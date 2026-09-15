@@ -49,7 +49,7 @@ export function DashboardAnalytics({
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-white">Аналітика</h2>
-          <p className="text-app-dim text-[12.5px]">
+          <p className="text-app-dim text-[13.5px]">
             Продажі та замовлення за обраний період.
           </p>
         </div>
@@ -113,7 +113,7 @@ function PeriodSwitch({
         <button
           aria-pressed={period === value}
           className={cn(
-            'rounded-control flex min-h-11 flex-1 items-center justify-center px-3 text-[12.5px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/40',
+            'rounded-control flex min-h-11 flex-1 items-center justify-center px-3 text-[13.5px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/40',
             period === value
               ? 'bg-white/[0.09] font-medium text-white'
               : 'text-app-muted hover:bg-white/[0.04]',
@@ -238,7 +238,7 @@ function Delta({ value, suffix = '' }: { value: number; suffix?: string }) {
         : '— без змін проти попереднього періоду'
 
   return (
-    <p className="text-app-dim text-[12.5px]">
+    <p className="text-app-dim text-[13.5px]">
       <span
         className={cn(
           'font-medium tabular-nums',

@@ -53,7 +53,7 @@ export function BillingSection({
           {title}
         </h2>
         {description === undefined ? null : (
-          <p className="text-app-dim text-[12.5px]">{description}</p>
+          <p className="text-app-dim text-[13.5px]">{description}</p>
         )}
       </div>
       {children}

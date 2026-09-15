@@ -53,7 +53,7 @@ export function DataTable<Row>({
   return (
     <div className="border-app-line rounded-panel bg-app-raised overflow-hidden border md:overflow-x-auto">
       <table
-        className="data-table w-full border-collapse text-[13.5px]"
+        className="data-table w-full border-collapse text-[14.5px]"
         role="table"
       >
         <caption className="sr-only">{caption}</caption>
@@ -62,7 +62,7 @@ export function DataTable<Row>({
             {columns.map((column) => (
               <th
                 className={cn(
-                  'text-app-dim border-app-line border-b px-3.5 py-2.5 font-mono text-[10.5px] font-normal tracking-[0.08em] whitespace-nowrap uppercase',
+                  'text-app-dim border-app-line border-b px-4 py-3 font-mono text-[11.5px] font-normal tracking-[0.08em] whitespace-nowrap uppercase',
                   column.align === 'end' ? 'text-right' : 'text-left',
                 )}
                 key={column.key}
@@ -98,7 +98,7 @@ export function DataTable<Row>({
                 return (
                   <Cell
                     className={cn(
-                      'px-3.5 py-3 text-left font-normal',
+                      'px-4 py-3.5 text-left font-normal',
                       column.align === 'end' && 'text-right tabular-nums',
                       isPrimary ? 'text-app-ink font-medium' : 'text-app-muted',
                     )}

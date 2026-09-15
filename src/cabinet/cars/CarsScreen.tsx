@@ -281,7 +281,7 @@ function CarCard({
             <CarFront aria-hidden className="size-8" />
           </span>
         )}
-        <span className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/65 px-2.5 py-1 text-[12px] font-semibold text-white backdrop-blur-sm">
+        <span className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/65 px-2.5 py-1 text-[13px] font-semibold text-white backdrop-blur-sm">
           <span
             aria-hidden
             className={cn(
@@ -294,7 +294,7 @@ function CarCard({
         {showMoney && percent !== null ? (
           <span
             className={cn(
-              'absolute top-3 right-3 rounded-full border border-white/10 bg-black/65 px-2.5 py-1 font-mono text-[12px] font-semibold tabular-nums backdrop-blur-sm',
+              'absolute top-3 right-3 rounded-full border border-white/10 bg-black/65 px-2.5 py-1 font-mono text-[13px] font-semibold tabular-nums backdrop-blur-sm',
               paidOff ? 'text-state-ok' : 'text-brand',
             )}
           >
@@ -305,21 +305,21 @@ function CarCard({
 
       <span className="grid gap-2.5 p-4">
         <span className="flex items-baseline justify-between gap-3">
-          <span className="truncate text-[17px] font-bold text-white">
+          <span className="truncate text-[18px] font-bold text-white">
             {car.code}
           </span>
           {showMoney ? (
-            <span className="text-[17px] font-bold whitespace-nowrap text-white tabular-nums">
+            <span className="text-[18px] font-bold whitespace-nowrap text-white tabular-nums">
               {money(car.profitability?.recouped ?? 0)}
             </span>
           ) : null}
         </span>
         <span className="flex items-baseline justify-between gap-3">
-          <span className="text-app-muted truncate text-[13px]">
+          <span className="text-app-muted truncate text-[14px]">
             {car.brand} {car.model} ({car.year})
           </span>
           {showMoney ? (
-            <span className="text-app-dim font-mono text-[10px] tracking-[0.14em] whitespace-nowrap uppercase">
+            <span className="text-app-dim font-mono text-[11px] tracking-[0.14em] whitespace-nowrap uppercase">
               Повернено
             </span>
           ) : null}
@@ -339,13 +339,13 @@ function CarCard({
           </span>
         ) : null}
         <span className="flex items-baseline justify-between gap-3">
-          <span className="text-app-muted text-[13px]">
+          <span className="text-app-muted text-[14px]">
             Запчастин{' '}
             <span className="font-semibold text-white tabular-nums">
               {car.partsCount}
             </span>
           </span>
-          <span className="text-app-muted text-[13px]">
+          <span className="text-app-muted text-[14px]">
             Продано{' '}
             <span className="font-semibold text-white tabular-nums">
               {car.soldPartsCount}
@@ -406,10 +406,10 @@ function CarsList({ base }: { base: string }) {
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="mx-auto grid w-full max-w-[1360px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
           <div className="min-w-0">
-            <p className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
+            <p className="text-app-dim font-mono text-[12px] tracking-[0.14em] uppercase">
               Склад
             </p>
             <h1 className="mt-1.5 text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
@@ -484,7 +484,7 @@ function CarsList({ base }: { base: string }) {
         {problem ? <Notice tone="danger">{problem}</Notice> : null}
 
         <p className="text-app-muted text-sm">
-          <span className="text-[17px] font-bold text-white tabular-nums">
+          <span className="text-[18px] font-bold text-white tabular-nums">
             {data?.total ?? 0}
           </span>{' '}
           знайдено
@@ -516,7 +516,7 @@ function CarsList({ base }: { base: string }) {
           aria-label="Пагінація автомобілів"
           className="border-app-line flex flex-wrap items-center justify-between gap-3 border-t pt-5"
         >
-          <p className="text-app-dim text-[13px]">
+          <p className="text-app-dim text-[14px]">
             Сторінка {page} з {totalPages}
           </p>
           <span className="flex items-center gap-2.5">
@@ -620,7 +620,7 @@ function PayoffBar({
         style={{ width: `${String(base)}%` }}
       >
         <span aria-hidden className="bg-app-line-2/40 absolute inset-0 block" />
-        <span className="text-app-muted relative truncate font-mono text-[11px] tracking-[0.08em] uppercase">
+        <span className="text-app-muted relative truncate font-mono text-[12px] tracking-[0.08em] uppercase">
           {investedLabel}
         </span>
       </span>
@@ -630,7 +630,7 @@ function PayoffBar({
           style={{ width: `max(${String(excess)}%, 6.75rem)` }}
         >
           {excessLabel === null ? null : (
-            <span className="truncate font-mono text-[11px] font-semibold tracking-[0.08em] text-black">
+            <span className="truncate font-mono text-[12px] font-semibold tracking-[0.08em] text-black">
               {excessLabel}
             </span>
           )}
@@ -732,7 +732,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
             <ChevronLeft aria-hidden className="size-3.5" />
             До автомобілів
           </Link>
-          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[11px] tracking-[0.14em] uppercase sm:flex">
+          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
             <span>Склад</span>
             <span aria-hidden className="text-white/20">
               /
@@ -773,7 +773,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
         ) : null}
       </div>
 
-      <div className="mx-auto grid w-full max-w-[1360px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-11 lg:px-12">
+      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-11 lg:px-12">
         {problem ? <Notice tone="danger">{problem}</Notice> : null}
         {copyStatus ? <Notice tone="ok">{copyStatus}</Notice> : null}
 
@@ -788,11 +788,11 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
             <div className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm font-medium">
               {car.vin ? (
                 <>
-                  <span className="border-app-line bg-app-input text-app-ink rounded-[7px] border px-2.5 py-1 font-mono text-[13px]">
+                  <span className="border-app-line bg-app-input text-app-ink rounded-[7px] border px-2.5 py-1 font-mono text-[14px]">
                     {car.vin}
                   </span>
                   <Button
-                    className="min-h-9 px-3 text-[13px] font-semibold"
+                    className="min-h-9 px-3 text-[14px] font-semibold"
                     onClick={() => {
                       void copyVin(car.vin ?? '')
                     }}
@@ -835,7 +835,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
                 <div className="grid gap-2" key={stat.key}>
                   <dt
                     className={cn(
-                      'font-mono text-[10px] tracking-[0.14em] whitespace-nowrap uppercase',
+                      'font-mono text-[11px] tracking-[0.14em] whitespace-nowrap uppercase',
                       stat.key === 'result' && paidOff
                         ? 'text-state-ok'
                         : 'text-app-dim',
@@ -860,7 +860,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
         <div className="mt-4 flex flex-wrap items-start gap-6">
           <Card
             aside={
-              <span className="text-app-dim font-mono text-[11px] tracking-[0.1em] uppercase">
+              <span className="text-app-dim font-mono text-[12px] tracking-[0.1em] uppercase">
                 {car.photos.length}{' '}
                 {plural(car.photos.length, ['знімок', 'знімки', 'знімків'])}
               </span>
@@ -898,7 +898,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
             {financeView && profit ? (
               <Card
                 aside={
-                  <span className="text-app-muted text-[13px] font-semibold">
+                  <span className="text-app-muted text-[14px] font-semibold">
                     {profit.partsTotal}{' '}
                     {plural(profit.partsTotal, [
                       'запчастина',
@@ -922,7 +922,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
                       %
                     </span>
                   </p>
-                  <p className="text-app-muted grid text-[13px]">
+                  <p className="text-app-muted grid text-[14px]">
                     <span className="font-semibold">окупності</span>
                     <span className="text-app-dim">
                       Повернення проти вкладеного
@@ -940,7 +940,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
 
                 <p
                   className={cn(
-                    'mt-2.5 text-[13px] font-semibold',
+                    'mt-2.5 text-[14px] font-semibold',
                     paidOff ? 'text-state-ok' : 'text-app-muted',
                   )}
                 >
@@ -971,12 +971,12 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
                     },
                   ].map((stat) => (
                     <div className="grid gap-1.5" key={stat.key}>
-                      <dt className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
+                      <dt className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
                         {stat.label}
                       </dt>
                       <dd
                         className={cn(
-                          'text-[15px] font-semibold tabular-nums',
+                          'text-[16px] font-semibold tabular-nums',
                           stat.muted ? 'text-app-dim' : 'text-white',
                         )}
                       >
@@ -1189,13 +1189,13 @@ function Expenses({
   return (
     <Card
       aside={
-        <span className="text-app-muted text-[13px] font-semibold">
+        <span className="text-app-muted text-[14px] font-semibold">
           Разом понад ціну придбання: {moneyExact(total)}
         </span>
       }
       title="Витрати"
     >
-      <p className="text-app-dim text-[13px] leading-[1.5]">
+      <p className="text-app-dim text-[14px] leading-[1.5]">
         Транспортування, мийка, розмитнення — усе, що ви вклали в авто понад
         ціну придбання. Кожна витрата збільшує інвестовану суму.
       </p>
@@ -1209,10 +1209,10 @@ function Expenses({
               <Wallet className="size-5" />
             </span>
             <span className="grid gap-0.5">
-              <span className="text-[15px] font-bold text-white">
+              <span className="text-[16px] font-bold text-white">
                 Витрат ще немає
               </span>
-              <span className="text-app-dim text-[13px]">
+              <span className="text-app-dim text-[14px]">
                 Додайте першу, щоб бачити реальну окупність.
               </span>
             </span>
@@ -1293,11 +1293,11 @@ function Expenses({
           footer={
             expenses.length === 0 ? undefined : (
               <div className="border-app-line flex flex-wrap items-baseline justify-between gap-2 border-t px-3.5 py-2.5">
-                <span className="text-app-dim text-[12.5px]">
+                <span className="text-app-dim text-[13.5px]">
                   Разом {expenses.length}{' '}
                   {plural(expenses.length, ['витрата', 'витрати', 'витрат'])}
                 </span>
-                <span className="text-[15px] font-semibold tabular-nums text-white">
+                <span className="text-[16px] font-semibold tabular-nums text-white">
                   {money(total)}
                 </span>
               </div>
@@ -1678,7 +1678,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                 aria-label="Поточні фото автомобіля"
                 className="grid gap-2"
               >
-                <h3 className="text-app-muted text-[12.5px]">Поточні фото</h3>
+                <h3 className="text-app-muted text-[13.5px]">Поточні фото</h3>
                 <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {media.map((item, index) => (
                     <li key={item.storageKey}>
@@ -1692,7 +1692,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                 </ul>
               </section>
             ) : (
-              <p className="text-app-dim text-[12.5px]">Фото немає.</p>
+              <p className="text-app-dim text-[13.5px]">Фото немає.</p>
             )}
           </SectionPanel>
         ) : (
@@ -1713,7 +1713,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
             description="Те, що вже витрачено на авто: транспортування, розмитнення, мийка. Разом із ціною придбання це інвестована сума."
             footer={
               <>
-                <span className="text-app-dim text-[12.5px]">
+                <span className="text-app-dim text-[13.5px]">
                   Витрати можна додати й пізніше, на сторінці авто.
                 </span>
                 <Button
@@ -1733,7 +1733,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
             title="Початкові витрати"
           >
             {expenses.length === 0 ? (
-              <p className="text-app-dim text-[12.5px]">
+              <p className="text-app-dim text-[13.5px]">
                 Витрат ще немає — авто збережеться й без них.
               </p>
             ) : (
@@ -1890,7 +1890,7 @@ function CarParts({
       footer={
         parts && parts.total > 0 ? (
           <>
-            <span className="text-app-dim text-[12.5px]">
+            <span className="text-app-dim text-[13.5px]">
               {parts.total > shown.length
                 ? `Показано ${String(shown.length)} із ${String(parts.total)}`
                 : 'Показано всі позиції'}
@@ -2046,14 +2046,14 @@ export function MediaPicker({
   return (
     <fieldset className="border-app-line rounded-panel bg-app-raised grid min-w-0 gap-3 border p-4">
       <legend className="px-1 text-base font-semibold text-white">Фото</legend>
-      <p className="text-app-dim text-[12.5px]">
+      <p className="text-app-dim text-[13.5px]">
         Можна вибрати кілька файлів одразу або зняти на камеру.
       </p>
       <input
         accept="image/*"
         aria-label="Додати фото"
         capture="environment"
-        className="bg-app-input text-app-muted border-app-line-2 rounded-control file:bg-app-raised file:text-app-ink file:rounded-control min-h-11 w-full cursor-pointer border px-3 py-2 text-sm file:mr-3 file:min-h-8 file:cursor-pointer file:border-0 file:px-3 file:text-[13px] disabled:cursor-not-allowed disabled:opacity-55"
+        className="bg-app-input text-app-muted border-app-line-2 rounded-control file:bg-app-raised file:text-app-ink file:rounded-control min-h-11 w-full cursor-pointer border px-3 py-2 text-sm file:mr-3 file:min-h-8 file:cursor-pointer file:border-0 file:px-3 file:text-[14px] disabled:cursor-not-allowed disabled:opacity-55"
         disabled={busy}
         multiple
         onChange={(event) => void upload(event.target.files)}
@@ -2064,10 +2064,10 @@ export function MediaPicker({
           className="border-state-danger/30 bg-state-danger-soft rounded-control border px-3.5 py-2.5"
           role="alert"
         >
-          <p className="text-state-danger text-[13.5px] font-medium">
+          <p className="text-state-danger text-[14.5px] font-medium">
             Ці файли не завантажилися. Виберіть інші або спробуйте ще раз.
           </p>
-          <ul className="text-app-ink mt-1.5 grid gap-1 text-[13px]">
+          <ul className="text-app-ink mt-1.5 grid gap-1 text-[14px]">
             {problems.map((problem) => (
               <li key={problem}>{problem}</li>
             ))}
@@ -2086,7 +2086,7 @@ export function MediaPicker({
                 className="rounded-control size-12 shrink-0 object-cover"
                 src={item.url}
               />
-              <span className="text-app-ink min-w-0 flex-1 truncate text-[13.5px]">
+              <span className="text-app-ink min-w-0 flex-1 truncate text-[14.5px]">
                 {names[item.storageKey] ??
                   item.storageKey.split('/').pop() ??
                   'Фото'}
@@ -2099,7 +2099,7 @@ export function MediaPicker({
           ))}
         </ul>
       ) : (
-        <p className="text-app-dim text-[12.5px]">
+        <p className="text-app-dim text-[13.5px]">
           <ImagePlus
             aria-hidden
             className="mr-1.5 inline size-4 align-text-bottom"

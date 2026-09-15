@@ -45,7 +45,7 @@ export function ActionMenu({
           {actions.map((action) => (
             <DropdownMenu.Item
               className={cn(
-                'rounded-control flex min-h-11 cursor-pointer items-center gap-2.5 px-3 text-[13.5px] outline-none select-none',
+                'rounded-control flex min-h-11 cursor-pointer items-center gap-2.5 px-3 text-[14.5px] outline-none select-none',
                 'data-[highlighted]:bg-white/[0.06]',
                 'data-[disabled]:pointer-events-none data-[disabled]:opacity-55',
                 action.destructive

@@ -69,7 +69,7 @@ export function StateScreen({
         </div>
       )}
       {meta === undefined ? null : (
-        <p className="text-app-dim mt-1 font-mono text-[11px]">{meta}</p>
+        <p className="text-app-dim mt-1 font-mono text-[12px]">{meta}</p>
       )}
     </section>
   )

@@ -297,7 +297,7 @@ function MobileNavigation({
         <Dialog.Trigger asChild>
           <button
             type="button"
-            className="flex min-h-11 min-w-11 flex-col items-center justify-center gap-1 rounded-xl px-3 text-[11px] text-neutral-400 transition-colors hover:bg-white/[0.05] hover:text-white"
+            className="flex min-h-11 min-w-11 flex-col items-center justify-center gap-1 rounded-xl px-3 text-[12px] text-neutral-400 transition-colors hover:bg-white/[0.05] hover:text-white"
           >
             <Ellipsis aria-hidden className="size-5" />
             <span>Ще</span>
@@ -394,7 +394,7 @@ function NavigationList({
   return (
     <div className={className}>
       {presentation === 'desktop' && label ? (
-        <p className="text-app-dim px-4 pt-3 pb-1.5 font-mono text-[10px] tracking-[0.12em] uppercase">
+        <p className="text-app-dim px-4 pt-3 pb-1.5 font-mono text-[11px] tracking-[0.12em] uppercase">
           {label}
         </p>
       ) : null}
@@ -435,7 +435,7 @@ function NavigationLink({
           presentation === 'desktop' && 'flex items-center gap-3 px-4 text-sm',
           presentation === 'rail' && 'grid place-items-center',
           presentation === 'mobile' &&
-            'flex flex-col items-center justify-center gap-1 px-3 text-[11px]',
+            'flex flex-col items-center justify-center gap-1 px-3 text-[12px]',
           presentation === 'dialog' &&
             'flex items-center gap-3 px-3 py-2 text-sm',
           isActive

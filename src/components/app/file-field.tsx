@@ -20,7 +20,7 @@ export function FileField({ className, ...props }: ComponentProps<'input'>) {
       {...props}
       className={cn(
         'bg-app-input border-app-line-2 rounded-control text-app-muted min-h-11 w-full cursor-pointer border px-3 py-2 text-sm',
-        'file:mr-3 file:min-h-11 file:cursor-pointer file:rounded-lg file:border-0 file:bg-white/[0.08] file:px-3 file:text-[12.5px] file:text-white hover:file:bg-white/[0.12]',
+        'file:mr-3 file:min-h-11 file:cursor-pointer file:rounded-lg file:border-0 file:bg-white/[0.08] file:px-3 file:text-[13.5px] file:text-white hover:file:bg-white/[0.12]',
         className,
       )}
     />
@@ -57,7 +57,7 @@ export function UploadList({
   emptyLabel?: ReactNode
 }) {
   if (items.length === 0) {
-    return <p className="text-app-dim text-[12.5px]">{emptyLabel}</p>
+    return <p className="text-app-dim text-[13.5px]">{emptyLabel}</p>
   }
 
   return (
@@ -80,12 +80,12 @@ export function UploadList({
           )}
 
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] text-white">
+            <span className="block truncate text-[14px] text-white">
               {item.name}
             </span>
             <span
               className={cn(
-                'block font-mono text-[11px]',
+                'block font-mono text-[12px]',
                 item.status === 'failed' ? 'text-state-danger' : 'text-app-dim',
               )}
             >
@@ -132,7 +132,7 @@ export function UploadSummary({ failed }: { failed: number }) {
 
   return (
     <p
-      className="text-state-danger flex items-center gap-2 text-[12.5px]"
+      className="text-state-danger flex items-center gap-2 text-[13.5px]"
       role="status"
     >
       <FileWarning aria-hidden className="size-4" />

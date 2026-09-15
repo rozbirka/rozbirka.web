@@ -473,10 +473,10 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="mx-auto grid w-full max-w-[1360px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
           <div className="min-w-0">
-            <p className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
+            <p className="text-app-dim font-mono text-[12px] tracking-[0.14em] uppercase">
               Склад
             </p>
             <h1 className="mt-1.5 text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
@@ -680,7 +680,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                 </span>
               </p>
               <div className="flex flex-wrap items-center gap-3">
-                <span className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
+                <span className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
                   Розмір сторінки
                 </span>
                 <PillGroup
@@ -779,7 +779,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                         aria-label="Пагінація деталей"
                         className="border-app-line flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4"
                       >
-                        <p className="text-app-dim text-[13px]">
+                        <p className="text-app-dim text-[14px]">
                           Сторінка {pageMeta.page} з {pageMeta.totalPages}
                         </p>
                         <span className="flex items-center gap-2.5">
@@ -827,7 +827,7 @@ function FilterGroup({
 }) {
   return (
     <section aria-label={label} className="grid gap-2.5">
-      <h2 className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
+      <h2 className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
         {label}
       </h2>
       {children}
@@ -885,7 +885,7 @@ function FilterRow({
       {count === undefined ? null : (
         <span
           className={cn(
-            'text-[13px] tabular-nums',
+            'text-[14px] tabular-nums',
             active ? 'text-white' : 'text-app-dim',
           )}
         >
@@ -1034,7 +1034,7 @@ function StockStats({
         <div className="grid gap-2" key={segment.key}>
           <dt
             className={cn(
-              'flex items-center gap-1.5 font-mono text-[10px] tracking-[0.14em] whitespace-nowrap uppercase',
+              'flex items-center gap-1.5 font-mono text-[11px] tracking-[0.14em] whitespace-nowrap uppercase',
               segment.value > 0 ? segment.ink : 'text-app-dim',
             )}
           >
@@ -1053,7 +1053,7 @@ function StockStats({
             {segment.value}
             <span
               className={cn(
-                'text-[15px] font-semibold',
+                'text-[16px] font-semibold',
                 segment.value > 0 ? 'text-app-muted' : 'text-app-dim',
               )}
             >
@@ -1124,10 +1124,10 @@ function OrderRow({
             {label}
           </Link>
         )}
-        <span className="text-app-dim text-[12.5px]">{detail}</span>
+        <span className="text-app-dim text-[13.5px]">{detail}</span>
       </span>
       {aside === undefined ? null : (
-        <span className="text-app-muted text-[12.5px] tabular-nums">
+        <span className="text-app-muted text-[13.5px] tabular-nums">
           {aside}
         </span>
       )}
@@ -1229,7 +1229,7 @@ function PartDetailScreen({
             <ChevronLeft aria-hidden className="size-3.5" />
             До складу
           </Link>
-          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[11px] tracking-[0.14em] uppercase sm:flex">
+          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
             <span>Склад</span>
             <span aria-hidden className="text-white/20">
               /
@@ -1272,7 +1272,7 @@ function PartDetailScreen({
         </div>
       </div>
 
-      <div className="mx-auto grid w-full max-w-[1360px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-11 lg:px-12">
+      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-11 lg:px-12">
         {deleteError !== null && !confirmingDelete ? (
           <Notice tone="danger">{deleteError}</Notice>
         ) : null}
@@ -1290,7 +1290,7 @@ function PartDetailScreen({
             {detail === null ? null : (
               <p className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3.5 gap-y-2 text-sm font-medium">
                 {detail.qrCode ? (
-                  <span className="border-app-line bg-app-input text-app-ink rounded-[7px] border px-2.5 py-1 font-mono text-[13px]">
+                  <span className="border-app-line bg-app-input text-app-ink rounded-[7px] border px-2.5 py-1 font-mono text-[14px]">
                     {detail.qrCode}
                   </span>
                 ) : null}
@@ -1320,7 +1320,7 @@ function PartDetailScreen({
             <div className="mt-4 flex flex-wrap items-start gap-6">
               <Card
                 aside={
-                  <span className="text-app-dim font-mono text-[11px] tracking-[0.1em] uppercase">
+                  <span className="text-app-dim font-mono text-[12px] tracking-[0.1em] uppercase">
                     {detail.photos.length}{' '}
                     {plural(detail.photos.length, [
                       'знімок',
@@ -1352,7 +1352,7 @@ function PartDetailScreen({
               <div className="flex min-w-[320px] flex-[1_1_460px] flex-col gap-6">
                 <Card
                   aside={
-                    <span className="text-app-muted text-[13px] font-semibold">
+                    <span className="text-app-muted text-[14px] font-semibold">
                       Усього {detail.quantityTotal} {detail.unit || 'шт'}
                     </span>
                   }
@@ -1369,7 +1369,7 @@ function PartDetailScreen({
                     </span>
                     {detail.effectiveSalePrice === null ? (
                       <span className="flex flex-wrap items-center gap-2.5">
-                        <span className="text-state-warn text-[15px] font-bold">
+                        <span className="text-state-warn text-[16px] font-bold">
                           ціни ще немає
                         </span>
                         {canManage ? (
@@ -1384,14 +1384,14 @@ function PartDetailScreen({
                     ) : (
                       <span className="grid justify-items-end gap-0.5">
                         <Amount
-                          className="text-[17px] font-bold text-white"
+                          className="text-[18px] font-bold text-white"
                           currency={PART_CURRENCY}
                           value={detail.effectiveSalePrice}
                         />
                         {detail.desiredSalePrice !== null &&
                         detail.desiredSalePrice !==
                           detail.effectiveSalePrice ? (
-                          <span className="text-app-dim text-[11.5px]">
+                          <span className="text-app-dim text-[12.5px]">
                             бажана{' '}
                             <Amount
                               currency={PART_CURRENCY}
@@ -1467,10 +1467,10 @@ function PartDetailScreen({
                     ]}
                   />
                   {detail.createdByName ? (
-                    <div className="text-app-muted mt-[18px] flex flex-wrap items-center gap-3 text-[13px]">
+                    <div className="text-app-muted mt-[18px] flex flex-wrap items-center gap-3 text-[14px]">
                       <span
                         aria-hidden
-                        className="text-app-ink grid size-[30px] place-items-center rounded-full bg-white/[0.07] text-[12px] font-bold"
+                        className="text-app-ink grid size-[30px] place-items-center rounded-full bg-white/[0.07] text-[13px] font-bold"
                       >
                         {initials(detail.createdByName)}
                       </span>
@@ -1532,7 +1532,7 @@ function PartDetailScreen({
                 {soldOrders.length > 0 ? (
                   <Card
                     aside={
-                      <span className="text-app-muted text-[13px] font-semibold">
+                      <span className="text-app-muted text-[14px] font-semibold">
                         Виручка{' '}
                         <Amount currency={PART_CURRENCY} value={soldRevenue} />
                       </span>
@@ -1584,7 +1584,7 @@ function PartDetailScreen({
                   rows={3}
                 />
               ) : history.events.length === 0 ? (
-                <p className="text-app-dim text-[13px]">
+                <p className="text-app-dim text-[14px]">
                   Подій ще немає — вони зʼявляться після першої зміни.
                 </p>
               ) : (
@@ -1598,19 +1598,19 @@ function PartDetailScreen({
                       key={event.id}
                     >
                       <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2.5 gap-y-1">
-                        <span className="text-[15px] font-semibold text-white">
+                        <span className="text-[16px] font-semibold text-white">
                           {historyLabel(event.eventType)}
                         </span>
                         {historyDetails(event.data).map((fact) => (
                           <span
-                            className="text-app-muted text-[13px] break-words"
+                            className="text-app-muted text-[14px] break-words"
                             key={fact}
                           >
                             {fact}
                           </span>
                         ))}
                         {event.order ? (
-                          <span className="text-[13px]">
+                          <span className="text-[14px]">
                             {links.orders ? (
                               <Link
                                 className="hover:text-brand text-app-muted"
@@ -1626,7 +1626,7 @@ function PartDetailScreen({
                           </span>
                         ) : null}
                       </span>
-                      <span className="text-app-dim flex flex-wrap items-baseline gap-x-2.5 text-[12px]">
+                      <span className="text-app-dim flex flex-wrap items-baseline gap-x-2.5 text-[13px]">
                         {event.user.name}
                         <DateValue value={event.createdAt} />
                       </span>
@@ -1844,10 +1844,10 @@ function PartMediaFields({
                 key={item.id}
               >
                 <div className="min-w-0 flex-1 basis-40">
-                  <p className="text-app-ink text-[13.5px] break-words">
+                  <p className="text-app-ink text-[14.5px] break-words">
                     {item.name} · {statusLabel(item)}
                   </p>
-                  <p className="text-app-dim text-[11.5px]">
+                  <p className="text-app-dim text-[12.5px]">
                     {mediaMetaLabel(item)}
                   </p>
                 </div>
@@ -1891,7 +1891,7 @@ function PartMediaFields({
           })}
         </ul>
       ) : (
-        <p className="text-app-dim text-[12.5px]">
+        <p className="text-app-dim text-[13.5px]">
           Фото ще не вибрано. Додайте знімки — покупці бачать їх у картці
           деталі.
         </p>
@@ -2354,7 +2354,7 @@ function PartForm({
         {error ? <Notice tone="danger">{error}</Notice> : null}
         <div className="border-app-line rounded-panel bg-app-raised flex flex-wrap items-center justify-end gap-2 border p-3">
           {mediaPending ? (
-            <p className="text-app-dim mr-auto text-[12.5px]">
+            <p className="text-app-dim mr-auto text-[13.5px]">
               Дочекайтеся, доки завантажаться всі фото.
             </p>
           ) : null}
@@ -2371,7 +2371,7 @@ function PartForm({
           </Button>
         </div>
       </form>
-      <div className="text-app-dim grid gap-1 text-[12.5px]">
+      <div className="text-app-dim grid gap-1 text-[13.5px]">
         <p>
           VIN та OEM-декодування недоступні: сервер не визначає операцію
           декодування.
@@ -2531,7 +2531,7 @@ function PartEdit({
           {error ? <Notice tone="danger">{error}</Notice> : null}
           <div className="border-app-line rounded-panel bg-app-raised flex flex-wrap items-center justify-end gap-2 border p-3">
             {mediaPending ? (
-              <p className="text-app-dim mr-auto text-[12.5px]">
+              <p className="text-app-dim mr-auto text-[13.5px]">
                 Дочекайтеся, доки завантажаться всі фото.
               </p>
             ) : null}
@@ -2554,7 +2554,7 @@ function PartEdit({
         </Notice>
       ) : null}
       {values ? null : error ? <Notice tone="danger">{error}</Notice> : null}
-      <div className="text-app-dim grid gap-1 text-[12.5px]">
+      <div className="text-app-dim grid gap-1 text-[13.5px]">
         <p>Сумісність недоступна для редагування</p>
         <p>Видалення деталі перевіряється сервером.</p>
       </div>

@@ -41,12 +41,12 @@ export function Field({
   return (
     <div className={cn('grid gap-1.5', className)}>
       <div className="flex items-baseline gap-1">
-        <label className="text-app-muted text-[12.5px]" htmlFor={id}>
+        <label className="text-app-muted text-[13.5px]" htmlFor={id}>
           {label}
         </label>
         {/* Outside the label: its text content must stay the accessible name. */}
         {required ? (
-          <span aria-hidden className="text-brand text-[12.5px]">
+          <span aria-hidden className="text-brand text-[13.5px]">
             *
           </span>
         ) : null}
@@ -67,11 +67,11 @@ export function Field({
         {children}
       </FieldContext.Provider>
       {invalid ? (
-        <p className="text-state-danger text-[11.5px]" id={errorId}>
+        <p className="text-state-danger text-[12.5px]" id={errorId}>
           {error}
         </p>
       ) : describedBy === hintId ? (
-        <p className="text-app-dim text-[11.5px]" id={hintId}>
+        <p className="text-app-dim text-[12.5px]" id={hintId}>
           {hint}
         </p>
       ) : null}

@@ -61,7 +61,7 @@ export function ActiveFilters({
       ))}
       {onReset === undefined ? null : (
         <button
-          className="text-app-muted hover:text-app-ink min-h-11 text-[12.5px] underline underline-offset-4"
+          className="text-app-muted hover:text-app-ink min-h-11 text-[13.5px] underline underline-offset-4"
           onClick={onReset}
           type="button"
         >

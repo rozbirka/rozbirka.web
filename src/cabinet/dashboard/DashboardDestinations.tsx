@@ -102,7 +102,7 @@ function DestinationCard({
         {destination.usage === null ? null : (
           <div
             className={cn(
-              'mt-0.5 text-[12px] tabular-nums',
+              'mt-0.5 text-[13px] tabular-nums',
               destination.usage.exhausted ? 'text-state-warn' : 'text-app-dim',
             )}
           >

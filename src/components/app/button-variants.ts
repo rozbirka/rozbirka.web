@@ -5,7 +5,7 @@ import { cva } from 'class-variance-authority'
  * because the app needs 44px targets and the brand fill as its primary action.
  */
 export const appButtonVariants = cva(
-  'inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-control border border-transparent px-4 text-[13.5px] font-medium whitespace-nowrap transition-colors outline-none select-none active:translate-y-px aria-busy:cursor-wait aria-busy:opacity-70 disabled:pointer-events-none disabled:opacity-55 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+  'inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-control border border-transparent px-4 text-[14.5px] font-medium whitespace-nowrap transition-colors outline-none select-none active:translate-y-px aria-busy:cursor-wait aria-busy:opacity-70 disabled:pointer-events-none disabled:opacity-55 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
@@ -23,7 +23,7 @@ export const appButtonVariants = cva(
         icon: 'min-w-11 px-0',
         wide: 'w-full',
         /** Warehouse floor: a gloved thumb needs more than the 44px office floor. */
-        touch: 'min-h-14 px-5 text-[15px]',
+        touch: 'min-h-14 px-5 text-[16px]',
       },
     },
     defaultVariants: { variant: 'ghost', size: 'md' },

@@ -157,7 +157,7 @@ const currencyNames: Record<string, string> = {
 const currencyName = (code: string) => currencyNames[code] ?? code
 /** Money reads as one column: digits right-aligned, code beside the figure. */
 const eyebrowClass =
-  'text-app-dim font-mono text-[10.5px] tracking-[0.12em] uppercase'
+  'text-app-dim font-mono text-[11.5px] tracking-[0.12em] uppercase'
 const currenciesFromText = (value: string) => [
   ...new Set(
     value
@@ -250,7 +250,7 @@ function CashOverview({ definition }: CabinetModuleScreenProps) {
                   <strong className="text-lg font-light tabular-nums text-white">
                     {currency.balance} {currency.currency}
                   </strong>
-                  <span className="text-app-dim font-mono text-[11.5px]">
+                  <span className="text-app-dim font-mono text-[12.5px]">
                     {' '}
                     {currency.income} / {currency.expense}
                   </span>
@@ -514,12 +514,12 @@ function CashRegisterDetail({
           <h2 className="text-base font-semibold text-white">
             Валюти та баланси
           </h2>
-          <p className="text-app-dim text-[12.5px]">
+          <p className="text-app-dim text-[13.5px]">
             Баланси рахує сервер після кожної операції
           </p>
         </div>
         {Object.keys(register.balances).length === 0 && (
-          <p className="text-app-dim px-4 py-4 text-[13.5px]">
+          <p className="text-app-dim px-4 py-4 text-[14.5px]">
             Валют ще немає. Додайте першу нижче, щоб каса почала вести баланс.
           </p>
         )}
@@ -529,14 +529,14 @@ function CashRegisterDetail({
               className="border-app-line bg-app-canvas rounded-control flex flex-wrap items-center gap-3 border px-3.5 py-3"
               key={code}
             >
-              <dt className="text-app-muted min-w-0 flex-1 text-[13.5px]">
+              <dt className="text-app-muted min-w-0 flex-1 text-[14.5px]">
                 {currencyName(code)}
               </dt>
               <dd className="ml-auto flex items-baseline gap-1.5">
                 <span className="text-[22px] leading-tight font-light tabular-nums text-white">
                   {balance}
                 </span>{' '}
-                <span className="text-app-muted text-[12.5px]">{code}</span>
+                <span className="text-app-muted text-[13.5px]">{code}</span>
               </dd>
               {mutationsAllowed && (
                 <Button
@@ -557,7 +557,7 @@ function CashRegisterDetail({
         </dl>
         {mutationsAllowed && (
           <div className="border-app-line grid gap-3 border-t px-4 py-4">
-            <p className="text-app-dim text-[12.5px]">
+            <p className="text-app-dim text-[13.5px]">
               Додайте валюту, щоб вести в ній окремий баланс. Валюту з
               ненульовим балансом видалити не можна — спершу зведіть її до нуля.
             </p>
@@ -595,7 +595,7 @@ function CashRegisterDetail({
               <h2 className="text-base font-semibold text-white">
                 Ручна операція
               </h2>
-              <p className="text-app-dim text-[12.5px]">
+              <p className="text-app-dim text-[13.5px]">
                 Запис у журнал цієї каси без переказу та без документа.
               </p>
             </div>
@@ -643,14 +643,14 @@ function CashRegisterDetail({
                 aria-live="polite"
                 className="border-app-line bg-app-canvas rounded-control flex flex-wrap items-center justify-between gap-3 border px-3.5 py-3"
               >
-                <span className="text-app-muted text-[12.5px]">
+                <span className="text-app-muted text-[13.5px]">
                   {type === 'manual_in'
                     ? `Надходження до каси «${register.name}»`
                     : `Витрата з каси «${register.name}»`}
                 </span>
                 <span
                   className={cn(
-                    'ml-auto text-[17px] font-semibold tabular-nums',
+                    'ml-auto text-[18px] font-semibold tabular-nums',
                     type === 'manual_in'
                       ? 'text-state-ok'
                       : 'text-state-danger',
@@ -729,7 +729,7 @@ function CashRegisterDetail({
                   {fromCurrency && (
                     <p
                       aria-live="polite"
-                      className="text-app-dim text-[11.5px] tabular-nums"
+                      className="text-app-dim text-[12.5px] tabular-nums"
                     >
                       Доступно в цій касі:{' '}
                       {register.balances[fromCurrency] ?? '—'} {fromCurrency}
@@ -797,7 +797,7 @@ function CashRegisterDetail({
                   {transferDestination && toCurrency && (
                     <p
                       aria-live="polite"
-                      className="text-app-dim text-[11.5px] tabular-nums"
+                      className="text-app-dim text-[12.5px] tabular-nums"
                     >
                       Баланс каси-отримувача:{' '}
                       {transferDestination.balances[toCurrency] ?? '—'}{' '}
@@ -841,7 +841,7 @@ function CashRegisterDetail({
         <Panel className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0 grid gap-1">
             <h2 className="text-base font-semibold text-white">Стан каси</h2>
-            <p className="text-app-dim text-[12.5px]">
+            <p className="text-app-dim text-[13.5px]">
               {register.isActive
                 ? 'Каса активна: у неї можна проводити операції та перекази.'
                 : 'Каса неактивна: нові операції та перекази в неї недоступні.'}
@@ -1067,8 +1067,8 @@ function CashRegisterForm({
           </Field>
           {registerId ? (
             <div className="border-app-line bg-app-canvas rounded-control grid gap-1 border px-3.5 py-3">
-              <p className="text-app-muted text-[13.5px]">Тип каси: {type}</p>
-              <p className="text-app-dim text-[11.5px]">
+              <p className="text-app-muted text-[14.5px]">Тип каси: {type}</p>
+              <p className="text-app-dim text-[12.5px]">
                 Тип задають при створенні й далі не змінюють. Потрібен інший тип
                 — створіть окрему касу.
               </p>

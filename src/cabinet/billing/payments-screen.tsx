@@ -239,7 +239,7 @@ export function PaymentsScreen() {
       cell: (item) => (
         <span className="grid gap-0.5">
           <DateValue value={item.createdAt} withTime={false} />
-          <span className="text-app-dim text-[11.5px]">
+          <span className="text-app-dim text-[12.5px]">
             {paymentTypeLabel(item.type)}
           </span>
         </span>
@@ -264,7 +264,7 @@ export function PaymentsScreen() {
       label: 'Чек',
       cell: (item) =>
         item.providerInvoiceId ? (
-          <span className="font-mono text-[11.5px] break-all">
+          <span className="font-mono text-[12.5px] break-all">
             {item.providerInvoiceId}
           </span>
         ) : (
@@ -438,7 +438,7 @@ function PaymentMethod({
               {(subscription?.cardBrand ?? 'Card').toUpperCase()} ••••{' '}
               {subscription?.cardLast4}
             </span>
-            <span className="text-app-dim text-[12.5px]">
+            <span className="text-app-dim text-[13.5px]">
               Авторизована для регулярних списань
             </span>
           </span>

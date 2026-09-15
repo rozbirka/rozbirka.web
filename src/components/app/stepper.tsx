@@ -47,7 +47,7 @@ export function Stepper({
             <span
               aria-hidden
               className={cn(
-                'grid size-5 shrink-0 place-items-center rounded-full text-[11px] font-semibold tabular-nums',
+                'grid size-5 shrink-0 place-items-center rounded-full text-[12px] font-semibold tabular-nums',
                 failed && 'bg-state-danger-soft text-state-danger',
                 !failed && active && 'bg-brand text-brand-foreground',
                 !failed && done && 'bg-state-ok-soft text-state-ok',
@@ -67,7 +67,7 @@ export function Stepper({
                 aria-current={active ? 'step' : undefined}
                 aria-label={label}
                 className={cn(
-                  'rounded-control flex min-h-11 w-full items-center gap-2 px-3 text-[12.5px] transition-colors',
+                  'rounded-control flex min-h-11 w-full items-center gap-2 px-3 text-[13.5px] transition-colors',
                   active ? 'bg-white/[0.05] text-white' : 'text-app-muted',
                   'hover:bg-white/[0.06]',
                 )}
@@ -80,7 +80,7 @@ export function Stepper({
               <span
                 aria-current={active ? 'step' : undefined}
                 className={cn(
-                  'rounded-control flex min-h-11 w-full items-center gap-2 px-3 text-[12.5px]',
+                  'rounded-control flex min-h-11 w-full items-center gap-2 px-3 text-[13.5px]',
                   active ? 'bg-white/[0.05] text-white' : 'text-app-dim',
                 )}
               >
@@ -106,7 +106,7 @@ export function StepPanel({
   return (
     <section aria-label={step.title} className="grid gap-3">
       {step.description === undefined ? null : (
-        <p className="text-app-dim text-[12.5px]">{step.description}</p>
+        <p className="text-app-dim text-[13.5px]">{step.description}</p>
       )}
       {children}
     </section>

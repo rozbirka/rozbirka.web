@@ -124,7 +124,7 @@ export function Fact({
 }) {
   return (
     <div className={cn('grid min-w-0 gap-1', className)}>
-      <dt className="text-app-dim text-[12.5px]">{label}</dt>
+      <dt className="text-app-dim text-[13.5px]">{label}</dt>
       <dd className="text-sm break-words text-white">{children}</dd>
     </div>
   )

@@ -607,7 +607,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                         className="grid w-full justify-items-end gap-1 md:justify-items-start"
                         role="status"
                       >
-                        <span className="text-app-muted text-[11.5px]">
+                        <span className="text-app-muted text-[12.5px]">
                           {progressText(report, status)}
                         </span>
                         {percent === null ? null : (
@@ -624,7 +624,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                       </span>
                     ) : null}
                     {status === 'failed' ? (
-                      <span className="text-app-muted text-[11.5px]">
+                      <span className="text-app-muted text-[12.5px]">
                         {report.errorMessage
                           ? `Причина: ${report.errorMessage}.`
                           : 'Сервер не назвав причини.'}{' '}
@@ -634,7 +634,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                       </span>
                     ) : null}
                     {status === 'expired' ? (
-                      <span className="text-app-muted text-[11.5px]">
+                      <span className="text-app-muted text-[12.5px]">
                         Строк зберігання минув{' '}
                         <DateValue value={report.expiresAt} withTime={false} />,
                         файл видалено.{' '}
@@ -644,7 +644,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                       </span>
                     ) : null}
                     {status === 'completed' ? (
-                      <span className="text-app-dim text-[11.5px]">
+                      <span className="text-app-dim text-[12.5px]">
                         PDF
                         {report.fileSizeBytes === null
                           ? ''

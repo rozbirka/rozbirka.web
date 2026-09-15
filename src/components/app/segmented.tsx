@@ -70,7 +70,7 @@ export function Segmented<Value extends string>({
             <button
               aria-pressed={pressed}
               className={cn(
-                'rounded-control min-h-11 flex-1 px-3 text-[12.5px] transition-colors',
+                'rounded-control min-h-11 flex-1 px-3 text-[13.5px] transition-colors',
                 pressed
                   ? 'bg-white/[0.09] font-medium text-white'
                   : 'text-app-muted hover:bg-white/[0.04]',
@@ -103,7 +103,7 @@ export function Segmented<Value extends string>({
         return (
           <label
             className={cn(
-              'rounded-control flex min-h-11 flex-1 cursor-pointer items-center justify-center px-3 text-[12.5px] transition-colors',
+              'rounded-control flex min-h-11 flex-1 cursor-pointer items-center justify-center px-3 text-[13.5px] transition-colors',
               checked
                 ? 'bg-white/[0.09] font-medium text-white'
                 : 'text-app-muted hover:bg-white/[0.04]',

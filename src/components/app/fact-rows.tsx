@@ -30,7 +30,7 @@ export function FactRows({
           )}
           key={row.label}
         >
-          <dt className="text-app-dim w-40 shrink-0 font-mono text-[10.5px] tracking-[0.08em] uppercase">
+          <dt className="text-app-dim w-40 shrink-0 font-mono text-[11.5px] tracking-[0.08em] uppercase">
             {row.label}
           </dt>
           <dd className="text-app-ink flex min-w-0 flex-1 flex-wrap items-center gap-3 text-sm break-words">

@@ -422,7 +422,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
         <span className="grid min-w-0 gap-0.5">
           <span className="truncate">{member.name}</span>
           {member.phone && (
-            <span className="text-app-dim text-[12.5px]">{member.phone}</span>
+            <span className="text-app-dim text-[13.5px]">{member.phone}</span>
           )}
         </span>
       ),
@@ -580,7 +580,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
             headerHidden: true,
             cell: (role: RoleDto) =>
               role.isSystem ? (
-                <span className="text-app-dim text-[12.5px]">
+                <span className="text-app-dim text-[13.5px]">
                   Змінам не підлягає
                 </span>
               ) : (
@@ -715,7 +715,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
               >
                 Учасники
               </h2>
-              <p className="text-app-dim text-[12.5px]">
+              <p className="text-app-dim text-[13.5px]">
                 Роль визначає, що людина бачить у кабінеті. Індивідуальні права
                 додаються поверх ролі.
               </p>
@@ -745,7 +745,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
               >
                 Ролі
               </h2>
-              <p className="text-app-dim text-[12.5px]">
+              <p className="text-app-dim text-[13.5px]">
                 Системні ролі змінити не можна — створіть власну й дайте їй
                 рівно ті права, що потрібні.
               </p>
@@ -822,7 +822,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
               >
                 Запрошення
               </h2>
-              <p className="text-app-dim text-[12.5px]">
+              <p className="text-app-dim text-[13.5px]">
                 Запрошення — це код, який людина вводить під час реєстрації. Він
                 діє до вказаної дати.
               </p>
@@ -1000,20 +1000,20 @@ function PermissionChecklist({
 }) {
   return (
     <fieldset className="grid min-w-0 gap-3">
-      <legend className="text-app-dim mb-1 text-[12.5px]">
+      <legend className="text-app-dim mb-1 text-[13.5px]">
         {legend} — обрано{' '}
         {ALL_PERMISSIONS.filter((item) => selected.includes(item)).length} з{' '}
         {ALL_PERMISSIONS.length}
       </legend>
       {permissionGroups.map((group) => (
         <fieldset className="grid min-w-0 gap-1" key={group.prefix}>
-          <legend className="text-app-dim font-mono text-[10.5px] tracking-[0.08em] uppercase">
+          <legend className="text-app-dim font-mono text-[11.5px] tracking-[0.08em] uppercase">
             {group.title}
           </legend>
           <div className="grid min-w-0 gap-1 sm:grid-cols-2">
             {group.permissions.map((permission) => (
               <label
-                className="text-app-muted rounded-control flex min-h-11 min-w-11 items-center gap-2.5 px-2 font-mono text-[12.5px] hover:bg-white/[0.04]"
+                className="text-app-muted rounded-control flex min-h-11 min-w-11 items-center gap-2.5 px-2 font-mono text-[13.5px] hover:bg-white/[0.04]"
                 key={permission}
               >
                 <input

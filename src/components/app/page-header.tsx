@@ -26,7 +26,7 @@ export function PageHeader({
     >
       <div className="min-w-0">
         {eyebrow === undefined ? null : (
-          <p className="text-app-dim font-mono text-[10.5px] tracking-[0.12em] uppercase">
+          <p className="text-app-dim font-mono text-[11.5px] tracking-[0.12em] uppercase">
             {eyebrow}
           </p>
         )}
@@ -41,7 +41,11 @@ export function PageHeader({
   )
 }
 
-/** Screen body: one column, consistent rhythm, never wider than its content. */
+/**
+ * Screen body: one column with a consistent rhythm. `wide` fills the window —
+ * the cabinet is worked in, not read, and tables earn every pixel. `narrow`
+ * keeps forms and long prose at a readable measure.
+ */
 export function PageBody({
   children,
   width = 'wide',
@@ -52,7 +56,7 @@ export function PageBody({
     <section
       className={cn(
         'mx-auto grid w-full min-w-0 gap-4',
-        width === 'wide' ? 'max-w-6xl' : 'max-w-3xl',
+        width === 'wide' ? 'max-w-none' : 'max-w-3xl',
         className,
       )}
       {...props}

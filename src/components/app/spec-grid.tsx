@@ -40,10 +40,10 @@ export function SpecGrid({
           )}
           key={spec.label}
         >
-          <dt className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
+          <dt className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
             {spec.label}
           </dt>
-          <dd className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[15px] font-medium break-words text-white">
+          <dd className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[16px] font-medium break-words text-white">
             {spec.value}
             {spec.note}
           </dd>
@@ -65,7 +65,7 @@ export function SpecNote({
   icon?: ReactNode
 }) {
   return (
-    <span className="text-app-dim inline-flex items-center gap-1.5 rounded-md bg-white/[0.04] px-2 py-1 text-[12px] font-normal">
+    <span className="text-app-dim inline-flex items-center gap-1.5 rounded-md bg-white/[0.04] px-2 py-1 text-[13px] font-normal">
       {icon}
       {children}
     </span>

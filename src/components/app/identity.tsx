@@ -39,7 +39,7 @@ export function RecordIdentity({
       <span className="grid min-w-0 gap-0.5">
         <span className="text-app-ink truncate font-medium">{title}</span>
         {subtitle === undefined ? null : (
-          <span className="text-app-dim truncate text-[12px]">{subtitle}</span>
+          <span className="text-app-dim truncate text-[13px]">{subtitle}</span>
         )}
       </span>
     </span>

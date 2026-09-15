@@ -76,7 +76,7 @@ export function TenantSwitcher({
         />
       )}
       {!compact && context ? (
-        <p className="text-app-dim mt-1 px-1 font-mono text-[10.5px]">
+        <p className="text-app-dim mt-1 px-1 font-mono text-[11.5px]">
           {isSwitching ? 'Перемикаємо…' : context}
         </p>
       ) : null}

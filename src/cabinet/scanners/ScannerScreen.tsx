@@ -456,7 +456,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
               Увімкнути камеру
             </Button>
             {cameraLive ? (
-              <p className="text-app-dim text-center text-[11.5px]">
+              <p className="text-app-dim text-center text-[12.5px]">
                 Зображення завмерло? Увімкніть камеру ще раз.
               </p>
             ) : null}
@@ -515,7 +515,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
         </form>
       </SectionPanel>
 
-      <p className="text-app-dim text-[12.5px]">
+      <p className="text-app-dim text-[13.5px]">
         VIN та OEM-декодування недоступні: відповідних серверних операцій немає.
       </p>
     </PageBody>

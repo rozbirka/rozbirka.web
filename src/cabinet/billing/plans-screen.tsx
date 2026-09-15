@@ -218,7 +218,7 @@ export function PlansScreen() {
                   currency={plan.currency}
                   value={plan.amount}
                 />
-                <span className="text-app-dim text-[12.5px]">/ місяць</span>
+                <span className="text-app-dim text-[13.5px]">/ місяць</span>
               </p>
               <dl className="border-app-line grid gap-1.5 border-t pt-3">
                 <PlanLimit label="Авто" value={plan.limits.cars} />
@@ -229,7 +229,7 @@ export function PlansScreen() {
               </dl>
               <div className="mt-auto pt-1">
                 {isCurrent ? (
-                  <p className="text-app-dim text-[12.5px]">
+                  <p className="text-app-dim text-[13.5px]">
                     Цей тариф уже діє.
                   </p>
                 ) : management.kind === 'mono' ? (
@@ -268,8 +268,8 @@ function PlansFrame({ children }: { children: ReactNode }) {
 function PlanLimit({ label, value }: { label: string; value: number | null }) {
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <dt className="text-app-dim text-[12.5px]">{label}</dt>
-      <dd className="text-app-muted text-[12.5px]">
+      <dt className="text-app-dim text-[13.5px]">{label}</dt>
+      <dd className="text-app-muted text-[13.5px]">
         <Quantity fallback="∞" value={value} />
       </dd>
     </div>

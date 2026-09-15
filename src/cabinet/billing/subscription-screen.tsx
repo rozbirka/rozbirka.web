@@ -441,10 +441,10 @@ function UsageSection({
               key={item.label}
             >
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-app-dim text-[12.5px]">{item.label}</span>
+                <span className="text-app-dim text-[13.5px]">{item.label}</span>
                 <span
                   className={cn(
-                    'text-[12.5px] tabular-nums',
+                    'text-[13.5px] tabular-nums',
                     over ? 'text-state-warn' : 'text-app-muted',
                   )}
                 >

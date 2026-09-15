@@ -150,7 +150,7 @@ export function TenantOnboardingScreen() {
       <main className="flex flex-1 justify-center px-4 pb-16 sm:px-6">
         <div className="anim-fade-up grid w-full max-w-[520px] content-start gap-6 sm:gap-8">
           <div className="grid gap-3">
-            <span className="text-brand text-[11px] font-medium tracking-[0.28em] uppercase">
+            <span className="text-brand text-[12px] font-medium tracking-[0.28em] uppercase">
               Перший крок
             </span>
             <h1 className="text-[34px] leading-[1.02] font-light tracking-[-0.025em] sm:text-[44px] lg:text-[52px]">
@@ -162,7 +162,7 @@ export function TenantOnboardingScreen() {
               Розбірка — це ваш робочий простір. Створіть її раз, і 14 днів
               роботи відкриються одразу, без картки.
             </p>
-            <ul className="text-app-muted mt-1 grid gap-2 text-[13.5px]">
+            <ul className="text-app-muted mt-1 grid gap-2 text-[14.5px]">
               {included.map((item) => (
                 <li className="flex items-start gap-2.5" key={item}>
                   <Check aria-hidden className="text-brand mt-0.5 size-4" />

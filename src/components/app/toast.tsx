@@ -81,7 +81,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           const Icon = toneIcon[tone]
           return (
             <div
-              className="bg-app-overlay border-app-line-2 rounded-control text-app-ink pointer-events-auto flex w-full max-w-md items-center gap-2.5 border px-3.5 py-2.5 text-[13.5px] shadow-2xl"
+              className="bg-app-overlay border-app-line-2 rounded-control text-app-ink pointer-events-auto flex w-full max-w-md items-center gap-2.5 border px-3.5 py-2.5 text-[14.5px] shadow-2xl"
               key={toast.id}
               role={tone === 'danger' ? 'alert' : 'status'}
             >
@@ -92,7 +92,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <span className="min-w-0 flex-1">{toast.message}</span>
               {toast.action === undefined ? null : (
                 <button
-                  className="text-brand shrink-0 text-[12.5px] underline underline-offset-4"
+                  className="text-brand shrink-0 text-[13.5px] underline underline-offset-4"
                   onClick={() => {
                     toast.action?.onAction()
                     dismiss(toast.id)

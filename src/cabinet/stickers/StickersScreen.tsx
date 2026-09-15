@@ -387,13 +387,13 @@ function TenantStickerQueue({
         </Button>
       </Toolbar>
       {partsUnavailable ? (
-        <p className="text-app-dim text-[12.5px]" role="status">
+        <p className="text-app-dim text-[13.5px]" role="status">
           Вибір деталей недоступний: список не завантажено, пошук за внутрішнім
           ID вимкнено.
         </p>
       ) : null}
       {!canGenerate ? (
-        <p className="text-app-dim text-[12.5px]" role="status">
+        <p className="text-app-dim text-[13.5px]" role="status">
           {generationDecision === 'subscription-blocked'
             ? 'Поточна підписка не дозволяє генерацію стікерів.'
             : generationDecision === 'access-loading'

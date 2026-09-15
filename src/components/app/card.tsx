@@ -38,7 +38,7 @@ export function Card({
         )}
       >
         <h2
-          className="text-[17px] font-bold tracking-[-0.01em] text-white"
+          className="text-[18px] font-bold tracking-[-0.01em] text-white"
           id={titleId}
         >
           {title}

@@ -116,12 +116,12 @@ function TotalLine({
 }) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
-      <span className="text-app-dim text-[12.5px]">{label}</span>
+      <span className="text-app-dim text-[13.5px]">{label}</span>
       <span
         className={
           strong
-            ? 'text-[15px] font-semibold tabular-nums text-white'
-            : 'text-app-muted text-[13px] tabular-nums'
+            ? 'text-[16px] font-semibold tabular-nums text-white'
+            : 'text-app-muted text-[14px] tabular-nums'
         }
       >
         {value}
@@ -633,7 +633,7 @@ function OrderForm({
                           onClick={() => setPartId(part.id)}
                         >
                           <span className="min-w-0 truncate">{part.name}</span>
-                          <span className="text-app-dim text-[12px] tabular-nums">
+                          <span className="text-app-dim text-[13px] tabular-nums">
                             {part.quantityAvailable} шт
                           </span>
                         </Button>
@@ -713,7 +713,7 @@ function OrderForm({
                         <span className="min-w-0 truncate">
                           {customer.name}
                         </span>
-                        <span className="text-app-dim text-[12px]">
+                        <span className="text-app-dim text-[13px]">
                           {customer.phone ?? 'без телефону'}
                         </span>
                       </Button>
@@ -723,7 +723,7 @@ function OrderForm({
               )}
               {customerMutationAllowed && (
                 <fieldset className="border-app-line-2 rounded-control grid gap-3 border border-dashed p-3">
-                  <legend className="text-app-muted px-1 text-[12.5px]">
+                  <legend className="text-app-muted px-1 text-[13.5px]">
                     Новий клієнт
                   </legend>
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -974,25 +974,25 @@ function OrderDetailScreen({
       <Panel>
         <dl className="grid gap-3 sm:grid-cols-4">
           <div className="grid gap-1">
-            <dt className="text-app-dim text-[12.5px]">Клієнт</dt>
+            <dt className="text-app-dim text-[13.5px]">Клієнт</dt>
             <dd className="text-sm text-white">
               {order.customerName ?? 'Без клієнта'}
             </dd>
           </div>
           <div className="grid gap-1">
-            <dt className="text-app-dim text-[12.5px]">Разом</dt>
+            <dt className="text-app-dim text-[13.5px]">Разом</dt>
             <dd className="text-sm tabular-nums text-white">
               {money(order.totalAmount, currency)}
             </dd>
           </div>
           <div className="grid gap-1">
-            <dt className="text-app-dim text-[12.5px]">Сплачено</dt>
+            <dt className="text-app-dim text-[13.5px]">Сплачено</dt>
             <dd className="text-sm tabular-nums text-white">
               {money(order.totalPaid, currency)}
             </dd>
           </div>
           <div className="grid gap-1">
-            <dt className="text-app-dim text-[12.5px]">Залишок</dt>
+            <dt className="text-app-dim text-[13.5px]">Залишок</dt>
             <dd className="text-sm tabular-nums text-white">
               {money(outstanding, currency)}
             </dd>
@@ -1002,7 +1002,7 @@ function OrderDetailScreen({
       {itemsEditable ? (
         <SectionPanel
           aside={
-            <span className="text-app-muted text-[12.5px] tabular-nums">
+            <span className="text-app-muted text-[13.5px] tabular-nums">
               Разом за позиціями {money(draftsTotal, currency)}
             </span>
           }
@@ -1057,14 +1057,14 @@ function OrderDetailScreen({
                   <p className="text-app-ink truncate text-sm font-medium">
                     {item.partName}
                   </p>
-                  <p className="text-app-dim mt-0.5 text-[11.5px] tabular-nums">
+                  <p className="text-app-dim mt-0.5 text-[12.5px] tabular-nums">
                     Сума позиції{' '}
                     {money(lineTotal(item.quantity, item.unitPrice), currency)}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-end gap-2">
                   <div className="grid w-20 gap-1.5">
-                    <span aria-hidden className="text-app-dim text-[11.5px]">
+                    <span aria-hidden className="text-app-dim text-[12.5px]">
                       Кількість
                     </span>
                     <TextInput
@@ -1087,7 +1087,7 @@ function OrderDetailScreen({
                     />
                   </div>
                   <div className="grid w-28 gap-1.5">
-                    <span aria-hidden className="text-app-dim text-[11.5px]">
+                    <span aria-hidden className="text-app-dim text-[12.5px]">
                       Ціна
                     </span>
                     <TextInput
@@ -1302,7 +1302,7 @@ function OrderDetailScreen({
                   className="border-app-line-2 rounded-control grid gap-3 border border-dashed p-3"
                   key={index}
                 >
-                  <legend className="text-app-muted px-1 text-[12.5px]">
+                  <legend className="text-app-muted px-1 text-[13.5px]">
                     Платіж {index + 1}
                   </legend>
                   <div className="grid gap-3 sm:grid-cols-3">

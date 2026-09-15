@@ -42,14 +42,14 @@ export function StatCard({
       padded={false}
     >
       <div className="p-4">
-        <p className="text-app-dim text-[12.5px]">{label}</p>
+        <p className="text-app-dim text-[13.5px]">{label}</p>
         <p className="mt-1.5 text-[25px] leading-tight font-light tracking-[-0.02em] tabular-nums text-white">
           {value}
         </p>
         {delta === undefined ? null : (
           <p
             className={cn(
-              'mt-1 font-mono text-[11.5px]',
+              'mt-1 font-mono text-[12.5px]',
               tone === 'up' && 'text-state-ok',
               tone === 'down' && 'text-state-danger',
               tone === 'neutral' && 'text-app-dim',
@@ -73,10 +73,10 @@ export function StatStrip({
     <dl className="flex flex-wrap gap-x-6 gap-y-2 px-0.5">
       {items.map((item) => (
         <div className="flex items-baseline gap-1.5" key={item.label}>
-          <dd className="text-[17px] font-semibold tabular-nums text-white">
+          <dd className="text-[18px] font-semibold tabular-nums text-white">
             {item.value}
           </dd>
-          <dt className="text-app-dim text-[12.5px]">{item.label}</dt>
+          <dt className="text-app-dim text-[13.5px]">{item.label}</dt>
         </div>
       ))}
     </dl>

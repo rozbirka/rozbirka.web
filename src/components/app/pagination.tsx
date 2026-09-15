@@ -41,7 +41,7 @@ export function Pagination({
       aria-label={label}
       className="border-app-line bg-app-raised flex flex-wrap items-center justify-between gap-3 border-t px-3.5 py-2.5"
     >
-      <p className="text-app-dim text-[12.5px] tabular-nums">
+      <p className="text-app-dim text-[13.5px] tabular-nums">
         {from === undefined || to === undefined
           ? `Сторінка ${String(page)} з ${String(totalPages)}`
           : `${String(from)}–${String(to)} з ${String(total)}`}

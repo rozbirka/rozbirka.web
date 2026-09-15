@@ -91,7 +91,7 @@ function SummaryList({ items }: { items: readonly SummaryItem[] }) {
           )}
           key={label}
         >
-          <dt className="text-app-dim text-[12.5px]">{label}</dt>
+          <dt className="text-app-dim text-[13.5px]">{label}</dt>
           <dd className="mt-1.5 text-[25px] leading-tight font-light tracking-[-0.02em] tabular-nums text-white">
             {value}
           </dd>

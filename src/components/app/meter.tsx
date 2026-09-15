@@ -64,7 +64,7 @@ export function Meter({
           {valueLabel}
         </span>
         {emptyLabel === undefined ? null : (
-          <span className="text-app-dim text-[11.5px]">{emptyLabel}</span>
+          <span className="text-app-dim text-[12.5px]">{emptyLabel}</span>
         )}
       </div>
     )
@@ -109,7 +109,7 @@ export function Meter({
           ) : null}
         </span>
       </span>
-      <span className={cn('text-[11.5px] tabular-nums', textTone[tone])}>
+      <span className={cn('text-[12.5px] tabular-nums', textTone[tone])}>
         {hint ?? `${String(percent)}%`}
       </span>
     </div>

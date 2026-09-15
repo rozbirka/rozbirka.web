@@ -103,7 +103,7 @@ export function BusinessSettingsScreen() {
         <div className="grid gap-2">
           <label
             htmlFor="business-name"
-            className="text-app-muted text-[12.5px]"
+            className="text-app-muted text-[13.5px]"
           >
             Назва розбірки
           </label>
@@ -121,7 +121,7 @@ export function BusinessSettingsScreen() {
         <div className="grid gap-2">
           <label
             htmlFor="business-city"
-            className="text-app-muted text-[12.5px]"
+            className="text-app-muted text-[13.5px]"
           >
             Місто
           </label>

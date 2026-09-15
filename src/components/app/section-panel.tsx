@@ -44,10 +44,10 @@ export function SectionPanel({
           {title}
         </Heading>
         {aside === undefined ? null : (
-          <div className="text-app-muted text-[12.5px]">{aside}</div>
+          <div className="text-app-muted text-[13.5px]">{aside}</div>
         )}
         {description === undefined ? null : (
-          <p className="text-app-dim w-full text-[12.5px]">{description}</p>
+          <p className="text-app-dim w-full text-[13.5px]">{description}</p>
         )}
       </header>
       <div className="grid gap-3 p-4">{children}</div>
@@ -81,7 +81,7 @@ export function PanelFooter({
         className,
       )}
     >
-      <div className="text-app-dim min-w-0 text-[12.5px]">{leading}</div>
+      <div className="text-app-dim min-w-0 text-[13.5px]">{leading}</div>
       <div className="flex flex-wrap items-center gap-2">{children}</div>
     </div>
   )
