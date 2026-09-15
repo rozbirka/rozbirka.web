@@ -152,6 +152,42 @@ it('pages the viewer with on-screen controls, not only the keyboard', async () =
   expect(within(viewer).getByText(/1 з 2/)).toBeVisible()
 })
 
+it('shows the full photo in the large frame and thumbnails in the strip', () => {
+  render(
+    <Gallery
+      label="Фото деталі"
+      photos={[
+        {
+          id: '1',
+          url: '/one-full.jpg',
+          thumbnailUrl: '/one-small.jpg',
+          alt: 'Бампер спереду',
+        },
+        { id: '2', url: '/two-full.jpg', thumbnailUrl: '/two-small.jpg' },
+      ]}
+    />,
+  )
+
+  // A thumbnail stretched across the frame reads as a broken photo.
+  const frame = screen.getByRole('button', {
+    name: 'Бампер спереду — відкрити на весь екран',
+  })
+  expect(within(frame).getByAltText('Бампер спереду')).toHaveAttribute(
+    'src',
+    '/one-full.jpg',
+  )
+  const strip = screen.getByRole('list', { name: 'Фото деталі' })
+  expect(within(strip).getByAltText('Фото деталі 2')).toHaveAttribute(
+    'src',
+    '/two-small.jpg',
+  )
+
+  // The small file sits under the original, so switching photos never leaves
+  // an empty box while several megabytes travel.
+  const underlay = frame.querySelector('img[aria-hidden="true"]')
+  expect(underlay).toHaveAttribute('src', '/one-small.jpg')
+})
+
 it('lets a thumbnail change the large frame before anything is opened', async () => {
   const user = userEvent.setup()
   render(<Gallery label="Фото деталі" photos={photos} />)

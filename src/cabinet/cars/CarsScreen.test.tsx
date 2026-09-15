@@ -466,9 +466,10 @@ it('renders car identity, gallery, and VIN copy', async () => {
   // The year reads both in the identity line and in the spec cell.
   expect(await screen.findByText('Рік')).toBeVisible()
   expect(screen.getAllByText('2020').length).toBeGreaterThan(0)
+  // The large frame loads the original; the thumbnail is for the strip.
   expect(
     screen.getByAltText(/Передня частина — фото автомобіля/),
-  ).toHaveAttribute('src', 'https://cdn.example/car-thumb.jpg')
+  ).toHaveAttribute('src', 'https://cdn.example/car.jpg')
   // Without parts.view the car page keeps quiet about the warehouse instead of
   // offering a link that would deny on arrival.
   expect(

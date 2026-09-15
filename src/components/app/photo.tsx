@@ -22,35 +22,82 @@ export function Thumbnail({
   alt,
   className,
   ratio = 'square',
+  size = 'thumbnail',
 }: {
   photo: Pick<Photo, 'url' | 'thumbnailUrl'>
   alt: string
   className?: string
   ratio?: 'square' | 'wide'
+  /**
+   * `thumbnail` is the small file, right for a strip or a row. `full` loads the
+   * original — a frame several hundred pixels wide shows every artefact of a
+   * thumbnail stretched to fit, which reads as a broken photo rather than a
+   * small one.
+   */
+  size?: 'thumbnail' | 'full'
 }) {
-  const [failed, setFailed] = useState(false)
+  const source = size === 'full' ? photo.url : (photo.thumbnailUrl ?? photo.url)
+  // Load state belongs to one file: a new src starts over, and the reset
+  // happens during render rather than in an effect, so nothing renders twice
+  // with the previous photo's state.
+  const [status, setStatus] = useState({
+    source,
+    failed: false,
+    loaded: false,
+  })
+  if (status.source !== source)
+    setStatus({ source, failed: false, loaded: false })
+  const { failed, loaded } = status
+  /**
+   * The small file shows while the original travels, so switching photos is
+   * never a blank box — the frame fills at once and sharpens a moment later.
+   */
+  const placeholder =
+    size === 'full' && photo.thumbnailUrl && photo.thumbnailUrl !== photo.url
+      ? photo.thumbnailUrl
+      : null
 
   return (
     <span
       className={cn(
-        'bg-app-input border-app-line rounded-panel block overflow-hidden border',
+        'bg-app-input border-app-line rounded-panel relative block overflow-hidden border',
         ratio === 'square' ? 'aspect-square' : 'aspect-4/3',
         className,
       )}
     >
       {failed ? (
-        <span className="text-app-dim grid h-full place-items-center gap-1 p-2 text-center text-[11px]">
+        <span className="text-app-dim grid h-full place-items-center gap-1 p-2 text-center text-[12px]">
           <ImageOff aria-hidden className="size-4" />
           Фото недоступне
         </span>
       ) : (
-        <img
-          alt={alt}
-          className="h-full w-full object-cover"
-          loading="lazy"
-          onError={() => setFailed(true)}
-          src={photo.thumbnailUrl ?? photo.url}
-        />
+        <>
+          {placeholder === null ? null : (
+            <img
+              alt=""
+              aria-hidden
+              className="absolute inset-0 h-full w-full scale-105 object-cover blur-[6px]"
+              src={placeholder}
+            />
+          )}
+          <img
+            alt={alt}
+            className={cn(
+              'relative h-full w-full object-cover',
+              placeholder !== null &&
+                'transition-opacity duration-200 motion-reduce:transition-none',
+              placeholder !== null && !loaded && 'opacity-0',
+            )}
+            loading={size === 'full' ? 'eager' : 'lazy'}
+            onError={() =>
+              setStatus((current) => ({ ...current, failed: true }))
+            }
+            onLoad={() =>
+              setStatus((current) => ({ ...current, loaded: true }))
+            }
+            src={source}
+          />
+        </>
       )}
     </span>
   )
@@ -103,7 +150,7 @@ function Lightbox({
           <Dialog.Title className="sr-only">{label}</Dialog.Title>
           <Dialog.Description className="sr-only">{alt}</Dialog.Description>
           <header className="flex items-center justify-between gap-3">
-            <p className="text-app-muted font-mono text-[11.5px] tabular-nums">
+            <p className="text-app-muted font-mono text-[12.5px] tabular-nums">
               {index + 1} з {total}
             </p>
             <Dialog.Close asChild>
@@ -212,7 +259,7 @@ export function PhotoGrid({
 
   if (photos.length === 0) {
     return (
-      <p className={cn('text-app-dim text-[12.5px]', className)}>
+      <p className={cn('text-app-dim text-[13.5px]', className)}>
         {emptyLabel}
       </p>
     )
@@ -287,11 +334,23 @@ export function Gallery({
   const [openIndex, setOpenIndex] = useState<number | null>(null)
   const shown = photos[Math.min(current, photos.length - 1)]
 
+  // Paging through a gallery is a sequence: the next photo is almost always
+  // the next click, so it is worth having it in the cache before then.
+  useEffect(() => {
+    const neighbours = [photos[current + 1], photos[current - 1]].filter(
+      (photo) => photo !== undefined,
+    )
+    for (const photo of neighbours) {
+      const preload = new Image()
+      preload.src = photo.url
+    }
+  }, [current, photos])
+
   if (!shown) {
     return (
       <p
         className={cn(
-          'text-app-dim text-[12.5px]',
+          'text-app-dim text-[13.5px]',
           variant === 'framed' && 'px-6 py-5',
           className,
         )}
@@ -321,12 +380,13 @@ export function Gallery({
             className={cn(framed && 'rounded-none border-0')}
             photo={shown}
             ratio={ratio === 'wide' ? 'wide' : 'square'}
+            size="full"
           />
         </button>
         {photos.length > 1 ? (
           <span
             aria-hidden
-            className="border-app-line-2 text-app-muted pointer-events-none absolute bottom-3 left-3 rounded-full border bg-black/70 px-3 py-1 font-mono text-[11px] tracking-[0.08em] tabular-nums backdrop-blur-sm"
+            className="border-app-line-2 text-app-muted pointer-events-none absolute bottom-3 left-3 rounded-full border bg-black/70 px-3 py-1 font-mono text-[12px] tracking-[0.08em] tabular-nums backdrop-blur-sm"
           >
             {pad(current + 1)} / {pad(photos.length)}
           </span>
@@ -426,7 +486,7 @@ export function RecordCard({
             {title}
           </span>
           {meta === undefined ? null : (
-            <span className="text-app-dim mt-1 block font-mono text-[11px]">
+            <span className="text-app-dim mt-1 block font-mono text-[12px]">
               {meta}
             </span>
           )}
@@ -450,7 +510,7 @@ export function RecordCard({
 
   const media =
     photo === undefined ? null : photo === null ? (
-      <span className="bg-app-input rounded-panel text-app-dim mb-1 grid aspect-4/3 place-items-center text-[11px]">
+      <span className="bg-app-input rounded-panel text-app-dim mb-1 grid aspect-4/3 place-items-center text-[12px]">
         <ImageOff aria-hidden className="size-4" />
       </span>
     ) : (
