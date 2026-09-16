@@ -29,6 +29,10 @@ const api = vi.hoisted(() => ({
   updateZone: vi.fn(),
   archiveZone: vi.fn(),
 }))
+const parts = vi.hoisted(() => ({
+  facets: vi.fn(),
+  search: vi.fn(),
+}))
 const printable = vi.hoisted(() => ({
   buildZoneLabelHtml: vi.fn().mockResolvedValue('<html>zones</html>'),
 }))
@@ -38,10 +42,12 @@ const permissions = vi.hoisted(() => ({
     'inventory.manage',
     'inventory.adjust',
     'inventory.zones.manage',
+    'parts.view',
   ]),
 }))
 
 vi.mock('@/api/inventory', () => ({ inventoryApi: api }))
+vi.mock('@/api/parts', () => ({ partsApi: parts }))
 vi.mock('./zone-label-output', () => printable)
 vi.mock('../CabinetContext', () => ({
   useCabinet: () => ({
@@ -205,6 +211,29 @@ beforeEach(() => {
   api.createZone.mockResolvedValue(undefined)
   api.updateZone.mockResolvedValue(undefined)
   api.archiveZone.mockResolvedValue(undefined)
+  parts.facets.mockResolvedValue({
+    statuses: [],
+    warehouses: [],
+    zones: [{ id: 'zone-1', name: 'Стелаж A1', count: 18 }],
+    conditions: [],
+    equipmentTypes: [],
+    makes: [],
+    models: [],
+    generations: [],
+    origins: [],
+    qualityFlags: [],
+    inventoryLocks: [],
+    discrepancies: [],
+  })
+  parts.search.mockImplementation((request: { hasDiscrepancy?: boolean }) =>
+    Promise.resolve({
+      items: [],
+      page: 1,
+      pageSize: 1,
+      total: request.hasDiscrepancy === true ? 3 : 20,
+      totalPages: 1,
+    }),
+  )
   printable.buildZoneLabelHtml.mockClear()
 })
 
@@ -448,6 +477,7 @@ it('does not allow replacement when current part placement failed to load', asyn
 })
 
 it('offers warehouse and zone management and prints actual zone QR labels', async () => {
+  const user = userEvent.setup()
   const print = vi.fn()
   const focus = vi.fn()
   const close = vi.fn()
@@ -462,14 +492,15 @@ it('offers warehouse and zone management and prints actual zone QR labels', asyn
   renderAt('/app/yard/inventory/warehouses/wh-1')
 
   expect(await screen.findByText('Стелаж A1')).toBeInTheDocument()
-  expect(
-    screen.getByRole('button', { name: 'Редагувати склад' }),
-  ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Редагувати' })).toBeInTheDocument()
   expect(
     screen.getByRole('button', { name: 'Архівувати зону Стелаж A1' }),
   ).toBeInTheDocument()
 
-  fireEvent.click(screen.getByRole('button', { name: 'Друкувати QR зон' }))
+  // Printing, exporting and archiving hide behind the overflow control, the
+  // way the toolbar is drawn.
+  await user.click(screen.getByRole('button', { name: 'Інші дії зі складом' }))
+  await user.click(screen.getByRole('button', { name: 'Друк стікерів зон' }))
 
   await waitFor(() =>
     expect(api.getZones).toHaveBeenCalledWith({ warehouseId: 'wh-1' }),
@@ -483,6 +514,34 @@ it('offers warehouse and zone management and prints actual zone QR labels', asyn
   ])
   expect(write).toHaveBeenCalledWith('<html>zones</html>')
   expect(print).toHaveBeenCalled()
+})
+
+it('counts the warehouse stock from the parts module', async () => {
+  renderAt('/app/yard/inventory/warehouses/wh-1')
+
+  await screen.findByText('Стелаж A1')
+  // Both figures come from the parts search, scoped to this warehouse.
+  expect(parts.search).toHaveBeenCalledWith(
+    { warehouseIds: ['wh-1'], pageSize: 1 },
+    expect.anything(),
+  )
+  const stock = screen.getByText('Позицій на складі').closest('div')
+  expect(within(stock as HTMLElement).getByText('20')).toBeInTheDocument()
+  const differing = screen.getByText('Розходження').closest('div')
+  expect(within(differing as HTMLElement).getByText('3')).toBeInTheDocument()
+  // The zone facet says how much of that stock sits in each zone.
+  expect(screen.getByText('18')).toBeInTheDocument()
+})
+
+it('offers to continue the session that is already counting this warehouse', async () => {
+  renderAt('/app/yard/inventory/warehouses/wh-1')
+
+  const rail = await screen.findByRole('region', { name: 'Активна сесія' })
+  expect(
+    within(rail).getByRole('link', { name: 'Продовжити сесію' }),
+  ).toHaveAttribute('href', '/app/yard/inventory/sessions/session-1')
+  // The zone is being counted right now, so its check column says so.
+  expect(screen.getByText('триває')).toBeInTheDocument()
 })
 
 it('asks for a reason before booking the counted quantity', async () => {

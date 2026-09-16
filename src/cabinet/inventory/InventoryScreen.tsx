@@ -10,7 +10,6 @@ import {
   Archive,
   ArrowRight,
   ChevronLeft,
-  ClipboardCheck,
   Pencil,
   Plus,
   Printer,
@@ -19,6 +18,7 @@ import {
 import {
   Button,
   Card,
+  ConfirmDialog,
   DataTable,
   EmptyState,
   Field,
@@ -32,6 +32,7 @@ import {
   StatCard,
   StatusPill,
   TextArea,
+  TextInput,
 } from '@/components/app'
 import {
   inventoryApi,
@@ -44,6 +45,7 @@ import {
   type Warehouse,
   type WarehouseDetail,
 } from '@/api/inventory'
+import { partsApi } from '@/api/parts'
 import { teamApi } from '@/api/team'
 import { normalizeApiProblem } from '@/api/errors'
 import { cn, plural } from '@/lib/utils'
@@ -360,116 +362,199 @@ function SessionRow({ item, base }: { item: InventorySession; base: string }) {
   )
 }
 
+/** One zone of the warehouse, as the detail endpoint returns it. */
+type WarehouseZone = WarehouseDetail['zones'][number]
+
+/** What the parts module knows about this warehouse's stock. */
+interface WarehouseStock {
+  /** Parts per zone, counted under this warehouse's filter. */
+  byZone: Map<string, number>
+  total: number | null
+  differing: number | null
+}
+
+interface WarehouseData {
+  warehouse: WarehouseDetail
+  sessions: InventorySession[]
+  stock: WarehouseStock
+  people: { userId: string; name: string }[]
+}
+
+const EMPTY_STOCK: WarehouseStock = {
+  byZone: new Map(),
+  total: null,
+  differing: null,
+}
+
+/** The day alone — a check is remembered by its date, not by its minute. */
+const day = (value?: string | null) =>
+  value
+    ? new Intl.DateTimeFormat('uk-UA', { dateStyle: 'short' }).format(
+        new Date(value),
+      )
+    : '—'
+
+/**
+ * How much of the yard sits in this warehouse. The parts module owns these
+ * numbers, so a viewer without `parts.view` simply sees none of them rather
+ * than a failed request.
+ */
+async function loadWarehouseStock(
+  warehouseId: string,
+  signal: AbortSignal,
+): Promise<WarehouseStock> {
+  try {
+    const [facets, all, differing] = await Promise.all([
+      partsApi.facets({ warehouseIds: [warehouseId] }, ['zone'], { signal }),
+      partsApi.search({ warehouseIds: [warehouseId], pageSize: 1 }, { signal }),
+      partsApi.search(
+        { warehouseIds: [warehouseId], hasDiscrepancy: true, pageSize: 1 },
+        { signal },
+      ),
+    ])
+    return {
+      byZone: new Map(facets.zones.map((zone) => [zone.id, zone.count])),
+      total: all.total,
+      differing: differing.total,
+    }
+  } catch {
+    return EMPTY_STOCK
+  }
+}
+
 function WarehouseView({ id }: { id: string }) {
   const base = useInventoryBase()
+  const { targetTenant } = useCabinet()
   const navigate = useNavigate()
   const canManage = usePermission('inventory.zones.manage')
+  const canSession = usePermission('inventory.manage')
+  const canSeeParts = usePermission('parts.view')
+  const canSeeTeam = usePermission('team.view')
+  const partsBase = targetTenant
+    ? cabinetPath(targetTenant.slug, 'parts')
+    : null
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.inventory,
   )
   const loader = useCallback(
-    (signal: AbortSignal) => inventoryApi.getWarehouse(id, { signal }),
-    [id],
+    async (signal: AbortSignal): Promise<WarehouseData> => {
+      const [warehouse, sessions, stock, people] = await Promise.all([
+        inventoryApi.getWarehouse(id, { signal }),
+        inventoryApi.getSessions({ signal }).then(
+          (list) => list,
+          () => [],
+        ),
+        canSeeParts
+          ? loadWarehouseStock(id, signal)
+          : Promise.resolve(EMPTY_STOCK),
+        canSeeTeam
+          ? teamApi.listMembers({ signal }).then(
+              (members) =>
+                members.map((member) => ({
+                  userId: member.userId,
+                  name: member.name,
+                })),
+              () => [],
+            )
+          : Promise.resolve([]),
+      ])
+      return { warehouse, sessions, stock, people }
+    },
+    [canSeeParts, canSeeTeam, id],
   )
   const resource = useLoad(loader, id)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [printing, setPrinting] = useState(false)
-  const createZone = async (form: FormData) => {
-    const name = formText(form, 'name')
-    const code = formText(form, 'code')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  /** Which write is asking for input: at most one dialog is open at a time. */
+  const [editingWarehouse, setEditingWarehouse] = useState(false)
+  const [archivingWarehouse, setArchivingWarehouse] = useState(false)
+  const [addingZone, setAddingZone] = useState(false)
+  const [editingZone, setEditingZone] = useState<WarehouseZone | null>(null)
+  const [archivingZone, setArchivingZone] = useState<WarehouseZone | null>(null)
+  const [draft, setDraft] = useState({ name: '', code: '' })
+
+  const run = async (write: (signal: AbortSignal) => Promise<void>) => {
+    setBusy(true)
+    try {
+      setOperationError(null)
+      const scope = requireLatestMutation({
+        permission: 'inventory.zones.manage',
+        quota: false,
+      })
+      await write(scope.signal)
+      return true
+    } catch (error) {
+      setOperationError(normalizeApiProblem(error).message)
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const createZone = async () => {
+    const name = draft.name.trim()
+    const code = draft.code.trim()
     if (!name || !code) return
-    try {
-      setOperationError(null)
-      const scope = requireLatestMutation({
-        permission: 'inventory.zones.manage',
-        quota: false,
-      })
-      await inventoryApi.createZone(
-        { warehouseId: id, name, code },
-        { signal: scope.signal },
-      )
-      resource.reload()
-    } catch (error) {
-      setOperationError(normalizeApiProblem(error).message)
-    }
+    const ok = await run((signal) =>
+      inventoryApi
+        .createZone({ warehouseId: id, name, code }, { signal })
+        .then(() => undefined),
+    )
+    if (!ok) return
+    setAddingZone(false)
+    resource.reload()
   }
-  const editWarehouse = async (warehouse: WarehouseDetail) => {
-    const name = window.prompt('Назва складу', warehouse.name)?.trim()
-    if (!name) return
-    const code = window.prompt('Код складу', warehouse.code)?.trim()
-    if (!code) return
-    try {
-      setOperationError(null)
-      const scope = requireLatestMutation({
-        permission: 'inventory.zones.manage',
-        quota: false,
-      })
-      await inventoryApi.updateWarehouse(
-        id,
-        {
-          name,
-          code,
-          isActive: warehouse.isActive,
-        },
-        { signal: scope.signal },
-      )
-      resource.reload()
-    } catch (error) {
-      setOperationError(normalizeApiProblem(error).message)
-    }
+  const saveWarehouse = async (warehouse: WarehouseDetail) => {
+    const name = draft.name.trim()
+    const code = draft.code.trim()
+    if (!name || !code) return
+    const ok = await run((signal) =>
+      inventoryApi
+        .updateWarehouse(
+          id,
+          { name, code, isActive: warehouse.isActive },
+          { signal },
+        )
+        .then(() => undefined),
+    )
+    if (!ok) return
+    setEditingWarehouse(false)
+    resource.reload()
   }
-  const archiveWarehouse = async (warehouse: WarehouseDetail) => {
-    if (!window.confirm(`Архівувати склад «${warehouse.name}»?`)) return
-    try {
-      setOperationError(null)
-      const scope = requireLatestMutation({
-        permission: 'inventory.zones.manage',
-        quota: false,
-      })
-      await inventoryApi.archiveWarehouse(id, { signal: scope.signal })
-      void navigate(base, { replace: true })
-    } catch (error) {
-      setOperationError(normalizeApiProblem(error).message)
-    }
+  const archiveWarehouse = async () => {
+    const ok = await run((signal) =>
+      inventoryApi.archiveWarehouse(id, { signal }),
+    )
+    if (!ok) return
+    setArchivingWarehouse(false)
+    void navigate(base, { replace: true })
   }
-  const editZone = async (zone: WarehouseDetail['zones'][number]) => {
-    const name = window.prompt('Назва зони', zone.name)?.trim()
-    if (!name) return
-    const code = window.prompt('Код зони', zone.code)?.trim()
-    if (!code) return
-    try {
-      setOperationError(null)
-      const scope = requireLatestMutation({
-        permission: 'inventory.zones.manage',
-        quota: false,
-      })
-      await inventoryApi.updateZone(
-        zone.id,
-        {
-          name,
-          code,
-          isActive: zone.isActive,
-        },
-        { signal: scope.signal },
-      )
-      resource.reload()
-    } catch (error) {
-      setOperationError(normalizeApiProblem(error).message)
-    }
+  const saveZone = async (zone: WarehouseZone) => {
+    const name = draft.name.trim()
+    const code = draft.code.trim()
+    if (!name || !code) return
+    const ok = await run((signal) =>
+      inventoryApi
+        .updateZone(
+          zone.id,
+          { name, code, isActive: zone.isActive },
+          { signal },
+        )
+        .then(() => undefined),
+    )
+    if (!ok) return
+    setEditingZone(null)
+    resource.reload()
   }
-  const archiveZone = async (zone: WarehouseDetail['zones'][number]) => {
-    if (!window.confirm(`Архівувати зону «${zone.name}»?`)) return
-    try {
-      setOperationError(null)
-      const scope = requireLatestMutation({
-        permission: 'inventory.zones.manage',
-        quota: false,
-      })
-      await inventoryApi.archiveZone(zone.id, { signal: scope.signal })
-      resource.reload()
-    } catch (error) {
-      setOperationError(normalizeApiProblem(error).message)
-    }
+  const archiveZone = async (zone: WarehouseZone) => {
+    const ok = await run((signal) =>
+      inventoryApi.archiveZone(zone.id, { signal }),
+    )
+    if (!ok) return
+    setArchivingZone(null)
+    resource.reload()
   }
   const printZones = async () => {
     const printWindow = window.open('', '_blank')
@@ -504,130 +589,723 @@ function WarehouseView({ id }: { id: string }) {
       setPrinting(false)
     }
   }
+
   return (
-    <PageBody>
-      <PageHeader
-        eyebrow={
-          <Link className="hover:text-white" to={base}>
-            Інвентаризація
-          </Link>
+    <Resource retry={resource.reload} state={resource.state}>
+      {({ warehouse, sessions, stock, people }: WarehouseData) => {
+        const nameOf = (userId?: string | null) =>
+          userId == null
+            ? null
+            : (people.find((person) => person.userId === userId)?.name ?? null)
+        const zones = warehouse.zones
+        /** The zones a person actually fills — the catch-all is not one. */
+        const real = zones.filter((zone) => !zone.isSystemUnassigned)
+        const partsIn = (zoneId: string) => stock.byZone.get(zoneId) ?? 0
+        const filled = real.filter((zone) => partsIn(zone.id) > 0).length
+        const occupancy =
+          stock.total === null || real.length === 0
+            ? null
+            : Math.round((filled / real.length) * 100)
+
+        const mine = sessions.filter((item) =>
+          item.zones.some((zone) => zone.warehouseId === warehouse.id),
+        )
+        const active =
+          mine.find(
+            (item) => item.status === 'inProgress' || item.status === 'review',
+          ) ??
+          mine.find((item) => item.status === 'draft') ??
+          null
+        const closedAt = (item: InventorySession) =>
+          item.completedAt ?? item.cancelledAt ?? item.createdAt
+        const history = mine
+          .filter(
+            (item) =>
+              item.status === 'completed' || item.status === 'cancelled',
+          )
+          .sort((left, right) => closedAt(right).localeCompare(closedAt(left)))
+          .slice(0, 5)
+        /** When this zone was last counted, or that a count is running now. */
+        const checkOf = (zoneId: string) => {
+          if (active?.zones.some((zone) => zone.zoneId === zoneId) === true)
+            return { label: 'триває', tone: 'text-state-warn' }
+          const last = history.find(
+            (item) =>
+              item.status === 'completed' &&
+              item.zones.some((zone) => zone.zoneId === zoneId),
+          )
+          return last === undefined
+            ? { label: 'не перевіряли', tone: 'text-app-dim' }
+            : { label: day(last.completedAt), tone: 'text-app-muted' }
         }
-        title="Склад"
-      />
-      {operationError ? <Notice tone="danger">{operationError}</Notice> : null}
-      <Resource state={resource.state} retry={resource.reload}>
-        {(warehouse: WarehouseDetail) => (
-          <>
-            <Panel>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-semibold text-white">
+        const zonesOf = (item: InventorySession) =>
+          [...new Set(item.zones.map((zone) => zone.zoneName))].join(', ')
+        const countedZones =
+          active === null
+            ? 0
+            : active.zones.filter((zone) => zone.status === 'completed').length
+
+        return (
+          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+              <div className="flex min-w-0 items-center gap-5">
+                <Link
+                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                  to={base}
+                >
+                  <ChevronLeft aria-hidden className="size-3.5" />
+                  До інвентаризації
+                </Link>
+                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                  <span>Склад</span>
+                  <span aria-hidden className="text-white/20">
+                    /
+                  </span>
+                  <span>Склади</span>
+                  <span aria-hidden className="text-white/20">
+                    /
+                  </span>
+                  <span className="text-app-muted truncate">
                     {warehouse.name}
-                  </h2>
-                  <p className="mt-1 font-mono text-xs text-app-dim">
-                    {warehouse.code}
-                  </p>
+                  </span>
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2.5">
+                {canManage ? (
+                  <Button
+                    className="px-[18px] text-sm font-semibold"
+                    onClick={() => {
+                      setDraft({ name: warehouse.name, code: warehouse.code })
+                      setEditingWarehouse(true)
+                    }}
+                  >
+                    <Pencil aria-hidden />
+                    Редагувати
+                  </Button>
+                ) : null}
+                {canSession ? (
+                  <Button
+                    asChild
+                    className="px-5 text-sm font-bold"
+                    variant="primary"
+                  >
+                    <Link to={`${base}/sessions/new`}>Нова сесія</Link>
+                  </Button>
+                ) : null}
+                <Button
+                  aria-expanded={menuOpen}
+                  aria-label="Інші дії зі складом"
+                  className="min-w-11 px-0 text-base font-bold tracking-[0.1em]"
+                  onClick={() => setMenuOpen((open) => !open)}
+                >
+                  <span aria-hidden>···</span>
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-4">
+                  <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+                    {warehouse.name}
+                  </h1>
+                  {warehouse.isActive ? (
+                    <span className="border-state-ok/30 bg-state-ok-soft text-state-ok inline-flex h-[30px] items-center gap-2 rounded-full border pr-3.5 pl-3 text-[13px] font-bold">
+                      <span
+                        aria-hidden
+                        className="bg-state-ok size-1.5 rounded-full"
+                      />
+                      Активний
+                    </span>
+                  ) : (
+                    <StatusPill tone="neutral">Архівний</StatusPill>
+                  )}
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <p className="text-app-muted mt-3 text-[15px]">
+                  {[
+                    `код ${warehouse.code}`,
+                    `${String(real.length)} ${plural(real.length, ['зона', 'зони', 'зон'])}`,
+                    stock.total === null
+                      ? null
+                      : `${String(stock.total)} ${plural(stock.total, ['позиція', 'позиції', 'позицій'])}`,
+                    `${String(warehouse.unassignedPartCount)} без зони`,
+                    warehouse.isSystemDefault ? 'склад за замовчуванням' : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              </div>
+
+              {operationError ? (
+                <Notice tone="danger">{operationError}</Notice>
+              ) : null}
+
+              {menuOpen ? (
+                <div className="border-app-line bg-app-raised flex flex-wrap items-center gap-2.5 rounded-[14px] border px-4 py-3">
                   <Button
                     disabled={printing}
                     onClick={() => void printZones()}
-                    variant="quiet"
+                    variant="ghost"
                   >
                     <Printer aria-hidden />
-                    Друкувати QR зон
+                    {printing ? 'Готуємо стікери…' : 'Друк стікерів зон'}
                   </Button>
-                  {canManage ? (
-                    <Button
-                      onClick={() => void editWarehouse(warehouse)}
-                      variant="ghost"
-                    >
-                      <Pencil aria-hidden />
-                      Редагувати склад
-                    </Button>
-                  ) : null}
+                  <Button
+                    disabled
+                    title="Сервер поки не віддає залишки складу файлом"
+                    variant="ghost"
+                  >
+                    Експорт залишків
+                  </Button>
                   {canManage && !warehouse.isSystemDefault ? (
                     <Button
-                      onClick={() => void archiveWarehouse(warehouse)}
+                      onClick={() => setArchivingWarehouse(true)}
                       variant="danger"
                     >
+                      <Archive aria-hidden />
                       Архівувати склад
                     </Button>
                   ) : null}
                 </div>
+              ) : null}
+
+              <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-px overflow-hidden rounded-[20px] border">
+                <WarehouseStat
+                  label="Позицій на складі"
+                  meta={`${String(real.length)} ${plural(real.length, ['зона', 'зони', 'зон'])} · ${String(warehouse.unassignedPartCount)} без зони`}
+                  unit="позицій"
+                  value={stock.total === null ? '—' : String(stock.total)}
+                />
+                <WarehouseStat
+                  label="Заповнені зони"
+                  meta={
+                    occupancy === null
+                      ? 'потрібне право «parts.view»'
+                      : `${String(filled)} з ${String(real.length)} ${plural(real.length, ['зони', 'зон', 'зон'])} мають залишок`
+                  }
+                  tone={
+                    occupancy !== null && occupancy >= 80 ? 'warn' : 'plain'
+                  }
+                  unit="%"
+                  value={occupancy === null ? '—' : String(occupancy)}
+                />
+                <WarehouseStat
+                  label="Вартість залишку"
+                  meta="сервер не рахує вартість складу"
+                  unit="USD"
+                  value="—"
+                />
+                <WarehouseStat
+                  label="Розходження"
+                  meta="позиції з незакритою різницею"
+                  tone={
+                    stock.differing !== null && stock.differing > 0
+                      ? 'danger'
+                      : 'plain'
+                  }
+                  unit="позицій"
+                  value={
+                    stock.differing === null ? '—' : String(stock.differing)
+                  }
+                />
               </div>
-              <p className="mt-3 text-sm text-app-dim">
-                Без зони: {warehouse.unassignedPartCount} запчастин
-              </p>
-            </Panel>
-            {canManage ? (
-              <Panel>
-                <form
-                  className="grid gap-3 sm:grid-cols-[1fr_12rem_auto] sm:items-end"
-                  action={(form) => void createZone(form)}
-                >
-                  <label className="grid gap-1 text-sm text-app-dim">
-                    Назва зони
-                    <input
-                      name="name"
-                      required
-                      className="min-h-11 rounded-lg border border-app-line bg-app-canvas px-3 text-white"
-                    />
-                  </label>
-                  <label className="grid gap-1 text-sm text-app-dim">
-                    Код
-                    <input
-                      name="code"
-                      required
-                      className="min-h-11 rounded-lg border border-app-line bg-app-canvas px-3 text-white"
-                    />
-                  </label>
-                  <Button type="submit">Додати зону</Button>
-                </form>
-              </Panel>
-            ) : null}
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {warehouse.zones.map((zone) => (
-                <Panel key={zone.id}>
-                  <div className="flex justify-between gap-2">
-                    <div>
-                      <strong className="text-white">{zone.name}</strong>
-                      <p className="font-mono text-xs text-app-dim">
-                        {zone.code}
-                      </p>
-                    </div>
-                    {zone.isSystemUnassigned ? (
-                      <StatusPill tone="neutral">Системна</StatusPill>
-                    ) : (
-                      <ClipboardCheck className="text-brand" aria-hidden />
-                    )}
-                  </div>
-                  {canManage && !zone.isSystemUnassigned ? (
-                    <div className="mt-4 flex flex-wrap gap-2">
+
+              <div className="flex flex-wrap items-start gap-5">
+                <Card
+                  aside={
+                    canManage ? (
                       <Button
-                        aria-label={`Редагувати зону ${zone.name}`}
-                        onClick={() => void editZone(zone)}
+                        className="text-[13px] font-semibold"
+                        onClick={() => {
+                          setDraft({ name: '', code: '' })
+                          setAddingZone(true)
+                        }}
                         variant="ghost"
                       >
-                        <Pencil aria-hidden />
-                        Редагувати
+                        <Plus aria-hidden />
+                        Додати зону
                       </Button>
-                      <Button
-                        aria-label={`Архівувати зону ${zone.name}`}
-                        onClick={() => void archiveZone(zone)}
-                        variant="danger"
+                    ) : (
+                      <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
+                        {real.length}{' '}
+                        {plural(real.length, ['зона', 'зони', 'зон'])}
+                      </span>
+                    )
+                  }
+                  bodyClassName="p-0 pt-4"
+                  className="min-w-0 flex-[2_1_34rem]"
+                  title="Зони"
+                >
+                  <div
+                    aria-hidden
+                    className={cn(
+                      'border-app-line text-app-muted hidden gap-3 border-y px-6 py-3 font-mono text-[10px] tracking-[0.14em] uppercase md:grid',
+                      canManage
+                        ? 'grid-cols-[minmax(0,1fr)_4.5rem_10rem_6.5rem_5.5rem]'
+                        : 'grid-cols-[minmax(0,1fr)_4.5rem_10rem_6.5rem]',
+                    )}
+                  >
+                    <span>Зона</span>
+                    <span className="text-right">Позицій</span>
+                    <span>Заповнення</span>
+                    <span className="text-right">Перевірено</span>
+                    {canManage ? <span className="text-right">Дії</span> : null}
+                  </div>
+                  <ul className="grid">
+                    {zones.length === 0 ? (
+                      <li className="text-app-muted px-6 py-6 text-sm">
+                        Зон ще немає — додайте першу, щоб розкладати запчастини
+                        по місцях.
+                      </li>
+                    ) : null}
+                    {zones.map((zone) => {
+                      const count = partsIn(zone.id)
+                      /** How much of the warehouse's stock lies in this zone. */
+                      const share =
+                        stock.total === null || stock.total === 0
+                          ? 0
+                          : Math.round((count / stock.total) * 100)
+                      const check = checkOf(zone.id)
+                      return (
+                        <li
+                          className={cn(
+                            'border-app-line grid items-center gap-x-4 gap-y-2 border-b px-6 py-4 last:border-0 md:gap-3',
+                            canManage
+                              ? 'md:grid-cols-[minmax(0,1fr)_4.5rem_10rem_6.5rem_5.5rem]'
+                              : 'md:grid-cols-[minmax(0,1fr)_4.5rem_10rem_6.5rem]',
+                          )}
+                          key={zone.id}
+                        >
+                          <div className="min-w-0">
+                            {partsBase === null ? (
+                              <span className="text-[15px] font-bold text-white">
+                                {zone.name}
+                              </span>
+                            ) : (
+                              <Link
+                                className="text-[15px] font-bold text-white hover:underline"
+                                to={`${partsBase}?zone=${encodeURIComponent(zone.id)}`}
+                              >
+                                {zone.name}
+                              </Link>
+                            )}
+                            <p className="text-app-muted mt-0.5 text-[13px]">
+                              {[
+                                zone.code,
+                                zone.isSystemUnassigned ? 'системна' : null,
+                                zone.isActive ? null : 'архівна',
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </p>
+                          </div>
+                          <p className="text-app-muted font-mono text-[14px] tabular-nums md:text-right">
+                            {stock.total === null ? '—' : count}
+                          </p>
+                          <div>
+                            <span
+                              aria-hidden
+                              className="bg-app-line-2 block h-1.5 overflow-hidden rounded-full"
+                            >
+                              <span
+                                className="bg-state-ok block h-full rounded-full"
+                                style={{ width: `${String(share)}%` }}
+                              />
+                            </span>
+                            <p className="text-app-muted mt-2 font-mono text-[12px]">
+                              {stock.total === null
+                                ? 'залишки недоступні'
+                                : `${String(share)}% складу`}
+                            </p>
+                          </div>
+                          <p
+                            className={cn(
+                              'text-[13px] md:text-right',
+                              check.tone,
+                            )}
+                          >
+                            {check.label}
+                          </p>
+                          {canManage ? (
+                            <div className="flex gap-1.5 md:justify-end">
+                              <Button
+                                aria-label={`Редагувати зону ${zone.name}`}
+                                className="min-w-11 px-0"
+                                disabled={zone.isSystemUnassigned}
+                                onClick={() => {
+                                  setDraft({
+                                    name: zone.name,
+                                    code: zone.code,
+                                  })
+                                  setEditingZone(zone)
+                                }}
+                                title={
+                                  zone.isSystemUnassigned
+                                    ? 'Системну зону не можна змінювати'
+                                    : undefined
+                                }
+                                variant="ghost"
+                              >
+                                <Pencil aria-hidden />
+                              </Button>
+                              <Button
+                                aria-label={`Архівувати зону ${zone.name}`}
+                                className="min-w-11 px-0"
+                                disabled={zone.isSystemUnassigned}
+                                onClick={() => setArchivingZone(zone)}
+                                title={
+                                  zone.isSystemUnassigned
+                                    ? 'Системну зону не можна архівувати'
+                                    : undefined
+                                }
+                                variant="ghost"
+                              >
+                                <Archive aria-hidden />
+                              </Button>
+                            </div>
+                          ) : null}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </Card>
+
+                <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-5">
+                  <section
+                    aria-label="Активна сесія"
+                    className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
+                  >
+                    <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+                      Активна сесія
+                    </h2>
+                    {active === null ? (
+                      <>
+                        <p className="mt-3 text-[19px] font-bold tracking-[-0.015em] text-white">
+                          Перевірка не йде
+                        </p>
+                        <p className="text-app-muted mt-1 text-[13px]">
+                          Останній підрахунок:{' '}
+                          {history[0] === undefined
+                            ? 'ще не було'
+                            : day(closedAt(history[0]))}
+                          .
+                        </p>
+                        {canSession ? (
+                          <Button
+                            asChild
+                            className="mt-5 min-h-11 w-full text-sm font-bold"
+                            variant="primary"
+                          >
+                            <Link to={`${base}/sessions/new`}>
+                              Почати сесію
+                            </Link>
+                          </Button>
+                        ) : null}
+                      </>
+                    ) : (
+                      <>
+                        <p className="mt-3 text-[19px] font-bold tracking-[-0.015em] text-white">
+                          {active.number} · {zonesOf(active)}
+                        </p>
+                        <p className="text-app-muted mt-1 text-[13px]">
+                          {active.startedAt == null
+                            ? `Створено ${date(active.createdAt)}`
+                            : `Розпочато ${date(active.startedAt)}`}
+                          {nameOf(active.startedBy ?? active.createdBy) === null
+                            ? null
+                            : ` · ${String(nameOf(active.startedBy ?? active.createdBy))}`}
+                        </p>
+                        <span
+                          aria-hidden
+                          className="bg-app-line-2 mt-4 block h-1.5 overflow-hidden rounded-full"
+                        >
+                          <span
+                            className="bg-state-warn block h-full rounded-full"
+                            style={{
+                              width: `${String(
+                                active.zones.length === 0
+                                  ? 0
+                                  : Math.round(
+                                      (countedZones / active.zones.length) *
+                                        100,
+                                    ),
+                              )}%`,
+                            }}
+                          />
+                        </span>
+                        <p className="text-app-muted mt-2.5 flex justify-between gap-3 font-mono text-[12px]">
+                          <span>
+                            {countedZones} / {active.zones.length}{' '}
+                            {plural(active.zones.length, [
+                              'зона',
+                              'зони',
+                              'зон',
+                            ])}
+                          </span>
+                          <span>
+                            {active.preview.conflictingPartCount}{' '}
+                            {plural(active.preview.conflictingPartCount, [
+                              'розходження',
+                              'розходження',
+                              'розходжень',
+                            ])}
+                          </span>
+                        </p>
+                        <Button
+                          asChild
+                          className="mt-5 min-h-11 w-full text-sm font-bold"
+                          variant="primary"
+                        >
+                          <Link to={`${base}/sessions/${active.id}`}>
+                            Продовжити сесію
+                          </Link>
+                        </Button>
+                      </>
+                    )}
+                  </section>
+
+                  <Card
+                    aside={
+                      <Link
+                        className="text-brand text-[13px] font-semibold hover:underline"
+                        to={base}
                       >
-                        Архівувати
-                      </Button>
-                    </div>
-                  ) : null}
-                </Panel>
-              ))}
+                        Усі
+                      </Link>
+                    }
+                    bodyClassName="p-0"
+                    title="Історія перевірок"
+                  >
+                    {history.length === 0 ? (
+                      <p className="text-app-muted px-6 pt-4 pb-6 text-sm">
+                        Завершених перевірок цього складу ще немає.
+                      </p>
+                    ) : (
+                      <ul className="grid">
+                        {history.map((item) => {
+                          const conflicts = item.preview.conflictingPartCount
+                          return (
+                            <li
+                              className="border-app-line flex items-center gap-4 border-t px-6 py-3.5"
+                              key={item.id}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <Link
+                                  className="text-[14px] font-semibold text-white hover:underline"
+                                  to={`${base}/sessions/${item.id}`}
+                                >
+                                  {item.number} · {zonesOf(item)}
+                                </Link>
+                                <p className="text-app-muted mt-0.5 text-[12px]">
+                                  {[
+                                    day(closedAt(item)),
+                                    nameOf(item.completedBy ?? item.createdBy),
+                                    item.status === 'cancelled'
+                                      ? 'скасована'
+                                      : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · ')}
+                                </p>
+                              </div>
+                              <p
+                                className={cn(
+                                  'font-mono text-[13px] whitespace-nowrap tabular-nums',
+                                  conflicts === 0
+                                    ? 'text-state-ok'
+                                    : 'text-state-danger',
+                                )}
+                              >
+                                {conflicts}
+                                <span className="sr-only">
+                                  {' '}
+                                  {plural(conflicts, [
+                                    'розходження',
+                                    'розходження',
+                                    'розходжень',
+                                  ])}
+                                </span>
+                              </p>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </Card>
+                </div>
+              </div>
             </div>
-          </>
-        )}
-      </Resource>
-    </PageBody>
+
+            <FormDialog
+              description="Назва і код видно всюди, де зустрічається цей склад."
+              onOpenChange={(next) => {
+                if (!next) setEditingWarehouse(false)
+              }}
+              onSubmit={(event) => {
+                event.preventDefault()
+                void saveWarehouse(warehouse)
+              }}
+              open={editingWarehouse}
+              pending={busy}
+              submitDisabled={
+                draft.name.trim() === '' || draft.code.trim() === ''
+              }
+              submitLabel="Зберегти"
+              title="Редагувати склад"
+            >
+              <NameAndCode draft={draft} onChange={setDraft} />
+            </FormDialog>
+
+            <FormDialog
+              description="Зона — це місце, куди кладуть запчастину і де її потім рахують."
+              onOpenChange={(next) => {
+                if (!next) setAddingZone(false)
+              }}
+              onSubmit={(event) => {
+                event.preventDefault()
+                void createZone()
+              }}
+              open={addingZone}
+              pending={busy}
+              submitDisabled={
+                draft.name.trim() === '' || draft.code.trim() === ''
+              }
+              submitLabel="Додати зону"
+              title="Нова зона"
+            >
+              <NameAndCode draft={draft} onChange={setDraft} />
+            </FormDialog>
+
+            <FormDialog
+              description={
+                editingZone === null
+                  ? undefined
+                  : `Зона «${editingZone.name}» складу «${warehouse.name}».`
+              }
+              onOpenChange={(next) => {
+                if (!next) setEditingZone(null)
+              }}
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (editingZone !== null) void saveZone(editingZone)
+              }}
+              open={editingZone !== null}
+              pending={busy}
+              submitDisabled={
+                draft.name.trim() === '' || draft.code.trim() === ''
+              }
+              submitLabel="Зберегти"
+              title="Редагувати зону"
+            >
+              <NameAndCode draft={draft} onChange={setDraft} />
+            </FormDialog>
+
+            <ConfirmDialog
+              confirmLabel="Архівувати склад"
+              consequence={`Склад «${warehouse.name}» зникне зі списків і з фільтрів. Запчастини залишаться на своїх зонах.`}
+              destructive
+              onConfirm={() => void archiveWarehouse()}
+              onOpenChange={(next) => {
+                if (!next) setArchivingWarehouse(false)
+              }}
+              open={archivingWarehouse}
+              pending={busy}
+              title="Архівувати склад?"
+            />
+
+            <ConfirmDialog
+              confirmLabel="Архівувати зону"
+              consequence={
+                archivingZone === null
+                  ? ''
+                  : `Зона «${archivingZone.name}» більше не зʼявиться у виборі місця. Запчастини, що в ній лежать, доведеться перекласти вручну.`
+              }
+              destructive
+              onConfirm={() => {
+                if (archivingZone !== null) void archiveZone(archivingZone)
+              }}
+              onOpenChange={(next) => {
+                if (!next) setArchivingZone(null)
+              }}
+              open={archivingZone !== null}
+              pending={busy}
+              title="Архівувати зону?"
+            />
+          </div>
+        )
+      }}
+    </Resource>
+  )
+}
+
+/** Name and code, the two fields every warehouse and zone dialog asks for. */
+function NameAndCode({
+  draft,
+  onChange,
+}: {
+  draft: { name: string; code: string }
+  onChange: (draft: { name: string; code: string }) => void
+}) {
+  return (
+    <>
+      <Field label="Назва" required>
+        <TextInput
+          onChange={(event) => onChange({ ...draft, name: event.target.value })}
+          value={draft.name}
+        />
+      </Field>
+      <Field
+        hint="Короткий код для етикеток і пошуку — наприклад A1."
+        label="Код"
+        required
+      >
+        <TextInput
+          onChange={(event) => onChange({ ...draft, code: event.target.value })}
+          value={draft.code}
+        />
+      </Field>
+    </>
+  )
+}
+
+/** One figure of the warehouse strip: label, number, unit and what it counts. */
+function WarehouseStat({
+  label,
+  value,
+  unit,
+  meta,
+  tone = 'plain',
+}: {
+  label: string
+  value: string
+  unit: string
+  meta: string
+  tone?: 'plain' | 'warn' | 'danger'
+}) {
+  return (
+    <div className="bg-app-raised px-6 pt-[22px] pb-6">
+      <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+        {label}
+      </p>
+      <p className="mt-3.5 flex items-baseline gap-2">
+        <span
+          className={cn(
+            'text-[30px] leading-none font-extrabold tracking-[-0.03em] tabular-nums',
+            tone === 'warn'
+              ? 'text-state-warn'
+              : tone === 'danger'
+                ? 'text-state-danger'
+                : 'text-white',
+          )}
+        >
+          {value}
+        </span>
+        <span className="text-app-muted font-mono text-[13px] font-medium">
+          {unit}
+        </span>
+      </p>
+      <p className="text-app-dim mt-3.5 text-[13px]">{meta}</p>
+    </div>
   )
 }
 
