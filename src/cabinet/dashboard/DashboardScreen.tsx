@@ -10,10 +10,15 @@ import { useDashboardData, type DashboardLoadable } from './use-dashboard-data'
 import type { DashboardData, DashboardPeriod } from '@/api/dashboard-contract'
 import { DashboardAnalytics, DashboardPeriodSwitch } from './DashboardAnalytics'
 import { DashboardBillingBanner } from './DashboardBillingBanner'
-import { DashboardDestinations } from './DashboardDestinations'
 import { DashboardErrorState } from './DashboardErrorState'
+import { DashboardRecentOrders } from './DashboardRecentOrders'
 import { DashboardSummary } from './DashboardSummary'
 import { getDashboardBillingPath } from './dashboard-billing-access'
+import {
+  useDashboardExtras,
+  type DashboardExtraLoadable,
+} from './use-dashboard-extras'
+import type { OrderListItem } from '@/api/orders'
 import './dashboard-redesign.css'
 
 const updatedAtFormatter = new Intl.DateTimeFormat('uk-UA', {
@@ -35,6 +40,10 @@ export function DashboardScreen() {
       ? getDashboardBillingPath(snapshot, targetTenant)
       : null
   const destinations = getHeaderDestinations(snapshot, targetTenant?.slug)
+  const extras = useDashboardExtras({
+    cashEnabled: destinations.cashEnabled,
+    ordersEnabled: destinations.ordersPath !== null,
+  })
 
   useEffect(() => {
     if (!selection.normalize) return
@@ -93,10 +102,21 @@ export function DashboardScreen() {
           ) : null}
           <DashboardSummaryState
             billingPath={billingPath}
+            cashBalances={
+              extras.cashBalances.status === 'ready'
+                ? extras.cashBalances.data
+                : undefined
+            }
             loadable={dashboard.summary}
             partsPath={destinations.parts}
             retry={() => dashboard.retrySummary()}
           />
+          {destinations.ordersPath === null ? null : (
+            <DashboardRecentOrdersState
+              loadable={extras.recentOrders}
+              ordersPath={destinations.ordersPath}
+            />
+          )}
           <div className="dashboard-below-fold">
             <DashboardAnalytics
               billingPath={billingPath}
@@ -106,12 +126,6 @@ export function DashboardScreen() {
               retry={() => dashboard.retryAnalytics()}
               showPeriodSwitch={false}
             />
-            {snapshot !== null && targetTenant !== null ? (
-              <DashboardDestinations
-                snapshot={snapshot}
-                tenant={targetTenant}
-              />
-            ) : null}
           </div>
         </div>
       </div>
@@ -121,11 +135,13 @@ export function DashboardScreen() {
 
 function DashboardSummaryState({
   billingPath,
+  cashBalances,
   loadable,
   partsPath,
   retry,
 }: {
   billingPath: string | null
+  cashBalances: Record<string, number> | undefined
   loadable: DashboardLoadable<DashboardData>
   partsPath: string | null
   retry: () => Promise<void>
@@ -134,6 +150,7 @@ function DashboardSummaryState({
     return (
       <DashboardSummary
         data={loadable.data}
+        cashBalances={cashBalances}
         partsPath={partsPath ?? undefined}
       />
     )
@@ -166,7 +183,13 @@ function getHeaderDestinations(
   slug: string | undefined,
 ) {
   if (snapshot === null || slug === undefined) {
-    return { scan: null, newOrder: null, parts: null }
+    return {
+      scan: null,
+      newOrder: null,
+      parts: null,
+      ordersPath: null,
+      cashEnabled: false,
+    }
   }
 
   const access = { status: 'ready' as const, snapshot, error: null }
@@ -176,12 +199,50 @@ function getHeaderDestinations(
   const canCreateOrder =
     evaluateModuleAccess(cabinetModules.orders, access, 'mutation').kind ===
     'allowed'
+  const canViewOrders =
+    evaluateModuleAccess(cabinetModules.orders, access, 'view').kind ===
+    'allowed'
+  const canViewCash =
+    evaluateModuleAccess(cabinetModules.cash, access, 'view').kind === 'allowed'
 
   return {
     scan: canViewParts ? cabinetPath(slug, 'parts', 'scan') : null,
     newOrder: canCreateOrder ? cabinetPath(slug, 'orders', 'new') : null,
     parts: canViewParts ? cabinetPath(slug, 'parts') : null,
+    ordersPath: canViewOrders ? cabinetPath(slug, 'orders') : null,
+    cashEnabled: canViewCash,
   }
+}
+
+function DashboardRecentOrdersState({
+  loadable,
+  ordersPath,
+}: {
+  loadable: DashboardExtraLoadable<OrderListItem[]>
+  ordersPath: string
+}) {
+  if (loadable.status === 'ready') {
+    return (
+      <DashboardRecentOrders orders={loadable.data} ordersPath={ordersPath} />
+    )
+  }
+
+  if (loadable.status === 'error') {
+    return (
+      <Panel aria-label="Останні замовлення">
+        <p className="text-app-muted text-sm">
+          Не вдалося завантажити останні замовлення.
+        </p>
+      </Panel>
+    )
+  }
+
+  return (
+    <Panel aria-label="Останні замовлення">
+      <Skeleton className="h-5 w-48" />
+      <Skeleton className="mt-4 h-24" />
+    </Panel>
+  )
 }
 
 function updatedSubtitle(loadable: DashboardLoadable<DashboardData>): string {

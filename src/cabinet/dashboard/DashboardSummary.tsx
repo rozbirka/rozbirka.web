@@ -23,9 +23,11 @@ const activityDateFormatter = new Intl.DateTimeFormat('uk-UA', {
 })
 
 export function DashboardSummary({
+  cashBalances,
   data,
   partsPath,
 }: {
+  cashBalances?: Record<string, number> | undefined
   data: DashboardData
   partsPath?: string | undefined
 }) {
@@ -57,9 +59,21 @@ export function DashboardSummary({
           )}
           <MetricCaption>{salesCaption(data.todaySalesCount)}</MetricCaption>
         </Metric>
-        {data.totalBalanceUah === null ? null : (
+        {cashBalances === undefined && data.totalBalanceUah === null ? null : (
           <Metric label="Баланс кас">
-            <MetricValue unit="UAH" value={data.totalBalanceUah} />
+            <div className="dashboard-revenue-values">
+              {cashBalances === undefined ? (
+                <MetricValue unit="UAH" value={data.totalBalanceUah!} />
+              ) : cashBalanceEntries(cashBalances).length === 0 ? (
+                <div className="dashboard-metric-value">
+                  <strong>—</strong>
+                </div>
+              ) : (
+                cashBalanceEntries(cashBalances).map(([currency, balance]) => (
+                  <MetricValue key={currency} unit={currency} value={balance} />
+                ))
+              )}
+            </div>
           </Metric>
         )}
         {data.totalInvested === null ? null : (
@@ -275,4 +289,15 @@ function formatNumber(value: number): string {
 function formatActivityDate(timestamp: string): string {
   const date = new Date(timestamp)
   return Number.isNaN(date.valueOf()) ? '—' : activityDateFormatter.format(date)
+}
+
+function cashBalanceEntries(
+  balances: Record<string, number>,
+): [string, number][] {
+  const priority: Record<string, number> = { USD: 0, UAH: 1, EUR: 2 }
+  return Object.entries(balances).sort(
+    ([left], [right]) =>
+      (priority[left] ?? 10) - (priority[right] ?? 10) ||
+      left.localeCompare(right),
+  )
 }

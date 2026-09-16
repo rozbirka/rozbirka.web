@@ -172,6 +172,18 @@ it('shows recoupment from server totals without inventing a cash split', () => {
   expect(screen.queryByText('ФОП Mono')).not.toBeInTheDocument()
 })
 
+it('shows real cash balances for every currency returned by cash registers', () => {
+  render(
+    <DashboardSummary
+      cashBalances={{ UAH: 123_456, USD: 2_450 }}
+      data={summary()}
+    />,
+  )
+
+  expect(normalizedText(metric('Баланс кас'))).toContain('2 450USD')
+  expect(normalizedText(metric('Баланс кас'))).toContain('123 456UAH')
+})
+
 it('renders an empty yard as a successful onboarding state', () => {
   render(<DashboardSummary data={summary({ isYardEmpty: true })} />)
 
