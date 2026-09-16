@@ -17,7 +17,7 @@ import type { DashboardLoadable } from './use-dashboard-data'
 import { DashboardErrorState } from './DashboardErrorState'
 
 const periodLabels: Readonly<Record<DashboardPeriod, string>> = {
-  day: 'День',
+  day: 'Сьогодні',
   week: 'Тиждень',
   month: 'Місяць',
 }
@@ -35,6 +35,7 @@ interface DashboardAnalyticsProps {
   onPeriodChange: (period: DashboardPeriod) => void
   retry: () => Promise<void>
   billingPath?: string | null
+  showPeriodSwitch?: boolean
 }
 
 export function DashboardAnalytics({
@@ -43,6 +44,7 @@ export function DashboardAnalytics({
   onPeriodChange,
   retry,
   billingPath = null,
+  showPeriodSwitch = true,
 }: DashboardAnalyticsProps) {
   return (
     <section aria-label="Аналітика" className="grid min-w-0 gap-4">
@@ -53,7 +55,12 @@ export function DashboardAnalytics({
             Продажі та замовлення за обраний період.
           </p>
         </div>
-        <PeriodSwitch onPeriodChange={onPeriodChange} period={period} />
+        {showPeriodSwitch ? (
+          <DashboardPeriodSwitch
+            onPeriodChange={onPeriodChange}
+            period={period}
+          />
+        ) : null}
       </div>
       {loadable.status === 'ready' ? (
         <AnalyticsContent data={loadable.data} />
@@ -78,7 +85,7 @@ export function DashboardAnalytics({
  * and Tab reachability of every option; arrow keys move focus here so the
  * group still behaves like one control.
  */
-function PeriodSwitch({
+export function DashboardPeriodSwitch({
   period,
   onPeriodChange,
 }: {

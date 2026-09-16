@@ -143,8 +143,6 @@ it('renders the minimal tenant dashboard home', () => {
     </MemoryRouter>,
   )
 
-  expect(
-    screen.getByRole('heading', { name: 'Вітаємо в Koval Auto' }),
-  ).toBeVisible()
-  expect(screen.getByRole('button', { name: 'Оновити дані' })).toBeVisible()
+  expect(screen.getByRole('heading', { name: 'Зведення' })).toBeVisible()
+  expect(screen.getByRole('group', { name: 'Період аналітики' })).toBeVisible()
 })

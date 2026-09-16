@@ -126,7 +126,7 @@ it('keeps the ready summary mounted when analytics fails and retries analytics o
   renderDashboard(['/app/koval/dashboard?period=month'])
 
   expect(screen.getByRole('region', { name: 'Зведення' })).toHaveTextContent(
-    'Продажів сьогодні',
+    'Гроші',
   )
   expect(screen.getByRole('alert', { name: 'Аналітика' })).toHaveTextContent(
     'Не вдалося завантажити аналітику',
@@ -178,7 +178,6 @@ it('retries only failed summary data and marks refresh as busy', async () => {
   expect(
     screen.queryByText('Raw upstream network detail'),
   ).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Оновлюємо…' })).toBeDisabled()
   expect(
     screen.getByRole('region', { name: 'Панель зведення' }),
   ).toHaveAttribute('aria-busy', 'true')
@@ -319,7 +318,7 @@ it('pushes selected periods and keeps tenant, scan, and browser-back state', asy
   const user = userEvent.setup()
   const router = renderDashboard(['/app/koval/dashboard?scan=QR-123~part'])
 
-  await user.click(screen.getByRole('button', { name: 'День' }))
+  await user.click(screen.getByRole('button', { name: 'Сьогодні' }))
   expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(
     '/app/koval/dashboard?scan=QR-123%7Epart&period=day',
   )

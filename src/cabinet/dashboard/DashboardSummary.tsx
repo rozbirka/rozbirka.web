@@ -1,22 +1,19 @@
+import type { ReactNode } from 'react'
+import { Link } from 'react-router'
 import { EmptyState } from '@/components/app'
-/**
- * Parts trade in dollars — the analytics contract names the same figure
- * `revenueUsd`; only the till (`totalBalanceUah`) is hryvnia.
- */
-const CAR_CURRENCY = 'USD'
-
-import { cn } from '@/lib/utils'
 import type { DashboardData, LastActivity } from '@/api/dashboard-contract'
 
-const numberFormatter = new Intl.NumberFormat('uk-UA')
-const currencyFormatter = (currency: string) =>
-  new Intl.NumberFormat('uk-UA', {
-    style: 'currency',
-    currency,
-    currencyDisplay: 'narrowSymbol',
-    maximumFractionDigits: 0,
-  })
+const CAR_CURRENCY = 'USD'
+const numberFormatter = new Intl.NumberFormat('uk-UA', {
+  maximumFractionDigits: 0,
+})
 const dateFormatter = new Intl.DateTimeFormat('uk-UA', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  timeZone: 'Europe/Kyiv',
+})
+const activityDateFormatter = new Intl.DateTimeFormat('uk-UA', {
   day: '2-digit',
   month: '2-digit',
   year: 'numeric',
@@ -25,48 +22,180 @@ const dateFormatter = new Intl.DateTimeFormat('uk-UA', {
   timeZone: 'Europe/Kyiv',
 })
 
-interface SummaryItem {
-  label: string
-  value: string
-  accent?: boolean
-}
-
-export function DashboardSummary({ data }: { data: DashboardData }) {
-  const revenue = revenueItem(data)
-  const commonItems = compact([
-    revenue === null ? null : { ...revenue, accent: true },
-    item('Продажів сьогодні', data.todaySalesCount),
-    item('Доступних запчастин', data.availablePartsCount),
-    item('Приймань', data.intakesCount),
-    item('Нових запчастин сьогодні', data.todayNewPartsCount),
-  ])
-  const managementItems = compact([
-    item('Активних авто', data.activeCarsCount),
-    item('Немає в наявності', data.outOfStockPartsCount),
-    item('Клієнтів', data.customersCount),
-    moneyItem('Баланс каси', data.totalBalanceUah, 'UAH'),
-    item('Учасників команди', data.teamMembersCount),
-    moneyItem('Інвестовано', data.totalInvested, CAR_CURRENCY),
-    moneyItem('Повернуто', data.totalRecouped, CAR_CURRENCY),
-  ])
-  const workItems = compact([
-    item('Авто в роботі', data.carsInWork),
-    item('Продано запчастин', data.totalPartsSold),
-    item('Продано мною сьогодні', data.myPartsToday),
-  ])
+export function DashboardSummary({
+  data,
+  partsPath,
+}: {
+  data: DashboardData
+  partsPath?: string | undefined
+}) {
+  const recoupment = getRecoupment(data.totalInvested, data.totalRecouped)
+  const date = latestActivityDate(data)
 
   return (
-    <section aria-label="Зведення" className="grid gap-4">
+    <section aria-label="Зведення" className="dashboard-overview">
       {data.isYardEmpty ? <DashboardEmptyState /> : null}
-      <SummaryList items={commonItems} />
-      {managementItems.length > 0 ? (
-        <SummaryList items={managementItems} />
-      ) : null}
-      {workItems.length > 0 ? <SummaryList items={workItems} /> : null}
-      <Activity activity={data.lastActivity} title="Остання активність" />
-      <Activity activity={data.lastMyActivity} title="Моя остання активність" />
+
+      <OverviewSection date={date} title="Гроші">
+        <Metric label="Виручка">
+          {data.revenue?.today.length ? (
+            <>
+              <div className="dashboard-revenue-values">
+                {data.revenue.today.map((entry) => (
+                  <MetricValue
+                    key={entry.currency}
+                    unit={entry.currency}
+                    value={entry.amount}
+                  />
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="dashboard-metric-value">
+              <strong>—</strong>
+            </div>
+          )}
+          <MetricCaption>{salesCaption(data.todaySalesCount)}</MetricCaption>
+        </Metric>
+        {data.totalBalanceUah === null ? null : (
+          <Metric label="Баланс кас">
+            <MetricValue unit="UAH" value={data.totalBalanceUah} />
+          </Metric>
+        )}
+        {data.totalInvested === null ? null : (
+          <Metric label="Інвестовано всього">
+            <MetricValue unit={CAR_CURRENCY} value={data.totalInvested} />
+            {data.activeCarsCount === null ? null : (
+              <MetricCaption>
+                {carsCaption(data.activeCarsCount)} · закупка і розбирання
+              </MetricCaption>
+            )}
+          </Metric>
+        )}
+        {data.totalRecouped === null ? null : (
+          <Metric accent="success" label="Повернено всього">
+            <MetricValue unit={CAR_CURRENCY} value={data.totalRecouped} />
+            {recoupment === null ? null : (
+              <>
+                <div
+                  aria-label={`Окупність складу ${recoupment.percent}%`}
+                  aria-valuemax={100}
+                  aria-valuemin={0}
+                  aria-valuenow={recoupment.percent}
+                  className="dashboard-progress"
+                  role="progressbar"
+                >
+                  <span style={{ width: `${recoupment.percent}%` }} />
+                </div>
+                <MetricCaption>
+                  <span>Окупність складу {recoupment.percent}%</span>
+                  <span> · </span>
+                  <span>
+                    лишилось {formatNumber(recoupment.remaining)} {CAR_CURRENCY}
+                  </span>
+                </MetricCaption>
+              </>
+            )}
+          </Metric>
+        )}
+      </OverviewSection>
+
+      <OverviewSection
+        action={
+          partsPath === undefined ? null : (
+            <Link className="dashboard-section-link" to={partsPath}>
+              Усі запчастини
+            </Link>
+          )
+        }
+        title="Склад"
+      >
+        <Metric label="Доступних запчастин">
+          <MetricValue unit="шт" value={data.availablePartsCount} />
+        </Metric>
+        {data.totalPartsSold === null ? null : (
+          <Metric label="Продано всього">
+            <MetricValue unit="шт" value={data.totalPartsSold} />
+            <MetricCaption>за весь час</MetricCaption>
+          </Metric>
+        )}
+        {data.todayNewPartsCount === null ? null : (
+          <Metric label="Нових сьогодні">
+            <MetricValue unit="шт" value={data.todayNewPartsCount} />
+            <MetricCaption>{intakesCaption(data.intakesCount)}</MetricCaption>
+          </Metric>
+        )}
+        {data.outOfStockPartsCount === null ? null : (
+          <Metric accent="warning" label="Немає в наявності">
+            <MetricValue unit="шт" value={data.outOfStockPartsCount} />
+            <MetricCaption>нульовий залишок</MetricCaption>
+          </Metric>
+        )}
+      </OverviewSection>
+
+      <div className="dashboard-activity-grid">
+        <Activity activity={data.lastActivity} title="Остання активність" />
+        <Activity
+          activity={data.lastMyActivity}
+          title="Моя остання активність"
+        />
+      </div>
     </section>
   )
+}
+
+function OverviewSection({
+  action,
+  children,
+  date,
+  title,
+}: {
+  action?: ReactNode
+  children: ReactNode
+  date?: string | null
+  title: string
+}) {
+  return (
+    <section className="dashboard-overview-section">
+      <header className="dashboard-section-heading">
+        <h2>{title}</h2>
+        <span className="dashboard-section-rule" />
+        {date ? <time>{date}</time> : null}
+        {action}
+      </header>
+      <div className="dashboard-metric-grid">{children}</div>
+    </section>
+  )
+}
+
+function Metric({
+  accent,
+  children,
+  label,
+}: {
+  accent?: 'success' | 'warning'
+  children: ReactNode
+  label: string
+}) {
+  return (
+    <article className="dashboard-metric" data-accent={accent}>
+      <h3>{label}</h3>
+      {children}
+    </article>
+  )
+}
+
+function MetricValue({ unit, value }: { unit: string; value: number }) {
+  return (
+    <div className="dashboard-metric-value">
+      <strong>{formatNumber(value)}</strong>
+      <span>{unit}</span>
+    </div>
+  )
+}
+
+function MetricCaption({ children }: { children: ReactNode }) {
+  return <p className="dashboard-metric-caption">{children}</p>
 }
 
 function DashboardEmptyState() {
@@ -75,29 +204,6 @@ function DashboardEmptyState() {
       description="Додайте перше авто або запчастину, щоб побачити робоче зведення."
       title="Почніть наповнювати розбірку"
     />
-  )
-}
-
-function SummaryList({ items }: { items: readonly SummaryItem[] }) {
-  return (
-    <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {items.map(({ label, value, accent }) => (
-        <div
-          className={cn(
-            'rounded-panel border p-4',
-            accent
-              ? 'border-brand/30 bg-brand/[0.06]'
-              : 'border-app-line bg-app-raised',
-          )}
-          key={label}
-        >
-          <dt className="text-app-dim text-[13.5px]">{label}</dt>
-          <dd className="mt-1.5 text-[25px] leading-tight font-light tracking-[-0.02em] tabular-nums text-white">
-            {value}
-          </dd>
-        </div>
-      ))}
-    </dl>
   )
 }
 
@@ -111,48 +217,62 @@ function Activity({
   if (activity === null) return null
 
   return (
-    <section
-      aria-label={title}
-      className="border-app-line rounded-panel bg-app-raised border p-4"
-    >
-      <h2 className="text-sm font-medium text-white">{title}</h2>
-      <p className="text-app-muted mt-2 text-sm">
-        {activity.type} · {activity.userName} · {formatDate(activity.timestamp)}
+    <section aria-label={title} className="dashboard-activity-card">
+      <h2>{title}</h2>
+      <p>
+        {activity.type} · {activity.userName} ·{' '}
+        {formatActivityDate(activity.timestamp)}
       </p>
     </section>
   )
 }
 
-function item(label: string, value: number | null): SummaryItem | null {
-  return value === null ? null : { label, value: numberFormatter.format(value) }
+function getRecoupment(invested: number | null, recouped: number | null) {
+  if (invested === null || recouped === null || invested <= 0) return null
+  const percent = Math.min(
+    100,
+    Math.max(0, Math.round((recouped / invested) * 100)),
+  )
+  return { percent, remaining: Math.max(0, invested - recouped) }
 }
 
-function moneyItem(
-  label: string,
-  value: number | null,
-  currency: string,
-): SummaryItem | null {
-  return value === null
-    ? null
-    : { label, value: currencyFormatter(currency).format(value) }
+function latestActivityDate(data: DashboardData): string | null {
+  const dates = [data.lastActivity?.timestamp, data.lastMyActivity?.timestamp]
+    .filter((value): value is string => value !== undefined)
+    .map((value) => new Date(value))
+    .filter((value) => !Number.isNaN(value.valueOf()))
+  const date =
+    dates.length === 0 ? new Date() : new Date(Math.max(...dates.map(Number)))
+  return dateFormatter.format(date)
 }
 
-/**
- * The server tags today's revenue with its own currency, so take what it sent
- * rather than looking for one code: a yard trading in dollars used to see this
- * figure disappear entirely.
- */
-function revenueItem(data: DashboardData): SummaryItem | null {
-  const entry = data.revenue?.today[0]
-  if (entry === undefined) return null
-  return moneyItem('Виручка сьогодні', entry.amount, entry.currency)
+function salesCaption(value: number): string {
+  return `${formatNumber(value)} ${plural(value, ['замовлення', 'замовлення', 'замовлень'])}`
 }
 
-function compact(items: readonly (SummaryItem | null)[]): SummaryItem[] {
-  return items.filter((item): item is SummaryItem => item !== null)
+function carsCaption(value: number): string {
+  return `${formatNumber(value)} ${plural(value, ['автомобіль', 'автомобілі', 'автомобілів'])}`
 }
 
-function formatDate(timestamp: string): string {
+function intakesCaption(value: number): string {
+  return `${formatNumber(value)} ${plural(value, ['приймання', 'приймання', 'приймань'])}`
+}
+
+function plural(value: number, forms: [string, string, string]): string {
+  const integer = Math.abs(Math.trunc(value))
+  const lastTwo = integer % 100
+  if (lastTwo >= 11 && lastTwo <= 14) return forms[2]
+  const last = integer % 10
+  if (last === 1) return forms[0]
+  if (last >= 2 && last <= 4) return forms[1]
+  return forms[2]
+}
+
+function formatNumber(value: number): string {
+  return numberFormatter.format(value)
+}
+
+function formatActivityDate(timestamp: string): string {
   const date = new Date(timestamp)
-  return Number.isNaN(date.valueOf()) ? '—' : dateFormatter.format(date)
+  return Number.isNaN(date.valueOf()) ? '—' : activityDateFormatter.format(date)
 }

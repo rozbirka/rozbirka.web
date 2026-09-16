@@ -78,7 +78,7 @@ it('changes the selected period once for pointer and keyboard activation', async
     'min-h-11',
   )
 
-  await user.click(screen.getByRole('button', { name: 'День' }))
+  await user.click(screen.getByRole('button', { name: 'Сьогодні' }))
   expect(onPeriodChange).toHaveBeenCalledTimes(1)
   expect(onPeriodChange).toHaveBeenLastCalledWith('day')
 
@@ -94,7 +94,7 @@ it('moves focus across the period group with arrow keys without selecting', asyn
   const onPeriodChange = vi.fn()
   renderAnalytics({ onPeriodChange })
 
-  screen.getByRole('button', { name: 'День' }).focus()
+  screen.getByRole('button', { name: 'Сьогодні' }).focus()
   await user.keyboard('{ArrowRight}')
   expect(screen.getByRole('button', { name: 'Тиждень' })).toHaveFocus()
 

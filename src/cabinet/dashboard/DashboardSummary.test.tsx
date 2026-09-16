@@ -41,19 +41,36 @@ const summary = (overrides: Partial<DashboardData> = {}): DashboardData => ({
   ...overrides,
 })
 
-const getByExactText = (text: string) =>
-  screen.getByText((_content, element) => element?.textContent === text)
+const metric = (label: string) => screen.getByText(label).closest('article')
+const normalizedText = (element: Element | null) =>
+  element?.textContent?.replace(/\s+/g, ' ') ?? ''
 
-it('renders common and owner totals in Ukrainian formats', () => {
-  render(<DashboardSummary data={summary()} />)
+it('renders the money and warehouse overview with authoritative values', () => {
+  render(
+    <DashboardSummary
+      data={summary({
+        revenue: {
+          today: [
+            { currency: 'USD', amount: 1_240 },
+            { currency: 'UAH', amount: 18_600 },
+          ],
+          week: [],
+          month: [],
+        },
+      })}
+    />,
+  )
 
   expect(screen.getByRole('region', { name: 'Зведення' })).toContainElement(
-    screen.getByText('Продажів сьогодні'),
+    screen.getByRole('heading', { name: 'Гроші' }),
   )
-  expect(getByExactText('1\u00a0234')).toBeInTheDocument()
-  expect(getByExactText('5\u00a0678')).toBeInTheDocument()
-  expect(getByExactText('45\u00a0600\u00a0₴')).toBeInTheDocument()
-  expect(getByExactText('123\u00a0456\u00a0₴')).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Склад' })).toBeInTheDocument()
+  expect(normalizedText(metric('Виручка'))).toContain('1 240USD')
+  expect(normalizedText(metric('Виручка'))).toContain('18 600UAH')
+  expect(normalizedText(metric('Баланс кас'))).toContain('123 456UAH')
+  expect(normalizedText(metric('Доступних запчастин'))).toContain('5 678шт')
+  expect(normalizedText(metric('Продано всього'))).toContain('45шт')
+  expect(normalizedText(metric('Виручка'))).toContain('1 234 замовлення')
   const activity = screen.getByRole('region', { name: 'Остання активність' })
   expect(activity).toHaveTextContent(/28\.08\.2026, 16:45/)
   expect(activity).toHaveTextContent(/Додано запчастину/)
@@ -74,9 +91,9 @@ it('does not invent absent owner values', () => {
     />,
   )
 
-  expect(screen.queryByText('Активних авто')).not.toBeInTheDocument()
-  expect(screen.queryByText('Баланс')).not.toBeInTheDocument()
-  expect(screen.queryByText('Інвестовано')).not.toBeInTheDocument()
+  expect(screen.queryByText('Баланс кас')).not.toBeInTheDocument()
+  expect(screen.queryByText('Інвестовано всього')).not.toBeInTheDocument()
+  expect(screen.queryByText('Повернено всього')).not.toBeInTheDocument()
 })
 
 it('renders Core-provided work totals for an owner, including a real zero', () => {
@@ -92,8 +109,7 @@ it('renders Core-provided work totals for an owner, including a real zero', () =
     />,
   )
 
-  expect(screen.getByText('Авто в роботі')).toBeInTheDocument()
-  expect(screen.getByText('Продано запчастин').parentElement).toHaveTextContent(
+  expect(screen.getByText('Продано всього').parentElement).toHaveTextContent(
     '0',
   )
 })
@@ -115,7 +131,6 @@ it('renders Core-provided personal totals and activity for a manager', () => {
     />,
   )
 
-  expect(screen.getByText('Продано мною сьогодні')).toBeInTheDocument()
   expect(
     screen.getByRole('region', { name: 'Моя остання активність' }),
   ).toHaveTextContent('Продано запчастину · Олена')
@@ -137,10 +152,24 @@ it('renders master-only totals and activity without owner values', () => {
     />,
   )
 
-  expect(screen.getByText('Авто в роботі')).toBeInTheDocument()
-  expect(screen.getByText('Продано мною сьогодні')).toBeInTheDocument()
+  expect(screen.getByText('Продано всього')).toBeInTheDocument()
   expect(screen.getByText(/Продано запчастину/)).toBeInTheDocument()
-  expect(screen.queryByText('Активних авто')).not.toBeInTheDocument()
+  expect(screen.queryByText('Інвестовано всього')).not.toBeInTheDocument()
+})
+
+it('shows recoupment from server totals without inventing a cash split', () => {
+  render(
+    <DashboardSummary
+      data={summary({ totalInvested: 10_000, totalRecouped: 8_200 })}
+    />,
+  )
+
+  expect(screen.getByText('Окупність складу 82%')).toBeInTheDocument()
+  expect(normalizedText(metric('Повернено всього'))).toContain(
+    'лишилось 1 800 USD',
+  )
+  expect(screen.queryByText('Сейф')).not.toBeInTheDocument()
+  expect(screen.queryByText('ФОП Mono')).not.toBeInTheDocument()
 })
 
 it('renders an empty yard as a successful onboarding state', () => {
