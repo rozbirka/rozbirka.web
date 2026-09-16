@@ -985,7 +985,8 @@ it('keeps server search, status, and pagination in the order URL', async () => {
 
   expect(await screen.findByRole('link', { name: /#12/ })).toBeVisible()
   expect(screen.getByLabelText('Пошук замовлень')).toHaveValue('door')
-  expect(screen.getByLabelText('Статус замовлення')).toHaveValue('pending')
+  // The status is a set of chips now; the URL's one is the pressed chip.
+  expect(screen.getByRole('radio', { name: /Очікує/ })).toBeChecked()
   expect(orderMocks.list).toHaveBeenCalledWith(
     {
       search: 'door',

@@ -16,12 +16,10 @@ import {
   Pagination,
   Panel,
   SearchInput,
-  SelectInput,
   SkeletonRows,
   StatusPill,
   TextArea,
   TextInput,
-  Toolbar,
 } from '@/components/app'
 import { normalizeApiProblem } from '@/api/errors'
 import { orderStatusPresentation } from './order-labels'
@@ -202,12 +200,38 @@ const canCreateOrder = (
   cabinet.snapshot?.permissions.has('parts.view') === true &&
   cabinet.snapshot.permissions.has('customers.view')
 
+/** Dates arrive as ISO strings; anything unparsable is shown as it came. */
+const day = (value: string) => {
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime())
+    ? value
+    : new Intl.DateTimeFormat('uk-UA', { dateStyle: 'short' }).format(parsed)
+}
+
+/** The statuses the list filters by, in the order a sale moves through them. */
+const ORDER_STATUS_FILTERS = [
+  { value: '', label: 'Усі', dot: 'bg-app-line-2' },
+  { value: 'pending', label: 'Очікує', dot: 'bg-state-warn' },
+  { value: 'confirmed', label: 'Підтверджено', dot: 'bg-state-ok' },
+  { value: 'refunded', label: 'Повернено', dot: 'bg-state-info' },
+  { value: 'cancelled', label: 'Скасовано', dot: 'bg-app-muted' },
+]
+
+/** Statuses whose money never reached the till. */
+const UNPAID_STATUSES = new Set(['cancelled', 'refunded'])
+
+const orderMoney = (value: number | null) =>
+  value === null ? '—' : `${new Intl.NumberFormat('uk-UA').format(value)} $`
+
 function OrderDirectory({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
   const createAllowed = canCreateOrder(definition, cabinet)
   const [params, setParams] = useSearchParams()
   const [orders, setOrders] = useState<OrderListItem[]>([])
   const [totalPages, setTotalPages] = useState(0)
+  const [total, setTotal] = useState(0)
+  /** How many orders sit behind each status chip, under the same search. */
+  const [counts, setCounts] = useState<Record<string, number> | null>(null)
   const [error, setError] = useState<string | null>(null)
   const search = params.get('q') ?? undefined
   const status = params.get('status') ?? undefined
@@ -228,6 +252,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
       .then((result) => {
         setOrders(result.items)
         setTotalPages(result.totalPages)
+        setTotal(result.total)
         setError(null)
       })
       .catch((error) => {
@@ -235,6 +260,33 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
       })
     return () => controller.abort()
   }, [customerId, page, search, status])
+
+  /* The endpoint reports a total per filter, not a breakdown, so each chip's
+     count is its own one-row request under the current search. */
+  useEffect(() => {
+    const controller = new AbortController()
+    void Promise.all(
+      ORDER_STATUS_FILTERS.map((option) =>
+        ordersApi
+          .list(
+            {
+              ...(search === undefined ? {} : { search }),
+              ...(option.value === '' ? {} : { status: option.value }),
+              ...(customerId === undefined ? {} : { customerId }),
+              page: 1,
+              pageSize: 1,
+            },
+            { signal: controller.signal },
+          )
+          .then((result) => [option.value, result.total] as const),
+      ),
+    ).then(
+      (pairs) => setCounts(Object.fromEntries(pairs)),
+      () => setCounts(null),
+    )
+    return () => controller.abort()
+  }, [customerId, search])
+
   const setParam = (name: string, value: string) => {
     const next = new URLSearchParams(params)
     if (value) next.set(name, value)
@@ -247,93 +299,213 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
     next.set('page', String(nextPage))
     setParams(next)
   }
+  const pageSum = orders
+    .filter((order) => !UNPAID_STATUSES.has(order.status))
+    .reduce((sum, order) => sum + (order.totalAmount ?? 0), 0)
+  const filtered = (search ?? '') !== '' || (status ?? '') !== ''
+
   return (
-    <PageBody>
-      <PageHeader
-        actions={
-          createAllowed ? (
-            <Button asChild variant="primary">
+    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+      <div className="grid w-full gap-4 px-4 pt-10 pb-16 sm:px-6 md:px-8 lg:px-12">
+        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
+          <div className="min-w-0">
+            <p className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
+              Продажі
+            </p>
+            <h1 className="mt-2.5 text-[38px] leading-none font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+              Замовлення
+            </h1>
+          </div>
+          {createAllowed ? (
+            <Button
+              asChild
+              className="min-h-11 px-5.5 text-[15px] font-bold"
+              variant="primary"
+            >
               <Link to="new">
                 <Plus aria-hidden />
                 Нове замовлення
               </Link>
             </Button>
-          ) : undefined
-        }
-        eyebrow="Продажі"
-        title="Замовлення"
-      />
-      <Toolbar>
-        <Field className="min-w-52 flex-1" label="Пошук замовлень">
+          ) : null}
+        </div>
+
+        <div className="mt-2.5">
           <SearchInput
+            aria-label="Пошук замовлень"
+            className="min-h-12.5 text-[15px]"
             onChange={(event) => setParam('q', event.target.value)}
+            placeholder="Номер замовлення або покупець"
             value={params.get('q') ?? ''}
           />
-        </Field>
-        <Field className="min-w-48" label="Статус замовлення">
-          <SelectInput
-            onChange={(event) => setParam('status', event.target.value)}
-            value={params.get('status') ?? ''}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
+          <div
+            aria-label="Статус замовлення"
+            className="border-app-line bg-app-raised flex flex-wrap gap-[3px] rounded-xl border p-[3px]"
+            role="radiogroup"
           >
-            <option value="">Усі</option>
-            <option value="pending">Очікує</option>
-            <option value="confirmed">Підтверджено</option>
-            <option value="cancelled">Скасовано</option>
-            <option value="refunded">Повернено</option>
-          </SelectInput>
-        </Field>
-      </Toolbar>
-      {error && <Notice tone="danger">{error}</Notice>}
-      <DataTable
-        caption="Список замовлень"
-        columns={[
-          {
-            key: 'number',
-            label: 'Замовлення',
-            variant: 'primary',
-            cell: (order) => (
-              <Link className="hover:text-brand block" to={order.id}>
-                #{order.number}
-              </Link>
-            ),
-          },
-          {
-            key: 'status',
-            label: 'Статус',
-            cell: (order) => {
-              const presentation = orderStatusPresentation(order.status)
+            {ORDER_STATUS_FILTERS.map((option) => {
+              const active = (status ?? '') === option.value
               return (
-                <StatusPill tone={presentation.tone}>
-                  {presentation.label}
-                </StatusPill>
+                <button
+                  aria-checked={active}
+                  className={cn(
+                    'focus-visible:outline-brand flex min-h-11 cursor-pointer items-center gap-2.5 rounded-[9px] px-3.5 text-[14px] font-semibold',
+                    active
+                      ? 'text-app-ink bg-white/[0.09]'
+                      : 'text-app-muted hover:bg-white/[0.05]',
+                  )}
+                  key={option.value}
+                  onClick={() => setParam('status', option.value)}
+                  role="radio"
+                  type="button"
+                >
+                  <span
+                    aria-hidden
+                    className={cn('size-1.5 rounded-full', option.dot)}
+                  />
+                  {option.label}
+                  {counts === null ? null : (
+                    <span className="text-app-muted font-mono text-[12px] font-medium">
+                      {counts[option.value] ?? 0}
+                    </span>
+                  )}
+                </button>
               )
-            },
-          },
-          {
-            key: 'total',
-            label: 'Сума',
-            align: 'end',
-            cell: (order) => order.totalAmount ?? '—',
-          },
-        ]}
-        empty={
-          <EmptyState
-            description="Замовлення з’являться тут, щойно ви створите перше або клієнт зробить його сам."
-            title="Замовлень поки немає"
-          />
-        }
-        footer={
-          <Pagination
-            label="Сторінки замовлень"
-            onPage={goToPage}
-            page={page}
-            totalPages={Math.max(totalPages, 1)}
-          />
-        }
-        rowKey={(order) => order.id}
-        rows={orders}
-      />
-    </PageBody>
+            })}
+          </div>
+          <p className="flex items-baseline gap-2.5">
+            <span className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
+              Сума на сторінці
+            </span>
+            <span className="text-[20px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
+              {orderMoney(pageSum)}
+            </span>
+          </p>
+        </div>
+
+        {error === null ? null : <Notice tone="danger">{error}</Notice>}
+
+        <section
+          aria-label="Список замовлень"
+          className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
+        >
+          <div
+            aria-hidden
+            className="border-app-line text-app-dim hidden gap-4 border-b px-6 py-3.5 font-mono text-[10px] tracking-[0.14em] uppercase md:grid md:grid-cols-[7rem_1.4fr_1fr_9.5rem_7.5rem]"
+          >
+            <span>Замовлення</span>
+            <span>Покупець</span>
+            <span>Позиції</span>
+            <span>Статус</span>
+            <span className="text-right">Сума</span>
+          </div>
+
+          {orders.length === 0 ? (
+            <div className="flex flex-col items-center gap-3.5 px-6 py-14 text-center">
+              <p className="text-[16px] font-bold text-white">
+                {filtered ? 'Нічого не знайдено' : 'Замовлень поки немає'}
+              </p>
+              <p className="text-app-muted text-[14px]">
+                {filtered
+                  ? 'Спробуйте змінити пошук або статус.'
+                  : 'Замовлення зʼявляться тут, щойно ви створите перше.'}
+              </p>
+              {filtered ? (
+                <Button
+                  className="text-[13px] font-bold"
+                  onClick={() => {
+                    const next = new URLSearchParams(params)
+                    next.delete('q')
+                    next.delete('status')
+                    next.set('page', '1')
+                    setParams(next)
+                  }}
+                >
+                  Скинути фільтри
+                </Button>
+              ) : null}
+            </div>
+          ) : (
+            <ul className="grid">
+              {orders.map((order) => {
+                const presentation = orderStatusPresentation(order.status)
+                const unpaid = UNPAID_STATUSES.has(order.status)
+                return (
+                  <li
+                    className="border-app-line border-b last:border-0"
+                    key={order.id}
+                  >
+                    <Link
+                      className="grid items-center gap-x-4 gap-y-1.5 px-6 py-3.5 hover:bg-white/[0.03] md:grid-cols-[7rem_1.4fr_1fr_9.5rem_7.5rem]"
+                      to={order.id}
+                    >
+                      <span>
+                        <span className="text-app-ink block font-mono text-[15px]">
+                          #{order.number}
+                        </span>
+                        <span className="text-app-muted mt-0.5 block text-[12px]">
+                          {day(order.createdAt)}
+                        </span>
+                      </span>
+                      <span className="min-w-0">
+                        <span
+                          className={cn(
+                            'block truncate text-[15px] font-semibold tracking-[-0.01em]',
+                            order.customerName === null
+                              ? 'text-app-dim'
+                              : 'text-white',
+                          )}
+                        >
+                          {order.customerName ?? 'Без покупця'}
+                        </span>
+                        <span className="text-app-muted mt-0.5 block truncate text-[13px]">
+                          {order.paymentAccountNames.length === 0
+                            ? 'платежів ще немає'
+                            : order.paymentAccountNames.join(', ')}
+                        </span>
+                      </span>
+                      <span className="text-app-muted min-w-0 truncate text-[14px] font-medium">
+                        {order.partNames.length === 0
+                          ? `${String(order.itemCount)} ${plural(order.itemCount, ['позиція', 'позиції', 'позицій'])}`
+                          : order.partNames.join(', ')}
+                      </span>
+                      <span>
+                        <StatusPill tone={presentation.tone}>
+                          {presentation.label}
+                        </StatusPill>
+                      </span>
+                      <span
+                        className={cn(
+                          'text-[16px] font-bold tracking-[-0.01em] tabular-nums md:text-right',
+                          unpaid ? 'text-app-dim' : 'text-white',
+                        )}
+                      >
+                        {orderMoney(order.totalAmount)}
+                      </span>
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+
+          <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-t px-6 py-3.5">
+            <p className="text-app-muted text-[13px] font-semibold">
+              {total} {plural(total, ['замовлення', 'замовлення', 'замовлень'])}
+            </p>
+            <Pagination
+              label="Сторінки замовлень"
+              onPage={goToPage}
+              page={page}
+              totalPages={Math.max(totalPages, 1)}
+            />
+          </div>
+        </section>
+      </div>
+    </div>
   )
 }
 
