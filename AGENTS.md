@@ -22,6 +22,14 @@ This repository contains the public Rozbirka website, authentication and account
 
 ## Stack and commands
 
+### Local cabinet startup (mandatory)
+
+Read `LOCAL-DEVELOPMENT.md` before starting/restarting the local cabinet.
+Plain `npm run dev` does not provide the session BFF in this setup.
+Do not report the cabinet working from a landing-page HTTP 200 or an anonymous
+`/session/refresh` 401. Verify the requested cabinet route and distinguish
+service health from an authenticated session. Never substitute QA endpoints.
+
 The app uses React 19, React Router 7, TypeScript 6, Vite 8, Tailwind CSS 4, Radix UI, Vitest, Playwright, and Wrangler. Use the committed lockfile and Node/npm versions expected by CI.
 
 - Install dependencies: `npm ci`

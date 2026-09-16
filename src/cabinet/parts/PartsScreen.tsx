@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Lock,
   Plus,
+  Printer,
   Search,
   Trash2,
 } from 'lucide-react'
@@ -25,6 +26,7 @@ import {
   Card,
   SectionPanel,
   PillGroup,
+  QuantityStepper,
   SkeletonRows,
   SpecGrid,
   SpecNote,
@@ -901,6 +903,14 @@ function FilterRow({
  * sends bare numbers, so the currency is stated here until it carries one.
  */
 const PART_CURRENCY = 'USD'
+
+/** The conditions the yard sorts by, in the server's own vocabulary. */
+const PART_CONDITIONS = [
+  { value: 'good', label: 'б/в' },
+  { value: 'refurbished', label: 'після ремонту' },
+  { value: 'new', label: 'нова' },
+  { value: 'scrap', label: 'під відновлення' },
+] as const
 
 const conditionLabel = (value: string) =>
   ({
@@ -2396,11 +2406,11 @@ function PartEdit({
   >['requireLatestMutation']
 }) {
   const [values, setValues] = useState<PartFormValues | null>(null)
+  const [detail, setDetail] = useState<PartDetail | null>(null)
   const [mediaItems, setMediaItems] = useState<PartMediaItem[]>([])
-  const sourceOptions = useSourceOptions(
-    canViewCars && values?.sourceType === 'car',
-    canViewIntakes && values?.sourceType === 'batch',
-  )
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const pendingRef = useRef(false)
   const [pending, setPending] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
@@ -2437,6 +2447,7 @@ function PartEdit({
           carModel: '',
           carYear: '',
         })
+        setDetail(part)
         setMediaItems(
           (part.photos ?? []).map((photo, index) => ({
             id: `existing-media-${photo.id}`,
@@ -2504,60 +2515,366 @@ function PartEdit({
       setPending(false)
     }
   }
+  const navigate = useNavigate()
+  const tenantSlug = useParams<{ tenant: string }>().tenant ?? ''
+  const base = `/app/${tenantSlug}/parts`
+  const backTo = `${base}/${partId}`
+  const remove = async () => {
+    if (deleting) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const scope = requireLatestMutation({ quota: false })
+      await partsApi.delete(partId, { signal: scope.signal })
+      setConfirmingDelete(false)
+      void navigate(base, { replace: true })
+    } catch {
+      setDeleteError('Не вдалося видалити деталь.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
-    <PageBody width="narrow">
-      <PageHeader eyebrow="Склад · Деталі" title="Редагувати деталь" />
-      {values ? (
-        <form
-          className="grid gap-4"
-          noValidate
-          onSubmit={(event) => void save(event)}
-        >
-          <PartFields
-            canViewCars={canViewCars}
-            canViewIntakes={canViewIntakes}
-            edit
-            errors={errors}
-            setValues={setValues}
-            sourceOptions={sourceOptions}
-            values={values}
-          />
-          <PartMediaFields
-            items={mediaItems}
-            requireLatestMutation={requireLatestMutation}
-            setItems={setMediaItems}
-          />
-          {status ? <Notice tone="ok">{status}</Notice> : null}
-          {error ? <Notice tone="danger">{error}</Notice> : null}
-          <div className="border-app-line rounded-panel bg-app-raised flex flex-wrap items-center justify-end gap-2 border p-3">
-            {mediaPending ? (
-              <p className="text-app-dim mr-auto text-[13.5px]">
-                Дочекайтеся, доки завантажаться всі фото.
-              </p>
-            ) : null}
-            <Button asChild>
-              <Link to="..">Скасувати</Link>
-            </Button>
-            <Button
-              aria-busy={pending || mediaPending}
-              disabled={pending || mediaPending}
-              type="submit"
-              variant="primary"
-            >
-              Зберегти зміни
-            </Button>
-          </div>
-        </form>
-      ) : !error ? (
-        <Notice role="status" tone="info">
-          Завантажуємо дані деталі…
-        </Notice>
-      ) : null}
-      {values ? null : error ? <Notice tone="danger">{error}</Notice> : null}
-      <div className="text-app-dim grid gap-1 text-[13.5px]">
-        <p>Сумісність недоступна для редагування</p>
-        <p>Видалення деталі перевіряється сервером.</p>
+    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+        <div className="flex min-w-0 items-center gap-5">
+          <Link
+            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+            to={backTo}
+          >
+            <ChevronLeft aria-hidden className="size-3.5" />
+            До деталі
+          </Link>
+          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+            <span>Склад</span>
+            <span aria-hidden className="text-white/20">
+              /
+            </span>
+            <span>Запчастини</span>
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button asChild className="px-[18px] text-sm font-semibold">
+            <Link to={backTo}>Скасувати</Link>
+          </Button>
+          <Button
+            aria-busy={pending || mediaPending}
+            className="px-5 text-sm font-bold"
+            disabled={pending || mediaPending || values === null}
+            form="part-edit"
+            type="submit"
+            variant="primary"
+          >
+            Зберегти зміни
+          </Button>
+        </div>
       </div>
-    </PageBody>
+
+      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+        <div className="min-w-0">
+          <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
+            {detail?.name ?? 'Редагувати деталь'}
+          </h1>
+          {detail ? (
+            <p className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm font-medium">
+              <span className="border-app-line bg-app-input text-app-ink rounded-[7px] border px-2.5 py-1 font-mono text-[13px]">
+                {detail.qrCode}
+              </span>
+              <span>
+                Створено {detail.createdByName} ·{' '}
+                <DateValue value={detail.createdAt} />
+              </span>
+            </p>
+          ) : null}
+        </div>
+
+        {status ? <Notice tone="ok">{status}</Notice> : null}
+        {error ? <Notice tone="danger">{error}</Notice> : null}
+
+        {values ? (
+          <form
+            className="flex flex-wrap items-start gap-6"
+            id="part-edit"
+            noValidate
+            onSubmit={(event) => void save(event)}
+          >
+            <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
+              <Card
+                aside={
+                  <span className="text-app-dim text-[13px]">
+                    Не змінюється
+                  </span>
+                }
+                title="Джерело"
+              >
+                <p className="text-app-muted text-sm">
+                  Джерело задане під час створення запчастини.
+                </p>
+                <div className="border-app-line bg-app-input flex flex-wrap items-center justify-between gap-3 rounded-[14px] border px-4 py-3.5">
+                  <span className="text-[16px] font-semibold text-white">
+                    {detail?.carId && detail.carCode
+                      ? `З авто · ${detail.carCode}${detail.carBrand ? ` (${detail.carBrand} ${detail.carModel ?? ''})` : ''}`
+                      : detail?.intakeId
+                        ? 'З приймання'
+                        : sourceLabel(values.sourceType)}
+                  </span>
+                  {detail?.carId && canViewCars ? (
+                    <Button asChild>
+                      <Link to={`/app/${tenantSlug}/cars/${detail.carId}`}>
+                        Відкрити авто
+                        <ExternalLink aria-hidden />
+                      </Link>
+                    </Button>
+                  ) : detail?.intakeId && canViewIntakes ? (
+                    <Button asChild>
+                      <Link
+                        to={`/app/${tenantSlug}/intakes/${detail.intakeId}`}
+                      >
+                        Відкрити приймання
+                        <ExternalLink aria-hidden />
+                      </Link>
+                    </Button>
+                  ) : null}
+                </div>
+              </Card>
+
+              <Card title="Опис деталі">
+                <p className="text-app-muted text-sm">
+                  Як запчастина виглядає у списку складу та в пошуку.
+                </p>
+                <Field error={errors.name} label="Назва" required>
+                  <TextInput
+                    name="name"
+                    onChange={(event) =>
+                      setValues((current) =>
+                        current
+                          ? { ...current, name: event.target.value }
+                          : current,
+                      )
+                    }
+                    required
+                    value={values.name}
+                  />
+                </Field>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Тип деталі">
+                    <TextInput
+                      name="partType"
+                      onChange={(event) =>
+                        setValues((current) =>
+                          current
+                            ? { ...current, partType: event.target.value }
+                            : current,
+                        )
+                      }
+                      value={values.partType}
+                    />
+                  </Field>
+                  <Field
+                    hint="Редагування OEM поки не приймає сервер"
+                    label="OEM-код"
+                  >
+                    <TextInput
+                      className="font-mono"
+                      disabled
+                      name="oemCode"
+                      value={values.oemCode}
+                    />
+                  </Field>
+                </div>
+                <Field label="Стан">
+                  <PillGroup
+                    label="Стан деталі"
+                    onChange={(next) =>
+                      setValues((current) =>
+                        current ? { ...current, condition: next } : current,
+                      )
+                    }
+                    options={PART_CONDITIONS}
+                    value={values.condition}
+                  />
+                </Field>
+                <Field label="Нотатки">
+                  <TextArea
+                    name="notes"
+                    onChange={(event) =>
+                      setValues((current) =>
+                        current
+                          ? { ...current, notes: event.target.value }
+                          : current,
+                      )
+                    }
+                    rows={2}
+                    value={values.notes}
+                  />
+                </Field>
+              </Card>
+
+              <Card title="Кількість і ціна">
+                <p className="text-app-muted text-sm">
+                  Скільки одиниць на складі та за скільки їх продавати.
+                </p>
+                <div className="grid gap-4 sm:grid-cols-[auto_1fr_1fr]">
+                  <Field error={errors.quantity} label="Кількість" required>
+                    <QuantityStepper
+                      label="Кількість на складі"
+                      min={0}
+                      onChange={(next) =>
+                        setValues((current) =>
+                          current
+                            ? { ...current, quantity: String(next) }
+                            : current,
+                        )
+                      }
+                      value={Number(values.quantity) || 0}
+                    />
+                  </Field>
+                  <Field label="Одиниця">
+                    <TextInput
+                      name="unit"
+                      onChange={(event) =>
+                        setValues((current) =>
+                          current
+                            ? { ...current, unit: event.target.value }
+                            : current,
+                        )
+                      }
+                      value={values.unit}
+                    />
+                  </Field>
+                  <Field
+                    error={errors.desiredSalePrice}
+                    hint="У доларах"
+                    label="Бажана ціна"
+                  >
+                    <TextInput
+                      inputMode="decimal"
+                      name="desiredSalePrice"
+                      onChange={(event) =>
+                        setValues((current) =>
+                          current
+                            ? {
+                                ...current,
+                                desiredSalePrice: event.target.value,
+                              }
+                            : current,
+                        )
+                      }
+                      value={values.desiredSalePrice}
+                    />
+                  </Field>
+                </div>
+              </Card>
+
+              <Card
+                aside={
+                  <span className="text-app-dim text-[13px]">
+                    Лише для читання
+                  </span>
+                }
+                title="Сумісність"
+              >
+                <p className="text-app-muted text-sm">
+                  Сумісність задана під час створення і доступна лише для
+                  читання.
+                </p>
+                <SpecGrid
+                  specs={[
+                    { label: 'Марка', value: detail?.compatCarBrand ?? '—' },
+                    { label: 'Модель', value: detail?.compatCarModel ?? '—' },
+                    {
+                      label: 'Рік',
+                      value:
+                        detail?.compatCarYear === null ||
+                        detail?.compatCarYear === undefined
+                          ? '—'
+                          : String(detail.compatCarYear),
+                    },
+                  ]}
+                />
+              </Card>
+
+              <Card title="Фото">
+                <p className="text-app-muted text-sm">
+                  Нові фото завантажуються одразу після вибору. Зберегти можна,
+                  коли всі файли завантажені.
+                </p>
+                <PartMediaFields
+                  items={mediaItems}
+                  requireLatestMutation={requireLatestMutation}
+                  setItems={setMediaItems}
+                />
+                <p className="text-app-dim text-[13px]">
+                  Покупці бачать фото у картці деталі.
+                </p>
+              </Card>
+            </div>
+
+            <aside className="sticky top-24 grid min-w-[280px] flex-[0_0_320px] gap-5">
+              <Card title="Зведення">
+                <dl className="grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
+                  <dt className="text-app-muted text-sm font-semibold">
+                    Доступно
+                  </dt>
+                  <dd className="font-mono text-[16px] text-white tabular-nums">
+                    {detail?.quantityAvailable ?? 0} {values.unit || 'шт'}
+                  </dd>
+                  <dt className="text-app-muted text-sm font-semibold">
+                    У резерві
+                  </dt>
+                  <dd className="font-mono text-[16px] text-white tabular-nums">
+                    {detail?.quantityReserved ?? 0} {values.unit || 'шт'}
+                  </dd>
+                  <dt className="text-app-muted text-sm font-semibold">
+                    QR-код
+                  </dt>
+                  <dd className="font-mono text-[14px] break-all text-white">
+                    {detail?.qrCode ?? '—'}
+                  </dd>
+                </dl>
+                <Button asChild className="mt-4 w-full text-sm font-semibold">
+                  <Link to={`/app/${tenantSlug}/stickers?part=${partId}`}>
+                    <Printer aria-hidden />
+                    Надрукувати стікер
+                  </Link>
+                </Button>
+              </Card>
+
+              <Card title="Видалення">
+                <p className="text-app-muted text-sm">
+                  {detail && detail.quantityReserved > 0
+                    ? 'Деталь у резерві під замовлення — сервер відхилить видалення.'
+                    : 'Деталь не входить у відкриті замовлення — її можна видалити.'}
+                </p>
+                <Button
+                  className="w-full text-sm font-semibold"
+                  onClick={() => setConfirmingDelete(true)}
+                  type="button"
+                  variant="danger"
+                >
+                  <Trash2 aria-hidden />
+                  Видалити запчастину
+                </Button>
+              </Card>
+            </aside>
+          </form>
+        ) : !error ? (
+          <SkeletonRows columns={2} label="Завантажуємо деталь…" rows={4} />
+        ) : null}
+      </div>
+
+      <ConfirmDialog
+        confirmLabel="Видалити"
+        consequence="Історія продажів, резерви та фото цієї деталі зникнуть назавжди."
+        destructive
+        error={deleteError}
+        onConfirm={() => void remove()}
+        onOpenChange={setConfirmingDelete}
+        open={confirmingDelete}
+        pending={deleting}
+        title="Видалити деталь?"
+      />
+    </div>
   )
 }

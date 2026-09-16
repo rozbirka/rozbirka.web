@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import {
   Button,
   Field,
@@ -145,9 +146,24 @@ function TenantStickerQueue({
     typeof useLatestMutationGuard
   >['requireLatestMutation']
 }) {
-  const [queue, setQueue] = useState<QueueItem[]>(() =>
-    scope ? readQueue(scope) : [],
-  )
+  const [searchParams, setSearchParams] = useSearchParams()
+  // Another screen can send one part here to be printed: the id arrives in the
+  // URL and joins the queue as it is read, so a queue is never a render behind
+  // the address bar.
+  const requested = searchParams.get('part')
+  const [queue, setQueue] = useState<QueueItem[]>(() => {
+    const stored = scope ? readQueue(scope) : []
+    return requested && !stored.some((item) => item.id === requested)
+      ? [...stored, { id: requested, quantity: 1 }]
+      : stored
+  })
+  useEffect(() => {
+    if (!requested) return
+    // The parameter has done its job; drop it so a reload does not re-queue.
+    const next = new URLSearchParams(searchParams)
+    next.delete('part')
+    setSearchParams(next, { replace: true })
+  }, [requested, searchParams, setSearchParams])
   const [id, setId] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [parts, setParts] = useState<PartListItem[]>([])

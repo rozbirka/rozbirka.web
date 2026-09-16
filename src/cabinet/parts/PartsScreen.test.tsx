@@ -780,13 +780,22 @@ it('rechecks intakes.view before creating an intake-sourced part', async () => {
 })
 
 it('loads existing edit values and updates every field accepted by the immutable request', async () => {
-  partMocks.get.mockResolvedValueOnce({
+  partMocks.get.mockResolvedValue({
     id: 'part-1',
     name: 'Front bumper',
     source: 'car',
     carId: 'car-1',
+    carCode: 'CAR-01',
+    carBrand: 'Ford',
+    carModel: 'Focus',
+    carYear: 2018,
     intakeId: null,
     quantityTotal: 2,
+    quantityAvailable: 2,
+    quantityReserved: 0,
+    qrCode: 'RZB-26-1',
+    createdByName: 'Olena',
+    createdAt: '2026-08-01T10:00:00Z',
     unit: 'pcs',
     condition: 'used',
     notes: 'Old note',
@@ -815,12 +824,13 @@ it('loads existing edit values and updates every field accepted by the immutable
   )
 
   expect(await screen.findByLabelText('Назва')).toHaveValue('Front bumper')
-  expect(
-    await screen.findByText('CAR-01 · Ford Focus (2018)'),
-  ).toBeInTheDocument()
+  // The source is stated, not editable — it is fixed when the part is born.
+  expect(await screen.findByText(/З авто · CAR-01/)).toBeInTheDocument()
   expect(screen.queryByLabelText('ID джерела')).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Тип джерела')).not.toBeInTheDocument()
   expect(screen.getByLabelText('OEM-код')).toHaveValue('OEM-read-only')
-  expect(screen.getByLabelText('Кількість')).toHaveValue(2)
+  // The stepper is a text field with numeric input mode, not <input type=number>.
+  expect(screen.getByLabelText('Кількість')).toHaveValue('2')
   expect(screen.getByRole('link', { name: 'Існуюче фото 1' })).toHaveAttribute(
     'href',
     'https://cdn.example/existing.jpg',

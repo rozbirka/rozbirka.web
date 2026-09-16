@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState, type ReactNode } from 'react'
 import {
   Link,
   useLocation,
@@ -6,9 +6,10 @@ import {
   useParams,
   useSearchParams,
 } from 'react-router'
-import { ChevronLeft, Plus } from 'lucide-react'
+import { ChevronLeft, Plus, ScanLine } from 'lucide-react'
 import {
   Button,
+  Card,
   Fact,
   ConfirmDialog,
   DataTable,
@@ -20,10 +21,13 @@ import {
   PageHeader,
   Pagination,
   Panel,
+  PillGroup,
+  QuantityStepper,
   SearchInput,
   SelectInput,
   SkeletonRows,
   StatCard,
+  StatusPill,
   StatStrip,
   TextArea,
   TextInput,
@@ -37,7 +41,10 @@ import {
   type IntakeListParams,
   isIntakeStatus,
 } from '@/api/intakes'
+import { inventoryApi, type InventoryZone } from '@/api/inventory'
+import { partsApi } from '@/api/parts'
 import { normalizeApiProblem } from '@/api/errors'
+import { cn, plural } from '@/lib/utils'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { MediaPicker } from '../cars/CarsScreen'
@@ -58,8 +65,19 @@ const pageSizeParam = (value: string | null, fallback: number) => {
   const number = positiveInteger(value, fallback)
   return number <= 100 ? number : fallback
 }
+/**
+ * Intakes are bought in dollars, like the cars and the parts they become. A
+ * round sum drops its cents; real cents are kept.
+ */
 const money = (amount: number) =>
-  new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 2 }).format(amount)
+  new Intl.NumberFormat('uk-UA', {
+    style: 'currency',
+    currency: 'USD',
+    currencyDisplay: 'narrowSymbol',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    trailingZeroDisplay: 'stripIfInteger',
+  }).format(amount)
 
 function useIntakeAccess() {
   const cabinet = useCabinet()
@@ -134,6 +152,18 @@ function useIntakeAccess() {
       viewDecision(cabinetModules.intakes, 'finance.view').kind === 'allowed',
   }
 }
+
+const allowedToView = (
+  definition: CabinetModuleDefinition,
+  cabinet: ReturnType<typeof useCabinet>,
+) =>
+  evaluateModuleAccess(
+    { ...definition, released: true },
+    cabinet.status === 'ready' && cabinet.snapshot
+      ? { status: 'ready', snapshot: cabinet.snapshot, error: null }
+      : { status: 'loading', snapshot: null, error: null },
+    'view',
+  ).kind === 'allowed'
 
 function Denied({ decision }: { decision: ModuleAccessDecision }) {
   const message =
@@ -777,6 +807,23 @@ function IntakeForm({
   )
 }
 
+/** The four states a yard actually sorts parts into, mapped to the server enum. */
+const INTAKE_CONDITIONS = [
+  { value: 'good', label: 'б/в' },
+  { value: 'refurbished', label: 'після ремонту' },
+  { value: 'new', label: 'нова' },
+  { value: 'scrap', label: 'під відновлення' },
+] as const
+
+/** A part added in this sitting, kept only for the session's own recap. */
+interface AddedPart {
+  id: string
+  name: string
+  quantity: number
+  unit: string
+  zone: string | null
+}
+
 function PartForm({
   canUploadMedia,
   intakeId,
@@ -788,59 +835,83 @@ function PartForm({
   const cabinet = useCabinet()
   const params = useParams<{ tenant: string }>()
   const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
+  const canPlace = allowedToView(cabinetModules.inventory, cabinet)
   const [values, setValues] = useState({
     name: '',
     partType: '',
+    oemCode: '',
     condition: 'good',
-    quantity: '1',
+    quantity: 1,
     unit: 'шт',
+    price: '',
+    zoneId: '',
     notes: '',
   })
   const [media, setMedia] = useState<MediaUploadResult[]>([])
   const [problem, setProblem] = useState<string | null>(null)
-  const [fieldErrors, setFieldErrors] = useState<{
-    name?: string
-    quantity?: string
-  }>({})
-  const [intakeName, setIntakeName] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string }>({})
+  const [intake, setIntake] = useState<Intake | null>(null)
+  const [zones, setZones] = useState<InventoryZone[]>([])
+  const [added, setAdded] = useState<AddedPart[]>([])
   const [busy, setBusy] = useState(false)
   const intakeMutation = useLatestMutationGuard(cabinetModules.intakes)
   const partMutation = useLatestMutationGuard(cabinetModules.parts)
-  const update =
-    (key: keyof typeof values) =>
-    (
-      event: React.ChangeEvent<
-        HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-      >,
-    ) => {
-      const { value } = event.target
-      setValues((current) => ({ ...current, [key]: value }))
-    }
+
   useEffect(() => {
     const controller = new AbortController()
     void intakesApi.get(intakeId, { signal: controller.signal }).then(
-      (intake) => setIntakeName(intake.name ?? 'без назви'),
+      (next) => {
+        if (!controller.signal.aborted) setIntake(next)
+      },
       () => undefined,
     )
     return () => controller.abort()
   }, [intakeId])
-  const save = async (event: React.FormEvent) => {
+
+  useEffect(() => {
+    if (!canPlace) return
+    const controller = new AbortController()
+    void inventoryApi
+      .getZones({ activeOnly: true, signal: controller.signal })
+      .then(
+        (next) => {
+          if (!controller.signal.aborted) setZones(next)
+        },
+        () => {
+          // Without zones the cell simply stays unset — the part is still added.
+        },
+      )
+    return () => controller.abort()
+  }, [canPlace])
+
+  const update = (key: keyof typeof values, value: string | number) =>
+    setValues((current) => ({ ...current, [key]: value }))
+
+  /**
+   * What one piece of this batch cost: the price of the whole intake spread
+   * over the positions already in it. It is the yard's own arithmetic, shown
+   * so the sale price is set against something rather than guessed.
+   */
+  const unitCost =
+    intake && intake.totalCost !== null && intake.partsCount > 0
+      ? intake.totalCost / intake.partsCount
+      : null
+  const price = Number(values.price.replace(',', '.'))
+  const hasPrice =
+    values.price.trim() !== '' && Number.isFinite(price) && price > 0
+  const margin =
+    hasPrice && unitCost !== null
+      ? Math.round(((price - unitCost) / price) * 100)
+      : null
+  const named = values.name.trim().length > 0
+  const zone = zones.find((item) => item.id === values.zoneId) ?? null
+
+  const save = async (event: React.FormEvent, andAnother = false) => {
     event.preventDefault()
     if (busy) return
-    const quantity = Number(values.quantity)
-    if (!values.name.trim() || !Number.isInteger(quantity) || quantity < 1) {
+    if (!named) {
       setFieldErrors({
-        ...(values.name.trim()
-          ? {}
-          : {
-              name: 'Вкажіть назву деталі, як її шукатимуть на складі — наприклад, «Бампер передній».',
-            }),
-        ...(Number.isInteger(quantity) && quantity >= 1
-          ? {}
-          : {
-              quantity:
-                'Введіть ціле число від 1 — скільки таких деталей приймаєте.',
-            }),
+        name: 'Вкажіть назву деталі, як її шукатимуть на складі — наприклад, «Бампер передній».',
       })
       return
     }
@@ -849,156 +920,433 @@ function PartForm({
       name: values.name.trim(),
       partType: values.partType.trim() || null,
       condition: values.condition || null,
-      quantity,
+      quantity: values.quantity,
       unit: values.unit || null,
       notes: values.notes.trim() || null,
       photoKeys: media.map((item) => item.storageKey),
+      ...(values.zoneId ? { inventoryZoneIds: [values.zoneId] } : {}),
     }
     setBusy(true)
     try {
       const intakeScope = intakeMutation.requireLatestMutation({ quota: false })
       partMutation.requireLatestMutation({ permission: 'parts.view' })
-      await intakesApi.addPart(intakeId, request, {
+      const created = await intakesApi.addPart(intakeId, request, {
         signal: intakeScope.signal,
       })
-      void navigate(`${base}/${intakeId}`)
+      // The intake endpoint carries no price, so the asking price is set on the
+      // part it just created — one call, right after, before anyone sees it.
+      if (hasPrice) {
+        const priceScope = partMutation.requireLatestMutation({
+          permission: 'parts.manage',
+          quota: false,
+        })
+        await partsApi.update(
+          created.id,
+          { desiredSalePrice: { isSet: true, value: price } },
+          { signal: priceScope.signal },
+        )
+      }
+      if (!andAnother) {
+        void navigate(`${base}/${intakeId}`)
+        return
+      }
+      setAdded((current) => [
+        {
+          id: created.id,
+          name: request.name,
+          quantity: values.quantity,
+          unit: values.unit || 'шт',
+          zone: zone?.code ?? null,
+        },
+        ...current,
+      ])
+      setValues((current) => ({
+        ...current,
+        name: '',
+        partType: '',
+        oemCode: '',
+        quantity: 1,
+        price: '',
+        notes: '',
+      }))
+      setMedia([])
+      setIntake(
+        (current) =>
+          current && { ...current, partsCount: current.partsCount + 1 },
+      )
+      setBusy(false)
     } catch (error: unknown) {
       setProblem(normalizeApiProblem(error).message)
       setBusy(false)
     }
   }
+
   const backTo = `${base}/${intakeId}`
+  const saveNote = named
+    ? 'Деталь отримає QR-код і потрапить у це приймання.'
+    : 'Вкажіть назву, щоб додати деталь.'
+
   return (
-    <PageBody role="main" width="narrow">
-      <Button asChild className="justify-self-start" variant="quiet">
-        <Link to={backTo}>
-          <ChevronLeft aria-hidden />
-          До приймання
-        </Link>
-      </Button>
-      <PageHeader eyebrow="Склад · Приймання" title="Нова запчастина" />
-      <p className="text-app-muted text-sm">
-        {intakeName === null
-          ? 'Деталь буде оприбуткована в це приймання.'
-          : `Деталь буде оприбуткована в приймання «${intakeName}».`}
-      </p>
-      {problem ? <Notice tone="danger">{problem}</Notice> : null}
-      <form
-        aria-busy={busy}
-        className="grid gap-4"
-        onSubmit={(event) => void save(event)}
-      >
-        <Panel className="grid gap-3">
-          <h2 className="text-base font-semibold text-white">Деталь</h2>
-          <Field
-            error={fieldErrors.name}
-            hint="Назва, за якою деталь шукатимуть на складі"
-            label="Назва"
-            required
+    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+        <div className="flex min-w-0 items-center gap-5">
+          <Link
+            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+            to={backTo}
           >
-            <TextInput
-              autoComplete="off"
-              name="name"
-              onChange={update('name')}
-              required
-              value={values.name}
-            />
-          </Field>
-          <div className="flex flex-wrap gap-3">
-            <Field
-              className="min-w-52 flex-1"
-              hint="Наприклад: кузов, оптика, двигун"
-              label="Тип"
-            >
-              <TextInput
-                autoComplete="off"
-                name="partType"
-                onChange={update('partType')}
-                value={values.partType}
-              />
-            </Field>
-            <Field
-              className="min-w-52 flex-1"
-              hint="Як позначаєте стан у своєму каталозі"
-              label="Стан"
-            >
-              <TextInput
-                autoComplete="off"
-                name="condition"
-                onChange={update('condition')}
-                value={values.condition}
-              />
-            </Field>
-          </div>
-        </Panel>
-        <Panel className="grid gap-3">
-          <h2 className="text-base font-semibold text-white">Скільки</h2>
-          <div className="flex flex-wrap gap-3">
-            <Field
-              className="min-w-36 flex-1"
-              error={fieldErrors.quantity}
-              label="Кількість"
-              required
-            >
-              <TextInput
-                inputMode="numeric"
-                name="quantity"
-                onChange={update('quantity')}
-                required
-                value={values.quantity}
-              />
-            </Field>
-            <Field
-              className="min-w-36 flex-1"
-              hint="шт, компл, кг"
-              label="Одиниця"
-            >
-              <TextInput
-                autoComplete="off"
-                name="unit"
-                onChange={update('unit')}
-                value={values.unit}
-              />
-            </Field>
-          </div>
-        </Panel>
-        <Panel className="grid gap-3">
-          <Field
-            hint="Дефекти, комплектність, звідки знято — усе, що вплине на продаж"
-            label="Нотатки"
+            <ChevronLeft aria-hidden className="size-3.5" />
+            До приймання
+          </Link>
+          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+            <span>Склад</span>
+            <span aria-hidden className="text-white/20">
+              /
+            </span>
+            <span>Приймання</span>
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button
+            aria-busy={busy}
+            className="px-[18px] text-sm font-semibold"
+            disabled={busy || !named}
+            onClick={(event) => void save(event, true)}
           >
-            <TextArea
-              name="notes"
-              onChange={update('notes')}
-              value={values.notes}
-            />
-          </Field>
-        </Panel>
-        {canUploadMedia ? (
-          <Panel>
-            <MediaPicker
-              beforeDispatch={() => {
-                intakeMutation.requireLatestMutation({ quota: false })
-                partMutation.requireLatestMutation({
-                  permission: 'parts.view',
-                  quota: false,
-                })
-              }}
-              entityType="parts"
-              items={media}
-              onChange={setMedia}
-            />
-          </Panel>
-        ) : null}
-        <div className="border-app-line rounded-panel bg-app-raised flex flex-wrap items-center gap-2 border p-3">
-          <Button disabled={busy} type="submit" variant="primary">
-            Додати запчастину
+            Зберегти й додати ще
           </Button>
-          <Button asChild variant="quiet">
-            <Link to={backTo}>Скасувати</Link>
+          <Button
+            aria-busy={busy}
+            className="px-5 text-sm font-bold"
+            disabled={busy || !named}
+            onClick={(event) => void save(event)}
+            variant="primary"
+          >
+            Додати деталь
           </Button>
         </div>
-      </form>
-    </PageBody>
+      </div>
+
+      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+        <div className="min-w-0">
+          <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
+            Додати деталь
+          </h1>
+          <p className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm font-medium">
+            <span>
+              Деталь у приймання{' '}
+              <span className="text-app-ink font-semibold">
+                {intake?.name ?? '…'}
+              </span>
+            </span>
+            {intake ? (
+              <>
+                <span aria-hidden className="text-white/20">
+                  ·
+                </span>
+                <span>
+                  уже {intake.partsCount}{' '}
+                  {plural(intake.partsCount, ['позиція', 'позиції', 'позицій'])}
+                </span>
+              </>
+            ) : null}
+          </p>
+        </div>
+
+        {problem ? <Notice tone="danger">{problem}</Notice> : null}
+
+        <form
+          aria-busy={busy}
+          className="flex flex-wrap items-start gap-6"
+          onSubmit={(event) => void save(event)}
+        >
+          <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
+            <FormCard step="01" title="Опис">
+              <Field
+                error={fieldErrors.name}
+                hint="Назва, за якою деталь шукатимуть на складі"
+                label="Назва"
+                required
+              >
+                <TextInput
+                  autoComplete="off"
+                  name="name"
+                  onChange={(event) => update('name', event.target.value)}
+                  placeholder="Наприклад: Фара права LED"
+                  required
+                  value={values.name}
+                />
+              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Тип деталі">
+                  <TextInput
+                    autoComplete="off"
+                    name="partType"
+                    onChange={(event) => update('partType', event.target.value)}
+                    placeholder="оптика, кузов, ходова"
+                    value={values.partType}
+                  />
+                </Field>
+                <Field
+                  hint="Приймання поки не зберігає OEM — впишіть його на картці деталі"
+                  label="OEM-код"
+                >
+                  <TextInput
+                    className="font-mono"
+                    disabled
+                    name="oemCode"
+                    placeholder="1RV-8820-02"
+                    value=""
+                  />
+                </Field>
+              </div>
+              <Field label="Стан">
+                <PillGroup
+                  label="Стан деталі"
+                  onChange={(next) => update('condition', next)}
+                  options={INTAKE_CONDITIONS}
+                  value={values.condition}
+                />
+              </Field>
+            </FormCard>
+
+            <FormCard
+              description={
+                unitCost === null
+                  ? 'Собівартість позиції з’явиться, щойно приймання матиме ціну й позиції.'
+                  : `Собівартість підтягується з партії — ${money(unitCost)} на одиницю.`
+              }
+              step="02"
+              title="Кількість і ціна"
+            >
+              <div className="grid gap-4 sm:grid-cols-[auto_1fr_1fr]">
+                <Field label="Кількість" required>
+                  <QuantityStepper
+                    label="Кількість деталей"
+                    min={1}
+                    onChange={(next) => update('quantity', next)}
+                    value={values.quantity}
+                  />
+                </Field>
+                <Field hint="шт, компл, кг" label="Одиниця">
+                  <TextInput
+                    autoComplete="off"
+                    name="unit"
+                    onChange={(event) => update('unit', event.target.value)}
+                    value={values.unit}
+                  />
+                </Field>
+                <Field hint="Бажана ціна, у доларах" label="Ціна продажу">
+                  <TextInput
+                    inputMode="decimal"
+                    name="price"
+                    onChange={(event) => update('price', event.target.value)}
+                    placeholder="0"
+                    value={values.price}
+                  />
+                </Field>
+              </div>
+            </FormCard>
+
+            {canPlace ? (
+              <FormCard
+                description="Можна вказати комірку зараз або розмістити партію пізніше."
+                step="03"
+                title="Розміщення"
+              >
+                <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
+                  <Field label="Комірка">
+                    <SelectInput
+                      name="zoneId"
+                      onChange={(event) => update('zoneId', event.target.value)}
+                      value={values.zoneId}
+                    >
+                      <option value="">Без комірки</option>
+                      {zones.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.code} · {item.name}
+                        </option>
+                      ))}
+                    </SelectInput>
+                  </Field>
+                  <Button
+                    className="min-h-11"
+                    disabled
+                    title="Сканування комірки камерою ще не підключене до цієї форми"
+                    type="button"
+                  >
+                    <ScanLine aria-hidden />
+                    Сканувати
+                  </Button>
+                </div>
+              </FormCard>
+            ) : null}
+
+            <FormCard step={canPlace ? '04' : '03'} title="Фото й нотатки">
+              {canUploadMedia ? (
+                <MediaPicker
+                  beforeDispatch={() => {
+                    intakeMutation.requireLatestMutation({ quota: false })
+                    partMutation.requireLatestMutation({
+                      permission: 'parts.view',
+                      quota: false,
+                    })
+                  }}
+                  entityType="parts"
+                  items={media}
+                  onChange={setMedia}
+                />
+              ) : null}
+              <Field label="Нотатки">
+                <TextArea
+                  name="notes"
+                  onChange={(event) => update('notes', event.target.value)}
+                  placeholder="Дефекти, комплектність"
+                  rows={2}
+                  value={values.notes}
+                />
+              </Field>
+            </FormCard>
+          </div>
+
+          <aside className="sticky top-24 grid min-w-[280px] flex-[0_0_320px] gap-5">
+            <Card title="Нова позиція">
+              <div className="border-app-line bg-app-input rounded-[14px] border p-4">
+                <p
+                  className={cn(
+                    'text-[17px] font-bold tracking-[-0.015em]',
+                    named ? 'text-white' : 'text-app-dim',
+                  )}
+                >
+                  {named ? values.name : 'Назва деталі'}
+                </p>
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                  <StatusPill tone={zone ? 'ok' : 'warn'}>
+                    {zone ? `Доступно · ${zone.code}` : 'Без комірки'}
+                  </StatusPill>
+                  <span className="text-app-muted font-mono text-[13px]">
+                    {values.quantity} {values.unit || 'шт'}
+                  </span>
+                </div>
+              </div>
+              <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
+                <dt className="text-app-muted text-sm font-semibold">
+                  Собівартість
+                </dt>
+                <dd className="font-mono text-[16px] text-white tabular-nums">
+                  {unitCost === null ? '—' : money(unitCost)}
+                </dd>
+                <dt className="text-app-muted text-sm font-semibold">
+                  Ціна продажу
+                </dt>
+                <dd
+                  className={cn(
+                    'font-mono text-[16px] tabular-nums',
+                    hasPrice ? 'text-white' : 'text-app-dim',
+                  )}
+                >
+                  {hasPrice ? money(price) : '—'}
+                </dd>
+                <div className="bg-app-line col-span-2 my-1 h-px" />
+                <dt className="text-[16px] font-bold text-white">Маржа</dt>
+                <dd
+                  className={cn(
+                    'font-mono text-[20px] tabular-nums',
+                    margin === null
+                      ? 'text-app-dim'
+                      : margin >= 30
+                        ? 'text-state-ok'
+                        : margin > 0
+                          ? 'text-state-warn'
+                          : 'text-state-danger',
+                  )}
+                >
+                  {margin === null ? '—' : `${String(margin)}%`}
+                </dd>
+              </dl>
+              <Button
+                aria-busy={busy}
+                className="mt-5 min-h-12 w-full text-[16px] font-bold"
+                disabled={busy || !named}
+                type="submit"
+                variant="primary"
+              >
+                Додати деталь
+              </Button>
+              <p className="text-app-dim mt-3 text-[13px] leading-[1.5]">
+                {saveNote}
+              </p>
+            </Card>
+
+            {added.length > 0 ? (
+              <Card
+                aside={
+                  <span className="text-app-muted font-mono text-[12px]">
+                    {added.length}
+                  </span>
+                }
+                bodyClassName="p-0"
+                title="Додані щойно"
+              >
+                <ul className="divide-app-line grid divide-y">
+                  {added.map((item) => (
+                    <li
+                      className="flex items-center gap-3 px-6 py-3"
+                      key={item.id}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-white">
+                          {item.name}
+                        </span>
+                        <span className="text-app-muted mt-0.5 block font-mono text-[13px]">
+                          {item.zone ?? 'без комірки'}
+                        </span>
+                      </span>
+                      <span className="text-app-muted font-mono text-[14px] whitespace-nowrap">
+                        {item.quantity} {item.unit}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            ) : null}
+          </aside>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+/** A numbered step of a long form, as the redesign draws it. */
+function FormCard({
+  step,
+  title,
+  description,
+  children,
+}: {
+  step: string
+  title: string
+  description?: string
+  children: ReactNode
+}) {
+  const titleId = useId()
+  return (
+    <section
+      aria-labelledby={titleId}
+      className="border-app-line bg-app-raised rounded-[18px] border px-6 pt-[22px] pb-6"
+    >
+      <div className="flex items-baseline gap-2.5">
+        <span className="text-app-dim font-mono text-[12px]">{step}</span>
+        <h2
+          className="text-[17px] font-bold tracking-[-0.01em] text-white"
+          id={titleId}
+        >
+          {title}
+        </h2>
+      </div>
+      {description === undefined ? null : (
+        <p className="text-app-muted mt-1.5 text-sm">{description}</p>
+      )}
+      <div className="mt-5 grid gap-4">{children}</div>
+    </section>
   )
 }

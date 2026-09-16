@@ -370,7 +370,7 @@ it('shows photos and creator but gates linked parts and warehouse actions with p
   expect(screen.queryByText(/5\s000/)).not.toBeInTheDocument()
   expect(screen.queryByText(/Бампер/)).not.toBeInTheDocument()
   expect(
-    screen.queryByRole('link', { name: 'Додати запчастину' }),
+    screen.queryByRole('link', { name: 'Додати деталь' }),
   ).not.toBeInTheDocument()
 })
 
@@ -392,7 +392,7 @@ it('renders every linked intake part for parts.view without requiring parts.mana
   expect(screen.getByRole('cell', { name: '2 шт' })).toBeVisible()
   expect(screen.getByRole('cell', { name: 'available' })).toBeVisible()
   expect(
-    screen.queryByRole('link', { name: 'Додати запчастину' }),
+    screen.queryByRole('link', { name: 'Додати деталь' }),
   ).not.toBeInTheDocument()
 })
 
@@ -452,11 +452,16 @@ it('allows no-photo part creation without parts.manage and exposes upload only w
   )
 
   expect(
-    await screen.findByRole('heading', { name: 'Нова запчастина' }),
+    await screen.findByRole('heading', { name: 'Додати деталь' }),
   ).toBeVisible()
   expect(screen.queryByLabelText('Додати фото')).not.toBeInTheDocument()
   await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Бампер')
-  await user.click(screen.getByRole('button', { name: 'Додати запчастину' }))
+  await user.click(
+    within(screen.getByRole('region', { name: 'Нова позиція' })).getByRole(
+      'button',
+      { name: 'Додати деталь' },
+    ),
+  )
   expect(intakesApi.addPart).toHaveBeenCalledWith(
     'intake-1',
     {
@@ -544,7 +549,9 @@ it('locks add-part submit, prevents duplicates, normalizes conflict, and retains
   )
 
   await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Бампер')
-  const save = screen.getByRole('button', { name: 'Додати запчастину' })
+  const save = within(
+    screen.getByRole('region', { name: 'Нова позиція' }),
+  ).getByRole('button', { name: 'Додати деталь' })
   await user.click(save)
   expect(save).toBeDisabled()
   expect(save.closest('form')).toHaveAttribute('aria-busy', 'true')
