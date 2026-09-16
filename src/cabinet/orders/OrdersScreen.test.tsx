@@ -876,8 +876,19 @@ it('preserves a refund key only for ambiguous retries and rotates after definiti
   )
 
   await screen.findByRole('heading', { name: 'Замовлення #1' })
+  // Refund is a destructive transition, so it sits behind the order's menu.
+  await user.click(
+    screen.getByRole('button', { name: 'Інші дії із замовленням' }),
+  )
+  await user.click(
+    within(
+      screen.getByRole('group', { name: 'Інші дії із замовленням' }),
+    ).getByRole('button', { name: 'Повернути кошти' }),
+  )
   await user.type(screen.getByLabelText('Причина повернення'), 'Помилка каси')
-  const submit = screen.getByRole('button', { name: 'Повернути кошти' })
+  const submit = within(
+    screen.getByRole('region', { name: 'Повернення коштів' }),
+  ).getByRole('button', { name: 'Повернути кошти' })
   await user.click(submit)
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Немає з’єднання з мережею.',
@@ -1064,9 +1075,9 @@ it('shows authoritative detail and lets orders.manage edit pending fields and ca
   const payments = screen.getByRole('table', { name: 'Платежі замовлення' })
   expect(within(payments).getByText('Основна каса')).toBeVisible()
   expect(within(payments).getByText('100 UAH')).toBeVisible()
-  const audit = screen.getByRole('table', { name: 'Історія замовлення' })
-  expect(within(audit).getByText('created')).toBeVisible()
-  expect(within(audit).getByText('Олена')).toBeVisible()
+  const audit = screen.getByRole('list', { name: 'Історія замовлення' })
+  expect(within(audit).getByText('Замовлення створено')).toBeVisible()
+  expect(within(audit).getByText(/Олена/)).toBeVisible()
   const timestamp = within(audit).getByText('2026-08-28 00:00')
   expect(timestamp.tagName).toBe('TIME')
   expect(timestamp).toHaveAttribute('datetime', '2026-08-28T00:00:00Z')
@@ -1088,6 +1099,10 @@ it('shows authoritative detail and lets orders.manage edit pending fields and ca
   expect(
     screen.queryByRole('button', { name: 'Підтвердити' }),
   ).not.toBeInTheDocument()
+  // Cancelling is destructive, so it lives in the order's menu too.
+  await user.click(
+    screen.getByRole('button', { name: 'Інші дії із замовленням' }),
+  )
   await user.click(screen.getByRole('button', { name: 'Скасувати замовлення' }))
   expect(orderMocks.cancel).toHaveBeenCalledWith('order-1')
 })
@@ -1300,6 +1315,11 @@ it('renders audit timestamps and data for otherwise identical events', async () 
     expect(stamp.tagName).toBe('TIME')
     expect(stamp).toHaveAttribute('datetime', '2026-08-28T10:15:00Z')
   }
+  // Event payloads are technical detail: shown on request, not by default.
+  expect(screen.queryByText('quantity: 2')).not.toBeInTheDocument()
+  await userEvent
+    .setup()
+    .click(screen.getByRole('button', { name: 'Технічні дані' }))
   expect(screen.getByText('quantity: 2')).toBeVisible()
   expect(screen.getByText('unitPrice: 125')).toBeVisible()
 })

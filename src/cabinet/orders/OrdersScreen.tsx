@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
-import { Plus, Trash2 } from 'lucide-react'
+import { ChevronLeft, MoreHorizontal, Plus, Trash2 } from 'lucide-react'
 import {
   Button,
+  Card,
   SectionPanel,
   DataTable,
   DeniedState,
@@ -24,6 +25,7 @@ import {
   type StatusTone,
 } from '@/components/app'
 import { normalizeApiProblem } from '@/api/errors'
+import { cn, plural } from '@/lib/utils'
 import {
   customersApi,
   readCustomerPhoneConflict,
@@ -98,6 +100,34 @@ const lineTotal = (quantity: number, unitPrice: number) => {
   return Number.isFinite(total) ? total : null
 }
 /** `2026-08-28T10:15:00Z` reads as `2026-08-28 10:15`; the machine value stays in `dateTime`. */
+/**
+ * What the server calls each order event, said in Ukrainian. An event the
+ * vocabulary does not know is shown as it came rather than guessed at.
+ */
+const ORDER_EVENTS: Record<string, string> = {
+  created: 'Замовлення створено',
+  items_updated: 'Позиції змінено',
+  item_updated: 'Позицію змінено',
+  notes_updated: 'Нотатки змінено',
+  customer_changed: 'Клієнта змінено',
+  confirmed: 'Підтверджено',
+  payment_accepted: 'Платіж прийнято',
+  cancelled: 'Скасовано',
+  refunded: 'Кошти повернено',
+}
+
+const orderEventTitle = (eventType: string) =>
+  ORDER_EVENTS[eventType] ?? eventType
+
+/** Two initials for the avatar chip; a single word gives one. */
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('') || '?'
+
 const formatTimestamp = (value: string) => {
   const parts = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(value)
   return parts ? `${parts[1]} ${parts[2]}` : value
@@ -865,6 +895,9 @@ function OrderDetailScreen({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [refundReason, setRefundReason] = useState('')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [refundOpen, setRefundOpen] = useState(false)
+  const [rawHistory, setRawHistory] = useState(false)
   const [draftNotes, setDraftNotes] = useState('')
   const [draftCustomerId, setDraftCustomerId] = useState('')
   const [paymentDrafts, setPaymentDrafts] = useState([
@@ -959,542 +992,731 @@ function OrderDetailScreen({
     order.totalAmount === null || order.totalPaid === null
       ? null
       : order.totalAmount - order.totalPaid
+  const ordersPath = location.pathname.replace(/\/orders\/.*$/, '/orders')
+  const customerPath =
+    order.customerId === null
+      ? null
+      : `${location.pathname.replace(/\/orders\/.*$/, '')}/customers/${order.customerId}`
   const historyRows = order.history.map((entry, index) => ({
     ...entry,
     key: `${entry.createdAt}-${entry.eventType}-${entry.userName}-${index}`,
   }))
   return (
-    <PageBody>
-      <PageHeader
-        actions={<StatusPill tone={status.tone}>{status.label}</StatusPill>}
-        eyebrow="Продажі · Замовлення"
-        title={`Замовлення #${String(order.number)}`}
-      />
-      {error && <Notice tone="danger">{error}</Notice>}
-      <Panel>
-        <dl className="grid gap-3 sm:grid-cols-4">
-          <div className="grid gap-1">
-            <dt className="text-app-dim text-[13.5px]">Клієнт</dt>
-            <dd className="text-sm text-white">
-              {order.customerName ?? 'Без клієнта'}
-            </dd>
-          </div>
-          <div className="grid gap-1">
-            <dt className="text-app-dim text-[13.5px]">Разом</dt>
-            <dd className="text-sm tabular-nums text-white">
-              {money(order.totalAmount, currency)}
-            </dd>
-          </div>
-          <div className="grid gap-1">
-            <dt className="text-app-dim text-[13.5px]">Сплачено</dt>
-            <dd className="text-sm tabular-nums text-white">
-              {money(order.totalPaid, currency)}
-            </dd>
-          </div>
-          <div className="grid gap-1">
-            <dt className="text-app-dim text-[13.5px]">Залишок</dt>
-            <dd className="text-sm tabular-nums text-white">
-              {money(outstanding, currency)}
-            </dd>
-          </div>
-        </dl>
-      </Panel>
-      {itemsEditable ? (
-        <SectionPanel
-          aside={
-            <span className="text-app-muted text-[13.5px] tabular-nums">
-              Разом за позиціями {money(draftsTotal, currency)}
+    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+        <div className="flex min-w-0 items-center gap-5">
+          <Link
+            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+            to={ordersPath}
+          >
+            <ChevronLeft aria-hidden className="size-3.5" />
+            До замовлень
+          </Link>
+          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+            <span>Продажі</span>
+            <span aria-hidden className="text-white/20">
+              /
             </span>
-          }
-          description={
-            itemDrafts.length === 1
-              ? 'Видалення останньої позиції скасує замовлення.'
-              : 'Змініть кількість або ціну й збережіть позиції — набір замінюється цілком.'
-          }
-          footer={
-            <>
-              <Button
-                disabled={busy}
-                onClick={() =>
-                  void transition(() =>
-                    ordersApi.updateItems(
-                      order.id,
-                      itemDrafts.map(({ partId, quantity, unitPrice }) => ({
-                        partId,
-                        quantity,
-                        unitPrice,
-                      })),
-                    ),
-                  )
-                }
-                variant="primary"
-              >
-                Зберегти позиції
-              </Button>
-              <Button asChild variant="ghost">
-                <Link to={`${location.pathname}/items/new`}>
-                  <Plus aria-hidden />
-                  Додати позицію
-                </Link>
-              </Button>
-            </>
-          }
-          title="Позиції"
-        >
-          {itemDrafts.length === 0 && (
-            <p className="text-app-muted px-4 py-3 text-sm">
-              Позицій немає. Додайте запчастину, щоб замовлення можна було
-              підтвердити.
-            </p>
-          )}
-          <ul>
-            {itemDrafts.map((item, index) => (
-              <li
-                className="border-app-line grid gap-3 border-b px-4 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
-                key={item.id}
-              >
-                <div className="min-w-0">
-                  <p className="text-app-ink truncate text-sm font-medium">
-                    {item.partName}
-                  </p>
-                  <p className="text-app-dim mt-0.5 text-[12.5px] tabular-nums">
-                    Сума позиції{' '}
-                    {money(lineTotal(item.quantity, item.unitPrice), currency)}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-end gap-2">
-                  <div className="grid w-20 gap-1.5">
-                    <span aria-hidden className="text-app-dim text-[12.5px]">
-                      Кількість
-                    </span>
-                    <TextInput
-                      aria-label={`Кількість ${item.partName}`}
-                      className="text-right"
-                      inputMode="numeric"
-                      onChange={(event) =>
-                        setItemDrafts((current) =>
-                          current.map((draft, draftIndex) =>
-                            draftIndex === index
-                              ? {
-                                  ...draft,
-                                  quantity: Number(event.target.value),
-                                }
-                              : draft,
-                          ),
-                        )
-                      }
-                      value={item.quantity}
-                    />
-                  </div>
-                  <div className="grid w-28 gap-1.5">
-                    <span aria-hidden className="text-app-dim text-[12.5px]">
-                      Ціна
-                    </span>
-                    <TextInput
-                      aria-label={`Ціна ${item.partName}`}
-                      className="text-right"
-                      inputMode="decimal"
-                      onChange={(event) =>
-                        setItemDrafts((current) =>
-                          current.map((draft, draftIndex) =>
-                            draftIndex === index
-                              ? {
-                                  ...draft,
-                                  unitPrice: Number(event.target.value),
-                                }
-                              : draft,
-                          ),
-                        )
-                      }
-                      value={item.unitPrice}
-                    />
-                  </div>
-                  <Button
-                    aria-label={`Видалити ${item.partName}`}
-                    disabled={busy}
-                    onClick={() =>
-                      void transition(() =>
-                        itemDrafts.length === 1
-                          ? ordersApi.cancel(order.id)
-                          : ordersApi.updateItems(
-                              order.id,
-                              itemDrafts
-                                .filter((_, draftIndex) => draftIndex !== index)
-                                .map(({ partId, quantity, unitPrice }) => ({
-                                  partId,
-                                  quantity,
-                                  unitPrice,
-                                })),
-                            ),
-                      )
-                    }
-                    size="icon"
-                    variant="danger"
-                  >
-                    <Trash2 aria-hidden />
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </SectionPanel>
-      ) : (
-        <section className="grid gap-2">
-          <h2 className="text-base font-semibold text-white">Позиції</h2>
-          <DataTable
-            caption="Позиції замовлення"
-            columns={[
-              {
-                key: 'part',
-                label: 'Позиція',
-                variant: 'primary',
-                cell: (item) => item.partName,
-              },
-              {
-                key: 'quantity',
-                label: 'Кількість',
-                align: 'end',
-                cell: (item) => item.quantity,
-              },
-              {
-                key: 'unitPrice',
-                label: 'Ціна',
-                align: 'end',
-                cell: (item) => money(item.unitPrice, currency),
-              },
-              {
-                key: 'totalPrice',
-                label: 'Сума',
-                align: 'end',
-                cell: (item) => money(item.totalPrice, currency),
-              },
-            ]}
-            empty={
-              <EmptyState
-                description="У цьому замовленні немає жодної запчастини."
-                title="Позицій немає"
-              />
-            }
-            rowKey={(item) => item.id}
-            rows={order.items}
-          />
-        </section>
-      )}
-      {itemsEditable && (
-        <SectionPanel
-          description="Нотатки бачить команда розбірки; клієнта можна змінити, доки замовлення очікує."
-          title="Клієнт і нотатки"
-        >
-          <div className="grid gap-4 p-4">
-            <div className="grid gap-2">
-              <Field label="Нотатки замовлення">
-                <TextArea
-                  onChange={(event) => setDraftNotes(event.target.value)}
-                  value={draftNotes}
-                />
-              </Field>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  disabled={busy}
-                  onClick={() =>
-                    void transition(() =>
-                      ordersApi.updateNotes(order.id, draftNotes),
-                    )
-                  }
-                >
-                  Зберегти нотатки
-                </Button>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-end gap-2">
-              <Field
-                className="min-w-52 flex-1"
-                hint="Порожнє поле відв’яже клієнта від замовлення."
-                label="ID клієнта замовлення"
-              >
-                <TextInput
-                  onChange={(event) => setDraftCustomerId(event.target.value)}
-                  value={draftCustomerId}
-                />
-              </Field>
-              <Button
-                disabled={busy}
-                onClick={() =>
-                  void transition(() =>
-                    ordersApi.setCustomer(order.id, draftCustomerId || null),
-                  )
-                }
-              >
-                Зберегти клієнта
-              </Button>
-            </div>
-          </div>
-        </SectionPanel>
-      )}
-      {financeAllowed && order.status === 'pending' && (
-        <SectionPanel
-          description="Підтвердження фіксує оплату й переводить замовлення у статус «Підтверджено»."
-          footer={
-            <>
-              <Button
-                disabled={
-                  busy ||
-                  paymentDrafts.some(
-                    (payment) =>
-                      !payment.accountId ||
-                      !payment.amount ||
-                      !payment.currency,
-                  )
-                }
-                onClick={() => {
-                  const input = {
-                    payments: paymentDrafts.map((payment) => ({
-                      accountId: payment.accountId,
-                      amount: Number(payment.amount),
-                      currency: payment.currency,
-                    })),
-                  }
-                  void transition(
-                    (idempotencyKey) =>
-                      ordersApi.confirm(order.id, input, {
-                        idempotencyKey: idempotencyKey!,
-                      }),
-                    {
-                      operation: 'order-confirm',
-                      payload: { orderId: order.id, input },
-                    },
-                    'finance.manage',
-                  )
-                }}
-                variant="primary"
-              >
-                Підтвердити
-              </Button>
-              <Button
-                onClick={() =>
-                  setPaymentDrafts((current) => [
-                    ...current,
-                    { accountId: '', amount: '', currency: '' },
-                  ])
-                }
-              >
-                <Plus aria-hidden />
-                Додати платіж
-              </Button>
-            </>
-          }
-          title="Оплата й підтвердження"
-        >
-          <div className="grid gap-3">
-            {paymentDrafts.map((payment, index) => {
-              const suffix = index === 0 ? '' : ` ${index + 1}`
-              const updatePayment = (
-                field: 'accountId' | 'amount' | 'currency',
-                value: string,
-              ) =>
-                setPaymentDrafts((current) =>
-                  current.map((item, itemIndex) =>
-                    itemIndex === index ? { ...item, [field]: value } : item,
-                  ),
-                )
-              return (
-                <fieldset
-                  className="border-app-line-2 rounded-control grid gap-3 border border-dashed p-3"
-                  key={index}
-                >
-                  <legend className="text-app-muted px-1 text-[13.5px]">
-                    Платіж {index + 1}
-                  </legend>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <Field label={`ID рахунку${suffix}`}>
-                      <TextInput
-                        onChange={(event) =>
-                          updatePayment('accountId', event.target.value)
-                        }
-                        value={payment.accountId}
-                      />
-                    </Field>
-                    <Field label={`Сума платежу${suffix}`}>
-                      <TextInput
-                        className="text-right"
-                        inputMode="decimal"
-                        onChange={(event) =>
-                          updatePayment('amount', event.target.value)
-                        }
-                        value={payment.amount}
-                      />
-                    </Field>
-                    <Field label={`Валюта платежу${suffix}`}>
-                      <TextInput
-                        onChange={(event) =>
-                          updatePayment('currency', event.target.value)
-                        }
-                        value={payment.currency}
-                      />
-                    </Field>
-                  </div>
-                  {paymentDrafts.length > 1 && (
-                    <div className="flex flex-wrap">
-                      <Button
-                        onClick={() =>
-                          setPaymentDrafts((current) =>
-                            current.filter(
-                              (_, itemIndex) => itemIndex !== index,
-                            ),
-                          )
-                        }
-                        variant="quiet"
-                      >
-                        Прибрати платіж {index + 1}
-                      </Button>
-                    </div>
-                  )}
-                </fieldset>
-              )
-            })}
-            <div className="grid gap-1">
-              <TotalLine
-                label="Сума платежів"
-                strong
-                value={money(paymentsTotal, currency)}
-              />
-              <TotalLine
-                label="Разом за замовленням"
-                value={money(order.totalAmount, currency)}
-              />
-            </div>
-          </div>
-        </SectionPanel>
-      )}
-      {itemsEditable && (
-        <SectionPanel
-          description="Скасування звільняє зарезервовані запчастини; повернути замовлення в роботу не вийде."
-          title="Скасування замовлення"
-        >
-          <div className="flex flex-wrap gap-2 p-4">
+            <span className="text-app-muted">Замовлення</span>
+          </p>
+        </div>
+        {itemsEditable || (financeAllowed && order.status === 'confirmed') ? (
+          <div className="flex flex-wrap items-center gap-2.5">
             <Button
-              disabled={busy}
-              onClick={() => void transition(() => ordersApi.cancel(order.id))}
-              variant="danger"
+              aria-expanded={menuOpen}
+              aria-label="Інші дії із замовленням"
+              className="min-w-11 px-0"
+              onClick={() => setMenuOpen((open) => !open)}
             >
-              Скасувати замовлення
+              <MoreHorizontal aria-hidden />
             </Button>
           </div>
-        </SectionPanel>
-      )}
-      {financeAllowed && order.status === 'confirmed' && (
-        <SectionPanel
-          description="Повернення переводить замовлення у статус «Повернено» і не скасовується."
-          title="Повернення коштів"
-        >
-          <form
-            className="grid gap-3 p-4"
-            onSubmit={(event) => {
-              event.preventDefault()
-              const input = { refundReason }
-              void transition(
-                (idempotencyKey) =>
-                  ordersApi.refund(order.id, input, {
-                    idempotencyKey: idempotencyKey!,
-                  }),
-                {
-                  operation: 'order-refund',
-                  payload: { orderId: order.id, input },
-                },
-                'finance.manage',
-              )
-            }}
+        ) : null}
+      </div>
+
+      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-4">
+            <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+              Замовлення #{order.number}
+            </h1>
+            <StatusPill tone={status.tone}>{status.label}</StatusPill>
+            <p className="text-app-muted text-sm">
+              Створено {formatTimestamp(order.createdAt)} ·{' '}
+              {order.createdByName}
+            </p>
+          </div>
+        </div>
+
+        {menuOpen ? (
+          <div
+            aria-label="Інші дії із замовленням"
+            className="border-app-line bg-app-raised flex flex-wrap items-center gap-2.5 rounded-[14px] border px-4 py-3"
+            role="group"
           >
-            <Field
-              hint="Причина потрапляє в історію замовлення."
-              label="Причина повернення"
-            >
-              <TextInput
-                onChange={(event) => setRefundReason(event.target.value)}
-                value={refundReason}
-              />
-            </Field>
-            <div className="flex flex-wrap gap-2">
+            {itemsEditable ? (
               <Button
-                disabled={busy || !refundReason}
-                type="submit"
+                disabled={busy}
+                onClick={() =>
+                  void transition(() => ordersApi.cancel(order.id))
+                }
+              >
+                Скасувати замовлення
+              </Button>
+            ) : null}
+            {financeAllowed && order.status === 'confirmed' ? (
+              <Button
+                onClick={() => setRefundOpen((open) => !open)}
                 variant="danger"
               >
                 Повернути кошти
               </Button>
-            </div>
-          </form>
-        </SectionPanel>
-      )}
-      <section className="grid gap-2">
-        <h2 className="text-base font-semibold text-white">Платежі</h2>
-        <DataTable
-          caption="Платежі замовлення"
-          columns={[
-            {
-              key: 'account',
-              label: 'Рахунок',
-              variant: 'primary',
-              cell: (payment) => payment.accountName,
-            },
-            {
-              key: 'amount',
-              label: 'Сума',
-              align: 'end',
-              cell: (payment) => `${payment.amount} ${payment.currency}`,
-            },
-          ]}
-          empty={
-            <EmptyState
-              description="Платежі з’являться тут після підтвердження замовлення."
-              title="Платежів немає"
-            />
-          }
-          rowKey={(payment) => payment.id}
-          rows={order.payments}
-        />
-      </section>
-      <section className="grid gap-2">
-        <h2 className="text-base font-semibold text-white">Аудит</h2>
-        <DataTable
-          caption="Історія замовлення"
-          columns={[
-            {
-              key: 'event',
-              label: 'Подія',
-              variant: 'primary',
-              cell: (entry) => entry.eventType,
-            },
-            {
-              key: 'user',
-              label: 'Користувач',
-              cell: (entry) => entry.userName,
-            },
-            {
-              key: 'time',
-              label: 'Час',
-              cell: (entry) => (
-                <time dateTime={entry.createdAt}>
-                  {formatTimestamp(entry.createdAt)}
-                </time>
-              ),
-            },
-            {
-              key: 'data',
-              label: 'Деталі',
-              cell: (entry) => entry.data ?? '—',
-            },
-          ]}
-          empty={
-            <EmptyState
-              description="Дії із замовленням з’являться тут одразу після збереження."
-              title="Подій немає"
-            />
-          }
-          rowKey={(entry) => entry.key}
-          rows={historyRows}
-        />
-      </section>
-    </PageBody>
+            ) : null}
+          </div>
+        ) : null}
+
+        {refundOpen && financeAllowed && order.status === 'confirmed' ? (
+          <section
+            aria-label="Повернення коштів"
+            className="border-state-danger/30 bg-app-raised rounded-[16px] border px-6 pt-5 pb-6"
+          >
+            <h2 className="text-base font-bold text-white">
+              Повернути кошти клієнту
+            </h2>
+            <p className="text-app-muted mt-1.5 text-sm leading-[1.5]">
+              Замовлення перейде у статус «Повернено». Дію не можна скасувати,
+              причина потрапляє в історію.
+            </p>
+            <form
+              className="mt-3.5 grid gap-3.5"
+              onSubmit={(event) => {
+                event.preventDefault()
+                const input = { refundReason }
+                void transition(
+                  (idempotencyKey) =>
+                    ordersApi.refund(order.id, input, {
+                      idempotencyKey: idempotencyKey!,
+                    }),
+                  {
+                    operation: 'order-refund',
+                    payload: { orderId: order.id, input },
+                  },
+                  'finance.manage',
+                )
+              }}
+            >
+              <Field
+                hint="Причина потрапляє в історію замовлення."
+                label="Причина повернення"
+              >
+                <TextInput
+                  onChange={(event) => setRefundReason(event.target.value)}
+                  value={refundReason}
+                />
+              </Field>
+              <div className="flex flex-wrap justify-end gap-2.5">
+                <Button onClick={() => setRefundOpen(false)} type="button">
+                  Скасувати
+                </Button>
+                <Button
+                  disabled={busy || !refundReason}
+                  type="submit"
+                  variant="danger"
+                >
+                  Повернути кошти
+                </Button>
+              </div>
+            </form>
+          </section>
+        ) : null}
+
+        {error && <Notice tone="danger">{error}</Notice>}
+
+        <div className="flex flex-wrap-reverse items-end gap-6">
+          <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
+            <Card title="Нотатки">
+              {itemsEditable ? (
+                <div className="grid gap-3">
+                  <Field label="Нотатки замовлення">
+                    <TextArea
+                      onChange={(event) => setDraftNotes(event.target.value)}
+                      value={draftNotes}
+                    />
+                  </Field>
+                  <div className="flex flex-wrap items-end gap-2.5">
+                    <Button
+                      disabled={busy}
+                      onClick={() =>
+                        void transition(() =>
+                          ordersApi.updateNotes(order.id, draftNotes),
+                        )
+                      }
+                    >
+                      Зберегти нотатки
+                    </Button>
+                  </div>
+                  <Field
+                    className="min-w-52"
+                    hint="Порожнє поле відв’яже клієнта від замовлення."
+                    label="ID клієнта замовлення"
+                  >
+                    <TextInput
+                      onChange={(event) =>
+                        setDraftCustomerId(event.target.value)
+                      }
+                      value={draftCustomerId}
+                    />
+                  </Field>
+                  <div className="flex flex-wrap gap-2.5">
+                    <Button
+                      disabled={busy}
+                      onClick={() =>
+                        void transition(() =>
+                          ordersApi.setCustomer(
+                            order.id,
+                            draftCustomerId || null,
+                          ),
+                        )
+                      }
+                    >
+                      Зберегти клієнта
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-app-ink text-[15px] leading-[1.55] whitespace-pre-line">
+                  {order.notes === null || order.notes === ''
+                    ? 'Нотаток немає.'
+                    : order.notes}
+                </p>
+              )}
+            </Card>
+
+            {itemsEditable ? (
+              <SectionPanel
+                aside={
+                  <span className="text-app-muted text-[13.5px] tabular-nums">
+                    Разом за позиціями {money(draftsTotal, currency)}
+                  </span>
+                }
+                description={
+                  itemDrafts.length === 1
+                    ? 'Видалення останньої позиції скасує замовлення.'
+                    : 'Змініть кількість або ціну й збережіть позиції — набір замінюється цілком.'
+                }
+                footer={
+                  <>
+                    <Button
+                      disabled={busy}
+                      onClick={() =>
+                        void transition(() =>
+                          ordersApi.updateItems(
+                            order.id,
+                            itemDrafts.map(
+                              ({ partId, quantity, unitPrice }) => ({
+                                partId,
+                                quantity,
+                                unitPrice,
+                              }),
+                            ),
+                          ),
+                        )
+                      }
+                      variant="primary"
+                    >
+                      Зберегти позиції
+                    </Button>
+                    <Button asChild variant="ghost">
+                      <Link to={`${location.pathname}/items/new`}>
+                        <Plus aria-hidden />
+                        Додати позицію
+                      </Link>
+                    </Button>
+                  </>
+                }
+                title="Позиції"
+              >
+                {itemDrafts.length === 0 && (
+                  <p className="text-app-muted px-4 py-3 text-sm">
+                    Позицій немає. Додайте запчастину, щоб замовлення можна було
+                    підтвердити.
+                  </p>
+                )}
+                <ul>
+                  {itemDrafts.map((item, index) => (
+                    <li
+                      className="border-app-line grid gap-3 border-b px-4 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+                      key={item.id}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-app-ink truncate text-sm font-medium">
+                          {item.partName}
+                        </p>
+                        <p className="text-app-dim mt-0.5 text-[12.5px] tabular-nums">
+                          Сума позиції{' '}
+                          {money(
+                            lineTotal(item.quantity, item.unitPrice),
+                            currency,
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-end gap-2">
+                        <div className="grid w-20 gap-1.5">
+                          <span
+                            aria-hidden
+                            className="text-app-dim text-[12.5px]"
+                          >
+                            Кількість
+                          </span>
+                          <TextInput
+                            aria-label={`Кількість ${item.partName}`}
+                            className="text-right"
+                            inputMode="numeric"
+                            onChange={(event) =>
+                              setItemDrafts((current) =>
+                                current.map((draft, draftIndex) =>
+                                  draftIndex === index
+                                    ? {
+                                        ...draft,
+                                        quantity: Number(event.target.value),
+                                      }
+                                    : draft,
+                                ),
+                              )
+                            }
+                            value={item.quantity}
+                          />
+                        </div>
+                        <div className="grid w-28 gap-1.5">
+                          <span
+                            aria-hidden
+                            className="text-app-dim text-[12.5px]"
+                          >
+                            Ціна
+                          </span>
+                          <TextInput
+                            aria-label={`Ціна ${item.partName}`}
+                            className="text-right"
+                            inputMode="decimal"
+                            onChange={(event) =>
+                              setItemDrafts((current) =>
+                                current.map((draft, draftIndex) =>
+                                  draftIndex === index
+                                    ? {
+                                        ...draft,
+                                        unitPrice: Number(event.target.value),
+                                      }
+                                    : draft,
+                                ),
+                              )
+                            }
+                            value={item.unitPrice}
+                          />
+                        </div>
+                        <Button
+                          aria-label={`Видалити ${item.partName}`}
+                          disabled={busy}
+                          onClick={() =>
+                            void transition(() =>
+                              itemDrafts.length === 1
+                                ? ordersApi.cancel(order.id)
+                                : ordersApi.updateItems(
+                                    order.id,
+                                    itemDrafts
+                                      .filter(
+                                        (_, draftIndex) => draftIndex !== index,
+                                      )
+                                      .map(
+                                        ({ partId, quantity, unitPrice }) => ({
+                                          partId,
+                                          quantity,
+                                          unitPrice,
+                                        }),
+                                      ),
+                                  ),
+                            )
+                          }
+                          size="icon"
+                          variant="danger"
+                        >
+                          <Trash2 aria-hidden />
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </SectionPanel>
+            ) : (
+              <Card
+                aside={
+                  <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
+                    {order.items.length}{' '}
+                    {plural(order.items.length, [
+                      'позиція',
+                      'позиції',
+                      'позицій',
+                    ])}
+                  </span>
+                }
+                bodyClassName="p-0"
+                title="Позиції"
+              >
+                <DataTable
+                  caption="Позиції замовлення"
+                  columns={[
+                    {
+                      key: 'part',
+                      label: 'Позиція',
+                      variant: 'primary',
+                      cell: (item) => item.partName,
+                    },
+                    {
+                      key: 'quantity',
+                      label: 'К-сть',
+                      align: 'end',
+                      cell: (item) => item.quantity,
+                    },
+                    {
+                      key: 'unitPrice',
+                      label: 'Ціна',
+                      align: 'end',
+                      cell: (item) => money(item.unitPrice, currency),
+                    },
+                    {
+                      key: 'totalPrice',
+                      label: 'Сума',
+                      align: 'end',
+                      cell: (item) => (
+                        <span className="font-bold text-white">
+                          {money(item.totalPrice, currency)}
+                        </span>
+                      ),
+                    },
+                  ]}
+                  empty={
+                    <EmptyState
+                      description="У цьому замовленні немає жодної запчастини."
+                      title="Позицій немає"
+                    />
+                  }
+                  footer={
+                    <div className="border-app-line flex flex-wrap items-baseline justify-end gap-5 border-t px-6 py-4">
+                      <span className="text-app-muted text-sm font-semibold">
+                        Разом
+                      </span>
+                      <span className="text-[20px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
+                        {money(order.totalAmount, currency)}
+                      </span>
+                    </div>
+                  }
+                  rowKey={(item) => item.id}
+                  rows={order.items}
+                />
+              </Card>
+            )}
+
+            {financeAllowed && order.status === 'pending' && (
+              <SectionPanel
+                description="Підтвердження фіксує оплату й переводить замовлення у статус «Підтверджено»."
+                footer={
+                  <>
+                    <Button
+                      disabled={
+                        busy ||
+                        paymentDrafts.some(
+                          (payment) =>
+                            !payment.accountId ||
+                            !payment.amount ||
+                            !payment.currency,
+                        )
+                      }
+                      onClick={() => {
+                        const input = {
+                          payments: paymentDrafts.map((payment) => ({
+                            accountId: payment.accountId,
+                            amount: Number(payment.amount),
+                            currency: payment.currency,
+                          })),
+                        }
+                        void transition(
+                          (idempotencyKey) =>
+                            ordersApi.confirm(order.id, input, {
+                              idempotencyKey: idempotencyKey!,
+                            }),
+                          {
+                            operation: 'order-confirm',
+                            payload: { orderId: order.id, input },
+                          },
+                          'finance.manage',
+                        )
+                      }}
+                      variant="primary"
+                    >
+                      Підтвердити
+                    </Button>
+                    <Button
+                      onClick={() =>
+                        setPaymentDrafts((current) => [
+                          ...current,
+                          { accountId: '', amount: '', currency: '' },
+                        ])
+                      }
+                    >
+                      <Plus aria-hidden />
+                      Додати платіж
+                    </Button>
+                  </>
+                }
+                title="Оплата й підтвердження"
+              >
+                <div className="grid gap-3">
+                  {paymentDrafts.map((payment, index) => {
+                    const suffix = index === 0 ? '' : ` ${index + 1}`
+                    const updatePayment = (
+                      field: 'accountId' | 'amount' | 'currency',
+                      value: string,
+                    ) =>
+                      setPaymentDrafts((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index
+                            ? { ...item, [field]: value }
+                            : item,
+                        ),
+                      )
+                    return (
+                      <fieldset
+                        className="border-app-line-2 rounded-control grid gap-3 border border-dashed p-3"
+                        key={index}
+                      >
+                        <legend className="text-app-muted px-1 text-[13.5px]">
+                          Платіж {index + 1}
+                        </legend>
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <Field label={`ID рахунку${suffix}`}>
+                            <TextInput
+                              onChange={(event) =>
+                                updatePayment('accountId', event.target.value)
+                              }
+                              value={payment.accountId}
+                            />
+                          </Field>
+                          <Field label={`Сума платежу${suffix}`}>
+                            <TextInput
+                              className="text-right"
+                              inputMode="decimal"
+                              onChange={(event) =>
+                                updatePayment('amount', event.target.value)
+                              }
+                              value={payment.amount}
+                            />
+                          </Field>
+                          <Field label={`Валюта платежу${suffix}`}>
+                            <TextInput
+                              onChange={(event) =>
+                                updatePayment('currency', event.target.value)
+                              }
+                              value={payment.currency}
+                            />
+                          </Field>
+                        </div>
+                        {paymentDrafts.length > 1 && (
+                          <div className="flex flex-wrap">
+                            <Button
+                              onClick={() =>
+                                setPaymentDrafts((current) =>
+                                  current.filter(
+                                    (_, itemIndex) => itemIndex !== index,
+                                  ),
+                                )
+                              }
+                              variant="quiet"
+                            >
+                              Прибрати платіж {index + 1}
+                            </Button>
+                          </div>
+                        )}
+                      </fieldset>
+                    )
+                  })}
+                  <div className="grid gap-1">
+                    <TotalLine
+                      label="Сума платежів"
+                      strong
+                      value={money(paymentsTotal, currency)}
+                    />
+                    <TotalLine
+                      label="Разом за замовленням"
+                      value={money(order.totalAmount, currency)}
+                    />
+                  </div>
+                </div>
+              </SectionPanel>
+            )}
+
+            <Card
+              aside={
+                <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
+                  {order.payments.length}{' '}
+                  {plural(order.payments.length, [
+                    'платіж',
+                    'платежі',
+                    'платежів',
+                  ])}
+                </span>
+              }
+              bodyClassName="p-0"
+              title="Платежі"
+            >
+              <DataTable
+                caption="Платежі замовлення"
+                columns={[
+                  {
+                    key: 'account',
+                    label: 'Рахунок',
+                    variant: 'primary',
+                    cell: (payment) => payment.accountName,
+                  },
+                  {
+                    key: 'amount',
+                    label: 'Сума',
+                    align: 'end',
+                    cell: (payment) => (
+                      <span className="font-bold text-white">
+                        {payment.amount} {payment.currency}
+                      </span>
+                    ),
+                  },
+                ]}
+                empty={
+                  <EmptyState
+                    description="Платежі з’являться тут після підтвердження замовлення."
+                    title="Платежів немає"
+                  />
+                }
+                rowKey={(payment) => payment.id}
+                rows={order.payments}
+              />
+            </Card>
+          </div>
+
+          <aside className="sticky top-24 grid min-w-[300px] flex-[0_1_340px] gap-5">
+            <Card title="Оплата">
+              <p className="flex flex-wrap items-baseline justify-between gap-3">
+                <span className="text-[34px] leading-none font-extrabold tracking-[-0.03em] text-white tabular-nums">
+                  {money(order.totalAmount, currency)}
+                </span>
+                <span
+                  className={cn(
+                    'text-[13px] font-bold',
+                    outstanding === null
+                      ? 'text-app-dim'
+                      : outstanding > 0
+                        ? 'text-state-warn'
+                        : 'text-state-ok',
+                  )}
+                >
+                  {outstanding === null
+                    ? 'Сума не відома'
+                    : outstanding > 0
+                      ? `Залишок ${money(outstanding, currency)}`
+                      : 'Оплачено повністю'}
+                </span>
+              </p>
+              <dl className="border-app-line mt-4.5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5 border-t pt-4">
+                <dt className="text-app-muted text-sm font-semibold">Клієнт</dt>
+                <dd className="text-sm text-white">
+                  {order.customerName ?? 'Без клієнта'}
+                </dd>
+                <dt className="text-app-muted text-sm font-semibold">Разом</dt>
+                <dd className="font-mono text-[15px] text-white tabular-nums">
+                  {money(order.totalAmount, currency)}
+                </dd>
+                <dt className="text-app-muted text-sm font-semibold">
+                  Сплачено
+                </dt>
+                <dd className="font-mono text-[15px] text-white tabular-nums">
+                  {money(order.totalPaid, currency)}
+                </dd>
+                <dt className="text-app-muted text-sm font-semibold">
+                  Залишок
+                </dt>
+                <dd className="font-mono text-[15px] text-white tabular-nums">
+                  {money(outstanding, currency)}
+                </dd>
+              </dl>
+            </Card>
+
+            {order.customerId === null ? null : (
+              <Card bodyClassName="px-6 pt-4 pb-5" title="Клієнт">
+                <Link
+                  className="hover:text-brand flex items-center gap-3.5"
+                  to={customerPath ?? '#'}
+                >
+                  <span className="bg-brand/15 text-brand grid size-10 shrink-0 place-items-center rounded-full text-sm font-bold">
+                    {initials(order.customerName ?? '—')}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[17px] font-bold tracking-[-0.015em] text-white">
+                      {order.customerName ?? 'Без імені'}
+                    </span>
+                    <span className="text-app-muted mt-0.5 block font-mono text-[12px]">
+                      картка клієнта
+                    </span>
+                  </span>
+                </Link>
+              </Card>
+            )}
+
+            <Card
+              aside={
+                <Button
+                  aria-pressed={rawHistory}
+                  className="min-h-8 px-2.5 text-xs font-semibold"
+                  onClick={() => setRawHistory((value) => !value)}
+                >
+                  {rawHistory ? 'Сховати дані' : 'Технічні дані'}
+                </Button>
+              }
+              title="Історія"
+            >
+              {historyRows.length === 0 ? (
+                <p className="text-app-muted text-sm">
+                  Дії із замовленням зʼявляться тут одразу після збереження.
+                </p>
+              ) : (
+                <ol aria-label="Історія замовлення" className="grid">
+                  {historyRows.map((entry, index) => (
+                    <li className="flex gap-3.5" key={entry.key}>
+                      <span aria-hidden className="flex flex-col items-center">
+                        <span className="bg-app-muted mt-1.5 size-2.5 rounded-full" />
+                        {index < historyRows.length - 1 ? (
+                          <span className="bg-app-line w-px flex-1" />
+                        ) : null}
+                      </span>
+                      <span className="min-w-0 flex-1 pb-5">
+                        <span className="block text-[15px] font-bold text-white">
+                          {orderEventTitle(entry.eventType)}
+                        </span>
+                        <span className="text-app-muted mt-1 block text-[13px]">
+                          {entry.userName} ·{' '}
+                          <time dateTime={entry.createdAt}>
+                            {formatTimestamp(entry.createdAt)}
+                          </time>
+                        </span>
+                        {rawHistory && entry.data ? (
+                          <span className="border-app-line bg-app-input text-app-muted mt-2 block rounded-[9px] border px-3 py-2.5 font-mono text-[11px] leading-[1.5] break-all">
+                            {entry.data}
+                          </span>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </Card>
+          </aside>
+        </div>
+      </div>
+    </div>
   )
 }
