@@ -1,5 +1,4 @@
 import {
-  act,
   fireEvent,
   render,
   screen,
@@ -1154,13 +1153,21 @@ it('submits a custom color and normalizes VIN from the redesigned controls', asy
   )
 })
 
-it('blocks both create actions until dropped photos have finished uploading', async () => {
-  let finish!: (result: { storageKey: string; url: string }) => void
-  vi.mocked(mediaApi.upload).mockReturnValue(
-    new Promise((resolve) => {
-      finish = resolve
-    }),
-  )
+it('keeps selected car photos local until the car is submitted', async () => {
+  const user = userEvent.setup()
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: vi.fn(() => 'blob:car-photo'),
+  })
+  Object.defineProperty(URL, 'revokeObjectURL', {
+    configurable: true,
+    value: vi.fn(),
+  })
+  vi.mocked(mediaApi.upload).mockResolvedValue({
+    storageKey: 'pending/cars/photo.jpg',
+    url: 'https://cdn.example/photo.jpg',
+  })
+  vi.mocked(carsApi.create).mockResolvedValue(detail)
   render(
     <MemoryRouter initialEntries={['/app/demo/cars/new']}>
       <Routes>
@@ -1172,6 +1179,27 @@ it('blocks both create actions until dropped photos have finished uploading', as
   fireEvent.drop(screen.getByLabelText('Додати фото'), {
     dataTransfer: { files: [file] },
   })
+  expect(
+    await screen.findByRole('img', { name: 'Попередній перегляд car.jpg' }),
+  ).toHaveAttribute('src', 'blob:car-photo')
+  expect(screen.getByText('car.jpg')).toBeVisible()
+  expect(
+    screen.getByText('Буде завантажено під час створення авто'),
+  ).toBeVisible()
+  expect(mediaApi.upload).not.toHaveBeenCalled()
+
+  await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-003')
+  await user.click(screen.getByRole('button', { name: 'Марка' }))
+  await user.click(await screen.findByRole('button', { name: 'BMW' }))
+  await user.click(screen.getByRole('button', { name: 'Модель' }))
+  await user.click(await screen.findByRole('button', { name: 'X5' }))
+  await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2020')
+  await user.type(
+    screen.getByRole('textbox', { name: 'Ціна придбання' }),
+    '12000',
+  )
+  await user.click(screen.getByRole('button', { name: 'Створити автомобіль' }))
+
   await waitFor(() =>
     expect(mediaApi.upload).toHaveBeenCalledWith(
       file,
@@ -1179,17 +1207,40 @@ it('blocks both create actions until dropped photos have finished uploading', as
       expect.any(Object),
     ),
   )
-  for (const button of screen.getAllByRole('button', {
-    name: /Створити автомобіль/,
-  }))
-    expect(button).toBeDisabled()
-  await act(() => {
-    finish({ storageKey: 'cars/photo.jpg', url: '/photo.jpg' })
-    return Promise.resolve()
+  expect(carsApi.create).toHaveBeenCalledWith(
+    expect.objectContaining({ photoKeys: ['pending/cars/photo.jpg'] }),
+    expect.any(Object),
+  )
+})
+
+it('removes a selected car photo locally without deleting server media', async () => {
+  const user = userEvent.setup()
+  const revokeObjectURL = vi.fn()
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: vi.fn(() => 'blob:car-photo'),
   })
-  expect(await screen.findByAltText('Попередній перегляд фото')).toBeVisible()
-  for (const button of screen.getAllByRole('button', {
-    name: /Створити автомобіль/,
-  }))
-    expect(button).toBeEnabled()
+  Object.defineProperty(URL, 'revokeObjectURL', {
+    configurable: true,
+    value: revokeObjectURL,
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/demo/cars/new']}>
+      <Routes>
+        <Route path="/app/:tenant/cars/new" element={<CarsScreen />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const file = new File(['image'], 'car.jpg', { type: 'image/jpeg' })
+  await user.upload(screen.getByLabelText('Додати фото'), file)
+  await user.click(
+    await screen.findByRole('button', { name: 'Прибрати car.jpg' }),
+  )
+
+  expect(screen.queryByText('car.jpg')).not.toBeInTheDocument()
+  expect(screen.getByText('Файлів ще не вибрано.')).toBeVisible()
+  expect(mediaApi.upload).not.toHaveBeenCalled()
+  expect(mediaApi.remove).not.toHaveBeenCalled()
+  expect(revokeObjectURL).toHaveBeenCalledWith('blob:car-photo')
 })

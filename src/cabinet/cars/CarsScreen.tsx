@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -1380,6 +1381,103 @@ function Expenses({
   )
 }
 
+interface StagedCarPhoto {
+  id: string
+  file: File
+  previewUrl: string
+  uploaded?: MediaUploadResult
+}
+
+function StagedCarPhotoPicker({
+  disabled,
+  items,
+  onAdd,
+  onRemove,
+}: {
+  disabled: boolean
+  items: StagedCarPhoto[]
+  onAdd: (files: FileList | null) => void
+  onRemove: (item: StagedCarPhoto) => void
+}) {
+  return (
+    <fieldset className="border-app-line rounded-panel bg-app-raised car-photo-panel grid min-w-0 gap-3 border p-4">
+      <legend className="px-1 text-base font-semibold text-white">
+        <span aria-hidden className="car-form-section-number">
+          04
+        </span>
+        Фото
+      </legend>
+      <p className="text-app-dim text-[13.5px]">
+        Вибрані фото залишаться тут і завантажаться лише під час створення авто.
+      </p>
+      <label
+        aria-disabled={disabled}
+        className="car-photo-dropzone"
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault()
+          if (!disabled) onAdd(event.dataTransfer.files)
+        }}
+      >
+        <ImagePlus aria-hidden />
+        <strong>Перетягніть фото сюди</strong>
+        <span>
+          або <em>виберіть файли</em> — кілька за раз
+        </span>
+        <input
+          accept="image/*"
+          aria-label="Додати фото"
+          className="car-photo-file-input"
+          disabled={disabled}
+          multiple
+          onChange={(event) => {
+            onAdd(event.target.files)
+            event.target.value = ''
+          }}
+          type="file"
+        />
+      </label>
+      {items.length > 0 ? (
+        <ul aria-label="Вибрані фото" className="car-staged-photo-list">
+          {items.map((item) => (
+            <li className="car-staged-photo" key={item.id}>
+              <img
+                alt={`Попередній перегляд ${item.file.name}`}
+                src={item.previewUrl}
+              />
+              <div>
+                <strong title={item.file.name}>{item.file.name}</strong>
+                <span>
+                  {item.uploaded
+                    ? 'Підготовлено до збереження'
+                    : 'Буде завантажено під час створення авто'}
+                </span>
+              </div>
+              <Button
+                aria-label={`Прибрати ${item.file.name}`}
+                disabled={disabled}
+                onClick={() => onRemove(item)}
+                size="icon"
+                variant="quiet"
+              >
+                <Trash2 aria-hidden />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-app-dim text-[13.5px]">
+          <ImagePlus
+            aria-hidden
+            className="mr-1.5 inline size-4 align-text-bottom"
+          />
+          Файлів ще не вибрано.
+        </p>
+      )}
+    </fieldset>
+  )
+}
+
 function CarForm({ carId, title }: { carId?: string; title: string }) {
   const { tenant } = useParams<{ tenant: string }>()
   const { cabinet, financeManage } = useAccess()
@@ -1396,8 +1494,10 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     purchasePrice: '',
     notes: '',
   })
-  const [mediaBusy, setMediaBusy] = useState(false)
   const [media, setMedia] = useState<MediaUploadResult[]>([])
+  const [stagedPhotos, setStagedPhotos] = useState<StagedCarPhoto[]>([])
+  const stagedPhotosRef = useRef(stagedPhotos)
+  const nextPhotoId = useRef(0)
   const [expenses, setExpenses] = useState<
     { id: number; name: string; amount: string }[]
   >([])
@@ -1414,6 +1514,17 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
   const [loading, setLoading] = useState(carId !== undefined)
   const [problem, setProblem] = useState<string | null>(null)
   const { requireLatestMutation } = useLatestMutationGuard(cabinetModules.cars)
+  useEffect(() => {
+    stagedPhotosRef.current = stagedPhotos
+  }, [stagedPhotos])
+  useEffect(
+    () => () => {
+      stagedPhotosRef.current.forEach((photo) =>
+        URL.revokeObjectURL(photo.previewUrl),
+      )
+    },
+    [],
+  )
   useEffect(() => {
     if (!carId) return
     void carsApi.get(carId).then(
@@ -1445,7 +1556,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
   }, [carId])
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (busy || mediaBusy) return
+    if (busy) return
     const purchasePrice = Number(values.purchasePrice)
     const request = {
       code: values.code.trim(),
@@ -1515,18 +1626,47 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
         savedCarId = car.id
       } else {
         if (!savedCarId) {
-          const createRequest: CreateCarRequest = {
-            ...request,
-            purchasePrice,
-            photoKeys: media.map((item) => item.storageKey),
-          }
-          const scope = requireLatestMutation()
+          const createScope = requireLatestMutation()
           requireLatestMutation({
             permission: 'finance.manage',
             quota: false,
           })
+          const resolvedPhotos = [...stagedPhotos]
+          for (const [index, photo] of resolvedPhotos.entries()) {
+            if (photo.uploaded) continue
+            try {
+              const scope = requireLatestMutation({ quota: false })
+              requireLatestMutation({
+                permission: 'finance.manage',
+                quota: false,
+              })
+              const uploaded = await mediaApi.upload(photo.file, 'cars', {
+                signal: scope.signal,
+              })
+              const resolvedPhoto = { ...photo, uploaded }
+              resolvedPhotos[index] = resolvedPhoto
+              setStagedPhotos((current) =>
+                current.map((item) =>
+                  item.id === photo.id ? resolvedPhoto : item,
+                ),
+              )
+            } catch (error: unknown) {
+              setProblem(
+                `Фото «${photo.file.name}» не завантажилось: ${normalizeApiProblem(error).message}`,
+              )
+              setBusy(false)
+              return
+            }
+          }
+          const createRequest: CreateCarRequest = {
+            ...request,
+            purchasePrice,
+            photoKeys: resolvedPhotos.flatMap((photo) =>
+              photo.uploaded ? [photo.uploaded.storageKey] : [],
+            ),
+          }
           const car = await carsApi.create(createRequest, {
-            signal: scope.signal,
+            signal: createScope.signal,
           })
           savedCarId = car.id
           setCreatedCarId(car.id)
@@ -1614,8 +1754,8 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
               </Button>
               <Button
                 aria-label="Створити автомобіль — верхня панель"
-                aria-busy={busy || mediaBusy}
-                disabled={busy || mediaBusy}
+                aria-busy={busy}
+                disabled={busy}
                 form="car-form"
                 type="submit"
                 variant="primary"
@@ -1914,14 +2054,41 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
               )}
             </SectionPanel>
           ) : (
-            <MediaPicker
-              additionalPermission="finance.manage"
+            <StagedCarPhotoPicker
               disabled={busy || createdCarId !== null}
-              onBusyChange={setMediaBusy}
-              redesigned
-              entityType="cars"
-              items={media}
-              onChange={setMedia}
+              items={stagedPhotos}
+              onAdd={(files) => {
+                if (!files || files.length === 0) return
+                const additions = Array.from(files).map((file) => ({
+                  id: `car-photo-${String(nextPhotoId.current++)}`,
+                  file,
+                  previewUrl: URL.createObjectURL(file),
+                }))
+                setStagedPhotos((current) => [...current, ...additions])
+              }}
+              onRemove={(photo) => {
+                URL.revokeObjectURL(photo.previewUrl)
+                setStagedPhotos((current) =>
+                  current.filter((item) => item.id !== photo.id),
+                )
+                const uploaded = photo.uploaded
+                if (uploaded) {
+                  void Promise.resolve()
+                    .then(() => {
+                      const scope = requireLatestMutation({ quota: false })
+                      requireLatestMutation({
+                        permission: 'finance.manage',
+                        quota: false,
+                      })
+                      return mediaApi.remove(uploaded.storageKey, {
+                        signal: scope.signal,
+                      })
+                    })
+                    .catch((error: unknown) =>
+                      setProblem(normalizeApiProblem(error).message),
+                    )
+                }
+              }}
             />
           )}
           <SectionPanel
@@ -1946,7 +2113,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
         </div>
         {!carId && (
           <CarFormSummary
-            busy={busy || mediaBusy}
+            busy={busy}
             expenses={initialExpensesTotal}
             values={values}
           />
