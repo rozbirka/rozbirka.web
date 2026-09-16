@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useState,
   type ReactNode,
@@ -1309,94 +1310,578 @@ function WarehouseStat({
   )
 }
 
+/** How the session picks its zones. */
+const SESSION_TYPES = [
+  {
+    value: 'full' as const,
+    label: 'Повна',
+    hint: 'Усі активні зони вибраного складу',
+    available: true,
+  },
+  {
+    value: 'zones' as const,
+    label: 'По зонах',
+    hint: 'Вибрані зони повністю',
+    available: true,
+  },
+  {
+    value: 'sample' as const,
+    label: 'Вибіркова',
+    hint: 'Окремі позиції або група деталей',
+    available: false,
+  },
+]
+
+type SessionType = (typeof SESSION_TYPES)[number]['value']
+
+interface NewSessionData {
+  warehouses: Warehouse[]
+  zones: InventoryZone[]
+  /** Parts per zone, when the viewer may read the parts module. */
+  byZone: Map<string, number> | null
+  people: { userId: string; name: string }[]
+}
+
 function NewSessionView() {
   const base = useInventoryBase()
   const navigate = useNavigate()
   const canManage = usePermission('inventory.manage')
+  const canSeeParts = usePermission('parts.view')
+  const canSeeTeam = usePermission('team.view')
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.inventory,
   )
   const loader = useCallback(
-    (signal: AbortSignal) => inventoryApi.getZones({ signal }),
-    [],
+    async (signal: AbortSignal): Promise<NewSessionData> => {
+      const [warehouses, zones, byZone, people] = await Promise.all([
+        inventoryApi.getWarehouses({ signal }),
+        inventoryApi.getZones({ activeOnly: true, signal }),
+        canSeeParts
+          ? partsApi.facets({}, ['zone'], { signal }).then(
+              (facets) =>
+                new Map(facets.zones.map((zone) => [zone.id, zone.count])),
+              () => null,
+            )
+          : Promise.resolve(null),
+        canSeeTeam
+          ? teamApi.listMembers({ signal }).then(
+              (members) =>
+                members.map((member) => ({
+                  userId: member.userId,
+                  name: member.name,
+                })),
+              () => [],
+            )
+          : Promise.resolve([]),
+      ])
+      return { warehouses, zones, byZone, people }
+    },
+    [canSeeParts, canSeeTeam],
   )
-  const zones = useLoad(loader, 'zones')
-  const [selected, setSelected] = useState<string[]>([])
-  const [creating, setCreating] = useState(false)
+  const resource = useLoad(loader, 'new-session')
+  const [type, setType] = useState<SessionType>('zones')
+  const [warehouseId, setWarehouseId] = useState<string | null>(null)
+  const [picked, setPicked] = useState<string[]>([])
+  const [busy, setBusy] = useState<'draft' | 'start' | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
-  const create = async () => {
-    if (!canManage || !selected.length) return
-    setCreating(true)
+
+  const create = async (zoneIds: readonly string[], start: boolean) => {
+    if (!canManage || zoneIds.length === 0) return
+    setBusy(start ? 'start' : 'draft')
     setOperationError(null)
     try {
       const scope = requireLatestMutation({ quota: false })
-      const session = await inventoryApi.createSession(selected, {
+      const session = await inventoryApi.createSession([...zoneIds], {
         signal: scope.signal,
       })
+      if (start) {
+        await inventoryApi.startSession(session.id, { signal: scope.signal })
+      }
       void navigate(`${base}/sessions/${session.id}`, { replace: true })
     } catch (error) {
       setOperationError(normalizeApiProblem(error).message)
     } finally {
-      setCreating(false)
+      setBusy(null)
     }
   }
+
   return (
-    <PageBody width="narrow">
-      <PageHeader
-        eyebrow={<Link to={base}>Інвентаризація</Link>}
-        title="Нова інвентаризація"
-      />
-      <Notice tone="info">
-        Підрахунок виконуватиметься працівниками у Mobile. Тут ви обираєте зони
-        та запускаєте сесію.
-      </Notice>
-      {!canManage ? (
-        <Notice tone="danger">
-          Для створення інвентаризації потрібен дозвіл керування.
-        </Notice>
-      ) : null}
-      {operationError ? <Notice tone="danger">{operationError}</Notice> : null}
-      <Resource state={zones.state} retry={zones.reload}>
-        {(items: InventoryZone[]) => (
-          <Panel>
-            <div className="grid gap-2">
-              {items
-                .filter((zone) => zone.isActive && !zone.isSystemUnassigned)
-                .map((zone) => (
-                  <label
-                    className="flex min-h-11 items-center gap-3 rounded-lg border border-app-line px-3 text-white"
-                    key={zone.id}
-                  >
-                    <input
-                      checked={selected.includes(zone.id)}
-                      disabled={!canManage}
-                      onChange={() =>
-                        setSelected((value) =>
-                          value.includes(zone.id)
-                            ? value.filter((id) => id !== zone.id)
-                            : [...value, zone.id],
-                        )
-                      }
-                      type="checkbox"
-                    />
-                    <span>
-                      {zone.warehouseName} · {zone.name}
-                    </span>
-                  </label>
-                ))}
+    <Resource retry={resource.reload} state={resource.state}>
+      {({ warehouses, zones, byZone, people }: NewSessionData) => {
+        const countable = zones.filter(
+          (zone) => zone.isActive && !zone.isSystemUnassigned,
+        )
+        /* A yard whose warehouse list came back empty still has zones, and
+           every zone names its warehouse. */
+        const houses: { id: string; name: string }[] =
+          warehouses.length > 0
+            ? warehouses.map((item) => ({ id: item.id, name: item.name }))
+            : [
+                ...new Map(
+                  countable.map((zone) => [
+                    zone.warehouseId,
+                    { id: zone.warehouseId, name: zone.warehouseName },
+                  ]),
+                ).values(),
+              ]
+        const house = warehouseId ?? houses[0]?.id ?? null
+        const inHouse = countable.filter((zone) => zone.warehouseId === house)
+        const selected =
+          type === 'full'
+            ? inHouse.map((zone) => zone.id)
+            : picked.filter((id) => inHouse.some((zone) => zone.id === id))
+        const partsIn = (zoneId: string) => byZone?.get(zoneId) ?? null
+        const partsTotal = selected.reduce(
+          (sum, id) => sum + (partsIn(id) ?? 0),
+          0,
+        )
+        const houseName =
+          houses.find((item) => item.id === house)?.name ?? 'Склад'
+        const typeName = type === 'full' ? 'повна' : 'по зонах'
+        const ready = selected.length > 0 && canManage
+
+        return (
+          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+              <div className="flex min-w-0 items-center gap-5">
+                <Link
+                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                  to={base}
+                >
+                  <ChevronLeft aria-hidden className="size-3.5" />
+                  До інвентаризації
+                </Link>
+                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                  <span>Склад</span>
+                  <span aria-hidden className="text-white/20">
+                    /
+                  </span>
+                  <span className="text-app-muted">Інвентаризація</span>
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <Button
+                  className="px-[18px] text-sm font-semibold"
+                  disabled={!ready || busy !== null}
+                  onClick={() => void create(selected, false)}
+                >
+                  {busy === 'draft' ? 'Зберігаємо…' : 'Зберегти чернетку'}
+                </Button>
+                <Button
+                  className="px-5 text-sm font-bold"
+                  disabled={!ready || busy !== null}
+                  onClick={() => void create(selected, true)}
+                  variant="primary"
+                >
+                  {busy === 'start' ? 'Запускаємо…' : 'Розпочати сесію'}
+                </Button>
+              </div>
             </div>
-            <Button
-              className="mt-4 w-full"
-              disabled={creating || !canManage || !selected.length}
-              onClick={() => void create()}
-              variant="primary"
-            >
-              Створити чернетку
-            </Button>
-          </Panel>
+
+            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+              <div className="min-w-0">
+                <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+                  Нова сесія інвентаризації
+                </h1>
+                <p className="text-app-muted mt-3 text-[15px]">
+                  Поки сесія активна, позиції в її зонах не можна редагувати
+                  вручну. Рахують у мобільному застосунку.
+                </p>
+              </div>
+
+              {!canManage ? (
+                <Notice tone="danger">
+                  Для створення інвентаризації потрібен дозвіл керування.
+                </Notice>
+              ) : null}
+              {operationError ? (
+                <Notice tone="danger">{operationError}</Notice>
+              ) : null}
+
+              <div className="flex flex-wrap items-start gap-6">
+                <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-5">
+                  <Step
+                    hint="Визначає, які зони входять у сесію."
+                    number="01"
+                    title="Тип перевірки"
+                  >
+                    <div
+                      aria-label="Тип перевірки"
+                      className="flex flex-wrap gap-2"
+                      role="radiogroup"
+                    >
+                      {SESSION_TYPES.map((option) => {
+                        const active = option.value === type
+                        return (
+                          <button
+                            aria-checked={active}
+                            className={cn(
+                              'focus-visible:outline-brand min-h-[70px] flex-[1_1_10rem] rounded-xl border px-4 py-3.5 text-left',
+                              active
+                                ? 'border-app-line-2 bg-white/[0.07]'
+                                : 'border-app-line bg-transparent',
+                              option.available
+                                ? 'cursor-pointer hover:border-white/20'
+                                : 'cursor-not-allowed opacity-55',
+                            )}
+                            disabled={!option.available}
+                            key={option.value}
+                            onClick={() => setType(option.value)}
+                            role="radio"
+                            title={
+                              option.available
+                                ? undefined
+                                : 'Сесія створюється з переліку зон — окремі позиції вибрати не можна'
+                            }
+                            type="button"
+                          >
+                            <span
+                              className={cn(
+                                'block text-[15px] font-bold',
+                                active ? 'text-app-ink' : 'text-app-muted',
+                              )}
+                            >
+                              {option.label}
+                            </span>
+                            <span className="text-app-muted mt-1.5 block text-[12px] leading-[1.4] font-medium">
+                              {option.hint}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </Step>
+
+                  <Step
+                    hint={
+                      type === 'full'
+                        ? 'Повна перевірка охоплює всі активні зони вибраного складу.'
+                        : 'Виберіть зони, які входять у сесію.'
+                    }
+                    number="02"
+                    title="Склад і зони"
+                  >
+                    {houses.length > 1 ? (
+                      <div
+                        aria-label="Склад"
+                        className="flex flex-wrap gap-1.5"
+                        role="radiogroup"
+                      >
+                        {houses.map((item) => {
+                          const active = item.id === house
+                          return (
+                            <button
+                              aria-checked={active}
+                              className={cn(
+                                'focus-visible:outline-brand min-h-11 cursor-pointer rounded-[10px] border px-4 text-[14px] font-semibold',
+                                active
+                                  ? 'border-app-line-2 text-app-ink bg-white/[0.07]'
+                                  : 'border-app-line text-app-muted hover:border-white/20',
+                              )}
+                              key={item.id}
+                              onClick={() => {
+                                setWarehouseId(item.id)
+                                setPicked([])
+                              }}
+                              role="radio"
+                              type="button"
+                            >
+                              {item.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ) : null}
+                    <ul className="mt-4 grid gap-2">
+                      {inHouse.length === 0 ? (
+                        <li className="text-app-muted text-sm">
+                          На цьому складі немає активних зон.
+                        </li>
+                      ) : null}
+                      {inHouse.map((zone) => {
+                        const on = selected.includes(zone.id)
+                        const count = partsIn(zone.id)
+                        return (
+                          <li key={zone.id}>
+                            <label
+                              className={cn(
+                                'flex w-full flex-wrap items-center gap-x-3.5 gap-y-1 rounded-xl border px-4 py-3.5',
+                                on
+                                  ? 'border-app-line-2 bg-white/[0.04]'
+                                  : 'border-app-line bg-app-canvas',
+                                type === 'full'
+                                  ? 'cursor-not-allowed'
+                                  : 'cursor-pointer hover:border-white/20',
+                              )}
+                            >
+                              <input
+                                checked={on}
+                                className="accent-brand size-5 shrink-0"
+                                disabled={type === 'full' || !canManage}
+                                onChange={() =>
+                                  setPicked((value) =>
+                                    value.includes(zone.id)
+                                      ? value.filter((id) => id !== zone.id)
+                                      : [...value, zone.id],
+                                  )
+                                }
+                                type="checkbox"
+                              />
+                              <span className="min-w-0 flex-[1_1_8rem]">
+                                <span
+                                  className={cn(
+                                    'block text-[15px] font-bold',
+                                    type === 'full'
+                                      ? 'text-app-muted'
+                                      : 'text-app-ink',
+                                  )}
+                                >
+                                  {zone.name}
+                                </span>
+                                <span className="text-app-muted mt-0.5 block text-[13px]">
+                                  {zone.code} · {zone.warehouseName}
+                                </span>
+                              </span>
+                              {/* Narrow screens give the count its own line
+                                  rather than squeezing the zone's name. */}
+                              <span className="text-app-muted w-full pl-8.5 font-mono text-[13px] tabular-nums sm:w-auto sm:pl-0">
+                                {count === null
+                                  ? '—'
+                                  : `${String(count)} ${plural(count, ['позиція', 'позиції', 'позицій'])}`}
+                              </span>
+                            </label>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </Step>
+
+                  <Step
+                    hint="Сканувати може будь-хто з правом на інвентаризацію — сесія не закріплюється за людьми."
+                    number="03"
+                    title="Виконавці"
+                  >
+                    {people.length === 0 ? (
+                      <p className="text-app-muted text-sm">
+                        {canSeeTeam
+                          ? 'У команді ще нікого немає.'
+                          : 'Список команди видно тим, хто має право «team.view».'}
+                      </p>
+                    ) : (
+                      <ul className="flex flex-wrap gap-2">
+                        {people.map((person) => (
+                          <li key={person.userId}>
+                            <span
+                              className="border-app-line text-app-muted flex min-h-11 items-center gap-2.5 rounded-full border py-0 pr-4 pl-2 text-[14px] font-semibold"
+                              title="Сервер не закріплює сесію за виконавцями — кожне сканування записується на того, хто його зробив"
+                            >
+                              <span
+                                aria-hidden
+                                className="flex size-7 items-center justify-center rounded-full bg-white/[0.06] text-[12px] font-bold"
+                              >
+                                {initials(person.name)}
+                              </span>
+                              {person.name}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </Step>
+
+                  <Step number="04" title="Правила">
+                    <ul className="grid gap-2.5">
+                      <Toggle
+                        hint="Продаж і переміщення в цих зонах недоступні, поки сесія не закриється."
+                        label="Блокувати рух позицій"
+                        on
+                        why="Так працює інвентаризація завжди — вимкнути не можна"
+                      />
+                      <Toggle
+                        hint="Виконавець не бачить очікувану кількість під час сканування."
+                        label="Сліпий підрахунок"
+                        on={false}
+                        why="Налаштування сліпого підрахунку в системі немає"
+                      />
+                      <Toggle
+                        hint="Якщо кількість не збігається, потрібно додати фото."
+                        label="Фото при розходженні"
+                        on={false}
+                        why="Вимоги фото при розходженні в системі немає"
+                      />
+                    </ul>
+                    <div className="mt-4">
+                      <Field
+                        hint="Сервер не зберігає коментар до сесії — причину можна написати при скасуванні або в коригуванні."
+                        label="Коментар до сесії"
+                      >
+                        <TextArea
+                          disabled
+                          name="comment"
+                          placeholder="Наприклад: перевірка після переміщення стелажів"
+                          rows={2}
+                        />
+                      </Field>
+                    </div>
+                  </Step>
+                </div>
+
+                <section
+                  aria-label="Обсяг сесії"
+                  className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-[18px] border px-5.5 pt-[22px] pb-6"
+                >
+                  <h2 className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
+                    Обсяг сесії
+                  </h2>
+                  <div className="border-app-line bg-app-canvas mt-4 rounded-[14px] border p-4">
+                    <p className="text-[17px] font-bold tracking-[-0.015em] text-white">
+                      {houseName} · {typeName}
+                    </p>
+                    <p className="text-app-muted mt-1 text-[14px]">
+                      {selected.length === 0
+                        ? 'Зони не вибрані'
+                        : inHouse
+                            .filter((zone) => selected.includes(zone.id))
+                            .map((zone) => zone.name)
+                            .join(', ')}
+                    </p>
+                  </div>
+                  <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
+                    <dt className="text-app-muted text-[14px] font-semibold">
+                      Зон
+                    </dt>
+                    <dd className="font-mono text-[15px] text-white tabular-nums">
+                      {selected.length === 0 ? '—' : selected.length}
+                    </dd>
+                    <dt className="text-app-muted text-[14px] font-semibold">
+                      Позицій
+                    </dt>
+                    <dd className="font-mono text-[15px] text-white tabular-nums">
+                      {byZone === null || selected.length === 0
+                        ? '—'
+                        : partsTotal}
+                    </dd>
+                    <dt
+                      className="text-app-muted text-[14px] font-semibold"
+                      title="Сервер не закріплює сесію за виконавцями"
+                    >
+                      Виконавців
+                    </dt>
+                    <dd className="text-app-dim font-mono text-[15px]">—</dd>
+                    <dd
+                      aria-hidden
+                      className="bg-app-line col-span-2 my-1 h-px"
+                    />
+                    <dt
+                      className="text-[15px] font-bold text-white"
+                      title="Сервер не оцінює тривалість підрахунку"
+                    >
+                      Орієнтовно
+                    </dt>
+                    <dd className="text-app-dim font-mono text-[20px]">—</dd>
+                  </dl>
+                  <Button
+                    className="mt-5.5 min-h-11.5 w-full text-[15px] font-bold"
+                    disabled={!ready || busy !== null}
+                    onClick={() => void create(selected, true)}
+                    variant="primary"
+                  >
+                    {busy === 'start' ? 'Запускаємо…' : 'Розпочати сесію'}
+                  </Button>
+                  <p className="text-app-dim mt-3 text-[12px] leading-[1.5]">
+                    {selected.length === 0
+                      ? 'Виберіть хоча б одну зону.'
+                      : 'Після старту зони блокуються для ручних змін. «Зберегти чернетку» створює сесію, не запускаючи підрахунок.'}
+                  </p>
+                </section>
+              </div>
+            </div>
+          </div>
+        )
+      }}
+    </Resource>
+  )
+}
+
+/** One numbered step of the form, with its own explanation. */
+function Step({
+  number,
+  title,
+  hint,
+  children,
+}: {
+  number: string
+  title: string
+  hint?: string
+  children: ReactNode
+}) {
+  const titleId = useId()
+  return (
+    <section
+      aria-labelledby={titleId}
+      className="border-app-line bg-app-raised rounded-[18px] border px-6 pt-[22px] pb-6"
+    >
+      <div className="flex items-baseline gap-2.5">
+        <span aria-hidden className="text-app-dim font-mono text-[11px]">
+          {number}
+        </span>
+        <h2
+          className="text-[17px] font-bold tracking-[-0.01em] text-white"
+          id={titleId}
+        >
+          {title}
+        </h2>
+      </div>
+      {hint === undefined ? null : (
+        <p className="text-app-muted mt-1.5 text-[14px]">{hint}</p>
+      )}
+      <div className="mt-4.5">{children}</div>
+    </section>
+  )
+}
+
+/**
+ * A rule of the count as a switch. Every switch here is fixed — the server has
+ * no setting behind it — so each says on itself why it cannot be moved.
+ */
+function Toggle({
+  label,
+  hint,
+  on,
+  why,
+}: {
+  label: string
+  hint: string
+  on: boolean
+  why: string
+}) {
+  return (
+    <li
+      className="border-app-line bg-app-canvas flex items-center gap-3.5 rounded-xl border px-4 py-3.5"
+      title={why}
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] font-bold text-white">{label}</span>
+        <span className="text-app-muted mt-0.5 block text-[13px] leading-[1.45]">
+          {hint} {why}.
+        </span>
+      </span>
+      <span
+        aria-hidden
+        className={cn(
+          'flex h-6 w-10.5 shrink-0 items-center rounded-full p-[3px]',
+          on ? 'bg-brand' : 'bg-white/10',
         )}
-      </Resource>
-    </PageBody>
+      >
+        <span
+          className={cn(
+            'size-4.5 rounded-full',
+            on ? 'bg-app-canvas translate-x-4.5' : 'bg-app-muted',
+          )}
+        />
+      </span>
+      <span className="sr-only">{on ? 'увімкнено' : 'вимкнено'}</span>
+    </li>
   )
 }
 

@@ -32,6 +32,7 @@ const api = vi.hoisted(() => ({
   completeSession: vi.fn(),
   reopenSession: vi.fn(),
   cancelSession: vi.fn(),
+  createSession: vi.fn(),
 }))
 const parts = vi.hoisted(() => ({
   facets: vi.fn(),
@@ -219,6 +220,7 @@ beforeEach(() => {
   api.completeSession.mockResolvedValue(session)
   api.reopenSession.mockResolvedValue(session)
   api.cancelSession.mockResolvedValue(session)
+  api.createSession.mockResolvedValue(session)
   parts.facets.mockResolvedValue({
     statuses: [],
     warehouses: [],
@@ -321,6 +323,51 @@ it('asks for a reason before cancelling a session', async () => {
       { signal: expect.any(AbortSignal) as AbortSignal },
     ),
   )
+})
+
+it('builds a session from zones and can start it at once', async () => {
+  const user = userEvent.setup()
+  api.createSession.mockResolvedValue({ ...session, id: 'session-9' })
+  renderAt('/app/yard/inventory/sessions/new')
+
+  await screen.findByRole('heading', { name: 'Нова сесія інвентаризації' })
+  const scope = screen.getByRole('region', { name: 'Обсяг сесії' })
+  const start = within(scope).getByRole('button', { name: 'Розпочати сесію' })
+  // Nothing is picked yet, so the action cannot run.
+  expect(start).toBeDisabled()
+
+  await user.click(screen.getByRole('checkbox', { name: /Стелаж A1/ }))
+  // The zone carries its real stock, counted by the parts facet.
+  expect(screen.getByText('18 позицій')).toBeInTheDocument()
+
+  await user.click(start)
+
+  await waitFor(() =>
+    expect(api.createSession).toHaveBeenCalledWith(['zone-1'], {
+      signal: expect.any(AbortSignal) as AbortSignal,
+    }),
+  )
+  // Starting is a second call: a draft that was never started stays a draft.
+  await waitFor(() =>
+    expect(api.startSession).toHaveBeenCalledWith('session-9', {
+      signal: expect.any(AbortSignal) as AbortSignal,
+    }),
+  )
+})
+
+it('picks every zone of the warehouse for a full check', async () => {
+  const user = userEvent.setup()
+  renderAt('/app/yard/inventory/sessions/new')
+
+  await screen.findByRole('heading', { name: 'Нова сесія інвентаризації' })
+  await user.click(screen.getByRole('radio', { name: /Повна/ }))
+
+  // A full check owns its selection, so the zone boxes stop being editable.
+  const zone = screen.getByRole('checkbox', { name: /Стелаж A1/ })
+  expect(zone).toBeChecked()
+  expect(zone).toBeDisabled()
+  // The sample check cannot be expressed as a list of zones.
+  expect(screen.getByRole('radio', { name: /Вибіркова/ })).toBeDisabled()
 })
 
 it('renders discrepancy results and adjustment affordance', async () => {
