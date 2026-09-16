@@ -7,6 +7,41 @@ afterEach(() => {
 })
 
 describe('customersApi', () => {
+  it('sends every directory control to the server endpoint', async () => {
+    const controller = new AbortController()
+    const result = {
+      items: [],
+      page: 2,
+      pageSize: 20,
+      total: 0,
+      totalPages: 0,
+      counts: { all: 0, regular: 0, occasional: 0, noOrders: 0 },
+    }
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: result })
+
+    await expect(
+      customersApi.directory(
+        {
+          q: 'Ірина',
+          segment: 'regular',
+          sort: 'name_asc',
+          page: 2,
+        },
+        { signal: controller.signal },
+      ),
+    ).resolves.toEqual(result)
+
+    expect(get).toHaveBeenCalledWith('/customers/directory', {
+      params: {
+        q: 'Ірина',
+        segment: 'regular',
+        sort: 'name_asc',
+        page: 2,
+      },
+      signal: controller.signal,
+    })
+  })
+
   it('sends the directory query to the authoritative server search endpoint', async () => {
     const get = vi.spyOn(apiClient, 'get').mockResolvedValue({
       data: [

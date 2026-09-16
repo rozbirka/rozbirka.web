@@ -1,12 +1,13 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { beforeEach, expect, it, vi } from 'vitest'
 import { ToastProvider } from '@/components/app'
 import { useCabinet } from '../CabinetContext'
 import { CustomersScreen } from './CustomersScreen'
 
 const customerMocks = vi.hoisted(() => ({
+  directory: vi.fn(),
   list: vi.fn(),
   getById: vi.fn(),
   create: vi.fn(),
@@ -65,44 +66,119 @@ const renderScreen = (path: string) =>
     </ToastProvider>,
   )
 
-afterEach(() => {
+beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(useCabinet).mockReturnValue(cabinet())
 })
-beforeEach(() => vi.mocked(useCabinet).mockReturnValue(cabinet()))
 
-it('renders the server-returned directory result instead of deriving customer statistics locally', async () => {
+it('renders the server-backed directory controls and customer columns', async () => {
   const user = userEvent.setup()
-  customerMocks.list.mockResolvedValue({
+  customerMocks.directory.mockResolvedValue({
     items: [
       {
         id: 'customer-1',
         name: 'Ірина',
-        phone: null,
+        phone: '+380501112233',
         notes: null,
         ordersCount: 3,
         totalAmount: 100,
-        lastOrderAt: null,
+        lastOrderAt: '2026-09-12T12:00:00Z',
       },
     ],
     page: 1,
     pageSize: 20,
     total: 27,
     totalPages: 2,
+    counts: { all: 27, regular: 4, occasional: 12, noOrders: 11 },
   })
 
-  renderScreen('/app/garage/customers?q=Ірина&page=1')
+  renderScreen(
+    '/app/garage/customers?q=Ірина&segment=regular&sort=name_asc&page=1',
+  )
 
   expect(await screen.findByText('Ірина')).toBeVisible()
-  expect(screen.getByText('знайдено')).toBeVisible()
-  expect(screen.getByText('27')).toBeVisible()
-  expect(customerMocks.list).toHaveBeenCalledWith(
-    { q: 'Ірина', page: 1 },
+  expect(screen.getByText('+380501112233')).toBeVisible()
+  expect(screen.getByText('12.09.2026')).toBeVisible()
+  expect(screen.getByText('100 $')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Постійні 4' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  expect(customerMocks.directory).toHaveBeenCalledWith(
+    { q: 'Ірина', segment: 'regular', sort: 'name_asc', page: 1 },
     expect.any(Object),
   )
 
   await user.click(screen.getByRole('button', { name: 'Наступна сторінка' }))
-  expect(customerMocks.list).toHaveBeenLastCalledWith(
-    { q: 'Ірина', page: 2 },
+  expect(customerMocks.directory).toHaveBeenLastCalledWith(
+    { q: 'Ірина', segment: 'regular', sort: 'name_asc', page: 2 },
+    expect.any(Object),
+  )
+})
+
+it('resets paging when the segment or sort changes', async () => {
+  const user = userEvent.setup()
+  customerMocks.directory.mockResolvedValue({
+    items: [],
+    page: 2,
+    pageSize: 20,
+    total: 0,
+    totalPages: 2,
+    counts: { all: 16, regular: 3, occasional: 12, noOrders: 1 },
+  })
+
+  renderScreen('/app/garage/customers?segment=all&sort=amount_desc&page=2')
+
+  await user.click(await screen.findByRole('button', { name: 'Разові 12' }))
+  expect(customerMocks.directory).toHaveBeenLastCalledWith(
+    { segment: 'occasional', sort: 'amount_desc', page: 1 },
+    expect.any(Object),
+  )
+  await user.click(screen.getByRole('button', { name: 'Іменем' }))
+  expect(customerMocks.directory).toHaveBeenLastCalledWith(
+    { segment: 'occasional', sort: 'name_asc', page: 1 },
+    expect.any(Object),
+  )
+})
+
+it('does not reveal customer amounts or amount sorting without finance access', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet([
+      'customers.view',
+      'customers.manage',
+      'orders.view',
+      'orders.manage',
+      'parts.view',
+    ]),
+  )
+  customerMocks.directory.mockResolvedValue({
+    items: [
+      {
+        id: 'customer-1',
+        name: 'Ірина',
+        phone: null,
+        notes: null,
+        ordersCount: 1,
+        totalAmount: 100,
+        lastOrderAt: null,
+      },
+    ],
+    page: 1,
+    pageSize: 20,
+    total: 1,
+    totalPages: 1,
+    counts: { all: 1, regular: 0, occasional: 1, noOrders: 0 },
+  })
+
+  renderScreen('/app/garage/customers?sort=amount_desc')
+
+  expect(await screen.findByText('Ірина')).toBeVisible()
+  expect(screen.queryByText('100 $')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Сумою' }),
+  ).not.toBeInTheDocument()
+  expect(customerMocks.directory).toHaveBeenCalledWith(
+    { segment: 'all', sort: 'name_asc', page: 1 },
     expect.any(Object),
   )
 })
@@ -121,7 +197,7 @@ it('uses browser-native contact links and carries only the customer id to a new 
     id: 'customer-1',
     name: 'Ірина',
     phone: '+380501112233',
-    notes: null,
+    notes: 'Постійний клієнт, попереджати про готовність заздалегідь.',
     isActive: true,
     createdAt: '2026-08-28T00:00:00Z',
     orders: [
@@ -138,8 +214,8 @@ it('uses browser-native contact links and carries only the customer id to a new 
     ordersCount: 9,
     totalAmount: 10500,
     averageAmount: 1166.67,
-    firstOrderAt: null,
-    lastOrderAt: null,
+    firstOrderAt: '2026-08-28T00:00:00Z',
+    lastOrderAt: '2026-09-12T12:00:00Z',
   })
 
   renderScreen('/app/garage/customers/customer-1')
@@ -160,6 +236,17 @@ it('uses browser-native contact links and carries only the customer id to a new 
     'href',
     '/app/garage/orders/order-7',
   )
+  expect(screen.getByText('Двері')).toBeVisible()
+  expect(screen.getByText('10 500 $')).toBeVisible()
+  expect(screen.getByText('10 500 UAH')).toBeVisible()
+  expect(screen.getByText('Нотатки')).toBeVisible()
+  expect(
+    screen.getByText(
+      'Постійний клієнт, попереджати про готовність заздалегідь.',
+    ),
+  ).toBeVisible()
+  expect(screen.getAllByText('28.08.2026').length).toBeGreaterThan(0)
+  expect(screen.getByText('12.09.2026')).toBeVisible()
 
   await user.click(screen.getByRole('button', { name: 'Копіювати телефон' }))
   expect(writeText).toHaveBeenCalledWith('+380501112233')
@@ -464,7 +551,7 @@ it('hides finance metrics without finance.view and preserves a nullable order co
   renderScreen('/app/garage/customers/customer-1')
 
   await screen.findByRole('heading', { name: 'Ірина' })
-  expect(screen.getByText('—')).toBeVisible()
+  expect(screen.getAllByText('—').length).toBeGreaterThan(0)
   expect(screen.queryByText('Витрачено')).not.toBeInTheDocument()
   expect(screen.queryByText('Середній чек')).not.toBeInTheDocument()
   expect(

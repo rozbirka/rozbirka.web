@@ -6,37 +6,31 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
-import { ChevronLeft, Copy, MessageSquare, Phone, Plus } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
 import {
   Button,
-  Fact,
-  DataTable,
   DeniedState,
-  EmptyState,
   ErrorState,
   Field,
   Notice,
   PageBody,
   PageHeader,
-  Pagination,
   Panel,
   PanelFooter,
-  SearchInput,
   SectionPanel,
   SkeletonRows,
-  StatStrip,
-  StatusPill,
   TextArea,
   TextInput,
-  Toolbar,
   useOperation,
 } from '@/components/app'
 import {
   customersApi,
   readCustomerPhoneConflict,
+  type CustomerDirectoryResult,
+  type CustomerDirectorySort,
   type CustomerDetail,
-  type CustomerListItem,
   type CustomerPhoneConflict,
+  type CustomerSegment,
 } from '@/api/customers'
 import { normalizeApiProblem } from '@/api/errors'
 import type { Permission } from '../access-types'
@@ -48,6 +42,9 @@ import {
   type ModuleAccessOperation,
 } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import { CustomerDirectoryView } from './customer-directory'
+import { CustomerDetailView } from './customer-detail'
+import './customers-redesign.css'
 
 const loadError = 'Не вдалося завантажити дані. Спробуйте ще раз.'
 const nameExample = 'Наприклад: Ірина Коваль або СТО «Пітстоп»'
@@ -148,101 +145,79 @@ export function CustomersScreen({ definition }: CabinetModuleScreenProps) {
 function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
   const mutationsAllowed = canAccess(definition, cabinet, 'mutation')
+  const financeViewAllowed = canAccess(
+    definition,
+    cabinet,
+    'view',
+    'finance.view',
+  )
   const [params, setParams] = useSearchParams()
   const q = params.get('q') ?? ''
-  const page = Number(params.get('page') ?? 1) || 1
-  const [customers, setCustomers] = useState<CustomerListItem[]>([])
-  const [total, setTotal] = useState(0)
-  const [totalPages, setTotalPages] = useState(0)
+  const page = Math.max(Number(params.get('page') ?? 1) || 1, 1)
+  const segmentValue = params.get('segment')
+  const segment: CustomerSegment = (
+    ['regular', 'occasional', 'no_orders'] as const
+  ).includes(segmentValue as 'regular' | 'occasional' | 'no_orders')
+    ? (segmentValue as CustomerSegment)
+    : 'all'
+  const sortValue = params.get('sort')
+  const requestedSort: CustomerDirectorySort =
+    sortValue === 'name_asc' ? 'name_asc' : 'amount_desc'
+  const sort: CustomerDirectorySort = financeViewAllowed
+    ? requestedSort
+    : 'name_asc'
+  const [result, setResult] = useState<CustomerDirectoryResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
     void customersApi
-      .list({ ...(q ? { q } : {}), page }, { signal: controller.signal })
-      .then((result) => {
-        setCustomers(result.items)
-        setTotal(result.total)
-        setTotalPages(result.totalPages)
+      .directory(
+        { ...(q ? { q } : {}), segment, sort, page },
+        { signal: controller.signal },
+      )
+      .then((nextResult) => {
+        setResult(nextResult)
         setError(null)
       })
       .catch(() => {
         if (!controller.signal.aborted) setError(loadError)
       })
     return () => controller.abort()
-  }, [page, q])
+  }, [page, q, segment, sort])
+
+  const updateParams = (
+    changes: Partial<{
+      q: string
+      segment: CustomerSegment
+      sort: CustomerDirectorySort
+      page: number
+    }>,
+    resetPage = true,
+  ) => {
+    const next = new URLSearchParams(params)
+    for (const [key, value] of Object.entries(changes)) {
+      if (value === '' || value === undefined) next.delete(key)
+      else next.set(key, String(value))
+    }
+    if (resetPage) next.set('page', '1')
+    setParams(next)
+  }
 
   return (
     <PageBody>
-      <PageHeader
-        actions={
-          mutationsAllowed ? (
-            <Button asChild variant="primary">
-              <Link to="new">
-                <Plus aria-hidden />
-                Новий клієнт
-              </Link>
-            </Button>
-          ) : undefined
-        }
-        eyebrow="Продажі"
-        title="Клієнти"
-      />
-      <Toolbar>
-        <Field className="min-w-52 flex-1" label="Пошук">
-          <SearchInput
-            onChange={(event) =>
-              setParams(
-                event.target.value ? { q: event.target.value, page: '1' } : {},
-              )
-            }
-            placeholder="Ім’я або телефон"
-            value={q}
-          />
-        </Field>
-      </Toolbar>
       {error && <Notice tone="danger">{error}</Notice>}
-      <StatStrip items={[{ label: 'знайдено', value: total }]} />
-      <DataTable
-        caption="Список клієнтів"
-        columns={[
-          {
-            key: 'name',
-            label: 'Клієнт',
-            variant: 'primary',
-            cell: (customer) => (
-              <Link className="hover:text-brand block" to={customer.id}>
-                {customer.name}
-              </Link>
-            ),
-          },
-          {
-            key: 'orders',
-            label: 'Замовлень',
-            align: 'end',
-            cell: (customer) => customer.ordersCount,
-          },
-        ]}
-        empty={
-          <EmptyState
-            description="Клієнти з’являються після першого замовлення або коли ви додасте їх самі."
-            title="Клієнтів поки немає"
-          />
-        }
-        footer={
-          <Pagination
-            label="Сторінки клієнтів"
-            onPage={(nextPage) => {
-              const next = new URLSearchParams(params)
-              next.set('page', String(nextPage))
-              setParams(next)
-            }}
-            page={page}
-            totalPages={Math.max(totalPages, 1)}
-          />
-        }
-        rowKey={(customer) => customer.id}
-        rows={customers}
+      <CustomerDirectoryView
+        canCreate={mutationsAllowed}
+        canViewFinance={financeViewAllowed}
+        onPage={(nextPage) => updateParams({ page: nextPage }, false)}
+        onQuery={(nextQuery) => updateParams({ q: nextQuery })}
+        onSegment={(nextSegment) => updateParams({ segment: nextSegment })}
+        onSort={(nextSort) => updateParams({ sort: nextSort })}
+        query={q}
+        result={result}
+        segment={segment}
+        sort={sort}
       />
     </PageBody>
   )
@@ -356,82 +331,24 @@ function CustomerDetailScreen({
   const orderPath = `/app/${cabinet.targetTenant?.slug ?? ''}/orders/new?customerId=${encodeURIComponent(customer.id)}`
   return (
     <PageBody>
-      <PageHeader
-        actions={
-          <StatusPill tone={customer.isActive ? 'ok' : 'neutral'}>
-            {customer.isActive ? 'Активний' : 'Неактивний'}
-          </StatusPill>
+      <CustomerDetailView
+        busy={busy}
+        canCreateOrder={orderCreateAllowed}
+        canManage={mutationsAllowed}
+        canViewFinance={financeViewAllowed}
+        customer={customer}
+        directoryPath={`/app/${cabinet.targetTenant?.slug ?? ''}/customers`}
+        deleteTriggerRef={triggerRef}
+        onCopyPhone={() =>
+          customer.phone
+            ? void navigator.clipboard.writeText(customer.phone)
+            : undefined
         }
-        eyebrow="Продажі · Клієнти"
-        title={customer.name}
+        onDelete={() => setConfirmDelete(true)}
+        onLifecycle={() => void updateLifecycle()}
+        orderPath={orderPath}
+        tenantSlug={cabinet.targetTenant?.slug ?? ''}
       />
-      <dl className="grid gap-3 sm:grid-cols-3">
-        <Fact label="Замовлень">
-          {customer.ordersCount === null ? '—' : String(customer.ordersCount)}
-        </Fact>
-        {financeViewAllowed && (
-          <>
-            <Fact label="Витрачено">{String(customer.totalAmount ?? '—')}</Fact>
-            <Fact label="Середній чек">
-              {String(customer.averageAmount ?? '—')}
-            </Fact>
-          </>
-        )}
-      </dl>
-      <Panel className="flex flex-wrap items-center gap-2">
-        {customer.phone && (
-          <>
-            <span className="text-app-muted mr-1 font-mono text-sm">
-              {customer.phone}
-            </span>
-            <Button asChild>
-              <a href={`tel:${customer.phone}`} aria-label="Зателефонувати">
-                <Phone aria-hidden />
-                Зателефонувати
-              </a>
-            </Button>
-            <Button asChild>
-              <a href={`sms:${customer.phone}`} aria-label="SMS">
-                <MessageSquare aria-hidden />
-                SMS
-              </a>
-            </Button>
-            <Button
-              onClick={() =>
-                void navigator.clipboard.writeText(customer.phone!)
-              }
-            >
-              <Copy aria-hidden />
-              Копіювати телефон
-            </Button>
-          </>
-        )}
-        {orderCreateAllowed && customer.isActive && (
-          <Button asChild variant="primary">
-            <Link to={orderPath}>Створити замовлення</Link>
-          </Button>
-        )}
-        {mutationsAllowed && (
-          <>
-            <Button asChild>
-              <Link to="edit">Редагувати</Link>
-            </Button>
-            <Button disabled={busy} onClick={() => void updateLifecycle()}>
-              {customer.isActive ? 'Деактивувати' : 'Активувати'}
-            </Button>
-            {customer.ordersCount === 0 && (
-              <Button
-                disabled={busy}
-                onClick={() => setConfirmDelete(true)}
-                ref={triggerRef}
-                variant="danger"
-              >
-                Видалити
-              </Button>
-            )}
-          </>
-        )}
-      </Panel>
       {confirmDelete && (
         <div
           ref={dialogRef}
@@ -469,49 +386,6 @@ function CustomerDetailScreen({
           </div>
         </div>
       )}
-      <section className="grid gap-2">
-        <h2 className="text-base font-semibold text-white">
-          Історія замовлень
-        </h2>
-        <DataTable
-          caption="Історія замовлень клієнта"
-          columns={[
-            {
-              key: 'number',
-              label: 'Замовлення',
-              variant: 'primary',
-              cell: (order) => (
-                <Link
-                  className="hover:text-brand block"
-                  to={`/app/${cabinet.targetTenant?.slug ?? ''}/orders/${order.id}`}
-                >
-                  #{order.number}
-                </Link>
-              ),
-            },
-            {
-              key: 'status',
-              label: 'Статус',
-              cell: (order) => order.status,
-            },
-            {
-              key: 'total',
-              label: 'Сума',
-              align: 'end',
-              cell: (order) =>
-                `${String(order.totalAmount ?? '—')} ${order.currency ?? ''}`.trim(),
-            },
-          ]}
-          empty={
-            <EmptyState
-              description="Щойно клієнт зробить перше замовлення, воно зʼявиться тут."
-              title="Замовлень ще не було"
-            />
-          }
-          rowKey={(order) => order.id}
-          rows={customer.orders}
-        />
-      </section>
     </PageBody>
   )
 }

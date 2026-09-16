@@ -974,7 +974,10 @@ it('keeps server search, status, and pagination in the order URL', async () => {
 
   expect(await screen.findByRole('link', { name: /#12/ })).toBeVisible()
   expect(screen.getByLabelText('Пошук замовлень')).toHaveValue('door')
-  expect(screen.getByLabelText('Статус замовлення')).toHaveValue('pending')
+  expect(screen.getByRole('button', { name: /^Очікує/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
   expect(orderMocks.list).toHaveBeenCalledWith(
     {
       search: 'door',
@@ -1302,4 +1305,31 @@ it('renders audit timestamps and data for otherwise identical events', async () 
   }
   expect(screen.getByText('quantity: 2')).toBeVisible()
   expect(screen.getByText('unitPrice: 125')).toBeVisible()
+})
+
+it('filters orders by status while preserving the customer and resetting the page', async () => {
+  const user = userEvent.setup()
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/garage/orders',
+        element: <OrdersScreen definition={definition} />,
+      },
+    ],
+    {
+      initialEntries: ['/app/garage/orders?q=BMW&customerId=customer-1&page=3'],
+    },
+  )
+  render(<RouterProvider router={router} />)
+  await user.click(screen.getByRole('button', { name: /^Очікує/ }))
+  await waitFor(() =>
+    expect(router.state.location.search).toContain('status=pending'),
+  )
+  expect(router.state.location.search).toContain('customerId=customer-1')
+  expect(router.state.location.search).toContain('q=BMW')
+  expect(router.state.location.search).toContain('page=1')
+  expect(screen.getByRole('button', { name: /^Очікує/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
 })

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { Plus, Trash2 } from 'lucide-react'
+import './orders-directory.css'
 import {
   Button,
   SectionPanel,
@@ -15,12 +16,10 @@ import {
   Pagination,
   Panel,
   SearchInput,
-  SelectInput,
   SkeletonRows,
   StatusPill,
   TextArea,
   TextInput,
-  Toolbar,
   type StatusTone,
 } from '@/components/app'
 import { normalizeApiProblem } from '@/api/errors'
@@ -182,9 +181,26 @@ const canCreateOrder = (
   cabinet.snapshot?.permissions.has('parts.view') === true &&
   cabinet.snapshot.permissions.has('customers.view')
 
+const orderFilters = [
+  { value: '', label: 'Усі', tone: 'neutral' },
+  { value: 'pending', label: 'Очікує', tone: 'warn' },
+  { value: 'confirmed', label: 'Підтверджено', tone: 'ok' },
+  { value: 'refunded', label: 'Повернено', tone: 'info' },
+  { value: 'cancelled', label: 'Скасовано', tone: 'neutral' },
+] as const
+const orderNumberFormat = new Intl.NumberFormat('uk-UA', {
+  maximumFractionDigits: 2,
+})
+const itemPlural = new Intl.PluralRules('uk-UA')
+const itemCountLabel = (count: number) =>
+  `${count} ${{ one: 'позиція', few: 'позиції', many: 'позицій', other: 'позиції' }[itemPlural.select(count) as 'one' | 'few' | 'many' | 'other']}`
+
 function OrderDirectory({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
   const createAllowed = canCreateOrder(definition, cabinet)
+  const navigate = useNavigate()
+  const [counts, setCounts] = useState<Record<string, number>>({})
+  const [loadedQuery, setLoadedQuery] = useState<string | null>(null)
   const [params, setParams] = useSearchParams()
   const [orders, setOrders] = useState<OrderListItem[]>([])
   const [totalPages, setTotalPages] = useState(0)
@@ -192,7 +208,34 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
   const search = params.get('q') ?? undefined
   const status = params.get('status') ?? undefined
   const customerId = params.get('customerId') ?? undefined
-  const page = Number(params.get('page') ?? 1) || 1
+  const page = Math.max(1, Number(params.get('page') ?? 1) || 1)
+  const queryKey = JSON.stringify([customerId, page, search, status])
+  const loading = loadedQuery !== queryKey
+  useEffect(() => {
+    const controller = new AbortController()
+    void Promise.all(
+      orderFilters.map(async (filter) => {
+        const result = await ordersApi.list(
+          {
+            ...(search === undefined ? {} : { search }),
+            ...(customerId === undefined ? {} : { customerId }),
+            ...(filter.value ? { status: filter.value } : {}),
+            page: 1,
+            pageSize: 1,
+          },
+          { signal: controller.signal },
+        )
+        return [filter.value, result.total] as const
+      }),
+    )
+      .then((entries) => {
+        if (!controller.signal.aborted) setCounts(Object.fromEntries(entries))
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setCounts({})
+      })
+    return () => controller.abort()
+  }, [customerId, search])
   useEffect(() => {
     const controller = new AbortController()
     void ordersApi
@@ -206,15 +249,20 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
         { signal: controller.signal },
       )
       .then((result) => {
+        if (controller.signal.aborted) return
+        setLoadedQuery(queryKey)
         setOrders(result.items)
         setTotalPages(result.totalPages)
         setError(null)
       })
       .catch((error) => {
-        if (!controller.signal.aborted) setError(errorMessage(error))
+        if (!controller.signal.aborted) {
+          setError(errorMessage(error))
+          setLoadedQuery(queryKey)
+        }
       })
     return () => controller.abort()
-  }, [customerId, page, search, status])
+  }, [customerId, page, search, status, queryKey])
   const setParam = (name: string, value: string) => {
     const next = new URLSearchParams(params)
     if (value) next.set(name, value)
@@ -228,7 +276,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
     setParams(next)
   }
   return (
-    <PageBody>
+    <PageBody className="orders-directory">
       <PageHeader
         actions={
           createAllowed ? (
@@ -243,76 +291,153 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
         eyebrow="Продажі"
         title="Замовлення"
       />
-      <Toolbar>
-        <Field className="min-w-52 flex-1" label="Пошук замовлень">
-          <SearchInput
-            onChange={(event) => setParam('q', event.target.value)}
-            value={params.get('q') ?? ''}
+      <SearchInput
+        aria-label="Пошук замовлень"
+        placeholder="Пошук: номер замовлення або покупець"
+        onChange={(event) => setParam('q', event.target.value)}
+        value={params.get('q') ?? ''}
+      />
+      <div className="orders-directory-toolbar">
+        <div
+          aria-label="Статус замовлення"
+          className="orders-status-filters"
+          role="group"
+        >
+          {orderFilters.map((filter) => (
+            <button
+              aria-pressed={(status ?? '') === filter.value}
+              className="orders-status-filter"
+              key={filter.value}
+              onClick={() => setParam('status', filter.value)}
+              type="button"
+            >
+              <span
+                aria-hidden
+                className={`orders-status-dot orders-status-dot--${filter.tone}`}
+              />
+              {filter.label}
+              {counts[filter.value] !== undefined && (
+                <span className="orders-status-count">
+                  {counts[filter.value]}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+        <p className="orders-list-total">
+          <span>Сума в списку</span>
+          <strong>
+            {loading ||
+            error ||
+            orders.some((order) => order.totalAmount === null)
+              ? '—'
+              : `${orderNumberFormat.format(
+                  orders.reduce(
+                    (sum, order) => sum + (order.totalAmount ?? 0),
+                    0,
+                  ),
+                )} $`}
+          </strong>
+        </p>
+      </div>
+      {error ? (
+        <ErrorState
+          title="Не вдалося завантажити замовлення"
+          description={error}
+        />
+      ) : loading ? (
+        <SkeletonRows />
+      ) : (
+        <>
+          <DataTable
+            caption="Список замовлень"
+            columns={[
+              {
+                key: 'number',
+                label: 'Замовлення',
+                variant: 'primary',
+                cell: (order) => (
+                  <div className="orders-cell-stack">
+                    <Link
+                      className="orders-number"
+                      onClick={(event) => event.stopPropagation()}
+                      to={order.id}
+                    >
+                      #{order.number}
+                    </Link>
+                    <time dateTime={order.createdAt}>
+                      {/^(\d{4})-(\d{2})-(\d{2})/
+                        .exec(order.createdAt)
+                        ?.slice(2)
+                        .reverse()
+                        .join('.') ?? '—'}
+                    </time>
+                  </div>
+                ),
+              },
+              {
+                key: 'customer',
+                label: 'Покупець',
+                cell: (order) => (
+                  <span className="orders-customer">
+                    {order.customerName ?? 'Без покупця'}
+                  </span>
+                ),
+              },
+              {
+                key: 'items',
+                label: 'Позиції',
+                cell: (order) => (
+                  <span title={order.partNames?.join(', ')}>
+                    {itemCountLabel(order.itemCount ?? 0)}
+                  </span>
+                ),
+              },
+              {
+                key: 'status',
+                label: 'Статус',
+                cell: (order) => {
+                  const presentation = orderStatusPresentation(order.status)
+                  return (
+                    <StatusPill tone={presentation.tone}>
+                      {presentation.label}
+                    </StatusPill>
+                  )
+                },
+              },
+              {
+                key: 'total',
+                label: 'Сума',
+                align: 'end',
+                cell: (order) => (
+                  <span className="orders-amount">
+                    {order.totalAmount == null
+                      ? '—'
+                      : `${orderNumberFormat.format(order.totalAmount)} $`}
+                  </span>
+                ),
+              },
+            ]}
+            empty={
+              <EmptyState
+                description="Замовлення з’являться тут, щойно ви створите перше або клієнт зробить його сам."
+                title="Замовлень поки немає"
+              />
+            }
+            onRowClick={(order) => {
+              void navigate(order.id)
+            }}
+            rowKey={(order) => order.id}
+            rows={orders}
           />
-        </Field>
-        <Field className="min-w-48" label="Статус замовлення">
-          <SelectInput
-            onChange={(event) => setParam('status', event.target.value)}
-            value={params.get('status') ?? ''}
-          >
-            <option value="">Усі</option>
-            <option value="pending">Очікує</option>
-            <option value="confirmed">Підтверджено</option>
-            <option value="cancelled">Скасовано</option>
-            <option value="refunded">Повернено</option>
-          </SelectInput>
-        </Field>
-      </Toolbar>
-      {error && <Notice tone="danger">{error}</Notice>}
-      <DataTable
-        caption="Список замовлень"
-        columns={[
-          {
-            key: 'number',
-            label: 'Замовлення',
-            variant: 'primary',
-            cell: (order) => (
-              <Link className="hover:text-brand block" to={order.id}>
-                #{order.number}
-              </Link>
-            ),
-          },
-          {
-            key: 'status',
-            label: 'Статус',
-            cell: (order) => {
-              const presentation = orderStatusPresentation(order.status)
-              return (
-                <StatusPill tone={presentation.tone}>
-                  {presentation.label}
-                </StatusPill>
-              )
-            },
-          },
-          {
-            key: 'total',
-            label: 'Сума',
-            align: 'end',
-            cell: (order) => order.totalAmount ?? '—',
-          },
-        ]}
-        empty={
-          <EmptyState
-            description="Замовлення з’являться тут, щойно ви створите перше або клієнт зробить його сам."
-            title="Замовлень поки немає"
-          />
-        }
-        footer={
           <Pagination
             label="Сторінки замовлень"
             onPage={goToPage}
             page={page}
             totalPages={Math.max(totalPages, 1)}
           />
-        }
-        rowKey={(order) => order.id}
-        rows={orders}
-      />
+        </>
+      )}
     </PageBody>
   )
 }

@@ -1,8 +1,16 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
+import { carCatalogApi } from '@/api/car-catalog'
 import { carsApi } from '@/api/cars'
 import { mediaApi } from '@/api/media'
 import type { PlanUsageDto } from '@/api/types'
@@ -10,6 +18,10 @@ import { useCabinet } from '../CabinetContext'
 import { CarsScreen, MediaPicker } from './CarsScreen'
 
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are invoked only through their owning singleton. */
+
+vi.mock('@/api/car-catalog', () => ({
+  carCatalogApi: { getMakes: vi.fn(), getModels: vi.fn() },
+}))
 
 vi.mock('@/api/cars', () => ({
   isCarStatus: (value: unknown) => value === 'active' || value === 'archived',
@@ -142,6 +154,15 @@ const cabinet = (
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(carCatalogApi.getMakes).mockResolvedValue([
+    { id: 452, name: 'BMW' },
+    { id: 441, name: 'Tesla' },
+  ])
+  vi.mocked(carCatalogApi.getModels).mockImplementation((id) =>
+    Promise.resolve(
+      id === 452 ? [{ id: 1, name: 'X5' }] : [{ id: 2, name: 'Model Y' }],
+    ),
+  )
   vi.mocked(useCabinet).mockReturnValue(
     cabinet(['cars.view', 'cars.manage', 'finance.view', 'finance.manage']),
   )
@@ -669,8 +690,10 @@ it('retries only remaining initial expenses after partial failure without recrea
   )
 
   await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-001')
-  await user.type(screen.getByRole('textbox', { name: 'Марка' }), 'BMW')
-  await user.type(screen.getByRole('textbox', { name: 'Модель' }), 'X5')
+  await user.click(screen.getByRole('button', { name: 'Марка' }))
+  await user.click(await screen.findByRole('button', { name: 'BMW' }))
+  await user.click(screen.getByRole('button', { name: 'Модель' }))
+  await user.click(await screen.findByRole('button', { name: 'X5' }))
   await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2020')
   await user.type(
     screen.getByRole('textbox', { name: 'Ціна придбання' }),
@@ -723,8 +746,10 @@ it('validates every initial expense before creating the car', async () => {
   )
 
   await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-001')
-  await user.type(screen.getByRole('textbox', { name: 'Марка' }), 'BMW')
-  await user.type(screen.getByRole('textbox', { name: 'Модель' }), 'X5')
+  await user.click(screen.getByRole('button', { name: 'Марка' }))
+  await user.click(await screen.findByRole('button', { name: 'BMW' }))
+  await user.click(screen.getByRole('button', { name: 'Модель' }))
+  await user.click(await screen.findByRole('button', { name: 'X5' }))
   await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2020')
   await user.type(
     screen.getByRole('textbox', { name: 'Ціна придбання' }),
@@ -735,7 +760,7 @@ it('validates every initial expense before creating the car', async () => {
   await user.click(screen.getByRole('button', { name: 'Створити автомобіль' }))
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Перевірте правильність початкових витрат. Кожна потребує назви до 200 символів і суми більшої за нуль.',
+    'Перевірте правильність додаткових витрат. Кожна потребує назви до 200 символів і суми більшої за нуль.',
   )
   expect(carsApi.create).not.toHaveBeenCalled()
 })
@@ -758,8 +783,10 @@ it('rechecks the latest car permission before dispatching create', async () => {
   )
 
   await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-001')
-  await user.type(screen.getByRole('textbox', { name: 'Марка' }), 'BMW')
-  await user.type(screen.getByRole('textbox', { name: 'Модель' }), 'X5')
+  await user.click(screen.getByRole('button', { name: 'Марка' }))
+  await user.click(await screen.findByRole('button', { name: 'BMW' }))
+  await user.click(screen.getByRole('button', { name: 'Модель' }))
+  await user.click(await screen.findByRole('button', { name: 'X5' }))
   await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2020')
   await user.type(
     screen.getByRole('textbox', { name: 'Ціна придбання' }),
@@ -1048,4 +1075,121 @@ it('opens the gallery viewer and pages through the shots', async () => {
   await waitFor(() =>
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
   )
+})
+
+it('updates the new-car investment preview as expenses are added and removed', async () => {
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/demo/cars/new']}>
+      <Routes>
+        <Route path="/app/:tenant/cars/new" element={<CarsScreen />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const summary = screen.getByRole('complementary', {
+    name: 'Перед створенням',
+  })
+  await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-042')
+  await user.click(screen.getByRole('button', { name: 'Марка' }))
+  await user.click(await screen.findByRole('button', { name: 'Tesla' }))
+  await user.click(screen.getByRole('button', { name: 'Модель' }))
+  await user.click(await screen.findByRole('button', { name: 'Model Y' }))
+  await user.type(
+    screen.getByRole('textbox', { name: 'Ціна придбання' }),
+    '10000',
+  )
+  await user.click(screen.getByRole('button', { name: 'Додати витрату' }))
+  await user.type(screen.getByLabelText('Назва витрати 1'), 'Доставка')
+  await user.type(screen.getByLabelText('Сума витрати 1'), '500')
+  expect(summary).toHaveTextContent('CAR-042')
+  expect(summary).toHaveTextContent('Tesla Model Y')
+  expect(within(summary).getByLabelText('Інвестовано')).toHaveTextContent(
+    '10 500 $',
+  )
+  await user.click(screen.getByRole('button', { name: 'Прибрати витрату 1' }))
+  expect(within(summary).getByLabelText('Інвестовано')).toHaveTextContent(
+    '10 000 $',
+  )
+})
+
+it('submits a custom color and normalizes VIN from the redesigned controls', async () => {
+  const user = userEvent.setup()
+  vi.mocked(carsApi.create).mockResolvedValue(detail)
+  render(
+    <MemoryRouter initialEntries={['/app/demo/cars/new']}>
+      <Routes>
+        <Route path="/app/:tenant/cars/new" element={<CarsScreen />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-002')
+  await user.click(screen.getByRole('button', { name: 'Марка' }))
+  await user.click(await screen.findByRole('button', { name: 'BMW' }))
+  await user.click(screen.getByRole('button', { name: 'Модель' }))
+  await user.click(await screen.findByRole('button', { name: 'X5' }))
+  await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2020')
+  await user.type(screen.getByRole('textbox', { name: 'Ціна придбання' }), '0')
+  await user.click(screen.getByRole('button', { name: 'Синій' }))
+  expect(screen.getByRole('button', { name: 'Синій' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  await user.click(screen.getByRole('button', { name: 'Інший' }))
+  await user.type(
+    screen.getByRole('textbox', { name: 'Інший колір' }),
+    'Зелений металік',
+  )
+  await user.type(
+    screen.getByRole('textbox', { name: 'VIN' }),
+    'wbaxx11010a123456',
+  )
+  await user.click(screen.getByRole('button', { name: 'Створити автомобіль' }))
+  expect(carsApi.create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      color: 'Зелений металік',
+      vin: 'WBAXX11010A123456',
+      purchasePrice: 0,
+    }),
+    expect.any(Object),
+  )
+})
+
+it('blocks both create actions until dropped photos have finished uploading', async () => {
+  let finish!: (result: { storageKey: string; url: string }) => void
+  vi.mocked(mediaApi.upload).mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve
+    }),
+  )
+  render(
+    <MemoryRouter initialEntries={['/app/demo/cars/new']}>
+      <Routes>
+        <Route path="/app/:tenant/cars/new" element={<CarsScreen />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const file = new File(['image'], 'car.jpg', { type: 'image/jpeg' })
+  fireEvent.drop(screen.getByLabelText('Додати фото'), {
+    dataTransfer: { files: [file] },
+  })
+  await waitFor(() =>
+    expect(mediaApi.upload).toHaveBeenCalledWith(
+      file,
+      'cars',
+      expect.any(Object),
+    ),
+  )
+  for (const button of screen.getAllByRole('button', {
+    name: /Створити автомобіль/,
+  }))
+    expect(button).toBeDisabled()
+  await act(() => {
+    finish({ storageKey: 'cars/photo.jpg', url: '/photo.jpg' })
+    return Promise.resolve()
+  })
+  expect(await screen.findByAltText('Попередній перегляд фото')).toBeVisible()
+  for (const button of screen.getAllByRole('button', {
+    name: /Створити автомобіль/,
+  }))
+    expect(button).toBeEnabled()
 })
