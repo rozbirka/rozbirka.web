@@ -301,11 +301,11 @@ it('uses browser-native contact links and carries only the customer id to a new 
   expect(screen.getAllByText('28.08.2026').length).toBeGreaterThan(0)
   expect(screen.getByText('12.09.2026')).toBeVisible()
   expect(screen.getByText('Телефон').parentElement).toHaveTextContent(
-    '+380501112233',
+    '+380 50 111 2233',
   )
   expect(
     screen
-      .getAllByText('+380501112233')
+      .getAllByText('+380 50 111 2233')
       .some((element) =>
         element.classList.contains('customer-card-phone-number'),
       ),

@@ -268,9 +268,9 @@
 }
 .customer-card-overview {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(400px, 440px);
+  grid-template-columns: minmax(0, 1fr) 400px;
   align-items: center;
-  gap: 24px;
+  gap: clamp(24px, 3vw, 40px);
   padding: 12px 40px;
 }
 .customer-card-hero {
@@ -286,9 +286,9 @@
 }
 .customer-card-avatar {
   display: grid;
-  width: 68px;
-  height: 68px;
-  flex: 0 0 68px;
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
   place-items: center;
   border-radius: 50%;
   font-size: 19px;
@@ -315,22 +315,24 @@
   text-overflow: ellipsis;
 }
 .customer-card-contact {
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 6px;
 }
 .customer-card-phone-number {
+  flex: 0 0 auto;
   margin-right: 2px;
   color: var(--color-app-ink);
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 .customer-card-contact [data-slot='app-button'] {
   min-height: 34px;
-  padding-inline: 9px;
-  font-size: 11px;
+  padding-inline: 8px;
+  font-size: 12px;
 }
 .customer-card-no-phone {
   color: var(--color-app-dim);
@@ -348,7 +350,7 @@
   display: grid;
   min-width: 0;
   gap: 7px;
-  padding: 24px 14px;
+  padding: 24px 10px;
   border-left: 1px solid var(--color-app-line);
 }
 .customer-card-metrics > div:first-child {
@@ -367,7 +369,7 @@
   overflow: hidden;
   color: var(--color-app-ink);
   font-family: var(--font-mono);
-  font-size: clamp(18px, 2vw, 24px);
+  font-size: clamp(18px, 1.75vw, 22px);
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
@@ -573,6 +575,7 @@
   }
   .customer-card-contact {
     align-items: stretch;
+    flex-wrap: wrap;
   }
   .customer-card-contact > span {
     width: 100%;

@@ -31,6 +31,13 @@ const formatNumber = (value: number) =>
 const formatMoney = (value: number | null, currency = '$') =>
   value === null ? '—' : `${formatNumber(value)} ${currency}`
 
+const formatPhone = (value: string) => {
+  const match = /^\+?380(\d{2})(\d{3})(\d{4})$/.exec(
+    value.replace(/[\s()-]/g, ''),
+  )
+  return match ? `+380 ${match[1]} ${match[2]} ${match[3]}` : value
+}
+
 export function CustomerDetailView({
   customer,
   directoryPath,
@@ -136,7 +143,7 @@ export function CustomerDetailView({
             {customer.phone ? (
               <div className="customer-card-contact">
                 <span className="customer-card-phone-number">
-                  {customer.phone}
+                  {formatPhone(customer.phone)}
                 </span>
                 <Button aria-label="Копіювати телефон" onClick={onCopyPhone}>
                   <Copy aria-hidden />
@@ -270,7 +277,7 @@ export function CustomerDetailView({
               <div>
                 <dt>Телефон</dt>
                 <dd className="customer-card-phone-number">
-                  {customer.phone ?? '—'}
+                  {customer.phone ? formatPhone(customer.phone) : '—'}
                 </dd>
               </div>
               <div>
