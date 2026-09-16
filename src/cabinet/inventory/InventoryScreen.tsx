@@ -18,8 +18,11 @@ import {
 } from 'lucide-react'
 import {
   Button,
+  Card,
   DataTable,
   EmptyState,
+  Field,
+  FormDialog,
   Notice,
   PageBody,
   PageHeader,
@@ -28,6 +31,7 @@ import {
   SkeletonRows,
   StatCard,
   StatusPill,
+  TextArea,
 } from '@/components/app'
 import {
   inventoryApi,
@@ -71,14 +75,6 @@ const sessionStatus = (status: InventorySession['status']) =>
     completed: ['Завершено', 'ok'],
     cancelled: ['Скасовано', 'danger'],
   })[status] as [string, 'neutral' | 'warn' | 'info' | 'ok' | 'danger']
-
-const resultStatus = (result: string) =>
-  ({
-    Matched: ['Збіг', 'ok'],
-    Shortage: ['Нестача', 'danger'],
-    Surplus: ['Надлишок', 'warn'],
-    Unexpected: ['Несподівана', 'warn'],
-  })[result] ?? [result, 'neutral']
 
 /** How many journal rows to show before the reader asks for more. */
 const JOURNAL_PAGE = 25
@@ -920,192 +916,590 @@ function SessionView({ id }: { id: string }) {
   )
 }
 
+/** Which side of the count the reader is looking at. */
+const RESULT_FILTERS = [
+  { value: 'diff', label: 'Розходження' },
+  { value: 'all', label: 'Усі позиції' },
+  { value: 'same', label: 'Збіглося' },
+] as const
+
+type ResultFilter = (typeof RESULT_FILTERS)[number]['value']
+
+interface ResultsData {
+  results: InventorySessionResults
+  session: InventorySession
+  audit: InventoryAuditEvent[]
+  people: { userId: string; name: string }[]
+}
+
 function ResultsView({ id }: { id: string }) {
   const base = useInventoryBase()
   const canAdjust = usePermission('inventory.adjust')
+  const canSeeTeam = usePermission('team.view')
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.inventory,
   )
   const loader = useCallback(
-    async (signal: AbortSignal) => {
-      const [results, session, audit] = await Promise.all([
+    async (signal: AbortSignal): Promise<ResultsData> => {
+      const [results, session, audit, people] = await Promise.all([
         inventoryApi.getResults(id, { signal }),
         inventoryApi.getSession(id, { signal }),
         inventoryApi.getAudit(id, { signal }),
+        canSeeTeam
+          ? teamApi.listMembers({ signal }).then(
+              (members) =>
+                members.map((member) => ({
+                  userId: member.userId,
+                  name: member.name,
+                })),
+              () => [],
+            )
+          : Promise.resolve([]),
       ])
-      return { results, session, audit }
+      return { results, session, audit, people }
     },
-    [id],
+    [canSeeTeam, id],
   )
   const resource = useLoad(loader, id)
   const [operationError, setOperationError] = useState<string | null>(null)
-  const [adjustingPartId, setAdjustingPartId] = useState<string | null>(null)
-  const [resultFilter, setResultFilter] = useState<'all' | 'discrepancies'>(
-    'discrepancies',
-  )
-  const adjust = async (part: InventoryPartResult) => {
-    if (adjustingPartId) return
-    const reason = window
-      .prompt(`Причина коригування: ${part.partName}`)
-      ?.trim()
-    if (!reason) return
-    setAdjustingPartId(part.partId)
-    try {
-      setOperationError(null)
-      const scope = requireLatestMutation({
-        permission: 'inventory.adjust',
-        quota: false,
-      })
-      await inventoryApi.applyAdjustment(id, part.partId, reason, {
-        signal: scope.signal,
-      })
-      resource.reload()
-    } catch (error) {
-      setOperationError(normalizeApiProblem(error).message)
-    } finally {
-      setAdjustingPartId(null)
+  const [filter, setFilter] = useState<ResultFilter>('diff')
+  /** The parts a reason is being asked for: one row, or every undecided row. */
+  const [asking, setAsking] = useState<InventoryPartResult[] | null>(null)
+  const [reason, setReason] = useState('')
+  const [applied, setApplied] = useState(0)
+  const [busy, setBusy] = useState(false)
+
+  const apply = async (parts: readonly InventoryPartResult[], why: string) => {
+    setBusy(true)
+    setApplied(0)
+    for (const [index, part] of parts.entries()) {
+      try {
+        const scope = requireLatestMutation({
+          permission: 'inventory.adjust',
+          quota: false,
+        })
+        await inventoryApi.applyAdjustment(id, part.partId, why, {
+          signal: scope.signal,
+        })
+        setApplied(index + 1)
+      } catch (error) {
+        setOperationError(
+          parts.length === 1
+            ? normalizeApiProblem(error).message
+            : `${normalizeApiProblem(error).message} Застосовано ${String(index)} з ${String(parts.length)} — решта лишилася без рішення.`,
+        )
+        setBusy(false)
+        setAsking(null)
+        resource.reload()
+        return
+      }
     }
+    setBusy(false)
+    setAsking(null)
+    setReason('')
+    resource.reload()
   }
+
   return (
-    <PageBody>
-      <PageHeader
-        eyebrow={<Link to={`${base}/sessions/${id}`}>Сесія</Link>}
-        title="Результати інвентаризації"
-      />
-      {operationError ? <Notice tone="danger">{operationError}</Notice> : null}
-      <Resource state={resource.state} retry={resource.reload}>
-        {({
-          results,
-          session,
-          audit,
-        }: {
-          results: InventorySessionResults
-          session: InventorySession
-          audit: InventoryAuditEvent[]
-        }) => {
-          const adjustedPartIds = new Set(
-            audit.flatMap((event) =>
-              event.adjustmentId && event.partId ? [event.partId] : [],
-            ),
-          )
-          const visibleParts = results.parts.filter(
-            (part) => resultFilter === 'all' || part.delta !== 0,
-          )
-          return (
-            <>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <StatCard label="Позицій" value={results.parts.length} />
-                <StatCard
-                  label="Нестач"
-                  value={results.parts.filter((part) => part.delta < 0).length}
-                />
-                <StatCard
-                  label="Надлишків"
-                  value={results.parts.filter((part) => part.delta > 0).length}
-                  accent
-                />
-              </div>
-              <label className="grid max-w-xs gap-1 text-sm text-app-dim">
-                Показати
-                <select
-                  className="min-h-11 rounded-lg border border-app-line bg-app-canvas px-3 text-white"
-                  onChange={(event) =>
-                    setResultFilter(
-                      event.target.value as 'all' | 'discrepancies',
-                    )
-                  }
-                  value={resultFilter}
+    <Resource retry={resource.reload} state={resource.state}>
+      {({ results, session, audit, people }: ResultsData) => {
+        const adjusted = new Set(
+          audit.flatMap((event) =>
+            event.adjustmentId && event.partId ? [event.partId] : [],
+          ),
+        )
+        const nameOf = (userId: string | null | undefined) =>
+          userId == null
+            ? null
+            : (people.find((person) => person.userId === userId)?.name ?? null)
+        const parts = results.parts
+        const differing = parts.filter((part) => part.delta !== 0)
+        const counts: Record<ResultFilter, number> = {
+          diff: differing.length,
+          all: parts.length,
+          same: parts.length - differing.length,
+        }
+        const rows =
+          filter === 'all'
+            ? parts
+            : filter === 'diff'
+              ? differing
+              : parts.filter((part) => part.delta === 0)
+        /** A row can still be decided: it differs, nothing was booked yet, and
+            the server will accept the write. */
+        const open = differing.filter(
+          (part) => !adjusted.has(part.partId) && !part.hasCoverageWarning,
+        )
+        const decidable =
+          canAdjust && session.status === 'review' ? open : ([] as typeof open)
+        const shortage = differing
+          .filter((part) => part.delta < 0)
+          .reduce((total, part) => total + part.delta, 0)
+        const surplus = differing
+          .filter((part) => part.delta > 0)
+          .reduce((total, part) => total + part.delta, 0)
+        const accuracy =
+          parts.length === 0
+            ? null
+            : Math.round(
+                ((parts.length - differing.length) / parts.length) * 1000,
+              ) / 10
+        const [statusLabel, statusTone] = sessionStatus(session.status)
+        const zones = [
+          ...new Set(session.zones.map((zone) => zone.zoneCode)),
+        ].join(', ')
+        const crew = [
+          ...new Set(
+            [session.startedBy, session.completedBy, session.createdBy]
+              .map(nameOf)
+              .filter((name): name is string => name !== null),
+          ),
+        ].join(', ')
+
+        return (
+          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+              <div className="flex min-w-0 items-center gap-5">
+                <Link
+                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                  to={`${base}/sessions/${id}`}
                 >
-                  <option value="discrepancies">Лише розбіжності</option>
-                  <option value="all">Усі позиції</option>
-                </select>
-              </label>
-              <div className="overflow-hidden rounded-panel border border-app-line">
-                {visibleParts.map((part) => (
-                  <ResultRow
-                    key={part.partId}
-                    part={part}
-                    adjusted={adjustedPartIds.has(part.partId)}
-                    pending={adjustingPartId === part.partId}
-                    {...(canAdjust &&
-                    session.status === 'review' &&
-                    part.delta !== 0 &&
-                    !part.hasCoverageWarning &&
-                    !adjustedPartIds.has(part.partId)
-                      ? { adjust: () => void adjust(part) }
-                      : {})}
-                  />
-                ))}
+                  <ChevronLeft aria-hidden className="size-3.5" />
+                  До сесії
+                </Link>
+                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                  <span>Інвентаризація</span>
+                  <span aria-hidden className="text-white/20">
+                    /
+                  </span>
+                  <span>{session.number}</span>
+                  <span aria-hidden className="text-white/20">
+                    /
+                  </span>
+                  <span className="text-app-muted">Результати</span>
+                </p>
               </div>
-            </>
-          )
-        }}
-      </Resource>
-    </PageBody>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <Button asChild className="px-[18px] text-sm font-semibold">
+                  <Link to={`${base}/sessions/${id}/audit`}>Аудит</Link>
+                </Button>
+                <Button
+                  disabled
+                  title="Сервер поки не віддає результати сесії файлом"
+                >
+                  Експорт
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-4">
+                  <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+                    Результати сесії
+                  </h1>
+                  <StatusPill tone={statusTone}>{statusLabel}</StatusPill>
+                </div>
+                <p className="text-app-muted mt-3 text-[15px]">
+                  {[
+                    session.zones[0]?.warehouseName,
+                    zones === '' ? null : `зони ${zones}`,
+                    session.startedAt == null ? null : date(session.startedAt),
+                    session.completedAt == null
+                      ? null
+                      : date(session.completedAt),
+                    crew === '' ? null : crew,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              </div>
+
+              {operationError ? (
+                <Notice tone="danger">{operationError}</Notice>
+              ) : null}
+
+              <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-px overflow-hidden rounded-[20px] border">
+                <JournalStat
+                  label="Позицій у сесії"
+                  meta={`${String(session.zones.length)} ${plural(session.zones.length, ['зона', 'зони', 'зон'])}`}
+                  value={String(parts.length)}
+                />
+                <JournalStat
+                  label="Точність"
+                  meta={`${String(parts.length - differing.length)} з ${String(parts.length)} збіглися`}
+                  unit="%"
+                  value={accuracy === null ? '—' : String(accuracy)}
+                />
+                <JournalStat
+                  label="Недостача"
+                  meta={`${String(differing.filter((part) => part.delta < 0).length)} ${plural(differing.filter((part) => part.delta < 0).length, ['позиція', 'позиції', 'позицій'])}`}
+                  tone={shortage < 0 ? 'danger' : undefined}
+                  unit="шт"
+                  value={String(Math.abs(shortage))}
+                />
+                <JournalStat
+                  label="Лишки"
+                  meta={`${String(differing.filter((part) => part.delta > 0).length)} ${plural(differing.filter((part) => part.delta > 0).length, ['позиція', 'позиції', 'позицій'])}`}
+                  unit="шт"
+                  value={String(surplus)}
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div
+                  aria-label="Які позиції показувати"
+                  className="border-app-line bg-app-raised flex flex-wrap gap-1 rounded-xl border p-1"
+                  role="radiogroup"
+                >
+                  {RESULT_FILTERS.map((option) => {
+                    const active = option.value === filter
+                    return (
+                      <button
+                        aria-checked={active}
+                        className={cn(
+                          'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-bold',
+                          active
+                            ? 'text-app-ink bg-white/[0.08]'
+                            : 'text-app-muted hover:text-app-ink',
+                        )}
+                        key={option.value}
+                        onClick={() => setFilter(option.value)}
+                        role="radio"
+                        type="button"
+                      >
+                        {option.label}
+                        <span className="text-app-dim font-mono text-[11px] font-medium">
+                          {counts[option.value]}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <p className="text-app-dim text-[13px]">
+                    {differing.length === 0
+                      ? 'Розходжень немає'
+                      : `${String(differing.filter((part) => adjusted.has(part.partId)).length)} з ${String(differing.length)} рішень прийнято`}
+                  </p>
+                  {decidable.length > 0 ? (
+                    <Button
+                      className="min-h-9 px-3.5 text-[13px] font-semibold"
+                      onClick={() => {
+                        setReason('')
+                        setAsking(decidable)
+                      }}
+                    >
+                      Прийняти факт для всіх
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+
+              <section
+                aria-label="Результати підрахунку"
+                className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
+              >
+                <DataTable
+                  caption="Позиції сесії"
+                  columns={[
+                    {
+                      key: 'code',
+                      label: 'Код',
+                      cell: (part) => (
+                        <span className="text-app-muted font-mono text-[13px]">
+                          {part.partQrCode}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'part',
+                      label: 'Позиція',
+                      variant: 'primary',
+                      cell: (part) => (
+                        <span className="grid gap-0.5">
+                          <span className="font-semibold text-white">
+                            {part.partName}
+                          </span>
+                          {part.hasCoverageWarning ? (
+                            <span className="text-state-warn text-[12px]">
+                              Порахована не в усіх зонах
+                            </span>
+                          ) : null}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'expected',
+                      label: 'Облік',
+                      align: 'end',
+                      cell: (part) => (
+                        <span className="text-app-muted font-mono tabular-nums">
+                          {part.expectedQuantity}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'actual',
+                      label: 'Факт',
+                      align: 'end',
+                      cell: (part) => (
+                        <span
+                          className={cn(
+                            'font-mono tabular-nums',
+                            part.delta === 0
+                              ? 'text-app-muted'
+                              : part.delta > 0
+                                ? 'text-state-warn'
+                                : 'text-state-danger',
+                          )}
+                        >
+                          {part.actualQuantity}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'delta',
+                      label: 'Різниця',
+                      align: 'end',
+                      cell: (part) =>
+                        part.delta === 0 ? (
+                          <span className="text-app-dim font-mono tabular-nums">
+                            0
+                          </span>
+                        ) : (
+                          <StatusPill tone={part.delta > 0 ? 'warn' : 'danger'}>
+                            {part.delta > 0
+                              ? `+${String(part.delta)}`
+                              : String(part.delta)}
+                          </StatusPill>
+                        ),
+                    },
+                    {
+                      key: 'decision',
+                      label: 'Рішення',
+                      align: 'end',
+                      cell: (part) => (
+                        <ResultDecision
+                          adjusted={adjusted.has(part.partId)}
+                          busy={busy}
+                          canAdjust={canAdjust}
+                          onAsk={() => {
+                            setReason('')
+                            setAsking([part])
+                          }}
+                          part={part}
+                          status={session.status}
+                        />
+                      ),
+                    },
+                  ]}
+                  empty={
+                    <EmptyState
+                      description={
+                        parts.length === 0
+                          ? 'Підсумки зʼявляться, коли сесію буде перераховано.'
+                          : 'Спробуйте інший фільтр.'
+                      }
+                      title={
+                        parts.length === 0
+                          ? 'Підсумків ще немає'
+                          : 'У цьому фільтрі позицій немає'
+                      }
+                    />
+                  }
+                  rowKey={(part) => part.partId}
+                  rows={rows}
+                />
+              </section>
+
+              <div className="flex flex-wrap items-start gap-5">
+                <Card
+                  className="min-w-[320px] flex-[1_1_420px]"
+                  title="Вплив на облік"
+                >
+                  <dl className="grid grid-cols-[1fr_auto] items-baseline gap-y-3">
+                    <dt className="text-app-muted text-sm font-semibold">
+                      Списати недостачу
+                    </dt>
+                    <dd className="text-state-danger font-mono text-[15px] tabular-nums">
+                      {shortage === 0 ? '—' : `${String(shortage)} шт`}
+                    </dd>
+                    <dt className="text-app-muted text-sm font-semibold">
+                      Додати лишки
+                    </dt>
+                    <dd className="text-state-ok font-mono text-[15px] tabular-nums">
+                      {surplus === 0 ? '—' : `+${String(surplus)} шт`}
+                    </dd>
+                    <div className="bg-app-line col-span-2 my-0.5 h-px" />
+                    <dt className="text-[15px] font-bold text-white">
+                      Зміна кількості
+                    </dt>
+                    <dd
+                      className={cn(
+                        'font-mono text-[19px] tabular-nums',
+                        shortage + surplus === 0
+                          ? 'text-app-muted'
+                          : shortage + surplus > 0
+                            ? 'text-state-ok'
+                            : 'text-state-danger',
+                      )}
+                    >
+                      {shortage + surplus > 0
+                        ? `+${String(shortage + surplus)}`
+                        : String(shortage + surplus)}{' '}
+                      шт
+                    </dd>
+                  </dl>
+                  <p
+                    className="text-app-dim mt-4 text-[13px] leading-[1.5]"
+                    title="Підсумки сесії не несуть собівартості позицій"
+                  >
+                    Вартість списаного й оприбуткованого сервер у підсумках не
+                    повертає — тут лише кількість.
+                  </p>
+                </Card>
+
+                <Card
+                  className="min-w-[280px] flex-[1_1_300px]"
+                  title="Після застосування"
+                >
+                  <ul className="text-app-ink grid gap-3 text-sm leading-[1.5]">
+                    {[
+                      'Залишок позиції стане таким, як порахували в зонах сесії.',
+                      'Кожне коригування потрапить у журнал аудиту сесії.',
+                      'Скасувати застосоване коригування з вебу не можна.',
+                    ].map((line) => (
+                      <li className="flex gap-2.5" key={line}>
+                        <span aria-hidden className="text-app-dim">
+                          —
+                        </span>
+                        {line}
+                      </li>
+                    ))}
+                  </ul>
+                  {decidable.length > 0 ? (
+                    <Button
+                      className="mt-5 min-h-11 w-full text-sm font-bold"
+                      onClick={() => {
+                        setReason('')
+                        setAsking(decidable)
+                      }}
+                      variant="primary"
+                    >
+                      Застосувати {decidable.length}{' '}
+                      {plural(decidable.length, [
+                        'рішення',
+                        'рішення',
+                        'рішень',
+                      ])}
+                    </Button>
+                  ) : (
+                    <p className="text-app-dim mt-5 text-[13px] leading-[1.5]">
+                      {differing.length === 0
+                        ? 'Розходжень немає — застосовувати нічого.'
+                        : session.status === 'review'
+                          ? canAdjust
+                            ? 'Усі розходження вже мають рішення.'
+                            : 'Застосування коригувань потребує права «inventory.adjust».'
+                          : 'Коригування застосовуються, коли сесія в статусі «Перевірка».'}
+                    </p>
+                  )}
+                </Card>
+              </div>
+            </div>
+
+            <FormDialog
+              description={
+                asking === null
+                  ? undefined
+                  : asking.length === 1
+                    ? `Залишок «${asking[0]?.partName ?? ''}» стане ${String(asking[0]?.actualQuantity ?? 0)} шт.`
+                    : `Факт буде прийнято для ${String(asking.length)} ${plural(asking.length, ['позиції', 'позицій', 'позицій'])}.`
+              }
+              onOpenChange={(next) => {
+                if (!next) setAsking(null)
+              }}
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (asking !== null) void apply(asking, reason.trim())
+              }}
+              open={asking !== null}
+              pending={busy}
+              submitDisabled={reason.trim() === ''}
+              submitLabel={
+                busy && asking !== null && asking.length > 1
+                  ? `Застосовуємо ${String(applied)} з ${String(asking.length)}…`
+                  : 'Застосувати'
+              }
+              title="Причина коригування"
+            >
+              <Field
+                hint="Потрапить у журнал аудиту сесії — напишіть, звідки взялася різниця."
+                label="Причина"
+                required
+              >
+                <TextArea
+                  name="reason"
+                  onChange={(event) => setReason(event.target.value)}
+                  rows={3}
+                  value={reason}
+                />
+              </Field>
+            </FormDialog>
+          </div>
+        )
+      }}
+    </Resource>
   )
 }
 
-function ResultRow({
+/**
+ * What can still be done about one row. Only one write exists — booking the
+ * counted quantity — so the column says either that, or why it is unavailable.
+ */
+function ResultDecision({
   part,
   adjusted,
-  pending,
-  adjust,
+  canAdjust,
+  status,
+  busy,
+  onAsk,
 }: {
   part: InventoryPartResult
   adjusted: boolean
-  pending: boolean
-  adjust?: () => void
+  canAdjust: boolean
+  status: InventorySession['status']
+  busy: boolean
+  onAsk: () => void
 }) {
-  const [label, tone] = resultStatus(part.result)
-  const delta =
-    part.delta > 0
-      ? `+${part.delta}`
-      : part.delta < 0
-        ? `−${Math.abs(part.delta)}`
-        : '0'
-  return (
-    <div className="grid gap-3 border-b border-app-line p-4 last:border-0 md:grid-cols-[minmax(0,1fr)_repeat(3,6rem)_auto] md:items-center">
-      <div>
-        <strong className="text-white">{part.partName}</strong>
-        <p className="font-mono text-xs text-app-dim">{part.partQrCode}</p>
-      </div>
-      <span className="text-sm text-app-dim">
-        Очікувалось <b className="text-white">{part.expectedQuantity}</b>
-      </span>
-      <span className="text-sm text-app-dim">
-        Фактично <b className="text-white">{part.actualQuantity}</b>
-      </span>
-      <strong
-        className={
-          part.delta < 0
-            ? 'text-state-danger'
-            : part.delta > 0
-              ? 'text-state-warn'
-              : 'text-state-ok'
-        }
+  if (part.delta === 0) return <span className="text-app-dim font-mono">—</span>
+  if (adjusted) return <StatusPill tone="ok">Застосовано</StatusPill>
+  if (part.hasCoverageWarning)
+    return (
+      <span
+        className="text-app-dim text-[12px]"
+        title="Позиція лежить і в зонах поза цією сесією, тож факт не можна вважати повним"
       >
-        {delta}
-      </strong>
-      <div className="flex items-center gap-2">
-        <StatusPill tone={tone as 'neutral'}>{label}</StatusPill>
-        {part.hasCoverageWarning ? (
-          <StatusPill tone="warn">Перевірте зони</StatusPill>
-        ) : null}
-        {adjusted ? <StatusPill tone="ok">Скориговано</StatusPill> : null}
-        {adjust ? (
-          <Button
-            aria-label={`Скоригувати ${part.partName}`}
-            aria-busy={pending}
-            disabled={pending}
-            onClick={adjust}
-            size="md"
-            variant="quiet"
-          >
-            Скоригувати
-          </Button>
-        ) : null}
-      </div>
-    </div>
+        Неповне покриття
+      </span>
+    )
+  if (!canAdjust)
+    return (
+      <span className="text-app-dim text-[12px]">
+        Немає права на коригування
+      </span>
+    )
+  if (status !== 'review')
+    return <span className="text-app-dim text-[12px]">Чекає на перевірку</span>
+  return (
+    <Button
+      className="min-h-9 px-3 text-xs font-bold"
+      disabled={busy}
+      onClick={onAsk}
+    >
+      Прийняти факт
+    </Button>
   )
 }
 

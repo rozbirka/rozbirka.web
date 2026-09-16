@@ -1,4 +1,11 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { InventoryScreen } from './InventoryScreen'
@@ -15,6 +22,7 @@ const api = vi.hoisted(() => ({
   getScans: vi.fn(),
   getPartZones: vi.fn(),
   replacePartZones: vi.fn(),
+  applyAdjustment: vi.fn(),
   updateWarehouse: vi.fn(),
   archiveWarehouse: vi.fn(),
   createZone: vi.fn(),
@@ -233,10 +241,9 @@ it('renders discrepancy results and adjustment affordance', async () => {
   api.getSession.mockResolvedValue({ ...session, status: 'review' })
   renderAt('/app/yard/inventory/sessions/session-1/results')
   expect(await screen.findByText('Крило')).toBeInTheDocument()
-  expect(screen.getByText('Нестача')).toBeInTheDocument()
-  expect(screen.getByText('−1')).toBeInTheDocument()
+  expect(screen.getByText('-1')).toBeInTheDocument()
   expect(
-    screen.getByRole('button', { name: 'Скоригувати Крило' }),
+    screen.getByRole('button', { name: 'Прийняти факт' }),
   ).toBeInTheDocument()
 })
 
@@ -293,9 +300,9 @@ it('does not offer duplicate or unsafe adjustments', async () => {
 
   renderAt('/app/yard/inventory/sessions/session-1/results')
 
-  expect(await screen.findByText('Скориговано')).toBeInTheDocument()
+  expect(await screen.findByText('Застосовано')).toBeInTheDocument()
   expect(
-    screen.queryByRole('button', { name: 'Скоригувати Крило' }),
+    screen.queryByRole('button', { name: 'Прийняти факт' }),
   ).not.toBeInTheDocument()
 })
 
@@ -320,11 +327,11 @@ it('filters matched results until the user asks to see every position', async ()
   })
   renderAt('/app/yard/inventory/sessions/session-1/results')
 
-  expect(await screen.findByLabelText('Показати')).toHaveValue('discrepancies')
+  expect(
+    await screen.findByRole('radio', { name: /Розходження/ }),
+  ).toBeChecked()
   expect(screen.queryByText('Дзеркало')).not.toBeInTheDocument()
-  fireEvent.change(screen.getByLabelText('Показати'), {
-    target: { value: 'all' },
-  })
+  fireEvent.click(screen.getByRole('radio', { name: /Усі позиції/ }))
   expect(screen.getByText('Дзеркало')).toBeInTheDocument()
 })
 
@@ -476,4 +483,33 @@ it('offers warehouse and zone management and prints actual zone QR labels', asyn
   ])
   expect(write).toHaveBeenCalledWith('<html>zones</html>')
   expect(print).toHaveBeenCalled()
+})
+
+it('asks for a reason before booking the counted quantity', async () => {
+  const user = userEvent.setup()
+  api.getSession.mockResolvedValue({ ...session, status: 'review' })
+  api.applyAdjustment.mockResolvedValue({})
+  renderAt('/app/yard/inventory/sessions/session-1/results')
+
+  await user.click(await screen.findByRole('button', { name: 'Прийняти факт' }))
+  const dialog = screen.getByRole('dialog')
+  // The reason reaches the session's audit trail, so it is not optional.
+  expect(
+    within(dialog).getByRole('button', { name: 'Застосувати' }),
+  ).toBeDisabled()
+  await user.type(
+    within(dialog).getByLabelText('Причина'),
+    'Знайшли в іншій зоні',
+  )
+  await user.click(within(dialog).getByRole('button', { name: 'Застосувати' }))
+
+  await waitFor(() => expect(api.applyAdjustment).toHaveBeenCalledTimes(1))
+  expect(api.applyAdjustment).toHaveBeenCalledWith(
+    'session-1',
+    'part-1',
+    'Знайшли в іншій зоні',
+    expect.objectContaining({
+      signal: expect.any(AbortSignal) as AbortSignal,
+    }),
+  )
 })
