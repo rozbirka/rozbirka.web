@@ -318,12 +318,14 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.customer-card-contact > span {
+.customer-card-phone-number {
   margin-right: 2px;
   color: var(--color-app-ink);
-  font-family: var(--font-mono);
-  font-size: 13px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
 }
 .customer-card-contact [data-slot='app-button'] {
   min-height: 34px;

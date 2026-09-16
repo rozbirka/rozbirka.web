@@ -20,7 +20,6 @@ import {
   StatusPill,
   TextArea,
   TextInput,
-  type StatusTone,
 } from '@/components/app'
 import { normalizeApiProblem } from '@/api/errors'
 import {
@@ -36,6 +35,7 @@ import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import { orderStatusPresentation } from './order-status'
 
 const idFromPath = (path: string) => /\/orders\/([^/]+)/.exec(path)?.[1] ?? null
 const errorMessage = (error: unknown) => {
@@ -74,16 +74,6 @@ const useOrderIdempotencyKeys = () => {
       keysRef.current.delete(operation)
     },
   }
-}
-
-const orderStatusPresentation = (
-  status: string,
-): { label: string; tone: StatusTone } => {
-  if (status === 'confirmed') return { label: 'Підтверджено', tone: 'ok' }
-  if (status === 'pending') return { label: 'Очікує', tone: 'warn' }
-  if (status === 'cancelled') return { label: 'Скасовано', tone: 'neutral' }
-  if (status === 'refunded') return { label: 'Повернено', tone: 'info' }
-  return { label: status, tone: 'neutral' }
 }
 
 /** One money figure as text: the digits stay bare so columns line up. */

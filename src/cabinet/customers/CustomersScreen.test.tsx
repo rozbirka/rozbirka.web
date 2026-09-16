@@ -303,6 +303,14 @@ it('uses browser-native contact links and carries only the customer id to a new 
   expect(screen.getByText('Телефон').parentElement).toHaveTextContent(
     '+380501112233',
   )
+  expect(
+    screen
+      .getAllByText('+380501112233')
+      .some((element) =>
+        element.classList.contains('customer-card-phone-number'),
+      ),
+  ).toBe(true)
+  expect(screen.getByText('Підтверджено')).toHaveClass('text-state-ok')
 
   await user.click(screen.getByRole('button', { name: 'Копіювати телефон' }))
   expect(writeText).toHaveBeenCalledWith('+380501112233')
@@ -644,7 +652,7 @@ it('contains delete-dialog focus and restores it to the trigger on close', async
   await user.click(screen.getByRole('menuitem', { name: 'Видалити' }))
   const confirm = screen.getByRole('button', { name: 'Підтвердити' })
   const cancel = screen.getByRole('button', { name: 'Скасувати' })
-  expect(cancel).toHaveFocus()
+  await waitFor(() => expect(cancel).toHaveFocus())
 
   await user.tab({ shift: true })
   expect(confirm).toHaveFocus()

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import type { CustomerDetail } from '@/api/customers'
 import { ActionMenu, Button, EmptyState, StatusPill } from '@/components/app'
+import { orderStatusPresentation } from '../orders/order-status'
 import { CustomerAvatar } from './customer-avatar'
 
 const formatDate = (value: string | null) =>
@@ -29,18 +30,6 @@ const formatNumber = (value: number) =>
 
 const formatMoney = (value: number | null, currency = '$') =>
   value === null ? '—' : `${formatNumber(value)} ${currency}`
-
-const statusLabel = (status: string) =>
-  ({
-    draft: 'Чернетка',
-    new: 'Нове',
-    confirmed: 'Підтверджено',
-    pending: 'Очікує',
-    processing: 'У роботі',
-    completed: 'Завершено',
-    cancelled: 'Скасовано',
-    refunded: 'Повернено',
-  })[status.toLowerCase()] ?? status
 
 export function CustomerDetailView({
   customer,
@@ -146,7 +135,9 @@ export function CustomerDetailView({
             </div>
             {customer.phone ? (
               <div className="customer-card-contact">
-                <span>{customer.phone}</span>
+                <span className="customer-card-phone-number">
+                  {customer.phone}
+                </span>
                 <Button aria-label="Копіювати телефон" onClick={onCopyPhone}>
                   <Copy aria-hidden />
                   Копіювати
@@ -229,36 +220,39 @@ export function CustomerDetailView({
                   </tr>
                 </thead>
                 <tbody>
-                  {customer.orders.map((order) => (
-                    <tr key={order.id}>
-                      <td>
-                        <Link to={`/app/${tenantSlug}/orders/${order.id}`}>
-                          <strong>#{order.number}</strong>
-                          <small>
-                            {order.partNames.length > 0
-                              ? order.partNames.join(', ')
-                              : 'Без запчастин'}
-                          </small>
-                        </Link>
-                      </td>
-                      <td data-label="Дата">{formatDate(order.createdAt)}</td>
-                      <td data-label="Статус">
-                        <StatusPill tone="neutral">
-                          {statusLabel(order.status)}
-                        </StatusPill>
-                      </td>
-                      {canViewFinance ? (
-                        <td data-label="Сума">
-                          {formatMoney(
-                            order.totalAmount,
-                            order.currency === 'USD'
-                              ? '$'
-                              : (order.currency ?? '$'),
-                          )}
+                  {customer.orders.map((order) => {
+                    const status = orderStatusPresentation(order.status)
+                    return (
+                      <tr key={order.id}>
+                        <td>
+                          <Link to={`/app/${tenantSlug}/orders/${order.id}`}>
+                            <strong>#{order.number}</strong>
+                            <small>
+                              {order.partNames.length > 0
+                                ? order.partNames.join(', ')
+                                : 'Без запчастин'}
+                            </small>
+                          </Link>
                         </td>
-                      ) : null}
-                    </tr>
-                  ))}
+                        <td data-label="Дата">{formatDate(order.createdAt)}</td>
+                        <td data-label="Статус">
+                          <StatusPill tone={status.tone}>
+                            {status.label}
+                          </StatusPill>
+                        </td>
+                        {canViewFinance ? (
+                          <td data-label="Сума">
+                            {formatMoney(
+                              order.totalAmount,
+                              order.currency === 'USD'
+                                ? '$'
+                                : (order.currency ?? '$'),
+                            )}
+                          </td>
+                        ) : null}
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -275,7 +269,9 @@ export function CustomerDetailView({
             <dl className="customer-card-facts">
               <div>
                 <dt>Телефон</dt>
-                <dd>{customer.phone ?? '—'}</dd>
+                <dd className="customer-card-phone-number">
+                  {customer.phone ?? '—'}
+                </dd>
               </div>
               <div>
                 <dt>Клієнт від</dt>
