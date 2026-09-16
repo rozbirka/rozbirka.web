@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { PageBody, Panel, Skeleton } from '@/components/app'
 import { useCabinet } from '../CabinetContext'
@@ -8,10 +8,11 @@ import { evaluateModuleAccess } from '../policy'
 import { readDashboardPeriod, writeDashboardPeriod } from './dashboard-period'
 import { useDashboardData, type DashboardLoadable } from './use-dashboard-data'
 import type { DashboardData, DashboardPeriod } from '@/api/dashboard-contract'
-import { DashboardAnalytics, DashboardPeriodSwitch } from './DashboardAnalytics'
+import { DashboardAnalytics } from './DashboardAnalytics'
 import { DashboardBillingBanner } from './DashboardBillingBanner'
 import { DashboardErrorState } from './DashboardErrorState'
 import { DashboardRecentOrders } from './DashboardRecentOrders'
+import { DashboardRecentIntakes } from './DashboardRecentIntakes'
 import { DashboardSummary } from './DashboardSummary'
 import { getDashboardBillingPath } from './dashboard-billing-access'
 import {
@@ -19,6 +20,7 @@ import {
   type DashboardExtraLoadable,
 } from './use-dashboard-extras'
 import type { OrderListItem } from '@/api/orders'
+import type { IntakeListItem } from '@/api/intakes'
 import './dashboard-redesign.css'
 
 const updatedAtFormatter = new Intl.DateTimeFormat('uk-UA', {
@@ -42,6 +44,7 @@ export function DashboardScreen() {
   const destinations = getHeaderDestinations(snapshot, targetTenant?.slug)
   const extras = useDashboardExtras({
     cashEnabled: destinations.cashEnabled,
+    intakesEnabled: destinations.intakesPath !== null,
     ordersEnabled: destinations.ordersPath !== null,
   })
 
@@ -85,10 +88,6 @@ export function DashboardScreen() {
             <h1>Зведення</h1>
             <p>{updatedSubtitle(dashboard.summary)}</p>
           </div>
-          <DashboardPeriodSwitch
-            onPeriodChange={selectPeriod}
-            period={selection.period}
-          />
         </div>
 
         <div
@@ -101,6 +100,16 @@ export function DashboardScreen() {
             <DashboardBillingBanner snapshot={snapshot} tenant={targetTenant} />
           ) : null}
           <DashboardSummaryState
+            analytics={
+              <DashboardAnalytics
+                billingPath={billingPath}
+                loadable={dashboard.analytics}
+                onPeriodChange={selectPeriod}
+                partsPath={destinations.parts}
+                period={selection.period}
+                retry={() => dashboard.retryAnalytics()}
+              />
+            }
             billingPath={billingPath}
             cashBalances={
               extras.cashBalances.status === 'ready'
@@ -111,21 +120,29 @@ export function DashboardScreen() {
             partsPath={destinations.parts}
             retry={() => dashboard.retrySummary()}
           />
-          {destinations.ordersPath === null ? null : (
-            <DashboardRecentOrdersState
-              loadable={extras.recentOrders}
-              ordersPath={destinations.ordersPath}
-            />
-          )}
-          <div className="dashboard-below-fold">
+          {dashboard.summary.status === 'ready' ? null : (
             <DashboardAnalytics
               billingPath={billingPath}
               loadable={dashboard.analytics}
               onPeriodChange={selectPeriod}
+              partsPath={destinations.parts}
               period={selection.period}
               retry={() => dashboard.retryAnalytics()}
-              showPeriodSwitch={false}
             />
+          )}
+          <div className="dashboard-recent-grid">
+            {destinations.ordersPath === null ? null : (
+              <DashboardRecentOrdersState
+                loadable={extras.recentOrders}
+                ordersPath={destinations.ordersPath}
+              />
+            )}
+            {destinations.intakesPath === null ? null : (
+              <DashboardRecentIntakesState
+                intakesPath={destinations.intakesPath}
+                loadable={extras.recentIntakes}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -134,12 +151,14 @@ export function DashboardScreen() {
 }
 
 function DashboardSummaryState({
+  analytics,
   billingPath,
   cashBalances,
   loadable,
   partsPath,
   retry,
 }: {
+  analytics: ReactNode
   billingPath: string | null
   cashBalances: Record<string, number> | undefined
   loadable: DashboardLoadable<DashboardData>
@@ -149,6 +168,7 @@ function DashboardSummaryState({
   if (loadable.status === 'ready') {
     return (
       <DashboardSummary
+        analytics={analytics}
         data={loadable.data}
         cashBalances={cashBalances}
         partsPath={partsPath ?? undefined}
@@ -188,6 +208,7 @@ function getHeaderDestinations(
       newOrder: null,
       parts: null,
       ordersPath: null,
+      intakesPath: null,
       cashEnabled: false,
     }
   }
@@ -204,12 +225,16 @@ function getHeaderDestinations(
     'allowed'
   const canViewCash =
     evaluateModuleAccess(cabinetModules.cash, access, 'view').kind === 'allowed'
+  const canViewIntakes =
+    evaluateModuleAccess(cabinetModules.intakes, access, 'view').kind ===
+    'allowed'
 
   return {
     scan: canViewParts ? cabinetPath(slug, 'parts', 'scan') : null,
     newOrder: canCreateOrder ? cabinetPath(slug, 'orders', 'new') : null,
     parts: canViewParts ? cabinetPath(slug, 'parts') : null,
     ordersPath: canViewOrders ? cabinetPath(slug, 'orders') : null,
+    intakesPath: canViewIntakes ? cabinetPath(slug, 'intakes') : null,
     cashEnabled: canViewCash,
   }
 }
@@ -240,6 +265,40 @@ function DashboardRecentOrdersState({
   return (
     <Panel aria-label="Останні замовлення">
       <Skeleton className="h-5 w-48" />
+      <Skeleton className="mt-4 h-24" />
+    </Panel>
+  )
+}
+
+function DashboardRecentIntakesState({
+  intakesPath,
+  loadable,
+}: {
+  intakesPath: string
+  loadable: DashboardExtraLoadable<IntakeListItem[]>
+}) {
+  if (loadable.status === 'ready') {
+    return (
+      <DashboardRecentIntakes
+        intakes={loadable.data}
+        intakesPath={intakesPath}
+      />
+    )
+  }
+
+  if (loadable.status === 'error') {
+    return (
+      <Panel aria-label="Приймання">
+        <p className="text-app-muted text-sm">
+          Не вдалося завантажити останні приймання.
+        </p>
+      </Panel>
+    )
+  }
+
+  return (
+    <Panel aria-label="Приймання">
+      <Skeleton className="h-5 w-36" />
       <Skeleton className="mt-4 h-24" />
     </Panel>
   )

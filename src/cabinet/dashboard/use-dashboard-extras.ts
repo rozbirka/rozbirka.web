@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { cashApi, type CashRegister } from '@/api/cash'
+import { intakesApi, type IntakeListItem } from '@/api/intakes'
 import { ordersApi, type OrderListItem } from '@/api/orders'
 import { useCabinet } from '../CabinetContext'
 
@@ -11,15 +12,18 @@ export type DashboardExtraLoadable<T> =
 interface DashboardExtrasState {
   cashBalances: DashboardExtraLoadable<Record<string, number>>
   recentOrders: DashboardExtraLoadable<OrderListItem[]>
+  recentIntakes: DashboardExtraLoadable<IntakeListItem[]>
 }
 
 const loading = { status: 'loading', data: null } as const
 
 export function useDashboardExtras({
   cashEnabled,
+  intakesEnabled,
   ordersEnabled,
 }: {
   cashEnabled: boolean
+  intakesEnabled: boolean
   ordersEnabled: boolean
 }): DashboardExtrasState {
   const cabinet = useCabinet()
@@ -30,6 +34,7 @@ export function useDashboardExtras({
   const [state, setState] = useState<DashboardExtrasState>({
     cashBalances: loading,
     recentOrders: loading,
+    recentIntakes: loading,
   })
 
   useEffect(() => {
@@ -37,7 +42,11 @@ export function useDashboardExtras({
     if (scope === null) {
       queueMicrotask(() => {
         if (active) {
-          setState({ cashBalances: loading, recentOrders: loading })
+          setState({
+            cashBalances: loading,
+            recentOrders: loading,
+            recentIntakes: loading,
+          })
         }
       })
       return () => {
@@ -46,11 +55,18 @@ export function useDashboardExtras({
     }
 
     const controller = new AbortController()
+    if (!cashEnabled && !ordersEnabled && !intakesEnabled) {
+      return () => {
+        active = false
+        controller.abort()
+      }
+    }
     queueMicrotask(() => {
       if (!active) return
       setState({
         cashBalances: cashEnabled ? loading : { status: 'ready', data: {} },
         recentOrders: ordersEnabled ? loading : { status: 'ready', data: [] },
+        recentIntakes: intakesEnabled ? loading : { status: 'ready', data: [] },
       })
     })
 
@@ -78,7 +94,7 @@ export function useDashboardExtras({
 
     if (ordersEnabled) {
       void ordersApi
-        .list({ page: 1, pageSize: 5 }, { signal: controller.signal })
+        .list({ page: 1, pageSize: 4 }, { signal: controller.signal })
         .then((page) => {
           if (controller.signal.aborted) return
           setState((current) => ({
@@ -95,11 +111,30 @@ export function useDashboardExtras({
         })
     }
 
+    if (intakesEnabled) {
+      void intakesApi
+        .list({ page: 1, pageSize: 3 }, { signal: controller.signal })
+        .then((page) => {
+          if (controller.signal.aborted) return
+          setState((current) => ({
+            ...current,
+            recentIntakes: { status: 'ready', data: page.items },
+          }))
+        })
+        .catch(() => {
+          if (controller.signal.aborted) return
+          setState((current) => ({
+            ...current,
+            recentIntakes: { status: 'error', data: null },
+          }))
+        })
+    }
+
     return () => {
       active = false
       controller.abort()
     }
-  }, [cashEnabled, ordersEnabled, scope])
+  }, [cashEnabled, intakesEnabled, ordersEnabled, scope])
 
   return state
 }

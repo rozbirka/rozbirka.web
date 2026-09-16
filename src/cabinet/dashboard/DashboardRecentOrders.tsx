@@ -8,7 +8,8 @@ const numberFormatter = new Intl.NumberFormat('uk-UA', {
 const dateFormatter = new Intl.DateTimeFormat('uk-UA', {
   day: '2-digit',
   month: '2-digit',
-  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
   timeZone: 'Europe/Kyiv',
 })
 
@@ -22,26 +23,17 @@ export function DashboardRecentOrders({
   return (
     <section
       aria-labelledby="dashboard-recent-orders"
-      className="dashboard-recent-orders"
+      className="dashboard-recent-card dashboard-recent-orders"
     >
       <header>
-        <div>
-          <span>01</span>
-          <h2 id="dashboard-recent-orders">Останні замовлення</h2>
-        </div>
+        <h2 id="dashboard-recent-orders">Останні замовлення</h2>
         <Link to={ordersPath}>Усі</Link>
       </header>
 
       {orders.length === 0 ? (
-        <p className="dashboard-orders-empty">Замовлень ще немає.</p>
+        <p className="dashboard-recent-empty">Замовлень ще немає.</p>
       ) : (
         <div className="dashboard-orders-table" role="table">
-          <div className="dashboard-orders-head" role="row">
-            <span role="columnheader">Замовлення</span>
-            <span role="columnheader">Дата</span>
-            <span role="columnheader">Статус</span>
-            <span role="columnheader">Сума</span>
-          </div>
           {orders.map((order) => (
             <OrderRow key={order.id} order={order} ordersPath={ordersPath} />
           ))}
@@ -60,10 +52,13 @@ function OrderRow({
 }) {
   const status = orderStatusPresentation(order.status)
   const createdAt = new Date(order.createdAt)
+  const customerName = order.customerName?.trim()
   const description =
-    order.partNames.length > 0
-      ? order.partNames.join(', ')
-      : (order.customerName ?? `${order.itemCount} позицій`)
+    customerName && customerName.length > 0
+      ? customerName
+      : order.partNames.length > 0
+        ? order.partNames.join(', ')
+        : `${order.itemCount} позицій`
 
   return (
     <div className="dashboard-order-row" role="row">

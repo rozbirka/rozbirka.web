@@ -4,6 +4,11 @@ import { EmptyState } from '@/components/app'
 import type { DashboardData, LastActivity } from '@/api/dashboard-contract'
 
 const CAR_CURRENCY = 'USD'
+const currencySymbols: Readonly<Record<string, string>> = {
+  UAH: '₴',
+  USD: '$',
+  EUR: '€',
+}
 const numberFormatter = new Intl.NumberFormat('uk-UA', {
   maximumFractionDigits: 0,
 })
@@ -23,10 +28,12 @@ const activityDateFormatter = new Intl.DateTimeFormat('uk-UA', {
 })
 
 export function DashboardSummary({
+  analytics,
   cashBalances,
   data,
   partsPath,
 }: {
+  analytics?: ReactNode
   cashBalances?: Record<string, number> | undefined
   data: DashboardData
   partsPath?: string | undefined
@@ -39,26 +46,6 @@ export function DashboardSummary({
       {data.isYardEmpty ? <DashboardEmptyState /> : null}
 
       <OverviewSection date={date} title="Гроші">
-        <Metric label="Виручка">
-          {data.revenue?.today.length ? (
-            <>
-              <div className="dashboard-revenue-values">
-                {data.revenue.today.map((entry) => (
-                  <MetricValue
-                    key={entry.currency}
-                    unit={entry.currency}
-                    value={entry.amount}
-                  />
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="dashboard-metric-value">
-              <strong>—</strong>
-            </div>
-          )}
-          <MetricCaption>{salesCaption(data.todaySalesCount)}</MetricCaption>
-        </Metric>
         {cashBalances === undefined && data.totalBalanceUah === null ? null : (
           <Metric label="Баланс кас">
             <div className="dashboard-revenue-values">
@@ -105,7 +92,8 @@ export function DashboardSummary({
                   <span>Окупність складу {recoupment.percent}%</span>
                   <span> · </span>
                   <span>
-                    лишилось {formatNumber(recoupment.remaining)} {CAR_CURRENCY}
+                    лишилось {formatNumber(recoupment.remaining)}{' '}
+                    {displayUnit(CAR_CURRENCY)}
                   </span>
                 </MetricCaption>
               </>
@@ -113,6 +101,8 @@ export function DashboardSummary({
           </Metric>
         )}
       </OverviewSection>
+
+      {analytics}
 
       <OverviewSection
         action={
@@ -170,7 +160,10 @@ function OverviewSection({
   title: string
 }) {
   return (
-    <section className="dashboard-overview-section">
+    <section
+      className="dashboard-overview-section"
+      data-section={title === 'Гроші' ? 'money' : 'stock'}
+    >
       <header className="dashboard-section-heading">
         <h2>{title}</h2>
         <span className="dashboard-section-rule" />
@@ -203,9 +196,13 @@ function MetricValue({ unit, value }: { unit: string; value: number }) {
   return (
     <div className="dashboard-metric-value">
       <strong>{formatNumber(value)}</strong>
-      <span>{unit}</span>
+      <span>{displayUnit(unit)}</span>
     </div>
   )
+}
+
+function displayUnit(unit: string): string {
+  return currencySymbols[unit.toUpperCase()] ?? unit
 }
 
 function MetricCaption({ children }: { children: ReactNode }) {
@@ -258,10 +255,6 @@ function latestActivityDate(data: DashboardData): string | null {
   const date =
     dates.length === 0 ? new Date() : new Date(Math.max(...dates.map(Number)))
   return dateFormatter.format(date)
-}
-
-function salesCaption(value: number): string {
-  return `${formatNumber(value)} ${plural(value, ['замовлення', 'замовлення', 'замовлень'])}`
 }
 
 function carsCaption(value: number): string {

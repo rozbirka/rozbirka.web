@@ -103,26 +103,36 @@ it('moves focus across the period group with arrow keys without selecting', asyn
   expect(onPeriodChange).not.toHaveBeenCalled()
 })
 
-it('renders response currencies, textual trends, authoritative totals, and decorative bars', () => {
+it('renders the three design cards with symbols, comparison copy, and line charts', () => {
   renderAnalytics()
 
-  expect(screen.getByText('Виручка, UAH')).toBeInTheDocument()
-  expect(screen.getByText('Виручка, USD')).toBeInTheDocument()
+  expect(screen.getByText('порівняння з минулим тижнем')).toBeInTheDocument()
+  expect(screen.getByRole('article', { name: 'Виручка' })).toHaveTextContent(
+    '12 500 ₴',
+  )
+  expect(screen.getByRole('article', { name: 'Виручка' })).toHaveTextContent(
+    '75 $',
+  )
+  expect(
+    screen.getByRole('article', { name: 'Продано запчастин' }),
+  ).toBeInTheDocument()
+  expect(
+    screen.getByRole('article', { name: 'Активні замовлення' }),
+  ).toBeInTheDocument()
   expect(screen.getByText('+12,5%')).toHaveClass('text-state-ok')
   expect(screen.getByText('24')).toBeInTheDocument()
-  expect(screen.getByText('−3')).toHaveClass('text-state-danger')
+  expect(screen.getByText('−3%')).toHaveClass('text-state-danger')
   expect(screen.getByText('8')).toBeInTheDocument()
-  expect(screen.getByText('+2')).toHaveClass('text-state-ok')
+  expect(screen.getByText('+2%')).toHaveClass('text-state-ok')
   expect(screen.getAllByText(/менше, ніж у попередній період/)).toHaveLength(1)
   expect(screen.getByText('Фара ліва')).toBeInTheDocument()
-  const charts = document.querySelectorAll(
-    '[aria-label="Декоративна діаграма"]',
-  )
+  const charts = screen.getAllByTestId('analytics-line-chart')
   expect(charts).toHaveLength(4)
   expect(charts[0]).toHaveAttribute('aria-hidden', 'true')
+  expect(screen.queryByTestId('analytics-bar')).not.toBeInTheDocument()
 })
 
-it('omits the optional top part and renders zero series without invalid bar dimensions', () => {
+it('omits the optional top part and renders zero series without invalid chart points', () => {
   renderAnalytics({
     loadable: ready(
       analytics({
@@ -137,12 +147,9 @@ it('omits the optional top part and renders zero series without invalid bar dime
   expect(
     screen.queryByRole('heading', { name: 'Найкраща запчастина' }),
   ).not.toBeInTheDocument()
-  expect(
-    document.querySelectorAll('[aria-label="Декоративна діаграма"]'),
-  ).toHaveLength(3)
-  expect(screen.getAllByTestId('analytics-bar')).toHaveLength(9)
-  for (const bar of screen.getAllByTestId('analytics-bar')) {
-    expect(bar).toHaveStyle({ height: '0%' })
+  expect(screen.getAllByTestId('analytics-line-chart')).toHaveLength(3)
+  for (const chart of screen.getAllByTestId('analytics-line-chart')) {
+    expect(chart.innerHTML).not.toContain('NaN')
   }
 })
 

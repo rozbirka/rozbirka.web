@@ -1,13 +1,6 @@
 import type { KeyboardEvent } from 'react'
-import {
-  Amount,
-  Fact,
-  FactList,
-  Panel,
-  Quantity,
-  SectionPanel,
-  Skeleton,
-} from '@/components/app'
+import { Link } from 'react-router'
+import { Amount, Panel, Skeleton } from '@/components/app'
 import { cn } from '@/lib/utils'
 import type {
   DashboardAnalytics as DashboardAnalyticsData,
@@ -22,12 +15,15 @@ const periodLabels: Readonly<Record<DashboardPeriod, string>> = {
   month: 'Місяць',
 }
 
+const comparisonLabels: Readonly<Record<DashboardPeriod, string>> = {
+  day: 'порівняння з вчора',
+  week: 'порівняння з минулим тижнем',
+  month: 'порівняння з минулим місяцем',
+}
+
 const numberFormatter = new Intl.NumberFormat('uk-UA', {
   maximumFractionDigits: 1,
 })
-
-const figureClass =
-  'text-[25px] leading-tight font-light tracking-[-0.02em] text-white'
 
 interface DashboardAnalyticsProps {
   loadable: DashboardLoadable<DashboardAnalyticsData>
@@ -35,6 +31,7 @@ interface DashboardAnalyticsProps {
   onPeriodChange: (period: DashboardPeriod) => void
   retry: () => Promise<void>
   billingPath?: string | null
+  partsPath?: string | null
   showPeriodSwitch?: boolean
 }
 
@@ -44,17 +41,17 @@ export function DashboardAnalytics({
   onPeriodChange,
   retry,
   billingPath = null,
+  partsPath = null,
   showPeriodSwitch = true,
 }: DashboardAnalyticsProps) {
   return (
-    <section aria-label="Аналітика" className="grid min-w-0 gap-4">
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold text-white">Аналітика</h2>
-          <p className="text-app-dim text-[13.5px]">
-            Продажі та замовлення за обраний період.
-          </p>
-        </div>
+    <section aria-label="Аналітика" className="dashboard-analytics">
+      <header className="dashboard-section-heading">
+        <h2>Аналітика</h2>
+        <span className="dashboard-section-rule" />
+      </header>
+      <div className="dashboard-analytics-toolbar">
+        <p>{comparisonLabels[period]}</p>
         {showPeriodSwitch ? (
           <DashboardPeriodSwitch
             onPeriodChange={onPeriodChange}
@@ -63,7 +60,7 @@ export function DashboardAnalytics({
         ) : null}
       </div>
       {loadable.status === 'ready' ? (
-        <AnalyticsContent data={loadable.data} />
+        <AnalyticsContent data={loadable.data} partsPath={partsPath} />
       ) : null}
       {loadable.status === 'loading' ? <AnalyticsLoading /> : null}
       {loadable.status === 'error' ? (
@@ -79,12 +76,6 @@ export function DashboardAnalytics({
   )
 }
 
-/**
- * An exclusive choice of period. Kept as toggle buttons rather than the kit
- * `Segmented` radios because the shell and browser suites pin `aria-pressed`
- * and Tab reachability of every option; arrow keys move focus here so the
- * group still behaves like one control.
- */
 export function DashboardPeriodSwitch({
   period,
   onPeriodChange,
@@ -112,19 +103,14 @@ export function DashboardPeriodSwitch({
   return (
     <div
       aria-label="Період аналітики"
-      className="bg-app-input border-app-line-2 rounded-control flex min-w-0 flex-wrap gap-1 border p-1"
+      className="dashboard-period-switch"
       onKeyDown={moveFocus}
       role="group"
     >
       {(Object.keys(periodLabels) as DashboardPeriod[]).map((value) => (
         <button
           aria-pressed={period === value}
-          className={cn(
-            'rounded-control flex min-h-11 flex-1 items-center justify-center px-3 text-[13.5px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/40',
-            period === value
-              ? 'bg-white/[0.09] font-medium text-white'
-              : 'text-app-muted hover:bg-white/[0.04]',
-          )}
+          className="min-h-11"
           key={value}
           onClick={() => onPeriodChange(value)}
           type="button"
@@ -136,149 +122,206 @@ export function DashboardPeriodSwitch({
   )
 }
 
-function AnalyticsContent({ data }: { data: DashboardAnalyticsData }) {
-  const totals = Object.entries(data.revenue.totals)
-
+function AnalyticsContent({
+  data,
+  partsPath,
+}: {
+  data: DashboardAnalyticsData
+  partsPath: string | null
+}) {
   return (
-    <div className="grid min-w-0 gap-4">
-      <SectionPanel
-        description="Скільки отримано з продажів за обраний період."
-        title="Виручка"
-      >
-        {totals.length === 0 ? (
-          <p className="text-app-muted text-sm">
-            За обраний період продажів не було.
-          </p>
-        ) : (
-          <FactList columns={2}>
-            {totals.map(([currency, total]) => (
-              <Fact key={currency} label={`Виручка, ${currency}`}>
-                <Amount className={figureClass} currency={null} value={total} />
-              </Fact>
-            ))}
-          </FactList>
-        )}
-        <Delta suffix="%" value={data.revenue.trendPercent} />
-        <MiniChart series={data.revenue.series} />
-      </SectionPanel>
-      <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-        <CounterPanel
-          delta={data.partsSold.delta}
-          description="Скільки запчастин продано за обраний період."
-          series={data.partsSold.series}
-          title="Продано запчастин"
-          total={data.partsSold.total}
+    <div className="dashboard-analytics-grid">
+      <RevenueCard data={data} />
+      <CounterCard
+        delta={data.partsSold.delta}
+        labels={data.labels}
+        series={data.partsSold.series}
+        title="Продано запчастин"
+        total={data.partsSold.total}
+        unit="шт"
+      />
+      <CounterCard
+        delta={data.activeOrders.delta}
+        labels={data.labels}
+        series={data.activeOrders.series}
+        title="Активні замовлення"
+        total={data.activeOrders.total}
+      />
+      {data.topPart === null ? null : (
+        <TopPart
+          data={data.topPart}
+          labels={data.labels}
+          partsPath={partsPath}
         />
-        <CounterPanel
-          delta={data.activeOrders.delta}
-          description="Скільки замовлень зараз у роботі."
-          series={data.activeOrders.series}
-          title="Активні замовлення"
-          total={data.activeOrders.total}
-        />
-      </div>
-      {data.topPart === null ? null : <TopPart data={data.topPart} />}
+      )}
     </div>
   )
 }
 
-function CounterPanel({
+function RevenueCard({ data }: { data: DashboardAnalyticsData }) {
+  const totals = Object.entries(data.revenue.totals)
+  return (
+    <article aria-label="Виручка" className="dashboard-analytics-card">
+      <CardHeader delta={data.revenue.trendPercent} title="Виручка" />
+      <div className="dashboard-analytics-values">
+        {totals.length === 0 ? (
+          <strong>—</strong>
+        ) : (
+          totals.map(([currency, total]) => (
+            <Amount currency={currency} key={currency} value={total} />
+          ))
+        )}
+      </div>
+      <LineChart labels={data.labels} series={data.revenue.series} />
+    </article>
+  )
+}
+
+function CounterCard({
   delta,
-  description,
+  labels,
   series,
   title,
   total,
+  unit,
 }: {
   delta: number
-  description: string
+  labels: string[]
   series: number[]
   title: string
   total: number
+  unit?: string
 }) {
   return (
-    <SectionPanel description={description} title={title}>
-      <p className={figureClass}>
-        <Amount currency={null} value={total} />
-      </p>
+    <article aria-label={title} className="dashboard-analytics-card">
+      <CardHeader delta={delta} title={title} />
+      <div className="dashboard-analytics-total">
+        <strong>{numberFormatter.format(total)}</strong>
+        {unit ? <span>{unit}</span> : null}
+      </div>
+      <LineChart labels={labels} series={series} />
+    </article>
+  )
+}
+
+function CardHeader({ delta, title }: { delta: number; title: string }) {
+  return (
+    <header>
+      <h3>{title}</h3>
       <Delta value={delta} />
-      <MiniChart series={series} />
-    </SectionPanel>
+    </header>
   )
 }
 
 function TopPart({
   data,
+  labels,
+  partsPath,
 }: {
   data: NonNullable<DashboardAnalyticsData['topPart']>
+  labels: string[]
+  partsPath: string | null
 }) {
+  const content = (
+    <>
+      <div className="dashboard-top-part-media">
+        {data.photoUrl ? <img alt="" src={data.photoUrl} /> : <span>Фото</span>}
+      </div>
+      <div className="dashboard-top-part-copy">
+        <strong>{data.name}</strong>
+        <p>Найкраща за обраний період</p>
+      </div>
+    </>
+  )
+
   return (
-    <SectionPanel
-      description="Запчастина з найбільшою виручкою за обраний період."
-      title="Найкраща запчастина"
+    <article
+      aria-label="Найкраща запчастина"
+      className="dashboard-analytics-card dashboard-top-part"
     >
-      <p className="text-base break-words text-white">{data.name}</p>
-      <FactList columns={2}>
-        <Fact label="Продано за період">
-          <Quantity unit="шт." value={data.salesCount} />
-        </Fact>
-        <Fact label="Виручка за період">
+      <header>
+        <h3>Найкраща запчастина</h3>
+        {partsPath ? (
+          <Link to={`${partsPath}/${encodeURIComponent(data.id)}`}>Картка</Link>
+        ) : null}
+      </header>
+      <div className="dashboard-top-part-info">{content}</div>
+      <div className="dashboard-top-part-stats">
+        <p>
           <Amount currency="USD" value={data.revenueUsd} />
-        </Fact>
-      </FactList>
-      <MiniChart series={data.salesSeries} />
-    </SectionPanel>
+          <span>виручка</span>
+        </p>
+        <p>
+          <strong>{numberFormatter.format(data.salesCount)}</strong>
+          <span>продажів</span>
+        </p>
+      </div>
+      <LineChart labels={labels} series={data.salesSeries} />
+    </article>
   )
 }
 
-/**
- * A change against the previous period. Direction is carried by the sign and
- * by the sentence, so the colour is confirmation and never the only cue.
- */
-function Delta({ value, suffix = '' }: { value: number; suffix?: string }) {
+function Delta({ value }: { value: number }) {
   const sign = value > 0 ? '+' : value < 0 ? '−' : ''
-  const figure = `${sign}${numberFormatter.format(Math.abs(value))}${suffix}`
+  const figure = `${sign}${numberFormatter.format(Math.abs(value))}${value === 0 ? '' : '%'} `
   const wording =
     value > 0
       ? 'більше, ніж у попередній період'
       : value < 0
         ? 'менше, ніж у попередній період'
-        : '— без змін проти попереднього періоду'
+        : 'без змін проти попереднього періоду'
 
   return (
-    <p className="text-app-dim text-[13.5px]">
-      <span
-        className={cn(
-          'font-medium tabular-nums',
-          value > 0 && 'text-state-ok',
-          value < 0 && 'text-state-danger',
-          value === 0 && 'text-app-muted',
-        )}
-      >
-        {figure}
-      </span>{' '}
-      {wording}
+    <p
+      className={cn(
+        'dashboard-analytics-delta',
+        value > 0 && 'text-state-ok',
+        value < 0 && 'text-state-danger',
+        value === 0 && 'text-app-muted',
+      )}
+    >
+      {figure.trim()}
+      <span className="sr-only"> {wording}</span>
     </p>
   )
 }
 
-function MiniChart({ series }: { series: number[] }) {
-  const maximum = Math.max(0, ...series.map((value) => Math.abs(value)))
+function LineChart({ series, labels }: { series: number[]; labels: string[] }) {
+  const values = series.length > 0 ? series : [0, 0]
+  const minimum = Math.min(...values)
+  const maximum = Math.max(...values)
+  const range = maximum - minimum
+  const points = values.map((value, index) => {
+    const x = values.length === 1 ? 150 : (index / (values.length - 1)) * 300
+    const y = range === 0 ? 36 : 62 - ((value - minimum) / range) * 48
+    return [x, y] as const
+  })
+  const line = points.map(([x, y]) => `${x},${y}`).join(' ')
+  const area = `M 0 70 L ${points.map(([x, y]) => `${x} ${y}`).join(' L ')} L 300 70 Z`
+
   return (
-    <div
-      aria-hidden="true"
-      aria-label="Декоративна діаграма"
-      className="mt-1 flex h-20 min-w-0 items-end gap-1"
-    >
-      {series.map((value, index) => (
-        <span
-          className="min-w-1 flex-1 rounded-t bg-brand/70"
-          data-testid="analytics-bar"
-          key={`${index}-${value}`}
-          style={{
-            height: `${maximum === 0 ? 0 : (Math.abs(value) / maximum) * 100}%`,
-          }}
+    <div className="dashboard-line-chart">
+      <svg
+        aria-hidden="true"
+        data-testid="analytics-line-chart"
+        preserveAspectRatio="none"
+        viewBox="0 0 300 72"
+      >
+        <path d={area} fill="currentColor" opacity="0.12" />
+        <polyline
+          fill="none"
+          points={line}
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+          vectorEffect="non-scaling-stroke"
         />
-      ))}
+      </svg>
+      <div aria-hidden="true">
+        <span>{labels.at(0) ?? '00:00'}</span>
+        <span>{labels.at(-1) ?? '23:00'}</span>
+      </div>
     </div>
   )
 }

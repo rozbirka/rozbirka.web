@@ -45,7 +45,7 @@ const metric = (label: string) => screen.getByText(label).closest('article')
 const normalizedText = (element: Element | null) =>
   element?.textContent?.replace(/\s+/g, ' ') ?? ''
 
-it('renders the money and warehouse overview with authoritative values', () => {
+it('renders the money and warehouse overview without duplicating analytics revenue', () => {
   render(
     <DashboardSummary
       data={summary({
@@ -65,12 +65,10 @@ it('renders the money and warehouse overview with authoritative values', () => {
     screen.getByRole('heading', { name: 'Гроші' }),
   )
   expect(screen.getByRole('heading', { name: 'Склад' })).toBeInTheDocument()
-  expect(normalizedText(metric('Виручка'))).toContain('1 240USD')
-  expect(normalizedText(metric('Виручка'))).toContain('18 600UAH')
-  expect(normalizedText(metric('Баланс кас'))).toContain('123 456UAH')
+  expect(screen.queryByText('Виручка')).not.toBeInTheDocument()
+  expect(normalizedText(metric('Баланс кас'))).toContain('123 456₴')
   expect(normalizedText(metric('Доступних запчастин'))).toContain('5 678шт')
   expect(normalizedText(metric('Продано всього'))).toContain('45шт')
-  expect(normalizedText(metric('Виручка'))).toContain('1 234 замовлення')
   const activity = screen.getByRole('region', { name: 'Остання активність' })
   expect(activity).toHaveTextContent(/28\.08\.2026, 16:45/)
   expect(activity).toHaveTextContent(/Додано запчастину/)
@@ -166,7 +164,7 @@ it('shows recoupment from server totals without inventing a cash split', () => {
 
   expect(screen.getByText('Окупність складу 82%')).toBeInTheDocument()
   expect(normalizedText(metric('Повернено всього'))).toContain(
-    'лишилось 1 800 USD',
+    'лишилось 1 800 $',
   )
   expect(screen.queryByText('Сейф')).not.toBeInTheDocument()
   expect(screen.queryByText('ФОП Mono')).not.toBeInTheDocument()
@@ -180,8 +178,8 @@ it('shows real cash balances for every currency returned by cash registers', () 
     />,
   )
 
-  expect(normalizedText(metric('Баланс кас'))).toContain('2 450USD')
-  expect(normalizedText(metric('Баланс кас'))).toContain('123 456UAH')
+  expect(normalizedText(metric('Баланс кас'))).toContain('2 450$')
+  expect(normalizedText(metric('Баланс кас'))).toContain('123 456₴')
 })
 
 it('renders an empty yard as a successful onboarding state', () => {

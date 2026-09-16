@@ -33,7 +33,9 @@ it('renders real recent orders with links, status, date, and total', () => {
     '/app/garage/orders/order-286',
   )
   expect(screen.getByText('Підтверджено')).toBeInTheDocument()
-  expect(screen.getByText('16.09.2026')).toBeInTheDocument()
+  expect(screen.getByText('Марина Данилюк')).toBeInTheDocument()
+  expect(screen.queryByText('Фара ліва, Крило')).not.toBeInTheDocument()
+  expect(screen.getByText('16.09, 12:15')).toBeInTheDocument()
   expect(
     screen.getByText(
       (_content, element) =>
