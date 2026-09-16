@@ -28,6 +28,10 @@ const api = vi.hoisted(() => ({
   createZone: vi.fn(),
   updateZone: vi.fn(),
   archiveZone: vi.fn(),
+  startSession: vi.fn(),
+  completeSession: vi.fn(),
+  reopenSession: vi.fn(),
+  cancelSession: vi.fn(),
 }))
 const parts = vi.hoisted(() => ({
   facets: vi.fn(),
@@ -211,6 +215,10 @@ beforeEach(() => {
   api.createZone.mockResolvedValue(undefined)
   api.updateZone.mockResolvedValue(undefined)
   api.archiveZone.mockResolvedValue(undefined)
+  api.startSession.mockResolvedValue(session)
+  api.completeSession.mockResolvedValue(session)
+  api.reopenSession.mockResolvedValue(session)
+  api.cancelSession.mockResolvedValue(session)
   parts.facets.mockResolvedValue({
     statuses: [],
     warehouses: [],
@@ -266,6 +274,55 @@ it('shows mobile counting progress as read-only web monitoring', async () => {
   ).not.toBeInTheDocument()
 })
 
+it('watches the live count from the session screen', async () => {
+  const user = userEvent.setup()
+  renderAt('/app/yard/inventory/sessions/session-1')
+
+  await screen.findByRole('heading', { name: 'INV-001' })
+  // The counted positions come from the session results, on this screen.
+  const positions = screen.getByRole('region', { name: 'Позиції' })
+  expect(within(positions).getByText('Крило')).toBeInTheDocument()
+  expect(within(positions).getByText('QR-1')).toBeInTheDocument()
+  // Scans are read per zone and merged into one stream.
+  expect(api.getScans).toHaveBeenCalledWith('session-1', 'zone-1', {
+    signal: expect.any(AbortSignal) as AbortSignal,
+  })
+  expect(
+    within(
+      screen.getByRole('region', { name: 'Останні сканування' }),
+    ).getByText('Крило'),
+  ).toBeInTheDocument()
+
+  // The only counted position differs, so the matched filter empties the list.
+  await user.click(screen.getByRole('radio', { name: 'Збіглося 0' }))
+  expect(within(positions).queryByText('Крило')).not.toBeInTheDocument()
+})
+
+it('asks for a reason before cancelling a session', async () => {
+  const user = userEvent.setup()
+  renderAt('/app/yard/inventory/sessions/session-1')
+
+  await screen.findByRole('heading', { name: 'INV-001' })
+  await user.click(screen.getByRole('button', { name: 'Інші дії із сесією' }))
+  await user.click(screen.getByRole('button', { name: 'Скасувати сесію' }))
+  const dialog = screen.getByRole('dialog')
+  // The reason reaches the audit trail, so it is not optional.
+  expect(
+    within(dialog).getByRole('button', { name: 'Скасувати сесію' }),
+  ).toBeDisabled()
+  await user.type(within(dialog).getByLabelText(/Причина/), 'Перерахуємо потім')
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Скасувати сесію' }),
+  )
+  await waitFor(() =>
+    expect(api.cancelSession).toHaveBeenCalledWith(
+      'session-1',
+      'Перерахуємо потім',
+      { signal: expect.any(AbortSignal) as AbortSignal },
+    ),
+  )
+})
+
 it('renders discrepancy results and adjustment affordance', async () => {
   api.getSession.mockResolvedValue({ ...session, status: 'review' })
   renderAt('/app/yard/inventory/sessions/session-1/results')
@@ -289,7 +346,7 @@ it('does not link draft sessions to unavailable results', async () => {
   api.getSession.mockResolvedValue({ ...session, status: 'draft' })
   renderAt('/app/yard/inventory/sessions/session-1')
 
-  await screen.findByText('INV-001')
+  await screen.findByRole('heading', { name: 'INV-001' })
   expect(
     screen.queryByRole('link', { name: 'Результати' }),
   ).not.toBeInTheDocument()
@@ -298,7 +355,9 @@ it('does not link draft sessions to unavailable results', async () => {
 it('routes correctly when the tenant slug matches a module segment', async () => {
   renderAt('/app/inventory/inventory/sessions/session-1')
 
-  expect(await screen.findByText('INV-001')).toBeInTheDocument()
+  expect(
+    await screen.findByRole('heading', { name: 'INV-001' }),
+  ).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Результати' })).toBeInTheDocument()
 })
 

@@ -1400,22 +1400,90 @@ function NewSessionView() {
   )
 }
 
+/** Which side of the count the session table is showing. */
+const SESSION_FILTERS = [
+  { value: 'all', label: 'Усі' },
+  { value: 'diff', label: 'Розходження' },
+  { value: 'same', label: 'Збіглося' },
+] as const
+
+type SessionFilter = (typeof SESSION_FILTERS)[number]['value']
+
+interface SessionData {
+  session: InventorySession
+  /** A draft has nothing counted yet, so it has no results to read. */
+  results: InventorySessionResults | null
+  /** Every zone's scans in one stream, newest first. */
+  scans: InventoryScan[]
+  people: { userId: string; name: string }[]
+}
+
+/** Two initials for the worker chip; a single word gives one. */
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('') || '?'
+
 function SessionView({ id }: { id: string }) {
   const base = useInventoryBase()
   const canManage = usePermission('inventory.manage')
+  const canSeeTeam = usePermission('team.view')
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.inventory,
   )
   const loader = useCallback(
-    (signal: AbortSignal) => inventoryApi.getSession(id, { signal }),
-    [id],
+    async (signal: AbortSignal): Promise<SessionData> => {
+      const session = await inventoryApi.getSession(id, { signal })
+      const [results, scanLists, people] = await Promise.all([
+        session.status === 'draft'
+          ? Promise.resolve(null)
+          : inventoryApi.getResults(id, { signal }).then(
+              (data) => data,
+              () => null,
+            ),
+        Promise.all(
+          session.zones.map((zone) =>
+            inventoryApi.getScans(id, zone.zoneId, { signal }).then(
+              (list) => list,
+              () => [],
+            ),
+          ),
+        ),
+        canSeeTeam
+          ? teamApi.listMembers({ signal }).then(
+              (members) =>
+                members.map((member) => ({
+                  userId: member.userId,
+                  name: member.name,
+                })),
+              () => [],
+            )
+          : Promise.resolve([]),
+      ])
+      const scans = scanLists
+        .flat()
+        .sort((left, right) => right.scannedAt.localeCompare(left.scannedAt))
+      return { session, results, scans, people }
+    },
+    [canSeeTeam, id],
   )
   const resource = useLoad(loader, id)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [acting, setActing] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [filter, setFilter] = useState<SessionFilter>('all')
+  /** The action waiting for a confirmation, and the reason a cancel needs. */
+  const [asking, setAsking] = useState<'start' | 'complete' | 'reopen' | null>(
+    null,
+  )
+  const [cancelling, setCancelling] = useState(false)
+  const [reason, setReason] = useState('')
   const isInProgress =
     resource.state.kind === 'ready' &&
-    resource.state.data.status === 'inProgress'
+    resource.state.data.session.status === 'inProgress'
   useEffect(() => {
     if (!isInProgress) return
     const timer = window.setInterval(
@@ -1424,14 +1492,9 @@ function SessionView({ id }: { id: string }) {
     )
     return () => window.clearInterval(timer)
   }, [isInProgress, resource])
+
   const act = async (action: 'start' | 'complete' | 'reopen' | 'cancel') => {
     if (acting) return
-    if (!window.confirm('Підтвердити дію із сесією?')) return
-    const reason =
-      action === 'cancel'
-        ? window.prompt('Причина скасування')?.trim()
-        : undefined
-    if (action === 'cancel' && !reason) return
     setActing(true)
     try {
       setOperationError(null)
@@ -1440,9 +1503,12 @@ function SessionView({ id }: { id: string }) {
       if (action === 'start') await inventoryApi.startSession(id, options)
       if (action === 'complete') await inventoryApi.completeSession(id, options)
       if (action === 'reopen') await inventoryApi.reopenSession(id, options)
-      if (action === 'cancel' && reason) {
-        await inventoryApi.cancelSession(id, reason, options)
+      if (action === 'cancel') {
+        await inventoryApi.cancelSession(id, reason.trim(), options)
       }
+      setAsking(null)
+      setCancelling(false)
+      setReason('')
       resource.reload()
     } catch (error) {
       setOperationError(normalizeApiProblem(error).message)
@@ -1450,147 +1516,683 @@ function SessionView({ id }: { id: string }) {
       setActing(false)
     }
   }
+
   return (
-    <PageBody>
-      <Resource state={resource.state} retry={resource.reload}>
-        {(session) => {
-          const [label, tone] = sessionStatus(session.status)
-          const completed = session.zones.filter(
-            (zone) => zone.status === 'completed',
-          ).length
-          return (
-            <>
-              <PageHeader
-                eyebrow={<Link to={base}>Інвентаризація</Link>}
-                title={session.number}
-                actions={
-                  <>
-                    <Button onClick={resource.reload} variant="ghost">
-                      <RefreshCw aria-hidden />
-                      Оновити
-                    </Button>
-                    {session.status !== 'draft' ? (
-                      <Button asChild variant="quiet">
-                        <Link to={`${base}/sessions/${id}/results`}>
-                          Результати
-                        </Link>
-                      </Button>
-                    ) : null}
-                    <Button asChild variant="quiet">
-                      <Link to={`${base}/sessions/${id}/audit`}>Аудит</Link>
-                    </Button>
-                  </>
-                }
-              />
-              <div className="grid gap-3 sm:grid-cols-3">
-                <StatCard
-                  label="Статус"
-                  value={<StatusPill tone={tone}>{label}</StatusPill>}
-                />
-                <StatCard
-                  label="Завершено зон"
-                  value={`${completed}/${session.zones.length}`}
-                  accent
-                />
-                <StatCard
-                  label="Запчастин у зрізі"
-                  value={session.preview.includedPartCount}
-                />
+    <Resource retry={resource.reload} state={resource.state}>
+      {({ session, results, scans, people }: SessionData) => {
+        const [label, tone] = sessionStatus(session.status)
+        const nameOf = (userId?: string | null) =>
+          userId == null
+            ? null
+            : (people.find((person) => person.userId === userId)?.name ?? null)
+        const zoneName = (zoneId: string) =>
+          session.zones.find((zone) => zone.zoneId === zoneId)?.zoneCode ?? '—'
+        const done = session.zones.filter(
+          (zone) => zone.status === 'completed',
+        ).length
+        const percent =
+          session.zones.length === 0
+            ? 0
+            : Math.round((done / session.zones.length) * 100)
+        const parts = results?.parts ?? []
+        const matched = parts.filter((part) => part.delta === 0).length
+        const differing = parts.length - matched
+        const counts: Record<SessionFilter, number> = {
+          all: parts.length,
+          diff: differing,
+          same: matched,
+        }
+        const rows = parts.filter((part) =>
+          filter === 'all'
+            ? true
+            : filter === 'diff'
+              ? part.delta !== 0
+              : part.delta === 0,
+        )
+        /** Who actually scanned, with when they started and how much. */
+        const workers = [
+          ...scans
+            .filter((scan) => scan.voidedAt == null)
+            .reduce((map, scan) => {
+              const current = map.get(scan.scannedBy)
+              map.set(scan.scannedBy, {
+                count: (current?.count ?? 0) + 1,
+                since:
+                  current === undefined ||
+                  scan.scannedAt.localeCompare(current.since) < 0
+                    ? scan.scannedAt
+                    : current.since,
+              })
+              return map
+            }, new Map<string, { count: number; since: string }>())
+            .entries(),
+        ].sort(([, left], [, right]) => right.count - left.count)
+        const counters = workers
+          .map(([userId]) => nameOf(userId))
+          .filter((name): name is string => name !== null)
+
+        return (
+          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+              <div className="flex min-w-0 items-center gap-5">
+                <Link
+                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                  to={base}
+                >
+                  <ChevronLeft aria-hidden className="size-3.5" />
+                  До інвентаризації
+                </Link>
+                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                  <span>Інвентаризація</span>
+                  <span aria-hidden className="text-white/20">
+                    /
+                  </span>
+                  <span className="text-app-muted">{session.number}</span>
+                </p>
               </div>
+              <div className="flex flex-wrap items-center gap-2.5">
+                {session.status === 'draft' ? null : (
+                  <Button
+                    asChild
+                    className="px-[18px] text-sm font-semibold"
+                    variant="quiet"
+                  >
+                    <Link to={`${base}/sessions/${id}/results`}>
+                      Результати
+                    </Link>
+                  </Button>
+                )}
+                {/* Counting happens in the mobile app; the cabinet watches it. */}
+                <Button
+                  className="px-5 text-sm font-bold"
+                  disabled
+                  title="Підрахунок ведеться в мобільному застосунку — кабінет показує його наживо"
+                  variant="primary"
+                >
+                  Сканувати
+                </Button>
+                <Button
+                  aria-expanded={menuOpen}
+                  aria-label="Інші дії із сесією"
+                  className="min-w-11 px-0 text-base font-bold tracking-[0.1em]"
+                  onClick={() => setMenuOpen((open) => !open)}
+                >
+                  <span aria-hidden>···</span>
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-4">
+                  <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+                    {session.number}
+                  </h1>
+                  <StatusPill tone={tone}>{label}</StatusPill>
+                </div>
+                <p className="text-app-muted mt-3 text-[15px]">
+                  {[
+                    session.zones[0]?.warehouseName ?? null,
+                    session.zones.length === 0
+                      ? null
+                      : `${String(session.zones.length)} ${plural(session.zones.length, ['зона', 'зони', 'зон'])}`,
+                    session.startedAt == null
+                      ? `створено ${date(session.createdAt)}`
+                      : `розпочато ${date(session.startedAt)}`,
+                    counters.length > 0 ? counters.join(', ') : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              </div>
+
               {operationError ? (
                 <Notice tone="danger">{operationError}</Notice>
               ) : null}
-              {canManage ? (
-                <Panel className="flex flex-wrap gap-2">
-                  {session.status === 'draft' ? (
+
+              {menuOpen ? (
+                <div className="border-app-line bg-app-raised flex flex-wrap items-center gap-2.5 rounded-[14px] border px-4 py-3">
+                  <Button asChild variant="ghost">
+                    <Link to={`${base}/sessions/${id}/audit`}>Аудит сесії</Link>
+                  </Button>
+                  <Button onClick={resource.reload} variant="ghost">
+                    <RefreshCw aria-hidden />
+                    Оновити
+                  </Button>
+                  <Button
+                    disabled
+                    title="Сервер не вміє ставити сесію на паузу — її можна лише завершити або скасувати"
+                    variant="ghost"
+                  >
+                    Призупинити
+                  </Button>
+                  {canManage &&
+                  session.status !== 'completed' &&
+                  session.status !== 'cancelled' ? (
                     <Button
-                      disabled={acting}
-                      onClick={() => void act('start')}
-                      variant="primary"
-                    >
-                      Запустити
-                    </Button>
-                  ) : null}
-                  {session.status === 'review' ? (
-                    <Button
-                      onClick={() => void act('complete')}
-                      disabled={acting}
-                      variant="primary"
-                    >
-                      Завершити
-                    </Button>
-                  ) : null}
-                  {session.status === 'review' ? (
-                    <Button
-                      disabled={acting}
-                      onClick={() => void act('reopen')}
-                      variant="quiet"
-                    >
-                      Відкрити повторно
-                    </Button>
-                  ) : null}
-                  {!['completed', 'cancelled'].includes(session.status) ? (
-                    <Button
-                      disabled={acting}
-                      onClick={() => void act('cancel')}
+                      onClick={() => {
+                        setReason('')
+                        setCancelling(true)
+                      }}
                       variant="danger"
                     >
                       <Archive aria-hidden />
-                      Скасувати
+                      Скасувати сесію
                     </Button>
                   ) : null}
-                </Panel>
+                </div>
               ) : null}
-              <div className="overflow-hidden rounded-panel border border-app-line">
-                {session.zones.map((zone) => (
-                  <div
-                    className="grid gap-2 border-b border-app-line p-4 last:border-0 sm:grid-cols-[1fr_auto]"
-                    key={zone.zoneId}
+
+              <div className="flex flex-wrap-reverse items-end gap-6">
+                <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-5">
+                  <Card
+                    aside={
+                      <div
+                        aria-label="Які позиції показувати"
+                        className="border-app-line bg-app-canvas flex flex-wrap gap-1 rounded-[10px] border p-[3px]"
+                        role="radiogroup"
+                      >
+                        {SESSION_FILTERS.map((option) => {
+                          const active = option.value === filter
+                          return (
+                            <button
+                              aria-checked={active}
+                              className={cn(
+                                'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-[8px] px-3 text-[12px] font-bold',
+                                active
+                                  ? 'text-app-ink bg-white/[0.08]'
+                                  : 'text-app-muted hover:text-app-ink',
+                              )}
+                              key={option.value}
+                              onClick={() => setFilter(option.value)}
+                              role="radio"
+                              type="button"
+                            >
+                              {option.label}{' '}
+                              <span className="text-app-dim font-mono text-[11px] font-medium">
+                                {counts[option.value]}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    }
+                    bodyClassName="p-0 pt-4"
+                    className="min-w-0"
+                    title="Позиції"
                   >
-                    <div>
-                      <strong className="text-white">{zone.zoneName}</strong>
-                      <p className="text-xs text-app-dim">
-                        {zone.warehouseName} · {zone.zoneCode}
+                    <div
+                      aria-hidden
+                      className="border-app-line text-app-muted hidden gap-3 border-y px-6 py-3 font-mono text-[10px] tracking-[0.14em] uppercase md:grid md:grid-cols-[7rem_minmax(0,1fr)_5.5rem_5.5rem_6rem]"
+                    >
+                      <span>Код</span>
+                      <span>Позиція</span>
+                      <span className="text-right">Очікується</span>
+                      <span className="text-right">Факт</span>
+                      <span className="text-right">Різниця</span>
+                    </div>
+                    {rows.length === 0 ? (
+                      <p className="text-app-muted px-6 py-6 text-sm">
+                        {results === null
+                          ? 'Сесія ще не запущена — рахувати нічого.'
+                          : parts.length === 0
+                            ? 'У зрізі сесії немає позицій.'
+                            : 'За цим фільтром позицій немає.'}
                       </p>
-                      {zone.leaseOwnerUserId ? (
-                        <p className="mt-2 text-xs text-state-warn">
-                          Зона зайнята користувачем до{' '}
-                          {date(zone.leaseExpiresAt)}
+                    ) : (
+                      <ul className="grid">
+                        {rows.map((part) => (
+                          <li
+                            className="border-app-line grid items-center gap-x-3 gap-y-1 border-b px-6 py-3.5 last:border-0 md:grid-cols-[7rem_minmax(0,1fr)_5.5rem_5.5rem_6rem]"
+                            key={part.partId}
+                          >
+                            <span className="text-app-muted font-mono text-[14px]">
+                              {part.partQrCode}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-[15px] font-semibold tracking-[-0.01em] text-white">
+                                {part.partName}
+                              </span>
+                              {part.hasCoverageWarning ? (
+                                <span className="text-state-warn mt-0.5 block text-[12px]">
+                                  Позиція лежить і поза зрізом сесії
+                                </span>
+                              ) : null}
+                            </span>
+                            <span className="text-app-muted font-mono text-[14px] tabular-nums md:text-right">
+                              {/* Stacked rows lose the header row, so each
+                                  number carries its own name below md. */}
+                              <span className="mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
+                                Очікується
+                              </span>
+                              {part.expectedQuantity}
+                            </span>
+                            <span
+                              className={cn(
+                                'font-mono text-[14px] tabular-nums md:text-right',
+                                part.delta === 0
+                                  ? 'text-app-muted'
+                                  : part.delta > 0
+                                    ? 'text-state-warn'
+                                    : 'text-state-danger',
+                              )}
+                            >
+                              <span className="text-app-muted mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
+                                Факт
+                              </span>
+                              {part.actualQuantity}
+                            </span>
+                            <span className="md:flex md:justify-end">
+                              <StatusPill
+                                tone={
+                                  part.delta === 0
+                                    ? 'ok'
+                                    : part.delta > 0
+                                      ? 'warn'
+                                      : 'danger'
+                                }
+                              >
+                                {part.delta > 0
+                                  ? `+${String(part.delta)}`
+                                  : String(part.delta)}
+                              </StatusPill>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </Card>
+
+                  <Card
+                    bodyClassName="p-0"
+                    className="min-w-0"
+                    title="Останні сканування"
+                  >
+                    {scans.length === 0 ? (
+                      <p className="text-app-muted px-6 pt-4 pb-6 text-sm">
+                        Сканувань ще не було.
+                      </p>
+                    ) : (
+                      <ul className="grid">
+                        {scans.slice(0, 8).map((scan) => (
+                          <li
+                            className="border-app-line flex flex-wrap items-center gap-x-3.5 gap-y-1 border-t px-6 py-3"
+                            key={scan.id}
+                          >
+                            <span className="text-app-dim w-13 shrink-0 font-mono text-[13px]">
+                              {timeOfDay(scan.scannedAt)}
+                            </span>
+                            <Link
+                              className="text-app-ink w-24 shrink-0 font-mono text-[14px] hover:underline"
+                              to={`${base}/sessions/${id}/journal/${scan.zoneId}`}
+                            >
+                              {zoneName(scan.zoneId)}
+                            </Link>
+                            <span className="text-app-muted order-last min-w-0 basis-full truncate text-[14px] sm:order-none sm:flex-1 sm:basis-auto">
+                              {scan.partName}
+                            </span>
+                            {nameOf(scan.scannedBy) === null ? null : (
+                              <span className="text-app-muted text-[13px] whitespace-nowrap">
+                                {nameOf(scan.scannedBy)}
+                              </span>
+                            )}
+                            <span
+                              className={cn(
+                                'min-w-12 text-right font-mono text-[13px] tabular-nums',
+                                scan.voidedAt != null
+                                  ? 'text-state-danger line-through'
+                                  : scan.unexpected
+                                    ? 'text-state-warn'
+                                    : 'text-app-muted',
+                              )}
+                            >
+                              {scan.zonePartCount}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </Card>
+                </div>
+
+                <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-5">
+                  <section
+                    aria-label="Прогрес"
+                    className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
+                  >
+                    <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+                      Прогрес
+                    </h2>
+                    <p className="mt-3 flex items-baseline gap-2.5">
+                      <span className="text-[34px] leading-none font-extrabold tracking-[-0.03em] tabular-nums text-white">
+                        {percent}%
+                      </span>
+                      <span className="text-app-muted font-mono text-[14px]">
+                        {done} / {session.zones.length}{' '}
+                        {plural(session.zones.length, ['зона', 'зони', 'зон'])}
+                      </span>
+                    </p>
+                    <span
+                      aria-hidden
+                      className="bg-app-line-2 mt-4 block h-2 overflow-hidden rounded-full"
+                    >
+                      <span
+                        className={cn(
+                          'block h-full rounded-full',
+                          percent === 100 ? 'bg-state-ok' : 'bg-state-warn',
+                        )}
+                        style={{ width: `${String(percent)}%` }}
+                      />
+                    </span>
+                    <dl className="border-app-line mt-4.5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5 border-t pt-4">
+                      <dt className="text-app-muted text-[14px] font-semibold">
+                        Збіглося позицій
+                      </dt>
+                      <dd className="text-state-ok font-mono text-[15px] tabular-nums">
+                        {results === null ? '—' : matched}
+                      </dd>
+                      <dt className="text-app-muted text-[14px] font-semibold">
+                        Розходжень
+                      </dt>
+                      <dd className="text-state-danger font-mono text-[15px] tabular-nums">
+                        {results === null ? '—' : differing}
+                      </dd>
+                      <dt className="text-app-muted text-[14px] font-semibold">
+                        Зон лишилось
+                      </dt>
+                      <dd className="font-mono text-[15px] text-white tabular-nums">
+                        {session.zones.length - done}
+                      </dd>
+                    </dl>
+                    {canManage ? (
+                      <div className="mt-4.5 grid gap-2.5">
+                        {session.status === 'draft' ? (
+                          <Button
+                            className="min-h-11 w-full text-sm font-bold"
+                            disabled={acting}
+                            onClick={() => setAsking('start')}
+                            variant="primary"
+                          >
+                            Запустити
+                          </Button>
+                        ) : null}
+                        {session.status === 'inProgress' ? (
+                          <Button
+                            className="min-h-11 w-full text-sm font-bold"
+                            disabled
+                            title="Підрахунок ведеться в мобільному застосунку"
+                            variant="primary"
+                          >
+                            Продовжити сканування
+                          </Button>
+                        ) : null}
+                        {session.status === 'review' ? (
+                          <Button
+                            className="min-h-11 w-full text-sm font-bold"
+                            disabled={acting}
+                            onClick={() => setAsking('complete')}
+                            variant="primary"
+                          >
+                            Завершити
+                          </Button>
+                        ) : null}
+                        {session.status === 'review' ? (
+                          <Button
+                            className="min-h-11 w-full text-sm font-semibold"
+                            disabled={acting}
+                            onClick={() => setAsking('reopen')}
+                          >
+                            Відкрити повторно
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <p className="text-app-dim mt-3 text-[12px] leading-[1.5]">
+                      {session.status === 'review'
+                        ? 'Завершити можна й раніше — неперевірені зони залишаться з попередніми даними.'
+                        : session.status === 'inProgress'
+                          ? 'Сесія переходить у перевірку, коли всі зони порахують у застосунку.'
+                          : session.status === 'draft'
+                            ? 'Поки сесія не запущена, залишки рухаються як завжди.'
+                            : 'Сесія закрита — залишки вже зафіксовані.'}
+                    </p>
+                  </section>
+
+                  <Card bodyClassName="p-0 pt-2" title="Зони">
+                    <ul className="grid">
+                      {session.zones.map((zone) => (
+                        <li
+                          className="border-app-line grid gap-2 border-t px-6 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                          key={zone.zoneId}
+                        >
+                          <div className="min-w-0">
+                            <strong className="text-[15px] font-bold text-white">
+                              {zone.zoneName}
+                            </strong>
+                            <p className="text-app-muted mt-0.5 text-[13px]">
+                              {zone.warehouseName} · {zone.zoneCode}
+                            </p>
+                            {zone.leaseOwnerUserId ? (
+                              <p className="text-state-warn mt-1.5 text-[12px]">
+                                Зона зайнята користувачем
+                                {nameOf(zone.leaseOwnerUserId) === null
+                                  ? ''
+                                  : ` ${String(nameOf(zone.leaseOwnerUserId))}`}{' '}
+                                до {date(zone.leaseExpiresAt)}
+                              </p>
+                            ) : null}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button asChild size="md" variant="quiet">
+                              <Link
+                                to={`${base}/sessions/${id}/journal/${zone.zoneId}`}
+                              >
+                                Журнал
+                              </Link>
+                            </Button>
+                            <StatusPill
+                              tone={
+                                zone.status === 'completed'
+                                  ? 'ok'
+                                  : zone.status === 'counting'
+                                    ? 'warn'
+                                    : 'neutral'
+                              }
+                            >
+                              {zone.status === 'completed'
+                                ? 'Завершено'
+                                : zone.status === 'counting'
+                                  ? 'Підрахунок триває'
+                                  : 'Очікує'}
+                            </StatusPill>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+
+                  {workers.length === 0 ? null : (
+                    <section
+                      aria-label="Виконавці"
+                      className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
+                    >
+                      <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+                        Виконавці
+                      </h2>
+                      <ul className="mt-4 grid gap-3.5">
+                        {workers.map(([userId, stat]) => {
+                          const who = nameOf(userId)
+                          return (
+                            <li
+                              className="flex items-center gap-3"
+                              key={userId}
+                            >
+                              <span
+                                aria-hidden
+                                className="bg-brand-soft text-brand flex size-[34px] shrink-0 items-center justify-center rounded-full text-[13px] font-bold"
+                              >
+                                {initials(who ?? '?')}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-[15px] font-semibold text-white">
+                                  {who ?? 'Імʼя приховано'}
+                                </span>
+                                <span className="text-app-muted mt-0.5 block text-[12px]">
+                                  з {timeOfDay(stat.since)}
+                                </span>
+                              </span>
+                              <span className="text-app-muted font-mono text-[14px] tabular-nums">
+                                {stat.count}
+                              </span>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                      {people.length === 0 ? (
+                        <p className="text-app-muted mt-3.5 text-[12px] leading-[1.5]">
+                          Імена видно тим, хто має право «team.view».
                         </p>
                       ) : null}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button asChild size="md" variant="quiet">
-                        <Link
-                          to={`${base}/sessions/${id}/journal/${zone.zoneId}`}
-                        >
-                          Журнал
-                        </Link>
-                      </Button>
-                      <StatusPill
-                        tone={
-                          zone.status === 'completed'
-                            ? 'ok'
-                            : zone.status === 'counting'
-                              ? 'warn'
-                              : 'neutral'
+                    </section>
+                  )}
+
+                  <section
+                    aria-label="Правила"
+                    className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
+                  >
+                    <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+                      Правила
+                    </h2>
+                    <ul className="mt-3.5 grid gap-2.5">
+                      {/* The slice stays locked until the session closes —
+                          review still has decisions waiting on it. */}
+                      <Rule
+                        on={
+                          session.status === 'inProgress' ||
+                          session.status === 'review'
                         }
                       >
-                        {zone.status === 'completed'
-                          ? 'Завершено'
-                          : zone.status === 'counting'
-                            ? 'Підрахунок триває'
-                            : 'Очікує'}
-                      </StatusPill>
-                    </div>
-                  </div>
-                ))}
+                        Рух позицій заблоковано
+                      </Rule>
+                      <Rule
+                        on={null}
+                        why="Сліпий підрахунок налаштовується в мобільному застосунку — кабінет про нього не знає"
+                      >
+                        Сліпий підрахунок
+                      </Rule>
+                      <Rule
+                        on={null}
+                        why="Вимоги фото при розходженні в системі немає"
+                      >
+                        Фото при розходженні
+                      </Rule>
+                    </ul>
+                  </section>
+                </div>
               </div>
-            </>
-          )
-        }}
-      </Resource>
-    </PageBody>
+            </div>
+
+            <ConfirmDialog
+              confirmLabel={
+                asking === 'start'
+                  ? 'Запустити'
+                  : asking === 'complete'
+                    ? 'Завершити'
+                    : 'Відкрити повторно'
+              }
+              consequence={
+                asking === 'start'
+                  ? `Сесія ${session.number} піде в роботу: позиції зрізу заблокуються для продажу, поки її не закриють.`
+                  : asking === 'complete'
+                    ? 'Залишки зафіксуються за прийнятими рішеннями. Неперевірені зони залишаться з попередніми даними.'
+                    : 'Сесія повернеться в підрахунок, і зони знову можна буде рахувати.'
+              }
+              onConfirm={() => {
+                if (asking !== null) void act(asking)
+              }}
+              onOpenChange={(next) => {
+                if (!next) setAsking(null)
+              }}
+              open={asking !== null}
+              pending={acting}
+              title={
+                asking === 'start'
+                  ? 'Запустити сесію?'
+                  : asking === 'complete'
+                    ? 'Завершити сесію?'
+                    : 'Відкрити сесію повторно?'
+              }
+            />
+
+            <FormDialog
+              description="Причина потрапить у журнал аудиту сесії."
+              onOpenChange={(next) => {
+                if (!next) setCancelling(false)
+              }}
+              onSubmit={(event) => {
+                event.preventDefault()
+                void act('cancel')
+              }}
+              open={cancelling}
+              pending={acting}
+              submitDisabled={reason.trim() === ''}
+              submitLabel="Скасувати сесію"
+              title="Скасувати сесію?"
+            >
+              <Field
+                hint="Скасовану сесію не можна відкрити знову — залишки лишаться такими, як були."
+                label="Причина"
+                required
+              >
+                <TextArea
+                  name="reason"
+                  onChange={(event) => setReason(event.target.value)}
+                  rows={3}
+                  value={reason}
+                />
+              </Field>
+            </FormDialog>
+          </div>
+        )
+      }}
+    </Resource>
+  )
+}
+
+/**
+ * One rule of the count. A rule the cabinet cannot read is drawn unset with
+ * the reason on it, so an empty mark never reads as "we checked, it is off".
+ */
+function Rule({
+  children,
+  on,
+  why,
+}: {
+  children: ReactNode
+  /** `null` when the system has no answer either way. */
+  on: boolean | null
+  why?: string
+}) {
+  return (
+    <li
+      className={cn(
+        'flex items-center gap-2.5 text-[13px] font-semibold',
+        on === true ? 'text-app-ink' : 'text-app-dim',
+      )}
+      title={why}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          'flex size-4.5 shrink-0 items-center justify-center rounded-full text-[11px] font-extrabold',
+          on === true ? 'bg-state-ok-soft text-state-ok' : 'bg-white/[0.06]',
+        )}
+      >
+        {on === true ? '✓' : on === false ? '' : '?'}
+      </span>
+      {children}
+      {on === null ? <span className="sr-only"> — невідомо</span> : null}
+    </li>
   )
 }
 
@@ -1846,7 +2448,7 @@ function ResultsView({ id }: { id: string }) {
                         role="radio"
                         type="button"
                       >
-                        {option.label}
+                        {option.label}{' '}
                         <span className="text-app-dim font-mono text-[11px] font-medium">
                           {counts[option.value]}
                         </span>
@@ -2418,7 +3020,7 @@ function AuditView({ id }: { id: string }) {
                         role="radio"
                         type="button"
                       >
-                        {option.label}
+                        {option.label}{' '}
                         <span className="text-app-dim font-mono text-[11px] font-medium">
                           {counts[option.value]}
                         </span>
@@ -2789,7 +3391,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                         }
                         type="button"
                       >
-                        {option.label}
+                        {option.label}{' '}
                         <span className="text-app-dim font-mono text-[11px] font-medium">
                           {counts[option.value]}
                         </span>
