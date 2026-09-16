@@ -47,6 +47,12 @@ import {
 } from '@/components/app'
 import { cn, plural } from '@/lib/utils'
 import {
+  conditionLabel,
+  historyLabel,
+  originLabel,
+  sourceLabel,
+} from './part-labels'
+import {
   partsApi,
   type PartCondition,
   type PartFacets,
@@ -624,7 +630,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                   count={value.count}
                   dot="bg-transparent"
                   key={value.id}
-                  label={conditionLabel(value.name || value.id)}
+                  label={value.name || value.id}
                   onSelect={() => updateFilter('condition', value.id)}
                 />
               ))}
@@ -911,36 +917,6 @@ const PART_CONDITIONS = [
   { value: 'new', label: 'нова' },
   { value: 'scrap', label: 'під відновлення' },
 ] as const
-
-const conditionLabel = (value: string) =>
-  ({
-    new: 'Нова',
-    used: 'Вживана',
-    refurbished: 'Відновлена',
-    damaged: 'Пошкоджена',
-  })[value] ?? value
-
-const originLabel = (id: string, name: string) =>
-  (({ car: 'З авто', batch: 'З партії', free: 'Вільна' })[id] ?? name) || id
-
-const sourceLabel = (value: string) =>
-  ({ car: 'Авто', batch: 'Приймання', free: 'Без джерела' })[value] ?? value
-
-/** Server event names, said the way a person would say them out loud. */
-const historyLabel = (value: string) =>
-  ({
-    created: 'Створено',
-    updated: 'Змінено',
-    reserved: 'Зарезервовано',
-    released: 'Резерв знято',
-    sold: 'Продано',
-    returned: 'Повернено',
-    moved: 'Переміщено',
-    deleted: 'Видалено',
-    edited: 'Змінено',
-    placed: 'Розміщено',
-    unplaced: 'Знято з місця',
-  })[value] ?? value
 
 const historyFieldLabels: Record<string, string> = {
   quantity: 'кількість',

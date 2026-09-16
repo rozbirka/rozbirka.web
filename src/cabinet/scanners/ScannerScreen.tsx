@@ -1,27 +1,37 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Camera, QrCode, RotateCcw, ScanLine, SearchX } from 'lucide-react'
+import {
+  Camera,
+  MapPin,
+  Printer,
+  QrCode,
+  RotateCcw,
+  ScanLine,
+  SearchX,
+} from 'lucide-react'
 import { Link } from 'react-router'
 import {
   Button,
+  DateValue,
   DeniedState,
   EmptyState,
-  Fact,
-  FactList,
   Field,
   FileField,
   Notice,
   PageBody,
   PageHeader,
-  Quantity,
-  RecordCard,
   SectionPanel,
   StateScreen,
   StatusPill,
+  Thumbnail,
   TextInput,
   type NoticeTone,
   type StatusTone,
 } from '@/components/app'
+import { cn } from '@/lib/utils'
+import { conditionLabel, historyLabel } from '../parts/part-labels'
 import { scannersApi } from '@/api/scanners'
+import { partsApi, type PartHistory } from '@/api/parts'
+import { inventoryApi, type PartInventoryZone } from '@/api/inventory'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { normalizeScanCode } from './scan-code'
@@ -66,10 +76,21 @@ interface ScannedPart {
   code: string
   qrCode: string | null
   status: string | null
+  condition: string | null
   unit: string | null
   quantityAvailable: number | null
+  quantityReserved: number | null
   car: string | null
+  carId: string | null
+  carCode: string | null
   photo: { url: string; thumbnailUrl?: string } | null
+}
+
+/** One code this device has already resolved in this sitting. */
+interface RecentScan {
+  code: string
+  name: string
+  at: string
 }
 
 const statusPresentation = (
@@ -98,6 +119,9 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
   const [videoReady, setVideoReady] = useState(false)
   const [status, setStatus] = useState<ScanNotice | null>(null)
   const [part, setPart] = useState<ScannedPart | null>(null)
+  const [history, setHistory] = useState<PartHistory['events']>([])
+  const [placement, setPlacement] = useState<PartInventoryZone[]>([])
+  const [recent, setRecent] = useState<RecentScan[]>([])
   const [pending, setPending] = useState(false)
 
   const shutdownCamera = useCallback(
@@ -164,14 +188,44 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
           code: normalized,
           qrCode: result.qrCode ?? null,
           status: result.status ?? null,
+          condition: result.condition ?? null,
           unit: result.unit ?? null,
           quantityAvailable: result.quantityAvailable ?? null,
+          quantityReserved: result.quantityReserved ?? null,
           car: vehicle || null,
+          carId: result.carId ?? null,
+          carCode: result.carCode ?? null,
           photo: cover
             ? { url: cover.url, thumbnailUrl: cover.thumbnailUrl }
             : null,
         })
         setStatus(null)
+        setRecent((current) =>
+          [
+            {
+              code: normalized,
+              name: result.name,
+              at: new Date().toISOString(),
+            },
+            ...current.filter((entry) => entry.code !== normalized),
+          ].slice(0, 5),
+        )
+        void partsApi.history(result.id, { signal: controller.signal }).then(
+          (next) => {
+            if (mountedRef.current && sequence === sequenceRef.current)
+              setHistory(next.events.slice(0, 3))
+          },
+          () => undefined,
+        )
+        void inventoryApi
+          .getPartZones(result.id, { signal: controller.signal })
+          .then(
+            (zones) => {
+              if (mountedRef.current && sequence === sequenceRef.current)
+                setPlacement(zones)
+            },
+            () => undefined,
+          )
       } catch {
         if (
           !mountedRef.current ||
@@ -340,37 +394,186 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
       ) : null}
 
       {part ? (
-        <SectionPanel
-          description="Переконайтеся, що це та сама деталь, яку тримаєте в руках."
-          title="Знайдена деталь"
-        >
-          <RecordCard
-            meta={<span className="break-all">{part.qrCode ?? part.code}</span>}
-            photo={part.photo}
-            status={<StatusPill tone="ok">Знайдено</StatusPill>}
-            title={part.name}
-          />
-          {/* A lean payload renders fewer facts rather than a row of dashes. */}
-          {partStatus ||
-          typeof part.quantityAvailable === 'number' ||
-          part.car ? (
-            <FactList columns={2}>
-              {partStatus ? (
-                <Fact label="Стан">
-                  <StatusPill tone={partStatus.tone}>
-                    {partStatus.label}
-                  </StatusPill>
-                </Fact>
+        <div className="grid gap-4">
+          <SectionPanel
+            aside={
+              <span className="text-app-dim font-mono text-[12px] break-all">
+                {part.qrCode ?? part.code}
+              </span>
+            }
+            description="Переконайтеся, що це та сама деталь, яку тримаєте в руках."
+            title="Код розпізнано"
+          >
+            <div className="flex flex-wrap items-start gap-4">
+              {part.photo ? (
+                <Thumbnail
+                  alt=""
+                  className="size-20 shrink-0"
+                  photo={part.photo}
+                />
               ) : null}
-              {typeof part.quantityAvailable === 'number' ? (
-                <Fact label="Доступно">
-                  <Quantity unit={part.unit} value={part.quantityAvailable} />
-                </Fact>
-              ) : null}
-              {part.car ? <Fact label="Авто-джерело">{part.car}</Fact> : null}
-            </FactList>
+              <div className="grid min-w-0 flex-1 gap-2">
+                <p className="text-[18px] font-bold break-words text-white">
+                  {part.name}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {partStatus ? (
+                    <StatusPill tone={partStatus.tone}>
+                      {partStatus.label}
+                      {typeof part.quantityAvailable === 'number'
+                        ? ` · ${String(part.quantityAvailable)} ${part.unit ?? 'шт'}`
+                        : ''}
+                    </StatusPill>
+                  ) : null}
+                  {part.condition ? (
+                    <span className="border-app-line bg-app-input text-app-muted rounded-full border px-2.5 py-1 text-[13px]">
+                      {conditionLabel(part.condition)}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </SectionPanel>
+
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            <SectionPanel
+              description="Дії виконуються одразу для цієї запчастини."
+              title="Що зробити"
+            >
+              <div className="grid gap-2.5">
+                <div className="border-app-line rounded-panel flex flex-wrap items-center justify-between gap-3 border p-3.5">
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <MapPin aria-hidden className="text-app-dim size-4" />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-white">
+                        Розміщення
+                      </span>
+                      <span className="text-app-muted block text-[13px]">
+                        {placement.length === 0
+                          ? 'Комірку не вказано'
+                          : placement
+                              .map((zone) => zone.zoneCode ?? zone.zoneName)
+                              .filter(Boolean)
+                              .join(' · ')}
+                      </span>
+                    </span>
+                  </span>
+                  <Button asChild>
+                    <Link
+                      to={`/app/${targetTenant?.slug ?? ''}/parts/${part.id}/inventory`}
+                    >
+                      Перемістити
+                    </Link>
+                  </Button>
+                </div>
+                <div className="border-app-line rounded-panel flex flex-wrap items-center justify-between gap-3 border p-3.5">
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <Printer aria-hidden className="text-app-dim size-4" />
+                    <span className="text-sm font-semibold text-white">
+                      Стікер
+                    </span>
+                  </span>
+                  <Button asChild>
+                    <Link
+                      to={`/app/${targetTenant?.slug ?? ''}/stickers?part=${part.id}`}
+                    >
+                      Надрукувати
+                    </Link>
+                  </Button>
+                </div>
+                {part.carId ? (
+                  <div className="border-app-line rounded-panel flex flex-wrap items-center justify-between gap-3 border p-3.5">
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <QrCode aria-hidden className="text-app-dim size-4" />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold text-white">
+                          Джерело
+                        </span>
+                        <span className="text-app-muted block text-[13px]">
+                          {[part.carCode, part.car].filter(Boolean).join(' · ')}
+                        </span>
+                      </span>
+                    </span>
+                    <Button asChild>
+                      <Link
+                        to={`/app/${targetTenant?.slug ?? ''}/cars/${part.carId}`}
+                      >
+                        Відкрити авто
+                      </Link>
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            </SectionPanel>
+
+            <SectionPanel
+              aside={
+                <Link
+                  className="hover:text-brand text-app-muted text-[13px]"
+                  to={`/app/${targetTenant?.slug ?? ''}/parts/${part.id}`}
+                >
+                  Повна історія
+                </Link>
+              }
+              title="Рух запчастини"
+            >
+              {history.length === 0 ? (
+                <p className="text-app-dim text-[13px]">
+                  Подій ще немає — вони зʼявляться після першої зміни.
+                </p>
+              ) : (
+                <ol className="grid">
+                  {history.map((event, index) => (
+                    <li
+                      className={cn(
+                        'flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2.5',
+                        index > 0 && 'border-app-line border-t',
+                      )}
+                      key={event.id}
+                    >
+                      <span className="text-sm font-semibold text-white">
+                        {historyLabel(event.eventType)}
+                      </span>
+                      <span className="text-app-dim flex flex-wrap gap-x-2.5 text-[12px]">
+                        {event.user.name}
+                        <DateValue value={event.createdAt} />
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </SectionPanel>
+          </div>
+
+          {recent.length > 1 ? (
+            <SectionPanel title="Попередні скани коду">
+              <ol className="grid">
+                {recent.slice(1).map((entry, index) => (
+                  <li
+                    className={cn(
+                      'flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2.5',
+                      index > 0 && 'border-app-line border-t',
+                    )}
+                    key={entry.code}
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-white">
+                        {entry.name}
+                      </span>
+                      <span className="text-app-dim block font-mono text-[12px] break-all">
+                        {entry.code}
+                      </span>
+                    </span>
+                    <DateValue
+                      className="text-app-dim text-[12px]"
+                      value={entry.at}
+                    />
+                  </li>
+                ))}
+              </ol>
+            </SectionPanel>
           ) : null}
-        </SectionPanel>
+        </div>
       ) : pending ? (
         <StateScreen
           description="Звіряємо стікер із деталями цієї розбірки. Це займає секунду."

@@ -11,9 +11,31 @@ const scannerMocks = vi.hoisted(() => ({
       (
         code: string,
         options: { signal: AbortSignal },
-      ) => Promise<{ id: string; name: string }>
+      ) => Promise<{
+        id: string
+        name: string
+        status?: string
+        unit?: string
+        quantityAvailable?: number
+        condition?: string
+      }>
     >()
-    .mockResolvedValue({ id: 'part-1', name: 'Bumper' }),
+    .mockResolvedValue({
+      id: 'part-1',
+      name: 'Bumper',
+      status: 'available',
+      unit: 'шт',
+      quantityAvailable: 2,
+      condition: 'good',
+    }),
+}))
+vi.mock('@/api/parts', () => ({
+  partsApi: {
+    history: vi.fn().mockResolvedValue({ partId: 'part-1', events: [] }),
+  },
+}))
+vi.mock('@/api/inventory', () => ({
+  inventoryApi: { getPartZones: vi.fn().mockResolvedValue([]) },
 }))
 vi.mock('@/api/scanners', () => ({
   scannersApi: {
@@ -435,7 +457,9 @@ it('presents a resolved scan as a record with one obvious way onward', async () 
   fireEvent.click(screen.getByRole('button', { name: 'Знайти деталь' }))
 
   expect(await screen.findByText('Bumper')).toBeInTheDocument()
-  expect(screen.getByText('Знайдено')).toBeInTheDocument()
+  // The pill states the part's own status and what is left of it, rather than
+  // repeating that the lookup succeeded.
+  expect(screen.getByText(/Доступно/)).toBeInTheDocument()
   expect(screen.getByText('QR-123')).toBeInTheDocument()
   expect(
     screen.getByRole('link', { name: 'Відкрити картку деталі' }),
