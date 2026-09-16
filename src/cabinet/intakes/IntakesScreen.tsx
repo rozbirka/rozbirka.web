@@ -1303,30 +1303,37 @@ function IntakeForm({
           <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
             {title}
           </h1>
-          <p className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-[15px] font-medium">
-            <span className="text-app-ink font-mono">
-              {values.name || 'Без назви'}
-            </span>
-            {intake ? (
-              <>
-                <span aria-hidden className="text-white/20">
-                  ·
-                </span>
-                <span>
-                  {positions}{' '}
-                  {plural(positions, ['позиція', 'позиції', 'позицій'])} ·{' '}
-                  {units} шт
-                </span>
-                <span aria-hidden className="text-white/20">
-                  ·
-                </span>
-                <span>
-                  Створено {day(intake.createdAt)} ·{' '}
-                  {intake.createdBy.displayName}
-                </span>
-              </>
-            ) : null}
-          </p>
+          {intakeId === undefined ? (
+            <p className="text-app-muted mt-3.5 text-[15px]">
+              Спочатку створіть приймання, потім додайте до нього запчастини —
+              по одній або партією.
+            </p>
+          ) : (
+            <p className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-[15px] font-medium">
+              <span className="text-app-ink font-mono">
+                {values.name || 'Без назви'}
+              </span>
+              {intake ? (
+                <>
+                  <span aria-hidden className="text-white/20">
+                    ·
+                  </span>
+                  <span>
+                    {positions}{' '}
+                    {plural(positions, ['позиція', 'позиції', 'позицій'])} ·{' '}
+                    {units} шт
+                  </span>
+                  <span aria-hidden className="text-white/20">
+                    ·
+                  </span>
+                  <span>
+                    Створено {day(intake.createdAt)} ·{' '}
+                    {intake.createdBy.displayName}
+                  </span>
+                </>
+              ) : null}
+            </p>
+          )}
         </div>
 
         {problem ? <Notice tone="danger">{problem}</Notice> : null}
@@ -1347,7 +1354,11 @@ function IntakeForm({
                   </span>
                 ) : undefined
               }
-              description="Джерело задане під час створення — від нього залежить розрахунок собівартості."
+              description={
+                intakeId === undefined
+                  ? 'Після створення джерело не змінюється — від нього залежить розрахунок собівартості.'
+                  : 'Джерело задане під час створення — від нього залежить розрахунок собівартості.'
+              }
               step="01"
               title="Джерело надходження"
             >
@@ -1545,7 +1556,9 @@ function IntakeForm({
           </div>
 
           <aside className="sticky top-24 grid min-w-[280px] flex-[0_0_320px] gap-5">
-            <Card title="Зведення">
+            <Card
+              title={intakeId === undefined ? 'Перед створенням' : 'Зведення'}
+            >
               <div className="border-app-line bg-app-input rounded-[14px] border p-4">
                 <p
                   className={cn(
@@ -1564,8 +1577,9 @@ function IntakeForm({
                     .join(' · ') || 'Дата не вказана'}
                 </p>
                 <p className="text-app-dim mt-3 font-mono text-[12px]">
-                  {values.name || 'без назви'} · {positions}{' '}
-                  {plural(positions, ['позиція', 'позиції', 'позицій'])}
+                  {intakeId === undefined
+                    ? 'номер присвоїться автоматично'
+                    : `${values.name || 'без назви'} · ${String(positions)} ${plural(positions, ['позиція', 'позиції', 'позицій'])}`}
                 </p>
               </div>
               {canManageFinance ? (
@@ -1631,7 +1645,9 @@ function IntakeForm({
                 {saveLabel}
               </Button>
               <p className="text-app-dim mt-3 text-[13px] leading-[1.5]">
-                Зміна суми придбання перерахує собівартість усіх позицій партії.
+                {intakeId === undefined
+                  ? 'Далі відкриється картка приймання, де додаються запчастини.'
+                  : 'Зміна суми придбання перерахує собівартість усіх позицій партії.'}
               </p>
             </Card>
 
