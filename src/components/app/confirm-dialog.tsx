@@ -16,6 +16,8 @@ export interface ConfirmDialogProps {
   destructive?: boolean
   /** Failure from the last attempt: shown here, where the retry button is. */
   error?: string | null
+  /** Runs when the dialog closes, for callers that restore focus themselves. */
+  onCloseAutoFocus?: (event: Event) => void
 }
 
 /**
@@ -34,6 +36,7 @@ export function ConfirmDialog({
   pending = false,
   destructive = true,
   error = null,
+  onCloseAutoFocus,
 }: ConfirmDialogProps) {
   const cancelRef = useRef<HTMLButtonElement>(null)
 
@@ -42,6 +45,7 @@ export function ConfirmDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
         <Dialog.Content
+          onCloseAutoFocus={onCloseAutoFocus}
           onOpenAutoFocus={(event) => {
             // Opening a destructive question lands on the way out of it.
             event.preventDefault()

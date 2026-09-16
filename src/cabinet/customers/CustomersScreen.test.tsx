@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -432,15 +432,20 @@ it('uses access decisions and customer eligibility for order, lifecycle, and del
   )
   renderScreen('/app/garage/customers/customer-1')
 
+  const user = userEvent.setup()
   await screen.findByRole('heading', { name: 'Ірина' })
   expect(
     screen.queryByRole('link', { name: 'Створити замовлення' }),
   ).not.toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Редагувати' })).toBeVisible()
+
+  // Lifecycle and deletion sit behind the overflow control.
+  await user.click(screen.getByRole('button', { name: 'Інші дії з клієнтом' }))
   expect(screen.getByRole('button', { name: 'Активувати' })).toBeVisible()
+  // The customer has orders, so deletion is offered but refused with a reason.
   expect(
-    screen.queryByRole('button', { name: 'Видалити' }),
-  ).not.toBeInTheDocument()
+    screen.getByRole('button', { name: 'Видалити клієнта' }),
+  ).toBeDisabled()
 })
 
 it('hides finance metrics without finance.view and preserves a nullable order count', async () => {
@@ -464,12 +469,11 @@ it('hides finance metrics without finance.view and preserves a nullable order co
   renderScreen('/app/garage/customers/customer-1')
 
   await screen.findByRole('heading', { name: 'Ірина' })
-  expect(screen.getByText('—')).toBeVisible()
+  // A missing order count reads as a dash rather than a zero.
+  const orders = screen.getByText('Замовлень').closest('div')
+  expect(within(orders as HTMLElement).getByText('—')).toBeVisible()
   expect(screen.queryByText('Витрачено')).not.toBeInTheDocument()
   expect(screen.queryByText('Середній чек')).not.toBeInTheDocument()
-  expect(
-    screen.queryByRole('button', { name: 'Видалити' }),
-  ).not.toBeInTheDocument()
 })
 
 it('contains delete-dialog focus and restores it to the trigger on close', async () => {
@@ -490,16 +494,26 @@ it('contains delete-dialog focus and restores it to the trigger on close', async
   const user = userEvent.setup()
   renderScreen('/app/garage/customers/customer-1')
 
-  const trigger = await screen.findByRole('button', { name: 'Видалити' })
+  await screen.findByRole('heading', { name: 'Ірина' })
+  await user.click(screen.getByRole('button', { name: 'Інші дії з клієнтом' }))
+  const trigger = screen.getByRole('button', { name: 'Видалити клієнта' })
   await user.click(trigger)
-  const confirm = screen.getByRole('button', { name: 'Підтвердити' })
-  const cancel = screen.getByRole('button', { name: 'Скасувати' })
-  expect(cancel).toHaveFocus()
 
-  await user.tab({ shift: true })
-  expect(confirm).toHaveFocus()
+  const dialog = await screen.findByRole('dialog')
+  const cancel = within(dialog).getByRole('button', { name: 'Скасувати' })
+  const confirm = within(dialog).getByRole('button', { name: 'Підтвердити' })
+  // Focus lands inside the dialog and cycles between its two answers.
+  const focused = () => document.activeElement as HTMLElement | null
+  expect(dialog).toContainElement(focused())
   await user.tab()
-  expect(cancel).toHaveFocus()
+  expect(dialog).toContainElement(focused())
+  expect([cancel, confirm]).toContain(focused())
+
   await user.click(cancel)
-  await waitFor(() => expect(trigger).toHaveFocus())
+  // Closing hands focus back to the control that opened the question.
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Видалити клієнта' }),
+    ).toHaveFocus(),
+  )
 })

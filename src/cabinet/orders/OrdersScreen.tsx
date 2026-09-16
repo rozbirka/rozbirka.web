@@ -22,9 +22,9 @@ import {
   TextArea,
   TextInput,
   Toolbar,
-  type StatusTone,
 } from '@/components/app'
 import { normalizeApiProblem } from '@/api/errors'
+import { orderStatusPresentation } from './order-labels'
 import { cn, plural } from '@/lib/utils'
 import {
   customersApi,
@@ -77,16 +77,6 @@ const useOrderIdempotencyKeys = () => {
       keysRef.current.delete(operation)
     },
   }
-}
-
-const orderStatusPresentation = (
-  status: string,
-): { label: string; tone: StatusTone } => {
-  if (status === 'confirmed') return { label: 'Підтверджено', tone: 'ok' }
-  if (status === 'pending') return { label: 'Очікує', tone: 'warn' }
-  if (status === 'cancelled') return { label: 'Скасовано', tone: 'neutral' }
-  if (status === 'refunded') return { label: 'Повернено', tone: 'info' }
-  return { label: status, tone: 'neutral' }
 }
 
 /** One money figure as text: the digits stay bare so columns line up. */

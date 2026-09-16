@@ -1,15 +1,19 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
-} from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
-import { ChevronLeft, Copy, MessageSquare, Phone, Plus } from 'lucide-react'
+import {
+  ChevronLeft,
+  Copy,
+  MessageSquare,
+  Phone,
+  Plus,
+  ShoppingCart,
+  Trash2,
+} from 'lucide-react'
+import { cn, plural } from '@/lib/utils'
 import {
   Button,
-  Fact,
+  Card,
+  ConfirmDialog,
   DataTable,
   DeniedState,
   EmptyState,
@@ -39,6 +43,7 @@ import {
   type CustomerPhoneConflict,
 } from '@/api/customers'
 import { normalizeApiProblem } from '@/api/errors'
+import { orderStatusPresentation } from '../orders/order-labels'
 import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { useCabinet } from '../CabinetContext'
@@ -101,36 +106,6 @@ function canAccess(
   )
 }
 
-function useDialogFocus(open: boolean) {
-  const dialogRef = useRef<HTMLDivElement>(null)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const trigger = triggerRef.current
-    dialogRef.current
-      ?.querySelector<HTMLElement>('button:not([disabled])')
-      ?.focus()
-    return () => trigger?.focus()
-  }, [open])
-  const containFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'Tab') return
-    const controls = dialogRef.current?.querySelectorAll<HTMLElement>(
-      'button:not([disabled])',
-    )
-    if (!controls?.length) return
-    const first = controls[0]
-    const last = controls[controls.length - 1]
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault()
-      last?.focus()
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault()
-      first?.focus()
-    }
-  }
-  return { containFocus, dialogRef, triggerRef }
-}
-
 export function CustomersScreen({ definition }: CabinetModuleScreenProps) {
   const location = useLocation()
   const id = idFromPath(location.pathname)
@@ -144,6 +119,23 @@ export function CustomersScreen({ definition }: CabinetModuleScreenProps) {
     <CustomerDirectory definition={definition} />
   )
 }
+
+/** Dates arrive as ISO strings; anything unparsable is shown as it came. */
+const day = (value: string) => {
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime())
+    ? value
+    : new Intl.DateTimeFormat('uk-UA', { dateStyle: 'short' }).format(parsed)
+}
+
+/** Two initials for the avatar chip; a single word gives one. */
+const customerInitials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('') || '?'
 
 function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
@@ -274,7 +266,11 @@ function CustomerDetailScreen({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const { containFocus, dialogRef, triggerRef } = useDialogFocus(confirmDelete)
+  const [menuOpen, setMenuOpen] = useState(false)
+  /** Where focus goes when the delete question is answered or dismissed. */
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null)
+  const [copied, setCopied] = useState(false)
+  const [notes, setNotes] = useState('')
   const navigate = useNavigate()
   useEffect(() => {
     if (!ordersViewAllowed) return
@@ -284,6 +280,7 @@ function CustomerDetailScreen({
       .then((result) => {
         if (!controller.signal.aborted) {
           setCustomer(result)
+          setNotes(result.notes ?? '')
           setError(null)
         }
       })
@@ -307,6 +304,34 @@ function CustomerDetailScreen({
               signal: scope.signal,
             }),
       )
+      setError(null)
+    } catch {
+      setError(loadError)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const copyPhone = async (phone: string) => {
+    try {
+      await navigator.clipboard.writeText(phone)
+      setCopied(true)
+    } catch {
+      setError('Не вдалося скопіювати телефон.')
+    }
+  }
+  const saveNotes = async () => {
+    if (!customer || busy || !mutationsAllowed) return
+    setBusy(true)
+    try {
+      const scope = requireLatestMutation({ quota: false })
+      requireLatestMutation({ permission: 'orders.view', quota: false })
+      const saved = await customersApi.update(
+        customer.id,
+        { notes: notes.trim() || null },
+        { signal: scope.signal },
+      )
+      setCustomer({ ...customer, notes: saved.customer.notes })
+      setNotes(saved.customer.notes ?? '')
       setError(null)
     } catch {
       setError(loadError)
@@ -354,165 +379,390 @@ function CustomerDetailScreen({
       </PageBody>
     )
   const orderPath = `/app/${cabinet.targetTenant?.slug ?? ''}/orders/new?customerId=${encodeURIComponent(customer.id)}`
+  const orderHref = (orderId: string) =>
+    `/app/${cabinet.targetTenant?.slug ?? ''}/orders/${orderId}`
+  const money = (value: number | null) =>
+    value === null ? '—' : `${new Intl.NumberFormat('uk-UA').format(value)} $`
+
   return (
-    <PageBody>
-      <PageHeader
-        actions={
-          <StatusPill tone={customer.isActive ? 'ok' : 'neutral'}>
-            {customer.isActive ? 'Активний' : 'Неактивний'}
-          </StatusPill>
-        }
-        eyebrow="Продажі · Клієнти"
-        title={customer.name}
-      />
-      <dl className="grid gap-3 sm:grid-cols-3">
-        <Fact label="Замовлень">
-          {customer.ordersCount === null ? '—' : String(customer.ordersCount)}
-        </Fact>
-        {financeViewAllowed && (
-          <>
-            <Fact label="Витрачено">{String(customer.totalAmount ?? '—')}</Fact>
-            <Fact label="Середній чек">
-              {String(customer.averageAmount ?? '—')}
-            </Fact>
-          </>
-        )}
-      </dl>
-      <Panel className="flex flex-wrap items-center gap-2">
-        {customer.phone && (
-          <>
-            <span className="text-app-muted mr-1 font-mono text-sm">
-              {customer.phone}
+    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+        <div className="flex min-w-0 items-center gap-5">
+          <Link
+            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+            to=".."
+          >
+            <ChevronLeft aria-hidden className="size-3.5" />
+            До клієнтів
+          </Link>
+          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+            <span>Продажі</span>
+            <span aria-hidden className="text-white/20">
+              /
             </span>
-            <Button asChild>
-              <a href={`tel:${customer.phone}`} aria-label="Зателефонувати">
-                <Phone aria-hidden />
-                Зателефонувати
-              </a>
-            </Button>
-            <Button asChild>
-              <a href={`sms:${customer.phone}`} aria-label="SMS">
-                <MessageSquare aria-hidden />
-                SMS
-              </a>
-            </Button>
-            <Button
-              onClick={() =>
-                void navigator.clipboard.writeText(customer.phone!)
-              }
-            >
-              <Copy aria-hidden />
-              Копіювати телефон
-            </Button>
-          </>
-        )}
-        {orderCreateAllowed && customer.isActive && (
-          <Button asChild variant="primary">
-            <Link to={orderPath}>Створити замовлення</Link>
-          </Button>
-        )}
-        {mutationsAllowed && (
-          <>
-            <Button asChild>
+            <span className="text-app-muted">Клієнти</span>
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          {mutationsAllowed ? (
+            <Button asChild className="px-[18px] text-sm font-semibold">
               <Link to="edit">Редагувати</Link>
             </Button>
+          ) : null}
+          {orderCreateAllowed && customer.isActive ? (
+            <Button
+              asChild
+              className="px-5 text-sm font-bold"
+              variant="primary"
+            >
+              <Link to={orderPath}>Створити замовлення</Link>
+            </Button>
+          ) : null}
+          {mutationsAllowed ? (
+            <Button
+              aria-expanded={menuOpen}
+              aria-label="Інші дії з клієнтом"
+              className="min-w-11 px-0 text-base font-bold tracking-[0.1em]"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <span aria-hidden>···</span>
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+        {error ? <Notice tone="danger">{error}</Notice> : null}
+        {copied ? <Notice tone="ok">Телефон скопійовано.</Notice> : null}
+
+        <div className="flex flex-wrap items-start gap-x-6 gap-y-5">
+          <span
+            aria-hidden
+            className="bg-brand/15 text-brand flex size-16 shrink-0 items-center justify-center rounded-full text-[22px] font-bold"
+          >
+            {customerInitials(customer.name)}
+          </span>
+          <div className="min-w-0 flex-[1_1_18rem]">
+            <div className="flex flex-wrap items-center gap-3.5">
+              <h1 className="text-[32px] leading-[1.05] font-extrabold tracking-[-0.03em] text-white sm:text-[40px]">
+                {customer.name}
+              </h1>
+              <StatusPill tone={customer.isActive ? 'ok' : 'neutral'}>
+                {customer.isActive ? 'Активний' : 'Неактивний'}
+              </StatusPill>
+            </div>
+            {customer.phone === null ? (
+              <p className="text-app-muted mt-3 text-[15px]">
+                Телефон не записаний.
+              </p>
+            ) : (
+              <div className="mt-3 flex flex-wrap items-center gap-2.5">
+                <span className="text-app-ink font-mono text-[15px]">
+                  {customer.phone}
+                </span>
+                <Button
+                  className="min-h-9 px-3 text-[12px] font-bold"
+                  onClick={() => void copyPhone(customer.phone ?? '')}
+                >
+                  <Copy aria-hidden />
+                  Копіювати телефон
+                </Button>
+                <Button asChild className="min-h-9 px-3 text-[12px] font-bold">
+                  <a href={`tel:${customer.phone}`}>
+                    <Phone aria-hidden />
+                    Зателефонувати
+                  </a>
+                </Button>
+                <Button asChild className="min-h-9 px-3 text-[12px] font-bold">
+                  <a href={`sms:${customer.phone}`}>
+                    <MessageSquare aria-hidden />
+                    SMS
+                  </a>
+                </Button>
+              </div>
+            )}
+          </div>
+          <dl className="border-app-line bg-app-raised ml-auto grid grid-cols-2 gap-x-7 gap-y-4 rounded-[16px] border px-6 py-4.5 sm:grid-cols-3">
+            <div>
+              <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+                Замовлень
+              </dt>
+              <dd
+                className={cn(
+                  'mt-2 text-[28px] leading-none font-bold tracking-[-0.02em] tabular-nums',
+                  (customer.ordersCount ?? 0) > 0
+                    ? 'text-white'
+                    : 'text-app-dim',
+                )}
+              >
+                {customer.ordersCount === null
+                  ? '—'
+                  : String(customer.ordersCount)}
+              </dd>
+            </div>
+            {financeViewAllowed ? (
+              <>
+                <div>
+                  <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+                    Витрачено
+                  </dt>
+                  <dd
+                    className={cn(
+                      'mt-2 text-[28px] leading-none font-bold tracking-[-0.02em] tabular-nums',
+                      (customer.totalAmount ?? 0) > 0
+                        ? 'text-white'
+                        : 'text-app-dim',
+                    )}
+                  >
+                    {money(customer.totalAmount)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+                    Середній чек
+                  </dt>
+                  <dd
+                    className={cn(
+                      'mt-2 text-[28px] leading-none font-bold tracking-[-0.02em] tabular-nums',
+                      (customer.averageAmount ?? 0) > 0
+                        ? 'text-white'
+                        : 'text-app-dim',
+                    )}
+                  >
+                    {money(customer.averageAmount)}
+                  </dd>
+                </div>
+              </>
+            ) : null}
+          </dl>
+        </div>
+
+        {menuOpen && mutationsAllowed ? (
+          <div className="border-app-line bg-app-raised flex flex-wrap items-center gap-3 rounded-[14px] border px-4 py-3">
             <Button disabled={busy} onClick={() => void updateLifecycle()}>
               {customer.isActive ? 'Деактивувати' : 'Активувати'}
             </Button>
-            {customer.ordersCount === 0 && (
-              <Button
-                disabled={busy}
-                onClick={() => setConfirmDelete(true)}
-                ref={triggerRef}
-                variant="danger"
-              >
-                Видалити
-              </Button>
-            )}
-          </>
-        )}
-      </Panel>
-      {confirmDelete && (
-        <div
-          ref={dialogRef}
-          role="alertdialog"
-          aria-modal="true"
-          aria-labelledby="customer-delete-title"
-          aria-describedby="customer-delete-description"
-          className="bg-app-overlay border-app-line-2 rounded-sheet grid gap-3 border p-5"
-          onKeyDown={containFocus}
-        >
-          <h2
-            className="text-lg font-semibold text-white"
-            id="customer-delete-title"
-          >
-            Підтвердити видалення
-          </h2>
-          <p
-            className="text-app-muted text-sm"
-            id="customer-delete-description"
-          >
-            Картка клієнта та його контакти зникнуть назавжди. Замовлень у нього
-            немає, тож історія продажів не постраждає.
-          </p>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button onClick={() => setConfirmDelete(false)} disabled={busy}>
-              Скасувати
-            </Button>
             <Button
-              onClick={() => void remove()}
-              disabled={busy}
+              disabled={busy || customer.ordersCount !== 0}
+              onClick={() => setConfirmDelete(true)}
+              ref={deleteTriggerRef}
+              title={
+                customer.ordersCount === 0
+                  ? undefined
+                  : 'Клієнта із замовленнями видалити не можна'
+              }
               variant="danger"
             >
-              Підтвердити
+              <Trash2 aria-hidden />
+              Видалити клієнта
             </Button>
+            <p className="text-app-muted text-[13px]">
+              {customer.ordersCount === 0
+                ? 'Видалення не можна скасувати.'
+                : 'Клієнта із замовленнями можна лише деактивувати.'}
+            </p>
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap items-start gap-6">
+          <Card
+            aside={
+              <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
+                {customer.orders.length}{' '}
+                {plural(customer.orders.length, [
+                  'замовлення',
+                  'замовлення',
+                  'замовлень',
+                ])}
+              </span>
+            }
+            bodyClassName="p-0"
+            className="min-w-0 flex-[2_1_34rem]"
+            title="Історія замовлень"
+          >
+            {customer.orders.length === 0 ? (
+              <div className="border-app-line flex flex-col items-center gap-3 border-t px-6 pt-14 pb-15 text-center">
+                <span
+                  aria-hidden
+                  className="bg-brand-soft text-brand flex size-13 items-center justify-center rounded-[15px]"
+                >
+                  <ShoppingCart className="size-6" />
+                </span>
+                <p className="text-[17px] font-bold text-white">
+                  Замовлень ще не було
+                </p>
+                <p className="text-app-muted max-w-[21rem] text-[14px] leading-[1.5] text-pretty">
+                  Щойно клієнт зробить перше замовлення, воно зʼявиться тут.
+                </p>
+                {orderCreateAllowed && customer.isActive ? (
+                  <Button
+                    asChild
+                    className="mt-1.5 px-5 text-sm font-bold"
+                    variant="primary"
+                  >
+                    <Link to={orderPath}>Створити замовлення</Link>
+                  </Button>
+                ) : null}
+              </div>
+            ) : (
+              <ul className="grid">
+                {customer.orders.map((order) => (
+                  <li
+                    className="border-app-line border-t first:border-t-0"
+                    key={order.id}
+                  >
+                    <Link
+                      className="grid items-center gap-x-4 gap-y-1 px-6 py-4 hover:bg-white/[0.03] sm:grid-cols-[minmax(0,1fr)_auto]"
+                      to={orderHref(order.id)}
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-[15px] font-bold text-white">
+                          #{order.number}
+                        </span>
+                        <span className="text-app-muted mt-0.5 block truncate text-[13px]">
+                          {[
+                            day(order.createdAt),
+                            orderStatusPresentation(order.status).label,
+                            order.partNames.join(', ') || null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      </span>
+                      <span className="font-mono text-[15px] whitespace-nowrap text-white tabular-nums">
+                        {order.totalAmount === null
+                          ? '—'
+                          : `${new Intl.NumberFormat('uk-UA').format(order.totalAmount)} ${order.currency ?? ''}`.trim()}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          <div className="flex min-w-0 flex-[1_1_18rem] flex-col gap-5">
+            <Card title="Деталі">
+              <dl className="grid grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-3.5">
+                <dt className="text-app-muted text-[14px] font-semibold">
+                  Телефон
+                </dt>
+                <dd
+                  className={cn(
+                    'font-mono text-[14px]',
+                    customer.phone === null ? 'text-app-dim' : 'text-app-ink',
+                  )}
+                >
+                  {customer.phone ?? '—'}
+                </dd>
+                <dt
+                  className="text-app-muted text-[14px] font-semibold"
+                  title="Сервер не зберігає, звідки прийшов клієнт"
+                >
+                  Канал
+                </dt>
+                <dd className="text-app-dim text-[14px] font-semibold">—</dd>
+                <dt className="text-app-muted text-[14px] font-semibold">
+                  Клієнт з
+                </dt>
+                <dd className="text-app-ink text-[14px] font-semibold">
+                  {day(customer.createdAt)}
+                </dd>
+                <dt className="text-app-muted text-[14px] font-semibold">
+                  Перша покупка
+                </dt>
+                <dd
+                  className={cn(
+                    'text-[14px] font-semibold',
+                    customer.firstOrderAt === null
+                      ? 'text-app-dim'
+                      : 'text-app-ink',
+                  )}
+                >
+                  {customer.firstOrderAt === null
+                    ? '—'
+                    : day(customer.firstOrderAt)}
+                </dd>
+                <dt className="text-app-muted text-[14px] font-semibold">
+                  Остання покупка
+                </dt>
+                <dd
+                  className={cn(
+                    'text-[14px] font-semibold',
+                    customer.lastOrderAt === null
+                      ? 'text-app-dim'
+                      : 'text-app-ink',
+                  )}
+                >
+                  {customer.lastOrderAt === null
+                    ? '—'
+                    : day(customer.lastOrderAt)}
+                </dd>
+              </dl>
+            </Card>
+
+            <Card title="Нотатки">
+              {mutationsAllowed ? (
+                <>
+                  <Field label="Нотатки про клієнта" srLabel={customer.name}>
+                    <TextArea
+                      disabled={busy}
+                      onChange={(event) => setNotes(event.target.value)}
+                      placeholder="Домовленості, побажання, що шукає клієнт"
+                      rows={4}
+                      value={notes}
+                    />
+                  </Field>
+                  {notes.trim() === (customer.notes ?? '') ? null : (
+                    <div className="mt-3 flex flex-wrap items-center justify-end gap-2.5">
+                      <Button
+                        disabled={busy}
+                        onClick={() => setNotes(customer.notes ?? '')}
+                      >
+                        Скасувати
+                      </Button>
+                      <Button
+                        aria-busy={busy}
+                        disabled={busy}
+                        onClick={() => void saveNotes()}
+                        variant="primary"
+                      >
+                        Зберегти нотатки
+                      </Button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p
+                  className={cn(
+                    'text-[14px] leading-[1.6] whitespace-pre-wrap',
+                    customer.notes === null ? 'text-app-dim' : 'text-app-muted',
+                  )}
+                >
+                  {customer.notes ?? 'Нотаток ще немає.'}
+                </p>
+              )}
+            </Card>
           </div>
         </div>
-      )}
-      <section className="grid gap-2">
-        <h2 className="text-base font-semibold text-white">
-          Історія замовлень
-        </h2>
-        <DataTable
-          caption="Історія замовлень клієнта"
-          columns={[
-            {
-              key: 'number',
-              label: 'Замовлення',
-              variant: 'primary',
-              cell: (order) => (
-                <Link
-                  className="hover:text-brand block"
-                  to={`/app/${cabinet.targetTenant?.slug ?? ''}/orders/${order.id}`}
-                >
-                  #{order.number}
-                </Link>
-              ),
-            },
-            {
-              key: 'status',
-              label: 'Статус',
-              cell: (order) => order.status,
-            },
-            {
-              key: 'total',
-              label: 'Сума',
-              align: 'end',
-              cell: (order) =>
-                `${String(order.totalAmount ?? '—')} ${order.currency ?? ''}`.trim(),
-            },
-          ]}
-          empty={
-            <EmptyState
-              description="Щойно клієнт зробить перше замовлення, воно зʼявиться тут."
-              title="Замовлень ще не було"
-            />
-          }
-          rowKey={(order) => order.id}
-          rows={customer.orders}
-        />
-      </section>
-    </PageBody>
+      </div>
+
+      <ConfirmDialog
+        confirmLabel="Підтвердити"
+        consequence="Картка клієнта та його контакти зникнуть назавжди. Замовлень у нього немає, тож історія продажів не постраждає."
+        destructive
+        onCloseAutoFocus={(event) => {
+          // The overflow row may have re-rendered; put focus back by hand.
+          event.preventDefault()
+          deleteTriggerRef.current?.focus()
+        }}
+        onConfirm={() => void remove()}
+        onOpenChange={setConfirmDelete}
+        open={confirmDelete}
+        pending={busy}
+        title="Підтвердити видалення"
+      />
+    </div>
   )
 }
 
