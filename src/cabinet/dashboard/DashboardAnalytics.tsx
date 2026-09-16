@@ -46,11 +46,11 @@ export function DashboardAnalytics({
 }: DashboardAnalyticsProps) {
   return (
     <section aria-label="Аналітика" className="dashboard-analytics">
-      <header className="dashboard-section-heading">
-        <h2>Аналітика</h2>
-        <span className="dashboard-section-rule" />
-      </header>
-      <div className="dashboard-analytics-toolbar">
+      <header className="dashboard-analytics-header">
+        <div className="dashboard-section-heading">
+          <h2>Аналітика</h2>
+          <span className="dashboard-section-rule" />
+        </div>
         <p>{comparisonLabels[period]}</p>
         {showPeriodSwitch ? (
           <DashboardPeriodSwitch
@@ -58,7 +58,7 @@ export function DashboardAnalytics({
             period={period}
           />
         ) : null}
-      </div>
+      </header>
       {loadable.status === 'ready' ? (
         <AnalyticsContent data={loadable.data} partsPath={partsPath} />
       ) : null}
@@ -136,6 +136,7 @@ function AnalyticsContent({
         delta={data.partsSold.delta}
         labels={data.labels}
         series={data.partsSold.series}
+        tone="blue"
         title="Продано запчастин"
         total={data.partsSold.total}
         unit="шт"
@@ -144,6 +145,7 @@ function AnalyticsContent({
         delta={data.activeOrders.delta}
         labels={data.labels}
         series={data.activeOrders.series}
+        tone="yellow"
         title="Активні замовлення"
         total={data.activeOrders.total}
       />
@@ -161,7 +163,11 @@ function AnalyticsContent({
 function RevenueCard({ data }: { data: DashboardAnalyticsData }) {
   const totals = Object.entries(data.revenue.totals)
   return (
-    <article aria-label="Виручка" className="dashboard-analytics-card">
+    <article
+      aria-label="Виручка"
+      className="dashboard-analytics-card"
+      data-tone="green"
+    >
       <CardHeader delta={data.revenue.trendPercent} title="Виручка" />
       <div className="dashboard-analytics-values">
         {totals.length === 0 ? (
@@ -181,6 +187,7 @@ function CounterCard({
   delta,
   labels,
   series,
+  tone,
   title,
   total,
   unit,
@@ -188,12 +195,17 @@ function CounterCard({
   delta: number
   labels: string[]
   series: number[]
+  tone: 'blue' | 'yellow'
   title: string
   total: number
   unit?: string
 }) {
   return (
-    <article aria-label={title} className="dashboard-analytics-card">
+    <article
+      aria-label={title}
+      className="dashboard-analytics-card"
+      data-tone={tone}
+    >
       <CardHeader delta={delta} title={title} />
       <div className="dashboard-analytics-total">
         <strong>{numberFormatter.format(total)}</strong>
@@ -238,6 +250,7 @@ function TopPart({
     <article
       aria-label="Найкраща запчастина"
       className="dashboard-analytics-card dashboard-top-part"
+      data-tone="orange"
     >
       <header>
         <h3>Найкраща запчастина</h3>

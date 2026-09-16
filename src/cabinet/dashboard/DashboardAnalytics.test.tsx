@@ -106,7 +106,14 @@ it('moves focus across the period group with arrow keys without selecting', asyn
 it('renders the three design cards with symbols, comparison copy, and line charts', () => {
   renderAnalytics()
 
-  expect(screen.getByText('порівняння з минулим тижнем')).toBeInTheDocument()
+  const analyticsHeading = screen.getByRole('heading', { name: 'Аналітика' })
+  const analyticsHeader = analyticsHeading.closest('header')
+  expect(analyticsHeader).toContainElement(
+    screen.getByText('порівняння з минулим тижнем'),
+  )
+  expect(analyticsHeader).toContainElement(
+    screen.getByRole('group', { name: 'Період аналітики' }),
+  )
   expect(screen.getByRole('article', { name: 'Виручка' })).toHaveTextContent(
     '12 500 ₴',
   )
@@ -119,6 +126,19 @@ it('renders the three design cards with symbols, comparison copy, and line chart
   expect(
     screen.getByRole('article', { name: 'Активні замовлення' }),
   ).toBeInTheDocument()
+  expect(screen.getByRole('article', { name: 'Виручка' })).toHaveAttribute(
+    'data-tone',
+    'green',
+  )
+  expect(
+    screen.getByRole('article', { name: 'Продано запчастин' }),
+  ).toHaveAttribute('data-tone', 'blue')
+  expect(
+    screen.getByRole('article', { name: 'Активні замовлення' }),
+  ).toHaveAttribute('data-tone', 'yellow')
+  expect(
+    screen.getByRole('article', { name: 'Найкраща запчастина' }),
+  ).toHaveAttribute('data-tone', 'orange')
   expect(screen.getByText('+12,5%')).toHaveClass('text-state-ok')
   expect(screen.getByText('24')).toBeInTheDocument()
   expect(screen.getByText('−3%')).toHaveClass('text-state-danger')
