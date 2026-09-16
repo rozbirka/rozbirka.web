@@ -14,9 +14,7 @@ import {
   Button,
   Card,
   ConfirmDialog,
-  DataTable,
   DeniedState,
-  EmptyState,
   ErrorState,
   Field,
   Notice,
@@ -28,11 +26,9 @@ import {
   SearchInput,
   SectionPanel,
   SkeletonRows,
-  StatStrip,
   StatusPill,
   TextArea,
   TextInput,
-  Toolbar,
   useOperation,
 } from '@/components/app'
 import {
@@ -137,9 +133,46 @@ const customerInitials = (name: string) =>
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('') || '?'
 
+/** How a customer is grouped by how often they buy. */
+const CUSTOMER_SEGMENTS = [
+  { value: 'all' as const, label: 'Усі' },
+  { value: 'regular' as const, label: 'Постійні' },
+  { value: 'once' as const, label: 'Разові' },
+  { value: 'none' as const, label: 'Без покупок' },
+]
+
+type CustomerSegment = (typeof CUSTOMER_SEGMENTS)[number]['value']
+
+/** From how many orders a customer counts as a regular. */
+const REGULAR_FROM = 3
+
+const segmentOf = (ordersCount: number): CustomerSegment =>
+  ordersCount >= REGULAR_FROM ? 'regular' : ordersCount > 0 ? 'once' : 'none'
+
+const segmentTag = (ordersCount: number) =>
+  ({
+    all: 'клієнт',
+    regular: 'постійний',
+    once: 'разовий',
+    none: 'без покупок',
+  })[segmentOf(ordersCount)]
+
+const CUSTOMER_SORTS = [
+  { value: 'sum' as const, label: 'Сумою' },
+  { value: 'name' as const, label: 'Іменем' },
+]
+
+type CustomerSort = (typeof CUSTOMER_SORTS)[number]['value']
+
 function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
   const mutationsAllowed = canAccess(definition, cabinet, 'mutation')
+  const financeViewAllowed = canAccess(
+    definition,
+    cabinet,
+    'view',
+    'finance.view',
+  )
   const [params, setParams] = useSearchParams()
   const q = params.get('q') ?? ''
   const page = Number(params.get('page') ?? 1) || 1
@@ -147,6 +180,8 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [segment, setSegment] = useState<CustomerSegment>('all')
+  const [sort, setSort] = useState<CustomerSort>('sum')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -164,79 +199,291 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
     return () => controller.abort()
   }, [page, q])
 
+  const counts: Record<CustomerSegment, number> = {
+    all: customers.length,
+    regular: 0,
+    once: 0,
+    none: 0,
+  }
+  for (const customer of customers) counts[segmentOf(customer.ordersCount)] += 1
+  const rows = customers
+    .filter(
+      (customer) =>
+        segment === 'all' || segmentOf(customer.ordersCount) === segment,
+    )
+    .sort((left, right) =>
+      sort === 'name'
+        ? left.name.localeCompare(right.name, 'uk')
+        : (right.totalAmount ?? 0) - (left.totalAmount ?? 0),
+    )
+  const filtered = q !== '' || segment !== 'all'
+
   return (
-    <PageBody>
-      <PageHeader
-        actions={
-          mutationsAllowed ? (
-            <Button asChild variant="primary">
+    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+      <div className="grid w-full gap-4 px-4 pt-10 pb-16 sm:px-6 md:px-8 lg:px-12">
+        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
+          <div className="min-w-0">
+            <p className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
+              Продажі
+            </p>
+            <h1 className="mt-2.5 text-[38px] leading-none font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+              Клієнти
+            </h1>
+          </div>
+          {mutationsAllowed ? (
+            <Button
+              asChild
+              className="min-h-11 px-5.5 text-[15px] font-bold"
+              variant="primary"
+            >
               <Link to="new">
                 <Plus aria-hidden />
                 Новий клієнт
               </Link>
             </Button>
-          ) : undefined
-        }
-        eyebrow="Продажі"
-        title="Клієнти"
-      />
-      <Toolbar>
-        <Field className="min-w-52 flex-1" label="Пошук">
+          ) : null}
+        </div>
+
+        <div className="mt-2.5">
           <SearchInput
+            aria-label="Пошук клієнта"
+            className="min-h-12.5 text-[15px]"
             onChange={(event) =>
               setParams(
                 event.target.value ? { q: event.target.value, page: '1' } : {},
               )
             }
-            placeholder="Ім’я або телефон"
+            placeholder="Імʼя або телефон"
             value={q}
           />
-        </Field>
-      </Toolbar>
-      {error && <Notice tone="danger">{error}</Notice>}
-      <StatStrip items={[{ label: 'знайдено', value: total }]} />
-      <DataTable
-        caption="Список клієнтів"
-        columns={[
-          {
-            key: 'name',
-            label: 'Клієнт',
-            variant: 'primary',
-            cell: (customer) => (
-              <Link className="hover:text-brand block" to={customer.id}>
-                {customer.name}
-              </Link>
-            ),
-          },
-          {
-            key: 'orders',
-            label: 'Замовлень',
-            align: 'end',
-            cell: (customer) => customer.ordersCount,
-          },
-        ]}
-        empty={
-          <EmptyState
-            description="Клієнти з’являються після першого замовлення або коли ви додасте їх самі."
-            title="Клієнтів поки немає"
-          />
-        }
-        footer={
-          <Pagination
-            label="Сторінки клієнтів"
-            onPage={(nextPage) => {
-              const next = new URLSearchParams(params)
-              next.set('page', String(nextPage))
-              setParams(next)
-            }}
-            page={page}
-            totalPages={Math.max(totalPages, 1)}
-          />
-        }
-        rowKey={(customer) => customer.id}
-        rows={customers}
-      />
-    </PageBody>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
+          <div
+            aria-label="Сегмент клієнтів"
+            className="border-app-line bg-app-raised flex flex-wrap gap-[3px] rounded-xl border p-[3px]"
+            role="radiogroup"
+          >
+            {CUSTOMER_SEGMENTS.map((option) => {
+              const active = option.value === segment
+              return (
+                <button
+                  aria-checked={active}
+                  className={cn(
+                    'focus-visible:outline-brand flex min-h-11 cursor-pointer items-center gap-2 rounded-[9px] px-3.5 text-[14px] font-semibold',
+                    active
+                      ? 'text-app-ink bg-white/[0.09]'
+                      : 'text-app-muted hover:bg-white/[0.05]',
+                  )}
+                  key={option.value}
+                  onClick={() => setSegment(option.value)}
+                  role="radio"
+                  type="button"
+                >
+                  {option.label}{' '}
+                  <span className="text-app-muted font-mono text-[12px] font-medium">
+                    {counts[option.value]}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex items-center gap-2.5">
+            <span
+              className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase"
+              id="customer-sort-label"
+            >
+              Сортувати
+            </span>
+            <div
+              aria-labelledby="customer-sort-label"
+              className="border-app-line bg-app-raised flex gap-[3px] rounded-xl border p-[3px]"
+              role="radiogroup"
+            >
+              {CUSTOMER_SORTS.map((option) => {
+                const active = option.value === sort
+                return (
+                  <button
+                    aria-checked={active}
+                    className={cn(
+                      'focus-visible:outline-brand min-h-9 cursor-pointer rounded-lg px-3.5 text-[13px] font-semibold',
+                      active
+                        ? 'text-app-ink bg-white/[0.09]'
+                        : 'text-app-muted hover:bg-white/[0.05]',
+                    )}
+                    key={option.value}
+                    onClick={() => setSort(option.value)}
+                    role="radio"
+                    type="button"
+                  >
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {totalPages > 1 ? (
+          <p className="text-app-dim text-[13px]">
+            Сегмент і сортування застосовуються до завантаженої сторінки —
+            сервер не приймає їх у запиті. Знайдено {total}{' '}
+            {plural(total, ['клієнта', 'клієнти', 'клієнтів'])}.
+          </p>
+        ) : null}
+
+        {error === null ? null : <Notice tone="danger">{error}</Notice>}
+
+        <section
+          aria-label="Список клієнтів"
+          className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
+        >
+          <div
+            aria-hidden
+            className={cn(
+              'border-app-line text-app-dim hidden gap-4 border-b px-6 py-3.5 font-mono text-[10px] tracking-[0.14em] uppercase md:grid',
+              financeViewAllowed
+                ? 'md:grid-cols-[1.5fr_1fr_1fr_7rem_8rem]'
+                : 'md:grid-cols-[1.5fr_1fr_1fr_7rem]',
+            )}
+          >
+            <span>Клієнт</span>
+            <span>Телефон</span>
+            <span>Остання покупка</span>
+            <span className="text-right">Замовлень</span>
+            {financeViewAllowed ? (
+              <span className="text-right">Сума</span>
+            ) : null}
+          </div>
+
+          {rows.length === 0 ? (
+            <div className="flex flex-col items-center gap-3.5 px-6 py-14 text-center">
+              <p className="text-[16px] font-bold text-white">
+                {filtered ? 'Нічого не знайдено' : 'Клієнтів поки немає'}
+              </p>
+              <p className="text-app-muted text-[14px]">
+                {filtered
+                  ? 'Спробуйте змінити пошук або сегмент.'
+                  : 'Клієнти зʼявляються після першого замовлення або коли ви додасте їх самі.'}
+              </p>
+              {filtered ? (
+                <Button
+                  className="text-[13px] font-bold"
+                  onClick={() => {
+                    setSegment('all')
+                    setParams({})
+                  }}
+                >
+                  Скинути фільтри
+                </Button>
+              ) : null}
+            </div>
+          ) : (
+            <ul className="grid">
+              {rows.map((customer) => (
+                <li
+                  className="border-app-line border-b last:border-0"
+                  key={customer.id}
+                >
+                  <Link
+                    className={cn(
+                      'grid items-center gap-x-4 gap-y-1.5 px-6 py-3.5 hover:bg-white/[0.03]',
+                      financeViewAllowed
+                        ? 'md:grid-cols-[1.5fr_1fr_1fr_7rem_8rem]'
+                        : 'md:grid-cols-[1.5fr_1fr_1fr_7rem]',
+                    )}
+                    to={customer.id}
+                  >
+                    <span className="flex min-w-0 items-center gap-3.5">
+                      <span
+                        aria-hidden
+                        className="bg-brand/15 text-brand flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-bold"
+                      >
+                        {customerInitials(customer.name)}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[15px] font-semibold tracking-[-0.01em] text-white">
+                          {customer.name}
+                        </span>
+                        <span className="text-app-muted mt-0.5 block text-[12px]">
+                          {segmentTag(customer.ordersCount)}
+                        </span>
+                      </span>
+                    </span>
+                    <span
+                      className={cn(
+                        'font-mono text-[14px]',
+                        customer.phone === null
+                          ? 'text-app-dim'
+                          : 'text-app-ink',
+                      )}
+                    >
+                      {customer.phone ?? '—'}
+                    </span>
+                    <span
+                      className={cn(
+                        'text-[14px] font-medium',
+                        customer.lastOrderAt === null
+                          ? 'text-app-dim'
+                          : 'text-app-muted',
+                      )}
+                    >
+                      <span className="text-app-dim mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
+                        Остання покупка
+                      </span>
+                      {customer.lastOrderAt === null
+                        ? '—'
+                        : day(customer.lastOrderAt)}
+                    </span>
+                    <span
+                      className={cn(
+                        'font-mono text-[15px] tabular-nums md:text-right',
+                        customer.ordersCount > 0
+                          ? 'text-app-ink'
+                          : 'text-app-dim',
+                      )}
+                    >
+                      <span className="text-app-dim mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
+                        Замовлень
+                      </span>
+                      {customer.ordersCount}
+                    </span>
+                    {financeViewAllowed ? (
+                      <span
+                        className={cn(
+                          'text-[16px] font-bold tracking-[-0.01em] tabular-nums md:text-right',
+                          (customer.totalAmount ?? 0) > 0
+                            ? 'text-white'
+                            : 'text-app-dim',
+                        )}
+                      >
+                        {customer.totalAmount === null ||
+                        customer.totalAmount === 0
+                          ? '—'
+                          : `${new Intl.NumberFormat('uk-UA').format(customer.totalAmount)} $`}
+                      </span>
+                    ) : null}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="border-app-line border-t px-6 py-3.5">
+            <Pagination
+              label="Сторінки клієнтів"
+              onPage={(nextPage) => {
+                const next = new URLSearchParams(params)
+                next.set('page', String(nextPage))
+                setParams(next)
+              }}
+              page={page}
+              totalPages={Math.max(totalPages, 1)}
+            />
+          </div>
+        </section>
+      </div>
+    </div>
   )
 }
 

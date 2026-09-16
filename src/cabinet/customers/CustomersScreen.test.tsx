@@ -93,8 +93,8 @@ it('renders the server-returned directory result instead of deriving customer st
   renderScreen('/app/garage/customers?q=Ірина&page=1')
 
   expect(await screen.findByText('Ірина')).toBeVisible()
-  expect(screen.getByText('знайдено')).toBeVisible()
-  expect(screen.getByText('27')).toBeVisible()
+  // The server's own total is what the page reports, not the page's length.
+  expect(screen.getByText(/Знайдено 27 клієнтів/)).toBeVisible()
   expect(customerMocks.list).toHaveBeenCalledWith(
     { q: 'Ірина', page: 1 },
     expect.any(Object),
