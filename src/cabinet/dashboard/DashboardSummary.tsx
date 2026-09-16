@@ -126,29 +126,35 @@ function SummaryStrip({
             <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
               {label}
             </dt>
-            <dd
-              className={cn(
-                'mt-3.5 text-[30px] leading-none font-extrabold tracking-[-0.03em] tabular-nums',
-                tone === 'ok'
-                  ? 'text-state-ok'
-                  : tone === 'warn'
-                    ? 'text-state-warn'
-                    : 'text-white',
+            {/* The bar and the note live inside the value: a definition list
+                allows nothing but dt/dd pairs between its terms. */}
+            <dd className="mt-3.5">
+              <span
+                className={cn(
+                  'block text-[30px] leading-none font-extrabold tracking-[-0.03em] tabular-nums',
+                  tone === 'ok'
+                    ? 'text-state-ok'
+                    : tone === 'warn'
+                      ? 'text-state-warn'
+                      : 'text-white',
+                )}
+              >
+                {value}
+              </span>
+              {bar === undefined ? null : (
+                <span className="bg-app-line-2 mt-4 block h-1.5 overflow-hidden rounded-full">
+                  <span
+                    className="bg-state-ok block h-full rounded-full"
+                    style={{ width: `${String(bar.filled)}%` }}
+                  />
+                </span>
               )}
-            >
-              {value}
+              {meta === undefined ? null : (
+                <span className="text-app-dim mt-3 block text-[13px]">
+                  {meta}
+                </span>
+              )}
             </dd>
-            {bar === undefined ? null : (
-              <div className="bg-app-line-2 mt-4 h-1.5 overflow-hidden rounded-full">
-                <div
-                  className="bg-state-ok h-full rounded-full"
-                  style={{ width: `${String(bar.filled)}%` }}
-                />
-              </div>
-            )}
-            {meta === undefined ? null : (
-              <p className="text-app-dim mt-3 text-[13px]">{meta}</p>
-            )}
           </div>
         ))}
       </dl>

@@ -41,8 +41,14 @@ const summary = (overrides: Partial<DashboardData> = {}): DashboardData => ({
   ...overrides,
 })
 
+/**
+ * A figure sits in its own span inside the `<dd>`, so a value with no note
+ * under it matches both. Take the innermost — the one actually holding it.
+ */
 const getByExactText = (text: string) =>
-  screen.getByText((_content, element) => element?.textContent === text)
+  screen
+    .getAllByText((_content, element) => element?.textContent === text)
+    .at(-1)!
 
 it('renders common and owner totals in Ukrainian formats', () => {
   render(<DashboardSummary data={summary()} />)
