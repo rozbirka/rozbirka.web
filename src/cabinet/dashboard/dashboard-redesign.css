@@ -273,12 +273,25 @@
   text-transform: none;
 }
 
-.dashboard-metric[data-accent='success'] .dashboard-metric-value strong {
+.dashboard-metric[data-accent='success'] .dashboard-metric-value strong,
+.dashboard-metric[data-accent='success']
+  .dashboard-metric-value
+  .dashboard-metric-currency {
   color: var(--dashboard-green);
 }
 
-.dashboard-metric[data-accent='warning'] .dashboard-metric-value strong {
+.dashboard-metric[data-accent='warning'] .dashboard-metric-value strong,
+.dashboard-metric[data-accent='warning']
+  .dashboard-metric-value
+  .dashboard-metric-currency {
   color: var(--dashboard-yellow);
+}
+
+.dashboard-metric[data-accent='danger'] .dashboard-metric-value strong,
+.dashboard-metric[data-accent='danger']
+  .dashboard-metric-value
+  .dashboard-metric-currency {
+  color: var(--color-state-danger);
 }
 
 .dashboard-metric-caption {
