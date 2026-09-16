@@ -264,6 +264,7 @@
 }
 
 .dashboard-metric-value .dashboard-metric-currency {
+  color: var(--dashboard-text);
   font-family: inherit;
   font-size: clamp(26px, 2.7vw, 31px);
   font-weight: 800;
