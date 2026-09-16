@@ -13,6 +13,7 @@ import {
   MoreHorizontal,
   Plus,
   ScanLine,
+  X,
 } from 'lucide-react'
 import {
   Button,
@@ -221,6 +222,17 @@ export function IntakesScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
   const tenant = params.tenant ?? cabinet.targetTenant?.slug ?? ''
   const base = `/app/${tenant}/intakes`
   const intakeId = params.intakeId
+  if (location.pathname.endsWith('/parts/batch')) {
+    if (manageDecision.kind !== 'allowed')
+      return <Denied decision={manageDecision} />
+    if (partCreateDecision.kind !== 'allowed')
+      return <Denied decision={partCreateDecision} />
+    return intakeId ? (
+      <BatchPartsForm canManageFinance={financeManage} intakeId={intakeId} />
+    ) : (
+      <Denied decision={{ kind: 'permission-denied' }} />
+    )
+  }
   if (location.pathname.endsWith('/parts/new')) {
     if (manageDecision.kind !== 'allowed')
       return <Denied decision={manageDecision} />
@@ -232,10 +244,7 @@ export function IntakesScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
       <Denied decision={{ kind: 'permission-denied' }} />
     )
   }
-  if (
-    location.pathname.endsWith('/new') ||
-    location.pathname.endsWith('/batch')
-  ) {
+  if (location.pathname.endsWith('/new')) {
     if (createDecision.kind !== 'allowed')
       return <Denied decision={createDecision} />
     return (
@@ -688,12 +697,13 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                 )}
               </Button>
             ) : null}
-            <Button
-              disabled
-              title="Масове додавання позицій ще не підтримане — деталі додаються по одній"
-            >
-              Додати партією
-            </Button>
+            {partCreateDecision.kind === 'allowed' ? (
+              <Button asChild>
+                <Link to={`${base}/${intake.id}/parts/batch`}>
+                  Додати партією
+                </Link>
+              </Button>
+            ) : null}
             <Button
               disabled={busy}
               onClick={() => setConfirmDelete(true)}
@@ -2163,6 +2173,553 @@ function PartForm({
                 </ul>
               </Card>
             ) : null}
+          </aside>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+/** One line of the batch sheet, before it becomes a part. */
+interface BatchRow {
+  key: string
+  name: string
+  quantity: string
+  price: string
+  zoneId: string
+}
+
+let batchRowSeq = 0
+const emptyBatchRow = (): BatchRow => ({
+  key: `row-${String(++batchRowSeq)}`,
+  name: '',
+  quantity: '1',
+  price: '',
+  zoneId: '',
+})
+
+const batchNumber = (value: string) => {
+  const parsed = Number(value.replace(',', '.').replace(/[^\d.]/g, ''))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+/**
+ * A whole delivery typed as a sheet. The server takes one part per call, so the
+ * screen sends them in order and says how far it got — a row that fails leaves
+ * everything before it booked in, which is what a yard wants when the van is
+ * already unloaded.
+ */
+function BatchPartsForm({
+  intakeId,
+  canManageFinance,
+}: {
+  intakeId: string
+  canManageFinance: boolean
+}) {
+  const navigate = useNavigate()
+  const cabinet = useCabinet()
+  const params = useParams<{ tenant: string }>()
+  const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
+  const canPlace = allowedToView(cabinetModules.inventory, cabinet)
+  const [rows, setRows] = useState<BatchRow[]>(() => [
+    emptyBatchRow(),
+    emptyBatchRow(),
+    emptyBatchRow(),
+    emptyBatchRow(),
+  ])
+  const [condition, setCondition] = useState('good')
+  const [sharedZoneId, setSharedZoneId] = useState('')
+  const [intake, setIntake] = useState<Intake | null>(null)
+  const [zones, setZones] = useState<InventoryZone[]>([])
+  const [problem, setProblem] = useState<string | null>(null)
+  const [saved, setSaved] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const intakeMutation = useLatestMutationGuard(cabinetModules.intakes)
+  const partMutation = useLatestMutationGuard(cabinetModules.parts)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void intakesApi.get(intakeId, { signal: controller.signal }).then(
+      (next) => {
+        if (!controller.signal.aborted) setIntake(next)
+      },
+      () => undefined,
+    )
+    return () => controller.abort()
+  }, [intakeId])
+
+  useEffect(() => {
+    if (!canPlace) return
+    const controller = new AbortController()
+    void inventoryApi
+      .getZones({ activeOnly: true, signal: controller.signal })
+      .then(
+        (next) => {
+          if (!controller.signal.aborted) setZones(next)
+        },
+        () => {
+          // Without zones the positions are simply booked in without a cell.
+        },
+      )
+    return () => controller.abort()
+  }, [canPlace])
+
+  const update = (key: string, field: keyof BatchRow, value: string) =>
+    setRows((current) =>
+      current.map((row) =>
+        row.key === key ? { ...row, [field]: value } : row,
+      ),
+    )
+  const filled = rows.filter((row) => row.name.trim() !== '')
+  const units = filled.reduce(
+    (total, row) => total + batchNumber(row.quantity),
+    0,
+  )
+  const priceSum = filled.reduce(
+    (total, row) => total + batchNumber(row.quantity) * batchNumber(row.price),
+    0,
+  )
+  const withoutCell = filled.filter(
+    (row) => (row.zoneId || sharedZoneId) === '',
+  ).length
+  const withoutPrice = filled.filter(
+    (row) => batchNumber(row.price) === 0,
+  ).length
+  /** The batch price spread over what the intake will hold once this is booked. */
+  const unitCost =
+    intake && intake.totalCost !== null && intake.partsCount + filled.length > 0
+      ? intake.totalCost / (intake.partsCount + filled.length)
+      : null
+
+  const fillDown = () =>
+    setRows((current) => {
+      const source = current.find((row) => row.zoneId !== '')
+      if (!source) return current
+      return current.map((row) =>
+        row.name.trim() !== '' && row.zoneId === ''
+          ? { ...row, zoneId: source.zoneId }
+          : row,
+      )
+    })
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (busy || filled.length === 0) return
+    setProblem(null)
+    setSaved(0)
+    setBusy(true)
+    for (const [index, row] of filled.entries()) {
+      const zoneId = row.zoneId || sharedZoneId
+      const price = batchNumber(row.price)
+      const request: AddIntakePartRequest = {
+        name: row.name.trim(),
+        partType: null,
+        condition,
+        quantity: Math.max(1, Math.round(batchNumber(row.quantity)) || 1),
+        unit: 'шт',
+        notes: null,
+        photoKeys: [],
+        ...(zoneId ? { inventoryZoneIds: [zoneId] } : {}),
+      }
+      try {
+        const scope = intakeMutation.requireLatestMutation({ quota: false })
+        partMutation.requireLatestMutation({ permission: 'parts.view' })
+        const created = await intakesApi.addPart(intakeId, request, {
+          signal: scope.signal,
+        })
+        if (price > 0) {
+          const priceScope = partMutation.requireLatestMutation({
+            permission: 'parts.manage',
+            quota: false,
+          })
+          await partsApi.update(
+            created.id,
+            { desiredSalePrice: { isSet: true, value: price } },
+            { signal: priceScope.signal },
+          )
+        }
+        setSaved(index + 1)
+      } catch (error: unknown) {
+        setProblem(
+          `${normalizeApiProblem(error).message} Прийнято ${String(index)} з ${String(filled.length)} позицій — решта лишилася в таблиці.`,
+        )
+        setRows(filled.slice(index))
+        setBusy(false)
+        return
+      }
+    }
+    void navigate(`${base}/${intakeId}`)
+  }
+
+  const backTo = `${base}/${intakeId}`
+  const ready = filled.length > 0
+  const saveLabel = ready
+    ? `Прийняти ${String(filled.length)} ${plural(filled.length, ['позицію', 'позиції', 'позицій'])}`
+    : 'Прийняти партію'
+
+  return (
+    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+        <div className="flex min-w-0 items-center gap-5">
+          <Link
+            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+            to={backTo}
+          >
+            <ChevronLeft aria-hidden className="size-3.5" />
+            До приймання
+          </Link>
+          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+            <span>Приймання</span>
+            <span aria-hidden className="text-white/20">
+              /
+            </span>
+            <span className="text-app-muted">Партією</span>
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button
+            disabled
+            title="Чернетки партії поки не зберігаються — заповніть таблицю за один раз"
+          >
+            Зберегти чернетку
+          </Button>
+          <Button
+            aria-busy={busy}
+            className="px-5 text-sm font-bold"
+            disabled={busy || !ready}
+            form="batch-parts"
+            type="submit"
+            variant="primary"
+          >
+            {saveLabel}
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+        <div className="min-w-0">
+          <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+            Приймання партією
+          </h1>
+          <p className="text-app-muted mt-3 text-[15px]">
+            {[intake?.name, intake?.supplier].filter(Boolean).join(' · ')}
+            {intake ? ' · ' : null}
+            додавайте позиції рядками; собівартість розподілиться по всій
+            партії.
+          </p>
+        </div>
+
+        {problem ? <Notice tone="danger">{problem}</Notice> : null}
+
+        <form
+          aria-busy={busy}
+          className="flex flex-wrap items-start gap-6"
+          id="batch-parts"
+          onSubmit={(event) => void save(event)}
+        >
+          <div className="grid min-w-[360px] flex-[1_1_620px] gap-5">
+            <section
+              aria-label="Позиції партії"
+              className="border-app-line bg-app-raised overflow-hidden rounded-[18px] border"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-4 px-6 pt-[18px] pb-4">
+                <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
+                  Позиції партії
+                </h2>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
+                    {rows.length}{' '}
+                    {plural(rows.length, ['рядок', 'рядки', 'рядків'])}
+                  </span>
+                  {canPlace ? (
+                    <Button
+                      className="min-h-9 px-3 text-xs font-semibold"
+                      onClick={fillDown}
+                      type="button"
+                    >
+                      Заповнити комірку вниз
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+              <div
+                aria-hidden
+                className={cn(
+                  'border-app-line text-app-muted hidden gap-3 border-t border-b px-6 py-2.5 font-mono text-[10px] tracking-[0.12em] uppercase sm:grid',
+                  canPlace
+                    ? 'sm:grid-cols-[2.4fr_0.8fr_1fr_1.4fr_44px]'
+                    : 'sm:grid-cols-[2.4fr_0.8fr_1fr_44px]',
+                )}
+              >
+                <span>Назва</span>
+                <span className="text-right">К-сть</span>
+                <span className="text-right">Ціна, $</span>
+                {canPlace ? <span>Комірка</span> : null}
+                <span />
+              </div>
+              <ul className="divide-app-line border-app-line grid divide-y border-t sm:border-t-0">
+                {rows.map((row, index) => (
+                  <li
+                    className={cn(
+                      'grid items-center gap-3 px-6 py-2.5',
+                      canPlace
+                        ? 'sm:grid-cols-[2.4fr_0.8fr_1fr_1.4fr_44px]'
+                        : 'sm:grid-cols-[2.4fr_0.8fr_1fr_44px]',
+                    )}
+                    key={row.key}
+                  >
+                    <TextInput
+                      aria-label={`Назва позиції ${String(index + 1)}`}
+                      autoComplete="off"
+                      onChange={(event) =>
+                        update(row.key, 'name', event.target.value)
+                      }
+                      placeholder={`${String(index + 1)} · назва запчастини`}
+                      value={row.name}
+                    />
+                    <TextInput
+                      aria-label={`Кількість у рядку ${String(index + 1)}`}
+                      inputMode="numeric"
+                      numeric
+                      onChange={(event) =>
+                        update(row.key, 'quantity', event.target.value)
+                      }
+                      value={row.quantity}
+                    />
+                    <TextInput
+                      aria-label={`Ціна в рядку ${String(index + 1)}`}
+                      className="font-mono"
+                      inputMode="decimal"
+                      numeric
+                      onChange={(event) =>
+                        update(row.key, 'price', event.target.value)
+                      }
+                      placeholder="—"
+                      value={row.price}
+                    />
+                    {canPlace ? (
+                      <SelectInput
+                        aria-label={`Комірка в рядку ${String(index + 1)}`}
+                        onChange={(event) =>
+                          update(row.key, 'zoneId', event.target.value)
+                        }
+                        value={row.zoneId}
+                      >
+                        <option value="">
+                          {sharedZoneId === '' ? 'Без комірки' : 'Як у партії'}
+                        </option>
+                        {zones.map((zone) => (
+                          <option key={zone.id} value={zone.id}>
+                            {zone.code}
+                          </option>
+                        ))}
+                      </SelectInput>
+                    ) : null}
+                    <Button
+                      aria-label={`Прибрати рядок ${String(index + 1)}`}
+                      className="min-w-11 px-0"
+                      disabled={rows.length <= 1}
+                      onClick={() =>
+                        setRows((current) =>
+                          current.filter((item) => item.key !== row.key),
+                        )
+                      }
+                      type="button"
+                    >
+                      <X aria-hidden />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+              <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-4">
+                <Button
+                  onClick={() =>
+                    setRows((current) => [...current, emptyBatchRow()])
+                  }
+                  type="button"
+                >
+                  <Plus aria-hidden />
+                  Додати рядок
+                </Button>
+                <p className="text-app-dim text-[13px]">
+                  Порожні рядки не зберігаються
+                </p>
+              </div>
+            </section>
+
+            <Card title="Спільні властивості">
+              <p className="text-app-muted -mt-1 text-sm">
+                Застосуються до всіх позицій без власного значення.
+              </p>
+              <PillGroup
+                className="mt-4 w-fit"
+                label="Стан позицій партії"
+                onChange={setCondition}
+                options={INTAKE_CONDITIONS}
+                value={condition}
+              />
+              {canPlace && zones.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  <button
+                    aria-pressed={sharedZoneId === ''}
+                    className={cn(
+                      'focus-visible:outline-brand min-h-9 cursor-pointer rounded-full border px-3.5 text-[13px] font-semibold',
+                      sharedZoneId === ''
+                        ? 'border-app-line-2 bg-app-input text-white'
+                        : 'border-app-line text-app-muted hover:text-app-ink',
+                    )}
+                    onClick={() => setSharedZoneId('')}
+                    type="button"
+                  >
+                    Без комірки
+                  </button>
+                  {zones.map((zone) => (
+                    <button
+                      aria-pressed={sharedZoneId === zone.id}
+                      className={cn(
+                        'focus-visible:outline-brand min-h-9 cursor-pointer rounded-full border px-3.5 font-mono text-[13px] font-semibold',
+                        sharedZoneId === zone.id
+                          ? 'border-app-line-2 bg-app-input text-white'
+                          : 'border-app-line text-app-muted hover:text-app-ink',
+                      )}
+                      key={zone.id}
+                      onClick={() => setSharedZoneId(zone.id)}
+                      type="button"
+                    >
+                      {zone.code}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </Card>
+          </div>
+
+          <aside className="sticky top-24 grid min-w-[300px] flex-[0_1_320px] gap-5">
+            <Card title="Партія">
+              <dl className="grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
+                <dt className="text-app-muted text-sm font-semibold">
+                  Позицій
+                </dt>
+                <dd className="font-mono text-[15px] text-white tabular-nums">
+                  {filled.length}
+                </dd>
+                <dt className="text-app-muted text-sm font-semibold">
+                  Одиниць
+                </dt>
+                <dd className="font-mono text-[15px] text-white tabular-nums">
+                  {units} шт
+                </dd>
+                {canManageFinance ? (
+                  <>
+                    <dt className="text-app-muted text-sm font-semibold">
+                      Сума за цінами
+                    </dt>
+                    <dd
+                      className={cn(
+                        'font-mono text-[15px] tabular-nums',
+                        priceSum > 0 ? 'text-white' : 'text-app-dim',
+                      )}
+                    >
+                      {priceSum > 0 ? money(priceSum) : '—'}
+                    </dd>
+                    <div className="bg-app-line col-span-2 my-1 h-px" />
+                    <dt className="text-app-muted text-sm font-semibold">
+                      Собівартість партії
+                    </dt>
+                    <dd className="font-mono text-[15px] text-white tabular-nums">
+                      {intake?.totalCost === null ||
+                      intake?.totalCost === undefined
+                        ? '—'
+                        : money(intake.totalCost)}
+                    </dd>
+                    <dt className="text-[15px] font-bold text-white">
+                      На позицію
+                    </dt>
+                    <dd className="font-mono text-[19px] text-white tabular-nums">
+                      {unitCost === null ? '—' : money(unitCost)}
+                    </dd>
+                  </>
+                ) : null}
+              </dl>
+              <Button
+                aria-busy={busy}
+                className="mt-5 min-h-11 w-full text-sm font-bold"
+                disabled={busy || !ready}
+                type="submit"
+                variant="primary"
+              >
+                {saveLabel}
+              </Button>
+              <p className="text-app-dim mt-2.5 text-xs leading-[1.5]">
+                {busy
+                  ? `Прийнято ${String(saved)} з ${String(filled.length)} — не закривайте сторінку.`
+                  : ready
+                    ? 'Позиції отримають QR-коди й потраплять у це приймання.'
+                    : 'Заповніть хоча б одну назву, щоб прийняти партію.'}
+              </p>
+            </Card>
+
+            <Card title="Перевірка">
+              <ul className="grid gap-2.5">
+                {[
+                  {
+                    state: ready ? 'ok' : 'idle',
+                    label: ready
+                      ? `${String(filled.length)} ${plural(filled.length, ['позиція готова', 'позиції готові', 'позицій готові'])} до приймання`
+                      : 'Жодної заповненої позиції',
+                  },
+                  ...(canPlace
+                    ? [
+                        {
+                          state: withoutCell === 0 && ready ? 'ok' : 'warn',
+                          label:
+                            withoutCell === 0 && ready
+                              ? 'Усі позиції мають комірку'
+                              : `${String(withoutCell)} ${plural(withoutCell, ['позиція', 'позиції', 'позицій'])} без комірки — розмістите пізніше`,
+                        },
+                      ]
+                    : []),
+                  {
+                    state: withoutPrice === 0 && ready ? 'ok' : 'warn',
+                    label:
+                      withoutPrice === 0 && ready
+                        ? 'Ціни вказані'
+                        : `${String(withoutPrice)} ${plural(withoutPrice, ['позиція', 'позиції', 'позицій'])} без ціни`,
+                  },
+                ].map((check) => (
+                  <li
+                    className={cn(
+                      'flex items-start gap-2.5 text-[13px] leading-[1.45] font-semibold',
+                      check.state === 'ok'
+                        ? 'text-app-ink'
+                        : check.state === 'warn'
+                          ? 'text-state-warn'
+                          : 'text-app-dim',
+                    )}
+                    key={check.label}
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'mt-px grid size-4.5 shrink-0 place-items-center rounded-full text-[11px] font-extrabold',
+                        check.state === 'ok'
+                          ? 'bg-state-ok-soft text-state-ok'
+                          : check.state === 'warn'
+                            ? 'bg-state-warn-soft text-state-warn'
+                            : 'bg-white/[0.06]',
+                      )}
+                    >
+                      {check.state === 'ok' ? (
+                        <Check className="size-3" />
+                      ) : check.state === 'warn' ? (
+                        '!'
+                      ) : null}
+                    </span>
+                    {check.label}
+                  </li>
+                ))}
+              </ul>
+            </Card>
           </aside>
         </form>
       </div>

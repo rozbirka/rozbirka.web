@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { intakesApi } from '@/api/intakes'
 import { mediaApi } from '@/api/media'
+import { partsApi } from '@/api/parts'
 import type { PlanUsageDto } from '@/api/types'
 import { useCabinet } from '../CabinetContext'
 import { IntakesScreen } from './IntakesScreen'
@@ -19,6 +20,11 @@ vi.mock('@/api/intakes', () => ({
     update: vi.fn(),
     remove: vi.fn(),
     addPart: vi.fn(),
+  },
+}))
+vi.mock('@/api/parts', () => ({
+  partsApi: {
+    update: vi.fn(),
   },
 }))
 vi.mock('@/api/media', () => ({
@@ -776,4 +782,92 @@ it('locks intake edit submission, normalizes permission failure, and retains the
     'Редагування заборонено.',
   )
   expect(name).toHaveValue('Липнева партія')
+})
+
+it('books a batch sheet in one row at a time and prices the rows that carry one', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage', 'parts.view', 'parts.manage']),
+  )
+  vi.mocked(intakesApi.addPart)
+    .mockResolvedValueOnce({ id: 'part-a' } as never)
+    .mockResolvedValueOnce({ id: 'part-b' } as never)
+  vi.mocked(partsApi.update).mockResolvedValue({} as never)
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/batch']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId/parts/batch"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(
+    await screen.findByRole('heading', { name: 'Приймання партією' }),
+  ).toBeVisible()
+  await user.type(screen.getByLabelText('Назва позиції 1'), 'Фара права')
+  await user.type(screen.getByLabelText('Ціна в рядку 1'), '120')
+  await user.type(screen.getByLabelText('Назва позиції 2'), 'Бампер')
+  await user.click(saveButton('Прийняти 2 позиції'))
+
+  await waitFor(() => expect(intakesApi.addPart).toHaveBeenCalledTimes(2))
+  expect(intakesApi.addPart).toHaveBeenNthCalledWith(
+    1,
+    'intake-1',
+    expect.objectContaining({ name: 'Фара права', quantity: 1, unit: 'шт' }),
+    expect.objectContaining({
+      signal: expect.any(AbortSignal) as AbortSignal,
+    }),
+  )
+  expect(intakesApi.addPart).toHaveBeenNthCalledWith(
+    2,
+    'intake-1',
+    expect.objectContaining({ name: 'Бампер' }),
+    expect.objectContaining({
+      signal: expect.any(AbortSignal) as AbortSignal,
+    }),
+  )
+  // Only the priced row reaches the parts endpoint.
+  expect(partsApi.update).toHaveBeenCalledTimes(1)
+  expect(partsApi.update).toHaveBeenCalledWith(
+    'part-a',
+    { desiredSalePrice: { isSet: true, value: 120 } },
+    expect.objectContaining({
+      signal: expect.any(AbortSignal) as AbortSignal,
+    }),
+  )
+})
+
+it('keeps the unbooked rows in the sheet when a batch row fails', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage', 'parts.view', 'parts.manage']),
+  )
+  vi.mocked(intakesApi.addPart)
+    .mockResolvedValueOnce({ id: 'part-a' } as never)
+    .mockRejectedValueOnce({ kind: 'conflict', message: 'Ліміт вичерпано.' })
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/batch']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId/parts/batch"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(
+    await screen.findByRole('heading', { name: 'Приймання партією' }),
+  ).toBeVisible()
+  await user.type(screen.getByLabelText('Назва позиції 1'), 'Фара права')
+  await user.type(screen.getByLabelText('Назва позиції 2'), 'Бампер')
+  await user.click(saveButton('Прийняти 2 позиції'))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Прийнято 1 з 2 позицій',
+  )
+  expect(screen.getByLabelText('Назва позиції 1')).toHaveValue('Бампер')
 })
