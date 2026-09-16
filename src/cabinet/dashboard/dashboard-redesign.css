@@ -263,6 +263,15 @@
   text-transform: uppercase;
 }
 
+.dashboard-metric-value .dashboard-metric-currency {
+  font-family: inherit;
+  font-size: clamp(26px, 2.7vw, 31px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+  text-transform: none;
+}
+
 .dashboard-metric[data-accent='success'] .dashboard-metric-value strong {
   color: var(--dashboard-green);
 }

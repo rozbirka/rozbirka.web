@@ -180,6 +180,12 @@ it('shows real cash balances for every currency returned by cash registers', () 
 
   expect(normalizedText(metric('Баланс кас'))).toContain('2 450$')
   expect(normalizedText(metric('Баланс кас'))).toContain('123 456₴')
+  expect(
+    metric('Баланс кас')?.querySelectorAll('.dashboard-metric-currency'),
+  ).toHaveLength(2)
+  expect(
+    metric('Інвестовано всього')?.querySelector('.dashboard-metric-currency'),
+  ).toHaveTextContent('$')
 })
 
 it('renders an empty yard as a successful onboarding state', () => {

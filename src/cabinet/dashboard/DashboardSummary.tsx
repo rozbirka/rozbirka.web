@@ -193,10 +193,14 @@ function Metric({
 }
 
 function MetricValue({ unit, value }: { unit: string; value: number }) {
+  const isCurrency = unit.toUpperCase() in currencySymbols
+
   return (
     <div className="dashboard-metric-value">
       <strong>{formatNumber(value)}</strong>
-      <span>{displayUnit(unit)}</span>
+      <span className={isCurrency ? 'dashboard-metric-currency' : undefined}>
+        {displayUnit(unit)}
+      </span>
     </div>
   )
 }
