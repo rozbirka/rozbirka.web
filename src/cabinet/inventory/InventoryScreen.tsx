@@ -8,6 +8,7 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router'
 import {
   Archive,
+  ChevronLeft,
   ClipboardCheck,
   Pencil,
   Plus,
@@ -16,11 +17,13 @@ import {
 } from 'lucide-react'
 import {
   Button,
+  DataTable,
   EmptyState,
   Notice,
   PageBody,
   PageHeader,
   Panel,
+  SearchInput,
   SkeletonRows,
   StatCard,
   StatusPill,
@@ -36,7 +39,9 @@ import {
   type Warehouse,
   type WarehouseDetail,
 } from '@/api/inventory'
+import { teamApi } from '@/api/team'
 import { normalizeApiProblem } from '@/api/errors'
+import { cn, plural } from '@/lib/utils'
 import { cabinetPath } from '../cabinet-paths'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
@@ -73,6 +78,9 @@ const resultStatus = (result: string) =>
     Surplus: ['Надлишок', 'warn'],
     Unexpected: ['Несподівана', 'warn'],
   })[result] ?? [result, 'neutral']
+
+/** How many journal rows to show before the reader asks for more. */
+const JOURNAL_PAGE = 25
 
 const formText = (form: FormData, name: string) => {
   const value = form.get(name)
@@ -1144,66 +1152,536 @@ function AuditView({ id }: { id: string }) {
   )
 }
 
+/** What the journal is being read for: everything, the gaps, or the matches. */
+const JOURNAL_FILTERS = [
+  { value: 'all', label: 'Усі' },
+  { value: 'diff', label: 'Розходження' },
+  { value: 'same', label: 'Збіглося' },
+] as const
+
+type JournalFilter = (typeof JOURNAL_FILTERS)[number]['value']
+
+const timeOfDay = (value: string) => {
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime())
+    ? value
+    : new Intl.DateTimeFormat('uk-UA', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(parsed)
+}
+
+/**
+ * Counting pace, in scans per hour. Under a quarter of an hour of counting the
+ * figure says more about the clock than about the work, so it is withheld.
+ */
+const pace = (scans: readonly InventoryScan[]) => {
+  if (scans.length < 2) return null
+  const times = scans.map((scan) => new Date(scan.scannedAt).getTime())
+  const span = Math.max(...times) - Math.min(...times)
+  if (!Number.isFinite(span) || span < 15 * 60 * 1000) return null
+  return Math.round(scans.length / (span / 3_600_000))
+}
+
+interface JournalData {
+  scans: InventoryScan[]
+  session: InventorySession
+  /** Empty until the count is far enough along for the server to total it. */
+  results: InventoryPartResult[]
+  /** Empty when this person cannot see the team; scanners then stay unnamed. */
+  people: { userId: string; name: string }[]
+}
+
 function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
   const base = useInventoryBase()
+  const canSeeTeam = usePermission('team.view')
+  const [filter, setFilter] = useState<JournalFilter>('all')
+  const [who, setWho] = useState<string>('all')
+  const [query, setQuery] = useState('')
+  const [shown, setShown] = useState(JOURNAL_PAGE)
   const loader = useCallback(
-    (signal: AbortSignal) => inventoryApi.getScans(id, zoneId, { signal }),
-    [id, zoneId],
+    async (signal: AbortSignal): Promise<JournalData> => {
+      const [scans, session, results, people] = await Promise.all([
+        inventoryApi.getScans(id, zoneId, { signal }),
+        inventoryApi.getSession(id, { signal }),
+        // Totals exist once the server has something to total; before that the
+        // journal still stands on its own.
+        inventoryApi.getResults(id, { signal }).then(
+          (data) => data.parts,
+          () => [],
+        ),
+        canSeeTeam
+          ? teamApi.listMembers({ signal }).then(
+              (members) =>
+                members.map((member) => ({
+                  userId: member.userId,
+                  name: member.name,
+                })),
+              () => [],
+            )
+          : Promise.resolve([]),
+      ])
+      return { scans, session, results, people }
+    },
+    [canSeeTeam, id, zoneId],
   )
   const resource = useLoad(loader, `${id}:${zoneId}`)
+
   return (
-    <PageBody>
-      <PageHeader
-        eyebrow={<Link to={`${base}/sessions/${id}`}>Сесія</Link>}
-        title="Журнал сканувань"
-      />
-      <Notice tone="info">
-        Це журнал підрахунку з Mobile. У Web він доступний лише для перегляду.
-      </Notice>
-      <Resource state={resource.state} retry={resource.reload}>
-        {(scans: InventoryScan[]) =>
-          scans.length ? (
-            <div className="overflow-hidden rounded-panel border border-app-line">
-              {scans.map((scan) => (
-                <div
-                  className="grid gap-2 border-b border-app-line p-4 last:border-0 sm:grid-cols-[1fr_auto_auto] sm:items-center"
-                  key={scan.id}
-                >
-                  <div>
-                    <strong className="text-white">{scan.partName}</strong>
-                    <p className="font-mono text-xs text-app-dim">
-                      {scan.partQrCode}
-                    </p>
-                  </div>
-                  <time className="text-xs text-app-dim">
-                    {date(scan.scannedAt)}
-                  </time>
-                  {scan.voidedAt ? (
-                    <div className="grid justify-items-end gap-1">
-                      <StatusPill tone="danger">Скасовано</StatusPill>
-                      {scan.voidReason ? (
-                        <span className="text-xs text-app-dim">
-                          {scan.voidReason}
-                        </span>
-                      ) : null}
-                    </div>
-                  ) : scan.unexpected ? (
-                    <StatusPill tone="warn">Несподівана</StatusPill>
-                  ) : (
-                    <StatusPill tone="ok">Очікувана</StatusPill>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="Сканувань ще немає"
-              description="Записи з’являться після підрахунку в Mobile."
-            />
-          )
+    <Resource retry={resource.reload} state={resource.state}>
+      {({ scans, session, results, people }: JournalData) => {
+        const zone = session.zones.find((item) => item.zoneId === zoneId)
+        const nameOf = (userId: string) =>
+          people.find((person) => person.userId === userId)?.name ?? null
+        const resultOf = (partId: string) =>
+          results.find((part) => part.partId === partId) ?? null
+        const live = scans.filter((scan) => scan.voidedAt == null)
+        const counts: Record<JournalFilter, number> = {
+          all: scans.length,
+          diff: scans.filter((scan) => {
+            const part = resultOf(scan.partId)
+            return part !== null && part.delta !== 0
+          }).length,
+          same: scans.filter((scan) => {
+            const part = resultOf(scan.partId)
+            return part !== null && part.delta === 0
+          }).length,
         }
-      </Resource>
-    </PageBody>
+        const scanners = [...new Set(live.map((scan) => scan.scannedBy))]
+        const needle = query.trim().toUpperCase()
+        const rows = scans.filter((scan) => {
+          const part = resultOf(scan.partId)
+          // A scan the server has not totalled yet belongs to neither side.
+          if (filter === 'diff' && (part?.delta ?? 0) === 0) return false
+          if (filter === 'same' && part?.delta !== 0) return false
+          if (who !== 'all' && scan.scannedBy !== who) return false
+          if (
+            needle !== '' &&
+            !`${scan.partName} ${scan.partQrCode}`
+              .toUpperCase()
+              .includes(needle)
+          )
+            return false
+          return true
+        })
+        const visible = rows.slice(0, shown)
+        const last = live.reduce<InventoryScan | null>(
+          (latest, scan) =>
+            latest === null || scan.scannedAt > latest.scannedAt
+              ? scan
+              : latest,
+          null,
+        )
+        const speed = pace(live)
+        const pending = session.zones.filter(
+          (item) => item.status === 'pending',
+        )
+        const backTo = `${base}/sessions/${id}`
+
+        return (
+          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+              <div className="flex min-w-0 items-center gap-5">
+                <Link
+                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                  to={backTo}
+                >
+                  <ChevronLeft aria-hidden className="size-3.5" />
+                  До сесії
+                </Link>
+                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                  <span>Сесія {session.number}</span>
+                  {zone ? (
+                    <>
+                      <span aria-hidden className="text-white/20">
+                        /
+                      </span>
+                      <span className="text-app-muted">{zone.zoneCode}</span>
+                    </>
+                  ) : null}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <Button asChild className="px-[18px] text-sm font-semibold">
+                  <Link to={`${base}/sessions/${id}/results`}>Результати</Link>
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+              <div className="min-w-0">
+                <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+                  Журнал сканувань{zone ? ` · ${zone.zoneCode}` : null}
+                </h1>
+                <p className="text-app-muted mt-3 text-[15px]">
+                  {[
+                    zone?.warehouseName,
+                    zone?.zoneName,
+                    session.startedAt == null
+                      ? 'сесію ще не розпочато'
+                      : `сесія триває з ${date(session.startedAt)}`,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              </div>
+
+              <Notice tone="info">
+                Підрахунок ведеться в Mobile. Тут журнал доступний лише для
+                перегляду.
+              </Notice>
+
+              <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-px overflow-hidden rounded-[20px] border">
+                <JournalStat
+                  label="Сканувань"
+                  meta={`${String(new Set(live.map((scan) => scan.partId)).size)} позицій`}
+                  unit={
+                    scans.length === live.length
+                      ? undefined
+                      : `з ${String(scans.length)}`
+                  }
+                  value={String(live.length)}
+                />
+                <JournalStat
+                  label="Розходжень"
+                  meta={
+                    results.length === 0
+                      ? 'підсумки з’являться після підрахунку'
+                      : 'потребують рішення'
+                  }
+                  tone={counts.diff > 0 ? 'danger' : undefined}
+                  unit="позицій"
+                  value={String(counts.diff)}
+                />
+                <JournalStat
+                  label="Темп"
+                  meta={`${String(scanners.length)} ${plural(scanners.length, ['виконавець', 'виконавці', 'виконавців'])}`}
+                  unit={speed === null ? undefined : 'сканувань/год'}
+                  value={speed === null ? '—' : String(speed)}
+                />
+                <JournalStat
+                  label="Останній скан"
+                  meta={
+                    last === null
+                      ? 'сканувань ще немає'
+                      : [nameOf(last.scannedBy), zone?.zoneCode]
+                          .filter(Boolean)
+                          .join(' · ')
+                  }
+                  value={last === null ? '—' : timeOfDay(last.scannedAt)}
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <div
+                  aria-label="Які сканування показувати"
+                  className="border-app-line bg-app-raised flex gap-1 rounded-xl border p-1"
+                  role="radiogroup"
+                >
+                  {JOURNAL_FILTERS.map((option) => {
+                    const active = option.value === filter
+                    const locked =
+                      option.value !== 'all' && results.length === 0
+                    return (
+                      <button
+                        aria-checked={active}
+                        className={cn(
+                          'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-bold disabled:cursor-not-allowed disabled:opacity-50',
+                          active
+                            ? 'text-app-ink bg-white/[0.08]'
+                            : 'text-app-muted hover:text-app-ink',
+                        )}
+                        disabled={locked}
+                        key={option.value}
+                        onClick={() => {
+                          setFilter(option.value)
+                          setShown(JOURNAL_PAGE)
+                        }}
+                        role="radio"
+                        title={
+                          locked
+                            ? 'Порівняння з обліком з’явиться, коли сервер порахує підсумки сесії'
+                            : undefined
+                        }
+                        type="button"
+                      >
+                        {option.label}
+                        <span className="text-app-dim font-mono text-[11px] font-medium">
+                          {counts[option.value]}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+                {people.length > 0 && scanners.length > 1 ? (
+                  <div
+                    aria-label="Чиї сканування показувати"
+                    className="flex flex-wrap gap-1.5"
+                    role="radiogroup"
+                  >
+                    {[
+                      { id: 'all', label: 'Усі' },
+                      ...scanners.map((userId) => ({
+                        id: userId,
+                        label: nameOf(userId) ?? 'Без імені',
+                      })),
+                    ].map((person) => (
+                      <button
+                        aria-checked={who === person.id}
+                        className={cn(
+                          'focus-visible:outline-brand min-h-9 cursor-pointer rounded-full border px-3.5 text-[13px] font-semibold',
+                          who === person.id
+                            ? 'border-app-line-2 bg-app-input text-white'
+                            : 'border-app-line text-app-muted hover:text-app-ink',
+                        )}
+                        key={person.id}
+                        onClick={() => {
+                          setWho(person.id)
+                          setShown(JOURNAL_PAGE)
+                        }}
+                        role="radio"
+                        type="button"
+                      >
+                        {person.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="min-w-[180px] flex-[1_1_200px]">
+                  <SearchInput
+                    aria-label="Пошук у журналі"
+                    onChange={(event) => {
+                      setQuery(event.target.value)
+                      setShown(JOURNAL_PAGE)
+                    }}
+                    placeholder="Позиція або код"
+                    value={query}
+                  />
+                </div>
+              </div>
+
+              <section
+                aria-label="Журнал сканувань"
+                className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
+              >
+                <DataTable
+                  caption="Сканування зони"
+                  columns={[
+                    {
+                      key: 'time',
+                      label: 'Час',
+                      cell: (scan) => (
+                        <span className="text-app-dim font-mono text-[13px]">
+                          {timeOfDay(scan.scannedAt)}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'part',
+                      label: 'Позиція',
+                      variant: 'primary',
+                      cell: (scan) => (
+                        <span className="grid gap-0.5">
+                          <span className="font-semibold text-white">
+                            {scan.partName}
+                          </span>
+                          <span className="text-app-dim font-mono text-[12px]">
+                            {scan.partQrCode}
+                          </span>
+                          {/* Facts about this scan rather than about the
+                              total, so they stay beside the part. */}
+                          {scan.voidReason == null ? null : (
+                            <span className="text-app-muted text-[12px]">
+                              {scan.voidReason}
+                            </span>
+                          )}
+                          {scan.unexpected && scan.voidedAt == null ? (
+                            <span className="text-state-warn text-[12px]">
+                              Несподівана
+                            </span>
+                          ) : null}
+                        </span>
+                      ),
+                    },
+                    ...(people.length > 0
+                      ? [
+                          {
+                            key: 'who',
+                            label: 'Хто',
+                            cell: (scan: InventoryScan) =>
+                              nameOf(scan.scannedBy) ?? '—',
+                          },
+                        ]
+                      : []),
+                    {
+                      key: 'expected',
+                      label: 'Облік',
+                      align: 'end',
+                      cell: (scan) => (
+                        <span className="text-app-muted font-mono tabular-nums">
+                          {resultOf(scan.partId)?.expectedQuantity ?? '—'}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'actual',
+                      label: 'Скан',
+                      align: 'end',
+                      cell: (scan) => (
+                        <span className="font-mono text-white tabular-nums">
+                          {resultOf(scan.partId)?.actualQuantity ??
+                            scan.zonePartCount}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'delta',
+                      label: 'Різниця',
+                      align: 'end',
+                      cell: (scan) => {
+                        if (scan.voidedAt != null)
+                          return (
+                            <StatusPill tone="danger">Скасовано</StatusPill>
+                          )
+                        const part = resultOf(scan.partId)
+                        if (part === null)
+                          return (
+                            <span className="text-app-dim font-mono">—</span>
+                          )
+                        return (
+                          <StatusPill
+                            tone={
+                              part.delta === 0
+                                ? 'ok'
+                                : part.delta > 0
+                                  ? 'warn'
+                                  : 'danger'
+                            }
+                          >
+                            {part.delta > 0
+                              ? `+${String(part.delta)}`
+                              : String(part.delta)}
+                          </StatusPill>
+                        )
+                      },
+                    },
+                  ]}
+                  empty={
+                    <EmptyState
+                      description={
+                        scans.length === 0
+                          ? 'Записи зʼявляться після підрахунку в Mobile.'
+                          : 'Спробуйте зняти фільтр або очистити пошук.'
+                      }
+                      title={
+                        scans.length === 0
+                          ? 'Сканувань ще немає'
+                          : 'Сканувань за цим фільтром немає'
+                      }
+                    />
+                  }
+                  rowKey={(scan) => scan.id}
+                  rows={visible}
+                />
+                {rows.length > 0 ? (
+                  <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-t px-6 py-4">
+                    <p className="text-app-dim text-[13px]">
+                      Показано {visible.length} з {rows.length}{' '}
+                      {plural(rows.length, [
+                        'сканування',
+                        'сканування',
+                        'сканувань',
+                      ])}
+                    </p>
+                    {visible.length < rows.length ? (
+                      <Button
+                        className="min-h-9 px-3.5 text-[13px] font-bold"
+                        onClick={() =>
+                          setShown((value) => value + JOURNAL_PAGE)
+                        }
+                      >
+                        Показати ще
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </section>
+
+              {pending.length > 0 ? (
+                <section
+                  aria-label="Неперевірені зони"
+                  className="grid gap-4.5"
+                >
+                  <div className="flex items-baseline gap-3.5">
+                    <h2 className="text-app-muted font-mono text-[11px] tracking-[0.16em] uppercase">
+                      Неперевірені зони
+                    </h2>
+                    <span aria-hidden className="bg-app-line h-px flex-1" />
+                    <span className="text-app-dim text-[13px]">
+                      {pending.length}{' '}
+                      {plural(pending.length, ['зона', 'зони', 'зон'])}
+                    </span>
+                  </div>
+                  <ul className="grid grid-cols-[repeat(auto-fill,minmax(96px,1fr))] gap-2">
+                    {pending.map((item) => (
+                      <li key={item.zoneId}>
+                        <Link
+                          className="border-app-line-2 text-app-muted hover:text-app-ink block rounded-[11px] border border-dashed bg-white/[0.02] px-3 py-2.5 text-center font-mono text-[13px] hover:bg-white/[0.05]"
+                          to={`${base}/sessions/${id}/journal/${item.zoneId}`}
+                        >
+                          {item.zoneCode}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+            </div>
+          </div>
+        )
+      }}
+    </Resource>
+  )
+}
+
+/** One cell of the journal's figure strip. */
+function JournalStat({
+  label,
+  value,
+  unit,
+  meta,
+  tone,
+}: {
+  label: string
+  value: string
+  unit?: string | undefined
+  meta?: string | undefined
+  tone?: 'danger' | undefined
+}) {
+  return (
+    <div className="bg-app-raised px-6 pt-[22px] pb-6">
+      <p className="text-app-muted font-mono text-[11px] tracking-[0.14em] uppercase">
+        {label}
+      </p>
+      <p className="mt-3.5 flex items-baseline gap-2">
+        <span
+          className={cn(
+            'text-[30px] leading-none font-extrabold tracking-[-0.03em] tabular-nums',
+            tone === 'danger' ? 'text-state-danger' : 'text-white',
+          )}
+        >
+          {value}
+        </span>
+        {unit === undefined ? null : (
+          <span className="text-app-muted font-mono text-[13px] font-medium">
+            {unit}
+          </span>
+        )}
+      </p>
+      {meta === undefined ? null : (
+        <p className="text-app-dim mt-3.5 text-[13px]">{meta}</p>
+      )}
+    </div>
   )
 }
 
