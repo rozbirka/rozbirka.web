@@ -342,7 +342,10 @@ it('keeps intake detail visible and reports a normalized delete failure after pe
   expect(
     await screen.findByRole('heading', { name: 'Липнева партія' }),
   ).toBeVisible()
-  const remove = screen.getByRole('button', { name: 'Видалити' })
+  await user.click(
+    screen.getByRole('button', { name: 'Інші дії з прийманням' }),
+  )
+  const remove = screen.getByRole('button', { name: 'Видалити приймання' })
   await user.click(remove)
   await user.click(
     within(screen.getByRole('dialog')).getByRole('button', {
@@ -374,8 +377,7 @@ it('shows photos and creator but gates linked parts and warehouse actions with p
     </MemoryRouter>,
   )
 
-  expect(await screen.findByText('Створив')).toBeVisible()
-  expect(screen.getByText('Олена')).toBeVisible()
+  expect(await screen.findByText(/Створив Олена/)).toBeVisible()
   expect(screen.getByRole('img', { name: 'Фото приймання 1' })).toBeVisible()
   expect(screen.queryByText(/Вартість:/)).not.toBeInTheDocument()
   expect(screen.queryByText(/5\s000/)).not.toBeInTheDocument()
@@ -398,10 +400,10 @@ it('renders every linked intake part for parts.view without requiring parts.mana
     </MemoryRouter>,
   )
 
-  const partRow = await screen.findByRole('rowheader', { name: 'Бампер' })
+  const partRow = await screen.findByRole('rowheader', { name: /Бампер/ })
   expect(partRow).toBeVisible()
   expect(screen.getByRole('cell', { name: '2 шт' })).toBeVisible()
-  expect(screen.getByRole('cell', { name: 'available' })).toBeVisible()
+  expect(screen.getByRole('cell', { name: 'Доступна' })).toBeVisible()
   expect(
     screen.queryByRole('link', { name: 'Додати деталь' }),
   ).not.toBeInTheDocument()

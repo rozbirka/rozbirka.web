@@ -147,18 +147,23 @@ function TenantStickerQueue({
   >['requireLatestMutation']
 }) {
   const [searchParams, setSearchParams] = useSearchParams()
-  // Another screen can send one part here to be printed: the id arrives in the
-  // URL and joins the queue as it is read, so a queue is never a render behind
-  // the address bar.
-  const requested = searchParams.get('part')
+  // Another screen can send parts here to be printed — one from a part card, a
+  // whole batch from an intake. The ids arrive in the URL and join the queue as
+  // it is read, so a queue is never a render behind the address bar.
+  const requested = useMemo(() => searchParams.getAll('part'), [searchParams])
   const [queue, setQueue] = useState<QueueItem[]>(() => {
     const stored = scope ? readQueue(scope) : []
-    return requested && !stored.some((item) => item.id === requested)
-      ? [...stored, { id: requested, quantity: 1 }]
-      : stored
+    const additions: QueueItem[] = []
+    for (const id of requested)
+      if (
+        !stored.some((item) => item.id === id) &&
+        !additions.some((item) => item.id === id)
+      )
+        additions.push({ id, quantity: 1 })
+    return additions.length > 0 ? [...stored, ...additions] : stored
   })
   useEffect(() => {
-    if (!requested) return
+    if (requested.length === 0) return
     // The parameter has done its job; drop it so a reload does not re-queue.
     const next = new URLSearchParams(searchParams)
     next.delete('part')

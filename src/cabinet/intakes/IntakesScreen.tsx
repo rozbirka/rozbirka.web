@@ -6,11 +6,17 @@ import {
   useParams,
   useSearchParams,
 } from 'react-router'
-import { Check, ChevronLeft, Lock, Plus, ScanLine } from 'lucide-react'
+import {
+  Check,
+  ChevronLeft,
+  Lock,
+  MoreHorizontal,
+  Plus,
+  ScanLine,
+} from 'lucide-react'
 import {
   Button,
   Card,
-  Fact,
   ConfirmDialog,
   DataTable,
   EmptyState,
@@ -20,14 +26,13 @@ import {
   PageBody,
   PageHeader,
   Pagination,
-  Panel,
   PillGroup,
   QuantityStepper,
   SearchInput,
   SelectInput,
   SkeletonRows,
-  StatCard,
   StatusPill,
+  type StatusTone,
   StatStrip,
   TextArea,
   TextInput,
@@ -82,6 +87,23 @@ const money = (amount: number) =>
     maximumFractionDigits: 2,
     trailingZeroDisplay: 'stripIfInteger',
   }).format(amount)
+
+/** Dates arrive as ISO strings; anything unparsable is shown as it came. */
+const day = (value: string) => {
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime())
+    ? value
+    : new Intl.DateTimeFormat('uk-UA', { dateStyle: 'medium' }).format(parsed)
+}
+
+/** Two initials for the avatar chip; a single word gives one. */
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('') || '?'
 
 function useIntakeAccess() {
   const cabinet = useCabinet()
@@ -397,14 +419,76 @@ function IntakesList({ base }: { base: string }) {
   )
 }
 
+/** The three ways a yard looks at the positions of one batch. */
+const INTAKE_PART_FILTERS = [
+  { value: 'all', label: 'Усі' },
+  { value: 'available', label: 'Доступні' },
+  { value: 'sold', label: 'Продані' },
+] as const
+
+type IntakePartFilter = (typeof INTAKE_PART_FILTERS)[number]['value']
+
+const partStatusPill = (
+  status: string,
+): { label: string; tone: StatusTone } => {
+  if (status === 'available') return { label: 'Доступна', tone: 'ok' }
+  if (status === 'reserved') return { label: 'У резерві', tone: 'warn' }
+  if (status === 'sold') return { label: 'Продана', tone: 'neutral' }
+  return { label: status, tone: 'neutral' }
+}
+
+/** One cell of the strip under the title: a figure with its unit and a note. */
+function IntakeStat({
+  label,
+  value,
+  unit,
+  meta,
+  tone,
+}: {
+  label: string
+  value: string
+  unit?: string
+  meta?: string
+  tone?: 'ok'
+}) {
+  return (
+    <div className="bg-app-raised px-6 pt-[22px] pb-6">
+      <p className="text-app-muted font-mono text-[11px] tracking-[0.14em] uppercase">
+        {label}
+      </p>
+      <p className="mt-3.5 flex items-baseline gap-2">
+        <span
+          className={cn(
+            'text-[30px] leading-none font-extrabold tracking-[-0.03em]',
+            tone === 'ok' ? 'text-state-ok' : 'text-white',
+          )}
+        >
+          {value}
+        </span>
+        {unit === undefined ? null : (
+          <span className="text-app-muted font-mono text-[13px] font-medium">
+            {unit}
+          </span>
+        )}
+      </p>
+      {meta === undefined ? null : (
+        <p className="text-app-dim mt-3.5 text-[13px]">{meta}</p>
+      )}
+    </div>
+  )
+}
+
 function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
-  const { manage, partsView, partCreateDecision, financeView } =
+  const { cabinet, manage, partsView, partCreateDecision, financeView } =
     useIntakeAccess()
   const navigate = useNavigate()
   const [intake, setIntake] = useState<Intake | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [filter, setFilter] = useState<IntakePartFilter>('all')
+  const canPrintStickers = allowedToView(cabinetModules.stickers, cabinet)
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.intakes,
   )
@@ -451,135 +535,527 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
         <SkeletonRows label="Завантажуємо приймання…" rows={3} />
       </PageBody>
     )
+
+  const units = intake.parts.reduce((total, part) => total + part.quantity, 0)
+  const sold = intake.parts.filter((part) => part.status === 'sold')
+  const available = intake.parts.filter((part) => part.status !== 'sold')
+  const counts: Record<IntakePartFilter, number> = {
+    all: intake.parts.length,
+    available: available.length,
+    sold: sold.length,
+  }
+  const rows =
+    filter === 'all' ? intake.parts : filter === 'sold' ? sold : available
+  /** What one position of this batch cost: the batch price over its positions. */
+  const unitCost =
+    intake.totalCost !== null && intake.partsCount > 0
+      ? intake.totalCost / intake.partsCount
+      : null
+  const profit = intake.profitability ?? null
+  const saleState =
+    intake.partsCount === 0
+      ? { label: 'Без позицій', tone: 'neutral' as StatusTone }
+      : intake.soldCount === 0
+        ? { label: 'Нічого не продано', tone: 'warn' as StatusTone }
+        : intake.soldCount < intake.partsCount
+          ? { label: 'Розпродається', tone: 'ok' as StatusTone }
+          : { label: 'Розпродано', tone: 'neutral' as StatusTone }
+  /**
+   * The batch's own trail, built from the timestamps the records carry: when
+   * it was opened, and what was booked into it since. Anything a person did in
+   * between — a price corrected, a position moved — is not recorded server-side.
+   */
+  const history = [
+    // Position names belong to the parts module; without it the trail keeps
+    // only what the intake itself records.
+    ...(partsView ? intake.parts : [])
+      .slice()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 4)
+      .map((part) => ({
+        id: part.id,
+        title: `Додано «${part.name}»`,
+        meta: day(part.createdAt),
+        value: `${String(part.quantity)} ${part.unit}`,
+        tone: 'ok' as const,
+      })),
+    {
+      id: 'created',
+      title: 'Приймання створено',
+      meta: `${day(intake.createdAt)} · ${intake.createdBy.displayName}`,
+      value: intake.name ?? '—',
+      tone: 'dim' as const,
+    },
+  ]
+  const stickerHref =
+    intake.parts.length > 0
+      ? `${base.replace(/\/intakes$/, '/stickers')}?${intake.parts
+          .map((part) => `part=${encodeURIComponent(part.id)}`)
+          .join('&')}`
+      : null
+
   return (
-    <PageBody aria-busy={busy} className="max-w-4xl" role="main">
-      <Button asChild className="justify-self-start" variant="quiet">
-        <Link to={base}>
-          <ChevronLeft aria-hidden />
-          До приймань
-        </Link>
-      </Button>
-      <PageHeader
-        actions={
-          manage ? (
-            <>
-              <Button asChild variant="primary">
-                <Link to={`${base}/${intake.id}/edit`}>Редагувати</Link>
+    <div
+      aria-busy={busy}
+      className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10"
+      role="main"
+    >
+      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+        <div className="flex min-w-0 items-center gap-5">
+          <Link
+            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+            to={base}
+          >
+            <ChevronLeft aria-hidden className="size-3.5" />
+            До приймань
+          </Link>
+          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+            <span>Склад</span>
+            <span aria-hidden className="text-white/20">
+              /
+            </span>
+            <span>Приймання</span>
+          </p>
+        </div>
+        {manage ? (
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Button asChild className="px-[18px] text-sm font-semibold">
+              <Link to={`${base}/${intake.id}/edit`}>Редагувати</Link>
+            </Button>
+            {partCreateDecision.kind === 'allowed' ? (
+              <Button
+                asChild
+                className="px-5 text-sm font-bold"
+                variant="primary"
+              >
+                <Link to={`${base}/${intake.id}/parts/new`}>Додати деталь</Link>
               </Button>
+            ) : null}
+            <Button
+              aria-expanded={menuOpen}
+              aria-label="Інші дії з прийманням"
+              className="min-w-11 px-0 text-base font-bold tracking-[0.1em]"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <MoreHorizontal aria-hidden />
+            </Button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-4">
+            <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+              {intake.name ?? 'Приймання без назви'}
+            </h1>
+            <StatusPill tone={saleState.tone}>{saleState.label}</StatusPill>
+          </div>
+          <p className="text-app-muted mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-[15px]">
+            <span>{intake.supplier ?? 'Постачальника не вказано'}</span>
+            <span aria-hidden className="text-white/20">
+              ·
+            </span>
+            <span>
+              {intake.purchasedAt === null
+                ? 'без дати придбання'
+                : day(intake.purchasedAt)}
+            </span>
+            <span aria-hidden className="text-white/20">
+              ·
+            </span>
+            <span>
+              Створив {intake.createdBy.displayName}, {day(intake.createdAt)}
+            </span>
+          </p>
+        </div>
+
+        {menuOpen && manage ? (
+          <div
+            aria-label="Інші дії з прийманням"
+            className="border-app-line bg-app-raised flex flex-wrap items-center gap-2.5 rounded-[14px] border px-4 py-3"
+            role="group"
+          >
+            {canPrintStickers ? (
+              <Button
+                asChild={stickerHref !== null}
+                disabled={stickerHref === null}
+              >
+                {stickerHref === null ? (
+                  <>Друк стікерів партії</>
+                ) : (
+                  <Link to={stickerHref}>Друк стікерів партії</Link>
+                )}
+              </Button>
+            ) : null}
+            <Button
+              disabled
+              title="Масове додавання позицій ще не підтримане — деталі додаються по одній"
+            >
+              Додати партією
+            </Button>
+            <Button
+              disabled={busy}
+              onClick={() => setConfirmDelete(true)}
+              variant="danger"
+            >
+              Видалити приймання
+            </Button>
+          </div>
+        ) : null}
+
+        {problem ? <Notice tone="danger">{problem}</Notice> : null}
+
+        <div className="bg-app-line border-app-line grid gap-px overflow-hidden rounded-[20px] border sm:grid-cols-2 lg:grid-cols-4">
+          <IntakeStat
+            label="Позицій"
+            meta={`${String(units)} ${plural(units, ['одиниця', 'одиниці', 'одиниць'])}`}
+            unit="найменувань"
+            value={String(intake.partsCount)}
+          />
+          <IntakeStat
+            label="Продано"
+            meta={`${String(intake.partsCount - intake.soldCount)} ще на складі`}
+            unit={`з ${String(intake.partsCount)}`}
+            value={String(intake.soldCount)}
+          />
+          {financeView ? (
+            <>
+              <IntakeStat
+                label="Інвестовано"
+                meta={
+                  unitCost === null
+                    ? 'вартість партії не вказано'
+                    : `${money(unitCost)} на позицію`
+                }
+                unit="USD"
+                value={money(profit?.invested ?? intake.totalCost ?? 0)}
+              />
+              <IntakeStat
+                label="Повернено"
+                meta={
+                  profit?.recoupedPercent === null ||
+                  profit?.recoupedPercent === undefined
+                    ? 'ще нічого не повернулося'
+                    : `${String(profit.recoupedPercent)}% від вкладеного`
+                }
+                tone="ok"
+                unit="USD"
+                value={money(profit?.recouped ?? 0)}
+              />
+            </>
+          ) : null}
+        </div>
+
+        {/* wrap-reverse puts the rail above the list on narrow screens; it also
+            flips the cross axis, so items-end is what pins both to the top. */}
+        <div className="flex flex-wrap-reverse items-end gap-6">
+          <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
+            {partsView ? (
+              <section
+                aria-label="Позиції приймання"
+                className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-4 px-6 pt-5 pb-4">
+                  <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
+                    Позиції приймання
+                  </h2>
+                  <div
+                    aria-label="Які позиції показувати"
+                    className="border-app-line bg-app-input flex gap-1 rounded-[10px] border p-1"
+                    role="radiogroup"
+                  >
+                    {INTAKE_PART_FILTERS.map((option) => {
+                      const active = option.value === filter
+                      return (
+                        <button
+                          aria-checked={active}
+                          className={cn(
+                            'focus-visible:outline-brand flex min-h-8 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-xs font-bold',
+                            active
+                              ? 'text-app-ink bg-white/[0.08]'
+                              : 'text-app-muted hover:text-app-ink',
+                          )}
+                          key={option.value}
+                          onClick={() => setFilter(option.value)}
+                          role="radio"
+                          type="button"
+                        >
+                          {option.label}
+                          <span className="text-app-dim font-mono text-[11px] font-medium">
+                            {counts[option.value]}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                <DataTable
+                  caption="Позиції приймання"
+                  columns={[
+                    {
+                      key: 'qr',
+                      label: 'Код',
+                      cell: (part) => (
+                        <span className="text-app-muted font-mono text-[13px]">
+                          {part.qrCode}
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'name',
+                      label: 'Назва',
+                      variant: 'primary',
+                      cell: (part) => (
+                        <span className="grid gap-0.5">
+                          <span className="font-semibold text-white">
+                            {part.name}
+                          </span>
+                          <span className="text-app-dim font-mono text-[12px]">
+                            {part.partType ?? 'без типу'}
+                          </span>
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'quantity',
+                      label: 'К-сть',
+                      align: 'end',
+                      cell: (part) => (
+                        <span className="text-app-muted font-mono tabular-nums">
+                          {part.quantity} {part.unit}
+                        </span>
+                      ),
+                    },
+                    ...(financeView
+                      ? [
+                          {
+                            key: 'cost',
+                            label: 'Собів.',
+                            align: 'end' as const,
+                            cell: () => (
+                              <span className="text-app-muted font-mono tabular-nums">
+                                {unitCost === null ? '—' : money(unitCost)}
+                              </span>
+                            ),
+                          },
+                        ]
+                      : []),
+                    {
+                      key: 'status',
+                      label: 'Стан',
+                      align: 'end',
+                      cell: (part) => {
+                        const pill = partStatusPill(part.status)
+                        return (
+                          <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
+                        )
+                      },
+                    },
+                  ]}
+                  empty={
+                    <EmptyState
+                      description={
+                        filter === 'all'
+                          ? 'Додайте запчастину, щоб оприбуткувати вміст цього приймання.'
+                          : 'За цим фільтром позицій немає — спробуйте «Усі».'
+                      }
+                      title={
+                        filter === 'all'
+                          ? 'У прийманні ще немає запчастин'
+                          : 'Порожньо за фільтром'
+                      }
+                    />
+                  }
+                  rowKey={(part) => part.id}
+                  rows={rows}
+                />
+              </section>
+            ) : null}
+
+            <Card
+              aside={
+                <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
+                  {history.length}{' '}
+                  {plural(history.length, ['подія', 'події', 'подій'])}
+                </span>
+              }
+              bodyClassName="p-0"
+              title="Історія"
+            >
+              <ul className="divide-app-line grid divide-y">
+                {history.map((event) => (
+                  <li
+                    className="flex items-center gap-3.5 px-6 py-3.5"
+                    key={event.id}
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'size-[7px] shrink-0 rounded-full',
+                        event.tone === 'ok' ? 'bg-state-ok' : 'bg-app-dim',
+                      )}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-white">
+                        {event.title}
+                      </span>
+                      <span className="text-app-muted mt-0.5 block text-xs">
+                        {event.meta}
+                      </span>
+                    </span>
+                    <span className="text-app-muted font-mono text-[13px] whitespace-nowrap">
+                      {event.value}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+
+            {intake.notes === null ? null : (
+              <Card title="Нотатки">
+                <p className="text-app-muted text-sm leading-[1.6] whitespace-pre-line">
+                  {intake.notes}
+                </p>
+              </Card>
+            )}
+
+            {intake.photos.length > 0 ? (
+              <Card title="Фото партії">
+                <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {intake.photos.map((photo, index) => (
+                    <li key={photo.url}>
+                      <a
+                        className="border-app-line block overflow-hidden rounded-[14px] border"
+                        href={photo.url}
+                      >
+                        <img
+                          alt={`Фото приймання ${String(index + 1)}`}
+                          className="aspect-4/3 w-full object-cover"
+                          src={photo.thumbnailUrl || photo.url}
+                        />
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            ) : null}
+          </div>
+
+          <aside className="sticky top-24 grid min-w-[300px] flex-[0_1_340px] gap-5">
+            {financeView ? (
+              <Card title="Собівартість">
+                <p className="flex items-baseline gap-2">
+                  <span className="text-[34px] leading-none font-extrabold tracking-[-0.03em] text-white">
+                    {intake.totalCost === null ? '—' : money(intake.totalCost)}
+                  </span>
+                  <span className="text-app-muted font-mono text-sm">USD</span>
+                </p>
+                <dl className="border-app-line mt-4.5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5 border-t pt-4">
+                  <dt className="text-app-muted text-sm font-semibold">
+                    Придбання
+                  </dt>
+                  <dd className="font-mono text-[15px] text-white tabular-nums">
+                    {intake.totalCost === null ? '—' : money(intake.totalCost)}
+                  </dd>
+                  <dt className="text-app-muted text-sm font-semibold">
+                    Доставка
+                  </dt>
+                  <dd
+                    className="text-app-dim font-mono text-[15px] tabular-nums"
+                    title="Супутні витрати приймання поки не зберігає"
+                  >
+                    —
+                  </dd>
+                  <dt className="text-app-muted text-sm font-semibold">
+                    На позицію
+                  </dt>
+                  <dd className="font-mono text-[15px] text-white tabular-nums">
+                    {unitCost === null ? '—' : money(unitCost)}
+                  </dd>
+                  <div className="bg-app-line col-span-2 my-1 h-px" />
+                  <dt className="text-[15px] font-bold text-white">
+                    Повернено
+                  </dt>
+                  <dd className="text-state-ok font-mono text-[19px] tabular-nums">
+                    {money(profit?.recouped ?? 0)}
+                  </dd>
+                </dl>
+              </Card>
+            ) : null}
+
+            <Card title="Продаж партії">
+              <p className="flex items-baseline gap-2.5">
+                <span className="text-[26px] leading-none font-extrabold tracking-[-0.03em] text-white">
+                  {intake.soldCount}
+                </span>
+                <span className="text-app-muted font-mono text-[13px]">
+                  з {intake.partsCount}{' '}
+                  {plural(intake.partsCount, ['позиції', 'позицій', 'позицій'])}
+                </span>
+              </p>
+              <span
+                aria-label="Продано позицій партії"
+                aria-valuemax={100}
+                aria-valuemin={0}
+                aria-valuenow={
+                  intake.partsCount === 0
+                    ? 0
+                    : Math.round((intake.soldCount / intake.partsCount) * 100)
+                }
+                className="bg-app-line-2 mt-3.5 block h-2 overflow-hidden rounded-full"
+                role="progressbar"
+              >
+                <span
+                  className="bg-state-ok block h-full rounded-full"
+                  style={{
+                    width: `${String(
+                      intake.partsCount === 0
+                        ? 0
+                        : Math.round(
+                            (intake.soldCount / intake.partsCount) * 100,
+                          ),
+                    )}%`,
+                  }}
+                />
+              </span>
+              <p className="text-app-muted mt-3 text-[13px]">
+                {profit === null
+                  ? `${String(intake.partsCount - intake.soldCount)} позицій ще на складі`
+                  : `${String(profit.partsAvailable)} доступно · ${String(profit.partsSold)} продано`}
+              </p>
               {partCreateDecision.kind === 'allowed' ? (
-                <Button asChild>
+                <Button
+                  asChild
+                  className="mt-4.5 min-h-11 w-full text-sm font-bold"
+                  variant="primary"
+                >
                   <Link to={`${base}/${intake.id}/parts/new`}>
-                    Додати запчастину
+                    Додати деталь
                   </Link>
                 </Button>
               ) : null}
-              <Button
-                disabled={busy}
-                onClick={() => setConfirmDelete(true)}
-                variant="danger"
-              >
-                Видалити
-              </Button>
-            </>
-          ) : undefined
-        }
-        eyebrow="Склад · Приймання"
-        title={intake.name ?? 'Приймання без назви'}
-      />
-      {problem ? <Notice tone="danger">{problem}</Notice> : null}
-      <Panel>
-        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Fact label="Постачальник">{intake.supplier ?? 'не вказано'}</Fact>
-          <Fact label="Дата придбання">
-            {intake.purchasedAt ?? 'не вказано'}
-          </Fact>
-          {financeView ? (
-            <Fact label="Вартість">
-              {intake.totalCost === null
-                ? 'не вказано'
-                : money(intake.totalCost)}
-            </Fact>
-          ) : null}
-          <Fact label="Створив">{intake.createdBy.displayName}</Fact>
-          <Fact label="Нотатки">{intake.notes ?? 'Нотаток немає'}</Fact>
-        </dl>
-      </Panel>
-      {intake.photos.length > 0 ? (
-        <section aria-label="Фото приймання" className="grid gap-2">
-          <h2 className="text-base font-semibold text-white">Фото</h2>
-          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {intake.photos.map((photo, index) => (
-              <li key={photo.url}>
-                <a
-                  className="rounded-panel border-app-line block overflow-hidden border"
-                  href={photo.url}
-                >
-                  <img
-                    alt={`Фото приймання ${index + 1}`}
-                    className="aspect-4/3 w-full object-cover"
-                    src={photo.thumbnailUrl || photo.url}
-                  />
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      {financeView && intake.profitability ? (
-        <section aria-label="Прибутковість" className="grid gap-2">
-          <h2 className="text-base font-semibold text-white">Прибутковість</h2>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <StatCard
-              accent
-              label="Інвестовано"
-              value={money(intake.profitability.invested)}
-            />
-            <StatCard
-              label="Повернено"
-              value={money(intake.profitability.recouped)}
-            />
-            <StatCard
-              label="Повернення"
-              value={`${String(intake.profitability.recoupedPercent ?? '—')}%`}
-            />
-          </div>
-        </section>
-      ) : null}
-      {partsView ? (
-        <section className="grid gap-2">
-          <h2 className="text-base font-semibold text-white">Запчастини</h2>
-          <DataTable
-            caption="Запчастини приймання"
-            columns={[
-              {
-                key: 'name',
-                label: 'Деталь',
-                variant: 'primary',
-                cell: (part) => part.name,
-              },
-              {
-                key: 'quantity',
-                label: 'Кількість',
-                align: 'end',
-                cell: (part) => `${String(part.quantity)} ${part.unit}`,
-              },
-              {
-                key: 'status',
-                label: 'Стан',
-                cell: (part) => part.status,
-              },
-            ]}
-            empty={
-              <EmptyState
-                description="Додайте запчастину, щоб оприбуткувати вміст цього приймання."
-                title="У прийманні ще немає запчастин"
-              />
-            }
-            rowKey={(part) => part.id}
-            rows={intake.parts}
-          />
-        </section>
-      ) : null}
+            </Card>
+
+            <Card title="Постачальник">
+              <div className="flex items-center gap-3.5">
+                <span className="text-app-ink grid size-10 shrink-0 place-items-center rounded-full bg-white/[0.08] text-sm font-bold">
+                  {initials(intake.supplier ?? '—')}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[17px] font-bold tracking-[-0.015em] text-white">
+                    {intake.supplier ?? 'Не вказано'}
+                  </span>
+                  <span className="text-app-muted mt-0.5 block text-xs">
+                    Постачальники поки не ведуться окремим довідником
+                  </span>
+                </span>
+              </div>
+            </Card>
+          </aside>
+        </div>
+      </div>
+
       <ConfirmDialog
         confirmLabel="Видалити"
         consequence="Приймання та його звʼязок із оприбуткованими деталями зникнуть назавжди."
@@ -589,7 +1065,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
         pending={busy}
         title="Видалити приймання?"
       />
-    </PageBody>
+    </div>
   )
 }
 
@@ -607,23 +1083,6 @@ const INTAKE_SOURCES = [
   { value: 'car', label: 'З авто', hint: 'Розібране авто зі складу' },
   { value: 'auction', label: 'З аукціону', hint: 'Лот, куплений на аукціоні' },
 ] as const
-
-/** Dates arrive as ISO strings; anything unparsable is shown as it came. */
-const day = (value: string) => {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime())
-    ? value
-    : new Intl.DateTimeFormat('uk-UA', { dateStyle: 'medium' }).format(parsed)
-}
-
-/** Two initials for the avatar chip; a single word gives one. */
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || '?'
 
 function IntakeForm({
   title,
