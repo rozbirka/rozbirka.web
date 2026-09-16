@@ -1,9 +1,11 @@
 import {
   useEffect,
+  useId,
   useMemo,
   useState,
   type ChangeEvent,
   type FormEvent,
+  type ReactNode,
 } from 'react'
 import {
   Link,
@@ -43,7 +45,6 @@ import {
   ErrorState,
   Notice,
   PageBody,
-  PageHeader,
   PillGroup,
   SkeletonRows,
   SpecGrid,
@@ -573,6 +574,20 @@ const carColors: Record<string, string> = {
 }
 const colorSwatch = (value: string) =>
   carColors[value.trim().toLowerCase()] ?? 'var(--color-app-line-2)'
+
+/**
+ * The colours a yard writes down most often, offered as one tap. The field
+ * itself stays free text — the server takes any word, and these are only a
+ * shortcut to the usual ones.
+ */
+const CAR_COLORS = [
+  'Білий',
+  'Чорний',
+  'Сірий',
+  'Срібний',
+  'Синій',
+  'Червоний',
+].map((label) => ({ label, swatch: colorSwatch(label) }))
 
 /**
  * Payback against the money that went in. The track is the investment, and
@@ -1398,6 +1413,9 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     { id: number; name: string; amount: string }[]
   >([])
   const [createdCarId, setCreatedCarId] = useState<string | null>(null)
+  /** The car as the server last sent it — for its expenses, parts and dates. */
+  const [loaded, setLoaded] = useState<Car | null>(null)
+  const [deleting, setDeleting] = useState(false)
   // Shown while typing, so the invested sum is not a surprise after saving.
   const initialExpensesTotal = expenses.reduce((sum, expense) => {
     const value = Number(expense.amount)
@@ -1415,6 +1433,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     void carsApi.get(carId).then(
       (car) => {
         setLoading(false)
+        setLoaded(car)
         setValues({
           code: car.code,
           brand: car.brand,
@@ -1557,6 +1576,21 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     }
   }
   const priceLocked = carId !== undefined && !financeManage
+  const remove = async () => {
+    if (busy || !carId) return
+    setBusy(true)
+    try {
+      setProblem(null)
+      const scope = requireLatestMutation({ quota: false })
+      await carsApi.remove(carId, { signal: scope.signal })
+      void navigate(base)
+    } catch (error: unknown) {
+      setProblem(normalizeApiProblem(error).message)
+      setDeleting(false)
+      setBusy(false)
+    }
+  }
+
   const bind = (key: keyof typeof values) => ({
     disabled: busy,
     name: key,
@@ -1567,266 +1601,696 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     },
     value: values[key],
   })
+  const backTo = carId ? `${base}/${carId}` : base
+  const vinLength = values.vin.trim().length
+  const priceNumber = Number(values.purchasePrice)
+  const priceValid = Number.isFinite(priceNumber) && priceNumber > 0
+  /* On a new car the expenses are still being typed; on an existing one they
+     are the car's real expenses, managed on its own page. */
+  const expensesTotal = carId
+    ? (loaded?.expenses ?? []).reduce((sum, item) => sum + item.amount, 0)
+    : initialExpensesTotal
+  const invested = (priceValid ? priceNumber : 0) + expensesTotal
+  const checks: { label: string; done: boolean }[] = [
+    { label: 'Код заповнено', done: values.code.trim() !== '' },
+    {
+      label: 'Марка й модель',
+      done: values.brand.trim() !== '' && values.model.trim() !== '',
+    },
+    { label: 'Рік — чотири цифри', done: /^\d{4}$/.test(values.year.trim()) },
+    {
+      label: priceLocked ? 'Ціну веде фінансист' : 'Ціна придбання',
+      done: priceLocked || priceValid,
+    },
+  ]
+
   if (loading)
     return (
-      <PageBody width="narrow">
-        <PageHeader eyebrow="Склад · Автомобілі" title={title} />
+      <div className="type-redesign -mx-4 -mt-6 grid content-start px-4 pt-8 sm:-mx-6 sm:px-6 md:-mx-8 md:-mt-8 md:px-8 lg:-mx-10 lg:-mt-10 lg:px-12">
         <SkeletonRows
           columns={2}
           label="Завантажуємо дані автомобіля…"
           rows={5}
         />
-      </PageBody>
+      </div>
     )
+
   return (
-    <PageBody width="narrow">
-      <Button asChild className="justify-self-start" variant="quiet">
-        <Link to={carId ? `${base}/${carId}` : base}>
-          <ChevronLeft aria-hidden />
-          {carId ? 'До автомобіля' : 'До автомобілів'}
-        </Link>
-      </Button>
-      <PageHeader eyebrow="Склад · Автомобілі" title={title} />
-      {problem ? <Notice tone="danger">{problem}</Notice> : null}
-      {createdCarId ? (
-        <div className="grid gap-2">
-          <Notice tone="ok">
-            Автомобіль створено. Решту витрат можна додати на його сторінці.
-          </Notice>
-          <div className="flex flex-wrap">
-            <Button asChild>
-              <Link to={`${base}/${createdCarId}`}>Відкрити автомобіль</Link>
+    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+      <form aria-busy={busy} onSubmit={(event) => void submit(event)}>
+        <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+          <div className="flex min-w-0 items-center gap-5">
+            <Link
+              className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+              to={backTo}
+            >
+              <ChevronLeft aria-hidden className="size-3.5" />
+              {carId ? 'До автомобіля' : 'До автомобілів'}
+            </Link>
+            <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+              <span>Склад</span>
+              <span aria-hidden className="text-white/20">
+                /
+              </span>
+              <span>Автомобілі</span>
+              {values.code.trim() === '' ? null : (
+                <>
+                  <span aria-hidden className="text-white/20">
+                    /
+                  </span>
+                  <span className="text-app-muted truncate">
+                    {values.code.trim()}
+                  </span>
+                </>
+              )}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Button asChild className="px-[18px] text-sm font-semibold">
+              <Link to={backTo}>Скасувати</Link>
+            </Button>
+            <Button
+              aria-busy={busy}
+              className="px-5 text-sm font-bold"
+              disabled={busy}
+              type="submit"
+              variant="primary"
+            >
+              {carId ? 'Зберегти зміни' : 'Створити автомобіль'}
             </Button>
           </div>
         </div>
-      ) : null}
-      <form
-        aria-busy={busy}
-        className="grid gap-4"
-        onSubmit={(event) => void submit(event)}
-      >
-        <SectionPanel
-          description="За кодом ви знаходите авто на складі, за VIN — звіряєте його з документами."
-          title="Ідентифікація"
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field hint="Внутрішній номер авто на складі" label="Код" required>
-              <TextInput {...bind('code')} required />
-            </Field>
-            <Field label="Марка" required>
-              <TextInput {...bind('brand')} required />
-            </Field>
-            <Field label="Модель" required>
-              <TextInput {...bind('model')} required />
-            </Field>
-            <Field hint="Чотири цифри, наприклад 2020" label="Рік" required>
-              <TextInput {...bind('year')} inputMode="numeric" required />
-            </Field>
-            <Field label="Колір">
-              <TextInput {...bind('color')} />
-            </Field>
-            <Field
-              className="sm:col-span-2"
-              hint="17 символів з техпаспорта"
-              label="VIN"
-            >
-              <TextInput {...bind('vin')} className="font-mono" />
-            </Field>
+
+        <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+          <div className="min-w-0">
+            <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+              {carId
+                ? `${values.brand.trim()} ${values.model.trim()}`.trim() ||
+                  title
+                : title}
+            </h1>
+            <p className="text-app-muted mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px]">
+              {values.code.trim() === '' ? null : (
+                <>
+                  <span className="text-app-ink font-mono">
+                    {values.code.trim()}
+                  </span>
+                  <span aria-hidden className="text-white/20">
+                    ·
+                  </span>
+                </>
+              )}
+              {values.year.trim() === '' ? null : (
+                <>
+                  <span>{values.year.trim()}</span>
+                  <span aria-hidden className="text-white/20">
+                    ·
+                  </span>
+                </>
+              )}
+              <span>
+                {loaded === null
+                  ? 'Заповніть обовʼязкові поля — решту можна дописати пізніше.'
+                  : `Створено ${day(loaded.createdAt)}`}
+              </span>
+            </p>
           </div>
-        </SectionPanel>
-        <SectionPanel
-          description="Ціна придбання разом із витратами формує інвестовану суму авто."
-          title="Придбання"
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Дата придбання">
-              <TextInput {...bind('acquiredAt')} type="date" />
-            </Field>
-            <Field
-              hint={
-                priceLocked
-                  ? 'Ціну змінює користувач із правом на фінанси'
-                  : 'У доларах, без пробілів'
-              }
-              label="Ціна придбання"
-              required={!priceLocked}
-            >
-              <TextInput
-                {...bind('purchasePrice')}
-                disabled={busy || priceLocked}
-                inputMode="decimal"
-                required={!priceLocked}
-              />
-            </Field>
-          </div>
-        </SectionPanel>
-        <SectionPanel
-          description="Стан авто, домовленості з продавцем, що перевірити перед розбиранням."
-          title="Нотатки"
-        >
-          <Field label="Нотатки">
-            <TextArea {...bind('notes')} rows={4} />
-          </Field>
-        </SectionPanel>
-        {carId ? (
-          <SectionPanel
-            description="Фото додають і прибирають під час створення авто."
-            title="Фото"
-          >
-            {media.length > 0 ? (
-              <section
-                aria-label="Поточні фото автомобіля"
-                className="grid gap-2"
+
+          {problem ? <Notice tone="danger">{problem}</Notice> : null}
+          {createdCarId ? (
+            <Notice tone="ok">
+              Автомобіль створено. Решту витрат можна додати на його сторінці.{' '}
+              <Link className="underline" to={`${base}/${createdCarId}`}>
+                Відкрити автомобіль
+              </Link>
+            </Notice>
+          ) : null}
+
+          <div className="flex flex-wrap items-start gap-6">
+            <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-5">
+              <CarStep
+                hint="Код і VIN використовуються в пошуку та на стікерах. Зміна коду не впливає на вже надруковані стікери."
+                number="01"
+                title="Ідентифікація"
               >
-                <h3 className="text-app-muted text-[13.5px]">Поточні фото</h3>
-                <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {media.map((item, index) => (
-                    <li key={item.storageKey}>
-                      <img
-                        alt={`Поточне фото автомобіля ${index + 1}`}
-                        className="border-app-line rounded-control aspect-4/3 w-full border object-cover"
-                        src={item.url}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : (
-              <p className="text-app-dim text-[13.5px]">Фото немає.</p>
-            )}
-          </SectionPanel>
-        ) : (
-          <MediaPicker
-            additionalPermission="finance.manage"
-            entityType="cars"
-            items={media}
-            onChange={setMedia}
-          />
-        )}
-        {!carId && financeManage ? (
-          <SectionPanel
-            aside={
-              initialExpensesTotal > 0
-                ? `Разом ${money(initialExpensesTotal)}`
-                : undefined
-            }
-            description="Те, що вже витрачено на авто: транспортування, розмитнення, мийка. Разом із ціною придбання це інвестована сума."
-            footer={
-              <>
-                <span className="text-app-dim text-[13.5px]">
-                  Витрати можна додати й пізніше, на сторінці авто.
-                </span>
-                <Button
-                  disabled={busy}
-                  onClick={() =>
-                    setExpenses((current) => [
-                      ...current,
-                      { id: Date.now(), name: '', amount: '' },
-                    ])
-                  }
-                >
-                  <Plus aria-hidden />
-                  Додати витрату
-                </Button>
-              </>
-            }
-            title="Початкові витрати"
-          >
-            {expenses.length === 0 ? (
-              <p className="text-app-dim text-[13.5px]">
-                Витрат ще немає — авто збережеться й без них.
-              </p>
-            ) : (
-              <ul className="grid">
-                {expenses.map((expense, index) => {
-                  const saved = completedExpenseIds.has(expense.id)
-                  return (
-                    <li
-                      className={cn(
-                        'grid gap-3 py-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] sm:items-end',
-                        index > 0 && 'border-app-line border-t',
-                      )}
-                      key={expense.id}
-                    >
-                      {/* The label stays short on screen; the number that keeps
-                          each row apart is carried in the accessible name. */}
-                      <Field label="Назва" srLabel={`витрати ${index + 1}`}>
-                        <TextInput
-                          disabled={busy || saved}
-                          onChange={(event) =>
-                            setExpenses((current) =>
-                              current.map((item) =>
-                                item.id === expense.id
-                                  ? { ...item, name: event.target.value }
-                                  : item,
-                              ),
-                            )
-                          }
-                          placeholder="Транспортування"
-                          value={expense.name}
-                        />
-                      </Field>
-                      <Field
-                        hint={index === 0 ? 'У доларах' : undefined}
-                        label="Сума"
-                        srLabel={`витрати ${index + 1}`}
-                      >
-                        <TextInput
-                          disabled={busy || saved}
-                          inputMode="decimal"
-                          onChange={(event) =>
-                            setExpenses((current) =>
-                              current.map((item) =>
-                                item.id === expense.id
-                                  ? { ...item, amount: event.target.value }
-                                  : item,
-                              ),
-                            )
-                          }
-                          placeholder="500"
-                          value={expense.amount}
-                        />
-                      </Field>
-                      <div className="flex items-center justify-end gap-2 pb-0.5">
-                        {saved ? (
-                          <StatusPill tone="ok">Збережено</StatusPill>
-                        ) : null}
-                        <Button
-                          aria-label={`Прибрати витрату ${String(index + 1)}`}
-                          disabled={busy || saved}
+                <div className="grid gap-3.5 sm:grid-cols-2">
+                  <Field
+                    hint="Внутрішній номер авто на складі"
+                    label="Код"
+                    required
+                  >
+                    <TextInput
+                      {...bind('code')}
+                      className="font-mono"
+                      placeholder="RZB-26-0001"
+                      required
+                    />
+                  </Field>
+                  <Field
+                    hint="Чотири цифри, наприклад 2020"
+                    label="Рік"
+                    required
+                  >
+                    <TextInput
+                      {...bind('year')}
+                      className="font-mono"
+                      inputMode="numeric"
+                      placeholder="2020"
+                      required
+                    />
+                  </Field>
+                  <Field label="Марка" required>
+                    <TextInput
+                      {...bind('brand')}
+                      placeholder="Tesla"
+                      required
+                    />
+                  </Field>
+                  <Field label="Модель" required>
+                    <TextInput
+                      {...bind('model')}
+                      placeholder="Model Y"
+                      required
+                    />
+                  </Field>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-app-ink text-[13px] font-bold">Колір</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {CAR_COLORS.map((option) => {
+                      const active =
+                        values.color.trim().toLowerCase() ===
+                        option.label.toLowerCase()
+                      return (
+                        <button
+                          aria-pressed={active}
+                          className={cn(
+                            'focus-visible:outline-brand flex min-h-11 cursor-pointer items-center gap-2 rounded-[10px] border px-3.5 text-[14px] font-semibold',
+                            active
+                              ? 'border-app-line-2 text-app-ink bg-white/[0.07]'
+                              : 'border-app-line text-app-muted hover:border-white/20',
+                          )}
+                          disabled={busy}
+                          key={option.label}
                           onClick={() =>
-                            setExpenses((current) =>
-                              current.filter((item) => item.id !== expense.id),
-                            )
+                            setValues((current) => ({
+                              ...current,
+                              color: active ? '' : option.label,
+                            }))
                           }
-                          size="icon"
-                          variant="quiet"
+                          type="button"
                         >
-                          <Trash2 aria-hidden />
-                        </Button>
-                      </div>
-                    </li>
-                  )
-                })}
+                          <span
+                            aria-hidden
+                            className="size-2.5 rounded-full border border-white/20"
+                            style={{ background: option.swatch }}
+                          />
+                          {option.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="mt-3">
+                    <Field
+                      hint="Будь-який колір можна вписати словами."
+                      label="Колір словами"
+                    >
+                      <TextInput {...bind('color')} placeholder="Синій" />
+                    </Field>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <Field
+                    hint="17 символів з техпаспорта. Декодування VIN сервер не виконує — марку, модель і рік заповнюємо вручну."
+                    label="VIN"
+                  >
+                    <TextInput
+                      {...bind('vin')}
+                      className="font-mono tracking-[0.04em] uppercase"
+                      maxLength={17}
+                      placeholder="WVWD2468F220158A6"
+                    />
+                  </Field>
+                  <p
+                    className={cn(
+                      'mt-1.5 text-right font-mono text-[11px]',
+                      vinLength === 0
+                        ? 'text-app-dim'
+                        : vinLength === 17
+                          ? 'text-state-ok'
+                          : 'text-state-warn',
+                    )}
+                  >
+                    {vinLength} / 17
+                  </p>
+                </div>
+              </CarStep>
+
+              <CarStep
+                hint="Ціна придбання разом із витратами формує інвестовану суму авто."
+                number="02"
+                title="Придбання"
+              >
+                <div className="grid gap-3.5 sm:grid-cols-2">
+                  <Field label="Дата придбання">
+                    <TextInput {...bind('acquiredAt')} type="date" />
+                  </Field>
+                  <Field
+                    hint={
+                      priceLocked
+                        ? 'Ціну змінює користувач із правом на фінанси'
+                        : 'У доларах, без пробілів'
+                    }
+                    label="Ціна придбання"
+                    required={!priceLocked}
+                  >
+                    <TextInput
+                      {...bind('purchasePrice')}
+                      className="font-mono"
+                      disabled={busy || priceLocked}
+                      inputMode="decimal"
+                      placeholder="10380"
+                      required={!priceLocked}
+                    />
+                  </Field>
+                </div>
+              </CarStep>
+
+              {financeManage ? (
+                <CarStep
+                  hint="Те, що вже витрачено на авто: транспортування, розмитнення, мийка. Разом із ціною придбання це інвестована сума."
+                  number="03"
+                  title="Початкові витрати"
+                >
+                  {carId ? (
+                    <CarFormExpenses
+                      expenses={loaded?.expenses ?? []}
+                      to={`${base}/${carId}`}
+                    />
+                  ) : (
+                    <NewCarExpenses
+                      busy={busy}
+                      completed={completedExpenseIds}
+                      expenses={expenses}
+                      onChange={setExpenses}
+                    />
+                  )}
+                </CarStep>
+              ) : null}
+
+              <CarStep
+                hint="Можна вибрати кілька файлів одразу або зняти на камеру."
+                number={financeManage ? '04' : '03'}
+                title="Фото"
+              >
+                {carId ? (
+                  <>
+                    {media.length === 0 ? (
+                      <p className="border-app-line-2 text-app-muted rounded-[14px] border border-dashed bg-white/[0.02] px-6 py-8 text-center text-sm">
+                        Фото немає.
+                      </p>
+                    ) : (
+                      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {media.map((item, index) => (
+                          <li key={item.storageKey}>
+                            <img
+                              alt={`Поточне фото автомобіля ${String(index + 1)}`}
+                              className="border-app-line rounded-control aspect-4/3 w-full border object-cover"
+                              src={item.url}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <p className="text-app-muted mt-3 text-[13px]">
+                      Фото додають і прибирають під час створення авто — ручка
+                      оновлення їх не приймає.
+                    </p>
+                  </>
+                ) : (
+                  <MediaPicker
+                    additionalPermission="finance.manage"
+                    bare
+                    entityType="cars"
+                    items={media}
+                    onChange={setMedia}
+                  />
+                )}
+              </CarStep>
+
+              <CarStep
+                hint="Стан авто, домовленості з продавцем, що перевірити перед розбиранням."
+                number={financeManage ? '05' : '04'}
+                title="Нотатки"
+              >
+                <Field label="Нотатки">
+                  <TextArea
+                    {...bind('notes')}
+                    placeholder="Ходова частина в робочому стані."
+                    rows={4}
+                  />
+                </Field>
+              </CarStep>
+            </div>
+
+            <section
+              aria-label="Зведення"
+              className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-[18px] border px-5.5 pt-[22px] pb-6"
+            >
+              <h2 className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
+                Зведення
+              </h2>
+              <div className="border-app-line bg-app-canvas mt-4 rounded-[14px] border p-4">
+                <p
+                  className={cn(
+                    'text-[17px] font-bold tracking-[-0.015em]',
+                    values.code.trim() === '' ? 'text-app-dim' : 'text-white',
+                  )}
+                >
+                  {values.code.trim() || 'Код не вказано'}
+                </p>
+                <p
+                  className={cn(
+                    'mt-1 text-[14px] font-medium',
+                    values.brand.trim() === '' && values.model.trim() === ''
+                      ? 'text-app-dim'
+                      : 'text-app-muted',
+                  )}
+                >
+                  {`${values.brand.trim()} ${values.model.trim()}`.trim() ||
+                    'Марка й модель не вказані'}
+                </p>
+                <p
+                  className={cn(
+                    'mt-3 font-mono text-[12px] tracking-[0.04em] break-all',
+                    vinLength === 17 ? 'text-app-muted' : 'text-app-dim',
+                  )}
+                >
+                  {values.vin.trim().toUpperCase() || 'VIN не вказано'}
+                </p>
+              </div>
+              <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
+                <dt className="text-app-muted text-[14px] font-semibold">
+                  Ціна придбання
+                </dt>
+                <dd
+                  className={cn(
+                    'font-mono text-[15px]',
+                    priceValid ? 'text-white' : 'text-app-dim',
+                  )}
+                >
+                  {priceValid ? money(priceNumber) : '—'}
+                </dd>
+                <dt className="text-app-muted text-[14px] font-semibold">
+                  Витрати
+                </dt>
+                <dd
+                  className={cn(
+                    'font-mono text-[15px]',
+                    expensesTotal > 0 ? 'text-white' : 'text-app-dim',
+                  )}
+                >
+                  {expensesTotal > 0 ? money(expensesTotal) : '—'}
+                </dd>
+                <dd aria-hidden className="bg-app-line col-span-2 my-1 h-px" />
+                <dt className="text-[15px] font-bold text-white">
+                  Інвестовано
+                </dt>
+                <dd className="font-mono text-[20px] text-white">
+                  {invested > 0 ? money(invested) : '—'}
+                </dd>
+              </dl>
+              <ul className="border-app-line mt-5.5 grid gap-2.5 border-t pt-4.5">
+                {checks.map((check) => (
+                  <li
+                    className={cn(
+                      'flex items-center gap-2.5 text-[13px] font-semibold',
+                      check.done ? 'text-app-ink' : 'text-app-muted',
+                    )}
+                    key={check.label}
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'flex size-4.5 shrink-0 items-center justify-center rounded-full text-[11px] font-extrabold',
+                        check.done
+                          ? 'bg-state-ok-soft text-state-ok'
+                          : 'bg-white/[0.06]',
+                      )}
+                    >
+                      {check.done ? '✓' : ''}
+                    </span>
+                    {check.label}
+                    <span className="sr-only">
+                      {check.done ? ' — заповнено' : ' — ще не заповнено'}
+                    </span>
+                  </li>
+                ))}
               </ul>
-            )}
-          </SectionPanel>
-        ) : null}
-        <div className="border-app-line rounded-panel bg-app-raised flex flex-wrap items-center justify-end gap-2 border p-3">
-          <Button asChild variant="quiet">
-            <Link to={carId ? `${base}/${carId}` : base}>Скасувати</Link>
-          </Button>
-          <Button
-            aria-busy={busy}
-            disabled={busy}
-            type="submit"
-            variant="primary"
-          >
-            {carId ? 'Зберегти зміни' : 'Створити автомобіль'}
-          </Button>
+              <Button
+                aria-busy={busy}
+                className="mt-5.5 min-h-11.5 w-full text-[15px] font-bold"
+                disabled={busy}
+                type="submit"
+                variant="primary"
+              >
+                {carId ? 'Зберегти зміни' : 'Створити автомобіль'}
+              </Button>
+              {carId && loaded !== null ? (
+                <div className="border-app-line mt-5 border-t pt-4.5">
+                  <p className="text-app-muted text-[13px] leading-[1.5]">
+                    {loaded.profitability == null
+                      ? 'Видалення прибирає авто разом з його історією.'
+                      : `На авто закріплено ${String(loaded.profitability.partsTotal)} ${plural(loaded.profitability.partsTotal, ['запчастину', 'запчастини', 'запчастин'])}. Сервер відмовить у видаленні, поки позиції в продажу.`}
+                  </p>
+                  <Button
+                    className="mt-3 min-h-10 w-full text-[13px] font-bold"
+                    disabled={busy}
+                    onClick={() => setDeleting(true)}
+                    variant="danger"
+                  >
+                    <Trash2 aria-hidden />
+                    Видалити автомобіль
+                  </Button>
+                </div>
+              ) : null}
+            </section>
+          </div>
         </div>
       </form>
-    </PageBody>
+
+      <ConfirmDialog
+        confirmLabel="Видалити автомобіль"
+        consequence="Автомобіль зникне разом зі своєю історією. Якщо на ньому ще висять позиції в продажу, сервер відмовить у видаленні."
+        destructive
+        onConfirm={() => void remove()}
+        onOpenChange={(next) => {
+          if (!next) setDeleting(false)
+        }}
+        open={deleting}
+        pending={busy}
+        title="Видалити автомобіль?"
+      />
+    </div>
+  )
+}
+
+/** One numbered step of the car form, with its own explanation. */
+function CarStep({
+  number,
+  title,
+  hint,
+  children,
+}: {
+  number: string
+  title: string
+  hint: string
+  children: ReactNode
+}) {
+  const titleId = useId()
+  return (
+    <section
+      aria-labelledby={titleId}
+      className="border-app-line bg-app-raised rounded-[18px] border px-6 pt-[22px] pb-6"
+    >
+      <div className="flex items-baseline gap-2.5">
+        <span aria-hidden className="text-app-dim font-mono text-[11px]">
+          {number}
+        </span>
+        <h2
+          className="text-[17px] font-bold tracking-[-0.01em] text-white"
+          id={titleId}
+        >
+          {title}
+        </h2>
+      </div>
+      <p className="text-app-muted mt-1.5 text-[14px] leading-[1.5] text-pretty">
+        {hint}
+      </p>
+      <div className="mt-4.5">{children}</div>
+    </section>
+  )
+}
+
+/** What an existing car has already spent, and where it is managed. */
+function CarFormExpenses({
+  expenses,
+  to,
+}: {
+  expenses: readonly CarExpense[]
+  to: string
+}) {
+  return (
+    <>
+      {expenses.length === 0 ? (
+        <p className="border-app-line-2 text-app-muted rounded-xl border border-dashed bg-white/[0.02] p-4.5 text-sm">
+          Витрат ще немає.
+        </p>
+      ) : (
+        <ul className="grid gap-3">
+          {expenses.map((expense) => (
+            <li
+              className="border-app-line bg-app-canvas flex items-center gap-3 rounded-xl border px-3.5 py-3"
+              key={expense.id}
+            >
+              <span className="min-w-0 flex-1 text-[15px] font-semibold text-white">
+                {expense.name}
+              </span>
+              <span className="font-mono text-[15px] text-white">
+                {money(expense.amount)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="border-app-line mt-4.5 flex flex-wrap items-center justify-between gap-4 border-t pt-4.5">
+        <p className="text-app-muted text-[13px]">
+          Витрати впливають на інвестовану суму й окупність авто.
+        </p>
+        <Button asChild className="text-[13px] font-bold">
+          <Link to={to}>Керувати витратами</Link>
+        </Button>
+      </div>
+    </>
+  )
+}
+
+/** The expense rows typed while a car is being created. */
+function NewCarExpenses({
+  busy,
+  completed,
+  expenses,
+  onChange,
+}: {
+  busy: boolean
+  completed: ReadonlySet<number>
+  expenses: { id: number; name: string; amount: string }[]
+  onChange: (
+    update: (
+      current: { id: number; name: string; amount: string }[],
+    ) => { id: number; name: string; amount: string }[],
+  ) => void
+}) {
+  return (
+    <>
+      {expenses.length === 0 ? (
+        <p className="border-app-line-2 text-app-muted rounded-xl border border-dashed bg-white/[0.02] p-4.5 text-sm">
+          Витрат ще немає — авто збережеться й без них.
+        </p>
+      ) : (
+        <ul className="grid">
+          {expenses.map((expense, index) => {
+            const saved = completed.has(expense.id)
+            return (
+              <li
+                className={cn(
+                  'grid gap-3 py-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] sm:items-end',
+                  index > 0 && 'border-app-line border-t',
+                )}
+                key={expense.id}
+              >
+                {/* The label stays short on screen; the number that keeps
+                    each row apart is carried in the accessible name. */}
+                <Field label="Назва" srLabel={`витрати ${String(index + 1)}`}>
+                  <TextInput
+                    disabled={busy || saved}
+                    onChange={(event) =>
+                      onChange((current) =>
+                        current.map((item) =>
+                          item.id === expense.id
+                            ? { ...item, name: event.target.value }
+                            : item,
+                        ),
+                      )
+                    }
+                    placeholder="Транспортування"
+                    value={expense.name}
+                  />
+                </Field>
+                <Field
+                  hint={index === 0 ? 'У доларах' : undefined}
+                  label="Сума"
+                  srLabel={`витрати ${String(index + 1)}`}
+                >
+                  <TextInput
+                    className="font-mono"
+                    disabled={busy || saved}
+                    inputMode="decimal"
+                    onChange={(event) =>
+                      onChange((current) =>
+                        current.map((item) =>
+                          item.id === expense.id
+                            ? { ...item, amount: event.target.value }
+                            : item,
+                        ),
+                      )
+                    }
+                    placeholder="500"
+                    value={expense.amount}
+                  />
+                </Field>
+                <div className="flex items-center justify-end gap-2 pb-0.5">
+                  {saved ? <StatusPill tone="ok">Збережено</StatusPill> : null}
+                  <Button
+                    aria-label={`Прибрати витрату ${String(index + 1)}`}
+                    disabled={busy || saved}
+                    onClick={() =>
+                      onChange((current) =>
+                        current.filter((item) => item.id !== expense.id),
+                      )
+                    }
+                    size="icon"
+                    variant="quiet"
+                  >
+                    <Trash2 aria-hidden />
+                  </Button>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      <div className="border-app-line mt-4.5 flex flex-wrap items-center justify-between gap-4 border-t pt-4.5">
+        <p className="text-app-muted text-[13px]">
+          Витрати можна додати й пізніше, на сторінці авто.
+        </p>
+        <Button
+          className="text-[13px] font-bold"
+          disabled={busy}
+          onClick={() =>
+            onChange((current) => [
+              ...current,
+              { id: Date.now(), name: '', amount: '' },
+            ])
+          }
+        >
+          <Plus aria-hidden />
+          Додати витрату
+        </Button>
+      </div>
+    </>
   )
 }
 
@@ -1966,12 +2430,15 @@ function CarParts({
 export function MediaPicker({
   additionalPermission,
   beforeDispatch,
+  bare = false,
   entityType,
   items,
   onChange,
 }: {
   additionalPermission?: Permission
   beforeDispatch?: () => unknown
+  /** Drops the picker's own frame and heading, for a host that has one. */
+  bare?: boolean
   entityType: Exclude<MediaEntityType, 'tenants'>
   items: MediaUploadResult[]
   onChange: (items: MediaUploadResult[]) => void
@@ -2044,11 +2511,25 @@ export function MediaPicker({
     }
   }
   return (
-    <fieldset className="border-app-line rounded-panel bg-app-raised grid min-w-0 gap-3 border p-4">
-      <legend className="px-1 text-base font-semibold text-white">Фото</legend>
-      <p className="text-app-dim text-[13.5px]">
-        Можна вибрати кілька файлів одразу або зняти на камеру.
-      </p>
+    <fieldset
+      className={cn(
+        'grid min-w-0 gap-3',
+        !bare && 'border-app-line rounded-panel bg-app-raised border p-4',
+      )}
+    >
+      <legend
+        className={cn(
+          'px-1 text-base font-semibold text-white',
+          bare && 'sr-only',
+        )}
+      >
+        Фото
+      </legend>
+      {bare ? null : (
+        <p className="text-app-dim text-[13.5px]">
+          Можна вибрати кілька файлів одразу або зняти на камеру.
+        </p>
+      )}
       <input
         accept="image/*"
         aria-label="Додати фото"
