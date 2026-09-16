@@ -1709,9 +1709,15 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                 </>
               )}
               <span>
-                {loaded === null
-                  ? 'Заповніть обовʼязкові поля — решту можна дописати пізніше.'
-                  : `Створено ${day(loaded.createdAt)}`}
+                {loaded === null ? (
+                  <>
+                    Обовʼязкові поля позначені{' '}
+                    <span className="text-brand font-bold">*</span>. Решту можна
+                    заповнити пізніше.
+                  </>
+                ) : (
+                  `Створено ${day(loaded.createdAt)}`
+                )}
               </span>
             </p>
           </div>
@@ -1729,7 +1735,11 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
           <div className="flex flex-wrap items-start gap-6">
             <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-5">
               <CarStep
-                hint="Код і VIN використовуються в пошуку та на стікерах. Зміна коду не впливає на вже надруковані стікери."
+                hint={
+                  carId
+                    ? 'Код і VIN використовуються в пошуку та на стікерах. Зміна коду не впливає на вже надруковані стікери.'
+                    : 'За кодом ви знаходите авто на складі, за VIN — звіряєте його з документами.'
+                }
                 number="01"
                 title="Ідентифікація"
               >
@@ -1956,11 +1966,11 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
             </div>
 
             <section
-              aria-label="Зведення"
+              aria-label={carId ? 'Зведення' : 'Перед створенням'}
               className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-[18px] border px-5.5 pt-[22px] pb-6"
             >
               <h2 className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
-                Зведення
+                {carId ? 'Зведення' : 'Перед створенням'}
               </h2>
               <div className="border-app-line bg-app-canvas mt-4 rounded-[14px] border p-4">
                 <p
