@@ -93,7 +93,7 @@ it('renders Core-provided work totals for an owner, including a real zero', () =
   )
 
   expect(screen.getByText('Авто в роботі')).toBeInTheDocument()
-  expect(screen.getByText('Продано запчастин').parentElement).toHaveTextContent(
+  expect(screen.getByText('Продано всього').parentElement).toHaveTextContent(
     '0',
   )
 })

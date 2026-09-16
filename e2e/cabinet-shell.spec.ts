@@ -938,9 +938,7 @@ async function loginFrom(page: Page) {
   await page.goto('/login', { waitUntil: 'domcontentloaded' })
   await completeOtpLogin(page)
   await expect(page).toHaveURL('/app/koval/dashboard')
-  await expect(
-    page.getByRole('heading', { name: 'Вітаємо в Розбірка Коваль' }),
-  ).toBeVisible()
+  await expect(page.getByText('Зріз «зараз» · Розбірка Коваль')).toBeVisible()
 }
 
 async function selectVisibleTenant(page: Page, tenantId: string) {
@@ -1212,9 +1210,7 @@ test('same-slug Back aborts a pending tenant selection before it can commit @cab
   await loginFrom(page)
   await selectVisibleTenant(page, 'tenant-2')
   await expect(page).toHaveURL('/app/sobol/dashboard')
-  await expect(
-    page.getByRole('heading', { name: 'Вітаємо в Розбірка Соболя' }),
-  ).toBeVisible()
+  await expect(page.getByText('Зріз «зараз» · Розбірка Соболя')).toBeVisible()
   await clickVisibleCabinetLink(page, 'Профіль')
   await expect(page).toHaveURL('/app/sobol/settings/profile')
 
@@ -1228,14 +1224,12 @@ test('same-slug Back aborts a pending tenant selection before it can commit @cab
   await fixture.waitForDelayedPermissions()
   await page.goBack()
   await expect(page).toHaveURL('/app/sobol/dashboard')
-  await expect(
-    page.getByRole('heading', { name: 'Вітаємо в Розбірка Соболя' }),
-  ).toBeVisible()
+  await expect(page.getByText('Зріз «зараз» · Розбірка Соболя')).toBeVisible()
   const abortedRequest = await formerAccessRequestFailed
   expect(abortedRequest.failure()?.errorText).toMatch(/aborted|cancelled/i)
 
   const formerTenantHeadingAppeared = page
-    .getByRole('heading', { name: 'Вітаємо в Розбірка Коваль' })
+    .getByText('Зріз «зараз» · Розбірка Коваль')
     .waitFor({ state: 'visible', timeout: 1_000 })
     .then(
       () => true,
@@ -1254,7 +1248,7 @@ test('same-slug Back aborts a pending tenant selection before it can commit @cab
   expect(await formerTenantHeadingAppeared).toBe(false)
   expect(await formerTenantAccessAppeared).toBe(false)
   await expect(
-    page.getByRole('heading', { name: 'Вітаємо в Розбірка Коваль' }),
+    page.getByText('Зріз «зараз» · Розбірка Коваль'),
   ).not.toBeVisible()
   await expect(page.getByRole('link', { name: 'Підписка' })).not.toBeVisible()
   await page.setViewportSize({ width: 320, height: 900 })
@@ -1313,9 +1307,7 @@ test('falls back to the target dashboard when its policy denies the current modu
   await selectVisibleTenant(page, 'tenant-2')
 
   await expect(page).toHaveURL('/app/sobol/dashboard')
-  await expect(
-    page.getByRole('heading', { name: 'Вітаємо в Розбірка Соболя' }),
-  ).toBeVisible()
+  await expect(page.getByText('Зріз «зараз» · Розбірка Соболя')).toBeVisible()
 })
 
 test('boots an active Manager entitlement without requesting detailed billing @cabinet-smoke', async ({
@@ -1329,9 +1321,7 @@ test('boots an active Manager entitlement without requesting detailed billing @c
   await selectVisibleTenant(page, 'tenant-2')
 
   await expect(page).toHaveURL('/app/sobol/dashboard')
-  await expect(
-    page.getByRole('heading', { name: 'Вітаємо в Розбірка Соболя' }),
-  ).toBeVisible()
+  await expect(page.getByText('Зріз «зараз» · Розбірка Соболя')).toBeVisible()
   expect(
     fixture.requests.filter(
       ({ path, tenantId }) =>
@@ -1663,9 +1653,7 @@ test('canonical tenant roots reach the private SPA and redirect to the dashboard
     expect(response?.status(), path).toBe(200)
     expect(response?.headers()['x-robots-tag'], path).toBe('noindex')
     await expect(page, path).toHaveURL('/app/koval/dashboard')
-    await expect(
-      page.getByRole('heading', { name: 'Вітаємо в Розбірка Коваль' }),
-    ).toBeVisible()
+    await expect(page.getByText('Зріз «зараз» · Розбірка Коваль')).toBeVisible()
   }
 })
 

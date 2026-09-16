@@ -140,9 +140,14 @@ it('omits the optional top part and renders zero series without invalid bar dime
   expect(
     document.querySelectorAll('[aria-label="Декоративна діаграма"]'),
   ).toHaveLength(3)
-  expect(screen.getAllByTestId('analytics-bar')).toHaveLength(9)
-  for (const bar of screen.getAllByTestId('analytics-bar')) {
-    expect(bar).toHaveStyle({ height: '0%' })
+  // A flat series has no span to scale by: it is drawn along the middle of the
+  // box rather than collapsed onto the floor or dividing by zero.
+  const lines = document.querySelectorAll(
+    '[aria-label="Декоративна діаграма"] polyline',
+  )
+  expect(lines).toHaveLength(6)
+  for (const line of lines) {
+    expect(line.getAttribute('points')).toContain('17.0')
   }
 })
 

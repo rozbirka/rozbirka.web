@@ -1,12 +1,12 @@
 import { EmptyState } from '@/components/app'
+import { cn, plural } from '@/lib/utils'
+import type { DashboardData, LastActivity } from '@/api/dashboard-contract'
+
 /**
  * Parts trade in dollars — the analytics contract names the same figure
  * `revenueUsd`; only the till (`totalBalanceUah`) is hryvnia.
  */
 const CAR_CURRENCY = 'USD'
-
-import { cn } from '@/lib/utils'
-import type { DashboardData, LastActivity } from '@/api/dashboard-contract'
 
 const numberFormatter = new Intl.NumberFormat('uk-UA')
 const currencyFormatter = (currency: string) =>
@@ -28,41 +28,59 @@ const dateFormatter = new Intl.DateTimeFormat('uk-UA', {
 interface SummaryItem {
   label: string
   value: string
-  accent?: boolean
+  /** Sits under the figure: what the figure is counting. */
+  meta?: string
+  tone?: 'ok' | 'warn'
+  /** Drawn under the meta line — the payback bar. */
+  bar?: { filled: number; tone: 'ok' } | undefined
 }
 
 export function DashboardSummary({ data }: { data: DashboardData }) {
-  const revenue = revenueItem(data)
-  const commonItems = compact([
-    revenue === null ? null : { ...revenue, accent: true },
+  const money = compact([
+    moneyItem('Баланс кас', data.totalBalanceUah, 'UAH'),
+    moneyItem('Інвестовано всього', data.totalInvested, CAR_CURRENCY, {
+      ...(data.activeCarsCount === null
+        ? {}
+        : {
+            meta: `${numberFormatter.format(data.activeCarsCount)} ${plural(data.activeCarsCount, ['авто', 'авто', 'авто'])} · закупка і розбирання`,
+          }),
+    }),
+    recoupedItem(data),
+  ])
+  const stock = compact([
+    item('Доступних запчастин', data.availablePartsCount, {
+      meta: 'на складі',
+    }),
+    item('Продано всього', data.totalPartsSold, { meta: 'за весь час' }),
+    item('Нових сьогодні', data.todayNewPartsCount, {
+      meta:
+        data.intakesCount > 0
+          ? `${numberFormatter.format(data.intakesCount)} ${plural(data.intakesCount, ['приймання', 'приймання', 'приймань'])}`
+          : 'приймань ще немає',
+    }),
+    item('Немає в наявності', data.outOfStockPartsCount, {
+      meta: 'нульовий залишок',
+      tone: 'warn',
+    }),
+  ])
+  const work = compact([
+    revenueItem(data),
     item('Продажів сьогодні', data.todaySalesCount),
-    item('Доступних запчастин', data.availablePartsCount),
-    item('Приймань', data.intakesCount),
-    item('Нових запчастин сьогодні', data.todayNewPartsCount),
-  ])
-  const managementItems = compact([
     item('Активних авто', data.activeCarsCount),
-    item('Немає в наявності', data.outOfStockPartsCount),
-    item('Клієнтів', data.customersCount),
-    moneyItem('Баланс каси', data.totalBalanceUah, 'UAH'),
-    item('Учасників команди', data.teamMembersCount),
-    moneyItem('Інвестовано', data.totalInvested, CAR_CURRENCY),
-    moneyItem('Повернуто', data.totalRecouped, CAR_CURRENCY),
-  ])
-  const workItems = compact([
     item('Авто в роботі', data.carsInWork),
-    item('Продано запчастин', data.totalPartsSold),
+    item('Клієнтів', data.customersCount),
+    item('Учасників команди', data.teamMembersCount),
     item('Продано мною сьогодні', data.myPartsToday),
   ])
 
   return (
     <section aria-label="Зведення" className="grid gap-4">
       {data.isYardEmpty ? <DashboardEmptyState /> : null}
-      <SummaryList items={commonItems} />
-      {managementItems.length > 0 ? (
-        <SummaryList items={managementItems} />
+      {money.length > 0 ? (
+        <SummaryStrip aside="станом на зараз" items={money} title="Гроші" />
       ) : null}
-      {workItems.length > 0 ? <SummaryList items={workItems} /> : null}
+      {stock.length > 0 ? <SummaryStrip items={stock} title="Склад" /> : null}
+      {work.length > 0 ? <SummaryStrip items={work} title="Робота" /> : null}
       <Activity activity={data.lastActivity} title="Остання активність" />
       <Activity activity={data.lastMyActivity} title="Моя остання активність" />
     </section>
@@ -78,26 +96,63 @@ function DashboardEmptyState() {
   )
 }
 
-function SummaryList({ items }: { items: readonly SummaryItem[] }) {
+/**
+ * A row of figures under one rule. The cells share a hairline grid rather than
+ * standing as separate boxes, so a strip reads as one measure of the yard.
+ */
+function SummaryStrip({
+  title,
+  aside,
+  items,
+}: {
+  title: string
+  aside?: string
+  items: readonly SummaryItem[]
+}) {
   return (
-    <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {items.map(({ label, value, accent }) => (
-        <div
-          className={cn(
-            'rounded-panel border p-4',
-            accent
-              ? 'border-brand/30 bg-brand/[0.06]'
-              : 'border-app-line bg-app-raised',
-          )}
-          key={label}
-        >
-          <dt className="text-app-dim text-[13.5px]">{label}</dt>
-          <dd className="mt-1.5 text-[25px] leading-tight font-light tracking-[-0.02em] tabular-nums text-white">
-            {value}
-          </dd>
-        </div>
-      ))}
-    </dl>
+    <section aria-label={title} className="grid gap-4.5">
+      <div className="flex items-baseline gap-3.5">
+        <h2 className="text-app-muted font-mono text-[11px] tracking-[0.16em] uppercase">
+          {title}
+        </h2>
+        <span aria-hidden className="bg-app-line h-px flex-1" />
+        {aside === undefined ? null : (
+          <span className="text-app-dim text-[13px]">{aside}</span>
+        )}
+      </div>
+      <dl className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-px overflow-hidden rounded-[20px] border">
+        {items.map(({ label, value, meta, tone, bar }) => (
+          <div className="bg-app-raised px-6 pt-[22px] pb-6" key={label}>
+            <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+              {label}
+            </dt>
+            <dd
+              className={cn(
+                'mt-3.5 text-[30px] leading-none font-extrabold tracking-[-0.03em] tabular-nums',
+                tone === 'ok'
+                  ? 'text-state-ok'
+                  : tone === 'warn'
+                    ? 'text-state-warn'
+                    : 'text-white',
+              )}
+            >
+              {value}
+            </dd>
+            {bar === undefined ? null : (
+              <div className="bg-app-line-2 mt-4 h-1.5 overflow-hidden rounded-full">
+                <div
+                  className="bg-state-ok h-full rounded-full"
+                  style={{ width: `${String(bar.filled)}%` }}
+                />
+              </div>
+            )}
+            {meta === undefined ? null : (
+              <p className="text-app-dim mt-3 text-[13px]">{meta}</p>
+            )}
+          </div>
+        ))}
+      </dl>
+    </section>
   )
 }
 
@@ -123,18 +178,52 @@ function Activity({
   )
 }
 
-function item(label: string, value: number | null): SummaryItem | null {
-  return value === null ? null : { label, value: numberFormatter.format(value) }
+function item(
+  label: string,
+  value: number | null,
+  extra: Omit<SummaryItem, 'label' | 'value'> = {},
+): SummaryItem | null {
+  return value === null
+    ? null
+    : { label, value: numberFormatter.format(value), ...extra }
 }
 
 function moneyItem(
   label: string,
   value: number | null,
   currency: string,
+  extra: Omit<SummaryItem, 'label' | 'value'> = {},
 ): SummaryItem | null {
   return value === null
     ? null
-    : { label, value: currencyFormatter(currency).format(value) }
+    : { label, value: currencyFormatter(currency).format(value), ...extra }
+}
+
+/**
+ * What the yard has earned back against what it put in. The bar is capped at
+ * full and the sentence underneath keeps the real numbers, so a yard that has
+ * more than paid itself back reads as done rather than as an overflowing bar.
+ */
+function recoupedItem(data: DashboardData): SummaryItem | null {
+  const recouped = data.totalRecouped
+  if (recouped === null) return null
+  const invested = data.totalInvested
+  const base: SummaryItem = {
+    label: 'Повернено всього',
+    value: currencyFormatter(CAR_CURRENCY).format(recouped),
+    tone: 'ok',
+  }
+  if (invested === null || invested <= 0) return base
+  const percent = Math.round((recouped / invested) * 100)
+  const left = invested - recouped
+  return {
+    ...base,
+    bar: { filled: Math.min(100, Math.max(0, percent)), tone: 'ok' },
+    meta:
+      left > 0
+        ? `Окупність складу ${String(percent)}% · лишилось ${currencyFormatter(CAR_CURRENCY).format(left)}`
+        : `Окупність складу ${String(percent)}% · вкладене повернулося`,
+  }
 }
 
 /**

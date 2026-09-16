@@ -178,7 +178,7 @@ it('retries only failed summary data and marks refresh as busy', async () => {
   expect(
     screen.queryByText('Raw upstream network detail'),
   ).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Оновлюємо…' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Оновлюємо дані' })).toBeDisabled()
   expect(
     screen.getByRole('region', { name: 'Панель зведення' }),
   ).toHaveAttribute('aria-busy', 'true')
