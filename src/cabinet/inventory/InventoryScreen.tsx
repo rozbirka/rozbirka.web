@@ -15,6 +15,7 @@ import {
   Plus,
   Printer,
   RefreshCw,
+  ScanLine,
 } from 'lucide-react'
 import {
   Button,
@@ -43,10 +44,12 @@ import {
   type InventorySession,
   type InventorySessionResults,
   type InventoryZone,
+  type PartInventoryZone,
   type Warehouse,
   type WarehouseDetail,
 } from '@/api/inventory'
-import { partsApi } from '@/api/parts'
+import { partsApi, type PartDetail, type PartHistory } from '@/api/parts'
+import { historyDetails, historyLabel } from '../parts/part-labels'
 import { teamApi } from '@/api/team'
 import { normalizeApiProblem } from '@/api/errors'
 import { cn, plural } from '@/lib/utils'
@@ -1808,11 +1811,14 @@ function Step({
   number,
   title,
   hint,
+  aside,
   children,
 }: {
   number: string
   title: string
   hint?: string
+  /** Sits opposite the title — a legend, a count. */
+  aside?: ReactNode
   children: ReactNode
 }) {
   const titleId = useId()
@@ -1821,16 +1827,19 @@ function Step({
       aria-labelledby={titleId}
       className="border-app-line bg-app-raised rounded-[18px] border px-6 pt-[22px] pb-6"
     >
-      <div className="flex items-baseline gap-2.5">
-        <span aria-hidden className="text-app-dim font-mono text-[11px]">
-          {number}
-        </span>
-        <h2
-          className="text-[17px] font-bold tracking-[-0.01em] text-white"
-          id={titleId}
-        >
-          {title}
-        </h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <div className="flex items-baseline gap-2.5">
+          <span aria-hidden className="text-app-dim font-mono text-[11px]">
+            {number}
+          </span>
+          <h2
+            className="text-[17px] font-bold tracking-[-0.01em] text-white"
+            id={titleId}
+          >
+            {title}
+          </h2>
+        </div>
+        {aside}
       </div>
       {hint === undefined ? null : (
         <p className="text-app-muted mt-1.5 text-[14px]">{hint}</p>
@@ -4156,24 +4165,58 @@ function JournalStat({
   )
 }
 
+/** Which part-history events are about where a part lies. */
+const PLACEMENT_EVENTS = new Set(['placed', 'unplaced', 'moved'])
+
+interface PlacementData {
+  zones: InventoryZone[]
+  placement: PartInventoryZone[]
+  part: PartDetail | null
+  history: PartHistory | null
+  /** Parts per zone, so a zone can say how loaded it is. */
+  byZone: Map<string, number> | null
+}
+
 function PartPlacementView({ partId }: { partId: string }) {
   const { targetTenant } = useCabinet()
   const canManage = usePermission('inventory.zones.manage')
+  const canSeeParts = usePermission('parts.view')
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.inventory,
   )
   const loader = useCallback(
-    async (signal: AbortSignal) => {
-      const [zones, placement] = await Promise.all([
+    async (signal: AbortSignal): Promise<PlacementData> => {
+      const [zones, placement, part, history, byZone] = await Promise.all([
         inventoryApi.getZones({ signal }),
         inventoryApi.getPartZones(partId, { signal }),
+        canSeeParts
+          ? partsApi.get(partId, { signal }).then(
+              (data) => data,
+              () => null,
+            )
+          : Promise.resolve(null),
+        canSeeParts
+          ? partsApi.history(partId, { signal }).then(
+              (data) => data,
+              () => null,
+            )
+          : Promise.resolve(null),
+        canSeeParts
+          ? partsApi.facets({}, ['zone'], { signal }).then(
+              (facets) =>
+                new Map(facets.zones.map((zone) => [zone.id, zone.count])),
+              () => null,
+            )
+          : Promise.resolve(null),
       ])
-      return { zones, placement }
+      return { zones, placement, part, history, byZone }
     },
-    [partId],
+    [canSeeParts, partId],
   )
   const resource = useLoad(loader, partId)
   const [selection, setSelection] = useState<string[] | null>(null)
+  const [warehouseId, setWarehouseId] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
   const [saving, setSaving] = useState(false)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
@@ -4212,67 +4255,457 @@ function PartPlacementView({ partId }: { partId: string }) {
   const back = targetTenant
     ? cabinetPath(targetTenant.slug, 'parts', partId)
     : '/'
+
   return (
-    <PageBody width="narrow">
-      <PageHeader
-        eyebrow={<Link to={back}>Запчастина</Link>}
-        title="Розміщення по зонах"
-      />
-      <Notice tone="info">
-        Виберіть щонайменше одну зону зберігання. Системна зона «Без зони» не
-        показується серед фізичних місць.
-      </Notice>
-      {operationError ? <Notice tone="danger">{operationError}</Notice> : null}
-      {saved ? <Notice tone="ok">Розміщення збережено</Notice> : null}
-      <Resource state={resource.state} retry={resource.reload}>
-        {({ zones: items }: { zones: InventoryZone[] }) => (
-          <Panel>
-            <div className="grid gap-2">
-              {items
-                .filter((zone) => zone.isActive && !zone.isSystemUnassigned)
-                .map((zone) => {
-                  const checked = selected.includes(zone.id)
-                  return (
-                    <label
-                      className="flex min-h-11 items-center gap-3 rounded-lg border border-app-line px-3 text-white"
-                      key={zone.id}
-                    >
-                      <input
-                        aria-label={`${zone.warehouseName} · ${zone.name}`}
-                        checked={checked}
-                        disabled={!canManage}
-                        onChange={() => {
-                          setSaved(false)
-                          setSelection((value) => {
-                            const current = value ?? selected
-                            return checked
-                              ? current.filter((id) => id !== zone.id)
-                              : [...current, zone.id]
-                          })
-                        }}
-                        type="checkbox"
-                      />
-                      <span>
-                        {zone.warehouseName} · {zone.name}
+    <Resource retry={resource.reload} state={resource.state}>
+      {({ zones, placement, part, history, byZone }: PlacementData) => {
+        const real = zones.filter(
+          (zone) => zone.isActive && !zone.isSystemUnassigned,
+        )
+        const houses = [
+          ...new Map(
+            real.map((zone) => [
+              zone.warehouseId,
+              { id: zone.warehouseId, name: zone.warehouseName },
+            ]),
+          ).values(),
+        ]
+        /* Open on the warehouse the part already lies in — that is where a
+           correction is most likely to be made. */
+        const house =
+          warehouseId ?? placement[0]?.warehouseId ?? houses[0]?.id ?? null
+        const inHouse = real.filter((zone) => zone.warehouseId === house)
+        const needle = query.trim().toLowerCase()
+        const shown = inHouse.filter(
+          (zone) =>
+            needle === '' ||
+            `${zone.name} ${zone.code}`.toLowerCase().includes(needle),
+        )
+        const partsIn = (zoneId: string) => byZone?.get(zoneId) ?? null
+        const busiest = Math.max(
+          1,
+          ...inHouse.map((zone) => partsIn(zone.id) ?? 0),
+        )
+        const before = placement.map((zone) => zone.zoneId)
+        const changed =
+          selected.length !== before.length ||
+          selected.some((id) => !before.includes(id))
+        const chosen = real.filter((zone) => selected.includes(zone.id))
+        const moves = (history?.events ?? []).filter((event) =>
+          PLACEMENT_EVENTS.has(event.eventType),
+        )
+        const toggle = (zoneId: string) => {
+          setSaved(false)
+          setSelection((value) => {
+            const current = value ?? selected
+            return current.includes(zoneId)
+              ? current.filter((id) => id !== zoneId)
+              : [...current, zoneId]
+          })
+        }
+
+        return (
+          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+              <div className="flex min-w-0 items-center gap-5">
+                <Link
+                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                  to={back}
+                >
+                  <ChevronLeft aria-hidden className="size-3.5" />
+                  До деталі
+                </Link>
+                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                  <span>Склад</span>
+                  <span aria-hidden className="text-white/20">
+                    /
+                  </span>
+                  <span>Запчастини</span>
+                  {part === null ? null : (
+                    <>
+                      <span aria-hidden className="text-white/20">
+                        /
                       </span>
-                    </label>
-                  )
-                })}
+                      <span className="text-app-muted">{part.qrCode}</span>
+                    </>
+                  )}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <Button
+                  disabled
+                  title="Зону сканують у мобільному застосунку — кабінет вибирає її зі списку"
+                >
+                  <ScanLine aria-hidden />
+                  Сканувати зону
+                </Button>
+                {canManage ? (
+                  <Button
+                    aria-busy={saving}
+                    className="px-5 text-sm font-bold"
+                    disabled={saving || selected.length === 0}
+                    onClick={() => void save()}
+                    variant="primary"
+                  >
+                    {saving ? 'Зберігаємо…' : 'Розмістити'}
+                  </Button>
+                ) : null}
+              </div>
             </div>
-            {canManage ? (
-              <Button
-                className="mt-4 w-full"
-                aria-busy={saving}
-                disabled={saving || !selected.length}
-                onClick={() => void save()}
-                variant="primary"
-              >
-                {saving ? 'Зберігаємо…' : 'Зберегти розміщення'}
-              </Button>
-            ) : null}
-          </Panel>
-        )}
-      </Resource>
-    </PageBody>
+
+            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+              <div className="min-w-0">
+                <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+                  Розміщення на складі
+                </h1>
+                <p className="text-app-muted mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px]">
+                  {part === null ? (
+                    <span>
+                      Картку запчастини видно тим, хто має право «parts.view».
+                    </span>
+                  ) : (
+                    <>
+                      <span className="text-app-ink font-semibold">
+                        {part.name}
+                      </span>
+                      <span aria-hidden className="text-white/20">
+                        ·
+                      </span>
+                      <span className="font-mono">{part.qrCode}</span>
+                      <span aria-hidden className="text-white/20">
+                        ·
+                      </span>
+                      <span>
+                        {part.quantityTotal} {part.unit} на складі
+                      </span>
+                    </>
+                  )}
+                </p>
+              </div>
+
+              {operationError ? (
+                <Notice tone="danger">{operationError}</Notice>
+              ) : null}
+              {saved ? <Notice tone="ok">Розміщення збережено</Notice> : null}
+
+              <div className="flex flex-wrap items-start gap-6">
+                <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-5">
+                  <Step
+                    hint="Фізичне приміщення, де лежить запчастина."
+                    number="01"
+                    title="Склад"
+                  >
+                    <div
+                      aria-label="Склад"
+                      className="flex flex-wrap gap-2"
+                      role="radiogroup"
+                    >
+                      {houses.map((item) => {
+                        const active = item.id === house
+                        const count = real.filter(
+                          (zone) => zone.warehouseId === item.id,
+                        ).length
+                        return (
+                          <button
+                            aria-checked={active}
+                            className={cn(
+                              'focus-visible:outline-brand min-h-[66px] flex-[1_1_10rem] cursor-pointer rounded-xl border px-3.5 py-3 text-left hover:border-white/20',
+                              active
+                                ? 'border-app-line-2 bg-white/[0.07]'
+                                : 'border-app-line bg-transparent',
+                            )}
+                            key={item.id}
+                            onClick={() => {
+                              setWarehouseId(item.id)
+                              setQuery('')
+                            }}
+                            role="radio"
+                            type="button"
+                          >
+                            <span
+                              className={cn(
+                                'block text-[15px] font-bold',
+                                active ? 'text-app-ink' : 'text-app-muted',
+                              )}
+                            >
+                              {item.name}
+                            </span>
+                            <span className="text-app-muted mt-1 block text-[12px] font-medium">
+                              {count} {plural(count, ['зона', 'зони', 'зон'])}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </Step>
+
+                  <Step
+                    aside={
+                      <p className="text-app-muted flex flex-wrap items-center gap-3.5 text-[12px]">
+                        <span className="flex items-center gap-1.5">
+                          <span
+                            aria-hidden
+                            className="size-2 rounded-[3px] bg-white/15"
+                          />
+                          порожня
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <span
+                            aria-hidden
+                            className="bg-state-warn/50 size-2 rounded-[3px]"
+                          />
+                          є позиції
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <span
+                            aria-hidden
+                            className="bg-state-danger/50 size-2 rounded-[3px]"
+                          />
+                          найзавантаженіша
+                        </span>
+                      </p>
+                    }
+                    hint="Зона — найдрібніше місце в нашій системі: саме її і сканують. Можна вибрати кілька."
+                    number="02"
+                    title="Зона"
+                  >
+                    <SearchInput
+                      aria-label="Пошук зони"
+                      onChange={(event) => setQuery(event.target.value)}
+                      placeholder="Назва або код зони, наприклад A1"
+                      value={query}
+                    />
+                    {shown.length === 0 ? (
+                      <p className="border-app-line-2 text-app-muted mt-3.5 rounded-xl border border-dashed bg-white/[0.02] p-4.5 text-sm">
+                        {inHouse.length === 0
+                          ? 'На цьому складі немає активних зон.'
+                          : 'Зон за запитом не знайдено. Перевірте код або виберіть інший склад.'}
+                      </p>
+                    ) : (
+                      <ul className="mt-3.5 grid grid-cols-[repeat(auto-fill,minmax(min(100%,8rem),1fr))] gap-2">
+                        {shown.map((zone) => {
+                          const on = selected.includes(zone.id)
+                          const count = partsIn(zone.id)
+                          const load =
+                            count === null
+                              ? 0
+                              : Math.round((count / busiest) * 100)
+                          return (
+                            <li key={zone.id}>
+                              <label
+                                className={cn(
+                                  'block cursor-pointer rounded-xl border px-3 pt-2.5 pb-3 hover:border-white/20',
+                                  on
+                                    ? 'border-app-line-2 bg-white/[0.06]'
+                                    : 'border-app-line bg-app-canvas',
+                                )}
+                              >
+                                <span className="flex items-start justify-between gap-2">
+                                  <span className="min-w-0">
+                                    <span
+                                      className={cn(
+                                        'block truncate text-[14px] font-bold',
+                                        on ? 'text-app-ink' : 'text-app-muted',
+                                      )}
+                                    >
+                                      {zone.name}
+                                    </span>
+                                    <span className="text-app-muted block font-mono text-[12px]">
+                                      {zone.code}
+                                    </span>
+                                  </span>
+                                  <input
+                                    aria-label={`${zone.warehouseName} · ${zone.name}`}
+                                    checked={on}
+                                    className="accent-brand mt-0.5 size-4.5 shrink-0"
+                                    disabled={!canManage}
+                                    onChange={() => toggle(zone.id)}
+                                    type="checkbox"
+                                  />
+                                </span>
+                                <span
+                                  aria-hidden
+                                  className="mt-2.5 block h-1 overflow-hidden rounded-full bg-white/[0.08]"
+                                >
+                                  <span
+                                    className={cn(
+                                      'block h-full rounded-full',
+                                      load >= 100
+                                        ? 'bg-state-danger/60'
+                                        : load > 0
+                                          ? 'bg-state-warn/60'
+                                          : 'bg-transparent',
+                                    )}
+                                    style={{ width: `${String(load)}%` }}
+                                  />
+                                </span>
+                                <span className="text-app-muted mt-1.5 block text-[11px] font-semibold">
+                                  {count === null
+                                    ? 'залишки недоступні'
+                                    : `${String(count)} ${plural(count, ['позиція', 'позиції', 'позицій'])}`}
+                                </span>
+                              </label>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </Step>
+
+                  <Step
+                    hint="Скільки одиниць кладемо у вибрану зону."
+                    number="03"
+                    title="Кількість"
+                  >
+                    <div className="flex flex-wrap items-center gap-4.5">
+                      <span
+                        className="border-app-line bg-app-canvas text-app-muted flex items-center gap-1 rounded-xl border p-[3px]"
+                        title="Сервер не ділить залишок між зонами — запчастина лежить у зоні цілком"
+                      >
+                        <span
+                          aria-hidden
+                          className="flex size-9.5 items-center justify-center rounded-[9px] text-[18px] font-bold opacity-40"
+                        >
+                          −
+                        </span>
+                        <span className="w-13 text-center font-mono text-[17px] text-white">
+                          {part?.quantityTotal ?? '—'}
+                        </span>
+                        <span
+                          aria-hidden
+                          className="flex size-9.5 items-center justify-center rounded-[9px] text-[18px] font-bold opacity-40"
+                        >
+                          +
+                        </span>
+                      </span>
+                      <p className="text-app-muted min-w-[12rem] flex-1 text-[14px]">
+                        Сервер не ділить залишок між зонами: запчастина лежить у
+                        вибраних зонах цілком, тому кількість тут не
+                        редагується.
+                      </p>
+                    </div>
+                  </Step>
+
+                  <Card
+                    aside={
+                      <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
+                        {moves.length}{' '}
+                        {plural(moves.length, ['запис', 'записи', 'записів'])}
+                      </span>
+                    }
+                    bodyClassName="p-0"
+                    className="min-w-0"
+                    title="Історія розміщень"
+                  >
+                    {moves.length === 0 ? (
+                      <p className="text-app-muted px-6 pt-4 pb-6 text-sm">
+                        {history === null
+                          ? 'Історію видно тим, хто має право «parts.view».'
+                          : 'Запчастину ще не переміщували.'}
+                      </p>
+                    ) : (
+                      <ul className="grid">
+                        {moves.slice(0, 8).map((event) => (
+                          <li
+                            className="border-app-line flex flex-wrap items-center gap-x-3.5 gap-y-1 border-t px-6 py-3"
+                            key={event.id}
+                          >
+                            <span className="text-app-ink w-28 shrink-0 text-[14px] font-semibold">
+                              {historyLabel(event.eventType)}
+                            </span>
+                            <span className="text-app-muted min-w-0 flex-1 text-[13px]">
+                              {historyDetails(event.data).join(' · ')}
+                            </span>
+                            <span className="text-app-dim font-mono text-[13px] whitespace-nowrap">
+                              {date(event.createdAt)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </Card>
+                </div>
+
+                <section
+                  aria-label="Нове розміщення"
+                  className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-[18px] border px-5.5 pt-[22px] pb-6"
+                >
+                  <h2 className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
+                    Нове розміщення
+                  </h2>
+                  <div className="border-app-line bg-app-canvas mt-4 rounded-[14px] border p-4">
+                    <p
+                      className={cn(
+                        'font-mono text-[22px] tracking-[-0.01em]',
+                        chosen.length === 0 ? 'text-app-dim' : 'text-app-ink',
+                      )}
+                    >
+                      {chosen.length === 0
+                        ? '— · —'
+                        : chosen
+                            .slice(0, 2)
+                            .map((zone) => zone.code)
+                            .join(' · ') + (chosen.length > 2 ? ' …' : '')}
+                    </p>
+                    <p className="text-app-muted mt-2 text-[13px]">
+                      {chosen.length === 0
+                        ? 'Зони не вибрані'
+                        : chosen
+                            .map(
+                              (zone) => `${zone.warehouseName} · ${zone.name}`,
+                            )
+                            .join(', ')}
+                    </p>
+                  </div>
+                  <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
+                    <dt className="text-app-muted text-[14px] font-semibold">
+                      Зон вибрано
+                    </dt>
+                    <dd className="font-mono text-[15px] text-white tabular-nums">
+                      {chosen.length}
+                    </dd>
+                    <dt className="text-app-muted text-[14px] font-semibold">
+                      Було
+                    </dt>
+                    <dd className="font-mono text-[15px] text-white tabular-nums">
+                      {placement.length}
+                    </dd>
+                    <dd
+                      aria-hidden
+                      className="bg-app-line col-span-2 my-1 h-px"
+                    />
+                    <dt
+                      className="text-app-muted text-[14px] font-semibold"
+                      title="Сервер не рахує місткість зони"
+                    >
+                      Місткість зони
+                    </dt>
+                    <dd className="text-app-dim font-mono text-[15px]">—</dd>
+                  </dl>
+                  {canManage ? (
+                    <Button
+                      aria-busy={saving}
+                      className="mt-5.5 min-h-11.5 w-full text-[15px] font-bold"
+                      disabled={saving || selected.length === 0}
+                      onClick={() => void save()}
+                      variant="primary"
+                    >
+                      {saving ? 'Зберігаємо…' : 'Зберегти розміщення'}
+                    </Button>
+                  ) : null}
+                  <p className="text-app-dim mt-3 text-[12px] leading-[1.5]">
+                    {selected.length === 0
+                      ? 'Виберіть хоча б одну зону — запчастина не може лишитися без місця.'
+                      : changed
+                        ? 'Збереження замінить увесь набір зон цієї запчастини, а не тільки вибраний склад.'
+                        : 'Нічого не змінилося — набір зон уже такий.'}
+                  </p>
+                </section>
+              </div>
+            </div>
+          </div>
+        )
+      }}
+    </Resource>
   )
 }

@@ -48,6 +48,7 @@ import {
 import { cn, plural } from '@/lib/utils'
 import {
   conditionLabel,
+  historyDetails,
   historyLabel,
   originLabel,
   sourceLabel,
@@ -917,51 +918,6 @@ const PART_CONDITIONS = [
   { value: 'new', label: 'нова' },
   { value: 'scrap', label: 'під відновлення' },
 ] as const
-
-const historyFieldLabels: Record<string, string> = {
-  quantity: 'кількість',
-  price: 'ціна',
-  unit_price: 'ціна',
-  sale_price: 'ціна продажу',
-  status: 'статус',
-  name: 'назва',
-  condition: 'стан',
-  zone: 'зона',
-  location: 'місце',
-}
-
-/**
- * History events carry their payload as a JSON string. Printed raw it puts
- * storage ids and braces on screen; this turns it into the two or three facts
- * a person actually reads, and says nothing when the payload is empty.
- *
- * Ids are dropped on purpose — the order is already a link on the same row.
- */
-const historyDetails = (raw: string | null): string[] => {
-  const trimmed = raw?.trim()
-  if (!trimmed) return []
-  if (!trimmed.startsWith('{')) return [trimmed]
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(trimmed)
-  } catch {
-    return [trimmed]
-  }
-  if (typeof parsed !== 'object' || parsed === null) return [trimmed]
-  return Object.entries(parsed as Record<string, unknown>)
-    .filter(
-      ([key, value]) =>
-        value !== null &&
-        value !== '' &&
-        typeof value !== 'object' &&
-        !/(^|_)id$/.test(key) &&
-        key !== 'order_number',
-    )
-    .map(
-      ([key, value]) =>
-        `${historyFieldLabels[key] ?? key.replaceAll('_', ' ')} ${String(value)}`,
-    )
-}
 
 /** Two letters standing in for a person where a photo would be. */
 const initials = (name: string) =>

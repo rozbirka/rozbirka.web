@@ -37,6 +37,8 @@ const api = vi.hoisted(() => ({
 const parts = vi.hoisted(() => ({
   facets: vi.fn(),
   search: vi.fn(),
+  get: vi.fn(),
+  history: vi.fn(),
 }))
 const printable = vi.hoisted(() => ({
   buildZoneLabelHtml: vi.fn().mockResolvedValue('<html>zones</html>'),
@@ -244,6 +246,24 @@ beforeEach(() => {
       totalPages: 1,
     }),
   )
+  parts.get.mockResolvedValue({
+    id: 'part-1',
+    name: 'Крило',
+    qrCode: 'QR-1',
+    unit: 'шт',
+    quantityTotal: 2,
+  })
+  parts.history.mockResolvedValue({
+    partId: 'part-1',
+    events: [
+      {
+        id: 'event-1',
+        eventType: 'placed',
+        data: '{"zone":"A1"}',
+        createdAt: '2026-09-01T10:00:00Z',
+      },
+    ],
+  })
   printable.buildZoneLabelHtml.mockClear()
 })
 
@@ -544,7 +564,10 @@ it('shows progress while part placement is being saved', async () => {
     await screen.findByRole('button', { name: 'Зберегти розміщення' }),
   )
 
-  expect(screen.getByRole('button', { name: 'Зберігаємо…' })).toBeDisabled()
+  // Both the toolbar and the summary panel save, and both report progress.
+  for (const button of screen.getAllByRole('button', { name: 'Зберігаємо…' })) {
+    expect(button).toBeDisabled()
+  }
   finishSaving?.()
 })
 
