@@ -25,7 +25,6 @@ import {
   Field,
   Notice,
   PageBody,
-  PageHeader,
   Pagination,
   PillGroup,
   QuantityStepper,
@@ -34,16 +33,15 @@ import {
   SkeletonRows,
   StatusPill,
   type StatusTone,
-  StatStrip,
   TextArea,
   TextInput,
-  Toolbar,
 } from '@/components/app'
 import {
   intakesApi,
   type AddIntakePartRequest,
   type CreateIntakeRequest,
   type Intake,
+  type IntakeListItem,
   type IntakeListParams,
   isIntakeStatus,
 } from '@/api/intakes'
@@ -273,8 +271,30 @@ export function IntakesScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
   return <IntakesList base={base} />
 }
 
+/** The lifecycle segments the list endpoint really understands. */
+const INTAKE_SEGMENTS = [
+  { value: '', label: 'Усі' },
+  { value: 'active', label: 'Активні' },
+  { value: 'closed', label: 'Закриті' },
+] as const
+
+/**
+ * How far a batch has sold through, said as a pill. The list item carries no
+ * lifecycle status of its own, so this is what the numbers actually support.
+ */
+const intakeSaleState = (
+  intake: IntakeListItem,
+): { label: string; tone: StatusTone } =>
+  intake.partsCount === 0
+    ? { label: 'Без позицій', tone: 'neutral' }
+    : intake.soldCount === 0
+      ? { label: 'Нічого не продано', tone: 'warn' }
+      : intake.soldCount < intake.partsCount
+        ? { label: 'Розпродається', tone: 'ok' }
+        : { label: 'Розпродано', tone: 'neutral' }
+
 function IntakesList({ base }: { base: string }) {
-  const { createDecision } = useIntakeAccess()
+  const { createDecision, financeView } = useIntakeAccess()
   const [searchParams, setSearchParams] = useSearchParams()
   const selection = useMemo<IntakeListParams>(
     () => ({
@@ -324,107 +344,259 @@ function IntakesList({ base }: { base: string }) {
   const currentPageSize =
     state.page?.pageSize ?? selection.pageSize ?? defaultPageSize
   const totalPages = state.page?.totalPages ?? 1
+  const items = state.page?.items ?? []
+  const positions = items.reduce((total, item) => total + item.partsCount, 0)
+  const sold = items.reduce((total, item) => total + item.soldCount, 0)
+  const cost = items.reduce((total, item) => total + (item.totalCost ?? 0), 0)
+
   return (
-    <PageBody>
-      <PageHeader
-        actions={
-          createDecision.kind === 'allowed' ? (
-            <Button asChild variant="primary">
+    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+        <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+          <span>Склад</span>
+          <span aria-hidden className="text-white/20">
+            /
+          </span>
+          <span className="text-app-muted">Приймання</span>
+        </p>
+        <div className="flex flex-1 flex-wrap items-center justify-end gap-2.5">
+          <form
+            className="min-w-[180px] flex-[0_1_320px]"
+            onSubmit={(event) => {
+              event.preventDefault()
+              updateSearch()
+            }}
+          >
+            <SearchInput
+              aria-label="Пошук приймань"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Назва, постачальник"
+              value={query}
+            />
+          </form>
+          {createDecision.kind === 'allowed' ? (
+            <Button
+              asChild
+              className="px-5 text-sm font-bold"
+              variant="primary"
+            >
               <Link to={`${base}/new`}>
                 <Plus aria-hidden />
                 Нове приймання
               </Link>
             </Button>
-          ) : undefined
-        }
-        eyebrow="Склад"
-        title="Приймання авто"
-      />
-      <form
-        onSubmit={(event) => {
-          event.preventDefault()
-          updateSearch()
-        }}
-      >
-        <Toolbar>
-          <Field className="min-w-52 flex-1" label="Пошук приймань">
-            <SearchInput
-              aria-label="Пошук приймань"
-              onChange={(event) => setQuery(event.target.value)}
-              value={query}
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+        <div className="min-w-0">
+          <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+            Приймання
+          </h1>
+          <p className="text-app-muted mt-3 text-[15px]">
+            Надходження запчастин з авто, від постачальників і з аукціонів
+          </p>
+        </div>
+
+        {state.error ? <Notice tone="danger">{state.error}</Notice> : null}
+
+        <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-px overflow-hidden rounded-[20px] border">
+          <IntakeStat
+            label="Приймань"
+            meta="усього за фільтром"
+            value={String(state.page?.total ?? 0)}
+          />
+          <IntakeStat
+            label="Позицій"
+            meta="на цій сторінці"
+            unit="шт"
+            value={String(positions)}
+          />
+          <IntakeStat
+            label="Продано"
+            meta="на цій сторінці"
+            unit="шт"
+            value={String(sold)}
+          />
+          {financeView ? (
+            <IntakeStat
+              label="Вартість надходжень"
+              meta="на цій сторінці"
+              unit="USD"
+              value={money(cost)}
             />
-          </Field>
-          <Field className="min-w-40" label="Статус">
-            <SelectInput
-              onChange={(event) => {
-                const next = new URLSearchParams(searchParams)
-                if (event.target.value) next.set('status', event.target.value)
-                else next.delete('status')
-                next.set('page', '1')
-                setSearchParams(next)
-              }}
-              value={selection.status ?? ''}
-            >
-              <option value="">Усі</option>
-              <option value="active">Активні</option>
-              <option value="closed">Закриті</option>
-            </SelectInput>
-          </Field>
-          <Button type="submit" variant="primary">
-            Шукати
-          </Button>
-        </Toolbar>
-      </form>
-      {state.error ? <Notice tone="danger">{state.error}</Notice> : null}
-      <StatStrip
-        items={[{ label: 'знайдено', value: state.page?.total ?? 0 }]}
-      />
-      <DataTable
-        caption="Список приймань"
-        columns={[
-          {
-            key: 'name',
-            label: 'Приймання',
-            variant: 'primary',
-            cell: (intake) => (
-              <Link
-                className="hover:text-brand block"
-                to={`${base}/${intake.id}`}
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div
+            aria-label="Які приймання показувати"
+            className="border-app-line bg-app-raised flex flex-wrap gap-1 rounded-xl border p-1"
+            role="radiogroup"
+          >
+            {INTAKE_SEGMENTS.map((option) => {
+              const active = (selection.status ?? '') === option.value
+              return (
+                <button
+                  aria-checked={active}
+                  className={cn(
+                    'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-bold',
+                    active
+                      ? 'text-app-ink bg-white/[0.08]'
+                      : 'text-app-muted hover:text-app-ink',
+                  )}
+                  key={option.value}
+                  onClick={() => {
+                    const next = new URLSearchParams(searchParams)
+                    if (option.value) next.set('status', option.value)
+                    else next.delete('status')
+                    next.set('page', '1')
+                    setSearchParams(next)
+                  }}
+                  role="radio"
+                  type="button"
+                >
+                  {option.label}
+                  {/* Only the chosen segment has a count: the list endpoint
+                      totals what it returns, not the segments beside it. */}
+                  {active ? (
+                    <span className="text-app-dim font-mono text-[11px] font-medium">
+                      {state.page?.total ?? 0}
+                    </span>
+                  ) : null}
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="text-app-dim text-[13px]">Сортувати</span>
+            {['Спочатку нові', 'За кількістю'].map((label) => (
+              <Button
+                className="min-h-9 px-3.5 text-[13px] font-semibold"
+                disabled
+                key={label}
+                title="Сортування приймань сервер поки не підтримує — список іде так, як його віддає сервер"
               >
-                {intake.name ?? 'Без назви'}
-              </Link>
-            ),
-          },
-          {
-            key: 'supplier',
-            label: 'Постачальник',
-            cell: (intake) => intake.supplier ?? 'Постачальника не вказано',
-          },
-          {
-            key: 'parts',
-            label: 'Запчастин',
-            align: 'end',
-            cell: (intake) => intake.partsCount,
-          },
-        ]}
-        empty={
-          <EmptyState
-            description="Створіть перше приймання, щоб оприбуткувати партію запчастин."
-            title="Приймань поки немає"
+                {label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <section
+          aria-label="Список приймань"
+          className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
+        >
+          <DataTable
+            caption="Список приймань"
+            columns={[
+              {
+                key: 'name',
+                label: 'Приймання',
+                variant: 'primary',
+                cell: (intake) => (
+                  <Link
+                    className="hover:text-brand grid gap-0.5"
+                    to={`${base}/${intake.id}`}
+                  >
+                    <span className="font-semibold text-white">
+                      {intake.name ?? 'Без назви'}
+                    </span>
+                    <span className="text-app-muted text-[13px]">
+                      {[
+                        intake.supplier ?? 'без постачальника',
+                        intake.createdBy.displayName,
+                      ].join(' · ')}
+                    </span>
+                  </Link>
+                ),
+              },
+              {
+                key: 'date',
+                label: 'Дата',
+                cell: (intake) => (
+                  <span className="text-app-muted font-mono text-[13px]">
+                    {day(intake.purchasedAt ?? intake.createdAt)}
+                  </span>
+                ),
+              },
+              {
+                key: 'parts',
+                label: 'Позицій',
+                align: 'end',
+                cell: (intake) => (
+                  <span className="font-mono text-white tabular-nums">
+                    {intake.partsCount}
+                  </span>
+                ),
+              },
+              ...(financeView
+                ? [
+                    {
+                      key: 'cost',
+                      label: 'Вартість',
+                      align: 'end' as const,
+                      cell: (intake: IntakeListItem) => (
+                        <span className="font-mono font-bold text-white tabular-nums">
+                          {intake.totalCost === null
+                            ? '—'
+                            : money(intake.totalCost)}
+                        </span>
+                      ),
+                    },
+                  ]
+                : []),
+              {
+                key: 'status',
+                label: 'Статус',
+                align: 'end',
+                cell: (intake) => {
+                  const sale = intakeSaleState(intake)
+                  return <StatusPill tone={sale.tone}>{sale.label}</StatusPill>
+                },
+              },
+            ]}
+            empty={
+              <EmptyState
+                description={
+                  (selection.search ?? '') === '' &&
+                  selection.status === undefined
+                    ? 'Створіть перше приймання, щоб оприбуткувати партію запчастин.'
+                    : 'Спробуйте інший фільтр або очистіть пошук.'
+                }
+                title={
+                  (selection.search ?? '') === '' &&
+                  selection.status === undefined
+                    ? 'Приймань поки немає'
+                    : 'Приймань за цим фільтром немає'
+                }
+              />
+            }
+            footer={
+              <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-t px-6 py-4">
+                <p className="text-app-dim text-[13px]">
+                  Показано {items.length} з {state.page?.total ?? 0}{' '}
+                  {plural(state.page?.total ?? 0, [
+                    'приймання',
+                    'приймання',
+                    'приймань',
+                  ])}
+                </p>
+                <Pagination
+                  label="Пагінація приймань"
+                  onPage={(nextPage) => updatePage(nextPage, currentPageSize)}
+                  page={currentPage}
+                  totalPages={totalPages}
+                />
+              </div>
+            }
+            rowKey={(intake) => intake.id}
+            rows={items}
           />
-        }
-        footer={
-          <Pagination
-            label="Пагінація приймань"
-            onPage={(nextPage) => updatePage(nextPage, currentPageSize)}
-            page={currentPage}
-            totalPages={totalPages}
-          />
-        }
-        rowKey={(intake) => intake.id}
-        rows={state.page?.items ?? []}
-      />
-    </PageBody>
+        </section>
+      </div>
+    </div>
   )
 }
 

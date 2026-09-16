@@ -196,7 +196,7 @@ it('loads the URL search and status list state through the server adapter', asyn
   )
 
   expect(
-    await screen.findByRole('heading', { name: 'Приймання авто' }),
+    await screen.findByRole('heading', { name: 'Приймання', level: 1 }),
   ).toBeVisible()
   expect(screen.getByText('Липнева партія')).toBeVisible()
   expect(intakesApi.list).toHaveBeenCalledWith(
@@ -216,8 +216,8 @@ it('updates a search in the URL before reloading page one', async () => {
   )
 
   const search = await screen.findByLabelText('Пошук приймань')
-  await user.type(search, 'Липнева')
-  await user.click(screen.getByRole('button', { name: 'Шукати' }))
+  // The search box submits its own form, as the redesign's header bar draws it.
+  await user.type(search, 'Липнева{Enter}')
 
   await waitFor(() =>
     expect(intakesApi.list).toHaveBeenLastCalledWith(
@@ -263,7 +263,7 @@ it('accepts an unbounded positive page while limiting pageSize to 100', async ()
     </MemoryRouter>,
   )
 
-  await screen.findByRole('heading', { name: 'Приймання авто' })
+  await screen.findByRole('heading', { name: 'Приймання', level: 1 })
   expect(intakesApi.list).toHaveBeenCalledWith(
     { search: undefined, status: undefined, page: 101, pageSize: 20 },
     expect.anything(),
@@ -279,7 +279,7 @@ it('omits an invalid status from the URL-backed server request', async () => {
     </MemoryRouter>,
   )
 
-  await screen.findByRole('heading', { name: 'Приймання авто' })
+  await screen.findByRole('heading', { name: 'Приймання', level: 1 })
   expect(intakesApi.list).toHaveBeenCalledWith(
     { search: undefined, status: undefined, page: 1, pageSize: 20 },
     expect.anything(),
