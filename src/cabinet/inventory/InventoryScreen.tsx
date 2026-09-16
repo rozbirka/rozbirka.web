@@ -8,6 +8,7 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router'
 import {
   Archive,
+  ArrowRight,
   ChevronLeft,
   ClipboardCheck,
   Pencil,
@@ -1108,47 +1109,358 @@ function ResultRow({
   )
 }
 
+/**
+ * The three things an audit trail records, taken from the action's own prefix
+ * and, failing that, from which id the event carries. An unknown action still
+ * lands somewhere rather than disappearing from every filter.
+ */
+const auditKind = (event: InventoryAuditEvent): AuditKind => {
+  const prefix = event.action.split('.')[0] ?? ''
+  if (prefix === 'adjustment' || event.adjustmentId != null) return 'decision'
+  if (prefix === 'scan' || event.scanId != null) return 'scan'
+  return 'session'
+}
+
+type AuditKind = 'decision' | 'scan' | 'session'
+
+const AUDIT_KINDS: Record<AuditKind, { label: string; dot: string }> = {
+  decision: { label: 'Рішення', dot: 'bg-brand' },
+  scan: { label: 'Сканування', dot: 'bg-state-info' },
+  session: { label: 'Сесія', dot: 'bg-state-ok' },
+}
+
+const AUDIT_FILTERS = [
+  { value: 'all', label: 'Усі' },
+  { value: 'decision', label: 'Рішення' },
+  { value: 'scan', label: 'Сканування' },
+  { value: 'session', label: 'Сесія' },
+] as const
+
+type AuditFilter = (typeof AUDIT_FILTERS)[number]['value']
+
+/**
+ * What the server calls each event, said in Ukrainian. An action the vocabulary
+ * does not know is shown as it came rather than guessed at.
+ */
+const AUDIT_ACTIONS: Record<string, string> = {
+  'session.created': 'Сесію створено',
+  'session.started': 'Сесію розпочато',
+  'session.reopened': 'Сесію повернуто в роботу',
+  'session.completed': 'Сесію завершено',
+  'session.cancelled': 'Сесію скасовано',
+  'zone.started': 'Зону взято в підрахунок',
+  'zone.completed': 'Зону перераховано',
+  'scan.recorded': 'Позицію відскановано',
+  'scan.voided': 'Сканування скасовано',
+  'adjustment.applied': 'Коригування застосовано',
+}
+
+const auditTitle = (action: string) => AUDIT_ACTIONS[action] ?? action
+
+/** The pairs of keys an audit payload uses when it records a change. */
+const CHANGE_KEYS: [string, string][] = [
+  ['expectedQuantity', 'actualQuantity'],
+  ['expected', 'fact'],
+  ['expected', 'actual'],
+  ['oldValue', 'newValue'],
+  ['from', 'to'],
+]
+
+/**
+ * A before and after, but only when the payload really carries one. Nothing is
+ * inferred: an event whose details name no such pair simply has no change row.
+ */
+const auditChange = (
+  detailsJson: string | null | undefined,
+): { from: string; to: string } | null => {
+  if (detailsJson == null || detailsJson === '') return null
+  let payload: unknown
+  try {
+    payload = JSON.parse(detailsJson)
+  } catch {
+    return null
+  }
+  if (payload === null || typeof payload !== 'object') return null
+  const record = payload as Record<string, unknown>
+  const shown = (value: unknown) =>
+    typeof value === 'string' || typeof value === 'number'
+      ? String(value)
+      : typeof value === 'boolean'
+        ? value
+          ? 'увімкнено'
+          : 'вимкнено'
+        : null
+  for (const [fromKey, toKey] of CHANGE_KEYS) {
+    const from = shown(record[fromKey])
+    const to = shown(record[toKey])
+    if (from !== null && to !== null) return { from, to }
+  }
+  return null
+}
+
+/** How many audit events to show before the reader asks for more. */
+const AUDIT_PAGE = 20
+
+interface AuditData {
+  events: InventoryAuditEvent[]
+  session: InventorySession
+  people: { userId: string; name: string }[]
+}
+
 function AuditView({ id }: { id: string }) {
   const base = useInventoryBase()
+  const canSeeTeam = usePermission('team.view')
+  const [filter, setFilter] = useState<AuditFilter>('all')
+  const [query, setQuery] = useState('')
+  const [raw, setRaw] = useState(false)
+  const [shown, setShown] = useState(AUDIT_PAGE)
   const loader = useCallback(
-    (signal: AbortSignal) => inventoryApi.getAudit(id, { signal }),
-    [id],
+    async (signal: AbortSignal): Promise<AuditData> => {
+      const [events, session, people] = await Promise.all([
+        inventoryApi.getAudit(id, { signal }),
+        inventoryApi.getSession(id, { signal }),
+        canSeeTeam
+          ? teamApi.listMembers({ signal }).then(
+              (members) =>
+                members.map((member) => ({
+                  userId: member.userId,
+                  name: member.name,
+                })),
+              () => [],
+            )
+          : Promise.resolve([]),
+      ])
+      return { events, session, people }
+    },
+    [canSeeTeam, id],
   )
   const resource = useLoad(loader, id)
+
   return (
-    <PageBody>
-      <PageHeader
-        eyebrow={<Link to={`${base}/sessions/${id}`}>Сесія</Link>}
-        title="Аудит інвентаризації"
-      />
-      <Resource state={resource.state} retry={resource.reload}>
-        {(events: InventoryAuditEvent[]) =>
-          events.length ? (
-            <div className="overflow-hidden rounded-panel border border-app-line">
-              {events.map((event) => (
-                <div
-                  className="grid gap-1 border-b border-app-line p-4 last:border-0 sm:grid-cols-[1fr_auto]"
-                  key={event.id}
-                >
-                  <strong className="text-white">{event.action}</strong>
-                  <time className="text-xs text-app-dim">
-                    {date(event.createdAt)}
-                  </time>
-                  <p className="font-mono text-xs text-app-dim">
-                    {event.actorUserId}
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="Подій аудиту ще немає"
-              description="Дії із сесією з’являться тут автоматично."
-            />
-          )
+    <Resource retry={resource.reload} state={resource.state}>
+      {({ events, session, people }: AuditData) => {
+        const nameOf = (userId: string) =>
+          people.find((person) => person.userId === userId)?.name ?? null
+        const counts: Record<AuditFilter, number> = {
+          all: events.length,
+          decision: events.filter((event) => auditKind(event) === 'decision')
+            .length,
+          scan: events.filter((event) => auditKind(event) === 'scan').length,
+          session: events.filter((event) => auditKind(event) === 'session')
+            .length,
         }
-      </Resource>
-    </PageBody>
+        const needle = query.trim().toLowerCase()
+        const rows = events.filter((event) => {
+          if (filter !== 'all' && auditKind(event) !== filter) return false
+          if (needle === '') return true
+          const haystack =
+            `${auditTitle(event.action)} ${nameOf(event.actorUserId) ?? ''}`.toLowerCase()
+          return haystack.includes(needle)
+        })
+        const visible = rows.slice(0, shown)
+        const zones = [
+          ...new Set(session.zones.map((zone) => zone.zoneCode)),
+        ].join(', ')
+        const warehouse = session.zones[0]?.warehouseName ?? null
+
+        return (
+          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+              <div className="flex min-w-0 items-center gap-5">
+                <Link
+                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                  to={`${base}/sessions/${id}`}
+                >
+                  <ChevronLeft aria-hidden className="size-3.5" />
+                  До сесії
+                </Link>
+                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                  <span>Інвентаризація</span>
+                  <span aria-hidden className="text-white/20">
+                    /
+                  </span>
+                  <span>{session.number}</span>
+                  <span aria-hidden className="text-white/20">
+                    /
+                  </span>
+                  <span className="text-app-muted">Аудит</span>
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <Button
+                  aria-pressed={raw}
+                  className="px-4 text-sm font-semibold"
+                  onClick={() => setRaw((value) => !value)}
+                >
+                  {raw ? 'Сховати дані' : 'Технічні дані'}
+                </Button>
+                <Button
+                  disabled
+                  title="Сервер поки не віддає журнал аудиту файлом"
+                >
+                  Експорт журналу
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+              <div className="min-w-0">
+                <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+                  Аудит сесії
+                </h1>
+                <p className="text-app-muted mt-3 text-[15px]">
+                  {[
+                    warehouse,
+                    zones === '' ? null : `зони ${zones}`,
+                    date(session.createdAt),
+                    `${String(events.length)} ${plural(events.length, ['подія', 'події', 'подій'])}`,
+                    'журнал не редагується',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <div
+                  aria-label="Які події показувати"
+                  className="border-app-line bg-app-raised flex flex-wrap gap-1 rounded-xl border p-1"
+                  role="radiogroup"
+                >
+                  {AUDIT_FILTERS.map((option) => {
+                    const active = option.value === filter
+                    return (
+                      <button
+                        aria-checked={active}
+                        className={cn(
+                          'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-bold',
+                          active
+                            ? 'text-app-ink bg-white/[0.08]'
+                            : 'text-app-muted hover:text-app-ink',
+                        )}
+                        key={option.value}
+                        onClick={() => {
+                          setFilter(option.value)
+                          setShown(AUDIT_PAGE)
+                        }}
+                        role="radio"
+                        type="button"
+                      >
+                        {option.label}
+                        <span className="text-app-dim font-mono text-[11px] font-medium">
+                          {counts[option.value]}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="min-w-[200px] flex-[1_1_220px]">
+                  <SearchInput
+                    aria-label="Пошук в аудиті"
+                    onChange={(event) => {
+                      setQuery(event.target.value)
+                      setShown(AUDIT_PAGE)
+                    }}
+                    placeholder="Подія або виконавець"
+                    value={query}
+                  />
+                </div>
+              </div>
+
+              <section
+                aria-label="Журнал аудиту"
+                className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-6 pb-2"
+              >
+                {visible.length === 0 ? (
+                  <p className="text-app-muted py-6 text-center text-sm">
+                    {events.length === 0
+                      ? 'Подій аудиту ще немає — дії із сесією зʼявляться тут автоматично.'
+                      : 'За цим фільтром подій немає.'}
+                  </p>
+                ) : (
+                  <ol className="grid">
+                    {visible.map((event, index) => {
+                      const kind = auditKind(event)
+                      const change = auditChange(event.detailsJson)
+                      return (
+                        <li className="flex gap-4" key={event.id}>
+                          <span
+                            aria-hidden
+                            className="flex flex-col items-center"
+                          >
+                            <span
+                              className={cn(
+                                'mt-1.5 size-2.5 rounded-full',
+                                AUDIT_KINDS[kind].dot,
+                              )}
+                            />
+                            {index < visible.length - 1 ? (
+                              <span className="bg-app-line w-px flex-1" />
+                            ) : null}
+                          </span>
+                          <span className="min-w-0 flex-1 pb-5.5">
+                            <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                              <span className="text-[15px] font-bold text-white">
+                                {auditTitle(event.action)}
+                              </span>
+                              <span className="border-app-line-2 text-app-muted inline-flex h-[22px] items-center rounded-full border bg-white/[0.05] px-2.5 text-[11px] font-bold">
+                                {AUDIT_KINDS[kind].label}
+                              </span>
+                              <span className="text-app-dim font-mono text-[12px]">
+                                {date(event.createdAt)}
+                              </span>
+                            </span>
+                            <span className="text-app-muted mt-1 block text-[13px]">
+                              {nameOf(event.actorUserId) ??
+                                'виконавець невідомий'}
+                            </span>
+                            {change === null ? null : (
+                              <span className="border-app-line bg-app-input mt-2.5 inline-flex items-center gap-3 rounded-[10px] border px-3.5 py-2 font-mono text-[13px]">
+                                <span className="text-app-muted line-through">
+                                  {change.from}
+                                </span>
+                                <ArrowRight
+                                  aria-hidden
+                                  className="text-app-dim size-3.5"
+                                />
+                                <span className="text-white">{change.to}</span>
+                              </span>
+                            )}
+                            {raw && event.detailsJson ? (
+                              <span className="border-app-line bg-app-input text-app-muted mt-2.5 block rounded-[9px] border px-3 py-2.5 font-mono text-[11px] leading-[1.55] break-all">
+                                {event.detailsJson}
+                              </span>
+                            ) : null}
+                          </span>
+                        </li>
+                      )
+                    })}
+                  </ol>
+                )}
+              </section>
+
+              {rows.length > 0 ? (
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <p className="text-app-dim text-[13px]">
+                    Показано {visible.length} з {rows.length}{' '}
+                    {plural(rows.length, ['події', 'подій', 'подій'])}
+                  </p>
+                  {visible.length < rows.length ? (
+                    <Button
+                      className="min-h-10 px-4 text-[13px] font-bold"
+                      onClick={() => setShown((value) => value + AUDIT_PAGE)}
+                    >
+                      Показати ще{' '}
+                      {Math.min(AUDIT_PAGE, rows.length - visible.length)}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        )
+      }}
+    </Resource>
   )
 }
 
