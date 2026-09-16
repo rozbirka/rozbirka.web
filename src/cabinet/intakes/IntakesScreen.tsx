@@ -6,7 +6,7 @@ import {
   useParams,
   useSearchParams,
 } from 'react-router'
-import { ChevronLeft, Plus, ScanLine } from 'lucide-react'
+import { Check, ChevronLeft, Lock, Plus, ScanLine } from 'lucide-react'
 import {
   Button,
   Card,
@@ -41,7 +41,11 @@ import {
   type IntakeListParams,
   isIntakeStatus,
 } from '@/api/intakes'
-import { inventoryApi, type InventoryZone } from '@/api/inventory'
+import {
+  inventoryApi,
+  type InventoryZone,
+  type Warehouse,
+} from '@/api/inventory'
 import { partsApi } from '@/api/parts'
 import { normalizeApiProblem } from '@/api/errors'
 import { cn, plural } from '@/lib/utils'
@@ -214,7 +218,6 @@ export function IntakesScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
       return <Denied decision={createDecision} />
     return (
       <IntakeForm
-        batch={location.pathname.endsWith('/batch')}
         canManageFinance={financeManage}
         title="Нове приймання"
         submit={(request, signal) => intakesApi.create(request, { signal })}
@@ -228,7 +231,7 @@ export function IntakesScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
       <IntakeForm
         canManageFinance={financeManage}
         intakeId={intakeId}
-        title="Редагувати приймання"
+        title="Редагування приймання"
         submit={(request, signal) =>
           intakesApi.update(intakeId, request, { signal })
         }
@@ -590,16 +593,46 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
   )
 }
 
+/**
+ * The three ways stock reaches a yard. The intake record has no source kind
+ * yet, so the tray shows what exists and stays inert — see
+ * `docs/reports/design-gaps.md`.
+ */
+const INTAKE_SOURCES = [
+  {
+    value: 'supplier',
+    label: 'Від постачальника',
+    hint: 'Партія за накладною',
+  },
+  { value: 'car', label: 'З авто', hint: 'Розібране авто зі складу' },
+  { value: 'auction', label: 'З аукціону', hint: 'Лот, куплений на аукціоні' },
+] as const
+
+/** Dates arrive as ISO strings; anything unparsable is shown as it came. */
+const day = (value: string) => {
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime())
+    ? value
+    : new Intl.DateTimeFormat('uk-UA', { dateStyle: 'medium' }).format(parsed)
+}
+
+/** Two initials for the avatar chip; a single word gives one. */
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('') || '?'
+
 function IntakeForm({
   title,
   intakeId,
-  batch = false,
   canManageFinance,
   submit,
 }: {
   title: string
   intakeId?: string
-  batch?: boolean
   canManageFinance: boolean
   submit: (request: CreateIntakeRequest, signal: AbortSignal) => Promise<Intake>
 }) {
@@ -607,6 +640,7 @@ function IntakeForm({
   const params = useParams<{ tenant: string }>()
   const navigate = useNavigate()
   const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
+  const canPlace = allowedToView(cabinetModules.inventory, cabinet)
   const [values, setValues] = useState({
     name: '',
     supplier: '',
@@ -615,8 +649,12 @@ function IntakeForm({
     notes: '',
   })
   const [media, setMedia] = useState<MediaUploadResult[]>([])
+  const [intake, setIntake] = useState<Intake | null>(null)
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([])
+  const [zones, setZones] = useState<InventoryZone[]>([])
   const [problem, setProblem] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<{ totalCost?: string }>({})
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [busy, setBusy] = useState(false)
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.intakes,
@@ -631,17 +669,19 @@ function IntakeForm({
     if (!intakeId) return
     const controller = new AbortController()
     void intakesApi.get(intakeId, { signal: controller.signal }).then(
-      (intake) =>
+      (next) => {
+        setIntake(next)
         setValues({
-          name: intake.name ?? '',
-          supplier: intake.supplier ?? '',
-          purchasedAt: intake.purchasedAt ?? '',
+          name: next.name ?? '',
+          supplier: next.supplier ?? '',
+          purchasedAt: next.purchasedAt ?? '',
           totalCost:
-            canManageFinance && intake.totalCost !== null
-              ? String(intake.totalCost)
+            canManageFinance && next.totalCost !== null
+              ? String(next.totalCost)
               : '',
-          notes: intake.notes ?? '',
-        }),
+          notes: next.notes ?? '',
+        })
+      },
       (error: unknown) => {
         if (!controller.signal.aborted)
           setProblem(normalizeApiProblem(error).message)
@@ -649,6 +689,33 @@ function IntakeForm({
     )
     return () => controller.abort()
   }, [canManageFinance, intakeId])
+  useEffect(() => {
+    if (!canPlace) return
+    const controller = new AbortController()
+    void Promise.all([
+      inventoryApi.getWarehouses({ signal: controller.signal }),
+      inventoryApi.getZones({ activeOnly: true, signal: controller.signal }),
+    ]).then(
+      ([nextWarehouses, nextZones]) => {
+        if (controller.signal.aborted) return
+        setWarehouses(nextWarehouses)
+        setZones(nextZones)
+      },
+      () => {
+        // The card is read-only anyway; without the lists it simply stays empty.
+      },
+    )
+    return () => controller.abort()
+  }, [canPlace])
+
+  const cost = values.totalCost === '' ? null : Number(values.totalCost)
+  const hasCost = cost !== null && Number.isFinite(cost) && cost > 0
+  const positions = intake?.partsCount ?? 0
+  const units =
+    intake?.parts.reduce((total, part) => total + part.quantity, 0) ?? 0
+  const named = values.name.trim().length > 0
+  const supplied = values.supplier.trim().length > 0
+
   const save = async (event: React.FormEvent) => {
     event.preventDefault()
     if (busy) return
@@ -680,130 +747,458 @@ function IntakeForm({
           permission: 'finance.manage',
           quota: false,
         })
-      const intake = await submit(
+      const saved = await submit(
         intakeId
           ? request
           : { ...request, photoKeys: media.map((item) => item.storageKey) },
         scope.signal,
       )
-      void navigate(`${base}/${intake.id}`)
+      void navigate(`${base}/${saved.id}`)
     } catch (error: unknown) {
       setProblem(normalizeApiProblem(error).message)
       setBusy(false)
     }
   }
+  const remove = async () => {
+    if (busy || !intakeId) return
+    setConfirmDelete(false)
+    setBusy(true)
+    try {
+      const scope = requireLatestMutation({ quota: false })
+      await intakesApi.remove(intakeId, { signal: scope.signal })
+      void navigate(base)
+    } catch (error: unknown) {
+      setProblem(normalizeApiProblem(error).message)
+      setBusy(false)
+    }
+  }
+
   const backTo = intakeId ? `${base}/${intakeId}` : base
+  const saveLabel = intakeId ? 'Зберегти зміни' : 'Створити приймання'
+  const checks = [
+    { done: named, label: 'Назва партії вказана' },
+    { done: supplied, label: 'Постачальник вказаний' },
+    ...(canManageFinance
+      ? [{ done: hasCost, label: 'Сума придбання вказана' }]
+      : []),
+  ]
+
   return (
-    <PageBody role="main" width="narrow">
-      <Button asChild className="justify-self-start" variant="quiet">
-        <Link to={backTo}>
-          <ChevronLeft aria-hidden />
-          {intakeId ? 'До приймання' : 'До приймань'}
-        </Link>
-      </Button>
-      <PageHeader eyebrow="Склад · Приймання" title={title} />
-      {batch ? (
-        <Panel className="grid gap-1.5">
-          <h2 className="text-sm font-semibold text-white">Підсумок партії</h2>
-          <p aria-label="Підсумок партії" className="text-app-muted text-sm">
-            Підсумок: {values.name || 'без назви'} ·{' '}
-            {values.supplier || 'без постачальника'}
-            {canManageFinance
-              ? ` · ${values.totalCost || 'вартість не вказано'}`
-              : null}
-          </p>
-        </Panel>
-      ) : null}
-      {problem ? <Notice tone="danger">{problem}</Notice> : null}
-      <form
-        aria-busy={busy}
-        className="grid gap-4"
-        onSubmit={(event) => void save(event)}
-      >
-        <Panel className="grid gap-3">
-          <h2 className="text-base font-semibold text-white">Партія</h2>
-          <Field hint="Як у накладній постачальника" label="Назва">
-            <TextInput
-              autoComplete="off"
-              name="name"
-              onChange={update('name')}
-              value={values.name}
-            />
-          </Field>
-          <div className="flex flex-wrap gap-3">
-            <Field className="min-w-52 flex-1" label="Постачальник">
-              <TextInput
-                autoComplete="off"
-                name="supplier"
-                onChange={update('supplier')}
-                value={values.supplier}
-              />
-            </Field>
-            <Field
-              className="min-w-52 flex-1"
-              hint="Формат РРРР-ММ-ДД"
-              label="Дата придбання"
-            >
-              <TextInput
-                inputMode="numeric"
-                name="purchasedAt"
-                onChange={update('purchasedAt')}
-                placeholder="2026-08-01"
-                value={values.purchasedAt}
-              />
-            </Field>
-          </div>
-        </Panel>
-        {canManageFinance ? (
-          <Panel className="grid gap-3">
-            <h2 className="text-base font-semibold text-white">Гроші</h2>
-            <Field
-              className="max-w-xs"
-              error={fieldErrors.totalCost}
-              hint="Скільки заплачено за всю партію. Порожнє поле — вартість не фіксуємо."
-              label="Загальна вартість"
-            >
-              <TextInput
-                inputMode="decimal"
-                name="totalCost"
-                onChange={update('totalCost')}
-                placeholder="0"
-                value={values.totalCost}
-              />
-            </Field>
-          </Panel>
-        ) : null}
-        <Panel className="grid gap-3">
-          <Field
-            hint="Домовленості, стан партії, усе, що знадобиться складу згодом"
-            label="Нотатки"
+    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+        <div className="flex min-w-0 items-center gap-5">
+          <Link
+            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+            to={backTo}
           >
-            <TextArea
-              name="notes"
-              onChange={update('notes')}
-              value={values.notes}
-            />
-          </Field>
-        </Panel>
-        {!intakeId ? (
-          <Panel>
-            <MediaPicker
-              entityType="intakes"
-              items={media}
-              onChange={setMedia}
-            />
-          </Panel>
-        ) : null}
-        <div className="border-app-line rounded-panel bg-app-raised flex flex-wrap items-center gap-2 border p-3">
-          <Button disabled={busy} type="submit" variant="primary">
-            Зберегти
-          </Button>
-          <Button asChild variant="quiet">
+            <ChevronLeft aria-hidden className="size-3.5" />
+            {intakeId ? 'До приймання' : 'До приймань'}
+          </Link>
+          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+            <span>Склад</span>
+            <span aria-hidden className="text-white/20">
+              /
+            </span>
+            <span>Приймання</span>
+            {named ? (
+              <>
+                <span aria-hidden className="text-white/20">
+                  /
+                </span>
+                <span className="text-app-muted max-w-40 truncate normal-case">
+                  {values.name}
+                </span>
+              </>
+            ) : null}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button asChild className="px-[18px] text-sm font-semibold">
             <Link to={backTo}>Скасувати</Link>
           </Button>
+          <Button
+            aria-busy={busy}
+            className="px-5 text-sm font-bold"
+            disabled={busy}
+            form="intake-form"
+            type="submit"
+            variant="primary"
+          >
+            {saveLabel}
+          </Button>
         </div>
-      </form>
-    </PageBody>
+      </div>
+
+      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+        <div className="min-w-0">
+          <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
+            {title}
+          </h1>
+          <p className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-[15px] font-medium">
+            <span className="text-app-ink font-mono">
+              {values.name || 'Без назви'}
+            </span>
+            {intake ? (
+              <>
+                <span aria-hidden className="text-white/20">
+                  ·
+                </span>
+                <span>
+                  {positions}{' '}
+                  {plural(positions, ['позиція', 'позиції', 'позицій'])} ·{' '}
+                  {units} шт
+                </span>
+                <span aria-hidden className="text-white/20">
+                  ·
+                </span>
+                <span>
+                  Створено {day(intake.createdAt)} ·{' '}
+                  {intake.createdBy.displayName}
+                </span>
+              </>
+            ) : null}
+          </p>
+        </div>
+
+        {problem ? <Notice tone="danger">{problem}</Notice> : null}
+
+        <form
+          aria-busy={busy}
+          className="flex flex-wrap items-start gap-6"
+          id="intake-form"
+          onSubmit={(event) => void save(event)}
+        >
+          <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
+            <FormCard
+              aside={
+                intakeId ? (
+                  <span className="border-app-line-2 text-app-muted inline-flex h-6 items-center gap-1.5 rounded-full border bg-white/[0.05] px-2.5 text-xs font-bold">
+                    <Lock aria-hidden className="size-3" />
+                    Не змінюється
+                  </span>
+                ) : undefined
+              }
+              description="Джерело задане під час створення — від нього залежить розрахунок собівартості."
+              step="01"
+              title="Джерело надходження"
+            >
+              <div
+                aria-label="Вид джерела"
+                className="flex flex-wrap gap-2"
+                role="group"
+              >
+                {INTAKE_SOURCES.map((source) => (
+                  <button
+                    className="border-app-line-2 text-app-muted min-h-[70px] flex-[1_1_160px] cursor-not-allowed rounded-xl border px-4 py-3 text-left disabled:opacity-55"
+                    disabled
+                    key={source.value}
+                    title="Приймання поки не зберігає вид джерела — партія завжди від постачальника"
+                    type="button"
+                  >
+                    <span className="block text-[15px] font-bold">
+                      {source.label}
+                    </span>
+                    <span className="text-app-dim mt-1.5 block text-xs leading-[1.4] font-medium">
+                      {source.hint}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field hint="Від кого прийшла партія" label="Постачальник">
+                  <TextInput
+                    autoComplete="off"
+                    name="supplier"
+                    onChange={update('supplier')}
+                    placeholder="Європа Авто"
+                    value={values.supplier}
+                  />
+                </Field>
+                <Field hint="Як у накладній постачальника" label="Назва">
+                  <TextInput
+                    autoComplete="off"
+                    name="name"
+                    onChange={update('name')}
+                    placeholder="Липнева партія"
+                    value={values.name}
+                  />
+                </Field>
+              </div>
+            </FormCard>
+
+            {canPlace ? (
+              <FormCard
+                description="Склад і зона поки не зберігаються в прийманні — кожну позицію розміщують окремо на картці деталі."
+                step="02"
+                title="Куди приймаємо"
+              >
+                <div className="flex flex-wrap gap-1.5">
+                  {warehouses.length === 0 ? (
+                    <p className="text-app-dim text-sm">
+                      Складів ще немає — додайте їх у модулі «Склад».
+                    </p>
+                  ) : (
+                    warehouses.map((warehouse) => (
+                      <button
+                        className="border-app-line-2 text-app-muted min-h-10 cursor-not-allowed rounded-[10px] border px-4 text-sm font-semibold whitespace-nowrap disabled:opacity-55"
+                        disabled
+                        key={warehouse.id}
+                        title="Приймання поки не зберігає склад за замовчуванням"
+                        type="button"
+                      >
+                        {warehouse.name}
+                      </button>
+                    ))
+                  )}
+                </div>
+                {zones.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {zones.slice(0, 8).map((zone) => (
+                      <button
+                        className="border-app-line-2 text-app-muted min-h-9 cursor-not-allowed rounded-full border px-3.5 text-[13px] font-semibold whitespace-nowrap disabled:opacity-55"
+                        disabled
+                        key={zone.id}
+                        title="Приймання поки не зберігає зону за замовчуванням"
+                        type="button"
+                      >
+                        {zone.code}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </FormCard>
+            ) : null}
+
+            <FormCard
+              step={canPlace ? '03' : '02'}
+              title="Дата й відповідальний"
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Дата приймання">
+                  <TextInput
+                    name="purchasedAt"
+                    onChange={update('purchasedAt')}
+                    type="date"
+                    value={values.purchasedAt.slice(0, 10)}
+                  />
+                </Field>
+                <Field
+                  hint="Номера накладної приймання поки не зберігає"
+                  label="Документ постачальника"
+                >
+                  <TextInput
+                    className="font-mono"
+                    disabled
+                    name="document"
+                    placeholder="4471"
+                    value=""
+                  />
+                </Field>
+              </div>
+              <Field hint="Хто прийняв партію" label="Відповідальний">
+                {intake ? (
+                  <p className="border-app-line-2 text-app-ink inline-flex w-fit min-h-11 items-center gap-2.5 rounded-full border py-1.5 pr-4 pl-2 text-sm font-semibold">
+                    <span className="text-app-muted grid size-7 place-items-center rounded-full bg-white/[0.06] text-xs font-bold">
+                      {initials(intake.createdBy.displayName)}
+                    </span>
+                    {intake.createdBy.displayName}
+                  </p>
+                ) : (
+                  <p className="text-app-dim text-sm">
+                    Відповідальним стає той, хто створює приймання.
+                  </p>
+                )}
+              </Field>
+            </FormCard>
+
+            <FormCard
+              description={
+                positions > 0
+                  ? `Сума придбання ділиться між позиціями партії — зараз їх ${String(positions)}.`
+                  : 'Сума придбання ділиться між позиціями партії й формує їхню собівартість.'
+              }
+              step={canPlace ? '04' : '03'}
+              title="Вартість партії"
+            >
+              {canManageFinance ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field
+                    error={fieldErrors.totalCost}
+                    hint="Скільки заплачено за всю партію, у доларах"
+                    label="Загальна вартість"
+                  >
+                    <TextInput
+                      className="font-mono"
+                      inputMode="decimal"
+                      name="totalCost"
+                      onChange={update('totalCost')}
+                      placeholder="6120"
+                      value={values.totalCost}
+                    />
+                  </Field>
+                  <Field
+                    hint="Доставка й розмитнення окремо поки не зберігаються"
+                    label="Супутні витрати"
+                  >
+                    <TextInput
+                      className="font-mono"
+                      disabled
+                      name="extraCost"
+                      placeholder="320"
+                      value=""
+                    />
+                  </Field>
+                </div>
+              ) : null}
+              <Field
+                hint="Домовленості, стан партії, усе, що знадобиться складу згодом"
+                label="Коментар"
+              >
+                <TextArea
+                  name="notes"
+                  onChange={update('notes')}
+                  placeholder="Стан партії, домовленості, що перевірити"
+                  rows={2}
+                  value={values.notes}
+                />
+              </Field>
+            </FormCard>
+
+            {!intakeId ? (
+              <FormCard step={canPlace ? '05' : '04'} title="Фото партії">
+                <MediaPicker
+                  entityType="intakes"
+                  items={media}
+                  onChange={setMedia}
+                />
+              </FormCard>
+            ) : null}
+          </div>
+
+          <aside className="sticky top-24 grid min-w-[280px] flex-[0_0_320px] gap-5">
+            <Card title="Зведення">
+              <div className="border-app-line bg-app-input rounded-[14px] border p-4">
+                <p
+                  className={cn(
+                    'text-[17px] font-bold tracking-[-0.015em]',
+                    supplied ? 'text-white' : 'text-app-dim',
+                  )}
+                >
+                  {supplied ? values.supplier : 'Постачальник не вказаний'}
+                </p>
+                <p className="text-app-muted mt-1.5 text-sm">
+                  {[
+                    values.purchasedAt ? day(values.purchasedAt) : null,
+                    intake?.createdBy.displayName ?? null,
+                  ]
+                    .filter((part) => part !== null)
+                    .join(' · ') || 'Дата не вказана'}
+                </p>
+                <p className="text-app-dim mt-3 font-mono text-[12px]">
+                  {values.name || 'без назви'} · {positions}{' '}
+                  {plural(positions, ['позиція', 'позиції', 'позицій'])}
+                </p>
+              </div>
+              {canManageFinance ? (
+                <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
+                  <dt className="text-app-muted text-sm font-semibold">
+                    Сума придбання
+                  </dt>
+                  <dd
+                    className={cn(
+                      'font-mono text-[15px] tabular-nums',
+                      hasCost ? 'text-white' : 'text-app-dim',
+                    )}
+                  >
+                    {hasCost && cost !== null ? money(cost) : '—'}
+                  </dd>
+                  <dt className="text-app-muted text-sm font-semibold">
+                    Витрати
+                  </dt>
+                  <dd
+                    className="text-app-dim font-mono text-[15px] tabular-nums"
+                    title="Супутні витрати приймання поки не зберігає"
+                  >
+                    —
+                  </dd>
+                  <div className="bg-app-line col-span-2 my-1 h-px" />
+                  <dt className="text-[15px] font-bold text-white">Разом</dt>
+                  <dd className="font-mono text-[20px] text-white tabular-nums">
+                    {money(hasCost && cost !== null ? cost : 0)}
+                  </dd>
+                </dl>
+              ) : null}
+              <ul className="border-app-line mt-5 grid gap-2.5 border-t pt-4.5">
+                {checks.map((item) => (
+                  <li
+                    className={cn(
+                      'flex items-center gap-2.5 text-[13px] font-semibold',
+                      item.done ? 'text-app-ink' : 'text-app-dim',
+                    )}
+                    key={item.label}
+                  >
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'grid size-4.5 shrink-0 place-items-center rounded-full',
+                        item.done
+                          ? 'bg-state-ok-soft text-state-ok'
+                          : 'bg-white/[0.06]',
+                      )}
+                    >
+                      {item.done ? <Check className="size-3" /> : null}
+                    </span>
+                    {item.label}
+                  </li>
+                ))}
+              </ul>
+              <Button
+                aria-busy={busy}
+                className="mt-5 min-h-12 w-full text-[16px] font-bold"
+                disabled={busy}
+                type="submit"
+                variant="primary"
+              >
+                {saveLabel}
+              </Button>
+              <p className="text-app-dim mt-3 text-[13px] leading-[1.5]">
+                Зміна суми придбання перерахує собівартість усіх позицій партії.
+              </p>
+            </Card>
+
+            {intakeId ? (
+              <Card title="Видалити приймання">
+                <p className="text-app-muted text-[13px] leading-[1.5]">
+                  У прийманні {positions}{' '}
+                  {plural(positions, ['позиція', 'позиції', 'позицій'])}.
+                  Видалення розірве їхній звʼязок із партією — його не
+                  відновити.
+                </p>
+                <Button
+                  className="mt-3 min-h-10 w-full text-[13px] font-bold"
+                  disabled={busy}
+                  onClick={() => setConfirmDelete(true)}
+                  type="button"
+                  variant="danger"
+                >
+                  Видалити приймання
+                </Button>
+              </Card>
+            ) : null}
+          </aside>
+        </form>
+      </div>
+
+      <ConfirmDialog
+        confirmLabel="Видалити"
+        consequence="Приймання та його звʼязок із оприбуткованими деталями зникнуть назавжди."
+        onConfirm={() => void remove()}
+        onOpenChange={setConfirmDelete}
+        open={confirmDelete}
+        pending={busy}
+        title="Видалити приймання?"
+      />
+    </div>
   )
 }
 
@@ -1321,11 +1716,14 @@ function FormCard({
   step,
   title,
   description,
+  aside,
   children,
 }: {
   step: string
   title: string
   description?: string
+  /** Sits on the title line: a lock, a count. */
+  aside?: ReactNode
   children: ReactNode
 }) {
   const titleId = useId()
@@ -1342,6 +1740,7 @@ function FormCard({
         >
           {title}
         </h2>
+        {aside}
       </div>
       {description === undefined ? null : (
         <p className="text-app-muted mt-1.5 text-sm">{description}</p>

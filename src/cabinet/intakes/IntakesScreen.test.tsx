@@ -51,6 +51,17 @@ vi.mock('../module-registry', () => ({
   },
 }))
 
+/**
+ * The intake form repeats its save button in the sticky bar and in the summary
+ * rail, exactly as the design draws it; the rail one is the form's own submit.
+ */
+const saveButton = (name: string) => {
+  const buttons = screen.getAllByRole('button', { name })
+  const last = buttons.at(-1)
+  if (!last) throw new Error(`Кнопки «${name}» немає на екрані`)
+  return last
+}
+
 const intake = {
   id: 'intake-1',
   name: 'Липнева партія',
@@ -301,9 +312,9 @@ it('applies intake quota only to create while allowing edit at the limit', async
   )
 
   expect(
-    await screen.findByRole('heading', { name: 'Редагувати приймання' }),
+    await screen.findByRole('heading', { name: 'Редагування приймання' }),
   ).toBeVisible()
-  expect(screen.getByRole('button', { name: 'Зберегти' })).toBeEnabled()
+  expect(saveButton('Зберегти зміни')).toBeEnabled()
 })
 
 it('keeps intake detail visible and reports a normalized delete failure after pending state', async () => {
@@ -584,7 +595,7 @@ it('locks intake create submission and prevents duplicate POSTs', async () => {
     </MemoryRouter>,
   )
 
-  const save = screen.getByRole('button', { name: 'Зберегти' })
+  const save = saveButton('Створити приймання')
   await user.click(save)
   expect(save).toBeDisabled()
   expect(save.closest('form')).toHaveAttribute('aria-busy', 'true')
@@ -609,7 +620,7 @@ it('allows intake creation without finance.manage while hiding and omitting tota
 
   expect(screen.queryByLabelText('Загальна вартість')).not.toBeInTheDocument()
   await user.type(screen.getByLabelText('Назва'), 'Нефінансове приймання')
-  await user.click(screen.getByRole('button', { name: 'Зберегти' }))
+  await user.click(saveButton('Створити приймання'))
 
   await waitFor(() => expect(intakesApi.create).toHaveBeenCalledTimes(1))
   expect(intakesApi.create).toHaveBeenCalledWith(
@@ -639,7 +650,7 @@ it('rechecks the latest intake permission before dispatching create', async () =
   )
 
   currentCabinet.snapshot.permissions.delete('intakes.manage')
-  await user.click(screen.getByRole('button', { name: 'Зберегти' }))
+  await user.click(saveButton('Створити приймання'))
 
   expect(intakesApi.create).not.toHaveBeenCalled()
 })
@@ -663,7 +674,7 @@ it('allows intake editing without finance.manage while hiding and omitting total
 
   expect(await screen.findByLabelText('Назва')).toHaveValue('Липнева партія')
   expect(screen.queryByLabelText('Загальна вартість')).not.toBeInTheDocument()
-  await user.click(screen.getByRole('button', { name: 'Зберегти' }))
+  await user.click(saveButton('Зберегти зміни'))
 
   await waitFor(() => expect(intakesApi.update).toHaveBeenCalledTimes(1))
   expect(intakesApi.update).toHaveBeenCalledWith(
@@ -695,7 +706,7 @@ it('exposes and submits totalCost when the intake manager has finance.manage', a
   )
 
   await user.type(screen.getByLabelText('Загальна вартість'), '7500')
-  await user.click(screen.getByRole('button', { name: 'Зберегти' }))
+  await user.click(saveButton('Створити приймання'))
 
   await waitFor(() => expect(intakesApi.create).toHaveBeenCalledTimes(1))
   expect(intakesApi.create).toHaveBeenCalledWith(
@@ -724,7 +735,7 @@ it('rechecks finance.manage before dispatching an intake totalCost', async () =>
 
   await user.type(screen.getByLabelText('Загальна вартість'), '7500')
   currentCabinet.snapshot.permissions.delete('finance.manage')
-  await user.click(screen.getByRole('button', { name: 'Зберегти' }))
+  await user.click(saveButton('Створити приймання'))
 
   expect(intakesApi.create).not.toHaveBeenCalled()
 })
@@ -753,7 +764,7 @@ it('locks intake edit submission, normalizes permission failure, and retains the
 
   const name = await screen.findByLabelText('Назва')
   expect(name).toHaveValue('Липнева партія')
-  const save = screen.getByRole('button', { name: 'Зберегти' })
+  const save = saveButton('Зберегти зміни')
   await user.click(save)
   expect(save).toBeDisabled()
   expect(save.closest('form')).toHaveAttribute('aria-busy', 'true')
