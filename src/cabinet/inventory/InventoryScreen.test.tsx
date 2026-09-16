@@ -276,11 +276,12 @@ const renderAt = (path: string) =>
 
 it('renders responsive management overview without physical scanning controls', async () => {
   renderAt('/app/yard/inventory')
-  expect(await screen.findByText('Основний склад')).toBeInTheDocument()
+  // The warehouse names the running session as well as its own card, so the
+  // list is the one that has to carry it.
+  const houses = await screen.findByRole('region', { name: 'Склади' })
+  expect(within(houses).getByText('Основний склад')).toBeInTheDocument()
   expect(screen.getByText('INV-001')).toBeInTheDocument()
-  expect(
-    screen.getByRole('link', { name: 'Нова інвентаризація' }),
-  ).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Нова сесія' })).toBeInTheDocument()
   expect(screen.queryByText(/увімкнути камеру/i)).not.toBeInTheDocument()
   expect(screen.queryByText(/сканувати qr/i)).not.toBeInTheDocument()
 })

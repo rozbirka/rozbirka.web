@@ -579,16 +579,68 @@ async function installCabinetApiBoundary(
       return
     }
     if (path === '/api/v1/inventory/sessions' && request.method() === 'GET') {
+      // The list carries the same shape as the detail endpoint: a session
+      // always knows its own preview counts.
       await fulfillData(route, [
         {
           id: 'session-1',
           number: 'INV-001',
           status: 'inProgress',
+          createdBy: namedUser.id,
+          startedBy: namedUser.id,
+          completedBy: null,
           createdAt: '2026-09-02T10:00:00.000Z',
+          startedAt: '2026-09-02T10:05:00.000Z',
+          completedAt: null,
+          cancelledAt: null,
+          cancellationReason: null,
+          preview: {
+            includedPartCount: 12,
+            coverageWarningPartCount: 0,
+            conflictingPartCount: 2,
+          },
           zones: [
             {
               zoneId: 'zone-1',
+              warehouseId: 'warehouse-1',
+              warehouseName: 'Основний склад',
+              zoneName: 'Стелаж A1',
+              zoneCode: 'A1',
               status: 'counting',
+              leaseOwnerUserId: null,
+              leaseExpiresAt: null,
+              completedAt: null,
+            },
+          ],
+        },
+        {
+          id: 'session-0',
+          number: 'INV-000',
+          status: 'completed',
+          createdBy: namedUser.id,
+          startedBy: namedUser.id,
+          completedBy: namedUser.id,
+          createdAt: '2026-08-28T10:00:00.000Z',
+          startedAt: '2026-08-28T10:05:00.000Z',
+          completedAt: '2026-08-28T15:40:00.000Z',
+          cancelledAt: null,
+          cancellationReason: null,
+          preview: {
+            includedPartCount: 240,
+            coverageWarningPartCount: 0,
+            conflictingPartCount: 3,
+          },
+          zones: [
+            {
+              zoneId: 'zone-1',
+              warehouseId: 'warehouse-1',
+              warehouseName: 'Основний склад',
+              zoneName: 'Стелаж A1',
+              zoneCode: 'A1',
+              status: 'completed',
+              leaseOwnerUserId: null,
+              leaseExpiresAt: null,
+              completedAt: '2026-08-28T15:40:00.000Z',
             },
           ],
         },
@@ -1549,7 +1601,11 @@ test('inventory overview remains usable at mobile and desktop widths @cabinet-sm
     await expect(
       page.getByRole('heading', { name: 'Інвентаризація' }),
     ).toBeVisible()
-    await expect(page.getByText('Основний склад')).toBeVisible()
+    // The warehouse names both the running session and its own card, so the
+    // list of warehouses is where it has to be visible.
+    await expect(
+      page.getByRole('region', { name: 'Склади' }).getByText('Основний склад'),
+    ).toBeVisible()
     await expect(page.getByText('INV-001')).toBeVisible()
     expect(
       await page.evaluate(
@@ -1563,7 +1619,7 @@ test('inventory overview remains usable at mobile and desktop widths @cabinet-sm
   await expect(page.getByText(/увімкнути камеру/i)).toHaveCount(0)
   await page.getByRole('link', { name: 'Результати' }).click()
   await expect(
-    page.getByRole('heading', { name: 'Результати інвентаризації' }),
+    page.getByRole('heading', { name: 'Результати сесії' }),
   ).toBeVisible()
   await expect(page.getByText('Крило')).toBeVisible()
 })
@@ -1578,9 +1634,7 @@ test('inventory hides management actions when manage permission is absent @cabin
   await expect(
     page.getByRole('heading', { name: 'Інвентаризація' }),
   ).toBeVisible()
-  await expect(
-    page.getByRole('link', { name: 'Нова інвентаризація' }),
-  ).toHaveCount(0)
+  await expect(page.getByRole('link', { name: 'Нова сесія' })).toHaveCount(0)
 })
 
 test('opens More by keyboard, traps focus, and restores it on close @cabinet-smoke', async ({

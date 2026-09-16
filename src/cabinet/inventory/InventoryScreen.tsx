@@ -26,12 +26,8 @@ import {
   Field,
   FormDialog,
   Notice,
-  PageBody,
-  PageHeader,
-  Panel,
   SearchInput,
   SkeletonRows,
-  StatCard,
   StatusPill,
   TextArea,
   TextInput,
@@ -84,11 +80,6 @@ const sessionStatus = (status: InventorySession['status']) =>
 
 /** How many journal rows to show before the reader asks for more. */
 const JOURNAL_PAGE = 25
-
-const formText = (form: FormData, name: string) => {
-  const value = form.get(name)
-  return typeof value === 'string' ? value.trim() : ''
-}
 
 function useLoad<T>(loader: (signal: AbortSignal) => Promise<T>, key: string) {
   const [revision, setRevision] = useState(0)
@@ -166,28 +157,84 @@ function usePermission(permission: string) {
   return snapshot?.permissions.has(permission) ?? false
 }
 
+/** Which sessions the overview is showing. */
+const OVERVIEW_SEGMENTS = [
+  { value: 'active' as const, label: 'Активні' },
+  { value: 'done' as const, label: 'Завершені' },
+  { value: 'draft' as const, label: 'Чернетки' },
+]
+
+type OverviewSegment = (typeof OVERVIEW_SEGMENTS)[number]['value']
+
+const segmentOf = (status: InventorySession['status']): OverviewSegment =>
+  status === 'draft'
+    ? 'draft'
+    : status === 'completed' || status === 'cancelled'
+      ? 'done'
+      : 'active'
+
+/** How many days back the "checked recently" figure looks. */
+const RECENT_DAYS = 30
+
+interface OverviewData {
+  warehouses: Warehouse[]
+  sessions: InventorySession[]
+  zones: InventoryZone[]
+  /** Parts per warehouse, when the viewer may read the parts module. */
+  byWarehouse: Map<string, number> | null
+  /** The cut-off for "checked recently", taken once when the data loads. */
+  since: number
+}
+
 function Overview() {
   const base = useInventoryBase()
   const canManage = usePermission('inventory.manage')
   const canZones = usePermission('inventory.zones.manage')
+  const canSeeParts = usePermission('parts.view')
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.inventory,
   )
-  const warehousesLoader = useCallback(
-    (signal: AbortSignal) => inventoryApi.getWarehouses({ signal }),
-    [],
+  const loader = useCallback(
+    async (signal: AbortSignal): Promise<OverviewData> => {
+      const [warehouses, sessions, zones, byWarehouse] = await Promise.all([
+        inventoryApi.getWarehouses({ signal }),
+        inventoryApi.getSessions({ signal }).then(
+          (list) => list,
+          () => [],
+        ),
+        inventoryApi.getZones({ activeOnly: true, signal }).then(
+          (list) => list,
+          () => [],
+        ),
+        canSeeParts
+          ? partsApi.facets({}, ['warehouse'], { signal }).then(
+              (facets) =>
+                new Map(facets.warehouses.map((item) => [item.id, item.count])),
+              () => null,
+            )
+          : Promise.resolve(null),
+      ])
+      return {
+        warehouses,
+        sessions,
+        zones,
+        byWarehouse,
+        since: Date.now() - RECENT_DAYS * 24 * 60 * 60 * 1000,
+      }
+    },
+    [canSeeParts],
   )
-  const sessionsLoader = useCallback(
-    (signal: AbortSignal) => inventoryApi.getSessions({ signal }),
-    [],
-  )
-  const warehouses = useLoad(warehousesLoader, 'warehouses')
-  const sessions = useLoad(sessionsLoader, 'sessions')
+  const resource = useLoad(loader, 'inventory-overview')
+  const [segment, setSegment] = useState<OverviewSegment>('active')
+  const [query, setQuery] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [draft, setDraft] = useState({ name: '', code: '' })
   const [creating, setCreating] = useState(false)
   const [operationError, setOperationError] = useState<string | null>(null)
-  const createWarehouse = async (form: FormData) => {
-    const name = formText(form, 'name')
-    const code = formText(form, 'code')
+
+  const createWarehouse = async () => {
+    const name = draft.name.trim()
+    const code = draft.code.trim()
     if (!name || !code) return
     setCreating(true)
     try {
@@ -200,169 +247,434 @@ function Overview() {
         { name, code },
         { signal: scope.signal },
       )
-      warehouses.reload()
+      setAdding(false)
+      resource.reload()
     } catch (error) {
       setOperationError(normalizeApiProblem(error).message)
     } finally {
       setCreating(false)
     }
   }
+
   return (
-    <PageBody>
-      <PageHeader
-        eyebrow="Складський облік"
-        title="Інвентаризація"
-        actions={
-          canManage ? (
-            <Button asChild variant="primary">
-              <Link to={`${base}/sessions/new`}>
-                <Plus aria-hidden />
-                Нова інвентаризація
-              </Link>
-            </Button>
-          ) : null
+    <Resource retry={resource.reload} state={resource.state}>
+      {({ warehouses, sessions, zones, byWarehouse, since }: OverviewData) => {
+        const zonesOf = (item: InventorySession) =>
+          [...new Set(item.zones.map((zone) => zone.zoneCode))].join(', ')
+        const houseOf = (item: InventorySession) =>
+          item.zones[0]?.warehouseName ?? '—'
+        const doneZones = (item: InventorySession) =>
+          item.zones.filter((zone) => zone.status === 'completed').length
+        const closedAt = (item: InventorySession) =>
+          item.completedAt ?? item.cancelledAt ?? item.createdAt
+        const counts: Record<OverviewSegment, number> = {
+          active: 0,
+          done: 0,
+          draft: 0,
         }
-      />
-      <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard
-          label="Складів"
-          value={
-            warehouses.state.kind === 'ready'
-              ? warehouses.state.data.length
-              : '—'
-          }
-        />
-        <StatCard
-          label="Активних сесій"
-          value={
-            sessions.state.kind === 'ready'
-              ? sessions.state.data.filter(
-                  (item) => item.status === 'inProgress',
-                ).length
-              : '—'
-          }
-          accent
-        />
-        <StatCard
-          label="На перевірці"
-          value={
-            sessions.state.kind === 'ready'
-              ? sessions.state.data.filter((item) => item.status === 'review')
-                  .length
-              : '—'
-          }
-        />
-      </div>
-      {operationError ? <Notice tone="danger">{operationError}</Notice> : null}
-      {canZones ? (
-        <Panel>
-          <form
-            className="grid gap-3 sm:grid-cols-[1fr_12rem_auto] sm:items-end"
-            action={(form) => void createWarehouse(form)}
-          >
-            <label className="grid gap-1 text-sm text-app-dim">
-              Назва
-              <input
-                name="name"
-                required
-                className="min-h-11 rounded-lg border border-app-line bg-app-canvas px-3 text-white"
-              />
-            </label>
-            <label className="grid gap-1 text-sm text-app-dim">
-              Код
-              <input
-                name="code"
-                required
-                className="min-h-11 rounded-lg border border-app-line bg-app-canvas px-3 font-mono text-white"
-              />
-            </label>
-            <Button disabled={creating} type="submit">
-              Додати склад
-            </Button>
-          </form>
-        </Panel>
-      ) : null}
-      <section className="grid gap-3">
-        <h2 className="text-lg font-semibold text-white">Склади й зони</h2>
-        <Resource state={warehouses.state} retry={warehouses.reload}>
-          {(items) =>
-            items.length ? (
-              <div className="grid gap-3 md:grid-cols-2">
-                {items.map((item) => (
-                  <WarehouseCard key={item.id} item={item} base={base} />
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                title="Складів ще немає"
-                description="Створіть перший склад, щоб налаштувати зони."
-              />
-            )
-          }
-        </Resource>
-      </section>
-      <section className="grid gap-3">
-        <h2 className="text-lg font-semibold text-white">Останні сесії</h2>
-        <Resource state={sessions.state} retry={sessions.reload}>
-          {(items) =>
-            items.length ? (
-              <div className="overflow-hidden rounded-panel border border-app-line">
-                {items.map((item) => (
-                  <SessionRow key={item.id} item={item} base={base} />
-                ))}
-              </div>
-            ) : (
-              <EmptyState
-                title="Інвентаризацій ще немає"
-                description="Створіть сесію та передайте підрахунок працівникам у Mobile."
-              />
-            )
-          }
-        </Resource>
-      </section>
-    </PageBody>
-  )
-}
+        for (const item of sessions) counts[segmentOf(item.status)] += 1
+        const needle = query.trim().toLowerCase()
+        const rows = sessions
+          .filter((item) => segmentOf(item.status) === segment)
+          .filter(
+            (item) =>
+              needle === '' ||
+              `${item.number} ${houseOf(item)} ${zonesOf(item)}`
+                .toLowerCase()
+                .includes(needle),
+          )
+          .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
 
-function WarehouseCard({ item, base }: { item: Warehouse; base: string }) {
-  return (
-    <Link
-      className="rounded-panel border border-app-line bg-app-raised p-4 transition hover:border-brand/50"
-      to={`${base}/warehouses/${item.id}`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="font-semibold text-white">{item.name}</h3>
-          <p className="mt-1 font-mono text-xs text-app-dim">{item.code}</p>
-        </div>
-        {item.isSystemDefault ? (
-          <StatusPill tone="info">Основний</StatusPill>
-        ) : null}
-      </div>
-      <p className="mt-4 text-sm text-app-dim">{item.zoneCount} зон</p>
-    </Link>
-  )
-}
+        const completedSessions = sessions
+          .filter((item) => item.status === 'completed')
+          .sort((left, right) => closedAt(right).localeCompare(closedAt(left)))
+        const last = completedSessions[0] ?? null
+        const accuracy =
+          last === null || last.preview.includedPartCount === 0
+            ? null
+            : Math.round(
+                ((last.preview.includedPartCount -
+                  last.preview.conflictingPartCount) /
+                  last.preview.includedPartCount) *
+                  1000,
+              ) / 10
+        const checkedZones = sessions
+          .filter((item) => new Date(closedAt(item)).getTime() >= since)
+          .reduce((sum, item) => sum + doneZones(item), 0)
+        const countable = zones.filter((zone) => !zone.isSystemUnassigned)
+        const running = sessions.filter(
+          (item) => segmentOf(item.status) === 'active',
+        )
+        const openDiffs = running.reduce(
+          (sum, item) => sum + item.preview.conflictingPartCount,
+          0,
+        )
+        /* The last time each warehouse was counted, and whether one is
+           running there right now. */
+        const checkOf = (warehouseId: string) => {
+          if (
+            running.some((item) =>
+              item.zones.some((zone) => zone.warehouseId === warehouseId),
+            )
+          )
+            return 'Перевірка триває'
+          const done = completedSessions.find((item) =>
+            item.zones.some((zone) => zone.warehouseId === warehouseId),
+          )
+          return done === undefined
+            ? 'Ще не перевіряли'
+            : `Перевірено ${day(done.completedAt)}`
+        }
+        const stock = byWarehouse
+        const stockTotal =
+          stock === null
+            ? 0
+            : [...stock.values()].reduce((sum, value) => sum + value, 0)
 
-function SessionRow({ item, base }: { item: InventorySession; base: string }) {
-  const [label, tone] = sessionStatus(item.status)
-  const completed = item.zones.filter(
-    (zone) => zone.status === 'completed',
-  ).length
-  return (
-    <Link
-      className="grid gap-2 border-b border-app-line p-4 last:border-0 hover:bg-white/[0.025] sm:grid-cols-[1fr_auto_auto] sm:items-center"
-      to={`${base}/sessions/${item.id}`}
-    >
-      <div>
-        <strong className="text-white">{item.number}</strong>
-        <p className="text-xs text-app-dim">Створено {date(item.createdAt)}</p>
-      </div>
-      <span className="text-sm tabular-nums text-app-dim">
-        {completed}/{item.zones.length} зон
-      </span>
-      <StatusPill tone={tone}>{label}</StatusPill>
-    </Link>
+        return (
+          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+              <p className="text-app-dim flex items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase">
+                <span>Склад</span>
+                <span aria-hidden className="text-white/20">
+                  /
+                </span>
+                <span className="text-app-muted">Інвентаризація</span>
+              </p>
+              <div className="flex flex-1 flex-wrap items-center justify-end gap-2.5">
+                <div className="min-w-[12rem] flex-[0_1_20rem]">
+                  <SearchInput
+                    aria-label="Пошук сесії"
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Сесія, склад або зона"
+                    value={query}
+                  />
+                </div>
+                {canManage ? (
+                  <Button
+                    asChild
+                    className="px-5 text-sm font-bold"
+                    variant="primary"
+                  >
+                    <Link to={`${base}/sessions/new`}>Нова сесія</Link>
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+              <div className="min-w-0">
+                <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+                  Інвентаризація
+                </h1>
+                <p className="text-app-muted mt-3 text-[15px]">
+                  {last === null
+                    ? 'Завершених перевірок ще не було — підрахунок ведеться в мобільному застосунку.'
+                    : `Остання завершена перевірка — ${day(last.completedAt)} · розходжень ${String(last.preview.conflictingPartCount)}`}
+                </p>
+              </div>
+
+              {operationError ? (
+                <Notice tone="danger">{operationError}</Notice>
+              ) : null}
+
+              <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-px overflow-hidden rounded-[20px] border">
+                <WarehouseStat
+                  label="Активних сесій"
+                  meta={
+                    running.length === 0
+                      ? 'зараз ніхто не рахує'
+                      : [...new Set(running.map((item) => houseOf(item)))].join(
+                          ', ',
+                        )
+                  }
+                  tone={running.length > 0 ? 'warn' : 'plain'}
+                  unit=""
+                  value={String(running.length)}
+                />
+                <WarehouseStat
+                  label="Перевірено зон"
+                  meta={`за останні ${String(RECENT_DAYS)} днів`}
+                  unit={
+                    countable.length === 0
+                      ? 'зон'
+                      : `з ${String(countable.length)}`
+                  }
+                  value={String(checkedZones)}
+                />
+                <WarehouseStat
+                  label="Розходження"
+                  meta="у сесіях, що тривають"
+                  tone={openDiffs > 0 ? 'danger' : 'plain'}
+                  unit="позицій"
+                  value={String(openDiffs)}
+                />
+                <WarehouseStat
+                  label="Точність"
+                  meta={
+                    last === null
+                      ? 'завершених перевірок ще не було'
+                      : `остання завершена сесія ${last.number}`
+                  }
+                  tone={accuracy === null ? 'plain' : 'ok'}
+                  unit="%"
+                  value={
+                    accuracy === null ? '—' : String(accuracy).replace('.', ',')
+                  }
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div
+                  aria-label="Які сесії показувати"
+                  className="border-app-line bg-app-raised flex flex-wrap gap-1 rounded-xl border p-1"
+                  role="radiogroup"
+                >
+                  {OVERVIEW_SEGMENTS.map((option) => {
+                    const active = option.value === segment
+                    return (
+                      <button
+                        aria-checked={active}
+                        className={cn(
+                          'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-bold',
+                          active
+                            ? 'text-app-ink bg-white/[0.08]'
+                            : 'text-app-muted hover:text-app-ink',
+                        )}
+                        key={option.value}
+                        onClick={() => setSegment(option.value)}
+                        role="radio"
+                        type="button"
+                      >
+                        {option.label}{' '}
+                        <span className="text-app-dim font-mono text-[11px] font-medium">
+                          {counts[option.value]}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-app-muted text-[13px]">
+                  {rows.length}{' '}
+                  {plural(rows.length, ['сесія', 'сесії', 'сесій'])} · спочатку
+                  найновіші
+                </p>
+              </div>
+
+              <section
+                aria-label="Сесії інвентаризації"
+                className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
+              >
+                <div
+                  aria-hidden
+                  className="border-app-line text-app-muted hidden gap-4 border-b px-6 py-3 font-mono text-[10px] tracking-[0.14em] uppercase md:grid md:grid-cols-[1.6fr_1fr_9.5rem_7rem_6rem]"
+                >
+                  <span>Сесія</span>
+                  <span>Склад і зони</span>
+                  <span>Прогрес</span>
+                  <span>Розходження</span>
+                  <span className="text-right">Статус</span>
+                </div>
+                {rows.length === 0 ? (
+                  <p className="text-app-muted px-6 py-8 text-center text-sm">
+                    {sessions.length === 0
+                      ? 'Інвентаризацій ще немає — створіть сесію, і працівники порахують склад у застосунку.'
+                      : 'За цим фільтром сесій немає.'}
+                  </p>
+                ) : (
+                  <ul className="grid">
+                    {rows.map((item) => {
+                      const [label, tone] = sessionStatus(item.status)
+                      const total = item.zones.length
+                      const done = doneZones(item)
+                      const percent =
+                        total === 0 ? 0 : Math.round((done / total) * 100)
+                      return (
+                        <li
+                          className="border-app-line border-b last:border-0"
+                          key={item.id}
+                        >
+                          <Link
+                            className="grid items-center gap-x-4 gap-y-2 px-6 py-4 hover:bg-white/[0.03] md:grid-cols-[1.6fr_1fr_9.5rem_7rem_6rem]"
+                            to={`${base}/sessions/${item.id}`}
+                          >
+                            <span className="min-w-0">
+                              <span className="block text-[15px] font-bold tracking-[-0.01em] text-white">
+                                {item.number}
+                              </span>
+                              <span className="text-app-muted mt-0.5 block text-[13px]">
+                                Створено {date(item.createdAt)}
+                              </span>
+                            </span>
+                            <span className="text-app-muted min-w-0 text-[14px]">
+                              {houseOf(item)}
+                              {zonesOf(item) === ''
+                                ? ''
+                                : ` · ${zonesOf(item)}`}
+                            </span>
+                            <span>
+                              <span
+                                aria-hidden
+                                className="bg-app-line-2 block h-1.5 overflow-hidden rounded-full"
+                              >
+                                <span
+                                  className={cn(
+                                    'block h-full rounded-full',
+                                    percent === 100
+                                      ? 'bg-state-ok'
+                                      : percent > 0
+                                        ? 'bg-state-warn'
+                                        : 'bg-transparent',
+                                  )}
+                                  style={{ width: `${String(percent)}%` }}
+                                />
+                              </span>
+                              <span className="text-app-muted mt-1.5 block font-mono text-[12px]">
+                                {done} / {total}{' '}
+                                {plural(total, ['зона', 'зони', 'зон'])}
+                              </span>
+                            </span>
+                            <span
+                              className={cn(
+                                'font-mono text-[14px] tabular-nums',
+                                item.status === 'draft'
+                                  ? 'text-app-dim'
+                                  : item.preview.conflictingPartCount === 0
+                                    ? 'text-state-ok'
+                                    : 'text-state-danger',
+                              )}
+                            >
+                              <span className="text-app-muted mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
+                                Розходження
+                              </span>
+                              {item.status === 'draft'
+                                ? '—'
+                                : item.preview.conflictingPartCount}
+                            </span>
+                            <span className="md:flex md:justify-end">
+                              <StatusPill tone={tone}>{label}</StatusPill>
+                            </span>
+                          </Link>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </section>
+
+              <section aria-label="Склади" className="grid gap-4.5">
+                <div className="flex flex-wrap items-baseline gap-3.5">
+                  <h2 className="text-app-muted font-mono text-[11px] tracking-[0.16em] uppercase">
+                    Склади
+                  </h2>
+                  <span aria-hidden className="bg-app-line h-px flex-1" />
+                  {canZones ? (
+                    <Button
+                      className="text-[13px] font-semibold"
+                      onClick={() => {
+                        setDraft({ name: '', code: '' })
+                        setAdding(true)
+                      }}
+                      variant="ghost"
+                    >
+                      <Plus aria-hidden />
+                      Додати склад
+                    </Button>
+                  ) : null}
+                </div>
+                {warehouses.length === 0 ? (
+                  <EmptyState
+                    description="Створіть перший склад, щоб розкласти запчастини по зонах."
+                    title="Складів ще немає"
+                  />
+                ) : (
+                  <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-4">
+                    {warehouses.map((item) => {
+                      const parts = stock?.get(item.id) ?? null
+                      const share =
+                        parts === null || stockTotal === 0
+                          ? 0
+                          : Math.round((parts / stockTotal) * 100)
+                      return (
+                        <li key={item.id}>
+                          <Link
+                            className="border-app-line bg-app-raised block h-full rounded-[18px] border px-5.5 pt-5 pb-5.5 hover:border-white/20"
+                            to={`${base}/warehouses/${item.id}`}
+                          >
+                            <span className="flex items-baseline justify-between gap-3">
+                              <span className="text-[17px] font-bold tracking-[-0.01em] text-white">
+                                {item.name}
+                              </span>
+                              <span className="text-app-muted font-mono text-[13px]">
+                                {item.zoneCount}{' '}
+                                {plural(item.zoneCount, [
+                                  'зона',
+                                  'зони',
+                                  'зон',
+                                ])}
+                              </span>
+                            </span>
+                            <span className="text-app-muted mt-1 block text-[13px]">
+                              код {item.code}
+                              {item.isSystemDefault
+                                ? ' · за замовчуванням'
+                                : ''}
+                              {item.isActive ? '' : ' · архівний'}
+                            </span>
+                            <span
+                              aria-hidden
+                              className="bg-app-line-2 mt-4 block h-1.5 overflow-hidden rounded-full"
+                            >
+                              <span
+                                className="bg-state-ok block h-full rounded-full"
+                                style={{ width: `${String(share)}%` }}
+                              />
+                            </span>
+                            <span className="text-app-muted mt-2.5 flex items-baseline justify-between gap-3 text-[13px]">
+                              <span>
+                                {parts === null
+                                  ? 'залишки недоступні'
+                                  : `${String(share)}% складу розбірки`}
+                              </span>
+                              <span className="font-mono">
+                                {parts === null ? '—' : `${String(parts)} поз.`}
+                              </span>
+                            </span>
+                            <span className="border-app-line text-app-dim mt-3.5 block border-t pt-3.5 text-[13px]">
+                              {checkOf(item.id)}
+                            </span>
+                          </Link>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </section>
+            </div>
+
+            <FormDialog
+              description="Склад — це приміщення; зони додаються вже всередині нього."
+              onOpenChange={(next) => {
+                if (!next) setAdding(false)
+              }}
+              onSubmit={(event) => {
+                event.preventDefault()
+                void createWarehouse()
+              }}
+              open={adding}
+              pending={creating}
+              submitDisabled={
+                draft.name.trim() === '' || draft.code.trim() === ''
+              }
+              submitLabel="Додати склад"
+              title="Новий склад"
+            >
+              <NameAndCode draft={draft} onChange={setDraft} />
+            </FormDialog>
+          </div>
+        )
+      }}
+    </Resource>
   )
 }
 
@@ -1284,7 +1596,7 @@ function WarehouseStat({
   value: string
   unit: string
   meta: string
-  tone?: 'plain' | 'warn' | 'danger'
+  tone?: 'plain' | 'ok' | 'warn' | 'danger'
 }) {
   return (
     <div className="bg-app-raised px-6 pt-[22px] pb-6">
@@ -1295,11 +1607,13 @@ function WarehouseStat({
         <span
           className={cn(
             'text-[30px] leading-none font-extrabold tracking-[-0.03em] tabular-nums',
-            tone === 'warn'
-              ? 'text-state-warn'
-              : tone === 'danger'
-                ? 'text-state-danger'
-                : 'text-white',
+            tone === 'ok'
+              ? 'text-state-ok'
+              : tone === 'warn'
+                ? 'text-state-warn'
+                : tone === 'danger'
+                  ? 'text-state-danger'
+                  : 'text-white',
           )}
         >
           {value}
