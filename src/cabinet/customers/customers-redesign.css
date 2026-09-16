@@ -268,7 +268,7 @@
 }
 .customer-card-overview {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 400px;
+  grid-template-columns: minmax(0, 1fr) 398px;
   align-items: center;
   gap: clamp(24px, 3vw, 40px);
   padding: 12px 40px;
@@ -340,27 +340,26 @@
 }
 .customer-card-metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, 96px);
+  gap: 28px;
   overflow: hidden;
   border: 1px solid var(--color-app-line);
-  border-radius: 14px;
+  border-radius: 16px;
   background: var(--color-app-raised);
+  padding: 18px 26px;
 }
 .customer-card-metrics > div {
   display: grid;
   min-width: 0;
-  gap: 7px;
-  padding: 24px 10px;
-  border-left: 1px solid var(--color-app-line);
-}
-.customer-card-metrics > div:first-child {
-  border-left: 0;
+  gap: 8px;
 }
 .customer-card-metrics dt {
   overflow: hidden;
   color: var(--color-app-dim);
-  font-size: 8px;
-  letter-spacing: 0.17em;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
@@ -368,12 +367,17 @@
 .customer-card-metrics dd {
   overflow: hidden;
   color: var(--color-app-ink);
-  font-family: var(--font-mono);
-  font-size: clamp(18px, 1.75vw, 22px);
-  font-weight: 650;
+  font-size: 22px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.customer-card-metrics > div[data-empty='true'] dd {
+  color: #6e6b66;
+  font-size: 28px;
 }
 .customer-card-grid {
   display: grid;
@@ -517,7 +521,17 @@
     padding-inline: 12px;
   }
   .customer-card-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0;
     width: 100%;
+    padding: 0;
+  }
+  .customer-card-metrics > div {
+    padding: 18px 14px;
+    border-left: 1px solid var(--color-app-line);
+  }
+  .customer-card-metrics > div:first-child {
+    border-left: 0;
   }
 }
 
@@ -585,9 +599,6 @@
   }
   .customer-card-contact a span {
     display: none;
-  }
-  .customer-card-metrics > div {
-    padding: 18px 14px;
   }
   .customer-card-metrics dt {
     white-space: normal;

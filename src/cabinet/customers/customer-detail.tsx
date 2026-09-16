@@ -88,7 +88,7 @@ export function CustomerDetailView({
     : []
 
   return (
-    <div className="customer-card-page">
+    <div className="customer-card-page type-redesign">
       <div className="customer-card-nav">
         <div className="customer-card-nav-context">
           <Link to={directoryPath}>
@@ -169,17 +169,17 @@ export function CustomerDetailView({
         </section>
 
         <dl className="customer-card-metrics">
-          <div>
+          <div data-empty={customer.ordersCount ? undefined : true}>
             <dt>Замовлень</dt>
             <dd>{customer.ordersCount ?? '—'}</dd>
           </div>
           {canViewFinance ? (
             <>
-              <div>
+              <div data-empty={customer.totalAmount ? undefined : true}>
                 <dt>Витрачено</dt>
                 <dd>{formatMoney(customer.totalAmount)}</dd>
               </div>
-              <div>
+              <div data-empty={customer.averageAmount ? undefined : true}>
                 <dt>Середній чек</dt>
                 <dd>{formatMoney(customer.averageAmount)}</dd>
               </div>
@@ -274,12 +274,6 @@ export function CustomerDetailView({
               </div>
             </div>
             <dl className="customer-card-facts">
-              <div>
-                <dt>Телефон</dt>
-                <dd className="customer-card-phone-number">
-                  {customer.phone ? formatPhone(customer.phone) : '—'}
-                </dd>
-              </div>
               <div>
                 <dt>Клієнт від</dt>
                 <dd>{formatDate(customer.createdAt)}</dd>

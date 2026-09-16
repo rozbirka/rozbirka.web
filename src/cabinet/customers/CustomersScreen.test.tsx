@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
@@ -300,16 +300,12 @@ it('uses browser-native contact links and carries only the customer id to a new 
   ).toBeVisible()
   expect(screen.getAllByText('28.08.2026').length).toBeGreaterThan(0)
   expect(screen.getByText('12.09.2026')).toBeVisible()
-  expect(screen.getByText('Телефон').parentElement).toHaveTextContent(
-    '+380 50 111 2233',
-  )
-  expect(
-    screen
-      .getAllByText('+380 50 111 2233')
-      .some((element) =>
-        element.classList.contains('customer-card-phone-number'),
-      ),
-  ).toBe(true)
+  const details = screen
+    .getByRole('heading', { name: 'Деталі' })
+    .closest('section')
+  expect(details).not.toBeNull()
+  expect(within(details!).queryByText('Телефон')).not.toBeInTheDocument()
+  expect(screen.getAllByText('+380 50 111 2233')).toHaveLength(1)
   expect(screen.getByText('Підтверджено')).toHaveClass('text-state-ok')
 
   await user.click(screen.getByRole('button', { name: 'Копіювати телефон' }))
