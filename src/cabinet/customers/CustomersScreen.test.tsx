@@ -116,6 +116,50 @@ it('renders the server-backed directory controls and customer columns', async ()
   )
 })
 
+it('gives different customers stable, varied avatar colors', async () => {
+  customerMocks.directory.mockResolvedValue({
+    items: [
+      {
+        id: 'customer-orange',
+        name: 'Марина Данилюк',
+        phone: null,
+        notes: null,
+        ordersCount: 3,
+        totalAmount: 100,
+        lastOrderAt: null,
+      },
+      {
+        id: 'customer-blue',
+        name: 'Роман Савчук',
+        phone: null,
+        notes: null,
+        ordersCount: 1,
+        totalAmount: 50,
+        lastOrderAt: null,
+      },
+    ],
+    page: 1,
+    pageSize: 20,
+    total: 2,
+    totalPages: 1,
+    counts: { all: 2, regular: 1, occasional: 1, noOrders: 0 },
+  })
+
+  renderScreen('/app/garage/customers')
+
+  await screen.findByText('Марина Данилюк')
+  const avatars = document.querySelectorAll<HTMLElement>(
+    '.customer-directory-avatar',
+  )
+  expect(avatars).toHaveLength(2)
+  expect(avatars[0]?.style.getPropertyValue('--customer-avatar-bg')).not.toBe(
+    '',
+  )
+  expect(avatars[0]?.style.getPropertyValue('--customer-avatar-bg')).not.toBe(
+    avatars[1]?.style.getPropertyValue('--customer-avatar-bg'),
+  )
+})
+
 it('resets paging when the segment or sort changes', async () => {
   const user = userEvent.setup()
   customerMocks.directory.mockResolvedValue({
@@ -221,6 +265,15 @@ it('uses browser-native contact links and carries only the customer id to a new 
   renderScreen('/app/garage/customers/customer-1')
 
   expect(await screen.findByText('9')).toBeVisible()
+  expect(screen.getByRole('link', { name: 'До клієнтів' })).toHaveAttribute(
+    'href',
+    '/app/garage/customers',
+  )
+  const overview = screen
+    .getByRole('heading', { name: 'Ірина' })
+    .closest('.customer-card-overview')
+  expect(overview).not.toBeNull()
+  expect(overview?.querySelector('.customer-card-metrics')).not.toBeNull()
   expect(screen.getByRole('link', { name: 'Зателефонувати' })).toHaveAttribute(
     'href',
     'tel:+380501112233',
@@ -247,9 +300,15 @@ it('uses browser-native contact links and carries only the customer id to a new 
   ).toBeVisible()
   expect(screen.getAllByText('28.08.2026').length).toBeGreaterThan(0)
   expect(screen.getByText('12.09.2026')).toBeVisible()
+  expect(screen.getByText('Телефон').parentElement).toHaveTextContent(
+    '+380501112233',
+  )
 
   await user.click(screen.getByRole('button', { name: 'Копіювати телефон' }))
   expect(writeText).toHaveBeenCalledWith('+380501112233')
+
+  await user.click(screen.getByRole('button', { name: 'Дії з клієнтом' }))
+  expect(screen.getByRole('menuitem', { name: 'Деактивувати' })).toBeVisible()
 })
 
 it('offers reuse and reactivation for the documented duplicate-phone conflict', async () => {
@@ -524,9 +583,12 @@ it('uses access decisions and customer eligibility for order, lifecycle, and del
     screen.queryByRole('link', { name: 'Створити замовлення' }),
   ).not.toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Редагувати' })).toBeVisible()
-  expect(screen.getByRole('button', { name: 'Активувати' })).toBeVisible()
+  await userEvent
+    .setup()
+    .click(screen.getByRole('button', { name: 'Дії з клієнтом' }))
+  expect(screen.getByRole('menuitem', { name: 'Активувати' })).toBeVisible()
   expect(
-    screen.queryByRole('button', { name: 'Видалити' }),
+    screen.queryByRole('menuitem', { name: 'Видалити' }),
   ).not.toBeInTheDocument()
 })
 
@@ -577,8 +639,9 @@ it('contains delete-dialog focus and restores it to the trigger on close', async
   const user = userEvent.setup()
   renderScreen('/app/garage/customers/customer-1')
 
-  const trigger = await screen.findByRole('button', { name: 'Видалити' })
+  const trigger = await screen.findByRole('button', { name: 'Дії з клієнтом' })
   await user.click(trigger)
+  await user.click(screen.getByRole('menuitem', { name: 'Видалити' }))
   const confirm = screen.getByRole('button', { name: 'Підтвердити' })
   const cancel = screen.getByRole('button', { name: 'Скасувати' })
   expect(cancel).toHaveFocus()

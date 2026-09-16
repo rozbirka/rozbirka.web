@@ -9,15 +9,8 @@ import {
   Plus,
 } from 'lucide-react'
 import type { CustomerDetail } from '@/api/customers'
-import { Button, EmptyState, StatusPill } from '@/components/app'
-
-const initials = (name: string) =>
-  name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || '—'
+import { ActionMenu, Button, EmptyState, StatusPill } from '@/components/app'
+import { CustomerAvatar } from './customer-avatar'
 
 const formatDate = (value: string | null) =>
   value
@@ -76,17 +69,46 @@ export function CustomerDetailView({
   onLifecycle: () => void
   onDelete: () => void
 }) {
+  const secondaryActions = canManage
+    ? [
+        {
+          key: 'lifecycle',
+          label: customer.isActive ? 'Деактивувати' : 'Активувати',
+          onSelect: onLifecycle,
+          disabled: busy,
+        },
+        ...(customer.ordersCount === 0
+          ? [
+              {
+                key: 'delete',
+                label: 'Видалити',
+                onSelect: () => window.setTimeout(onDelete, 0),
+                destructive: true,
+                disabled: busy,
+              },
+            ]
+          : []),
+      ]
+    : []
+
   return (
     <div className="customer-card-page">
       <div className="customer-card-nav">
-        <Link to={directoryPath}>
-          <ArrowLeft aria-hidden />
-          Клієнти
-        </Link>
-        <div>
+        <div className="customer-card-nav-context">
+          <Link to={directoryPath}>
+            <ArrowLeft aria-hidden />
+            До клієнтів
+          </Link>
+          <span className="customer-card-breadcrumbs" aria-hidden>
+            <span>Продажі</span>
+            <span>·</span>
+            <span>Клієнти</span>
+          </span>
+        </div>
+        <div className="customer-card-nav-actions">
           {canManage ? (
             <Button asChild>
-              <Link to="edit">
+              <Link to={`${directoryPath}/${customer.id}/edit`}>
                 <Pencil aria-hidden />
                 Редагувати
               </Link>
@@ -100,80 +122,73 @@ export function CustomerDetailView({
               </Link>
             </Button>
           ) : null}
+          <ActionMenu
+            actions={secondaryActions}
+            label="Дії з клієнтом"
+            triggerRef={deleteTriggerRef}
+          />
         </div>
       </div>
 
-      <section className="customer-card-hero" aria-labelledby="customer-name">
-        <span className="customer-card-avatar" aria-hidden>
-          {initials(customer.name)}
-        </span>
-        <div className="customer-card-identity">
-          <div>
-            <h1 id="customer-name">{customer.name}</h1>
-            <StatusPill tone={customer.isActive ? 'ok' : 'neutral'}>
-              {customer.isActive ? 'Активний' : 'Неактивний'}
-            </StatusPill>
-          </div>
-          {customer.phone ? (
-            <div className="customer-card-contact">
-              <span>{customer.phone}</span>
-              <Button asChild aria-label="Зателефонувати">
-                <a href={`tel:${customer.phone}`}>
-                  <Phone aria-hidden />
-                  Зателефонувати
-                </a>
-              </Button>
-              <Button asChild aria-label="SMS">
-                <a href={`sms:${customer.phone}`}>
-                  <MessageSquare aria-hidden />
-                  SMS
-                </a>
-              </Button>
-              <Button aria-label="Копіювати телефон" onClick={onCopyPhone}>
-                <Copy aria-hidden />
-              </Button>
+      <div className="customer-card-overview">
+        <section className="customer-card-hero" aria-labelledby="customer-name">
+          <CustomerAvatar
+            className="customer-card-avatar"
+            customerId={customer.id}
+            name={customer.name}
+          />
+          <div className="customer-card-identity">
+            <div>
+              <h1 id="customer-name">{customer.name}</h1>
+              <StatusPill tone={customer.isActive ? 'ok' : 'neutral'}>
+                {customer.isActive ? 'Активний' : 'Неактивний'}
+              </StatusPill>
             </div>
-          ) : (
-            <span className="customer-card-no-phone">Телефон не вказано</span>
-          )}
-          {canManage ? (
-            <div className="customer-card-lifecycle">
-              <Button disabled={busy} onClick={onLifecycle}>
-                {customer.isActive ? 'Деактивувати' : 'Активувати'}
-              </Button>
-              {customer.ordersCount === 0 ? (
-                <Button
-                  disabled={busy}
-                  onClick={onDelete}
-                  ref={deleteTriggerRef}
-                  variant="danger"
-                >
-                  Видалити
+            {customer.phone ? (
+              <div className="customer-card-contact">
+                <span>{customer.phone}</span>
+                <Button aria-label="Копіювати телефон" onClick={onCopyPhone}>
+                  <Copy aria-hidden />
+                  Копіювати
                 </Button>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </section>
+                <Button asChild aria-label="Зателефонувати">
+                  <a href={`tel:${customer.phone}`}>
+                    <Phone aria-hidden />
+                    Зателефонувати
+                  </a>
+                </Button>
+                <Button asChild aria-label="SMS">
+                  <a href={`sms:${customer.phone}`}>
+                    <MessageSquare aria-hidden />
+                    SMS
+                  </a>
+                </Button>
+              </div>
+            ) : (
+              <span className="customer-card-no-phone">Телефон не вказано</span>
+            )}
+          </div>
+        </section>
 
-      <dl className="customer-card-metrics">
-        <div>
-          <dt>Замовлень</dt>
-          <dd>{customer.ordersCount ?? '—'}</dd>
-        </div>
-        {canViewFinance ? (
-          <>
-            <div>
-              <dt>Витрачено</dt>
-              <dd>{formatMoney(customer.totalAmount)}</dd>
-            </div>
-            <div>
-              <dt>Середній чек</dt>
-              <dd>{formatMoney(customer.averageAmount)}</dd>
-            </div>
-          </>
-        ) : null}
-      </dl>
+        <dl className="customer-card-metrics">
+          <div>
+            <dt>Замовлень</dt>
+            <dd>{customer.ordersCount ?? '—'}</dd>
+          </div>
+          {canViewFinance ? (
+            <>
+              <div>
+                <dt>Витрачено</dt>
+                <dd>{formatMoney(customer.totalAmount)}</dd>
+              </div>
+              <div>
+                <dt>Середній чек</dt>
+                <dd>{formatMoney(customer.averageAmount)}</dd>
+              </div>
+            </>
+          ) : null}
+        </dl>
+      </div>
 
       <div className="customer-card-grid">
         <section
@@ -182,13 +197,22 @@ export function CustomerDetailView({
         >
           <div className="customer-card-section-heading">
             <div>
-              <span>01</span>
               <h2 id="order-history-title">Історія замовлень</h2>
             </div>
-            <strong>{customer.orders.length}</strong>
+            <strong>{customer.orders.length} замовлень</strong>
           </div>
           {customer.orders.length === 0 ? (
             <EmptyState
+              actions={
+                canCreateOrder && customer.isActive ? (
+                  <Button asChild variant="primary">
+                    <Link to={orderPath}>
+                      <Plus aria-hidden />
+                      Створити замовлення
+                    </Link>
+                  </Button>
+                ) : undefined
+              }
               description="Щойно клієнт зробить перше замовлення, воно з’явиться тут."
               title="Замовлень ще не було"
             />
@@ -245,11 +269,14 @@ export function CustomerDetailView({
           <section aria-labelledby="customer-details-title">
             <div className="customer-card-section-heading">
               <div>
-                <span>02</span>
                 <h2 id="customer-details-title">Деталі</h2>
               </div>
             </div>
             <dl className="customer-card-facts">
+              <div>
+                <dt>Телефон</dt>
+                <dd>{customer.phone ?? '—'}</dd>
+              </div>
               <div>
                 <dt>Клієнт від</dt>
                 <dd>{formatDate(customer.createdAt)}</dd>
@@ -267,7 +294,6 @@ export function CustomerDetailView({
           <section aria-labelledby="customer-notes-title">
             <div className="customer-card-section-heading">
               <div>
-                <span>03</span>
                 <h2 id="customer-notes-title">Нотатки</h2>
               </div>
             </div>

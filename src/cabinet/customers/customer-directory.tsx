@@ -14,17 +14,10 @@ import {
   SearchInput,
   SkeletonRows,
 } from '@/components/app'
+import { CustomerAvatar } from './customer-avatar'
 
 const segmentLabel = (orders: number) =>
   orders === 0 ? 'без покупок' : orders >= 3 ? 'постійний' : 'разовий'
-
-const initials = (name: string) =>
-  name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || '—'
 
 const formatDate = (value: string | null) =>
   value
@@ -44,9 +37,11 @@ const formatAmount = (value: number | null) =>
 function CustomerIdentity({ customer }: { customer: CustomerListItem }) {
   return (
     <div className="customer-directory-identity">
-      <span className="customer-directory-avatar" aria-hidden>
-        {initials(customer.name)}
-      </span>
+      <CustomerAvatar
+        className="customer-directory-avatar"
+        customerId={customer.id}
+        name={customer.name}
+      />
       <span>
         <Link to={customer.id}>{customer.name}</Link>
         <small>{segmentLabel(customer.ordersCount)}</small>

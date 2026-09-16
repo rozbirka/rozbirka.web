@@ -212,60 +212,93 @@
 
 .customer-card-page {
   display: grid;
-  gap: 18px;
+  gap: 28px;
 }
 .customer-card-nav,
-.customer-card-nav > div,
-.customer-card-contact,
-.customer-card-lifecycle {
+.customer-card-nav-context,
+.customer-card-nav-actions,
+.customer-card-contact {
   display: flex;
   align-items: center;
-  gap: 8px;
 }
 .customer-card-nav {
+  min-height: 64px;
   justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--color-app-line);
 }
-.customer-card-nav > a {
+.customer-card-nav-context {
+  min-width: 0;
+  gap: 24px;
+}
+.customer-card-nav-context > a {
   display: inline-flex;
+  min-height: 36px;
   align-items: center;
   gap: 7px;
+  padding: 0 12px;
+  border: 1px solid var(--color-app-line);
+  border-radius: 999px;
   color: var(--color-app-muted);
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 600;
 }
-.customer-card-nav > a:hover {
+.customer-card-nav-context > a:hover {
+  border-color: var(--color-app-line-2);
   color: var(--color-app-ink);
 }
-.customer-card-nav > a svg {
-  width: 15px;
-  height: 15px;
+.customer-card-nav-context > a svg {
+  width: 14px;
+  height: 14px;
+}
+.customer-card-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-app-dim);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.customer-card-nav-actions {
+  flex: 0 0 auto;
+  gap: 8px;
+}
+.customer-card-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(400px, 440px);
+  align-items: center;
+  gap: 24px;
+  padding: 12px 40px;
 }
 .customer-card-hero {
   display: flex;
-  align-items: flex-start;
-  gap: 18px;
-  padding: 24px;
-  border: 1px solid var(--color-app-line);
-  border-radius: 16px;
-  background: var(--color-app-raised);
+  min-width: 0;
+  align-items: center;
+  gap: 20px;
+}
+.customer-card-avatar,
+.customer-directory-avatar {
+  background: var(--customer-avatar-bg);
+  color: var(--customer-avatar-fg);
 }
 .customer-card-avatar {
   display: grid;
-  width: 70px;
-  height: 70px;
-  flex: 0 0 70px;
+  width: 68px;
+  height: 68px;
+  flex: 0 0 68px;
   place-items: center;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--color-brand) 14%, #171717);
-  color: var(--color-brand);
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 750;
   letter-spacing: -0.03em;
 }
 .customer-card-identity {
   display: grid;
   min-width: 0;
-  flex: 1;
-  gap: 13px;
+  gap: 14px;
 }
 .customer-card-identity > div:first-child {
   display: flex;
@@ -273,27 +306,29 @@
   gap: 12px;
 }
 .customer-card-identity h1 {
+  overflow: hidden;
   color: var(--color-app-ink);
-  font-size: clamp(24px, 3vw, 34px);
-  font-weight: 680;
-  letter-spacing: -0.035em;
-  line-height: 1.05;
+  font-size: clamp(27px, 3.2vw, 40px);
+  font-weight: 690;
+  letter-spacing: -0.045em;
+  line-height: 1.02;
+  text-overflow: ellipsis;
 }
 .customer-card-contact {
   flex-wrap: wrap;
+  gap: 8px;
 }
 .customer-card-contact > span {
-  margin-right: 4px;
-  color: var(--color-app-muted);
+  margin-right: 2px;
+  color: var(--color-app-ink);
   font-family: var(--font-mono);
   font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
-.customer-card-contact button[aria-label='Копіювати телефон'] {
-  width: 44px;
-  padding-inline: 0;
-}
-.customer-card-lifecycle {
-  flex-wrap: wrap;
+.customer-card-contact [data-slot='app-button'] {
+  min-height: 34px;
+  padding-inline: 9px;
+  font-size: 11px;
 }
 .customer-card-no-phone {
   color: var(--color-app-dim);
@@ -309,30 +344,37 @@
 }
 .customer-card-metrics > div {
   display: grid;
-  gap: 5px;
-  padding: 18px 20px;
+  min-width: 0;
+  gap: 7px;
+  padding: 24px 14px;
   border-left: 1px solid var(--color-app-line);
 }
 .customer-card-metrics > div:first-child {
   border-left: 0;
 }
 .customer-card-metrics dt {
+  overflow: hidden;
   color: var(--color-app-dim);
-  font-size: 10px;
-  letter-spacing: 0.13em;
+  font-size: 8px;
+  letter-spacing: 0.17em;
+  text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 .customer-card-metrics dd {
+  overflow: hidden;
   color: var(--color-app-ink);
   font-family: var(--font-mono);
-  font-size: 21px;
+  font-size: clamp(18px, 2vw, 24px);
   font-weight: 650;
   font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .customer-card-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.75fr) minmax(260px, 0.75fr);
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.72fr) minmax(310px, 0.98fr);
+  gap: 20px;
   align-items: start;
 }
 .customer-order-history,
@@ -344,14 +386,14 @@
 }
 .customer-card-aside {
   display: grid;
-  gap: 16px;
+  gap: 20px;
 }
 .customer-card-section-heading {
   display: flex;
-  min-height: 58px;
+  min-height: 60px;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 18px;
+  padding: 15px 20px;
   border-bottom: 1px solid var(--color-app-line);
 }
 .customer-card-section-heading > div {
@@ -359,33 +401,31 @@
   align-items: baseline;
   gap: 10px;
 }
-.customer-card-section-heading span {
-  color: var(--color-app-dim);
-  font-family: var(--font-mono);
-  font-size: 10px;
-}
 .customer-card-section-heading h2 {
   color: var(--color-app-ink);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 650;
 }
 .customer-card-section-heading strong {
-  display: grid;
-  min-width: 24px;
-  height: 24px;
-  place-items: center;
-  border-radius: 999px;
-  background: #ffffff0a;
-  color: var(--color-app-muted);
+  color: var(--color-app-dim);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.customer-order-history > [role='status'] {
+  min-height: 310px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 .customer-orders-table {
   width: 100%;
   border-collapse: collapse;
 }
 .customer-orders-table th {
-  padding: 11px 16px;
+  padding: 11px 18px;
   color: var(--color-app-dim);
   font-size: 9px;
   font-weight: 500;
@@ -399,7 +439,7 @@
 }
 .customer-orders-table td {
   height: 66px;
-  padding: 10px 16px;
+  padding: 10px 18px;
   border-top: 1px solid var(--color-app-line);
   color: var(--color-app-muted);
   font-size: 12px;
@@ -430,7 +470,7 @@
 }
 .customer-card-facts {
   display: grid;
-  padding: 4px 18px;
+  padding: 4px 20px;
 }
 .customer-card-facts > div {
   display: flex;
@@ -447,6 +487,7 @@
   font-size: 11px;
 }
 .customer-card-facts dd {
+  overflow-wrap: anywhere;
   color: var(--color-app-ink);
   font-family: var(--font-mono);
   font-size: 11px;
@@ -454,12 +495,26 @@
   text-align: right;
 }
 .customer-card-notes {
-  min-height: 104px;
-  padding: 16px 18px;
+  min-height: 110px;
+  margin: 16px 20px 20px;
+  padding: 14px;
+  border: 1px solid var(--color-app-line);
+  border-radius: 10px;
+  background: #090909;
   color: var(--color-app-muted);
   font-size: 12px;
   line-height: 1.65;
   white-space: pre-wrap;
+}
+
+@media (max-width: 1050px) {
+  .customer-card-overview {
+    grid-template-columns: 1fr;
+    padding-inline: 12px;
+  }
+  .customer-card-metrics {
+    width: 100%;
+  }
 }
 
 @media (max-width: 900px) {
@@ -472,42 +527,68 @@
 }
 
 @media (max-width: 640px) {
+  .customer-card-page {
+    gap: 20px;
+  }
   .customer-card-nav {
     align-items: stretch;
     flex-direction: column;
   }
-  .customer-card-nav > div {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .customer-card-nav-context {
+    justify-content: space-between;
   }
-  .customer-card-nav > div a {
+  .customer-card-breadcrumbs {
+    display: none;
+  }
+  .customer-card-nav-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  }
+  .customer-card-nav-actions > a {
     width: 100%;
   }
+  .customer-card-overview {
+    gap: 22px;
+    padding: 4px 0;
+  }
   .customer-card-hero {
-    padding: 18px;
+    align-items: flex-start;
+    gap: 14px;
   }
   .customer-card-avatar {
-    width: 50px;
-    height: 50px;
-    flex-basis: 50px;
+    width: 52px;
+    height: 52px;
+    flex-basis: 52px;
     font-size: 15px;
   }
   .customer-card-identity > div:first-child {
     align-items: flex-start;
     flex-direction: column;
+    gap: 8px;
+  }
+  .customer-card-identity h1 {
+    font-size: 27px;
+  }
+  .customer-card-contact {
+    align-items: stretch;
+  }
+  .customer-card-contact > span {
+    width: 100%;
+  }
+  .customer-card-contact [data-slot='app-button'] {
+    padding-inline: 10px;
   }
   .customer-card-contact a span {
     display: none;
   }
-  .customer-card-metrics {
-    grid-template-columns: 1fr;
-  }
   .customer-card-metrics > div {
-    border-top: 1px solid var(--color-app-line);
-    border-left: 0;
+    padding: 18px 14px;
   }
-  .customer-card-metrics > div:first-child {
-    border-top: 0;
+  .customer-card-metrics dt {
+    white-space: normal;
+  }
+  .customer-card-metrics dd {
+    font-size: 18px;
   }
   .customer-card-aside {
     grid-template-columns: 1fr;
