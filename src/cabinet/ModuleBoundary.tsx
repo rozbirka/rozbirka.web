@@ -18,6 +18,7 @@ import { evaluateModuleAccess, type ModuleAccessDecision } from './policy'
 import {
   FeatureUnavailableScreen,
   ModuleUnavailableScreen,
+  SubscriptionStateScreen,
 } from './screens/module-unavailable'
 import type { TenantAccessState } from './access-types'
 
@@ -89,11 +90,9 @@ function decisionScreen(
       )
     case 'subscription-blocked':
       return (
-        <BoundaryStateScreen
-          action={<BillingLink label="Перейти до підписки" module="billing" />}
-          description="Поки підписка неактивна, розділ доступний лише для перегляду історії в білінгу."
-          title="Підписка потребує уваги"
-          tone="warn"
+        <SubscriptionStateScreen
+          definition={definition}
+          state={decision.state}
         />
       )
     case 'quota-exhausted':

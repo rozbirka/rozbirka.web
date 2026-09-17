@@ -308,7 +308,7 @@ function SubscriptionPanel({
           Цією підпискою керує {management.label}. Змінюйте або скасовуйте її
           там.{' '}
           <a
-            className="text-brand underline-offset-4 hover:underline"
+            className="text-brand underline underline-offset-4"
             href={management.url}
             rel="noopener noreferrer"
             target="_blank"

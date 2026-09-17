@@ -178,18 +178,48 @@ describe('ModuleBoundary', () => {
 
     expect(
       screen.getByRole('heading', {
-        name: 'Функція недоступна на вашому тарифі',
+        name: 'Розділ «Звіти» не входить у ваш тариф',
       }),
     ).toBeVisible()
-    expect(screen.getByText(/поточн.*тариф/i)).toBeVisible()
-    expect(screen.getByRole('link', { name: 'До головної' })).toHaveAttribute(
-      'href',
-      '/app/koval/dashboard',
-    )
+    expect(screen.getByText(/Недоступно у .*тариф/i)).toBeVisible()
+    // The paywall points at the catalogue, not at the dashboard: the reader
+    // came here to open the module, not to leave.
+    expect(
+      screen.getByRole('link', { name: 'Порівняти тарифи' }),
+    ).toHaveAttribute('href', '/app/koval/settings/billing/plans')
     expect(
       screen.queryByRole('heading', { name: 'Розділ поки недоступний' }),
     ).not.toBeInTheDocument()
     expect(screen.queryByText('Reports module code')).not.toBeInTheDocument()
+    expect(load).not.toHaveBeenCalled()
+  })
+
+  it('reads the blocked-subscription access list from the module registry', () => {
+    mockedUseCabinet.mockReturnValue({
+      ...cabinet(['parts.view', 'billing.view']),
+      snapshot: {
+        ...cabinet(['parts.view', 'billing.view']).snapshot!,
+        entitlement: { state: 'blocked', usage: subscription.usage },
+        subscription: { ...subscription, state: 'blocked' },
+      },
+    })
+    const load = vi.fn(() =>
+      Promise.resolve({
+        default: (_props: CabinetModuleScreenProps) => <p>Parts module code</p>,
+      }),
+    )
+
+    renderBoundary('parts', lazy(load))
+
+    expect(
+      screen.getByRole('heading', {
+        name: 'Підписка неактивна — дані лише для читання',
+      }),
+    ).toBeVisible()
+    // Запчастини are closed while blocked; Підписка stays open. Both come from
+    // `allowedSubscriptionStates`, the same table the router checks.
+    expect(screen.getAllByLabelText('закритий').length).toBeGreaterThan(0)
+    expect(screen.getAllByLabelText('доступний').length).toBeGreaterThan(0)
     expect(load).not.toHaveBeenCalled()
   })
 })
