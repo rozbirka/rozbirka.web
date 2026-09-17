@@ -49,18 +49,20 @@ const renderHistory = (
   imports: ImportStatus[] = rows,
   onOpen = vi.fn(),
   onPage = vi.fn(),
+  onNew = vi.fn(),
 ) => {
   render(
     <ImportHistory
       capabilities={capabilities}
       imports={imports}
+      onNew={onNew}
       onOpen={onOpen}
       onPage={onPage}
       page={1}
       total={imports.length}
     />,
   )
-  return { onOpen, onPage }
+  return { onOpen, onPage, onNew }
 }
 
 it('states the file limit from the capabilities the server reported', () => {
@@ -138,11 +140,30 @@ it('names the action by what the import is waiting for', () => {
   )
 })
 
-it('invites a first import when the history is empty', () => {
-  renderHistory([])
+it('replaces the whole history with the four steps when nothing was imported', async () => {
+  const user = userEvent.setup()
+  const { onNew } = renderHistory([])
 
   expect(
-    screen.getByRole('heading', { name: 'Імпортів ще немає' }),
+    screen.getByRole('heading', {
+      name: 'Завантажте таблицю — і склад наповниться за кілька хвилин',
+    }),
   ).toBeVisible()
-  expect(screen.getByText(/Завантажте таблицю CSV або XLSX/)).toBeVisible()
+  expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('group', { name: 'Групи імпортів' }),
+  ).not.toBeInTheDocument()
+
+  await user.click(screen.getByRole('button', { name: 'Завантажити файл' }))
+  expect(onNew).toHaveBeenCalled()
+})
+
+it('states the limits on the empty screen from the same capabilities', () => {
+  renderHistory([])
+
+  expect(screen.getByText('CSV, XLSX')).toBeVisible()
+  expect(screen.getByText(/до 10 MiB, до 10 000 рядків/)).toBeVisible()
+  expect(
+    screen.getByText('Сервер не повідомляє ліміт фото для цього середовища.'),
+  ).toBeVisible()
 })

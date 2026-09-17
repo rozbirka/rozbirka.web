@@ -556,6 +556,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
             onOpen={(id) => {
               void navigate(`${base}/${id}`)
             }}
+            onNew={next}
             onPage={setHistoryPage}
             page={historyPage}
             total={historyTotal}

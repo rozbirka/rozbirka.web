@@ -3,6 +3,7 @@ import { Button, DataTable, EmptyState, StatusPill } from '@/components/app'
 import { cn } from '@/lib/utils'
 import type { StatusTone } from '@/components/app'
 import type { ImportCapabilities, ImportStatus } from '@/api/part-imports'
+import { ImportEmpty } from './import-empty'
 import { issueText, statusLabels } from './import-model'
 
 /** The seven states the history chip can take, and the tone each one reads in. */
@@ -158,6 +159,7 @@ export function ImportHistory({
   page,
   onPage,
   onOpen,
+  onNew,
 }: {
   capabilities: ImportCapabilities
   imports: readonly ImportStatus[]
@@ -165,6 +167,7 @@ export function ImportHistory({
   page: number
   onPage: (page: number) => void
   onOpen: (id: string) => void
+  onNew: () => void
 }) {
   const [segment, setSegment] = useState<string>('all')
   const active = SEGMENTS.find((s) => s.key === segment) ?? SEGMENTS[0]
@@ -191,6 +194,11 @@ export function ImportHistory({
   // showing a zero that would read as "nothing went wrong".
   const noExecution =
     'Список імпортів не повертає підсумків виконання — вони на екрані самого імпорту.'
+
+  // Nothing imported yet is not an empty table — it is a different screen, and
+  // the design treats it as one: no figures to show, no groups to filter.
+  if (total === 0)
+    return <ImportEmpty capabilities={capabilities} onNew={onNew} />
 
   return (
     <div className="min-w-0">

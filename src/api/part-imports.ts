@@ -24,8 +24,17 @@ export interface ImportCapabilities {
   encodings: string[]
   fields: ImportField[]
   transforms: string[]
-  limits: { maxBytes: number; maxRows: number }
+  limits: {
+    maxBytes: number
+    maxRows: number
+    /** Absent on servers older than the adaptive-import work. */
+    maxColumns?: number
+  }
   maxOrderGroupSize: number
+  /** How many photos one part may carry. Absent before the media work landed. */
+  maxPhotosPerEntity?: number
+  /** Photos one import may prepare in total. */
+  maxPreparedPhotos?: number
 }
 export interface ImportTransform {
   operation: string
