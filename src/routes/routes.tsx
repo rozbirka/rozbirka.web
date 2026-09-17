@@ -157,6 +157,16 @@ const commerceDetailRoutes: RouteObject[] = [
       path,
     ),
   ),
+  ...['parts/imports', 'parts/imports/:importId'].map((path) =>
+    cabinetScreenRoute(
+      'parts',
+      async () => {
+        const { ImportScreen } = await import('@/cabinet/imports/ImportScreen')
+        return ImportScreen
+      },
+      path,
+    ),
+  ),
   ...['parts/new', 'parts/:partId', 'parts/:partId/edit'].map((path) =>
     cabinetScreenRoute(
       'parts',

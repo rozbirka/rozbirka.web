@@ -55,6 +55,23 @@ export interface CustomerListParams {
   page?: number
   pageSize?: number
 }
+export type CustomerSegment = 'all' | 'regular' | 'occasional' | 'no_orders'
+export type CustomerDirectorySort = 'amount_desc' | 'name_asc'
+export interface CustomerDirectoryParams {
+  q?: string
+  segment: CustomerSegment
+  sort: CustomerDirectorySort
+  page: number
+  pageSize?: number
+}
+export interface CustomerDirectoryResult extends Page<CustomerListItem> {
+  counts: {
+    all: number
+    regular: number
+    occasional: number
+    noOrders: number
+  }
+}
 const requestConfig = (options: RequestOptions) =>
   options.signal ? { signal: options.signal } : {}
 const endpoint = (id: string) => `/customers/${encodeURIComponent(id)}`
@@ -86,6 +103,17 @@ export const readCustomerPhoneConflict = (
 }
 
 export const customersApi = {
+  async directory(
+    params: CustomerDirectoryParams,
+    options: RequestOptions = {},
+  ): Promise<CustomerDirectoryResult> {
+    return (
+      await apiClient.get<CustomerDirectoryResult>('/customers/directory', {
+        params,
+        ...requestConfig(options),
+      })
+    ).data
+  },
   async list(
     params: CustomerListParams = {},
     options: RequestOptions = {},

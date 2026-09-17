@@ -51,7 +51,7 @@ export function DataTable<Row>({
   }
 
   return (
-    <div className="border-app-line rounded-panel bg-app-raised overflow-hidden border md:overflow-x-auto">
+    <div className="border-app-line rounded-panel bg-app-raised relative overflow-hidden border md:overflow-x-auto">
       <table
         className="data-table w-full border-collapse text-[14.5px]"
         role="table"

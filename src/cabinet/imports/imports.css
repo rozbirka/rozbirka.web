@@ -1,0 +1,150 @@
+.import-workspace {
+  min-width: 0;
+}
+.import-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-bottom: 1px solid var(--color-app-line);
+  padding-bottom: 20px;
+}
+.import-caption {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-app-dim);
+}
+.import-body {
+  padding-top: 32px;
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+}
+.import-body h1 {
+  font-size: clamp(30px, 4vw, 46px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+}
+.import-description {
+  color: var(--color-app-muted);
+  max-width: 800px;
+}
+.import-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.import-steps button {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 13px;
+  border: 1px solid var(--color-app-line);
+  border-radius: 10px;
+  color: var(--color-app-muted);
+  font-size: 14px;
+}
+.import-steps button span {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.import-steps button[aria-current='step'] {
+  background: var(--color-app-input);
+  border-color: var(--color-app-line-2);
+  color: var(--color-app-ink);
+}
+.import-steps button:disabled {
+  opacity: 0.4;
+}
+.import-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 2.5fr) minmax(260px, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.import-stack {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+.import-drop {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 36px 16px;
+  background: var(--color-app-input);
+  border: 1px dashed var(--color-app-line-2);
+  border-radius: 14px;
+}
+.import-drop input {
+  max-width: 100%;
+}
+.import-table {
+  overflow-x: auto;
+  min-width: 0;
+  border: 1px solid var(--color-app-line);
+  border-radius: 16px;
+  background: var(--color-app-raised);
+}
+.import-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.import-table th {
+  text-align: left;
+  font: 11px var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-app-dim);
+}
+.import-table th,
+.import-table td {
+  padding: 16px;
+  border-bottom: 1px solid var(--color-app-line);
+}
+.import-table small {
+  display: block;
+  color: var(--color-app-muted);
+  margin-top: 5px;
+}
+.import-table input[type='checkbox'] {
+  accent-color: var(--color-brand);
+  width: 18px;
+  height: 18px;
+}
+.import-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-block: 10px;
+}
+.import-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-block: 10px 24px;
+}
+.import-stats > div {
+  padding: 18px;
+  border-bottom: 1px solid var(--color-app-line);
+}
+.import-stats strong {
+  display: block;
+  font-size: 26px;
+  margin-top: 8px;
+}
+@media (max-width: 900px) {
+  .import-columns {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 480px) {
+  .import-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

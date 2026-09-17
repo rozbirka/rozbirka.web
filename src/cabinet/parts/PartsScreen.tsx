@@ -492,6 +492,11 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
               Деталі
             </h1>
           </div>
+          {manageDecision.kind === 'allowed' ? (
+            <Button asChild>
+              <Link to="imports">Імпорт запчастин</Link>
+            </Button>
+          ) : null}
           {createDecision.kind === 'allowed' ? (
             <Button
               asChild

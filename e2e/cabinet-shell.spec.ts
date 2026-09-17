@@ -1814,11 +1814,14 @@ for (const width of [320, 768, 1024, 1440]) {
 
     for (const path of releasedAccessPaths) {
       await expectReleasedScreenSettled(page, path)
-      expect(
-        await page.evaluate(
-          () => document.documentElement.scrollWidth <= window.innerWidth,
-        ),
-      ).toBe(true)
+      await page.evaluate(() => document.fonts.ready)
+      const dimensions = await page.evaluate(() => ({
+        content: document.documentElement.scrollWidth,
+        viewport: window.innerWidth,
+      }))
+      expect(dimensions.content, `${path} at ${width}px`).toBeLessThanOrEqual(
+        dimensions.viewport,
+      )
     }
   })
 }

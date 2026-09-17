@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { ReactNode, Ref } from 'react'
 import { MoreHorizontal } from 'lucide-react'
 import { DropdownMenu } from 'radix-ui'
 import { cn } from '@/lib/utils'
@@ -22,17 +22,19 @@ export interface MenuAction {
 export function ActionMenu({
   label,
   actions,
+  triggerRef,
 }: {
   /** Names the trigger: "Інші дії з автомобілем". */
   label: string
   actions: readonly MenuAction[]
+  triggerRef?: Ref<HTMLButtonElement>
 }) {
   if (actions.length === 0) return null
 
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
-        <Button aria-label={label} size="icon">
+        <Button aria-label={label} ref={triggerRef} size="icon">
           <MoreHorizontal aria-hidden />
         </Button>
       </DropdownMenu.Trigger>
