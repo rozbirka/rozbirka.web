@@ -26,6 +26,7 @@ import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { cabinetPath } from '../cabinet-paths'
+import { ImportHistory } from './import-history'
 import {
   createMapping,
   fieldLabels,
@@ -46,7 +47,7 @@ const steps = [
   'Виконання',
 ]
 const titles = [
-  'Історія імпортів',
+  'Імпорт запчастин',
   'Завантаження файлу',
   'Налаштування імпорту',
   'Перевірка даних',
@@ -54,7 +55,7 @@ const titles = [
   'Деталі імпорту',
 ]
 const descriptions = [
-  'Продовжіть незавершену підготовку, перегляньте результат або почніть новий імпорт.',
+  'Перенесення залишків із власної таблиці CSV або XLSX.',
   'CSV або XLSX до 10 МіБ. Перевірте, що система прочитала таблицю правильно.',
   'Зіставте колонки файлу з полями Розбірки. Спільні значення застосовуються до всіх рядків.',
   'Виберіть рядки для імпорту та вирішіть проблеми. Один рядок із кількістю 5 створює одну позицію з п’ятьма одиницями товару.',
@@ -500,29 +501,31 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
         </Button>
       </header>
       <div className="import-body">
-        <nav className="import-steps" aria-label="Кроки імпорту">
-          {steps.map((label, i) => (
-            <button
-              key={label}
-              type="button"
-              aria-current={step === i ? 'step' : undefined}
-              disabled={
-                busy ||
-                (i > 1 &&
-                  (!status?.source || status.source.fields.length === 0)) ||
-                (i === 4 && !canConfirm) ||
-                (i === 5 && !status?.execution)
-              }
-              onClick={() => {
-                if (i === 0) void navigate(base)
-                setStep(i)
-              }}
-            >
-              <span>{String(i + 1).padStart(2, '0')}</span>
-              {label}
-            </button>
-          ))}
-        </nav>
+        {step === 0 ? null : (
+          <nav className="import-steps" aria-label="Кроки імпорту">
+            {steps.map((label, i) => (
+              <button
+                key={label}
+                type="button"
+                aria-current={step === i ? 'step' : undefined}
+                disabled={
+                  busy ||
+                  (i > 1 &&
+                    (!status?.source || status.source.fields.length === 0)) ||
+                  (i === 4 && !canConfirm) ||
+                  (i === 5 && !status?.execution)
+                }
+                onClick={() => {
+                  if (i === 0) void navigate(base)
+                  setStep(i)
+                }}
+              >
+                <span>{String(i + 1).padStart(2, '0')}</span>
+                {label}
+              </button>
+            ))}
+          </nav>
+        )}
         <h1>{titles[step]}</h1>
         <p className="import-description">{descriptions[step]}</p>
         {error ? (
@@ -547,63 +550,16 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
           </Notice>
         ) : null}
         {step === 0 ? (
-          <>
-            <div className="import-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Імпорт</th>
-                    <th>Статус</th>
-                    <th>Рядків</th>
-                    <th>Дія</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.map((h) => (
-                    <tr key={h.id}>
-                      <td>
-                        <span className="font-mono">{h.id.slice(0, 8)}</span>
-                        <small>
-                          {new Date(h.createdAt).toLocaleString('uk-UA')}
-                        </small>
-                      </td>
-                      <td>{statusLabels[h.status] ?? h.status}</td>
-                      <td>{h.rowCount}</td>
-                      <td>
-                        <Button
-                          onClick={() => {
-                            void navigate(`${base}/${h.id}`)
-                          }}
-                        >
-                          {draftStates.includes(h.status)
-                            ? 'Продовжити'
-                            : 'Переглянути'}
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {history.length === 0 ? (
-                <p className="p-6 text-app-muted">Імпортів ще немає.</p>
-              ) : null}
-            </div>
-            <div className="import-actions">
-              <Button
-                disabled={historyPage === 1}
-                onClick={() => setHistoryPage((p) => p - 1)}
-              >
-                Назад
-              </Button>
-              <span>{historyPage}</span>
-              <Button
-                disabled={historyPage * 50 >= historyTotal}
-                onClick={() => setHistoryPage((p) => p + 1)}
-              >
-                Далі
-              </Button>
-            </div>
-          </>
+          <ImportHistory
+            capabilities={caps}
+            imports={history}
+            onOpen={(id) => {
+              void navigate(`${base}/${id}`)
+            }}
+            onPage={setHistoryPage}
+            page={historyPage}
+            total={historyTotal}
+          />
         ) : null}
         {step === 1 ? (
           <div className="import-columns">

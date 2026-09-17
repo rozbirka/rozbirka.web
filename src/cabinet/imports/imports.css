@@ -19,6 +19,10 @@
 .import-body {
   padding-top: 32px;
   display: grid;
+  /* An auto track sizes to the widest child and overflows the box no matter
+     what min-width the box itself carries; a 1fr track with a zero minimum is
+     what actually lets a wide table shrink on a phone. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 22px;
   min-width: 0;
 }
