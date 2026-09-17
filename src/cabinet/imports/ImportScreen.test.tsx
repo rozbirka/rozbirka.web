@@ -206,7 +206,7 @@ it('resumes a draft and requires a fresh server validation before commit', async
     screen.getByRole('checkbox', { name: 'Імпортувати рядок 2' }),
   )
   await user.click(screen.getByRole('button', { name: 'До підтвердження' }))
-  await screen.findByText('Буде створено 1 запчастин')
+  await screen.findByRole('region', { name: 'Буде створено' })
   expect(calls.filter((c) => c.url?.endsWith('/commit'))).toHaveLength(0)
   await user.click(screen.getByRole('button', { name: 'Почати імпорт' }))
   await screen.findByText('Результати рядків')
@@ -243,7 +243,7 @@ it('reuses the commit key after an uncertain network response', async () => {
     screen.getByRole('checkbox', { name: 'Імпортувати рядок 2' }),
   )
   await user.click(screen.getByRole('button', { name: 'До підтвердження' }))
-  await screen.findByText('Буде створено 1 запчастин')
+  await screen.findByRole('region', { name: 'Буде створено' })
   await user.click(screen.getByRole('button', { name: 'Почати імпорт' }))
   await screen.findByRole('alert')
   commitFails = false
@@ -276,12 +276,19 @@ it('shows the server stale revision error and invalidates confirmation', async (
     screen.getByRole('checkbox', { name: 'Імпортувати рядок 2' }),
   )
   await user.click(screen.getByRole('button', { name: 'До підтвердження' }))
-  await screen.findByText('Буде створено 1 запчастин')
+  await screen.findByRole('region', { name: 'Буде створено' })
   await user.click(screen.getByRole('button', { name: 'Почати імпорт' }))
   expect(
     await screen.findByText(
       'Дані змінилися. Оновіть імпорт і повторіть перевірку.',
     ),
   ).toBeVisible()
-  expect(screen.getByRole('button', { name: 'Почати імпорт' })).toBeDisabled()
+  // The confirmation is spent: there is nothing left to press, and the screen
+  // says why rather than offering a button that cannot work.
+  expect(
+    screen.queryByRole('button', { name: 'Почати імпорт' }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.getByRole('button', { name: 'Назад до перевірки' }),
+  ).toBeVisible()
 })

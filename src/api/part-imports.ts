@@ -138,6 +138,9 @@ export interface ImportValidation {
   plannedWarehouses: number
   plannedZones: number
   plannedPhotos: number
+  /** How reserved rows become orders. Absent before the adaptive-import work. */
+  orderGrouping?: string
+  maxOrderGroupSize?: number
 }
 export interface ImportProfile {
   id: string

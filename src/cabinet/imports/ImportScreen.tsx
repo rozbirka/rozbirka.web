@@ -17,6 +17,7 @@ import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { cabinetPath } from '../cabinet-paths'
+import { ImportConfirmStep } from './import-confirm'
 import { ImportFileStep } from './import-file'
 import { ImportHistory } from './import-history'
 import { ImportMappingStep } from './import-mapping'
@@ -451,14 +452,13 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
             До історії
           </Button>
         ) : null}
-        {step === 3 ? null : (
+        {step === 3 || step === 4 ? null : (
           <Button
             disabled={
               busy ||
               (step === 1 && !status?.source && !file) ||
               (step === 1 && status?.source?.fields.length === 0) ||
-              (step === 2 && !editable) ||
-              (step === 4 && !canConfirm)
+              (step === 2 && !editable)
             }
             onClick={next}
             variant="primary"
@@ -659,34 +659,24 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
           />
         ) : null}
         {step === 4 && validation ? (
-          <div className="import-columns">
-            <Card title={`Буде створено ${validation.plannedParts} запчастин`}>
-              <div className="import-stats">
-                {[
-                  ['Запчастин', validation.plannedParts],
-                  ['Замовлень', validation.plannedOrders],
-                  ['Нових клієнтів', validation.plannedCustomers],
-                  ['Автомобілів', validation.plannedCars],
-                  ['Партій', validation.plannedIntakes],
-                  ['Фото', validation.plannedPhotos],
-                  ['Виключено рядків', rowTotal - selected.length],
-                ].map(([label, count]) => (
-                  <div key={label}>
-                    <span className="import-caption">{label}</span>
-                    <strong>{count}</strong>
-                  </div>
-                ))}
-              </div>
-              <Notice tone="info">
-                Зупинка імпорту не видаляє вже створені дані.
-              </Notice>
-            </Card>
-            <Card title="Налаштування імпорту">
-              <p>
-                {selected.length} обраних рядків. Перевірку виконано сервером.
-              </p>
+          <ImportConfirmStep
+            busy={busy}
+            mapping={mapping}
+            onBack={() => setStep(3)}
+            onCommit={next}
+            rows={rows}
+            selected={selected}
+            validation={validation}
+          />
+        ) : step === 4 ? (
+          <div className="grid gap-4">
+            <Notice tone="warn">
+              Підтвердження більше не дійсне — дані змінилися після перевірки.
+              Поверніться до перевірки й підтвердьте ще раз.
+            </Notice>
+            <div>
               <Button onClick={() => setStep(3)}>Назад до перевірки</Button>
-            </Card>
+            </div>
           </div>
         ) : null}
         {step === 5 && status ? (
