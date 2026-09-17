@@ -109,6 +109,38 @@ export interface ImportStatus {
     errorCode?: string | null
   } | null
 }
+/**
+ * The same numbers as the status, without the source document, the mapping or
+ * the rows. Polling a running import asks for this, not for the whole record.
+ */
+export interface ImportProgress {
+  id: string
+  status: string
+  revision: number
+  previewVersion: number
+  rowCount: number
+  createdAt: string
+  retentionExpiresAt: string | null
+  errorCode: string | null
+  execution: {
+    id: string
+    status: string
+    selected: number
+    committed: number
+    failed: number
+  } | null
+  report: {
+    version: number
+    status: string
+    errorCode?: string | null
+  }
+}
+/** A short-lived signed link to the file the import was uploaded from. */
+export interface ImportSourceDownload {
+  status: string
+  url?: string | null
+  expiresAt?: string | null
+}
 export interface ImportPage<T> {
   items: T[]
   total: number
@@ -163,6 +195,10 @@ export const partImportsApi = {
     get<ImportPage<ImportStatus>>(`${base}?page=${page}&pageSize=50`, options),
   status: (id: string, options?: RequestOptions) =>
     get<ImportStatus>(path(id), options),
+  progress: (id: string, options?: RequestOptions) =>
+    get<ImportProgress>(`${path(id)}/progress`, options),
+  sourceDownload: (id: string, options?: RequestOptions) =>
+    get<ImportSourceDownload>(`${path(id)}/source/download`, options),
   rows: (id: string, page = 1, errors = false, options?: RequestOptions) =>
     get<ImportPage<ImportRow>>(
       `${path(id)}/${errors ? 'errors' : 'rows'}?page=${page}&pageSize=100`,

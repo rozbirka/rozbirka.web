@@ -209,7 +209,7 @@ it('resumes a draft and requires a fresh server validation before commit', async
   await screen.findByRole('region', { name: 'Буде створено' })
   expect(calls.filter((c) => c.url?.endsWith('/commit'))).toHaveLength(0)
   await user.click(screen.getByRole('button', { name: 'Почати імпорт' }))
-  await screen.findByText('Результати рядків')
+  await screen.findByRole('region', { name: 'Стан імпорту' })
   const sent = calls.find((c) => c.url?.endsWith('/commit'))!
   expect(JSON.parse(sent.data as string)).toMatchObject({
     revision: 2,
@@ -248,7 +248,7 @@ it('reuses the commit key after an uncertain network response', async () => {
   await screen.findByRole('alert')
   commitFails = false
   await user.click(screen.getByRole('button', { name: 'Почати імпорт' }))
-  await screen.findByText('Результати рядків')
+  await screen.findByRole('region', { name: 'Стан імпорту' })
   const commits = calls.filter((c) => c.url?.endsWith('/commit'))
   expect(commits).toHaveLength(2)
   expect((JSON.parse(commits[0]!.data as string) as { key: string }).key).toBe(

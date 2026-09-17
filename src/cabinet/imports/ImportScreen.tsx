@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ArrowLeft } from 'lucide-react'
-import { Button, Card, Notice, SkeletonRows } from '@/components/app'
+import { Button, Notice, SkeletonRows } from '@/components/app'
 import {
   partImportsApi as api,
   type ImportCapabilities,
@@ -22,10 +22,10 @@ import { ImportConflict } from './import-conflict'
 import { ImportFileStep } from './import-file'
 import { ImportHistory } from './import-history'
 import { ImportMappingStep } from './import-mapping'
+import { ImportResultStep } from './import-result'
 import { ImportReviewStep } from './import-review'
 import {
   createMapping,
-  statusLabels,
   issueText,
   isActiveImport,
   mayConfirm,
@@ -54,7 +54,7 @@ const descriptions = [
   'Зіставте колонки файлу з полями Розбірки. Спільні значення застосовуються до всіх рядків.',
   'Виберіть рядки для імпорту та вирішіть проблеми. Один рядок із кількістю 5 створює одну позицію з п’ятьма одиницями товару.',
   'Це те, що буде створено. Після запуску зміни виконуються у фоні.',
-  'Стан роботи та результати рядків. Сторінку можна закрити — імпорт продовжиться.',
+  'Стан роботи та результати рядків цього імпорту.',
 ]
 const draftStates = ['Uploaded', 'NeedsReview', 'Ready']
 export function ImportScreen(props: CabinetModuleScreenProps) {
@@ -74,7 +74,11 @@ export function ImportScreen(props: CabinetModuleScreenProps) {
 function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
   const navigate = useNavigate()
+  const location = useLocation()
   const { importId } = useParams<{ importId: string }>()
+  // Leaving a finished import for a new one changes the route key and remounts
+  // this screen, so "start over" has to travel with the navigation.
+  const fresh = (location.state as { fresh?: boolean } | null)?.fresh === true
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const base = cabinetPath(cabinet.targetTenant!.slug, 'parts', 'imports')
   const [caps, setCaps] = useState<ImportCapabilities | null>(null),
@@ -83,7 +87,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
     [historyTotal, setHistoryTotal] = useState(0)
   const [status, setStatus] = useState<ImportStatus | null>(null),
     [rows, setRows] = useState<ImportRow[]>([]),
-    [step, setStep] = useState(importId ? 1 : 0)
+    [step, setStep] = useState(importId || fresh ? 1 : 0)
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
     [file, setFile] = useState<File | null>(null)
@@ -261,7 +265,33 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
       return
     const c = new AbortController()
     const timer = setTimeout(() => {
-      void loadImport(status.id, c.signal).catch(effectFailure)
+      // Progress carries the counters without the source document, the mapping
+      // or the rows; the whole record is only worth re-reading once the run has
+      // actually moved on.
+      void api.progress(status.id, { signal: c.signal }).then((p) => {
+        if (c.signal.aborted || !live()) return
+        const moved =
+          p.status !== status.status ||
+          p.revision !== status.revision ||
+          p.report.status !== status.report?.status ||
+          !p.execution !== !status.execution
+        if (moved) {
+          void loadImport(status.id, c.signal).catch(effectFailure)
+          return
+        }
+        setStatus((current) =>
+          current?.id !== p.id
+            ? current
+            : {
+                ...current,
+                errorCode: p.errorCode,
+                execution:
+                  current.execution && p.execution
+                    ? { ...current.execution, ...p.execution }
+                    : current.execution,
+              },
+        )
+      }, effectFailure)
     }, 5000)
     return () => {
       clearTimeout(timer)
@@ -390,14 +420,17 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
             : step === 4
               ? 'Почати імпорт'
               : 'До історії'
+  const startOver = () => {
+    void navigate(base, { state: { fresh: true } })
+    setStatus(null)
+    setRows([])
+    setMapping(null)
+    setFile(null)
+    setStep(1)
+  }
   const next = () => {
     if (step === 0) {
-      void navigate(base)
-      setStatus(null)
-      setRows([])
-      setMapping(null)
-      setFile(null)
-      setStep(1)
+      startOver()
     } else if (step === 1 && status?.source) setStep(2)
     else if (step === 1 && file)
       void action(async (signal) => {
@@ -714,178 +747,61 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
           />
         ) : null}
         {step === 5 && status ? (
-          <div className="import-columns">
-            <div className="import-stack">
-              <Card title={statusLabels[status.status] ?? status.status}>
-                <div className="import-actions">
-                  <strong className="text-4xl">
-                    {status.execution?.committed ?? 0}
-                  </strong>
-                  <span>
-                    з {status.execution?.selected ?? status.rowCount} вибраних
-                    рядків створено
-                  </span>
-                </div>
-                <progress
-                  className="w-full"
-                  value={status.execution?.committed ?? 0}
-                  max={Math.max(
-                    1,
-                    status.execution?.selected ?? status.rowCount,
-                  )}
-                />
-                <p className="mt-3 text-app-muted">
-                  Помилки: {status.execution?.failed ?? 0}
-                </p>
-                {isActiveImport(status.status) ? (
-                  <Button
-                    disabled={busy}
-                    onClick={() =>
-                      void action(async (signal) => {
-                        apply(
-                          await api.cancel(status.id, status.revision, {
-                            signal,
-                          }),
-                        )
-                      })
-                    }
-                  >
-                    Зупинити імпорт
-                  </Button>
-                ) : null}
-                {status.errorCode ? (
-                  <Notice tone="warn">{issueText(status.errorCode)}</Notice>
-                ) : null}
-              </Card>
-              <Card title="Результати рядків">
-                <div className="import-stack">
-                  {rows.map((r) => (
-                    <div
-                      key={r.rowId}
-                      className="border-b border-app-line pb-3"
-                    >
-                      <strong>
-                        {r.draft?.values['Name'] ?? `Рядок ${r.sourceRow}`}
-                      </strong>
-                      <p className="text-app-muted">
-                        {r.executionStatus === 'Committed'
-                          ? 'Запчастину створено'
-                          : r.executionErrorCode
-                            ? issueText(r.executionErrorCode)
-                            : 'Очікує обробки'}
-                      </p>
-                      {r.partId ? (
-                        <Link
-                          className="text-brand"
-                          to={cabinetPath(
-                            cabinet.targetTenant!.slug,
-                            'parts',
-                            r.partId,
-                          )}
-                        >
-                          До запчастини
-                        </Link>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-                <div className="import-actions">
-                  <Button
-                    disabled={rowPage === 1}
-                    onClick={() => setRowPage((p) => p - 1)}
-                  >
-                    Назад
-                  </Button>
-                  <Button
-                    disabled={rowPage * 100 >= rowTotal}
-                    onClick={() => setRowPage((p) => p + 1)}
-                  >
-                    Далі
-                  </Button>
-                </div>
-              </Card>
-            </div>
-            <div className="import-stack">
-              <Card title="CSV-звіт">
-                <p className="text-app-muted">
-                  Звіт готується окремо від імпорту й може стати доступним
-                  пізніше.
-                </p>
-                <Button
-                  disabled={busy || status.report?.status !== 'Ready'}
-                  onClick={() => {
-                    void download()
-                  }}
-                >
-                  Завантажити звіт
-                </Button>
-                {status.report?.status === 'Failed' ? (
-                  <Button
-                    disabled={busy}
-                    onClick={() =>
-                      void action(async (signal) => {
-                        await api.retryReport(status.id, status.revision, {
-                          signal,
-                        })
-                        await refresh(status.id, signal)
-                      })
-                    }
-                  >
-                    Повторити підготовку звіту
-                  </Button>
-                ) : null}
-              </Card>
-              {['Failed', 'Cancelled', 'CompletedWithErrors'].includes(
-                status.status,
-              ) &&
-              (!status.execution ||
-                rows.some((r) =>
-                  ['Pending', 'RetryableFailure'].includes(
-                    r.executionStatus ?? '',
+          <ImportResultStep
+            busy={busy}
+            fileName={file?.name ?? null}
+            onCancel={() =>
+              void action(async (signal) => {
+                apply(await api.cancel(status.id, status.revision, { signal }))
+              })
+            }
+            onNewImport={startOver}
+            onReport={() => {
+              void download()
+            }}
+            onRetry={() =>
+              void action(async (signal) => {
+                apply(
+                  await api.retry(
+                    status.id,
+                    status.revision,
+                    status.execution?.id,
+                    {
+                      signal,
+                    },
                   ),
-                )) ? (
-                <Card title="Повтор">
-                  <p className="text-app-muted">
-                    Уже створені запчастини не дублюються. Повтор доступний для
-                    рядків, які можна відновити.
-                  </p>
-                  <Button
-                    disabled={busy}
-                    onClick={() =>
-                      void action(async (signal) => {
-                        apply(
-                          await api.retry(
-                            status.id,
-                            status.revision,
-                            status.execution?.id,
-                            { signal },
-                          ),
-                        )
-                      })
-                    }
-                  >
-                    Повторити
-                  </Button>
-                </Card>
-              ) : null}
-              <Card title="Можна закрити сторінку">
-                <p className="text-app-muted">
-                  Імпорт виконується у фоні. Закриття екрана не є скасуванням —
-                  знайдіть імпорт в історії.
-                </p>
-              </Card>
-              <Button
-                disabled={busy}
-                onClick={() =>
-                  void action(async (signal) => {
-                    await refresh(status.id, signal)
-                  })
-                }
-              >
-                Оновити стан
-              </Button>
-            </div>
-          </div>
+                )
+              })
+            }
+            onRetryReport={() =>
+              void action(async (signal) => {
+                await api.retryReport(status.id, status.revision, { signal })
+                await refresh(status.id, signal)
+              })
+            }
+            onRowPage={setRowPage}
+            onSource={() =>
+              void action(async (signal) => {
+                const link = await api.sourceDownload(status.id, { signal })
+                if (signal.aborted) return
+                if (!link.url)
+                  throw new Error(
+                    link.status === 'Gone'
+                      ? 'EXPIRED'
+                      : 'IMPORT_SOURCE_UNAVAILABLE',
+                  )
+                window.open(link.url, '_blank', 'noopener,noreferrer')
+              })
+            }
+            partHref={(partId) =>
+              cabinetPath(cabinet.targetTenant!.slug, 'parts', partId)
+            }
+            partsHref={cabinetPath(cabinet.targetTenant!.slug, 'parts')}
+            rowPage={rowPage}
+            rowTotal={rowTotal}
+            rows={rows}
+            status={status}
+          />
         ) : null}
       </div>
     </div>

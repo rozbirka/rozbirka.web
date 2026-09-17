@@ -81,6 +81,8 @@ export const issueLabels: Record<string, string> = {
   IMPORT_DISABLED: 'Імпорт поки недоступний.',
   EXPIRED: 'Строк зберігання минув.',
   FILE_LIMIT: 'Файл перевищує дозволений розмір.',
+  IMPORT_SOURCE_UNAVAILABLE: 'Вихідний файл недоступний для завантаження.',
+  IMPORT_EXPIRED: 'Строк зберігання файлу минув.',
 }
 export function createMapping(
   schemaVersion: number,
