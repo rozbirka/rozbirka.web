@@ -12,7 +12,6 @@ import { useDashboardData, type DashboardLoadable } from './use-dashboard-data'
 import type { DashboardData, DashboardPeriod } from '@/api/dashboard-contract'
 import { DashboardAnalytics } from './DashboardAnalytics'
 import { DashboardBillingBanner } from './DashboardBillingBanner'
-import { DashboardDestinations } from './DashboardDestinations'
 import { DashboardErrorState } from './DashboardErrorState'
 import { DashboardSummary } from './DashboardSummary'
 import { getDashboardBillingPath } from './dashboard-billing-access'
@@ -133,9 +132,6 @@ export function DashboardScreen() {
           />
           {snapshot !== null && targetTenant !== null ? (
             <DashboardActivity snapshot={snapshot} tenant={targetTenant} />
-          ) : null}
-          {snapshot !== null && targetTenant !== null ? (
-            <DashboardDestinations snapshot={snapshot} tenant={targetTenant} />
           ) : null}
         </div>
       </div>

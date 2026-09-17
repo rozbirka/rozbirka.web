@@ -288,20 +288,19 @@ it('uses week for a missing period without changing the URL', () => {
   )
 })
 
-it('shows released account destinations after analytics from the full module registry', () => {
+it('ends the dashboard on analytics, with no module or action lists after it', () => {
   renderDashboard(['/app/koval/dashboard'])
 
-  const profile = screen.getByRole('link', { name: 'Профіль' })
-  expect(profile).toHaveAttribute('href', '/app/koval/settings/profile')
+  expect(screen.getByRole('region', { name: 'Аналітика' })).toBeVisible()
   expect(
-    screen.queryByRole('region', { name: 'Підготовка робочих модулів' }),
+    screen.queryByRole('link', { name: 'Профіль' }),
   ).not.toBeInTheDocument()
-
-  const analytics = screen.getByRole('region', { name: 'Аналітика' })
   expect(
-    analytics.compareDocumentPosition(profile) &
-      Node.DOCUMENT_POSITION_FOLLOWING,
-  ).not.toBe(0)
+    screen.queryByRole('region', { name: 'Робочі модулі' }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('region', { name: 'Швидкі дії' }),
+  ).not.toBeInTheDocument()
 })
 
 it.each(['period=year', 'period=day&period=month'])(
