@@ -1,5 +1,5 @@
 import { Button, Field, Notice, SelectInput } from '@/components/app'
-import { cn } from '@/lib/utils'
+import { cn, plural } from '@/lib/utils'
 import type { ReactNode } from 'react'
 import type {
   ImportCapabilities,
@@ -7,7 +7,7 @@ import type {
   ImportSelection,
   ImportStatus,
 } from '@/api/part-imports'
-import { issueText } from './import-model'
+import { issueText, looksMisdecoded } from './import-model'
 
 const DELIMITERS = [
   { value: ',', label: 'Кома' },
@@ -100,13 +100,69 @@ export function ImportFileStep({
   settingsOpen: boolean
   onToggleSettings: () => void
   onChooseFile: (file: File | undefined) => void
-  onReanalyze: () => void
+  onReanalyze: (override?: ImportSelection) => void
   onContinue: () => void
 }) {
   const source = status === null ? null : status.source
   const columns = source?.fields ?? []
   const preview = rows.slice(0, 5)
   const format = (file?.name.split('.').pop() ?? 'CSV').toUpperCase()
+
+  // Which text columns came back as mojibake, and what we can offer about it.
+  const textColumns = columns.filter((column) =>
+    rows.some((row) => {
+      const raw = row.source.cells.find(
+        (cell) => cell.column === column.column,
+      )?.raw
+      return raw !== null && raw !== undefined && /[^\d\s.,-]/.test(raw)
+    }),
+  )
+  const brokenColumns = textColumns.filter((column) =>
+    looksMisdecoded(
+      rows.map(
+        (row) =>
+          row.source.cells.find((cell) => cell.column === column.column)?.raw ??
+          null,
+      ),
+    ),
+  )
+  const otherEncoding = capabilities.encodings.find(
+    (one) => one.toLowerCase() !== selection.encoding.toLowerCase(),
+  )
+  const failed = status !== null && status.status === 'Failed'
+  const trouble: {
+    tone: 'danger' | 'warn'
+    title: string
+    body: string
+    fix: { label: string; run: () => void } | null
+  } | null = failed
+    ? {
+        tone: 'danger',
+        title: 'Файл прочитати не вдалося',
+        body:
+          status.errorCode === null
+            ? 'Сервер не зміг прочитати цю таблицю. Спробуйте інші налаштування читання або інший файл.'
+            : issueText(status.errorCode),
+        fix: null,
+      }
+    : brokenColumns.length > 0
+      ? {
+          tone: 'warn',
+          title: 'Кодування не розпізнано — назви нечитабельні',
+          body: `Файл прочитано як ${selection.encoding.toUpperCase()}, але текст у ${brokenColumns.length === 1 ? `колонці «${brokenColumns[0]!.header}»` : `колонках ${brokenColumns.map((column) => `«${column.header}»`).join(', ')}`} пошкоджений. Схоже, таблиця збережена в іншому кодуванні.`,
+          fix:
+            otherEncoding === undefined || !editable
+              ? null
+              : {
+                  label: `Прочитати як ${otherEncoding.toUpperCase()}`,
+                  run: () => {
+                    const next = { ...selection, encoding: otherEncoding }
+                    onSelection(() => next)
+                    onReanalyze(next)
+                  },
+                },
+        }
+      : null
 
   if (status === null || source === null)
     return (
@@ -182,6 +238,50 @@ export function ImportFileStep({
         </div>
       </div>
 
+      {trouble === null ? null : (
+        <div
+          className={cn(
+            'flex flex-wrap items-center gap-4.5 rounded-[18px] border px-5.5 py-5',
+            trouble.tone === 'danger'
+              ? 'border-state-danger/26 bg-state-danger-soft'
+              : 'border-state-warn/26 bg-state-warn-soft',
+          )}
+          role={trouble.tone === 'danger' ? 'alert' : 'status'}
+        >
+          <span
+            aria-hidden
+            className={cn(
+              'inline-flex size-10.5 flex-none items-center justify-center rounded-[11px] text-[18px] font-bold',
+              trouble.tone === 'danger'
+                ? 'bg-state-danger/12 text-state-danger'
+                : 'bg-state-warn/12 text-state-warn',
+            )}
+          >
+            !
+          </span>
+          <div className="min-w-0 flex-[1_1_320px]">
+            <p
+              className={cn(
+                'text-[15px] font-bold',
+                trouble.tone === 'danger'
+                  ? 'text-state-danger'
+                  : 'text-state-warn',
+              )}
+            >
+              {trouble.title}
+            </p>
+            <p className="text-app-muted mt-1.5 text-[14px] leading-6 text-pretty">
+              {trouble.body}
+            </p>
+          </div>
+          {trouble.fix === null ? null : (
+            <Button disabled={busy} onClick={trouble.fix.run} variant="primary">
+              {trouble.fix.label}
+            </Button>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-start gap-4">
         <section
           aria-label="Що прочитано"
@@ -189,10 +289,17 @@ export function ImportFileStep({
         >
           <div className="border-app-line flex flex-wrap items-baseline justify-between gap-3 border-b px-5.5 py-4">
             <h2 className="text-app-ink text-[15px] font-bold">Що прочитано</h2>
-            <p className="text-app-dim text-[13px]">
-              {selection.headerRow == null
-                ? 'Заголовків немає — колонки названо за номерами'
-                : `Рядок ${String(selection.headerRow)} використано як заголовки`}
+            <p
+              className={cn(
+                'text-[13px]',
+                brokenColumns.length > 0 ? 'text-state-warn' : 'text-app-dim',
+              )}
+            >
+              {brokenColumns.length > 0
+                ? `${String(brokenColumns.length)} з ${String(columns.length)} ${plural(columns.length, ['колонки', 'колонок', 'колонок'])} нечитабельні`
+                : selection.headerRow == null
+                  ? 'Заголовків немає — колонки названо за номерами'
+                  : `Рядок ${String(selection.headerRow)} використано як заголовки`}
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -235,9 +342,12 @@ export function ImportFileStep({
             </table>
           </div>
           <p className="text-app-dim px-5.5 py-3.5 text-[13px]">
-            {status.rowCount <= preview.length
-              ? `Показано всі ${count(status.rowCount)} рядки файлу`
-              : `Показано перші ${count(preview.length)} з ${count(status.rowCount)} рядків`}
+            {brokenColumns.length > 0 &&
+            brokenColumns.length < textColumns.length + 1
+              ? 'Числові колонки прочитані правильно — проблема тільки в текстових.'
+              : status.rowCount <= preview.length
+                ? `Показано всі ${count(status.rowCount)} рядки файлу`
+                : `Показано перші ${count(preview.length)} з ${count(status.rowCount)} рядків`}
           </p>
         </section>
 
@@ -402,13 +512,66 @@ export function ImportFileStep({
                 ) : null}
 
                 {editable ? (
-                  <Button disabled={busy} onClick={onReanalyze}>
+                  <Button disabled={busy} onClick={() => onReanalyze()}>
                     Прочитати заново
                   </Button>
                 ) : null}
               </div>
             ) : null}
           </section>
+
+          {trouble === null ? null : (
+            <section
+              aria-label="Спробуйте"
+              className="border-app-line bg-app-raised rounded-[18px] border px-5 py-4.5"
+            >
+              <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+                Спробуйте
+              </h2>
+              <ul className="mt-3.5 grid gap-3.5">
+                {[
+                  {
+                    title:
+                      otherEncoding === undefined
+                        ? 'Інше кодування'
+                        : `Кодування ${otherEncoding.toUpperCase()}`,
+                    hint: 'Windows-1251 — найчастіша причина для таблиць з Excel українською.',
+                  },
+                  {
+                    title: 'Зберегти як CSV UTF-8',
+                    hint: 'В Excel: Файл → Зберегти як → CSV UTF-8 (з комами).',
+                  },
+                  {
+                    title: 'Завантажити XLSX',
+                    hint: 'XLSX не має проблем з кодуванням — можна завантажити оригінал таблиці.',
+                  },
+                ].map((fix) => (
+                  <li key={fix.title}>
+                    <p className="text-app-ink text-[14px] font-bold">
+                      {fix.title}
+                    </p>
+                    <p className="text-app-muted mt-1 text-[13px] leading-5 text-pretty">
+                      {fix.hint}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-4 flex flex-wrap gap-2.5">
+                {editable ? (
+                  <Button disabled={busy} onClick={onToggleSettings}>
+                    Змінити налаштування читання
+                  </Button>
+                ) : null}
+                <Button disabled={busy} onClick={() => onChooseFile(undefined)}>
+                  Вибрати інший файл
+                </Button>
+              </div>
+              <p className="text-app-dim mt-4 text-[13px] leading-5 text-pretty">
+                Нічого не створено. Цей імпорт залишиться в історії — його можна
+                продовжити пізніше або почати новий.
+              </p>
+            </section>
+          )}
 
           <section
             aria-label="Обмеження"

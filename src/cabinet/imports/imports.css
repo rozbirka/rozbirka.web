@@ -86,6 +86,14 @@
 .import-steps button[aria-current='step'] span {
   color: var(--color-brand);
 }
+.import-steps button[data-state='failed'] {
+  background: color-mix(in srgb, var(--color-state-danger) 8%, transparent);
+  border-color: color-mix(in srgb, var(--color-state-danger) 30%, transparent);
+  color: color-mix(in srgb, var(--color-state-danger) 78%, white);
+}
+.import-steps button[data-state='failed'] span {
+  color: var(--color-state-danger);
+}
 .import-steps button:disabled {
   opacity: 0.45;
 }

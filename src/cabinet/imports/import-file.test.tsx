@@ -143,3 +143,84 @@ it('offers the drop zone, not the preview, before anything is read', () => {
     screen.queryByRole('region', { name: 'Що прочитано' }),
   ).not.toBeInTheDocument()
 })
+
+const mojibake: ImportRow[] = [
+  {
+    rowId: 'r1',
+    sourceRow: 1,
+    source: {
+      id: 'r1',
+      row: 1,
+      cells: [
+        { column: 0, raw: 'Ôàðà ë³âà' },
+        { column: 1, raw: '2' },
+      ],
+    },
+    draft: null,
+  },
+  {
+    rowId: 'r2',
+    sourceRow: 2,
+    source: {
+      id: 'r2',
+      row: 2,
+      cells: [
+        { column: 0, raw: 'Äâåð³ ïåðåäí³ ïðàâ³' },
+        { column: 1, raw: '1' },
+      ],
+    },
+    draft: null,
+  },
+]
+
+it('names the unreadable column and offers the other encoding', async () => {
+  const user = userEvent.setup()
+  const props = renderStep({ rows: mojibake })
+
+  const alert = screen.getByRole('status')
+  expect(alert).toHaveTextContent('Кодування не розпізнано')
+  expect(alert).toHaveTextContent('колонці «Назва»')
+  expect(alert).toHaveTextContent('прочитано як UTF-8')
+
+  await user.click(
+    screen.getByRole('button', { name: 'Прочитати як WINDOWS-1251' }),
+  )
+  expect(props.onSelection).toHaveBeenCalled()
+  expect(props.onReanalyze).toHaveBeenCalledWith(
+    expect.objectContaining({ encoding: 'windows-1251' }),
+  )
+})
+
+it('says the numbers survived when only text columns are broken', () => {
+  renderStep({ rows: mojibake })
+
+  expect(screen.getByText(/Числові колонки прочитані правильно/)).toBeVisible()
+  expect(
+    screen.getByRole('region', { name: 'Що прочитано' }),
+  ).toHaveTextContent('1 з 2 колонок нечитабельні')
+})
+
+it('reports a failed read as the server put it, with no guess of its own', () => {
+  renderStep({
+    rows: mojibake,
+    status: { ...status, status: 'Failed', errorCode: 'HEADER_UNUSABLE' },
+  })
+
+  const alert = screen.getByRole('alert')
+  expect(alert).toHaveTextContent('Файл прочитати не вдалося')
+  expect(alert).toHaveTextContent(
+    'Рядок заголовків містить формули або помилки',
+  )
+  expect(
+    screen.queryByRole('button', { name: /Прочитати як/ }),
+  ).not.toBeInTheDocument()
+})
+
+it('stays quiet when the text read fine', () => {
+  renderStep()
+
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('region', { name: 'Спробуйте' }),
+  ).not.toBeInTheDocument()
+})

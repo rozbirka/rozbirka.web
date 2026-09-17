@@ -513,7 +513,13 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
                   <button
                     aria-current={step === i ? 'step' : undefined}
                     data-state={
-                      step === i ? 'current' : step > i ? 'done' : 'ahead'
+                      step === i
+                        ? status?.status === 'Failed'
+                          ? 'failed'
+                          : 'current'
+                        : step > i
+                          ? 'done'
+                          : 'ahead'
                     }
                     disabled={
                       busy ||
@@ -540,7 +546,11 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
           </nav>
         )}
         <h1>{titles[step]}</h1>
-        <p className="import-description">{descriptions[step]}</p>
+        <p className="import-description">
+          {step === 1 && status?.status === 'Failed'
+            ? 'Файл прочитати не вдалося. Нижче — що саме сталося й що можна зробити.'
+            : descriptions[step]}
+        </p>
         {error ? (
           <Notice
             tone="danger"
@@ -583,12 +593,15 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
             file={file}
             onChooseFile={chooseFile}
             onContinue={next}
-            onReanalyze={() =>
+            onReanalyze={(override) =>
               void action(async (signal) => {
                 if (!status) return
-                await api.analyze(status.id, status.revision, selection, {
-                  signal,
-                })
+                await api.analyze(
+                  status.id,
+                  status.revision,
+                  override ?? selection,
+                  { signal },
+                )
                 await refresh(status.id, signal)
                 if (!signal.aborted) {
                   setMapping(null)

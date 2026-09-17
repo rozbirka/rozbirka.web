@@ -144,3 +144,31 @@ export const isActiveImport = (status: string) =>
   ].includes(status)
 export const issueText = (code: string) =>
   issueLabels[code] ?? `Потребує перевірки (${code})`
+
+/**
+ * Cyrillic text saved as Windows-1251 and then read as UTF-8 does not fail —
+ * it succeeds into nonsense, and the file looks imported until someone reads
+ * the names. The giveaway is the character range: every byte lands in the
+ * Latin-1 supplement (À-ÿ, ³, ¿) and no Cyrillic letter survives.
+ *
+ * This is a guess, not a verdict, and the screen says so. It exists because
+ * the alternative — the operator noticing on their own — happens after the
+ * import, not before it.
+ */
+export function looksMisdecoded(values: readonly (string | null)[]) {
+  const text = values.filter(
+    (value): value is string => value !== null && /[^\d\s.,-]/.test(value),
+  )
+  if (text.length === 0) return false
+  const suspicious = text.filter((value) => {
+    const letters = [...value].filter((char) => /\p{L}/u.test(char))
+    if (letters.length < 3) return false
+    const cyrillic = letters.filter((char) => /\p{Script=Cyrillic}/u.test(char))
+    const latin1 = letters.filter((char) => {
+      const code = char.codePointAt(0) ?? 0
+      return code >= 0x00a1 && code <= 0x00ff
+    })
+    return cyrillic.length === 0 && latin1.length / letters.length > 0.5
+  })
+  return suspicious.length / text.length > 0.5
+}
