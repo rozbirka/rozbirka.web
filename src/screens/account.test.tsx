@@ -105,7 +105,9 @@ it('renders first-tenant onboarding for an authenticated user with no tenants', 
 
   renderAccount()
 
-  expect(screen.getByRole('heading', { name: /Створіть/ })).toBeInTheDocument()
+  expect(
+    screen.getByRole('heading', { name: 'Розкажіть про свій бізнес' }),
+  ).toBeInTheDocument()
   expect(screen.getByLabelText('Назва розбірки')).toBeInTheDocument()
   expect(screen.queryByLabelText('Поточний маршрут')).toBeNull()
 })
