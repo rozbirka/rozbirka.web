@@ -3,6 +3,7 @@ import { ToastProvider } from '@/components/app'
 import { useAuth } from '../auth/AuthContext'
 import { useCabinet, type CabinetContextValue } from './CabinetContext'
 import { CabinetNavigation } from './CabinetNavigation'
+import { CommandPalette } from './CommandPalette'
 import { ConnectionNotice } from './ConnectionNotice'
 
 export function CabinetShell() {
@@ -29,6 +30,10 @@ export function CabinetShell() {
       <main className="cabinet-shell__content min-w-0 flex-1 px-4 py-6 sm:px-6 md:px-8 md:py-8 lg:px-10 lg:py-10">
         <ToastProvider>
           <ConnectionNotice />
+          <CommandPalette
+            snapshot={cabinet.snapshot}
+            tenant={cabinet.targetTenant}
+          />
           <Outlet />
         </ToastProvider>
       </main>
