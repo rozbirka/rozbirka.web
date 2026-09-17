@@ -39,30 +39,57 @@
 .import-steps {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  align-items: center;
+  gap: 6px 10px;
+}
+.import-steps__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.import-steps__arrow {
+  color: var(--color-app-line-2);
+  font-size: 13px;
 }
 .import-steps button {
-  display: flex;
-  gap: 8px;
+  display: inline-flex;
+  gap: 9px;
   align-items: center;
-  padding: 9px 13px;
+  /* 44px of touch target around a 30px pill: the rail is the one control on
+     this screen a thumb reaches for while the other hand holds the phone. */
+  min-height: 2.75rem;
+  padding: 0 13px 0 10px;
   border: 1px solid var(--color-app-line);
-  border-radius: 10px;
-  color: var(--color-app-muted);
-  font-size: 14px;
+  border-radius: 999px;
+  color: var(--color-app-dim);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 .import-steps button span {
   font-family: var(--font-mono);
   font-size: 11px;
+  font-weight: 500;
+  color: var(--color-app-line-2);
+}
+.import-steps button[data-state='done'] {
+  color: var(--color-app-muted);
+}
+.import-steps button[data-state='done'] span {
+  color: var(--color-app-dim);
 }
 .import-steps button[aria-current='step'] {
-  background: var(--color-app-input);
-  border-color: var(--color-app-line-2);
-  color: var(--color-app-ink);
+  background: color-mix(in srgb, var(--color-brand) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-brand) 34%, transparent);
+  color: color-mix(in srgb, var(--color-brand) 72%, white);
+}
+.import-steps button[aria-current='step'] span {
+  color: var(--color-brand);
 }
 .import-steps button:disabled {
-  opacity: 0.4;
+  opacity: 0.45;
 }
+
 .import-columns {
   display: grid;
   grid-template-columns: minmax(0, 2.5fr) minmax(260px, 1fr);

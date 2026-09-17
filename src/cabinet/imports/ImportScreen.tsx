@@ -1,7 +1,7 @@
 import { ImportReferencePicker } from './ImportReferencePicker'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import { Upload, ArrowLeft } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import {
   Button,
   Card,
@@ -26,6 +26,7 @@ import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { cabinetPath } from '../cabinet-paths'
+import { ImportFileStep } from './import-file'
 import { ImportHistory } from './import-history'
 import {
   createMapping,
@@ -502,28 +503,40 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
       </header>
       <div className="import-body">
         {step === 0 ? null : (
-          <nav className="import-steps" aria-label="Кроки імпорту">
-            {steps.map((label, i) => (
-              <button
-                key={label}
-                type="button"
-                aria-current={step === i ? 'step' : undefined}
-                disabled={
-                  busy ||
-                  (i > 1 &&
-                    (!status?.source || status.source.fields.length === 0)) ||
-                  (i === 4 && !canConfirm) ||
-                  (i === 5 && !status?.execution)
-                }
-                onClick={() => {
-                  if (i === 0) void navigate(base)
-                  setStep(i)
-                }}
-              >
-                <span>{String(i + 1).padStart(2, '0')}</span>
-                {label}
-              </button>
-            ))}
+          <nav aria-label="Кроки імпорту" className="import-steps">
+            {steps.slice(1).map((label, index) => {
+              // The rail is the flow only: history is where the flow starts
+              // from, not a step inside it, so it is numbered 1 through 5.
+              const i = index + 1
+              return (
+                <span className="import-steps__item" key={label}>
+                  <button
+                    aria-current={step === i ? 'step' : undefined}
+                    data-state={
+                      step === i ? 'current' : step > i ? 'done' : 'ahead'
+                    }
+                    disabled={
+                      busy ||
+                      (i > 1 &&
+                        (!status?.source ||
+                          status.source.fields.length === 0)) ||
+                      (i === 4 && !canConfirm) ||
+                      (i === 5 && !status?.execution)
+                    }
+                    onClick={() => setStep(i)}
+                    type="button"
+                  >
+                    <span>{i}</span>
+                    {label}
+                  </button>
+                  {i < steps.length - 1 ? (
+                    <span aria-hidden className="import-steps__arrow">
+                      →
+                    </span>
+                  ) : null}
+                </span>
+              )
+            })}
           </nav>
         )}
         <h1>{titles[step]}</h1>
@@ -563,211 +576,33 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
           />
         ) : null}
         {step === 1 ? (
-          <div className="import-columns">
-            <div className="import-stack">
-              <Card title="Таблиця запчастин">
-                <label
-                  className="import-drop"
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault()
-                    if (!status) chooseFile(e.dataTransfer.files[0])
-                  }}
-                >
-                  <Upload aria-hidden />
-                  <strong>Перетягніть CSV або XLSX</strong>
-                  <span>або виберіть файл — до 10 МіБ</span>
-                  <input
-                    aria-label="Файл імпорту"
-                    type="file"
-                    accept=".csv,.xlsx"
-                    disabled={busy || !!status}
-                    onChange={(e) => chooseFile(e.target.files?.[0])}
-                  />
-                </label>
-                {file ? <p className="mt-4">{file.name}</p> : null}
-                {status ? (
-                  <p className="mt-4 text-app-muted">
-                    {statusLabels[status.status] ?? status.status} ·{' '}
-                    {status.rowCount} рядків
-                  </p>
-                ) : null}
-              </Card>
-              {status?.source ? (
-                <Card title="Що прочитала система">
-                  <div className="import-table">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>#</th>
-                          {status.source.fields.map((f) => (
-                            <th key={f.id}>{f.header}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rows.slice(0, 3).map((r) => (
-                          <tr key={r.rowId}>
-                            <td>{r.sourceRow}</td>
-                            {status.source!.fields.map((f) => (
-                              <td key={f.id}>
-                                {r.source.cells.find(
-                                  (c) => c.column === f.column,
-                                )?.raw ?? '—'}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-              ) : null}
-            </div>
-            <Card title="Читання файлу">
-              <p className="text-app-muted">
-                Змінюйте налаштування, якщо дані прочитані неправильно.
-              </p>
-              {status?.source?.warnings.map((warning) => (
-                <Notice key={warning} tone="warn">
-                  {issueText(warning)}
-                </Notice>
-              ))}
-              <Button onClick={() => setReadSettings((v) => !v)}>
-                Налаштувати
-              </Button>
-              {readSettings ? (
-                <div className="import-stack mt-4">
-                  {status?.source ? (
-                    <Field label="Аркуш">
-                      <SelectInput
-                        value={selection.sheet ?? ''}
-                        onChange={(e) =>
-                          setSelection((s) => ({ ...s, sheet: e.target.value }))
-                        }
-                      >
-                        <option value="">Оберіть аркуш</option>
-                        {status.source.tables.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
-                          </option>
-                        ))}
-                      </SelectInput>
-                    </Field>
-                  ) : null}
-                  <Field label="Рядок заголовків">
-                    <TextInput
-                      type="number"
-                      min={1}
-                      value={selection.headerRow ?? 1}
-                      onChange={(e) =>
-                        setSelection((s) => ({
-                          ...s,
-                          headerRow: Number(e.target.value),
-                        }))
-                      }
-                    />
-                  </Field>
-                  <Field label="Перший рядок даних">
-                    <TextInput
-                      type="number"
-                      min={1}
-                      value={selection.startRow ?? 2}
-                      onChange={(e) =>
-                        setSelection((s) => ({
-                          ...s,
-                          startRow: Number(e.target.value),
-                        }))
-                      }
-                    />
-                  </Field>
-                  <Field label="Роздільник CSV">
-                    <SelectInput
-                      value={selection.delimiter}
-                      onChange={(e) => {
-                        setSelection((s) => ({
-                          ...s,
-                          delimiter: e.target.value,
-                        }))
-                        uploadKey.current = crypto.randomUUID()
-                      }}
-                    >
-                      <option value=",">Кома</option>
-                      <option value=";">Крапка з комою</option>
-                      <option value={'\t'}>Табуляція</option>
-                      <option value="|">Вертикальна риска</option>
-                    </SelectInput>
-                  </Field>
-                  <Field label="Кодування CSV">
-                    <SelectInput
-                      value={selection.encoding}
-                      onChange={(e) => {
-                        setSelection((s) => ({
-                          ...s,
-                          encoding: e.target.value,
-                        }))
-                        uploadKey.current = crypto.randomUUID()
-                      }}
-                    >
-                      {opts(caps.encodings)}
-                    </SelectInput>
-                  </Field>
-                  {status?.source?.warnings.includes('HIDDEN_ROWS') ? (
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={selection.acceptHiddenRows ?? false}
-                        onChange={(e) =>
-                          setSelection((s) => ({
-                            ...s,
-                            acceptHiddenRows: e.target.checked,
-                          }))
-                        }
-                      />
-                      Підтверджую включення прихованих рядків
-                    </label>
-                  ) : null}
-                  {status?.source?.warnings.includes('HIDDEN_COLUMNS') ? (
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={selection.acceptHiddenColumns ?? false}
-                        onChange={(e) =>
-                          setSelection((s) => ({
-                            ...s,
-                            acceptHiddenColumns: e.target.checked,
-                          }))
-                        }
-                      />
-                      Підтверджую включення прихованих колонок
-                    </label>
-                  ) : null}
-                  {editable ? (
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        void action(async (signal) => {
-                          await api.analyze(
-                            status.id,
-                            status.revision,
-                            selection,
-                            { signal },
-                          )
-                          await refresh(status.id, signal)
-                          if (!signal.aborted) {
-                            setMapping(null)
-                            setSelected([])
-                          }
-                        })
-                      }
-                    >
-                      Прочитати ще раз
-                    </Button>
-                  ) : null}
-                </div>
-              ) : null}
-            </Card>
-          </div>
+          <ImportFileStep
+            busy={busy}
+            capabilities={caps}
+            editable={editable}
+            file={file}
+            onChooseFile={chooseFile}
+            onContinue={next}
+            onReanalyze={() =>
+              void action(async (signal) => {
+                if (!status) return
+                await api.analyze(status.id, status.revision, selection, {
+                  signal,
+                })
+                await refresh(status.id, signal)
+                if (!signal.aborted) {
+                  setMapping(null)
+                  setSelected([])
+                }
+              })
+            }
+            onSelection={setSelection}
+            onToggleSettings={() => setReadSettings((value) => !value)}
+            rows={rows}
+            selection={selection}
+            settingsOpen={readSettings}
+            status={status}
+          />
         ) : null}
         {step === 2 && status?.source ? (
           <div className="import-columns">
