@@ -15,6 +15,7 @@ import {
   Printer,
   Search,
   Trash2,
+  X,
 } from 'lucide-react'
 import {
   ActionMenu,
@@ -78,6 +79,14 @@ import {
 } from '../module-registry'
 import { evaluateModuleAccess, type ModuleAccessDecision } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import {
+  readSavedViews,
+  sameView,
+  savedViewLimit,
+  writeSavedViews,
+  type SavedView,
+  type SavedViewScope,
+} from '../saved-views'
 
 const partStatuses = new Set(['available', 'reserved', 'sold'])
 /** Every group the filter panel draws; the server counts each one for us. */
@@ -276,6 +285,26 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     text: string
   } | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
+  const viewUserId = cabinet.snapshot?.userId ?? null
+  const viewTenantId = cabinet.targetTenant?.id ?? null
+  const viewScope = useMemo<SavedViewScope | null>(
+    () =>
+      viewUserId && viewTenantId
+        ? { userId: viewUserId, tenantId: viewTenantId, screen: 'parts' }
+        : null,
+    [viewUserId, viewTenantId],
+  )
+  // Keyed on the identifiers rather than the object, so a fresh context object
+  // on every render does not read storage again — or loop.
+  const viewKey = `${viewUserId ?? ''}:${viewTenantId ?? ''}`
+  const [views, setViews] = useState<SavedView[]>([])
+  const [viewsFor, setViewsFor] = useState<string | null>(null)
+  const [naming, setNaming] = useState(false)
+  const [viewName, setViewName] = useState('')
+  if (viewsFor !== viewKey) {
+    setViewsFor(viewKey)
+    setViews(viewScope ? readSavedViews(viewScope) : [])
+  }
   const links = {
     cars: allowedToView(cabinetModules.cars, cabinet),
     intakes: allowedToView(cabinetModules.intakes, cabinet),
@@ -510,6 +539,29 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     .concat(filters.carIds.length > 0 ? ['car_ids'] : [])
     .concat(filters.intakeIds.length > 0 ? ['intake_ids'] : [])
 
+  const currentQuery = searchParams.toString()
+  const activeView = views.find((view) => sameView(view.query, currentQuery))
+  const applyView = (view: SavedView) => {
+    setSearchParams(new URLSearchParams(view.query))
+  }
+  const saveCurrentView = () => {
+    const name = viewName.trim()
+    if (!viewScope || name === '' || views.length >= savedViewLimit) return
+    const next = [
+      ...views.filter((view) => view.name !== name),
+      { id: `${Date.now().toString(36)}-${name}`, name, query: currentQuery },
+    ]
+    setViews(next)
+    writeSavedViews(viewScope, next)
+    setNaming(false)
+    setViewName('')
+  }
+  const forgetView = (id: string) => {
+    const next = views.filter((view) => view.id !== id)
+    setViews(next)
+    if (viewScope) writeSavedViews(viewScope, next)
+  }
+
   const pickedIds = [...picked]
   const pickedNoun = plural(pickedIds.length, ['деталь', 'деталі', 'деталей'])
 
@@ -645,7 +697,64 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         </span>
 
         <div className="flex flex-wrap items-start gap-6">
-          <aside className="border-app-line bg-app-raised grid min-w-0 flex-[1_1_320px] gap-6 rounded-[20px] border p-5 sm:min-w-[260px]">
+          <aside className="border-app-line bg-app-raised grid min-w-0 flex-[0_1_320px] gap-6 rounded-[20px] border p-5 sm:min-w-[260px]">
+            {viewScope === null ? null : (
+              <FilterGroup label="Мої подання">
+                {views.length === 0 ? (
+                  <p className="text-app-dim text-[13px] leading-5">
+                    Наберіть фільтри, які ставите щодня, і збережіть їх — вони
+                    лишаться на цьому пристрої.
+                  </p>
+                ) : (
+                  <ul className="grid gap-1.5">
+                    {views.map((view) => (
+                      <li className="flex items-center gap-1.5" key={view.id}>
+                        <button
+                          aria-pressed={activeView?.id === view.id}
+                          className={cn(
+                            'focus-visible:outline-brand min-h-10 min-w-0 flex-1 truncate rounded-[10px] px-3 text-left text-sm transition-colors',
+                            activeView?.id === view.id
+                              ? 'bg-app-input font-semibold text-white'
+                              : 'text-app-muted hover:bg-white/[0.03] hover:text-app-ink',
+                          )}
+                          onClick={() => applyView(view)}
+                          type="button"
+                        >
+                          {view.name}
+                        </button>
+                        <Button
+                          aria-label={`Забути подання: ${view.name}`}
+                          onClick={() => forgetView(view.id)}
+                          size="icon"
+                        >
+                          <X aria-hidden />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <Button
+                  className="w-full text-sm font-semibold"
+                  disabled={
+                    views.length >= savedViewLimit || activeView !== undefined
+                  }
+                  onClick={() => {
+                    setViewName('')
+                    setNaming(true)
+                  }}
+                  {...(views.length >= savedViewLimit
+                    ? {
+                        title: `Більше ${String(savedViewLimit)} подань на цей список не зберігається.`,
+                      }
+                    : activeView !== undefined
+                      ? { title: 'Ці фільтри вже збережені.' }
+                      : {})}
+                >
+                  Зберегти ці фільтри
+                </Button>
+              </FilterGroup>
+            )}
+
             <FilterGroup label="Статус">
               <FilterRow
                 active={filters.status === ''}
@@ -1051,6 +1160,32 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
             inputMode="decimal"
             onChange={(event) => setBulkPrice(event.target.value)}
             value={bulkPrice}
+          />
+        </Field>
+      </FormDialog>
+
+      <FormDialog
+        description="Подання зберігає поточні фільтри разом із пошуком. Воно лишається в цьому браузері — на іншому пристрої його не буде."
+        onOpenChange={(open) => {
+          if (!open) setNaming(false)
+        }}
+        onSubmit={(event) => {
+          event.preventDefault()
+          saveCurrentView()
+        }}
+        open={naming}
+        submitDisabled={viewName.trim() === ''}
+        submitLabel="Зберегти"
+        title="Назвіть подання"
+      >
+        <Field
+          hint="Назвіть його так, як ви це питаєте вголос: «Резерв понад тиждень»."
+          label="Назва подання"
+        >
+          <TextInput
+            maxLength={60}
+            onChange={(event) => setViewName(event.target.value)}
+            value={viewName}
           />
         </Field>
       </FormDialog>

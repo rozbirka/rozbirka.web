@@ -1810,3 +1810,112 @@ it('reports how many of a bulk delete went through when some rows refuse', async
     ),
   ).toBeVisible()
 })
+
+it('saves the current filters under a name, applies them back, and forgets them', async () => {
+  const user = userEvent.setup()
+  localStorage.clear()
+  partMocks.search.mockResolvedValue({
+    items: pickableRows,
+    page: 1,
+    pageSize: 30,
+    total: 2,
+    totalPages: 1,
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts?status=reserved']}>
+      <Routes>
+        <Route
+          element={
+            <>
+              <PartsScreen definition={partsDefinition as never} />
+              <LocationProbe />
+            </>
+          }
+          path="/app/:tenant/parts"
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const rail = await screen.findByRole('region', { name: 'Мої подання' })
+  await user.click(
+    within(rail).getByRole('button', { name: 'Зберегти ці фільтри' }),
+  )
+  await user.type(
+    screen.getByRole('textbox', { name: 'Назва подання' }),
+    'Резерв',
+  )
+  await user.click(screen.getByRole('button', { name: 'Зберегти' }))
+
+  const saved = within(
+    screen.getByRole('region', { name: 'Мої подання' }),
+  ).getByRole('button', { name: 'Резерв' })
+  expect(saved).toHaveAttribute('aria-pressed', 'true')
+
+  // Filters move away, then the view brings them back.
+  await user.click(
+    within(screen.getByRole('region', { name: 'Статус' })).getByRole('button', {
+      name: /Продано/,
+    }),
+  )
+  expect(
+    within(screen.getByRole('region', { name: 'Мої подання' })).getByRole(
+      'button',
+      { name: 'Резерв' },
+    ),
+  ).toHaveAttribute('aria-pressed', 'false')
+
+  await user.click(
+    within(screen.getByRole('region', { name: 'Мої подання' })).getByRole(
+      'button',
+      { name: 'Резерв' },
+    ),
+  )
+  await vi.waitFor(() =>
+    expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(
+      'status=reserved',
+    ),
+  )
+
+  await user.click(
+    screen.getByRole('button', { name: 'Забути подання: Резерв' }),
+  )
+  expect(
+    within(screen.getByRole('region', { name: 'Мої подання' })).queryByRole(
+      'button',
+      { name: 'Резерв' },
+    ),
+  ).not.toBeInTheDocument()
+})
+
+it('refuses to save filters that are already a view, and says why', async () => {
+  const user = userEvent.setup()
+  localStorage.clear()
+  localStorage.setItem(
+    'rozbirka.views.v1:user-1:tenant-1:parts',
+    JSON.stringify({
+      version: 1,
+      views: [{ id: 'v1', name: 'Резерв', query: 'status=reserved' }],
+    }),
+  )
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts?status=reserved']}>
+      <Routes>
+        <Route
+          element={<PartsScreen definition={partsDefinition as never} />}
+          path="/app/:tenant/parts"
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const save = within(
+    await screen.findByRole('region', { name: 'Мої подання' }),
+  ).getByRole('button', { name: 'Зберегти ці фільтри' })
+  expect(save).toBeDisabled()
+  expect(save).toHaveAttribute('title', 'Ці фільтри вже збережені.')
+  await user.click(save)
+  expect(
+    screen.queryByRole('textbox', { name: 'Назва подання' }),
+  ).not.toBeInTheDocument()
+})
