@@ -93,7 +93,7 @@ it('renders the approved authenticated profile fields', () => {
   const view = render(<ProfileScreen />)
 
   expect(screen.getByRole('heading', { name: 'Профіль' })).toBeVisible()
-  expect(screen.getByLabelText('Ім’я')).toHaveValue('Олена')
+  expect(screen.getByLabelText('Ім’я та прізвище')).toHaveValue('Олена')
   expect(screen.getByText('+380733182301')).toBeVisible()
   expect(screen.getByText('Менеджер')).toBeVisible()
   expect(screen.getByText('QA Switch Test')).toBeVisible()
@@ -104,7 +104,7 @@ it('disables saving an unchanged or invalid display name', async () => {
   const user = userEvent.setup()
   render(<ProfileScreen />)
 
-  const input = screen.getByLabelText('Ім’я')
+  const input = screen.getByLabelText('Ім’я та прізвище')
   const save = screen.getByRole('button', { name: 'Зберегти' })
   expect(save).toBeDisabled()
 
@@ -120,7 +120,7 @@ it('trims and saves the name once while the request is pending', async () => {
   const user = userEvent.setup()
   render(<ProfileScreen />)
 
-  const input = screen.getByLabelText('Ім’я')
+  const input = screen.getByLabelText('Ім’я та прізвище')
   await user.clear(input)
   await user.type(input, '  Нова назва  ')
   const save = screen.getByRole('button', { name: 'Зберегти' })
@@ -147,7 +147,7 @@ it('keeps the typed value and shows a retryable error when saving fails', async 
   const user = userEvent.setup()
   render(<ProfileScreen />)
 
-  const input = screen.getByLabelText('Ім’я')
+  const input = screen.getByLabelText('Ім’я та прізвище')
   await user.clear(input)
   await user.type(input, 'Нове ім’я')
   await user.click(screen.getByRole('button', { name: 'Зберегти' }))
@@ -165,7 +165,7 @@ it('does not publish local completion state after unmount', async () => {
   const user = userEvent.setup()
   const view = render(<ProfileScreen />)
 
-  const input = screen.getByLabelText('Ім’я')
+  const input = screen.getByLabelText('Ім’я та прізвище')
   await user.clear(input)
   await user.type(input, 'Інше ім’я')
   await user.click(screen.getByRole('button', { name: 'Зберегти' }))
@@ -188,7 +188,7 @@ it('publishes save completion after the StrictMode effect replay', async () => {
     </StrictMode>,
   )
 
-  const input = screen.getByLabelText('Ім’я')
+  const input = screen.getByLabelText('Ім’я та прізвище')
   await user.clear(input)
   await user.type(input, 'Ім’я в StrictMode')
   await user.click(screen.getByRole('button', { name: 'Зберегти' }))
@@ -313,8 +313,8 @@ it('resets for an in-place auth transition and ignores the prior update completi
   const user = userEvent.setup()
   const view = render(<ProfileScreen />)
 
-  await user.clear(screen.getByLabelText('Ім’я'))
-  await user.type(screen.getByLabelText('Ім’я'), 'Старе імʼя')
+  await user.clear(screen.getByLabelText('Ім’я та прізвище'))
+  await user.type(screen.getByLabelText('Ім’я та прізвище'), 'Старе імʼя')
   await user.click(screen.getByRole('button', { name: 'Зберегти' }))
 
   vi.mocked(useAuth).mockReturnValue({
@@ -336,10 +336,28 @@ it('resets for an in-place auth transition and ignores the prior update completi
   } satisfies AuthContextValue)
   view.rerender(<ProfileScreen />)
 
-  expect(screen.getByLabelText('Ім’я')).toHaveValue('Нове імʼя')
+  expect(screen.getByLabelText('Ім’я та прізвище')).toHaveValue('Нове імʼя')
   await act(() => {
     pending.resolve()
     return pending.promise
   })
   expect(screen.queryByRole('status')).toBeNull()
+})
+
+it('shows the profile controls the identity service cannot back as disabled', () => {
+  render(<ProfileScreen />)
+
+  // There is no password in the product: login is a one-time SMS code.
+  const password = screen.getByLabelText('Новий пароль')
+  expect(password).toBeDisabled()
+  expect(password.title).toContain('Пароля в системі немає')
+  // The phone is the login, and only the name can be edited.
+  expect(screen.getByLabelText('Телефон')).toBeDisabled()
+  for (const label of ['Завантажити фото', 'Прибрати', 'Українська', 'Дашборд'])
+    expect(screen.getByRole('button', { name: label })).toBeDisabled()
+  const sessions = screen.getByRole('button', {
+    name: 'Завершити інші сеанси',
+  })
+  expect(sessions).toBeDisabled()
+  expect(sessions.title).toContain('Переліку сеансів сервер не віддає')
 })
