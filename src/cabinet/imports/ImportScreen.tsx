@@ -20,9 +20,9 @@ import { cabinetPath } from '../cabinet-paths'
 import { ImportFileStep } from './import-file'
 import { ImportHistory } from './import-history'
 import { ImportMappingStep } from './import-mapping'
+import { ImportReviewStep } from './import-review'
 import {
   createMapping,
-  fieldLabels,
   statusLabels,
   issueText,
   isActiveImport,
@@ -96,7 +96,6 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
     [decisions, setDecisions] = useState<Record<string, string>>({})
   const [validation, setValidation] = useState<ImportValidation | null>(null),
     [validated, setValidated] = useState<string[]>([]),
-    [filter, setFilter] = useState('all'),
     [rowPage, setRowPage] = useState(1)
   const [rowTotal, setRowTotal] = useState(0)
   const [profiles] = useState<ImportProfile[]>([]),
@@ -301,24 +300,6 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
     )
   const editable =
     !!status && draftStates.includes(status.status) && !!status.source
-  const visible = rows.filter(
-    (r) =>
-      filter === 'all' ||
-      (r.draft?.issues ?? []).some((i) =>
-        filter === 'decision'
-          ? i.severity === 'NeedsDecision'
-          : i.severity !== 'Warning',
-      ),
-  )
-  const chosenProblems = rows.filter(
-    (r) =>
-      selected.includes(r.rowId) &&
-      (r.draft?.issues ?? []).some(
-        (i) =>
-          i.severity !== 'Warning' &&
-          !(i.code === 'DUPLICATE_DECISION_REQUIRED' && decisions[r.rowId]),
-      ),
-  )
   async function saveMapping(signal: AbortSignal) {
     if (!status || !caps) return
     const next = createMapping(
@@ -470,20 +451,21 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
             До історії
           </Button>
         ) : null}
-        <Button
-          variant="primary"
-          disabled={
-            busy ||
-            (step === 1 && !status?.source && !file) ||
-            (step === 1 && status?.source?.fields.length === 0) ||
-            (step === 2 && !editable) ||
-            (step === 3 && (!editable || selected.length === 0)) ||
-            (step === 4 && !canConfirm)
-          }
-          onClick={next}
-        >
-          {primary}
-        </Button>
+        {step === 3 ? null : (
+          <Button
+            disabled={
+              busy ||
+              (step === 1 && !status?.source && !file) ||
+              (step === 1 && status?.source?.fields.length === 0) ||
+              (step === 2 && !editable) ||
+              (step === 4 && !canConfirm)
+            }
+            onClick={next}
+            variant="primary"
+          >
+            {primary}
+          </Button>
+        )}
       </header>
       <div className="import-body">
         {step === 0 ? null : (
@@ -654,165 +636,27 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
             status={status}
           />
         ) : null}
-        {step === 3 ? (
-          <>
-            <div className="import-actions">
-              {[
-                ['all', 'Усі'],
-                ['errors', 'З проблемами на сторінці'],
-                ['decision', 'Рішення на сторінці'],
-              ].map(([key, label]) => (
-                <Button
-                  key={key}
-                  aria-pressed={filter === key}
-                  onClick={() => {
-                    setFilter(key!)
-                    setRowPage(1)
-                  }}
-                >
-                  {label}
-                </Button>
-              ))}
-              <span className="grow" />
-              <strong>{selected.length} вибрано</strong>
-            </div>
-            {chosenProblems.length ? (
-              <Notice
-                tone="warn"
-                action={
-                  <Button
-                    onClick={() => {
-                      setSelected((ids) =>
-                        ids.filter(
-                          (id) => !chosenProblems.some((r) => r.rowId === id),
-                        ),
-                      )
-                      changed()
-                    }}
-                  >
-                    Виключити проблемні рядки
-                  </Button>
-                }
-              >
-                {chosenProblems.length} рядків потребують рішення.
-              </Notice>
-            ) : null}
-            <div className="import-actions">
-              <Button
-                disabled={!editable}
-                onClick={() => {
-                  setSelected((ids) => [
-                    ...new Set([...ids, ...rows.map((r) => r.rowId)]),
-                  ])
-                  changed()
-                }}
-              >
-                Обрати сторінку ({rows.length})
-              </Button>
-              <Button
-                onClick={() => {
-                  setSelected([])
-                  changed()
-                }}
-              >
-                Зняти вибір
-              </Button>
-            </div>
-            <div className="import-table">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Вибір</th>
-                    <th>Майбутня запчастина</th>
-                    <th>К-сть</th>
-                    <th>Ціна</th>
-                    <th>Стан рядка</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visible.map((r) => (
-                    <tr key={r.rowId}>
-                      <td>
-                        <input
-                          type="checkbox"
-                          aria-label={`Обрати рядок ${r.sourceRow}`}
-                          checked={selected.includes(r.rowId)}
-                          disabled={!editable}
-                          onChange={(e) => {
-                            setSelected((ids) =>
-                              e.target.checked
-                                ? [...ids, r.rowId]
-                                : ids.filter((id) => id !== r.rowId),
-                            )
-                            changed()
-                          }}
-                        />
-                      </td>
-                      <td>
-                        {r.draft?.values['Name'] ?? 'Не зіставлено'}
-                        <small>Рядок {r.sourceRow}</small>
-                      </td>
-                      <td>{r.draft?.values['Quantity'] ?? '—'}</td>
-                      <td>{r.draft?.values['DesiredSalePrice'] ?? '—'}</td>
-                      <td>
-                        {r.draft?.issues.length ? (
-                          r.draft.issues.map((i, n) => (
-                            <div key={n}>
-                              <span className="text-state-warn">
-                                {fieldLabels[i.field] ?? i.field}:{' '}
-                                {issueText(i.code)}
-                              </span>
-                              {i.code === 'DUPLICATE_DECISION_REQUIRED' ? (
-                                <Button
-                                  disabled={!!decisions[r.rowId]}
-                                  onClick={() => {
-                                    setDecisions((d) => ({
-                                      ...d,
-                                      [r.rowId]: 'create-separately',
-                                    }))
-                                    changed()
-                                  }}
-                                >
-                                  {decisions[r.rowId]
-                                    ? 'Створити окремо обрано'
-                                    : 'Створити окремо'}
-                                </Button>
-                              ) : null}
-                            </div>
-                          ))
-                        ) : r.draft ? (
-                          <span className="text-state-ok">
-                            Готовий до перевірки
-                          </span>
-                        ) : (
-                          'Потрібне зіставлення'
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="import-actions">
-              <Button
-                disabled={rowPage === 1}
-                onClick={() => setRowPage((p) => p - 1)}
-              >
-                Назад
-              </Button>
-              <span>{rowPage}</span>
-              <Button
-                disabled={rowPage * 100 >= rowTotal}
-                onClick={() => setRowPage((p) => p + 1)}
-              >
-                Далі
-              </Button>
-            </div>
-            <p className="text-app-muted text-sm">
-              Комірки не редагуються в імпорті. Виправляйте через зіставлення
-              колонок, спільні значення або вихідний файл.
-            </p>
-          </>
+        {step === 3 && status ? (
+          <ImportReviewStep
+            busy={busy}
+            decisions={decisions}
+            editable={editable}
+            onContinue={next}
+            onDecision={(rowId, decision) => {
+              setDecisions((current) => ({ ...current, [rowId]: decision }))
+              changed()
+            }}
+            onRowPage={setRowPage}
+            onSelected={(next) => {
+              setSelected(next)
+              changed()
+            }}
+            rowPage={rowPage}
+            rowTotal={rowTotal}
+            rows={rows}
+            selected={selected}
+            validation={validation}
+          />
         ) : null}
         {step === 4 && validation ? (
           <div className="import-columns">

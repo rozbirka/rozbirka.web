@@ -202,7 +202,9 @@ it('resumes a draft and requires a fresh server validation before commit', async
   expect(
     screen.getByRole('button', { name: 'До підтвердження' }),
   ).toBeDisabled()
-  await user.click(screen.getByRole('checkbox', { name: 'Обрати рядок 2' }))
+  await user.click(
+    screen.getByRole('checkbox', { name: 'Імпортувати рядок 2' }),
+  )
   await user.click(screen.getByRole('button', { name: 'До підтвердження' }))
   await screen.findByText('Буде створено 1 запчастин')
   expect(calls.filter((c) => c.url?.endsWith('/commit'))).toHaveLength(0)
@@ -220,7 +222,9 @@ it('keeps invalid rows on review and never commits them', async () => {
   const user = userEvent.setup()
   mount()
   await screen.findByText('Фара')
-  await user.click(screen.getByRole('checkbox', { name: 'Обрати рядок 2' }))
+  await user.click(
+    screen.getByRole('checkbox', { name: 'Імпортувати рядок 2' }),
+  )
   await user.click(screen.getByRole('button', { name: 'До підтвердження' }))
   await waitFor(() =>
     expect(calls.some((c) => c.url?.endsWith('/validate'))).toBe(true),
@@ -235,7 +239,9 @@ it('reuses the commit key after an uncertain network response', async () => {
   const user = userEvent.setup()
   mount()
   await screen.findByText('Фара')
-  await user.click(screen.getByRole('checkbox', { name: 'Обрати рядок 2' }))
+  await user.click(
+    screen.getByRole('checkbox', { name: 'Імпортувати рядок 2' }),
+  )
   await user.click(screen.getByRole('button', { name: 'До підтвердження' }))
   await screen.findByText('Буде створено 1 запчастин')
   await user.click(screen.getByRole('button', { name: 'Почати імпорт' }))
@@ -266,7 +272,9 @@ it('shows the server stale revision error and invalidates confirmation', async (
   const user = userEvent.setup()
   mount()
   await screen.findByText('Фара')
-  await user.click(screen.getByRole('checkbox', { name: 'Обрати рядок 2' }))
+  await user.click(
+    screen.getByRole('checkbox', { name: 'Імпортувати рядок 2' }),
+  )
   await user.click(screen.getByRole('button', { name: 'До підтвердження' }))
   await screen.findByText('Буде створено 1 запчастин')
   await user.click(screen.getByRole('button', { name: 'Почати імпорт' }))
