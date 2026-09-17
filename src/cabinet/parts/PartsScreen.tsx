@@ -39,6 +39,7 @@ import {
   EmptyState,
   ErrorState,
   Field,
+  InlineEdit,
   Notice,
   PageBody,
   PageHeader,
@@ -65,6 +66,7 @@ import {
   type PartSearchItem,
   type PartSearchRequest,
   type CreatePartRequest,
+  type UpdatePartRequest,
   type PartDetail,
   type PartsSummary,
 } from '@/api/parts'
@@ -572,6 +574,38 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     const next = views.filter((view) => view.id !== id)
     setViews(next)
     if (viewScope) writeSavedViews(viewScope, next)
+  }
+
+  /**
+   * Edits one field of one part in place. PUT /parts/{id} replaces the record,
+   * so the current one is read first and written back whole with the single
+   * change applied — the same reason the bulk price change reads first.
+   * Returns the message to show in the cell, or null when it went through.
+   */
+  const rewritePart = async (
+    id: string,
+    change: (current: UpdatePartRequest) => UpdatePartRequest | string,
+  ): Promise<string | null> => {
+    try {
+      const scope = requireLatestMutation({ quota: false })
+      const current = await partsApi.get(id, { signal: scope.signal })
+      const next = change({
+        name: current.name,
+        condition: current.condition,
+        notes: current.notes,
+        quantity: current.quantityTotal,
+        partType: current.partType,
+        unit: current.unit,
+        photoKeys: current.photos.map((photo) => photo.storageKey),
+        desiredSalePrice: { isSet: false },
+      })
+      if (typeof next === 'string') return next
+      await partsApi.update(id, next, { signal: scope.signal })
+      setReloadToken((value) => value + 1)
+      return null
+    } catch {
+      return 'Не вдалося зберегти. Спробуйте ще раз.'
+    }
   }
 
   const pickedIds = [...picked]
@@ -1100,6 +1134,40 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                             </StatusPill>
                           )
                         },
+                      },
+                      {
+                        key: 'quantity',
+                        label: 'Всього',
+                        align: 'end',
+                        cell: (part) => (
+                          <InlineEdit
+                            inputMode="numeric"
+                            label={`Кількість — ${part.name}`}
+                            onCommit={(next) =>
+                              rewritePart(part.id, (current) => {
+                                const quantity = Number(next.trim())
+                                return Number.isInteger(quantity) &&
+                                  quantity >= 0
+                                  ? { ...current, quantity }
+                                  : 'Кількість — ціле число від нуля.'
+                              })
+                            }
+                            value={String(part.quantity)}
+                            {...(canManage
+                              ? {}
+                              : {
+                                  unavailable: 'Немає права змінювати деталі.',
+                                })}
+                            {...(part.isInventoryLocked
+                              ? {
+                                  unavailable:
+                                    'Деталь у відкритій інвентаризації — кількість рахує сесія.',
+                                }
+                              : {})}
+                          >
+                            {part.quantity}
+                          </InlineEdit>
+                        ),
                       },
                       {
                         key: 'available',

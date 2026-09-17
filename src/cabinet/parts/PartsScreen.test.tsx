@@ -1968,3 +1968,145 @@ it('remembers the tighter row spacing for the next visit to the list', async () 
     ).getByRole('radio', { name: 'Щільно' }),
   ).toBeChecked()
 })
+
+it('edits a quantity in the row by rewriting the whole record', async () => {
+  const user = userEvent.setup()
+  localStorage.clear()
+  partMocks.search.mockResolvedValue({
+    items: pickableRows,
+    page: 1,
+    pageSize: 30,
+    total: 2,
+    totalPages: 1,
+  })
+  partMocks.get.mockResolvedValue({
+    id: 'part-1',
+    name: 'Фара ліва',
+    condition: 'good',
+    notes: 'знята з Focus',
+    quantityTotal: 2,
+    partType: 'optics',
+    unit: 'шт',
+    photos: [
+      {
+        id: 'p1',
+        storageKey: 'key-1',
+        url: '',
+        thumbnailUrl: '',
+        sortOrder: 0,
+      },
+    ],
+    desiredSalePrice: 300,
+  })
+  partMocks.update.mockResolvedValue({ id: 'part-1', desiredSalePrice: 300 })
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts']}>
+      <Routes>
+        <Route
+          element={<PartsScreen definition={partsDefinition as never} />}
+          path="/app/:tenant/parts"
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  await user.click(
+    await screen.findByRole('button', {
+      name: 'Змінити — Кількість — Фара ліва',
+    }),
+  )
+  const input = screen.getByRole('textbox', { name: 'Кількість — Фара ліва' })
+  await user.clear(input)
+  await user.type(input, '5')
+  await user.click(screen.getByRole('button', { name: 'Зберегти значення' }))
+
+  await vi.waitFor(() =>
+    expect(partMocks.update).toHaveBeenCalledWith(
+      'part-1',
+      {
+        name: 'Фара ліва',
+        condition: 'good',
+        notes: 'знята з Focus',
+        quantity: 5,
+        partType: 'optics',
+        unit: 'шт',
+        photoKeys: ['key-1'],
+        desiredSalePrice: { isSet: false },
+      },
+      expect.anything(),
+    ),
+  )
+})
+
+it('refuses a quantity that is not a whole number and says so in the cell', async () => {
+  const user = userEvent.setup()
+  localStorage.clear()
+  partMocks.search.mockResolvedValue({
+    items: pickableRows,
+    page: 1,
+    pageSize: 30,
+    total: 2,
+    totalPages: 1,
+  })
+  partMocks.get.mockResolvedValue({
+    id: 'part-1',
+    name: 'Фара ліва',
+    condition: 'good',
+    notes: null,
+    quantityTotal: 2,
+    partType: null,
+    unit: 'шт',
+    photos: [],
+    desiredSalePrice: null,
+  })
+  partMocks.update.mockClear()
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts']}>
+      <Routes>
+        <Route
+          element={<PartsScreen definition={partsDefinition as never} />}
+          path="/app/:tenant/parts"
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  await user.click(
+    await screen.findByRole('button', {
+      name: 'Змінити — Кількість — Фара ліва',
+    }),
+  )
+  const input = screen.getByRole('textbox', { name: 'Кількість — Фара ліва' })
+  await user.clear(input)
+  await user.type(input, '2.5{Enter}')
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Кількість — ціле число від нуля.',
+  )
+  expect(partMocks.update).not.toHaveBeenCalled()
+})
+
+it('keeps a locked part read-only in the row and says which session holds it', async () => {
+  partMocks.search.mockResolvedValue({
+    items: [{ ...pickableRows[0]!, isInventoryLocked: true }],
+    page: 1,
+    pageSize: 30,
+    total: 1,
+    totalPages: 1,
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts']}>
+      <Routes>
+        <Route
+          element={<PartsScreen definition={partsDefinition as never} />}
+          path="/app/:tenant/parts"
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  await screen.findByRole('table')
+  expect(
+    screen.queryByRole('button', { name: 'Змінити — Кількість — Фара ліва' }),
+  ).not.toBeInTheDocument()
+})

@@ -9,6 +9,7 @@ export {
   type DataTableSelection,
 } from './data-table'
 export { BulkBar, type BulkAction } from './bulk-bar'
+export { InlineEdit, type InlineEditProps } from './inline-edit'
 export { Field, type FieldProps } from './field'
 export { useFieldControl, type FieldControlContext } from './field-context'
 export { SearchInput, SelectInput, TextArea, TextInput } from './input'
