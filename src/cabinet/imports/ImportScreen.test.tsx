@@ -280,15 +280,16 @@ it('shows the server stale revision error and invalidates confirmation', async (
   await user.click(screen.getByRole('button', { name: 'Почати імпорт' }))
   expect(
     await screen.findByText(
-      'Дані змінилися. Оновіть імпорт і повторіть перевірку.',
+      'Дані імпорту змінилися — перевірте їх ще раз перед запуском',
     ),
   ).toBeVisible()
   // The confirmation is spent: there is nothing left to press, and the screen
-  // says why rather than offering a button that cannot work.
+  // shows what changed instead of a button that cannot work.
   expect(
     screen.queryByRole('button', { name: 'Почати імпорт' }),
   ).not.toBeInTheDocument()
+  expect(screen.getByRole('region', { name: 'Що змінилося' })).toBeVisible()
   expect(
-    screen.getByRole('button', { name: 'Назад до перевірки' }),
+    screen.getByRole('button', { name: 'Перевірити повторно' }),
   ).toBeVisible()
 })

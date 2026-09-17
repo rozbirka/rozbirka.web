@@ -18,6 +18,7 @@ import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { cabinetPath } from '../cabinet-paths'
 import { ImportConfirmStep } from './import-confirm'
+import { ImportConflict } from './import-conflict'
 import { ImportFileStep } from './import-file'
 import { ImportHistory } from './import-history'
 import { ImportMappingStep } from './import-mapping'
@@ -95,6 +96,10 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
   const [mapping, setMapping] = useState<ImportMapping | null>(null),
     [selected, setSelected] = useState<string[]>([]),
     [decisions, setDecisions] = useState<Record<string, string>>({})
+  const [conflict, setConflict] = useState<{
+    mapping: ImportMapping | null
+    validation: ImportValidation | null
+  } | null>(null)
   const [validation, setValidation] = useState<ImportValidation | null>(null),
     [validated, setValidated] = useState<string[]>([]),
     [rowPage, setRowPage] = useState(1)
@@ -168,6 +173,9 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
         : '')
     setError(code ? issueText(code) : p.message)
     if (/STALE|SCHEMA|CONFLICT/.test(code)) {
+      // Keep what the confirmation was computed against: the conflict screen
+      // is only useful if it can show the difference, not just the failure.
+      setConflict({ mapping, validation })
       setValidation(null)
       setValidated([])
     }
@@ -402,16 +410,31 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
     else if (step === 3) void action(validate)
     else if (step === 4 && canConfirm)
       void action(async (signal) => {
-        await api.commit(
-          status.id,
-          {
-            revision: status.revision,
-            previewVersion: status.previewVersion,
-            digest: validation!.digest!,
-            key: commitKey.current,
-          },
-          { signal },
-        )
+        try {
+          await api.commit(
+            status.id,
+            {
+              revision: status.revision,
+              previewVersion: status.previewVersion,
+              digest: validation!.digest!,
+              key: commitKey.current,
+            },
+            { signal },
+          )
+        } catch (e) {
+          const p = normalizeApiProblem(e)
+          const code = p.code ?? ''
+          if (!/STALE|SCHEMA|CONFLICT/.test(code)) throw e
+          // Nothing was created. The conflict screen promises to show what
+          // changed, and that is only possible with the record as it is now —
+          // so re-read it before handing over.
+          setConflict({ mapping, validation })
+          setError(issueText(code))
+          setValidation(null)
+          setValidated([])
+          await refresh(status.id, signal)
+          return
+        }
         await refresh(status.id, signal)
         if (!signal.aborted) setStep(5)
       }, true)
@@ -519,7 +542,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
               : descriptions[step]}
           </p>
         )}
-        {error ? (
+        {error && !(step === 4 && conflict) ? (
           <Notice
             tone="danger"
             action={
@@ -668,16 +691,27 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
             selected={selected}
             validation={validation}
           />
-        ) : step === 4 ? (
-          <div className="grid gap-4">
-            <Notice tone="warn">
-              Підтвердження більше не дійсне — дані змінилися після перевірки.
-              Поверніться до перевірки й підтвердьте ще раз.
-            </Notice>
-            <div>
-              <Button onClick={() => setStep(3)}>Назад до перевірки</Button>
-            </div>
-          </div>
+        ) : step === 4 && status ? (
+          <ImportConflict
+            busy={busy}
+            lastValidation={conflict?.validation ?? null}
+            mine={conflict?.mapping ?? null}
+            onRecheck={() =>
+              void action(async (signal) => {
+                const fresh = await refresh(status.id, signal)
+                if (signal.aborted) return
+                setConflict(null)
+                setMapping(fresh.mapping)
+                setStep(3)
+              })
+            }
+            onSettings={() => {
+              setConflict(null)
+              setStep(2)
+            }}
+            status={status}
+            theirs={status.mapping}
+          />
         ) : null}
         {step === 5 && status ? (
           <div className="import-columns">
