@@ -195,15 +195,15 @@ beforeEach(() => {
 it('uses the cabinet subscription snapshot without loading it again', () => {
   renderScreen(<SubscriptionScreen />)
 
-  expect(screen.getByText('Pro')).toBeInTheDocument()
-  expect(screen.getByText('7 днів')).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Pro' })).toBeVisible()
+  expect(screen.getByText(/7 днів/)).toBeInTheDocument()
   expect(billingApi.getSubscription).not.toHaveBeenCalled()
 })
 
 it('keeps subscription usage text at WCAG AA contrast', () => {
   const view = renderScreen(<SubscriptionScreen />)
 
-  expect(screen.getByRole('heading', { name: 'Використання' })).toBeVisible()
+  expect(screen.getByRole('heading', { name: 'Ліміти тарифу' })).toBeVisible()
   expect(view.container.querySelector('.text-neutral-600')).toBeNull()
 })
 
@@ -240,7 +240,9 @@ it('never offers Mono checkout for native subscriptions in the plans screen', as
 
   renderScreen(<PlansScreen />)
 
-  expect(await screen.findByText('Lite')).toBeInTheDocument()
+  expect(
+    await screen.findByRole('heading', { name: 'Lite' }),
+  ).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Обрати' })).toBeNull()
   expect(screen.getByText(/Google Play/)).toBeInTheDocument()
 })
@@ -285,6 +287,9 @@ it('revalidates the latest provider before dispatching Mono reactivation', async
   vi.mocked(useCabinet).mockReturnValue(currentCabinet)
   const user = userEvent.setup()
   renderScreen(<SubscriptionScreen />)
+  // The overview loads its payment strip; let it land before interacting, or
+  // the re-render replaces the button mid-click.
+  await screen.findByText('Платежів ще не було.')
 
   const currentSnapshot = currentCabinet.snapshot
   if (!currentSnapshot) throw new Error('Expected ready cabinet snapshot')
@@ -306,6 +311,9 @@ it('revalidates the latest provider before dispatching Mono cancellation', async
   vi.mocked(useCabinet).mockReturnValue(currentCabinet)
   const user = userEvent.setup()
   renderScreen(<SubscriptionScreen />)
+  // The overview loads its payment strip; let it land before interacting, or
+  // the re-render replaces the button mid-click.
+  await screen.findByText('Платежів ще не було.')
 
   const currentSnapshot = currentCabinet.snapshot
   if (!currentSnapshot) throw new Error('Expected ready cabinet snapshot')
@@ -379,8 +387,10 @@ it('uses source-appropriate payment copy for native subscriptions', async () => 
   )
   renderScreen(<PaymentsScreen />)
 
+  // Let the ledger land: the card moves into its column once it does.
+  await screen.findByText('Платежів ще не було.')
   expect(
-    await screen.findByText(/Спосіб оплати керується App Store/),
+    screen.getByText(/Спосіб оплати керується App Store/),
   ).toBeInTheDocument()
   expect(screen.queryByText(/Monobank/)).toBeNull()
 })
@@ -391,10 +401,10 @@ it('orders the payment page heading before the billing history section', async (
   await screen.findByText('Платежів ще не було.')
   expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
   expect(
-    screen.getByRole('heading', { level: 1, name: 'Оплата' }),
+    screen.getByRole('heading', { level: 1, name: 'Платежі' }),
   ).toBeVisible()
   expect(
-    screen.getByRole('heading', { level: 2, name: 'Білінг' }),
+    screen.getByRole('heading', { level: 2, name: 'Спосіб оплати' }),
   ).toBeVisible()
   expect(view.container.querySelector('.text-neutral-500')).toBeNull()
 })
@@ -417,7 +427,9 @@ it('hides checkout controls without billing.manage regardless of role name', asy
 
   renderScreen(<PlansScreen />)
 
-  expect(await screen.findByText('Lite')).toBeInTheDocument()
+  expect(
+    await screen.findByRole('heading', { name: 'Lite' }),
+  ).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Обрати' })).toBeNull()
 })
 
@@ -555,7 +567,9 @@ it('shows a retryable plans error instead of treating a network failure as empty
 
   await user.click(screen.getByRole('button', { name: 'Спробувати ще раз' }))
 
-  expect(await screen.findByText('Lite')).toBeInTheDocument()
+  expect(
+    await screen.findByRole('heading', { name: 'Lite' }),
+  ).toBeInTheDocument()
   expect(billingApi.getPlans).toHaveBeenCalledTimes(2)
 })
 
@@ -673,7 +687,9 @@ it('ignores a recognized tenant-scope cancellation while a new plans generation 
   view.rerender(inShell(<PlansScreen />))
   oldLoad.reject(new CanceledError())
 
-  expect(await screen.findByText('Lite')).toBeInTheDocument()
+  expect(
+    await screen.findByRole('heading', { name: 'Lite' }),
+  ).toBeInTheDocument()
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
@@ -706,4 +722,28 @@ it('does not surface a late mutation failure from a stale cabinet generation', a
     expect(screen.getByRole('button', { name: 'Скасувати' })).toBeEnabled(),
   )
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+it('says which billing controls the API cannot back instead of faking them', async () => {
+  renderScreen(<PaymentsScreen />)
+
+  await screen.findByText('Платежів ще не було.')
+  for (const label of [
+    'Додати спосіб оплати',
+    'Експорт CSV',
+    'Змінити реквізити',
+  ])
+    expect(screen.getByRole('button', { name: label })).toBeDisabled()
+  expect(
+    screen.getByRole('button', { name: 'Додати спосіб оплати' }).title,
+  ).toContain('Кількох карток білінг не тримає')
+})
+
+it('keeps the card-change control on the subscription overview disabled', async () => {
+  renderScreen(<SubscriptionScreen />)
+
+  await screen.findByText('Платежів ще не було.')
+  const card = screen.getByRole('button', { name: 'Змінити карту' })
+  expect(card).toBeDisabled()
+  expect(card.title).toContain('Замінити картку через кабінет не можна')
 })

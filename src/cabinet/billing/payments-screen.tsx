@@ -1,22 +1,16 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CreditCard } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import {
   Amount,
   Button,
-  DataTable,
   DateValue,
-  EmptyState,
   ErrorState,
   Notice,
-  PageBody,
-  PageHeader,
-  SectionPanel,
   SkeletonRows,
   StatusPill,
   useOperation,
   useToast,
-  type DataColumn,
-  type StatusTone,
 } from '@/components/app'
 import {
   billingApi,
@@ -24,20 +18,16 @@ import {
   type ProviderAwareSubscriptionDto,
 } from '@/api/billing'
 import { normalizeApiProblem } from '@/api/errors'
-import type {
-  PagedResult,
-  PaymentDto,
-  PaymentStatus,
-  SubscriptionDto,
-} from '@/api/types'
+import type { PagedResult, PaymentDto, SubscriptionDto } from '@/api/types'
 import { ModuleAccessDeniedError } from '../policy'
 import { tenantRequestScope } from '../tenant-request-scope'
+import { Kpi, KpiStrip } from '../redesign-kpi'
+import { BillingCard, BillingDead, BillingShell } from './billing-shell'
+import { paymentStatusMeta, paymentTypeLabel } from './billing-vocabulary'
 import {
-  BILLING_EYEBROW,
   BILLING_MANAGEMENT_UNAVAILABLE,
   BillingManagementUnavailableError,
   BillingMutationGate,
-  BillingSection,
   useBillingMutation,
 } from './billing-layout'
 
@@ -60,6 +50,25 @@ type PaymentsState =
 /** A result that arrived for a tenant we have already left changes nothing. */
 type MutationOutcome = 'applied' | 'stale'
 
+const PAYMENT_SEGMENTS = [
+  { key: 'all', label: 'Усі' },
+  { key: 'success', label: 'Оплачені' },
+  { key: 'pending', label: 'Очікують' },
+  { key: 'failed', label: 'Невдалі' },
+] as const
+
+/** What the billing endpoints do not carry, said where the design asks for it. */
+const NO_RECEIPT_FILE =
+  'Файлу чи посилання на чек сервер не віддає — у платежі є лише номер рахунку провайдера.'
+const NO_STATUS_FILTER =
+  'Сервер не фільтрує платежі за статусом: сегменти впорядковують завантажену сторінку, і лічильники рахують її ж.'
+const NO_CARD_LIST =
+  'Кількох карток білінг не тримає: у підписці є одна — бренд і чотири цифри. Ні додати другу, ні зробити основною, ні видалити через API не можна.'
+const NO_PAYMENTS_EXPORT =
+  'Вивантаження платежів у файл сервер не робить — є тільки сторінковий перелік.'
+const NO_INVOICE_DETAILS =
+  'Реквізитів для чеків — назви платника, коду й адреси — у білінгу немає, і змінювати їх нема де. Чеки формує Mono за даними картки.'
+
 type PaymentSubscription = Readonly<
   Pick<SubscriptionDto, 'cardBrand' | 'cardLast4'>
 > &
@@ -81,6 +90,8 @@ export function PaymentsScreen() {
   } | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [loadAttempt, setLoadAttempt] = useState(0)
+  const [segment, setSegment] =
+    useState<(typeof PAYMENT_SEGMENTS)[number]['key']>('all')
   const latestSnapshotRef = useRef(cabinet.snapshot)
   const paymentIdRef = useRef<string | null>(null)
   const cancelStageRef = useRef<'cancel' | 'reload'>('cancel')
@@ -173,6 +184,13 @@ export function PaymentsScreen() {
   const paymentMethod = (
     <PaymentMethod subscription={cabinet.snapshot?.subscription ?? null} />
   )
+  const actionable =
+    currentPaymentsState.kind === 'ready' &&
+    currentPaymentsState.page.items.some(
+      (item) =>
+        hasMonoManagement(cabinet.snapshot?.subscription ?? null) &&
+        item.status === 'pending',
+    )
   const canManageMonoPayments = hasMonoManagement(
     cabinet.snapshot?.subscription ?? null,
   )
@@ -185,9 +203,7 @@ export function PaymentsScreen() {
     return (
       <PaymentsFrame>
         {paymentMethod}
-        <BillingSection description="Історія платежів і чеки" title="Білінг">
-          <SkeletonRows columns={4} label="Завантажуємо платежі…" rows={3} />
-        </BillingSection>
+        <SkeletonRows columns={4} label="Завантажуємо платежі…" rows={3} />
       </PaymentsFrame>
     )
   }
@@ -196,19 +212,21 @@ export function PaymentsScreen() {
     return (
       <PaymentsFrame>
         {paymentMethod}
-        <BillingSection description="Історія платежів і чеки" title="Білінг">
-          <ErrorState
-            description={currentPaymentsState.message}
-            onRetry={() => setLoadAttempt((attempt) => attempt + 1)}
-            title="Платежі не завантажилися"
-          />
-        </BillingSection>
+        <ErrorState
+          description={currentPaymentsState.message}
+          onRetry={() => setLoadAttempt((attempt) => attempt + 1)}
+          title="Платежі не завантажилися"
+        />
       </PaymentsFrame>
     )
   }
 
   const items =
     currentPaymentsState.kind === 'ready' ? currentPaymentsState.page.items : []
+  const total =
+    currentPaymentsState.kind === 'ready'
+      ? currentPaymentsState.page.total
+      : items.length
   const guardCheckout = (event: { preventDefault: () => void }) => {
     try {
       requireLatestMutation()
@@ -227,121 +245,245 @@ export function PaymentsScreen() {
     paymentIdRef.current = paymentId
     cancelPayment.run()
   }
-  const actionable = items.some(
-    (item) => canManageMonoPayments && item.status === 'pending',
-  )
-
-  const columns: DataColumn<PaymentDto>[] = [
-    {
-      key: 'date',
-      label: 'Дата',
-      variant: 'primary',
-      cell: (item) => (
-        <span className="grid gap-0.5">
-          <DateValue value={item.createdAt} withTime={false} />
-          <span className="text-app-dim text-[12.5px]">
-            {paymentTypeLabel(item.type)}
-          </span>
-        </span>
-      ),
-    },
-    {
-      key: 'amount',
-      label: 'Сума',
-      align: 'end',
-      cell: (item) => <Amount currency={item.currency} value={item.amount} />,
-    },
-    {
-      key: 'status',
-      label: 'Статус',
-      cell: (item) => {
-        const status = paymentStatusMeta[item.status]
-        return <StatusPill tone={status.tone}>{status.label}</StatusPill>
-      },
-    },
-    {
-      key: 'receipt',
-      label: 'Чек',
-      cell: (item) =>
-        item.providerInvoiceId ? (
-          <span className="font-mono text-[12.5px] break-all">
-            {item.providerInvoiceId}
-          </span>
-        ) : (
-          '—'
-        ),
-    },
-    ...(actionable
-      ? [
-          {
-            key: 'actions',
-            label: 'Дії',
-            align: 'end' as const,
-            headerHidden: true,
-            cell: (item: PaymentDto) =>
-              canManageMonoPayments && item.status === 'pending' ? (
-                <span className="flex min-w-0 flex-wrap justify-end gap-2">
-                  {item.checkoutUrl && (
-                    <BillingMutationGate decision={controlDecision}>
-                      <Button asChild variant="ghost">
-                        <a
-                          href={item.checkoutUrl}
-                          onClick={guardCheckout}
-                          rel="noopener noreferrer"
-                          target="_blank"
-                        >
-                          Продовжити оплату
-                        </a>
-                      </Button>
-                    </BillingMutationGate>
-                  )}
-                  <BillingMutationGate decision={controlDecision}>
-                    <Button
-                      {...cancelPayment.triggerProps}
-                      aria-busy={cancellingId === item.id}
-                      onClick={() => startCancel(item.id)}
-                      variant="danger"
-                    >
-                      Скасувати
-                    </Button>
-                  </BillingMutationGate>
-                </span>
-              ) : null,
-          },
-        ]
-      : []),
-  ]
+  const counts = {
+    all: items.length,
+    success: items.filter((item) => item.status === 'success').length,
+    pending: items.filter((item) => item.status === 'pending').length,
+    failed: items.filter(
+      (item) => item.status === 'failed' || item.status === 'reversed',
+    ).length,
+  }
+  const shown = items.filter((item) => {
+    if (segment === 'all') return true
+    if (segment === 'failed')
+      return item.status === 'failed' || item.status === 'reversed'
+    return item.status === segment
+  })
+  const paid = items
+    .filter((item) => item.status === 'success')
+    .reduce((sum, item) => sum + item.amount, 0)
+  const paidCurrency = items.find((item) => item.status === 'success')?.currency
+  const mixedCurrency =
+    new Set(
+      items.filter((item) => item.status === 'success').map((i) => i.currency),
+    ).size > 1
 
   return (
     <PaymentsFrame>
-      {paymentMethod}
-      <BillingSection description="Історія платежів і чеки" title="Білінг">
-        {mutationError === null ? null : (
-          <Notice tone="danger">{mutationError}</Notice>
-        )}
-        <DataTable
-          caption="Історія платежів"
-          columns={columns}
-          empty={
-            <EmptyState
-              description="Платежів ще не було."
-              title="Історія платежів порожня"
-            />
+      {mutationError === null ? null : (
+        <Notice tone="danger">{mutationError}</Notice>
+      )}
+
+      <KpiStrip>
+        <Kpi
+          label="Платежів усього"
+          meta={
+            total === items.length
+              ? 'усі, що повернув сервер'
+              : `показано ${String(items.length)} найновіших`
           }
-          rowKey={(item) => item.id}
-          rows={items}
+          value={String(total)}
         />
-      </BillingSection>
+        <Kpi
+          label="Сплачено на сторінці"
+          meta={
+            mixedCurrency
+              ? 'на сторінці кілька валют — сума не складається'
+              : 'сума успішних платежів цієї сторінки'
+          }
+          value={
+            mixedCurrency || paidCurrency === undefined ? (
+              '—'
+            ) : (
+              <Amount currency={paidCurrency} value={paid} />
+            )
+          }
+        />
+        <Kpi
+          label="Очікують оплати"
+          meta={
+            counts.pending === 0
+              ? 'незавершених рахунків немає'
+              : 'рахунок можна доплатити або скасувати'
+          }
+          tone={counts.pending === 0 ? 'plain' : 'warn'}
+          value={String(counts.pending)}
+        />
+      </KpiStrip>
+
+      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-2">
+        <PaymentMethod subscription={cabinet.snapshot?.subscription ?? null} />
+        <BillingCard title="Реквізити для чеків">
+          <p className="text-app-muted text-[13.5px] leading-5 text-pretty">
+            {NO_INVOICE_DETAILS}
+          </p>
+          <div className="mt-3.5">
+            <BillingDead title={NO_INVOICE_DETAILS}>
+              Змінити реквізити
+            </BillingDead>
+          </div>
+        </BillingCard>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <div
+          aria-label="Статус платежу"
+          className="border-app-line bg-app-raised flex min-w-0 flex-wrap gap-1 rounded-[14px] border p-1"
+          role="group"
+          title={NO_STATUS_FILTER}
+        >
+          {PAYMENT_SEGMENTS.map((one) => (
+            <button
+              aria-pressed={segment === one.key}
+              className={cn(
+                'inline-flex min-h-11 items-center gap-2 rounded-[10px] px-3.5 text-[13.5px] font-bold whitespace-nowrap',
+                segment === one.key
+                  ? 'text-app-ink bg-white/[0.08]'
+                  : 'text-app-muted hover:text-app-ink',
+              )}
+              key={one.key}
+              onClick={() => setSegment(one.key)}
+              type="button"
+            >
+              {one.label}
+              <span className="text-app-dim font-mono text-[12px]">
+                {counts[one.key]}
+              </span>
+            </button>
+          ))}
+        </div>
+        <p className="text-app-dim text-[13px]">
+          Показано {shown.length} з {items.length} на цій сторінці
+        </p>
+      </div>
+
+      <section
+        aria-label="Історія платежів"
+        className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
+      >
+        {shown.length === 0 ? (
+          <p className="text-app-muted px-5.5 py-8 text-[14px]">
+            {items.length === 0
+              ? 'Платежів ще не було.'
+              : 'Платежів за цим фільтром на цій сторінці немає.'}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-[14px]">
+              <caption className="sr-only">Історія платежів</caption>
+              <thead>
+                <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
+                  <th className="px-5.5 py-2.5 text-left">Дата</th>
+                  <th className="px-3 py-2.5 text-left">Опис</th>
+                  <th className="px-3 py-2.5 text-right">Сума</th>
+                  <th className="px-3 py-2.5 text-left">Статус</th>
+                  <th className="px-3 py-2.5 text-left" title={NO_RECEIPT_FILE}>
+                    Чек
+                  </th>
+                  {actionable && (
+                    <th className="relative px-5.5 py-2.5 text-right">
+                      <span className="sr-only">Дії</span>
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((item) => {
+                  const status = paymentStatusMeta[item.status]
+                  return (
+                    <tr className="border-app-line border-b" key={item.id}>
+                      <td className="text-app-dim px-5.5 py-3.5 font-mono text-[13px] whitespace-nowrap">
+                        <DateValue value={item.createdAt} withTime={false} />
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <span className="text-app-ink block font-medium">
+                          {paymentTypeLabel(item.type)}
+                        </span>
+                        <span className="text-app-dim mt-0.5 block text-[12.5px]">
+                          {item.providerInvoiceId ??
+                            'номер рахунку не повернувся'}
+                        </span>
+                      </td>
+                      <td className="text-app-ink px-3 py-3.5 text-right font-mono tabular-nums">
+                        <Amount currency={item.currency} value={item.amount} />
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <StatusPill tone={status.tone}>
+                          {status.label}
+                        </StatusPill>
+                      </td>
+                      <td className="px-3 py-3.5">
+                        <span
+                          className="text-app-dim text-[13px]"
+                          title={NO_RECEIPT_FILE}
+                        >
+                          —
+                        </span>
+                      </td>
+                      {actionable && (
+                        <td className="px-5.5 py-3.5">
+                          {canManageMonoPayments &&
+                          item.status === 'pending' ? (
+                            <span className="flex min-w-0 flex-wrap justify-end gap-2">
+                              {item.checkoutUrl && (
+                                <BillingMutationGate decision={controlDecision}>
+                                  <Button asChild variant="ghost">
+                                    <a
+                                      href={item.checkoutUrl}
+                                      onClick={guardCheckout}
+                                      rel="noopener noreferrer"
+                                      target="_blank"
+                                    >
+                                      Продовжити оплату
+                                    </a>
+                                  </Button>
+                                </BillingMutationGate>
+                              )}
+                              <BillingMutationGate decision={controlDecision}>
+                                <Button
+                                  {...cancelPayment.triggerProps}
+                                  aria-busy={cancellingId === item.id}
+                                  onClick={() => startCancel(item.id)}
+                                  variant="danger"
+                                >
+                                  Скасувати
+                                </Button>
+                              </BillingMutationGate>
+                            </span>
+                          ) : null}
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="text-app-dim border-app-line border-t px-5.5 py-3.5 text-[13px] leading-5 text-pretty">
+          {NO_RECEIPT_FILE} {NO_STATUS_FILTER}
+        </p>
+      </section>
     </PaymentsFrame>
   )
 }
 
-function PaymentsFrame({ children }: { children: ReactNode }) {
+function PaymentsFrame({
+  actions,
+  children,
+}: {
+  actions?: ReactNode
+  children: ReactNode
+}) {
   return (
-    <PageBody>
-      <PageHeader eyebrow={BILLING_EYEBROW} title="Оплата" />
+    <BillingShell
+      actions={actions}
+      crumb="Налаштування · Підписка · Платежі"
+      lead="Оплати за підписку, їх стан і спосіб оплати."
+      title="Платежі"
+    >
       {children}
-    </PageBody>
+    </BillingShell>
   )
 }
 
@@ -415,10 +557,7 @@ function PaymentMethod({
   const hasCard = Boolean(subscription?.cardLast4)
 
   return (
-    <SectionPanel
-      description="Карта, з якої списується підписка"
-      title="Спосіб оплати"
-    >
+    <BillingCard title="Спосіб оплати">
       {management.kind === 'provider' ? (
         <p className="text-app-muted text-sm">
           Спосіб оплати керується {management.label}. Змініть картку в
@@ -449,7 +588,14 @@ function PaymentMethod({
           під час оплати.
         </p>
       )}
-    </SectionPanel>
+      <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
+        {NO_CARD_LIST}
+      </p>
+      <div className="mt-3.5 flex flex-wrap gap-2.5">
+        <BillingDead title={NO_CARD_LIST}>Додати спосіб оплати</BillingDead>
+        <BillingDead title={NO_PAYMENTS_EXPORT}>Експорт CSV</BillingDead>
+      </div>
+    </BillingCard>
   )
 }
 
@@ -464,28 +610,4 @@ function hasMonoManagement(subscription: unknown) {
       >,
     ).kind === 'mono'
   )
-}
-
-const paymentStatusMeta: Record<
-  PaymentStatus,
-  { label: string; tone: StatusTone }
-> = {
-  success: { label: 'Оплачено', tone: 'ok' },
-  pending: { label: 'Очікує', tone: 'warn' },
-  failed: { label: 'Помилка', tone: 'danger' },
-  reversed: { label: 'Повернено', tone: 'neutral' },
-  cancelled: { label: 'Скасовано', tone: 'neutral' },
-}
-
-function paymentTypeLabel(type: PaymentDto['type']): string {
-  switch (type) {
-    case 'checkout':
-      return 'Перший платіж'
-    case 'recurring':
-      return 'Регулярне списання'
-    case 'verification':
-      return 'Верифікація'
-    default:
-      return type
-  }
 }
