@@ -6,6 +6,7 @@ import {
   useState,
   type ComponentType,
 } from 'react'
+import { Link } from 'react-router'
 import {
   Ban,
   KeyRound,
@@ -13,28 +14,27 @@ import {
   Plus,
   Power,
   PowerOff,
+  Search,
   Trash2,
 } from 'lucide-react'
 import { AlertDialog } from 'radix-ui'
 import {
   Button,
-  DataTable,
   DateValue,
-  EmptyState,
   Field,
   FormDialog,
   Notice,
   PageBody,
   PageHeader,
-  SectionPanel,
   SelectInput,
   SkeletonRows,
   StatusPill,
   TextInput,
   useOperation,
-  type DataColumn,
   type StatusTone,
 } from '@/components/app'
+import { cn, plural } from '@/lib/utils'
+import { Kpi, KpiStrip } from '../redesign-kpi'
 import { ALL_PERMISSIONS } from '../access-types'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
@@ -98,6 +98,31 @@ const permissionGroups = ALL_PERMISSIONS.reduce<
   return groups
 }, [])
 
+const MEMBER_SEGMENTS = [
+  { key: 'all', label: 'Усі' },
+  { key: 'active', label: 'Активні' },
+  { key: 'off', label: 'Вимкнені' },
+] as const
+
+/** What the team endpoints do not carry, said out loud where it is missing. */
+const NO_LAST_SEEN =
+  'Останній вхід учасника сервер не зберігає: у відповіді є лише дата приєднання.'
+const NO_EMAIL =
+  'Пошти учасника у відповіді немає — сервер повертає лише імʼя й телефон, і телефон тут порожній.'
+const NO_RESEND =
+  'Надіслати запрошення повторно нема куди: сервер не шле листів, він лише видає код. Потрібен новий — створіть запрошення нижче.'
+const NO_EMAIL_INVITE =
+  'Листів сервер не надсилає й пошти не питає: запрошення — це код, який ви передаєте людині самі. Місце в тарифі рахується за учасниками, а не за виданими кодами.'
+
+/** Two letters standing in for a photo the API does not keep. */
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+
 const invitationStatus = (
   invitation: InvitationDto,
 ): { label: string; tone: StatusTone } => {
@@ -118,6 +143,9 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
     useState<AccessRefreshState>('ready')
   const [refreshNonce, setRefreshNonce] = useState(0)
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null)
+  const [query, setQuery] = useState('')
+  const [segment, setSegment] =
+    useState<(typeof MEMBER_SEGMENTS)[number]['key']>('all')
   const [permissionMember, setPermissionMember] =
     useState<TeamMemberDto | null>(null)
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
@@ -412,471 +440,690 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
   }
 
   const pageError = error ?? roleAssignment.error
-
-  const memberColumns: DataColumn<TeamMemberDto>[] = [
-    {
-      key: 'member',
-      label: 'Учасник',
-      variant: 'primary',
-      cell: (member) => (
-        <span className="grid min-w-0 gap-0.5">
-          <span className="truncate">{member.name}</span>
-          {member.phone && (
-            <span className="text-app-dim text-[13.5px]">{member.phone}</span>
-          )}
-        </span>
-      ),
-    },
-    {
-      key: 'role',
-      label: 'Роль',
-      cell: (member) =>
-        canManageAccess ? (
-          <SelectInput
-            aria-busy={roleAssignment.pending}
-            aria-label={`Роль для ${member.name}`}
-            className="min-w-40"
-            onChange={(event) => {
-              roleAssignmentRef.current = {
-                memberId: member.id,
-                roleId: event.target.value,
-              }
-              roleAssignment.run()
-            }}
-            value={member.role.id}
-          >
-            {availableRoles.map((role) => (
-              <option key={role.id} value={role.id}>
-                {role.name}
-              </option>
-            ))}
-          </SelectInput>
-        ) : (
-          member.role.name
-        ),
-    },
-    {
-      key: 'state',
-      label: 'Стан',
-      cell: (member) => (
-        <StatusPill tone={member.isActive ? 'ok' : 'neutral'}>
-          {member.isActive ? 'Активний' : 'Неактивний'}
-        </StatusPill>
-      ),
-    },
-    ...(canManageAccess
-      ? [
-          {
-            key: 'actions',
-            label: 'Дії',
-            align: 'end' as const,
-            headerHidden: true,
-            cell: (member: TeamMemberDto) => (
-              <span className="flex min-w-0 flex-wrap justify-end gap-2">
-                <Button
-                  aria-label={`Права ${member.name}`}
-                  onClick={() => void openPermissions(member)}
-                >
-                  <KeyRound aria-hidden />
-                  Права
-                </Button>
-                <Button
-                  aria-label={
-                    member.isActive
-                      ? `Вимкнути ${member.name}`
-                      : `Активувати ${member.name}`
-                  }
-                  onClick={() =>
-                    askConfirmation({
-                      title: member.isActive
-                        ? 'Вимкнути учасника'
-                        : 'Активувати учасника',
-                      description: member.isActive
-                        ? `${member.name} втратить доступ до кабінету. Ви зможете активувати цей обліковий запис пізніше.`
-                        : `${member.name} знову отримає доступ до кабінету з роллю «${member.role.name}».`,
-                      failure: member.isActive
-                        ? 'Не вдалося вимкнути учасника. Перевірте зв’язок і спробуйте ще раз.'
-                        : 'Не вдалося активувати учасника. Перевірте зв’язок і спробуйте ще раз.',
-                      confirm: () =>
-                        mutate(
-                          member.isActive
-                            ? 'Учасника вимкнено.'
-                            : 'Учасника активовано.',
-                          (signal) =>
-                            member.isActive
-                              ? teamApi.deactivateMember(member.id, { signal })
-                              : teamApi.activateMember(member.id, { signal }),
-                        ),
-                    })
-                  }
-                >
-                  {member.isActive ? (
-                    <PowerOff aria-hidden />
-                  ) : (
-                    <Power aria-hidden />
-                  )}
-                  {member.isActive ? 'Вимкнути' : 'Активувати'}
-                </Button>
-                <Button
-                  aria-label={`Видалити ${member.name}`}
-                  onClick={() =>
-                    askConfirmation({
-                      title: 'Видалити учасника',
-                      description: `${member.name} втратить доступ назавжди. Щоб повернути людину в команду, доведеться створити нове запрошення.`,
-                      failure:
-                        'Не вдалося видалити учасника. Перевірте зв’язок і спробуйте ще раз.',
-                      confirm: () =>
-                        mutate('Учасника видалено.', (signal) =>
-                          teamApi.deleteMember(member.id, { signal }),
-                        ),
-                    })
-                  }
-                  variant="danger"
-                >
-                  <Trash2 aria-hidden />
-                  Видалити
-                </Button>
-              </span>
-            ),
-          },
-        ]
-      : []),
-  ]
-
-  const roleColumns: DataColumn<RoleDto>[] = [
-    {
-      key: 'role',
-      label: 'Роль',
-      variant: 'primary',
-      cell: (role) => role.name,
-    },
-    {
-      key: 'kind',
-      label: 'Тип',
-      cell: (role) => (
-        <StatusPill tone={role.isSystem ? 'info' : 'neutral'}>
-          {role.isSystem ? 'Системна роль' : 'Власна роль'}
-        </StatusPill>
-      ),
-    },
-    {
-      key: 'permissions',
-      label: 'Права',
-      cell: (role) =>
-        `${String(role.permissions?.length ?? 0)} з ${String(ALL_PERMISSIONS.length)}`,
-    },
-    {
-      key: 'members',
-      label: 'Учасників',
-      align: 'end',
-      cell: (role) => role.membersCount ?? '—',
-    },
-    ...(canManageAccess
-      ? [
-          {
-            key: 'actions',
-            label: 'Дії',
-            align: 'end' as const,
-            headerHidden: true,
-            cell: (role: RoleDto) =>
-              role.isSystem ? (
-                <span className="text-app-dim text-[13.5px]">
-                  Змінам не підлягає
-                </span>
-              ) : (
-                <span className="flex min-w-0 flex-wrap justify-end gap-2">
-                  <Button
-                    aria-label={`Редагувати ${role.name}`}
-                    onClick={() => openRoleEditor(role)}
-                  >
-                    <Pencil aria-hidden />
-                    Редагувати
-                  </Button>
-                  <Button
-                    aria-label={`Видалити ${role.name}`}
-                    onClick={() =>
-                      askConfirmation({
-                        title: 'Видалити роль',
-                        description: `Роль «${role.name}» зникне зі списку. Учасникам із цією роллю доведеться призначити іншу.`,
-                        failure:
-                          'Не вдалося видалити роль. Перевірте зв’язок і спробуйте ще раз.',
-                        confirm: () =>
-                          mutate('Роль видалено.', (signal) =>
-                            teamApi.deleteRole(role.id, { signal }),
-                          ),
-                      })
-                    }
-                    variant="danger"
-                  >
-                    <Trash2 aria-hidden />
-                    Видалити
-                  </Button>
-                </span>
-              ),
-          },
-        ]
-      : []),
-  ]
-
-  const invitationColumns: DataColumn<InvitationDto>[] = [
-    {
-      key: 'code',
-      label: 'Код',
-      variant: 'primary',
-      cell: (item) => <span className="font-mono">{item.code}</span>,
-    },
-    { key: 'role', label: 'Роль', cell: (item) => item.role.name },
-    {
-      key: 'state',
-      label: 'Стан',
-      cell: (item) => {
-        const status = invitationStatus(item)
-        return <StatusPill tone={status.tone}>{status.label}</StatusPill>
-      },
-    },
-    {
-      key: 'expires',
-      label: 'Діє до',
-      cell: (item) => <DateValue value={item.expiresAt} />,
-    },
-    ...(canManageAccess
-      ? [
-          {
-            key: 'actions',
-            label: 'Дії',
-            align: 'end' as const,
-            headerHidden: true,
-            cell: (item: InvitationDto) =>
-              invitationStatus(item).label === 'Активне' ? (
-                <Button
-                  aria-label={`Відкликати ${item.code}`}
-                  onClick={() =>
-                    askConfirmation({
-                      title: 'Відкликати запрошення',
-                      description: `Код ${item.code} перестане працювати. Створіть нове запрошення, якщо доступ ще потрібен.`,
-                      failure:
-                        'Не вдалося відкликати запрошення. Перевірте зв’язок і спробуйте ще раз.',
-                      confirm: () =>
-                        mutate('Запрошення відкликано.', (signal) =>
-                          teamApi.revokeInvitation(item.id, { signal }),
-                        ),
-                    })
-                  }
-                  variant="danger"
-                >
-                  <Ban aria-hidden />
-                  Відкликати
-                </Button>
-              ) : null,
-          },
-        ]
-      : []),
-  ]
+  const members = teamData?.members ?? []
+  const activeMembers = members.filter((one) => one.isActive).length
+  const offMembers = members.length - activeMembers
+  const segmentCounts = {
+    all: members.length,
+    active: activeMembers,
+    off: offMembers,
+  }
+  const needle = query.trim().toLowerCase()
+  const shownMembers = members
+    .filter(
+      (one) =>
+        segment === 'all' ||
+        (segment === 'active' ? one.isActive : !one.isActive),
+    )
+    .filter(
+      (one) =>
+        needle === '' ||
+        one.name.toLowerCase().includes(needle) ||
+        (one.phone ?? '').toLowerCase().includes(needle),
+    )
+  const openInvitations = (teamData?.invitations ?? []).filter(
+    (one) => invitationStatus(one).label === 'Активне',
+  )
+  const seats = cabinet.snapshot?.entitlement?.usage.users ?? null
+  const planName = cabinet.snapshot?.subscription?.planName ?? null
+  const myUserId = cabinet.snapshot?.userId ?? null
 
   return (
-    <PageBody className="gap-6">
-      <PageHeader eyebrow="Налаштування доступу" title="Команда" />
-      <p className="text-app-muted text-sm">
-        Керуйте учасниками, ролями та запрошеннями розбірки.
-      </p>
-
-      {feedback && <Notice tone="ok">{feedback}</Notice>}
-      {pageError && <Notice tone="danger">{pageError}</Notice>}
-      {accessWarning && (
-        <Notice
-          action={
-            <Button
-              disabled={accessRefreshState === 'refreshing'}
-              onClick={() => {
-                void refreshAccess()
-              }}
-            >
-              Оновити права
-            </Button>
-          }
-          role="alert"
-          tone="warn"
-        >
-          {accessWarning}
-        </Notice>
-      )}
-      {loading && <SkeletonRows label="Завантажуємо команду…" />}
-
-      {teamData && (
-        <>
-          <section
-            aria-labelledby="team-members-heading"
-            className="grid min-w-0 gap-3"
-          >
-            <div className="grid gap-1">
-              <h2
-                className="text-base font-semibold text-white"
-                id="team-members-heading"
-              >
-                Учасники
-              </h2>
-              <p className="text-app-dim text-[13.5px]">
-                Роль визначає, що людина бачить у кабінеті. Індивідуальні права
-                додаються поверх ролі.
+    <>
+      <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+        <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+          <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+            <div className="min-w-0">
+              <p className="text-app-dim font-mono text-[12px] tracking-[0.14em] uppercase">
+                Налаштування · Команда
+              </p>
+              <h1 className="mt-1.5 text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
+                Команда
+              </h1>
+              <p className="text-app-muted mt-2.5 max-w-[62ch] text-[14.5px] leading-6 text-pretty">
+                Хто має доступ до складу, продажів і грошей.
               </p>
             </div>
-            <DataTable
-              caption="Учасники команди"
-              columns={memberColumns}
-              empty={
-                <EmptyState
-                  description="Створіть запрошення нижче й надішліть код людині, яку берете в команду."
-                  title="У команді поки лише ви"
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="border-app-line bg-app-raised focus-within:border-app-line-2 flex h-13 min-w-0 flex-[1_1_220px] items-center gap-3 rounded-[14px] border px-4">
+                <Search aria-hidden className="text-app-dim size-4 shrink-0" />
+                <input
+                  aria-label="Пошук учасників"
+                  className="text-app-ink placeholder:text-app-dim min-w-0 flex-1 bg-transparent text-sm outline-none"
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Імʼя або телефон"
+                  value={query}
                 />
-              }
-              rowKey={(member) => member.id}
-              rows={teamData.members}
-            />
-          </section>
-
-          <section
-            aria-labelledby="team-roles-heading"
-            className="grid min-w-0 gap-3"
-          >
-            <div className="grid gap-1">
-              <h2
-                className="text-base font-semibold text-white"
-                id="team-roles-heading"
-              >
-                Ролі
-              </h2>
-              <p className="text-app-dim text-[13.5px]">
-                Системні ролі змінити не можна — створіть власну й дайте їй
-                рівно ті права, що потрібні.
-              </p>
-            </div>
-            <DataTable
-              caption="Ролі команди"
-              columns={roleColumns}
-              empty={
-                <EmptyState
-                  description="Ролі визначають доступ до модулів кабінету."
-                  title="Ролей поки немає"
-                />
-              }
-              rowKey={(role) => role.id}
-              rows={teamData.roles}
-            />
-            {canManageAccess && (
-              <SectionPanel
-                description="Назвіть роль так, як її називають у розбірці, і позначте потрібні права."
-                title="Нова роль"
-              >
-                <form
-                  className="grid min-w-0 gap-4"
-                  onSubmit={(event) => {
-                    event.preventDefault()
-                    roleCreation.run()
-                  }}
-                >
-                  {roleCreation.error !== null && (
-                    <Notice tone="danger">{roleCreation.error}</Notice>
-                  )}
-                  <Field
-                    hint="Наприклад: Диспетчер, Комірник, Продавець."
-                    label="Назва нової ролі"
-                    required
-                  >
-                    <TextInput
-                      onChange={(event) => setNewRoleName(event.target.value)}
-                      value={newRoleName}
-                    />
-                  </Field>
-                  <PermissionChecklist
-                    onToggle={toggleNewRolePermission}
-                    selected={newRolePermissions}
-                  />
-                  <div className="flex flex-wrap justify-end gap-2">
-                    <Button
-                      {...roleCreation.triggerProps}
-                      disabled={
-                        roleCreation.pending ||
-                        !newRoleName.trim() ||
-                        newRolePermissions.length === 0
-                      }
-                      type="submit"
-                      variant="primary"
-                    >
-                      <Plus aria-hidden />
-                      Створити роль
-                    </Button>
-                  </div>
-                </form>
-              </SectionPanel>
-            )}
-          </section>
-
-          <section
-            aria-labelledby="team-invitations-heading"
-            className="grid min-w-0 gap-3"
-          >
-            <div className="grid gap-1">
-              <h2
-                className="text-base font-semibold text-white"
-                id="team-invitations-heading"
-              >
-                Запрошення
-              </h2>
-              <p className="text-app-dim text-[13.5px]">
-                Запрошення — це код, який людина вводить під час реєстрації. Він
-                діє до вказаної дати.
-              </p>
-            </div>
-            {canManageAccess && (
-              <form
-                className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,16rem)_auto] sm:items-end"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  const form = new FormData(event.currentTarget)
-                  const roleId = form.get('invitation-role')
-                  if (typeof roleId === 'string' && roleId) {
-                    invitationRoleRef.current = roleId
-                    invitationCreation.run()
-                  }
-                }}
-              >
-                <Field label="Роль для запрошення">
-                  <SelectInput name="invitation-role">
-                    {availableRoles.map((role) => (
-                      <option key={role.id} value={role.id}>
-                        {role.name}
-                      </option>
-                    ))}
-                  </SelectInput>
-                </Field>
+              </span>
+              {canManageAccess && (
                 <Button
-                  {...invitationCreation.triggerProps}
-                  type="submit"
+                  asChild
+                  className="px-5 text-sm font-bold"
                   variant="primary"
                 >
-                  <Plus aria-hidden />
-                  Створити запрошення
+                  <a href="#team-invite">
+                    <Plus aria-hidden />
+                    Запросити
+                  </a>
                 </Button>
-              </form>
-            )}
-            {invitationCreation.error !== null && (
-              <Notice tone="danger">{invitationCreation.error}</Notice>
-            )}
-            <DataTable
-              caption="Запрошення до команди"
-              columns={invitationColumns}
-              empty={
-                <EmptyState
-                  description="Створіть запрошення й надішліть код людині — вона приєднається сама."
-                  title="Запрошень поки немає"
-                />
+              )}
+            </div>
+          </div>
+
+          {feedback && <Notice tone="ok">{feedback}</Notice>}
+          {pageError && <Notice tone="danger">{pageError}</Notice>}
+          {accessWarning && (
+            <Notice
+              action={
+                <Button
+                  disabled={accessRefreshState === 'refreshing'}
+                  onClick={() => {
+                    void refreshAccess()
+                  }}
+                >
+                  Оновити права
+                </Button>
               }
-              rowKey={(item) => item.id}
-              rows={teamData.invitations}
-            />
-          </section>
-        </>
-      )}
+              role="alert"
+              tone="warn"
+            >
+              {accessWarning}
+            </Notice>
+          )}
+          {loading && <SkeletonRows label="Завантажуємо команду…" />}
+
+          {teamData && (
+            <>
+              <KpiStrip>
+                <Kpi
+                  label="Учасників"
+                  meta={`${String(activeMembers)} ${plural(activeMembers, ['активний', 'активні', 'активних'])}${
+                    offMembers === 0
+                      ? ''
+                      : ` · ${String(offMembers)} ${plural(offMembers, ['вимкнений', 'вимкнені', 'вимкнених'])}`
+                  }`}
+                  value={String(teamData.members.length)}
+                />
+                <Kpi
+                  label="Місць у тарифі"
+                  meta={
+                    seats === null
+                      ? 'тариф не повідомляє ліміт місць'
+                      : seats.max == null
+                        ? `${planName ?? 'Тариф'} · без обмеження`
+                        : `${planName ?? 'Тариф'} · вільно ${String(Math.max(seats.max - seats.used, 0))}`
+                  }
+                  tone={
+                    seats?.max != null && seats.used >= seats.max
+                      ? 'warn'
+                      : 'plain'
+                  }
+                  value={
+                    seats === null
+                      ? '—'
+                      : seats.max == null
+                        ? String(seats.used)
+                        : `${String(seats.used)} / ${String(seats.max)}`
+                  }
+                />
+                <Kpi
+                  label="Запрошень діє"
+                  meta={
+                    openInvitations.length === 0
+                      ? 'усі коди використані або відкликані'
+                      : 'код вводять під час реєстрації'
+                  }
+                  value={String(openInvitations.length)}
+                />
+              </KpiStrip>
+
+              <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+                <div
+                  aria-label="Стан учасника"
+                  className="border-app-line bg-app-raised flex min-w-0 flex-wrap gap-1 rounded-[14px] border p-1"
+                  role="group"
+                >
+                  {MEMBER_SEGMENTS.map((one) => (
+                    <button
+                      aria-pressed={segment === one.key}
+                      className={cn(
+                        'inline-flex min-h-11 items-center gap-2 rounded-[10px] px-3.5 text-[13.5px] font-bold whitespace-nowrap',
+                        segment === one.key
+                          ? 'text-app-ink bg-white/[0.08]'
+                          : 'text-app-muted hover:text-app-ink',
+                      )}
+                      key={one.key}
+                      onClick={() => setSegment(one.key)}
+                      type="button"
+                    >
+                      {one.label}
+                      <span className="text-app-dim font-mono text-[12px]">
+                        {segmentCounts[one.key]}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-app-dim text-[13px]">
+                  Показано {shownMembers.length} з {teamData.members.length}{' '}
+                  {plural(teamData.members.length, [
+                    'учасника',
+                    'учасників',
+                    'учасників',
+                  ])}
+                </p>
+              </div>
+
+              <section
+                aria-labelledby="team-members-heading"
+                className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
+              >
+                <h2 className="sr-only" id="team-members-heading">
+                  Учасники
+                </h2>
+                {shownMembers.length === 0 ? (
+                  <p className="text-app-muted px-5.5 py-8 text-[14px]">
+                    Учасників за цим фільтром немає.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-[14px]">
+                      <caption className="sr-only">Учасники команди</caption>
+                      <thead>
+                        <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
+                          <th className="px-5.5 py-2.5 text-left">
+                            Користувач
+                          </th>
+                          <th className="px-3 py-2.5 text-left">Роль</th>
+                          <th
+                            className="px-3 py-2.5 text-left"
+                            title={NO_LAST_SEEN}
+                          >
+                            Активність
+                          </th>
+                          <th className="px-3 py-2.5 text-left">Статус</th>
+                          {canManageAccess && (
+                            // `relative` keeps the visually hidden label's
+                            // containing block inside the cell: absolutely
+                            // positioned at the page root it would widen the
+                            // document and break the 320px floor.
+                            <th className="relative px-5.5 py-2.5 text-right">
+                              <span className="sr-only">Дії</span>
+                            </th>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {shownMembers.map((member) => (
+                          <tr
+                            className="border-app-line border-b"
+                            key={member.id}
+                          >
+                            <td className="px-5.5 py-3.5">
+                              <span className="flex min-w-0 items-center gap-3">
+                                <span
+                                  aria-hidden
+                                  className="border-app-line text-app-muted inline-flex size-9 shrink-0 items-center justify-center rounded-full border font-mono text-[12px]"
+                                >
+                                  {initials(member.name)}
+                                </span>
+                                <span className="grid min-w-0 gap-0.5">
+                                  <span className="text-app-ink flex flex-wrap items-center gap-2 font-medium">
+                                    {member.name}
+                                    {member.userId === myUserId && (
+                                      <span className="border-app-line text-app-dim rounded-full border px-2 py-0.5 text-[11px]">
+                                        це ви
+                                      </span>
+                                    )}
+                                  </span>
+                                  {member.phone ? (
+                                    <span className="text-app-dim text-[12.5px]">
+                                      {member.phone}
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className="text-app-dim text-[12.5px]"
+                                      title={NO_EMAIL}
+                                    >
+                                      пошти й телефону сервер не повертає
+                                    </span>
+                                  )}
+                                </span>
+                              </span>
+                            </td>
+                            <td className="px-3 py-3.5">
+                              {canManageAccess ? (
+                                <SelectInput
+                                  aria-busy={roleAssignment.pending}
+                                  aria-label={`Роль для ${member.name}`}
+                                  className="min-w-40"
+                                  onChange={(event) => {
+                                    roleAssignmentRef.current = {
+                                      memberId: member.id,
+                                      roleId: event.target.value,
+                                    }
+                                    roleAssignment.run()
+                                  }}
+                                  value={member.role.id}
+                                >
+                                  {availableRoles.map((role) => (
+                                    <option key={role.id} value={role.id}>
+                                      {role.name}
+                                    </option>
+                                  ))}
+                                </SelectInput>
+                              ) : (
+                                <span className="text-app-muted">
+                                  {member.role.name}
+                                </span>
+                              )}
+                            </td>
+                            <td className="text-app-muted px-3 py-3.5">
+                              у команді з <DateValue value={member.joinedAt} />
+                            </td>
+                            <td className="px-3 py-3.5">
+                              <StatusPill
+                                tone={member.isActive ? 'ok' : 'neutral'}
+                              >
+                                {member.isActive ? 'Активний' : 'Вимкнений'}
+                              </StatusPill>
+                            </td>
+                            {canManageAccess && (
+                              <td className="px-5.5 py-3.5">
+                                <span className="flex min-w-0 flex-wrap justify-end gap-2">
+                                  <Button
+                                    aria-label={`Права ${member.name}`}
+                                    onClick={() => void openPermissions(member)}
+                                  >
+                                    <KeyRound aria-hidden />
+                                    Права
+                                  </Button>
+                                  <Button
+                                    aria-label={
+                                      member.isActive
+                                        ? `Вимкнути ${member.name}`
+                                        : `Активувати ${member.name}`
+                                    }
+                                    onClick={() =>
+                                      askConfirmation({
+                                        title: member.isActive
+                                          ? 'Вимкнути учасника'
+                                          : 'Активувати учасника',
+                                        description: member.isActive
+                                          ? `${member.name} втратить доступ до кабінету. Ви зможете активувати цей обліковий запис пізніше.`
+                                          : `${member.name} знову отримає доступ до кабінету з роллю «${member.role.name}».`,
+                                        failure: member.isActive
+                                          ? 'Не вдалося вимкнути учасника. Перевірте зв’язок і спробуйте ще раз.'
+                                          : 'Не вдалося активувати учасника. Перевірте зв’язок і спробуйте ще раз.',
+                                        confirm: () =>
+                                          mutate(
+                                            member.isActive
+                                              ? 'Учасника вимкнено.'
+                                              : 'Учасника активовано.',
+                                            (signal) =>
+                                              member.isActive
+                                                ? teamApi.deactivateMember(
+                                                    member.id,
+                                                    { signal },
+                                                  )
+                                                : teamApi.activateMember(
+                                                    member.id,
+                                                    { signal },
+                                                  ),
+                                          ),
+                                      })
+                                    }
+                                  >
+                                    {member.isActive ? (
+                                      <PowerOff aria-hidden />
+                                    ) : (
+                                      <Power aria-hidden />
+                                    )}
+                                    {member.isActive
+                                      ? 'Вимкнути'
+                                      : 'Активувати'}
+                                  </Button>
+                                  <Button
+                                    aria-label={`Видалити ${member.name}`}
+                                    onClick={() =>
+                                      askConfirmation({
+                                        title: 'Видалити учасника',
+                                        description: `${member.name} втратить доступ назавжди. Щоб повернути людину в команду, доведеться створити нове запрошення.`,
+                                        failure:
+                                          'Не вдалося видалити учасника. Перевірте зв’язок і спробуйте ще раз.',
+                                        confirm: () =>
+                                          mutate(
+                                            'Учасника видалено.',
+                                            (signal) =>
+                                              teamApi.deleteMember(member.id, {
+                                                signal,
+                                              }),
+                                          ),
+                                      })
+                                    }
+                                    variant="danger"
+                                  >
+                                    <Trash2 aria-hidden />
+                                    Видалити
+                                  </Button>
+                                </span>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                <div className="border-app-line flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t px-5.5 py-3.5">
+                  <p className="text-app-dim text-[13px] leading-5 text-pretty">
+                    <span title={NO_LAST_SEEN}>
+                      Останнього входу сервер не зберігає — у колонці
+                      «Активність» лише дата приєднання.
+                    </span>{' '}
+                    {seats === null
+                      ? 'Скільки місць дає тариф, сервер зараз не повідомляє.'
+                      : seats.max == null
+                        ? `Зайнято ${String(seats.used)} — тариф не обмежує кількість людей.`
+                        : `Зайнято ${String(seats.used)} з ${String(seats.max)} місць тарифу.`}
+                  </p>
+                  <Link
+                    className="text-brand text-[13px] font-bold underline-offset-4 hover:underline"
+                    to="../billing"
+                  >
+                    Збільшити ліміт
+                  </Link>
+                </div>
+              </section>
+
+              <div className="grid min-w-0 items-start gap-5 lg:grid-cols-2">
+                <section
+                  aria-labelledby="team-roles-heading"
+                  className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5.5 py-5"
+                >
+                  <h2
+                    className="text-app-ink text-[15px] font-bold"
+                    id="team-roles-heading"
+                  >
+                    Ролі й доступи
+                  </h2>
+                  <p className="text-app-dim mt-1.5 text-[13px] leading-5 text-pretty">
+                    Системні ролі змінити не можна — створіть власну й дайте їй
+                    рівно ті права, що потрібні.
+                  </p>
+                  <ul className="mt-4 grid gap-2.5">
+                    {teamData.roles.map((role) => (
+                      <li
+                        className="border-app-line rounded-[16px] border px-4 py-3.5"
+                        key={role.id}
+                      >
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                          <span className="flex flex-wrap items-center gap-2.5">
+                            <span className="text-app-ink text-[14px] font-bold">
+                              {role.name}
+                            </span>
+                            <StatusPill
+                              tone={role.isSystem ? 'info' : 'neutral'}
+                            >
+                              {role.isSystem ? 'Системна роль' : 'Власна роль'}
+                            </StatusPill>
+                          </span>
+                          <span className="text-app-dim font-mono text-[12px]">
+                            {role.membersCount === null
+                              ? '—'
+                              : `${String(role.membersCount)} ${plural(role.membersCount, ['учасник', 'учасники', 'учасників'])}`}
+                          </span>
+                        </div>
+                        <div className="mt-2.5 flex flex-wrap gap-1.5">
+                          {(role.permissions ?? [])
+                            .slice(0, 6)
+                            .map((permission) => (
+                              <span
+                                className="border-app-line text-app-muted rounded-full border px-2.5 py-0.5 font-mono text-[11.5px]"
+                                key={permission}
+                              >
+                                {permission}
+                              </span>
+                            ))}
+                          {(role.permissions?.length ?? 0) > 6 && (
+                            <span className="text-app-dim px-1 py-0.5 text-[11.5px]">
+                              ще {String((role.permissions?.length ?? 0) - 6)} з{' '}
+                              {String(ALL_PERMISSIONS.length)}
+                            </span>
+                          )}
+                          {(role.permissions?.length ?? 0) === 0 && (
+                            <span className="text-app-dim text-[12.5px]">
+                              Прав ще немає
+                            </span>
+                          )}
+                        </div>
+                        {canManageAccess && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {role.isSystem ? (
+                              <span className="text-app-dim text-[12.5px]">
+                                Змінам не підлягає
+                              </span>
+                            ) : (
+                              <>
+                                <Button
+                                  aria-label={`Редагувати ${role.name}`}
+                                  onClick={() => openRoleEditor(role)}
+                                >
+                                  <Pencil aria-hidden />
+                                  Редагувати
+                                </Button>
+                                <Button
+                                  aria-label={`Видалити ${role.name}`}
+                                  onClick={() =>
+                                    askConfirmation({
+                                      title: 'Видалити роль',
+                                      description: `Роль «${role.name}» зникне зі списку. Учасникам із цією роллю доведеться призначити іншу.`,
+                                      failure:
+                                        'Не вдалося видалити роль. Перевірте зв’язок і спробуйте ще раз.',
+                                      confirm: () =>
+                                        mutate('Роль видалено.', (signal) =>
+                                          teamApi.deleteRole(role.id, {
+                                            signal,
+                                          }),
+                                        ),
+                                    })
+                                  }
+                                  variant="danger"
+                                >
+                                  <Trash2 aria-hidden />
+                                  Видалити
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                    {teamData.roles.length === 0 && (
+                      <li className="text-app-muted text-[13.5px]">
+                        Ролей поки немає.
+                      </li>
+                    )}
+                  </ul>
+                  {canManageAccess && (
+                    <form
+                      className="border-app-line mt-5 grid min-w-0 gap-4 border-t pt-5"
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        roleCreation.run()
+                      }}
+                    >
+                      <h3 className="text-app-ink text-[14px] font-bold">
+                        Нова роль
+                      </h3>
+                      {roleCreation.error !== null && (
+                        <Notice tone="danger">{roleCreation.error}</Notice>
+                      )}
+                      <Field
+                        hint="Наприклад: Диспетчер, Комірник, Продавець."
+                        label="Назва нової ролі"
+                        required
+                      >
+                        <TextInput
+                          onChange={(event) =>
+                            setNewRoleName(event.target.value)
+                          }
+                          value={newRoleName}
+                        />
+                      </Field>
+                      <PermissionChecklist
+                        onToggle={toggleNewRolePermission}
+                        selected={newRolePermissions}
+                      />
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                          {...roleCreation.triggerProps}
+                          disabled={
+                            roleCreation.pending ||
+                            !newRoleName.trim() ||
+                            newRolePermissions.length === 0
+                          }
+                          type="submit"
+                          variant="primary"
+                        >
+                          <Plus aria-hidden />
+                          Створити роль
+                        </Button>
+                      </div>
+                    </form>
+                  )}
+                </section>
+
+                <section
+                  aria-labelledby="team-invitations-heading"
+                  className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5.5 py-5"
+                  id="team-invite"
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                    <h2
+                      className="text-app-ink text-[15px] font-bold"
+                      id="team-invitations-heading"
+                    >
+                      Запрошення
+                    </h2>
+                    <span className="text-app-dim font-mono text-[12px]">
+                      {openInvitations.length === 0
+                        ? 'жодного активного'
+                        : `${String(openInvitations.length)} ${plural(openInvitations.length, ['діє', 'діють', 'діють'])}`}
+                    </span>
+                  </div>
+                  <p className="text-app-dim mt-1.5 text-[13px] leading-5 text-pretty">
+                    Запрошення — це код, який людина вводить під час реєстрації.
+                  </p>
+                  <ul className="mt-4 grid gap-2.5">
+                    {teamData.invitations.map((item) => {
+                      const status = invitationStatus(item)
+                      return (
+                        <li
+                          className="border-app-line flex flex-wrap items-center gap-x-4 gap-y-2.5 rounded-[16px] border px-4 py-3.5"
+                          key={item.id}
+                        >
+                          <div className="min-w-0 flex-[1_1_160px]">
+                            <p className="text-app-ink font-mono text-[14px] font-bold">
+                              {item.code}
+                            </p>
+                            <p className="text-app-dim mt-0.5 text-[12.5px]">
+                              {item.role.name} · діє до{' '}
+                              <DateValue value={item.expiresAt} />
+                            </p>
+                          </div>
+                          <StatusPill tone={status.tone}>
+                            {status.label}
+                          </StatusPill>
+                          {canManageAccess && (
+                            <div className="ml-auto flex flex-wrap gap-2">
+                              <button
+                                className="border-app-line text-app-dim inline-flex min-h-11 cursor-not-allowed items-center rounded-[10px] border px-3.5 text-[13px] font-medium"
+                                disabled
+                                title={NO_RESEND}
+                                type="button"
+                              >
+                                Надіслати ще
+                              </button>
+                              {status.label === 'Активне' && (
+                                <Button
+                                  aria-label={`Відкликати ${item.code}`}
+                                  onClick={() =>
+                                    askConfirmation({
+                                      title: 'Відкликати запрошення',
+                                      description: `Код ${item.code} перестане працювати. Створіть нове запрошення, якщо доступ ще потрібен.`,
+                                      failure:
+                                        'Не вдалося відкликати запрошення. Перевірте зв’язок і спробуйте ще раз.',
+                                      confirm: () =>
+                                        mutate(
+                                          'Запрошення відкликано.',
+                                          (signal) =>
+                                            teamApi.revokeInvitation(item.id, {
+                                              signal,
+                                            }),
+                                        ),
+                                    })
+                                  }
+                                  variant="danger"
+                                >
+                                  <Ban aria-hidden />
+                                  Відкликати
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </li>
+                      )
+                    })}
+                    {teamData.invitations.length === 0 && (
+                      <li className="text-app-muted text-[13.5px]">
+                        Запрошень поки немає.
+                      </li>
+                    )}
+                  </ul>
+                  {canManageAccess && (
+                    <form
+                      className="border-app-line mt-5 grid min-w-0 gap-3 border-t pt-5 sm:grid-cols-[minmax(0,16rem)_auto] sm:items-end"
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        const form = new FormData(event.currentTarget)
+                        const roleId = form.get('invitation-role')
+                        if (typeof roleId === 'string' && roleId) {
+                          invitationRoleRef.current = roleId
+                          invitationCreation.run()
+                        }
+                      }}
+                    >
+                      <Field label="Роль для запрошення">
+                        <SelectInput name="invitation-role">
+                          {availableRoles.map((role) => (
+                            <option key={role.id} value={role.id}>
+                              {role.name}
+                            </option>
+                          ))}
+                        </SelectInput>
+                      </Field>
+                      <Button
+                        {...invitationCreation.triggerProps}
+                        type="submit"
+                        variant="primary"
+                      >
+                        <Plus aria-hidden />
+                        Створити запрошення
+                      </Button>
+                    </form>
+                  )}
+                  {invitationCreation.error !== null && (
+                    <Notice tone="danger">{invitationCreation.error}</Notice>
+                  )}
+                  <p className="text-app-dim mt-4 text-[12.5px] leading-5 text-pretty">
+                    {NO_EMAIL_INVITE}
+                  </p>
+                </section>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
 
       {editingRole !== null && (
         <FormDialog
@@ -985,7 +1232,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
           )}
         </AlertDialog.Portal>
       </AlertDialog.Root>
-    </PageBody>
+    </>
   )
 }
 

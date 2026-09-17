@@ -14,7 +14,7 @@ import {
   signedMoney,
 } from './cash-labels'
 import type { CashFeedEntry } from './cash-feed'
-import { Kpi, KpiStrip } from './cash-kpi'
+import { Kpi, KpiStrip } from '../redesign-kpi'
 
 const SEGMENTS = [
   { key: 'all', label: 'Усі' },

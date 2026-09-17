@@ -15,7 +15,7 @@ import {
   registerTypeLabels,
   signedMoney,
 } from './cash-labels'
-import { Kpi, KpiStrip } from './cash-kpi'
+import { Kpi, KpiStrip } from '../redesign-kpi'
 
 /**
  * Everything the till card wants to show and the server does not keep. Each

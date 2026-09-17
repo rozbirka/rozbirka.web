@@ -8,6 +8,7 @@ import {
   within,
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { ToastProvider } from '@/components/app'
 import {
@@ -113,9 +114,11 @@ const cabinet = (permissions = ['team.view', 'team.manage']) =>
 
 /** `useOperation` reports through the toast api the cabinet shell provides. */
 const teamScreen = () => (
-  <ToastProvider>
-    <TeamScreen definition={cabinetModules.team} />
-  </ToastProvider>
+  <MemoryRouter initialEntries={['/app/garage/team']}>
+    <ToastProvider>
+      <TeamScreen definition={cabinetModules.team} />
+    </ToastProvider>
+  </MemoryRouter>
 )
 const renderScreen = () => render(teamScreen())
 
@@ -742,7 +745,7 @@ it('refreshes visible member data after a successful member mutation', async () 
   )
   await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
 
-  expect(await screen.findByText('Неактивний')).toBeInTheDocument()
+  expect(await screen.findByText('Вимкнений')).toBeInTheDocument()
   expect(currentCabinet.retry).toHaveBeenCalledOnce()
 })
 
@@ -826,4 +829,23 @@ it('keeps old data hidden across a retry generation switch until the current ide
 
   expect(await screen.findByText('Іван')).toBeInTheDocument()
   expect(screen.queryByText('Олена')).toBeNull()
+})
+
+it('says what the team endpoints do not carry instead of inventing it', async () => {
+  vi.mocked(useCabinet).mockReturnValue(cabinet())
+  vi.mocked(teamApi.listMembers).mockResolvedValue([{ ...member, phone: null }])
+  vi.mocked(teamApi.listRoles).mockResolvedValue([ownerRole, mechanicRole])
+  vi.mocked(teamApi.listInvitations).mockResolvedValue([invitation()])
+  renderScreen()
+
+  // No last-seen field exists, so the activity column says so rather than
+  // dressing the join date up as a login.
+  expect(
+    await screen.findByText(/Останнього входу сервер не зберігає/),
+  ).toBeVisible()
+  expect(screen.getByText('пошти й телефону сервер не повертає')).toBeVisible()
+  // An invitation is a code, not a letter: there is nothing to resend.
+  const resend = screen.getByRole('button', { name: 'Надіслати ще' })
+  expect(resend).toBeDisabled()
+  expect(resend.title).toContain('сервер не шле листів')
 })
