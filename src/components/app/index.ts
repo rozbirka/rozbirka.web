@@ -2,7 +2,13 @@ export { Button, type AppButtonProps } from './button'
 export { appButtonVariants } from './button-variants'
 export { Card } from './card'
 export { ConfirmDialog, type ConfirmDialogProps } from './confirm-dialog'
-export { DataTable, type DataColumn, type DataTableProps } from './data-table'
+export {
+  DataTable,
+  type DataColumn,
+  type DataTableProps,
+  type DataTableSelection,
+} from './data-table'
+export { BulkBar, type BulkAction } from './bulk-bar'
 export { Field, type FieldProps } from './field'
 export { useFieldControl, type FieldControlContext } from './field-context'
 export { SearchInput, SelectInput, TextArea, TextInput } from './input'
