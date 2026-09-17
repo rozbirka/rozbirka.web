@@ -1050,9 +1050,7 @@ async function expectReleasedScreenSettled(page: Page, path: string) {
   await page.goto(path)
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
   if (path.endsWith('/team')) {
-    await expect(
-      page.getByRole('rowheader', { name: /Іван Менеджер/ }),
-    ).toBeVisible()
+    await expect(page.getByText('Іван Менеджер')).toBeVisible()
     await expect(page.getByText('TEAM-2026', { exact: true })).toBeVisible()
     return
   }
@@ -1068,11 +1066,13 @@ async function expectReleasedScreenSettled(page: Page, path: string) {
     return
   }
   if (path === '/app/koval/settings/profile') {
-    await expect(page.getByLabel('Ім’я')).toHaveValue('Олена Коваль')
+    await expect(page.getByLabel('Ім’я та прізвище')).toHaveValue(
+      'Олена Коваль',
+    )
     return
   }
   if (path === '/app/koval/settings/business') {
-    await expect(page.getByLabel('Назва розбірки')).toHaveValue(
+    await expect(page.getByLabel('Назва бізнесу')).toHaveValue(
       'Розбірка Коваль',
     )
     return
@@ -1081,22 +1081,26 @@ async function expectReleasedScreenSettled(page: Page, path: string) {
     await expect(
       page.getByRole('heading', { name: 'Підписка', level: 1 }),
     ).toBeVisible()
-    await expect(page.getByText('Koval Pro', { exact: true })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Koval Pro', level: 2 }),
+    ).toBeVisible()
     return
   }
   if (path === '/app/koval/settings/billing/plans') {
     await expect(
       page.getByRole('heading', { name: 'Тарифи', level: 1 }),
     ).toBeVisible()
-    await expect(page.getByText('Lite', { exact: true })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Lite', level: 2 }),
+    ).toBeVisible()
     return
   }
   if (path === '/app/koval/settings/billing/payments') {
     await expect(
-      page.getByRole('heading', { name: 'Оплата', level: 1 }),
+      page.getByRole('heading', { name: 'Платежі', level: 1 }),
     ).toBeVisible()
     await expect(
-      page.getByRole('heading', { name: 'Білінг', level: 2 }),
+      page.getByRole('heading', { name: 'Спосіб оплати', level: 2 }),
     ).toBeVisible()
     await expect(page.getByText('Платежів ще не було.')).toBeVisible()
     return
@@ -1327,7 +1331,9 @@ test('loads tenant-specific subscription data from tenant-scoped requests @cabin
   const fixture = await installCabinetApiBoundary(page, { sobolBilling: true })
   await loginFrom(page)
   await clickVisibleCabinetLink(page, 'Підписка')
-  await expect(page.getByText('Koval Pro')).toBeVisible()
+  await expect(
+    page.getByRole('heading', { name: 'Koval Pro', level: 2 }),
+  ).toBeVisible()
 
   await selectVisibleTenant(page, 'tenant-2')
   await expect(page).toHaveURL('/app/sobol/settings/billing/overview')
@@ -1787,10 +1793,9 @@ test('renders an unknown cabinet route inside the branded shell', async ({
   await expect(
     page.getByRole('link', { name: 'rozbirka — на головну' }),
   ).toBeVisible()
-  await expect(page.getByRole('link', { name: 'До головної' })).toHaveAttribute(
-    'href',
-    '/app/koval/dashboard',
-  )
+  await expect(
+    page.getByRole('link', { name: 'На головну', exact: true }),
+  ).toHaveAttribute('href', '/app/koval/dashboard')
 })
 
 test('cabinet meets automated WCAG 2.2 AA checks', async ({ page }) => {
