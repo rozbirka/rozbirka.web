@@ -80,6 +80,8 @@ import {
   type CabinetModuleDefinition,
 } from '../module-registry'
 import { evaluateModuleAccess, type ModuleAccessDecision } from '../policy'
+import { normalizeApiProblem } from '@/api/errors'
+import type { ApiProblem } from '@/api/contracts'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import {
   isListDensity,
@@ -262,7 +264,9 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const [history, setHistory] = useState<Awaited<
     ReturnType<typeof partsApi.history>
   > | null>(null)
-  const [error, setError] = useState(false)
+  // Holds why, not just whether: a dead network and a broken server ask for
+  // different words, and only one of them is worth retrying right now.
+  const [error, setError] = useState<ApiProblem | null>(null)
   const isNew = location.pathname.endsWith('/new')
   const isEdit = location.pathname.endsWith('/edit')
   const createDecision = evaluateModuleAccess(
@@ -436,10 +440,10 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
           if (controller.signal.aborted) return
           setDetail(result)
           setHistory(nextHistory)
-          setError(false)
+          setError(null)
         })
-        .catch(() => {
-          if (!controller.signal.aborted) setError(true)
+        .catch((failure: unknown) => {
+          if (!controller.signal.aborted) setError(normalizeApiProblem(failure))
         })
       return () => controller.abort()
     }
@@ -457,10 +461,10 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
           setPageMeta({ page: page.page, totalPages: page.totalPages })
           setFacets(nextFacets)
           setSummary(nextSummary)
-          setError(false)
+          setError(null)
         })
-        .catch(() => {
-          if (!controller.signal.aborted) setError(true)
+        .catch((failure: unknown) => {
+          if (!controller.signal.aborted) setError(normalizeApiProblem(failure))
         })
     }
     return () => controller.abort()
@@ -493,7 +497,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       <PartDetailScreen
         detail={detail}
         history={history}
-        error={error}
+        error={error !== null}
         partId={partId}
         canManage={canManage}
         links={links}
@@ -1005,11 +1009,19 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
 
             {error ? (
               <ErrorState
-                description="Не вдалося завантажити склад. Дані на місці — потрібно лише повторити запит."
+                description={
+                  error.kind === 'network' || error.kind === 'timeout'
+                    ? 'Немає звʼязку з сервером. Фільтри лишилися на місці — повторіть, коли мережа повернеться.'
+                    : 'Не вдалося завантажити склад. Дані на місці — потрібно лише повторити запит.'
+                }
                 onRetry={() =>
                   setSearchParams(new URLSearchParams(searchParams))
                 }
-                title="Склад не завантажився"
+                title={
+                  error.kind === 'network' || error.kind === 'timeout'
+                    ? 'Склад не відповідає'
+                    : 'Склад не завантажився'
+                }
               />
             ) : (
               <>

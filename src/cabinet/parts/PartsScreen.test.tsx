@@ -2110,3 +2110,50 @@ it('keeps a locked part read-only in the row and says which session holds it', a
     screen.queryByRole('button', { name: 'Змінити — Кількість — Фара ліва' }),
   ).not.toBeInTheDocument()
 })
+
+it('names the network as the reason when the stock list cannot be reached', async () => {
+  partMocks.search.mockRejectedValue(
+    Object.assign(new Error('Network Error'), {
+      isAxiosError: true,
+      code: 'ERR_NETWORK',
+    }),
+  )
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts']}>
+      <Routes>
+        <Route
+          element={<PartsScreen definition={partsDefinition as never} />}
+          path="/app/:tenant/parts"
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(
+    await screen.findByRole('heading', { name: 'Склад не відповідає' }),
+  ).toBeVisible()
+  expect(screen.getByText(/Немає звʼязку з сервером/)).toBeVisible()
+})
+
+it('blames the server, not the network, when the request came back 500', async () => {
+  partMocks.search.mockRejectedValue(
+    Object.assign(new Error('boom'), {
+      isAxiosError: true,
+      response: { status: 500, data: {} },
+    }),
+  )
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts']}>
+      <Routes>
+        <Route
+          element={<PartsScreen definition={partsDefinition as never} />}
+          path="/app/:tenant/parts"
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(
+    await screen.findByRole('heading', { name: 'Склад не завантажився' }),
+  ).toBeVisible()
+})
