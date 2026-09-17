@@ -14,6 +14,7 @@ import {
   signedMoney,
 } from './cash-labels'
 import type { CashFeedEntry } from './cash-feed'
+import { Kpi, KpiStrip } from './cash-kpi'
 
 const SEGMENTS = [
   { key: 'all', label: 'Усі' },
@@ -30,50 +31,6 @@ const NO_RECONCILIATION =
   'Звіряння залишку сервер не веде: ні дати останнього перерахунку, ні розбіжностей у відповіді немає.'
 const NO_OWNER =
   'Відповідального за касу сервер не зберігає — каса належить розбірці, а не людині.'
-
-function Kpi({
-  label,
-  value,
-  unit,
-  meta,
-  tone,
-  title,
-}: {
-  label: string
-  value: string
-  unit?: string
-  meta: string
-  tone?: 'plain' | 'warn' | 'dim'
-  title?: string
-}) {
-  return (
-    <div className="bg-app-raised px-6 pt-5.5 pb-6" title={title}>
-      <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-        {label}
-      </p>
-      <p className="mt-3.5 flex items-baseline gap-2">
-        <span
-          className={cn(
-            'text-[30px] leading-none font-extrabold tracking-[-0.03em]',
-            tone === 'warn' && 'text-state-warn',
-            tone === 'dim' && 'text-app-dim',
-            (tone === undefined || tone === 'plain') && 'text-app-ink',
-          )}
-        >
-          {value}
-        </span>
-        {unit === undefined ? null : (
-          <span className="text-app-muted font-mono text-[13px] font-medium">
-            {unit}
-          </span>
-        )}
-      </p>
-      <p className="text-app-dim mt-3.5 text-[13px] leading-5 text-pretty">
-        {meta}
-      </p>
-    </div>
-  )
-}
 
 /**
  * Гроші · Каси — the till list. Balances are shown per currency and never
@@ -167,7 +124,7 @@ export function CashList({
           </div>
         </div>
 
-        <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,190px),1fr))] gap-px overflow-hidden rounded-[20px] border">
+        <KpiStrip>
           <Kpi
             label="Кас"
             meta={
@@ -193,7 +150,7 @@ export function CashList({
             tone="dim"
             value="—"
           />
-        </div>
+        </KpiStrip>
 
         <div className="flex flex-wrap items-center gap-3">
           <div

@@ -7,11 +7,9 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
-import { ArrowDown, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown } from 'lucide-react'
 import {
   Button,
-  DataTable,
-  EmptyState,
   ErrorState,
   Field,
   Notice,
@@ -21,7 +19,6 @@ import {
   Panel,
   SelectInput,
   SkeletonRows,
-  StatusPill,
   TextArea,
   TextInput,
   Toolbar,
@@ -35,6 +32,8 @@ import {
   type CashTransaction,
 } from '@/api/cash'
 import { useCabinet } from '../CabinetContext'
+import { CashCard } from './cash-card'
+import { CashEditView } from './cash-edit'
 import { CashList } from './cash-list'
 import { readCashFeed, type CashFeedEntry } from './cash-feed'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
@@ -148,16 +147,8 @@ const useDialogFocus = (open: boolean) => {
   }
   return { containFocus, dialogRef, triggerRef }
 }
-/** Reads back a currency code in words so the code is not printed twice. */
-const currencyNames: Record<string, string> = {
-  UAH: 'Гривня',
-  USD: 'Долар США',
-  EUR: 'Євро',
-  PLN: 'Злотий',
-  GBP: 'Фунт стерлінгів',
-}
-const currencyName = (code: string) => currencyNames[code] ?? code
-/** Money reads as one column: digits right-aligned, code beside the figure. */
+/** One register's slice of the day summary. */
+type CashDaySummary = CashDailySummary['registers'][number]
 const eyebrowClass =
   'text-app-dim font-mono text-[11.5px] tracking-[0.12em] uppercase'
 const currenciesFromText = (value: string) => [
@@ -184,13 +175,10 @@ const balancesFromText = (value: string) =>
 export function CashScreen({ definition }: CabinetModuleScreenProps) {
   const location = useLocation()
   const id = idFromPath(location.pathname)
-  if (location.pathname.endsWith('/new') || location.pathname.endsWith('/edit'))
-    return (
-      <CashRegisterForm
-        definition={definition}
-        registerId={location.pathname.endsWith('/edit') ? id : null}
-      />
-    )
+  if (location.pathname.endsWith('/edit') && id)
+    return <CashRegisterEdit definition={definition} registerId={id} />
+  if (location.pathname.endsWith('/new'))
+    return <CashRegisterForm definition={definition} registerId={null} />
   return id ? (
     <CashRegisterDetail definition={definition} registerId={id} />
   ) : (
@@ -260,11 +248,16 @@ function CashRegisterDetail({
   const replayKeys = useCashIdempotencyKeys()
   const mutationsAllowed = canMutate(definition, cabinet, false)
   const transferAllowed = canTransfer(definition, cabinet)
-  const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const date = localDate(timeZone)
   const [register, setRegister] = useState<CashRegister | null>(null)
   const [ledger, setLedger] = useState<CashTransaction[]>([])
+  const [ledgerTotal, setLedgerTotal] = useState(0)
   const [ledgerTotalPages, setLedgerTotalPages] = useState(0)
+  const [totalOperations, setTotalOperations] = useState<number | null>(null)
+  const [lastOperationAt, setLastOperationAt] = useState<string | null>(null)
+  const [daySummary, setDaySummary] = useState<CashDaySummary | null>(null)
   const [transferRegisters, setTransferRegisters] = useState<CashRegister[]>([])
   const [error, setError] = useState<string | null>(null)
   const [type, setType] = useState<'manual_in' | 'manual_out'>('manual_in')
@@ -272,7 +265,6 @@ function CashRegisterDetail({
   const [currency, setCurrency] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
-  const [newCurrency, setNewCurrency] = useState('')
   const [toRegisterId, setToRegisterId] = useState('')
   const [fromCurrency, setFromCurrency] = useState('')
   const [toCurrency, setToCurrency] = useState('')
@@ -282,8 +274,6 @@ function CashRegisterDetail({
   const [transferBusy, setTransferBusy] = useState(false)
   const [transferError, setTransferError] = useState<string | null>(null)
   const [transferStatus, setTransferStatus] = useState<string | null>(null)
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  const { containFocus, dialogRef, triggerRef } = useDialogFocus(confirmDelete)
   const ledgerCurrency = params.get('currency') ?? undefined
   const ledgerFrom = params.get('from') ?? undefined
   const ledgerTo = params.get('to') ?? undefined
@@ -292,6 +282,16 @@ function CashRegisterDetail({
     (signal?: AbortSignal) =>
       Promise.all([
         cashApi.getById(registerId, signal ? { signal } : {}),
+        cashApi.list(true, signal ? { signal } : {}),
+        // The lifetime count and the newest movement have to come from an
+        // unfiltered read: the ledger page below may be narrowed to a
+        // currency, a date range or a later page, and its total would answer a
+        // different question than «операцій усього».
+        cashApi.transactions(
+          registerId,
+          { page: 1, pageSize: 1 },
+          signal ? { signal } : {},
+        ),
         cashApi.transactions(
           registerId,
           {
@@ -304,14 +304,16 @@ function CashRegisterDetail({
           },
           signal ? { signal } : {},
         ),
-        cashApi.list(true, signal ? { signal } : {}),
       ])
-        .then(([account, page, availableRegisters]) => {
+        .then(([account, availableRegisters, lifetime, page]) => {
           if (!signal?.aborted) {
             setRegister(account)
             setLedger(page.items)
+            setLedgerTotal(page.total)
             setLedgerTotalPages(page.totalPages)
             setTransferRegisters(availableRegisters)
+            setTotalOperations(lifetime.total)
+            setLastOperationAt(lifetime.items[0]?.createdAt ?? null)
             setError(null)
           }
         })
@@ -325,6 +327,22 @@ function CashRegisterDetail({
     void load(controller.signal)
     return () => controller.abort()
   }, [load])
+  useEffect(() => {
+    const controller = new AbortController()
+    void cashApi
+      .dailySummary(date, timeZone, { signal: controller.signal })
+      .then((daily) => {
+        if (controller.signal.aborted) return
+        setDaySummary(
+          daily.registers.find((one) => one.id === registerId) ?? null,
+        )
+      })
+      .catch(() => {
+        // The day slice is an extra: a till card without it still shows the
+        // balances and the ledger, so a failure here stays silent.
+      })
+    return () => controller.abort()
+  }, [date, registerId, timeZone])
   const saveMovement = async (event: FormEvent) => {
     event.preventDefault()
     if (busy || !amount) return
@@ -353,38 +371,6 @@ function CashRegisterDetail({
       if (!isAmbiguousMutationFailure(error)) replayKeys.clear('movement')
       setError(problemMessage(error))
     } finally {
-      setBusy(false)
-    }
-  }
-  const mutateRegister = async (
-    action: () => Promise<CashRegister | void>,
-    reloadAfter = false,
-  ) => {
-    if (busy) return
-    setBusy(true)
-    try {
-      const scope = requireLatestMutation({ quota: false })
-      const result = await action()
-      if (scope.signal.aborted) return
-      if (result) setRegister(result)
-      if (reloadAfter) await load()
-      setError(null)
-    } catch (mutationError) {
-      setError(problemMessage(mutationError))
-    } finally {
-      setBusy(false)
-    }
-  }
-  const removeRegister = async () => {
-    if (busy) return
-    setBusy(true)
-    try {
-      const scope = requireLatestMutation({ quota: false })
-      await cashApi.remove(registerId)
-      if (scope.signal.aborted) return
-      await navigate('..', { replace: true })
-    } catch (mutationError) {
-      setError(problemMessage(mutationError))
       setBusy(false)
     }
   }
@@ -454,101 +440,62 @@ function CashRegisterDetail({
   const transferDestination = transferDestinations.find(
     (candidate) => candidate.id === toRegisterId,
   )
+  const setFilter = (key: string, value: string) => {
+    const next = new URLSearchParams(params)
+    if (value) next.set(key, value)
+    else next.delete(key)
+    next.set('page', '1')
+    setParams(next)
+  }
   return (
-    <PageBody>
-      <PageHeader
-        actions={
-          <>
-            <StatusPill tone={register.isActive ? 'ok' : 'neutral'}>
-              {register.isActive ? 'Активна' : 'Неактивна'}
-            </StatusPill>
-            {mutationsAllowed && (
-              <Button asChild variant="primary">
-                <Link to="edit">Редагувати</Link>
-              </Button>
-            )}
-          </>
-        }
-        eyebrow="Гроші · Каси"
-        title={register.name}
-      />
-      {error && <Notice tone="danger">{error}</Notice>}
-      <Panel padded={false}>
-        <div className="border-app-line flex flex-wrap items-baseline justify-between gap-2 border-b px-4 py-3.5">
-          <h2 className="text-base font-semibold text-white">
-            Валюти та баланси
-          </h2>
-          <p className="text-app-dim text-[13.5px]">
-            Баланси рахує сервер після кожної операції
-          </p>
-        </div>
-        {Object.keys(register.balances).length === 0 && (
-          <p className="text-app-dim px-4 py-4 text-[14.5px]">
-            Валют ще немає. Додайте першу нижче, щоб каса почала вести баланс.
-          </p>
-        )}
-        <dl className="grid gap-3 p-4 empty:hidden">
-          {Object.entries(register.balances).map(([code, balance]) => (
-            <div
-              className="border-app-line bg-app-canvas rounded-control flex flex-wrap items-center gap-3 border px-3.5 py-3"
-              key={code}
-            >
-              <dt className="text-app-muted min-w-0 flex-1 text-[14.5px]">
-                {currencyName(code)}
-              </dt>
-              <dd className="ml-auto flex items-baseline gap-1.5">
-                <span className="text-[22px] leading-tight font-light tabular-nums text-white">
-                  {balance}
-                </span>{' '}
-                <span className="text-app-muted text-[13.5px]">{code}</span>
-              </dd>
-              {mutationsAllowed && (
-                <Button
-                  disabled={busy}
-                  onClick={() =>
-                    void mutateRegister(
-                      () => cashApi.removeCurrency(registerId, code),
-                      true,
-                    )
-                  }
-                >
-                  <Trash2 aria-hidden />
-                  Видалити {code}
-                </Button>
-              )}
-            </div>
-          ))}
-        </dl>
-        {mutationsAllowed && (
-          <div className="border-app-line grid gap-3 border-t px-4 py-4">
-            <p className="text-app-dim text-[13.5px]">
-              Додайте валюту, щоб вести в ній окремий баланс. Валюту з
-              ненульовим балансом видалити не можна — спершу зведіть її до нуля.
-            </p>
-            <div className="flex flex-wrap items-end gap-3">
-              <Field className="min-w-40 flex-1" label="Нова валюта">
-                <TextInput
-                  value={newCurrency}
-                  onChange={(event) => setNewCurrency(event.target.value)}
-                  placeholder="USD"
-                />
-              </Field>
-              <Button
-                disabled={busy || !newCurrency.trim()}
-                onClick={() =>
-                  void mutateRegister(async () => {
-                    await cashApi.addCurrency(registerId, newCurrency.trim())
-                    setNewCurrency('')
-                  }, true)
-                }
-              >
-                <Plus aria-hidden />
-                Додати валюту
-              </Button>
-            </div>
-          </div>
-        )}
-      </Panel>
+    <CashCard
+      canManage={mutationsAllowed}
+      date={date}
+      daySummary={daySummary}
+      error={error}
+      filters={
+        <Toolbar>
+          <Field className="min-w-36 flex-1" label="Валюта журналу">
+            <TextInput
+              onChange={(event) => setFilter('currency', event.target.value)}
+              placeholder="Усі"
+              value={params.get('currency') ?? ''}
+            />
+          </Field>
+          <Field className="min-w-36 flex-1" label="Від">
+            <TextInput
+              onChange={(event) => setFilter('from', event.target.value)}
+              type="date"
+              value={params.get('from') ?? ''}
+            />
+          </Field>
+          <Field className="min-w-36 flex-1" label="До">
+            <TextInput
+              onChange={(event) => setFilter('to', event.target.value)}
+              type="date"
+              value={params.get('to') ?? ''}
+            />
+          </Field>
+        </Toolbar>
+      }
+      lastOperationAt={lastOperationAt}
+      ledger={ledger}
+      ledgerTotal={ledgerTotal}
+      pagination={
+        <Pagination
+          label="Сторінки журналу"
+          onPage={(nextPage) => {
+            const next = new URLSearchParams(params)
+            next.set('page', String(nextPage))
+            setParams(next)
+          }}
+          page={ledgerPage}
+          totalPages={Math.max(ledgerTotalPages, 1)}
+        />
+      }
+      register={register}
+      totalOperations={totalOperations}
+    >
       {mutationsAllowed && (
         <Panel padded={false}>
           <form
@@ -801,164 +748,174 @@ function CashRegisterDetail({
           )}
         </section>
       )}
-      {mutationsAllowed && (
-        <Panel className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0 grid gap-1">
-            <h2 className="text-base font-semibold text-white">Стан каси</h2>
-            <p className="text-app-dim text-[13.5px]">
-              {register.isActive
-                ? 'Каса активна: у неї можна проводити операції та перекази.'
-                : 'Каса неактивна: нові операції та перекази в неї недоступні.'}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Button
-              disabled={busy}
-              onClick={() =>
-                void mutateRegister(() =>
-                  register.isActive
-                    ? cashApi.deactivate(registerId)
-                    : cashApi.activate(registerId),
-                )
-              }
-            >
-              {register.isActive ? 'Деактивувати касу' : 'Активувати касу'}
-            </Button>
-            <Button
-              ref={triggerRef}
-              onClick={() => setConfirmDelete(true)}
-              variant="danger"
-            >
-              <Trash2 aria-hidden />
-              Видалити касу
-            </Button>
-          </div>
-        </Panel>
-      )}
-      {confirmDelete && (
-        <div
-          ref={dialogRef}
-          role="alertdialog"
-          aria-modal="true"
-          aria-labelledby="cash-delete-title"
-          aria-describedby="cash-delete-description"
-          className="bg-app-overlay border-app-line-2 rounded-sheet grid gap-3 border p-5"
-          onKeyDown={containFocus}
-        >
-          <h2
-            className="text-lg font-semibold text-white"
-            id="cash-delete-title"
+    </CashCard>
+  )
+}
+
+function CashRegisterEdit({
+  definition,
+  registerId,
+}: CabinetModuleScreenProps & { registerId: string }) {
+  const cabinet = useCabinet()
+  const { requireLatestMutation } = useLatestMutationGuard(definition)
+  const mutationsAllowed = canMutate(definition, cabinet, false)
+  const navigate = useNavigate()
+  const [register, setRegister] = useState<CashRegister | null>(null)
+  const [name, setName] = useState('')
+  const [newCurrency, setNewCurrency] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const { containFocus, dialogRef, triggerRef } = useDialogFocus(confirmDelete)
+  const load = useCallback(
+    (signal?: AbortSignal) =>
+      cashApi
+        .getById(registerId, signal ? { signal } : {})
+        .then((result) => {
+          if (signal?.aborted) return
+          setRegister(result)
+          setName((current) => (current === '' ? result.name : current))
+          setError(null)
+        })
+        .catch((failure) => {
+          if (!signal?.aborted) setError(problemMessage(failure))
+        }),
+    [registerId],
+  )
+  useEffect(() => {
+    const controller = new AbortController()
+    void load(controller.signal)
+    return () => controller.abort()
+  }, [load])
+  const mutate = async (action: () => Promise<CashRegister | void>) => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const scope = requireLatestMutation({ quota: false })
+      const result = await action()
+      if (scope.signal.aborted) return
+      if (result) setRegister(result)
+      else await load()
+      setError(null)
+    } catch (failure) {
+      setError(problemMessage(failure))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const save = async () => {
+    if (busy || name.trim() === '') return
+    setBusy(true)
+    try {
+      const scope = requireLatestMutation({ quota: false })
+      await cashApi.update(registerId, { name: name.trim() })
+      if (scope.signal.aborted) return
+      await navigate(`../${registerId}`, { replace: true })
+    } catch (failure) {
+      setError(problemMessage(failure))
+      setBusy(false)
+    }
+  }
+  const removeRegister = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const scope = requireLatestMutation({ quota: false })
+      await cashApi.remove(registerId)
+      if (scope.signal.aborted) return
+      await navigate('../..', { replace: true })
+    } catch (failure) {
+      setError(problemMessage(failure))
+      setBusy(false)
+    }
+  }
+  if (error && !register)
+    return (
+      <PageBody width="narrow">
+        <ErrorState description={error} title="Не вдалося завантажити касу" />
+      </PageBody>
+    )
+  if (!register)
+    return (
+      <PageBody width="narrow">
+        <SkeletonRows label="Завантажуємо касу…" rows={3} />
+      </PageBody>
+    )
+  return (
+    <CashEditView
+      busy={busy}
+      canManage={mutationsAllowed}
+      dialog={
+        confirmDelete ? (
+          <div
+            aria-describedby="cash-delete-description"
+            aria-labelledby="cash-delete-title"
+            aria-modal="true"
+            className="bg-app-overlay border-app-line-2 rounded-sheet grid gap-3 border p-5"
+            onKeyDown={containFocus}
+            ref={dialogRef}
+            role="alertdialog"
           >
-            Підтвердити видалення каси
-          </h2>
-          <p className="text-app-muted text-sm" id="cash-delete-description">
-            Каса та її журнал операцій зникнуть назавжди.
-          </p>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button disabled={busy} onClick={() => setConfirmDelete(false)}>
-              Скасувати
-            </Button>
-            <Button
-              disabled={busy}
-              onClick={() => void removeRegister()}
-              variant="danger"
+            <h2
+              className="text-lg font-semibold text-white"
+              id="cash-delete-title"
             >
-              Підтвердити видалення
-            </Button>
+              Підтвердити видалення каси
+            </h2>
+            <p className="text-app-muted text-sm" id="cash-delete-description">
+              Каса та її журнал операцій зникнуть назавжди.
+            </p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button disabled={busy} onClick={() => setConfirmDelete(false)}>
+                Скасувати
+              </Button>
+              <Button
+                disabled={busy}
+                onClick={() => void removeRegister()}
+                variant="danger"
+              >
+                Підтвердити видалення
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
-      <section className="grid gap-3">
-        <h2 className="text-base font-semibold text-white">Журнал</h2>
-        <Toolbar>
-          <Field className="min-w-36 flex-1" label="Валюта журналу">
-            <TextInput
-              value={params.get('currency') ?? ''}
-              onChange={(event) => {
-                const next = new URLSearchParams(params)
-                if (event.target.value) next.set('currency', event.target.value)
-                else next.delete('currency')
-                next.set('page', '1')
-                setParams(next)
-              }}
-              placeholder="Усі"
-            />
-          </Field>
-          <Field className="min-w-36 flex-1" label="Від">
-            <TextInput
-              type="date"
-              value={params.get('from') ?? ''}
-              onChange={(event) => {
-                const next = new URLSearchParams(params)
-                if (event.target.value) next.set('from', event.target.value)
-                else next.delete('from')
-                next.set('page', '1')
-                setParams(next)
-              }}
-            />
-          </Field>
-          <Field className="min-w-36 flex-1" label="До">
-            <TextInput
-              type="date"
-              value={params.get('to') ?? ''}
-              onChange={(event) => {
-                const next = new URLSearchParams(params)
-                if (event.target.value) next.set('to', event.target.value)
-                else next.delete('to')
-                next.set('page', '1')
-                setParams(next)
-              }}
-            />
-          </Field>
-        </Toolbar>
-        <DataTable
-          caption="Журнал операцій каси"
-          columns={[
-            {
-              key: 'direction',
-              label: 'Операція',
-              variant: 'primary',
-              cell: (entry) => entry.direction,
-            },
-            {
-              key: 'amount',
-              label: 'Сума',
-              align: 'end',
-              cell: (entry) => (
-                <span className="tabular-nums">
-                  {`${String(entry.amount)} ${entry.currency}`}
-                </span>
-              ),
-            },
-            {
-              key: 'user',
-              label: 'Хто',
-              cell: (entry) => entry.createdByName,
-            },
-          ]}
-          empty={
-            <EmptyState
-              description="Операції зʼявляться тут після першого надходження або витрати."
-              title="Журнал порожній"
-            />
-          }
-          footer={
-            <Pagination
-              label="Сторінки журналу"
-              onPage={(nextPage) => {
-                const next = new URLSearchParams(params)
-                next.set('page', String(nextPage))
-                setParams(next)
-              }}
-              page={ledgerPage}
-              totalPages={Math.max(ledgerTotalPages, 1)}
-            />
-          }
-          rowKey={(entry) => entry.id}
-          rows={ledger}
-        />
-      </section>
-    </PageBody>
+        ) : null
+      }
+      name={name}
+      newCurrency={newCurrency}
+      notice={
+        <>
+          {!mutationsAllowed && (
+            <Notice tone="warn">
+              Зберегти не вдасться: бракує права finance.manage. Попросіть
+              власника кабінету відкрити доступ.
+            </Notice>
+          )}
+          {error && <Notice tone="danger">{error}</Notice>}
+        </>
+      }
+      onAddCurrency={() =>
+        void mutate(async () => {
+          await cashApi.addCurrency(registerId, newCurrency.trim())
+          setNewCurrency('')
+        })
+      }
+      deleteRef={triggerRef}
+      onDelete={() => setConfirmDelete(true)}
+      onName={setName}
+      onNewCurrency={setNewCurrency}
+      onRemoveCurrency={(code) =>
+        void mutate(() => cashApi.removeCurrency(registerId, code))
+      }
+      onSave={() => void save()}
+      onToggleActive={() =>
+        void mutate(() =>
+          register.isActive
+            ? cashApi.deactivate(registerId)
+            : cashApi.activate(registerId),
+        )
+      }
+      register={register}
+    />
   )
 }
 

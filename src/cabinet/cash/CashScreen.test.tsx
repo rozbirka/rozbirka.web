@@ -61,6 +61,13 @@ afterEach(() => {
 beforeEach(() => {
   vi.mocked(useCabinet).mockReturnValue(cabinet())
   cashMocks.list.mockResolvedValue([])
+  cashMocks.dailySummary.mockResolvedValue({
+    date: '2026-09-17',
+    timeZone: 'UTC',
+    startUtc: '2026-09-17T00:00:00Z',
+    endUtc: '2026-09-18T00:00:00Z',
+    registers: [],
+  })
 })
 
 it('renders Core daily figures without calculating them in the browser', async () => {
@@ -211,7 +218,6 @@ it('keeps existing-register mutations available when the production cash quota i
   )
 
   expect(await screen.findByRole('link', { name: 'Редагувати' })).toBeVisible()
-  expect(screen.getByRole('button', { name: 'Видалити касу' })).toBeVisible()
   expect(
     screen.getByRole('heading', { name: 'Переказ між касами' }),
   ).toBeVisible()
@@ -240,11 +246,15 @@ it('allows editing an existing register but still meters new register creation a
     </MemoryRouter>,
   )
 
-  const editSubmit = await screen.findByRole('button', { name: 'Зберегти' })
-  expect(editSubmit).toBeEnabled()
-  await user.click(editSubmit)
+  const editSubmit = await screen.findByRole('button', {
+    name: 'Зберегти зміни',
+  })
+  expect(editSubmit).toBeDisabled()
+  await user.clear(screen.getByLabelText('Назва каси'))
+  await user.type(screen.getByLabelText('Назва каси'), 'Головна каса')
+  await user.click(screen.getByRole('button', { name: 'Зберегти зміни' }))
   expect(cashMocks.update).toHaveBeenCalledWith('cash-1', {
-    name: 'Основна каса',
+    name: 'Головна каса',
   })
 
   unmount()
@@ -387,12 +397,14 @@ it('submits one idempotent transfer and reloads authoritative balances and ledge
     },
   })
 
-  expect(await screen.findByText('75')).toBeVisible()
+  expect(await screen.findByText('75,00 ₴')).toBeVisible()
   expect(screen.getByText('Баланс каси-отримувача: 25 USD')).toBeVisible()
-  expect(screen.getByText(/30 UAH/)).toBeVisible()
+  expect(screen.getByText('−30,00 ₴')).toBeVisible()
   expect(cashMocks.getById).toHaveBeenCalledTimes(2)
   expect(cashMocks.list).toHaveBeenCalledTimes(2)
-  expect(cashMocks.transactions).toHaveBeenCalledTimes(2)
+  // Each load reads the ledger page on screen and, separately, the unfiltered
+  // lifetime count behind «Операцій усього».
+  expect(cashMocks.transactions).toHaveBeenCalledTimes(4)
 })
 
 it('reuses a transfer key after an ambiguous failure and rotates it when the payload changes', async () => {
@@ -883,8 +895,11 @@ it('renders the register type as immutable in edit mode', async () => {
     </MemoryRouter>,
   )
 
-  await screen.findByRole('heading', { name: 'Редагувати касу' })
-  expect(screen.getByText('Тип каси: bank')).toBeVisible()
+  await screen.findByRole('heading', { name: 'Редагування каси' })
+  const chosen = screen.getByRole('button', { name: /Безготівкова/ })
+  expect(chosen).toBeDisabled()
+  expect(chosen).toHaveAttribute('aria-pressed', 'true')
+  expect(screen.getByRole('button', { name: /Готівкова/ })).toBeDisabled()
   expect(
     screen.queryByRole('combobox', { name: 'Тип' }),
   ).not.toBeInTheDocument()
@@ -896,16 +911,9 @@ it('manages register currencies and lifecycle through documented endpoints', asy
     name: 'Каса',
     type: 'cash',
     isActive: true,
-    balances: { UAH: 100 },
+    balances: { UAH: 0, USD: 5 },
   }
   cashMocks.getById.mockResolvedValue(register)
-  cashMocks.transactions.mockResolvedValue({
-    items: [],
-    page: 1,
-    pageSize: 20,
-    total: 0,
-    totalPages: 0,
-  })
   cashMocks.addCurrency.mockResolvedValue(undefined)
   cashMocks.removeCurrency.mockResolvedValue(undefined)
   cashMocks.deactivate.mockResolvedValue({ ...register, isActive: false })
@@ -913,25 +921,28 @@ it('manages register currencies and lifecycle through documented endpoints', asy
   cashMocks.remove.mockResolvedValue(undefined)
   const user = userEvent.setup()
   render(
-    <MemoryRouter initialEntries={['/app/garage/cash/cash-1']}>
+    <MemoryRouter initialEntries={['/app/garage/cash/cash-1/edit']}>
       <CashScreen definition={definition} />
     </MemoryRouter>,
   )
 
-  await screen.findByRole('heading', { name: 'Каса' })
-  await user.type(screen.getByLabelText('Нова валюта'), 'USD')
+  await screen.findByRole('heading', { name: 'Редагування каси' })
+  await user.type(screen.getByLabelText('Нова валюта'), 'EUR')
   await user.click(screen.getByRole('button', { name: 'Додати валюту' }))
-  expect(cashMocks.addCurrency).toHaveBeenCalledWith('cash-1', 'USD')
+  expect(cashMocks.addCurrency).toHaveBeenCalledWith('cash-1', 'EUR')
 
-  await user.click(screen.getByRole('button', { name: 'Видалити UAH' }))
+  // A currency still holding money is the server's refusal, not ours: the
+  // control stays visible and says what has to happen first.
+  expect(
+    screen.getByRole('button', { name: 'Видалити валюту USD' }),
+  ).toBeDisabled()
+  await user.click(screen.getByRole('button', { name: 'Видалити валюту UAH' }))
   expect(cashMocks.removeCurrency).toHaveBeenCalledWith('cash-1', 'UAH')
 
-  await user.click(screen.getByRole('button', { name: 'Деактивувати касу' }))
+  await user.click(screen.getByRole('button', { name: 'Закрити касу' }))
   expect(cashMocks.deactivate).toHaveBeenCalledWith('cash-1')
 
-  await user.click(
-    await screen.findByRole('button', { name: 'Активувати касу' }),
-  )
+  await user.click(await screen.findByRole('button', { name: 'Відкрити касу' }))
   expect(cashMocks.activate).toHaveBeenCalledWith('cash-1')
 
   const deleteTrigger = screen.getByRole('button', { name: 'Видалити касу' })
@@ -1094,4 +1105,111 @@ it('hides cash mutations without finance.manage and renders quota failures', asy
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Функція потребує активної підписки.',
   )
+})
+
+it('reads the till card figures from the server and dashes what it does not keep', async () => {
+  const register = {
+    id: 'cash-1',
+    name: 'Основна каса',
+    type: 'cash',
+    isActive: true,
+    balances: { USD: 14280 },
+  }
+  cashMocks.getById.mockResolvedValue(register)
+  cashMocks.list.mockResolvedValue([register])
+  cashMocks.dailySummary.mockResolvedValue({
+    date: '2026-09-17',
+    timeZone: 'UTC',
+    startUtc: '2026-09-17T00:00:00Z',
+    endUtc: '2026-09-18T00:00:00Z',
+    registers: [
+      {
+        id: 'cash-1',
+        name: 'Основна каса',
+        type: 'cash',
+        isActive: true,
+        sortOrder: 0,
+        currencies: [
+          {
+            currency: 'USD',
+            income: 1240,
+            expense: 240,
+            net: 1000,
+            balance: 14280,
+            operationCount: 6,
+          },
+        ],
+      },
+    ],
+  })
+  const row = {
+    id: 'movement-1',
+    type: 'order_payment',
+    direction: 'in',
+    amount: 990,
+    currency: 'USD',
+    note: 'Продаж SO-1042',
+    createdAt: '2026-09-16T14:20:00Z',
+    createdByName: 'Дмитро Кравець',
+    referenceId: null,
+  }
+  cashMocks.transactions.mockImplementation(
+    (_id: string, params: { pageSize?: number }) =>
+      Promise.resolve(
+        params.pageSize === 1
+          ? { items: [row], page: 1, pageSize: 1, total: 84, totalPages: 84 }
+          : { items: [row], page: 1, pageSize: 20, total: 1, totalPages: 1 },
+      ),
+  )
+
+  render(
+    <MemoryRouter initialEntries={['/app/garage/cash/cash-1']}>
+      <CashScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await screen.findByRole('heading', { name: 'Основна каса', level: 1 })
+  // The day figures are the server's own, one line per currency.
+  expect(screen.getByText('+1 240,00 $')).toBeVisible()
+  expect(screen.getByText('−240,00 $')).toBeVisible()
+  expect(screen.getByText('+990,00 $')).toBeVisible()
+  // «Операцій усього» comes from the unfiltered read, not from the page.
+  expect(screen.getByText('84')).toBeVisible()
+  expect(cashMocks.transactions).toHaveBeenCalledWith(
+    'cash-1',
+    { page: 1, pageSize: 1 },
+    expect.any(Object),
+  )
+  // Reconciliation has no endpoint, so the control stays and says why.
+  const reconcile = screen.getByRole('button', { name: 'Звірити залишок' })
+  expect(reconcile).toBeDisabled()
+  expect(reconcile.title).toContain('Звіряння залишку сервер не веде')
+  expect(
+    screen.getByText(/Стовпець «Залишок» порожній/, { exact: false }),
+  ).toBeVisible()
+})
+
+it('keeps the till settings the server cannot save visible and disabled', async () => {
+  cashMocks.getById.mockResolvedValue({
+    id: 'cash-1',
+    name: 'Основна каса',
+    type: 'cash',
+    isActive: true,
+    balances: { USD: 14280 },
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/garage/cash/cash-1/edit']}>
+      <CashScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await screen.findByRole('heading', { name: 'Редагування каси' })
+  const dead = screen.getAllByRole('button', { name: 'Не зберігається' })
+  expect(dead).toHaveLength(2)
+  for (const control of dead) expect(control).toBeDisabled()
+  for (const label of ['Щодня', 'Щотижня', 'Щомісяця', 'Вручну'])
+    expect(screen.getByRole('button', { name: label })).toBeDisabled()
+  expect(
+    screen.getByText(/Ці перемикачі лишаються вимкненими/, { exact: false }),
+  ).toBeVisible()
 })
