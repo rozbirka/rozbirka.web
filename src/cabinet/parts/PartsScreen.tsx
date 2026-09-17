@@ -80,6 +80,12 @@ import {
 import { evaluateModuleAccess, type ModuleAccessDecision } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import {
+  isListDensity,
+  readDensity,
+  writeDensity,
+  type ListDensity,
+} from '../list-density'
+import {
   readSavedViews,
   sameView,
   savedViewLimit,
@@ -300,6 +306,12 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const [views, setViews] = useState<SavedView[]>([])
   const [viewsFor, setViewsFor] = useState<string | null>(null)
   const [naming, setNaming] = useState(false)
+  const [density, setDensity] = useState<ListDensity>('comfortable')
+  const [densityFor, setDensityFor] = useState<string | null>(null)
+  if (densityFor !== viewKey) {
+    setDensityFor(viewKey)
+    setDensity(readDensity(viewScope))
+  }
   const [viewName, setViewName] = useState('')
   if (viewsFor !== viewKey) {
     setViewsFor(viewKey)
@@ -937,6 +949,23 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                   ]}
                   value={String(filters.pageSize)}
                 />
+                <span className="text-app-dim hidden font-mono text-[11px] tracking-[0.14em] uppercase md:inline">
+                  Рядки
+                </span>
+                <PillGroup
+                  className="hidden md:inline-flex"
+                  label="Щільність рядків"
+                  onChange={(next) => {
+                    if (!isListDensity(next)) return
+                    setDensity(next)
+                    writeDensity(viewScope, next)
+                  }}
+                  options={[
+                    { value: 'comfortable', label: 'Просторо' },
+                    { value: 'compact', label: 'Щільно' },
+                  ]}
+                  value={density}
+                />
               </div>
             </div>
 
@@ -1028,6 +1057,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                 <div className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border">
                   <DataTable
                     caption="Деталі на складі"
+                    density={density}
                     selection={{
                       selected: picked,
                       onChange: setPicked,

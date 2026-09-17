@@ -35,6 +35,9 @@ export interface DataTableProps<Row> {
   footer?: ReactNode
   /** Turns the list into a working set: a checkbox per row and in the header. */
   selection?: DataTableSelection<Row>
+  /** "compact" trades breathing room for rows on screen. Desktop only — the
+   * card layout below 768px is already as tight as it reads. */
+  density?: 'comfortable' | 'compact'
 }
 
 /**
@@ -51,7 +54,10 @@ export function DataTable<Row>({
   onRowClick,
   footer,
   selection,
+  density = 'comfortable',
 }: DataTableProps<Row>) {
+  const compact = density === 'compact'
+  const cellPadding = compact ? 'px-3 py-1.5 md:px-4' : 'px-4 py-3.5'
   const pickable =
     selection === undefined
       ? []
@@ -90,7 +96,10 @@ export function DataTable<Row>({
   return (
     <div className="border-app-line rounded-panel bg-app-raised relative overflow-hidden border md:overflow-x-auto">
       <table
-        className="data-table w-full border-collapse text-[14.5px]"
+        className={cn(
+          'data-table w-full border-collapse',
+          compact ? 'text-[13.5px]' : 'text-[14.5px]',
+        )}
         role="table"
       >
         <caption className="sr-only">{caption}</caption>
@@ -98,7 +107,10 @@ export function DataTable<Row>({
           <tr role="row">
             {selection === undefined ? null : (
               <th
-                className="border-app-line w-11 border-b px-4 py-3"
+                className={cn(
+                  'border-app-line border-b px-4',
+                  compact ? 'w-9 py-2' : 'w-11 py-3',
+                )}
                 role="columnheader"
                 scope="col"
               >
@@ -122,7 +134,8 @@ export function DataTable<Row>({
             {columns.map((column) => (
               <th
                 className={cn(
-                  'text-app-dim border-app-line border-b px-4 py-3 font-mono text-[11.5px] font-normal tracking-[0.08em] whitespace-nowrap uppercase',
+                  'text-app-dim border-app-line border-b px-4 font-mono text-[11.5px] font-normal tracking-[0.08em] whitespace-nowrap uppercase',
+                  compact ? 'py-2' : 'py-3',
                   column.align === 'end' ? 'text-right' : 'text-left',
                 )}
                 key={column.key}
@@ -159,7 +172,7 @@ export function DataTable<Row>({
               >
                 {selection === undefined ? null : (
                   <td
-                    className="px-4 py-3.5 text-left font-normal"
+                    className={cn(cellPadding, 'text-left font-normal')}
                     data-label="Обрати"
                     // The checkbox is the point of the cell; a row that navigates
                     // must not swallow the click that picks it.
@@ -187,7 +200,8 @@ export function DataTable<Row>({
                   return (
                     <Cell
                       className={cn(
-                        'px-4 py-3.5 text-left font-normal',
+                        cellPadding,
+                        'text-left font-normal',
                         column.align === 'end' && 'text-right tabular-nums',
                         isPrimary
                           ? 'text-app-ink font-medium'

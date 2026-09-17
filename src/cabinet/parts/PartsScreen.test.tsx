@@ -1919,3 +1919,52 @@ it('refuses to save filters that are already a view, and says why', async () => 
     screen.queryByRole('textbox', { name: 'Назва подання' }),
   ).not.toBeInTheDocument()
 })
+
+it('remembers the tighter row spacing for the next visit to the list', async () => {
+  const user = userEvent.setup()
+  localStorage.clear()
+  partMocks.search.mockResolvedValue({
+    items: pickableRows,
+    page: 1,
+    pageSize: 30,
+    total: 2,
+    totalPages: 1,
+  })
+  const view = render(
+    <MemoryRouter initialEntries={['/app/yard/parts']}>
+      <Routes>
+        <Route
+          element={<PartsScreen definition={partsDefinition as never} />}
+          path="/app/:tenant/parts"
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const density = () =>
+    within(screen.getByRole('radiogroup', { name: 'Щільність рядків' }))
+  expect(await screen.findByRole('table')).toHaveClass('text-[14.5px]')
+  expect(density().getByRole('radio', { name: 'Просторо' })).toBeChecked()
+
+  await user.click(density().getByRole('radio', { name: 'Щільно' }))
+  expect(screen.getByRole('table')).toHaveClass('text-[13.5px]')
+
+  view.unmount()
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts']}>
+      <Routes>
+        <Route
+          element={<PartsScreen definition={partsDefinition as never} />}
+          path="/app/:tenant/parts"
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByRole('table')).toHaveClass('text-[13.5px]')
+  expect(
+    within(
+      screen.getByRole('radiogroup', { name: 'Щільність рядків' }),
+    ).getByRole('radio', { name: 'Щільно' }),
+  ).toBeChecked()
+})
