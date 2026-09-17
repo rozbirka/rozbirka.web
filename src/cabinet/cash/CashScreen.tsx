@@ -35,6 +35,8 @@ import {
   type CashTransaction,
 } from '@/api/cash'
 import { useCabinet } from '../CabinetContext'
+import { CashList } from './cash-list'
+import { readCashFeed, type CashFeedEntry } from './cash-feed'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
@@ -198,12 +200,15 @@ export function CashScreen({ definition }: CabinetModuleScreenProps) {
 
 function CashOverview({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
+  const navigate = useNavigate()
   const mutationsAllowed = canMutate(definition, cabinet)
   const [params] = useSearchParams()
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
   const date = params.get('date') ?? localDate(timeZone)
   const [summary, setSummary] = useState<CashDailySummary | null>(null)
   const [registers, setRegisters] = useState<CashRegister[]>([])
+  const [feed, setFeed] = useState<CashFeedEntry[]>([])
+  const [feedTruncated, setFeedTruncated] = useState(false)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     const controller = new AbortController()
@@ -211,79 +216,38 @@ function CashOverview({ definition }: CabinetModuleScreenProps) {
       cashApi.list(undefined, { signal: controller.signal }),
       cashApi.dailySummary(date, timeZone, { signal: controller.signal }),
     ])
-      .then(([list, daily]) => {
+      .then(async ([list, daily]) => {
+        if (controller.signal.aborted) return
         setRegisters(list)
         setSummary(daily)
         setError(null)
+        const latest = await readCashFeed(list, controller.signal)
+        if (controller.signal.aborted) return
+        setFeed(latest.entries)
+        setFeedTruncated(latest.truncated)
       })
       .catch((error) => {
         if (!controller.signal.aborted) setError(problemMessage(error))
       })
     return () => controller.abort()
   }, [date, timeZone])
+  const transferFrom = registers.find((one) => one.isActive)
   return (
-    <PageBody>
-      <PageHeader
-        actions={
-          mutationsAllowed ? (
-            <Button asChild variant="primary">
-              <Link to="new">
-                <Plus aria-hidden />
-                Нова каса
-              </Link>
-            </Button>
-          ) : undefined
-        }
-        eyebrow={`Фінанси · ${date} · ${timeZone}`}
-        title="Каси"
-      />
+    <>
       {error && <Notice tone="danger">{error}</Notice>}
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {summary?.registers.map((register) => (
-          <Panel key={register.id}>
-            <h2 className="text-app-ink text-sm font-semibold">
-              {register.name}
-            </h2>
-            <ul className="mt-2 grid gap-2">
-              {register.currencies.map((currency) => (
-                <li className="grid gap-0.5" key={currency.currency}>
-                  <strong className="text-lg font-light tabular-nums text-white">
-                    {currency.balance} {currency.currency}
-                  </strong>
-                  <span className="text-app-dim font-mono text-[12.5px]">
-                    {' '}
-                    {currency.income} / {currency.expense}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </Panel>
-        ))}
-      </section>
-      <DataTable
-        caption="Список кас"
-        columns={[
-          {
-            key: 'name',
-            label: 'Каса',
-            variant: 'primary',
-            cell: (register) => (
-              <Link className="hover:text-brand block" to={register.id}>
-                {register.name}
-              </Link>
-            ),
-          },
-        ]}
-        empty={
-          <EmptyState
-            description="Створіть першу касу, щоб фіксувати надходження та витрати."
-            title="Кас поки немає"
-          />
-        }
-        rowKey={(register) => register.id}
-        rows={registers}
+      <CashList
+        canCreate={mutationsAllowed}
+        canTransfer={mutationsAllowed && transferFrom !== undefined}
+        date={date}
+        feed={feed}
+        feedTruncated={feedTruncated}
+        onTransfer={() => {
+          if (transferFrom) void navigate(transferFrom.id)
+        }}
+        registers={registers}
+        summary={summary}
       />
-    </PageBody>
+    </>
   )
 }
 

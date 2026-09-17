@@ -63,8 +63,22 @@ beforeEach(() => {
   cashMocks.list.mockResolvedValue([])
 })
 
-it('renders Core daily balances without calculating them in the browser', async () => {
-  cashMocks.list.mockResolvedValue([])
+it('renders Core daily figures without calculating them in the browser', async () => {
+  cashMocks.list.mockResolvedValue([
+    {
+      id: 'cash-1',
+      name: 'Каса',
+      type: 'cash',
+      isActive: true,
+      balances: { UAH: 1800 },
+    },
+  ])
+  cashMocks.transactions.mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 4,
+  })
   cashMocks.dailySummary.mockResolvedValue({
     date: '2026-08-28',
     timeZone: 'Europe/Kyiv',
@@ -97,8 +111,10 @@ it('renders Core daily balances without calculating them in the browser', async 
     </MemoryRouter>,
   )
 
-  expect(await screen.findByText('1800 UAH')).toBeVisible()
-  expect(screen.getByText('1000 / 200')).toBeVisible()
+  // The balance comes from the register itself and the operation count from
+  // the day's summary — the browser adds nothing up.
+  expect(await screen.findByText('1 800,00 ₴')).toBeVisible()
+  expect(screen.getByText('4 операції за 2026-08-28')).toBeVisible()
 })
 
 it('uses the selected timezone rather than UTC when defaulting the finance date', () => {
