@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are asserted directly. */
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { businessApi } from '@/api/business'
 import type { BillingState, Tenant } from '@/api/types'
@@ -8,6 +9,9 @@ import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { BusinessSettingsScreen } from './business-settings-screen'
 
 vi.mock('@/api/business', () => ({ businessApi: { update: vi.fn() } }))
+vi.mock('@/api/inventory', () => ({
+  inventoryApi: { getWarehouses: vi.fn(() => Promise.resolve([])) },
+}))
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
 
 const tenant: Tenant = {
@@ -72,7 +76,11 @@ beforeEach(() => {
 })
 
 it('uses accessible secondary text on the dark business surface', () => {
-  const view = render(<BusinessSettingsScreen />)
+  const view = render(
+    <MemoryRouter initialEntries={['/app/koval/settings/business']}>
+      <BusinessSettingsScreen />
+    </MemoryRouter>,
+  )
 
   expect(view.container.querySelector('.text-neutral-500')).toBeNull()
 })
@@ -87,13 +95,17 @@ it('round-trips trimmed business settings through the active tenant', async () =
   const currentCabinet = cabinet()
   vi.mocked(useCabinet).mockReturnValue(currentCabinet)
   const user = userEvent.setup()
-  render(<BusinessSettingsScreen />)
+  render(
+    <MemoryRouter initialEntries={['/app/koval/settings/business']}>
+      <BusinessSettingsScreen />
+    </MemoryRouter>,
+  )
 
-  await user.clear(screen.getByLabelText('Назва розбірки'))
-  await user.type(screen.getByLabelText('Назва розбірки'), '  Koval Parts  ')
+  await user.clear(screen.getByLabelText('Назва бізнесу'))
+  await user.type(screen.getByLabelText('Назва бізнесу'), '  Koval Parts  ')
   await user.clear(screen.getByLabelText('Місто'))
   await user.type(screen.getByLabelText('Місто'), '  Київ  ')
-  await user.click(screen.getByRole('button', { name: 'Зберегти' }))
+  await user.click(screen.getAllByRole('button', { name: 'Зберегти' })[0]!)
 
   const updateCall = vi.mocked(businessApi.update).mock.calls[0]
   expect(updateCall?.[0]).toBe('tenant-1')
@@ -102,7 +114,7 @@ it('round-trips trimmed business settings through the active tenant', async () =
   expect(await screen.findByRole('status')).toHaveTextContent(
     'Налаштування бізнесу збережено.',
   )
-  expect(screen.getByLabelText('Назва розбірки')).toHaveValue('Koval Parts LLC')
+  expect(screen.getByLabelText('Назва бізнесу')).toHaveValue('Koval Parts LLC')
   expect(screen.getByLabelText('Місто')).toHaveValue('Буча')
   expect(currentCabinet.switchTenant).toHaveBeenCalledWith('tenant-1')
 })
@@ -111,12 +123,16 @@ it('rechecks permission immediately before dispatching a business update', async
   const currentCabinet = cabinet()
   vi.mocked(useCabinet).mockReturnValue(currentCabinet)
   const user = userEvent.setup()
-  render(<BusinessSettingsScreen />)
+  render(
+    <MemoryRouter initialEntries={['/app/koval/settings/business']}>
+      <BusinessSettingsScreen />
+    </MemoryRouter>,
+  )
 
-  await user.clear(screen.getByLabelText('Назва розбірки'))
-  await user.type(screen.getByLabelText('Назва розбірки'), 'Koval Parts')
+  await user.clear(screen.getByLabelText('Назва бізнесу'))
+  await user.type(screen.getByLabelText('Назва бізнесу'), 'Koval Parts')
   currentCabinet.snapshot?.permissions.delete('team.manage')
-  await user.click(screen.getByRole('button', { name: 'Зберегти' }))
+  await user.click(screen.getAllByRole('button', { name: 'Зберегти' })[0]!)
 
   expect(businessApi.update).not.toHaveBeenCalled()
   expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -128,20 +144,42 @@ it('rechecks subscription access immediately before dispatching a business updat
   const currentCabinet = cabinet()
   vi.mocked(useCabinet).mockReturnValue(currentCabinet)
   const user = userEvent.setup()
-  render(<BusinessSettingsScreen />)
+  render(
+    <MemoryRouter initialEntries={['/app/koval/settings/business']}>
+      <BusinessSettingsScreen />
+    </MemoryRouter>,
+  )
 
-  await user.clear(screen.getByLabelText('Назва розбірки'))
-  await user.type(screen.getByLabelText('Назва розбірки'), 'Koval Parts')
+  await user.clear(screen.getByLabelText('Назва бізнесу'))
+  await user.type(screen.getByLabelText('Назва бізнесу'), 'Koval Parts')
   if (currentCabinet.snapshot?.entitlement) {
     const entitlement = currentCabinet.snapshot.entitlement as {
       state: BillingState
     }
     entitlement.state = 'blocked'
   }
-  await user.click(screen.getByRole('button', { name: 'Зберегти' }))
+  await user.click(screen.getAllByRole('button', { name: 'Зберегти' })[0]!)
 
   expect(businessApi.update).not.toHaveBeenCalled()
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Ви більше не маєте права змінювати налаштування бізнесу.',
   )
+})
+
+it('shows the business fields the tenant record cannot hold as disabled', async () => {
+  vi.mocked(useCabinet).mockReturnValue(cabinet())
+  render(
+    <MemoryRouter initialEntries={['/app/koval/settings/business']}>
+      <BusinessSettingsScreen />
+    </MemoryRouter>,
+  )
+
+  // `PATCH /tenants/{id}` takes a name, a city and a logo — nothing else.
+  for (const label of ['ЄДРПОУ / ІПН', 'Телефон', 'Адреса'])
+    expect(await screen.findByLabelText(label)).toBeDisabled()
+  for (const label of ['ФОП', 'USD', 'Експорт усіх даних', 'Видалити кабінет'])
+    expect(screen.getByRole('button', { name: label })).toBeDisabled()
+  expect(
+    screen.getByRole('button', { name: 'Видалити кабінет' }).title,
+  ).toContain('Видалити розбірку через API не можна')
 })
