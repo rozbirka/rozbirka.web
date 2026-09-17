@@ -1,16 +1,7 @@
-import { ImportReferencePicker } from './ImportReferencePicker'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { ArrowLeft } from 'lucide-react'
-import {
-  Button,
-  Card,
-  Field,
-  Notice,
-  SelectInput,
-  TextInput,
-  SkeletonRows,
-} from '@/components/app'
+import { Button, Card, Notice, SkeletonRows } from '@/components/app'
 import {
   partImportsApi as api,
   type ImportCapabilities,
@@ -28,10 +19,10 @@ import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { cabinetPath } from '../cabinet-paths'
 import { ImportFileStep } from './import-file'
 import { ImportHistory } from './import-history'
+import { ImportMappingStep } from './import-mapping'
 import {
   createMapping,
   fieldLabels,
-  valueLabels,
   statusLabels,
   issueText,
   isActiveImport,
@@ -84,7 +75,6 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
   const { importId } = useParams<{ importId: string }>()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const base = cabinetPath(cabinet.targetTenant!.slug, 'parts', 'imports')
-  const [advanced, setAdvanced] = useState(false)
   const [caps, setCaps] = useState<ImportCapabilities | null>(null),
     [history, setHistory] = useState<ImportStatus[]>([]),
     [historyPage, setHistoryPage] = useState(1),
@@ -109,7 +99,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
     [filter, setFilter] = useState('all'),
     [rowPage, setRowPage] = useState(1)
   const [rowTotal, setRowTotal] = useState(0)
-  const [profiles, setProfiles] = useState<ImportProfile[]>([]),
+  const [profiles] = useState<ImportProfile[]>([]),
     [profileName, setProfileName] = useState(''),
     [readSettings, setReadSettings] = useState(false)
   const lifetime = useRef<AbortController | null>(null),
@@ -329,12 +319,6 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
           !(i.code === 'DUPLICATE_DECISION_REQUIRED' && decisions[r.rowId]),
       ),
   )
-  const opts = (values: string[]) =>
-    values.map((v) => (
-      <option key={v} value={v}>
-        {valueLabels[v] ?? v}
-      </option>
-    ))
   async function saveMapping(signal: AbortSignal) {
     if (!status || !caps) return
     const next = createMapping(
@@ -546,11 +530,13 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
           </nav>
         )}
         <h1>{titles[step]}</h1>
-        <p className="import-description">
-          {step === 1 && status?.status === 'Failed'
-            ? 'Файл прочитати не вдалося. Нижче — що саме сталося й що можна зробити.'
-            : descriptions[step]}
-        </p>
+        {step === 2 ? null : (
+          <p className="import-description">
+            {step === 1 && status?.status === 'Failed'
+              ? 'Файл прочитати не вдалося. Нижче — що саме сталося й що можна зробити.'
+              : descriptions[step]}
+          </p>
+        )}
         {error ? (
           <Notice
             tone="danger"
@@ -618,228 +604,55 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
           />
         ) : null}
         {step === 2 && status?.source ? (
-          <div className="import-columns">
-            <Card
-              title="Зіставлення колонок"
-              aside={
-                <Button onClick={() => setAdvanced((v) => !v)}>
-                  {advanced ? 'Основні поля' : 'Усі поля'}
-                </Button>
-              }
-            >
-              <div className="import-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Поле Розбірки</th>
-                      <th>Колонка файлу</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {caps.fields
-                      .filter(
-                        (f) =>
-                          advanced ||
-                          [
-                            'Name',
-                            'Quantity',
-                            'DesiredSalePrice',
-                            'ExternalCode',
-                          ].includes(f.id),
-                      )
-                      .map((f) => (
-                        <tr key={f.id}>
-                          <td>
-                            {fieldLabels[f.id] ?? f.id}
-                            {f.required ? (
-                              <span className="text-brand"> *</span>
-                            ) : null}
-                          </td>
-                          <td>
-                            <SelectInput
-                              aria-label={`Колонка: ${fieldLabels[f.id] ?? f.id}`}
-                              value={
-                                mapping?.rules.find((r) => r.target === f.id)
-                                  ?.sources[0] ?? ''
-                              }
-                              onChange={(e) =>
-                                mapRule(
-                                  f.id,
-                                  e.target.value,
-                                  mapping?.rules.find((r) => r.target === f.id)
-                                    ?.constant ?? undefined,
-                                )
-                              }
-                            >
-                              <option value="">Не з колонки</option>
-                              {status.source!.fields.map((c) => (
-                                <option key={c.id} value={c.id}>
-                                  {c.header || `Колонка ${c.column}`}
-                                </option>
-                              ))}
-                            </SelectInput>
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="import-stack mt-4">
-                <h3>Колонки, які не імпортувати</h3>
-                {status.source.fields
-                  .filter(
-                    (f) =>
-                      !mapping?.rules.some((r) => r.sources.includes(f.id)),
-                  )
-                  .map((f) => (
-                    <label key={f.id} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={mapping?.skippedFields.includes(f.id) ?? false}
-                        onChange={(e) => {
-                          changed()
-                          setMapping((m) => ({
-                            ...m!,
-                            version: m?.version ?? 0,
-                            schemaVersion: caps.schemaVersion,
-                            rules: m?.rules ?? [],
-                            skippedFields: e.target.checked
-                              ? [...(m?.skippedFields ?? []), f.id]
-                              : (m?.skippedFields ?? []).filter(
-                                  (id) => id !== f.id,
-                                ),
-                          }))
-                        }}
-                      />
-                      {f.header || f.id}
-                    </label>
-                  ))}
-              </div>
-            </Card>
-            <div className="import-stack">
-              <Card title="Спільні значення">
-                <div className="import-stack">
-                  {caps.fields
-                    .filter(
-                      (f) =>
-                        advanced ||
-                        [
-                          'SourceType',
-                          'Strategy',
-                          'CarId',
-                          'IntakeId',
-                          'InventoryZoneId',
-                          'EquipmentTypeId',
-                          'Condition',
-                          'CustomerId',
-                          'ReserveQuantity',
-                          'ReservePrice',
-                          'OrderNotes',
-                        ].includes(f.id),
-                    )
-                    .filter(
-                      (f) =>
-                        !mapping?.rules.find((r) => r.target === f.id)?.sources
-                          .length,
-                    )
-                    .map((f) => (
-                      <Field
-                        key={f.id}
-                        label={fieldLabels[f.id] ?? f.id}
-                        required={f.required}
-                      >
-                        {f.allowed ? (
-                          <SelectInput
-                            value={
-                              mapping?.rules.find((r) => r.target === f.id)
-                                ?.constant ?? ''
-                            }
-                            onChange={(e) => mapRule(f.id, '', e.target.value)}
-                          >
-                            <option value="">Не вказувати</option>
-                            {opts(f.allowed)}
-                          </SelectInput>
-                        ) : f.type === 'reference' ? (
-                          <ImportReferencePicker
-                            field={f.id}
-                            value={
-                              mapping?.rules.find((r) => r.target === f.id)
-                                ?.constant ?? ''
-                            }
-                            onChange={(value) => mapRule(f.id, '', value)}
-                          />
-                        ) : (
-                          <TextInput
-                            value={
-                              mapping?.rules.find((r) => r.target === f.id)
-                                ?.constant ?? ''
-                            }
-                            onChange={(e) => mapRule(f.id, '', e.target.value)}
-                            placeholder={undefined}
-                          />
-                        )}
-                      </Field>
-                    ))}
-                </div>
-              </Card>
-              <Card title="Профіль імпорту">
-                <div className="import-stack">
-                  <Button
-                    disabled={busy}
-                    onClick={() =>
-                      void action(async (signal) => {
-                        const p = await api.profiles({ signal })
-                        if (!signal.aborted) setProfiles(p)
-                      })
-                    }
-                  >
-                    Мої профілі
-                  </Button>
-                  {profiles.map((p) => (
-                    <Button
-                      key={p.id}
-                      onClick={() =>
-                        void action(async (signal) => {
-                          const match = await api.matchProfile(
-                            status.id,
-                            p.id,
-                            { signal },
-                          )
-                          if (signal.aborted) return
-                          if (match.conflicts.length)
-                            throw new Error(match.conflicts.join(', '))
-                          if (match.plan) {
-                            changed()
-                            setMapping(match.plan)
-                          }
-                        })
-                      }
-                    >
-                      {p.name}
-                    </Button>
-                  ))}
-                  <Field label="Назва профілю">
-                    <TextInput
-                      value={profileName}
-                      onChange={(e) => setProfileName(e.target.value)}
-                    />
-                  </Field>
-                  <Button
-                    disabled={busy || !status.mapping || !profileName.trim()}
-                    onClick={() =>
-                      void action(async (signal) => {
-                        await api.saveProfile(status.id, profileName, {
-                          signal,
-                        })
-                      })
-                    }
-                  >
-                    Зберегти застосоване зіставлення
-                  </Button>
-                </div>
-              </Card>
-            </div>
-          </div>
+          <ImportMappingStep
+            busy={busy}
+            capabilities={caps}
+            editable={editable}
+            mapping={mapping}
+            onApplyProfile={(profile) =>
+              void action(async (signal) => {
+                const match = await api.matchProfile(status.id, profile.id, {
+                  signal,
+                })
+                if (signal.aborted) return
+                if (match.conflicts.length)
+                  throw new Error(match.conflicts.join(', '))
+                if (match.plan) {
+                  changed()
+                  setMapping(match.plan)
+                }
+              })
+            }
+            onClearProfile={() => {
+              changed()
+              setMapping(null)
+            }}
+            onContinue={next}
+            onProfileName={setProfileName}
+            onRule={mapRule}
+            onSaveProfile={() =>
+              void action(async (signal) => {
+                await api.saveProfile(status.id, profileName, { signal })
+              })
+            }
+            onSkip={(fileFieldId, skippedNow) => {
+              changed()
+              setMapping((current) => ({
+                schemaVersion: caps.schemaVersion,
+                version: current?.version ?? 0,
+                rules: current?.rules ?? [],
+                skippedFields: skippedNow
+                  ? [...(current?.skippedFields ?? []), fileFieldId]
+                  : (current?.skippedFields ?? []).filter(
+                      (id) => id !== fileFieldId,
+                    ),
+              }))
+            }}
+            profileName={profileName}
+            profiles={profiles}
+            rows={rows}
+            status={status}
+          />
         ) : null}
         {step === 3 ? (
           <>
