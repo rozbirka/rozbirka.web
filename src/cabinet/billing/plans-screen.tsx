@@ -241,7 +241,7 @@ export function PlansScreen() {
       {management.kind === 'unavailable' && <BillingUnavailableNotice />}
 
       <ul
-        className="grid min-w-0 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3"
+        className="grid min-w-0 items-start gap-5 sm:grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))]"
         role="list"
       >
         {plans.map((plan) => {

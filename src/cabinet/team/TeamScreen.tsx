@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { AlertDialog } from 'radix-ui'
 import {
+  ActionMenu,
   Button,
   DateValue,
   Field,
@@ -722,78 +723,80 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                           </td>
                           {canManageAccess && (
                             <td className="px-5.5 py-3.5">
-                              <span className="flex min-w-0 flex-wrap justify-end gap-2">
-                                <Button
-                                  aria-label={`Права ${member.name}`}
-                                  onClick={() => void openPermissions(member)}
-                                >
-                                  <KeyRound aria-hidden />
-                                  Права
-                                </Button>
-                                <Button
-                                  aria-label={
-                                    member.isActive
-                                      ? `Вимкнути ${member.name}`
-                                      : `Активувати ${member.name}`
-                                  }
-                                  onClick={() =>
-                                    askConfirmation({
-                                      title: member.isActive
-                                        ? 'Вимкнути учасника'
-                                        : 'Активувати учасника',
-                                      description: member.isActive
-                                        ? `${member.name} втратить доступ до кабінету. Ви зможете активувати цей обліковий запис пізніше.`
-                                        : `${member.name} знову отримає доступ до кабінету з роллю «${member.role.name}».`,
-                                      failure: member.isActive
-                                        ? 'Не вдалося вимкнути учасника. Перевірте зв’язок і спробуйте ще раз.'
-                                        : 'Не вдалося активувати учасника. Перевірте зв’язок і спробуйте ще раз.',
-                                      confirm: () =>
-                                        mutate(
-                                          member.isActive
-                                            ? 'Учасника вимкнено.'
-                                            : 'Учасника активовано.',
-                                          (signal) =>
-                                            member.isActive
-                                              ? teamApi.deactivateMember(
-                                                  member.id,
-                                                  { signal },
-                                                )
-                                              : teamApi.activateMember(
+                              <span className="flex justify-end">
+                                <ActionMenu
+                                  actions={[
+                                    {
+                                      key: 'permissions',
+                                      label: 'Права',
+                                      icon: <KeyRound aria-hidden />,
+                                      onSelect: () =>
+                                        void openPermissions(member),
+                                    },
+                                    {
+                                      key: 'lifecycle',
+                                      label: member.isActive
+                                        ? 'Вимкнути'
+                                        : 'Активувати',
+                                      icon: member.isActive ? (
+                                        <PowerOff aria-hidden />
+                                      ) : (
+                                        <Power aria-hidden />
+                                      ),
+                                      onSelect: () =>
+                                        askConfirmation({
+                                          title: member.isActive
+                                            ? 'Вимкнути учасника'
+                                            : 'Активувати учасника',
+                                          description: member.isActive
+                                            ? `${member.name} втратить доступ до кабінету. Ви зможете активувати цей обліковий запис пізніше.`
+                                            : `${member.name} знову отримає доступ до кабінету з роллю «${member.role.name}».`,
+                                          failure: member.isActive
+                                            ? 'Не вдалося вимкнути учасника. Перевірте зв’язок і спробуйте ще раз.'
+                                            : 'Не вдалося активувати учасника. Перевірте зв’язок і спробуйте ще раз.',
+                                          confirm: () =>
+                                            mutate(
+                                              member.isActive
+                                                ? 'Учасника вимкнено.'
+                                                : 'Учасника активовано.',
+                                              (signal) =>
+                                                member.isActive
+                                                  ? teamApi.deactivateMember(
+                                                      member.id,
+                                                      { signal },
+                                                    )
+                                                  : teamApi.activateMember(
+                                                      member.id,
+                                                      { signal },
+                                                    ),
+                                            ),
+                                        }),
+                                    },
+                                    {
+                                      key: 'delete',
+                                      label: 'Видалити',
+                                      icon: <Trash2 aria-hidden />,
+                                      destructive: true,
+                                      onSelect: () =>
+                                        askConfirmation({
+                                          title: 'Видалити учасника',
+                                          description: `${member.name} втратить доступ назавжди. Щоб повернути людину в команду, доведеться створити нове запрошення.`,
+                                          failure:
+                                            'Не вдалося видалити учасника. Перевірте зв’язок і спробуйте ще раз.',
+                                          confirm: () =>
+                                            mutate(
+                                              'Учасника видалено.',
+                                              (signal) =>
+                                                teamApi.deleteMember(
                                                   member.id,
                                                   { signal },
                                                 ),
-                                        ),
-                                    })
-                                  }
-                                >
-                                  {member.isActive ? (
-                                    <PowerOff aria-hidden />
-                                  ) : (
-                                    <Power aria-hidden />
-                                  )}
-                                  {member.isActive ? 'Вимкнути' : 'Активувати'}
-                                </Button>
-                                <Button
-                                  aria-label={`Видалити ${member.name}`}
-                                  onClick={() =>
-                                    askConfirmation({
-                                      title: 'Видалити учасника',
-                                      description: `${member.name} втратить доступ назавжди. Щоб повернути людину в команду, доведеться створити нове запрошення.`,
-                                      failure:
-                                        'Не вдалося видалити учасника. Перевірте зв’язок і спробуйте ще раз.',
-                                      confirm: () =>
-                                        mutate('Учасника видалено.', (signal) =>
-                                          teamApi.deleteMember(member.id, {
-                                            signal,
-                                          }),
-                                        ),
-                                    })
-                                  }
-                                  variant="danger"
-                                >
-                                  <Trash2 aria-hidden />
-                                  Видалити
-                                </Button>
+                                            ),
+                                        }),
+                                    },
+                                  ]}
+                                  label={`Дії з учасником ${member.name}`}
+                                />
                               </span>
                             </td>
                           )}
