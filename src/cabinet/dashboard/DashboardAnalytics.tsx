@@ -19,6 +19,8 @@ const periodLabels: Readonly<Record<DashboardPeriod, string>> = {
 const numberFormatter = new Intl.NumberFormat('uk-UA', {
   maximumFractionDigits: 1,
 })
+const currencySymbol = (currency: string) =>
+  ({ UAH: '₴', USD: '$', EUR: '€' })[currency] ?? currency
 
 interface DashboardAnalyticsProps {
   loadable: DashboardLoadable<DashboardAnalyticsData>
@@ -159,7 +161,7 @@ function AnalyticsContent({
             <Figure
               key={currency}
               label={`Виручка, ${currency}`}
-              unit={currency}
+              unit={currencySymbol(currency)}
               value={<Amount currency={null} value={total} />}
             />
           ))
@@ -256,7 +258,14 @@ function Figure({
         {value}
       </span>
       {unit === undefined ? null : (
-        <span className="text-app-muted font-mono text-[13px] font-medium">
+        <span
+          className={cn(
+            'font-mono font-medium',
+            ['$', '₴', '€'].includes(unit)
+              ? 'text-[30px] leading-none font-extrabold text-white'
+              : 'text-app-muted text-[13px]',
+          )}
+        >
           {unit}
         </span>
       )}
@@ -307,7 +316,9 @@ function TopPart({
             <span className="text-[26px] leading-none font-extrabold tracking-[-0.03em] tabular-nums text-white">
               <Amount currency={null} value={data.revenueUsd} />
             </span>
-            <span className="text-app-muted font-mono text-xs">USD</span>
+            <span className="font-mono text-[26px] leading-none font-extrabold text-white">
+              $
+            </span>
           </span>
           <span className="text-app-dim mt-1.5 block text-xs">виручка</span>
         </p>

@@ -9,7 +9,6 @@ import {
 import {
   Check,
   ChevronLeft,
-  Lock,
   MoreHorizontal,
   Plus,
   ScanLine,
@@ -45,11 +44,7 @@ import {
   type IntakeListParams,
   isIntakeStatus,
 } from '@/api/intakes'
-import {
-  inventoryApi,
-  type InventoryZone,
-  type Warehouse,
-} from '@/api/inventory'
+import { inventoryApi, type InventoryZone } from '@/api/inventory'
 import { partsApi } from '@/api/parts'
 import { normalizeApiProblem } from '@/api/errors'
 import { cn, plural } from '@/lib/utils'
@@ -423,7 +418,6 @@ function IntakesList({ base }: { base: string }) {
             <IntakeStat
               label="Вартість надходжень"
               meta="на цій сторінці"
-              unit="USD"
               value={money(cost)}
             />
           ) : null}
@@ -468,19 +462,6 @@ function IntakesList({ base }: { base: string }) {
                 </button>
               )
             })}
-          </div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span className="text-app-dim text-[13px]">Сортувати</span>
-            {['Спочатку нові', 'За кількістю'].map((label) => (
-              <Button
-                className="min-h-9 px-3.5 text-[13px] font-semibold"
-                disabled
-                key={label}
-                title="Сортування приймань сервер поки не підтримує — список іде так, як його віддає сервер"
-              >
-                {label}
-              </Button>
-            ))}
           </div>
         </div>
 
@@ -910,7 +891,6 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                     ? 'вартість партії не вказано'
                     : `${money(unitCost)} на позицію`
                 }
-                unit="USD"
                 value={money(profit?.invested ?? intake.totalCost ?? 0)}
               />
               <IntakeStat
@@ -922,7 +902,6 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                     : `${String(profit.recoupedPercent)}% від вкладеного`
                 }
                 tone="ok"
-                unit="USD"
                 value={money(profit?.recouped ?? 0)}
               />
             </>
@@ -1131,7 +1110,6 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                   <span className="text-[34px] leading-none font-extrabold tracking-[-0.03em] text-white">
                     {intake.totalCost === null ? '—' : money(intake.totalCost)}
                   </span>
-                  <span className="text-app-muted font-mono text-sm">USD</span>
                 </p>
                 <dl className="border-app-line mt-4.5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5 border-t pt-4">
                   <dt className="text-app-muted text-sm font-semibold">
@@ -1251,21 +1229,6 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
   )
 }
 
-/**
- * The three ways stock reaches a yard. The intake record has no source kind
- * yet, so the tray shows what exists and stays inert — see
- * `docs/reports/design-gaps.md`.
- */
-const INTAKE_SOURCES = [
-  {
-    value: 'supplier',
-    label: 'Від постачальника',
-    hint: 'Партія за накладною',
-  },
-  { value: 'car', label: 'З авто', hint: 'Розібране авто зі складу' },
-  { value: 'auction', label: 'З аукціону', hint: 'Лот, куплений на аукціоні' },
-] as const
-
 function IntakeForm({
   title,
   intakeId,
@@ -1281,7 +1244,6 @@ function IntakeForm({
   const params = useParams<{ tenant: string }>()
   const navigate = useNavigate()
   const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
-  const canPlace = allowedToView(cabinetModules.inventory, cabinet)
   const [values, setValues] = useState({
     name: '',
     supplier: '',
@@ -1291,8 +1253,6 @@ function IntakeForm({
   })
   const [media, setMedia] = useState<MediaUploadResult[]>([])
   const [intake, setIntake] = useState<Intake | null>(null)
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([])
-  const [zones, setZones] = useState<InventoryZone[]>([])
   const [problem, setProblem] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<{ totalCost?: string }>({})
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -1330,25 +1290,6 @@ function IntakeForm({
     )
     return () => controller.abort()
   }, [canManageFinance, intakeId])
-  useEffect(() => {
-    if (!canPlace) return
-    const controller = new AbortController()
-    void Promise.all([
-      inventoryApi.getWarehouses({ signal: controller.signal }),
-      inventoryApi.getZones({ activeOnly: true, signal: controller.signal }),
-    ]).then(
-      ([nextWarehouses, nextZones]) => {
-        if (controller.signal.aborted) return
-        setWarehouses(nextWarehouses)
-        setZones(nextZones)
-      },
-      () => {
-        // The card is read-only anyway; without the lists it simply stays empty.
-      },
-    )
-    return () => controller.abort()
-  }, [canPlace])
-
   const cost = values.totalCost === '' ? null : Number(values.totalCost)
   const hasCost = cost !== null && Number.isFinite(cost) && cost > 0
   const positions = intake?.partsCount ?? 0
@@ -1517,45 +1458,7 @@ function IntakeForm({
           onSubmit={(event) => void save(event)}
         >
           <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
-            <FormCard
-              aside={
-                intakeId ? (
-                  <span className="border-app-line-2 text-app-muted inline-flex h-6 items-center gap-1.5 rounded-full border bg-white/[0.05] px-2.5 text-xs font-bold">
-                    <Lock aria-hidden className="size-3" />
-                    Не змінюється
-                  </span>
-                ) : undefined
-              }
-              description={
-                intakeId === undefined
-                  ? 'Після створення джерело не змінюється — від нього залежить розрахунок собівартості.'
-                  : 'Джерело задане під час створення — від нього залежить розрахунок собівартості.'
-              }
-              step="01"
-              title="Джерело надходження"
-            >
-              <div
-                aria-label="Вид джерела"
-                className="flex flex-wrap gap-2"
-                role="group"
-              >
-                {INTAKE_SOURCES.map((source) => (
-                  <button
-                    className="border-app-line-2 text-app-muted min-h-[70px] flex-[1_1_160px] cursor-not-allowed rounded-xl border px-4 py-3 text-left disabled:opacity-55"
-                    disabled
-                    key={source.value}
-                    title="Приймання поки не зберігає вид джерела — партія завжди від постачальника"
-                    type="button"
-                  >
-                    <span className="block text-[15px] font-bold">
-                      {source.label}
-                    </span>
-                    <span className="text-app-dim mt-1.5 block text-xs leading-[1.4] font-medium">
-                      {source.hint}
-                    </span>
-                  </button>
-                ))}
-              </div>
+            <FormCard step="01" title="Основні дані">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field hint="Від кого прийшла партія" label="Постачальник">
                   <TextInput
@@ -1578,53 +1481,7 @@ function IntakeForm({
               </div>
             </FormCard>
 
-            {canPlace ? (
-              <FormCard
-                description="Склад і зона поки не зберігаються в прийманні — кожну позицію розміщують окремо на картці деталі."
-                step="02"
-                title="Куди приймаємо"
-              >
-                <div className="flex flex-wrap gap-1.5">
-                  {warehouses.length === 0 ? (
-                    <p className="text-app-dim text-sm">
-                      Складів ще немає — додайте їх у модулі «Склад».
-                    </p>
-                  ) : (
-                    warehouses.map((warehouse) => (
-                      <button
-                        className="border-app-line-2 text-app-muted min-h-10 cursor-not-allowed rounded-[10px] border px-4 text-sm font-semibold whitespace-nowrap disabled:opacity-55"
-                        disabled
-                        key={warehouse.id}
-                        title="Приймання поки не зберігає склад за замовчуванням"
-                        type="button"
-                      >
-                        {warehouse.name}
-                      </button>
-                    ))
-                  )}
-                </div>
-                {zones.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {zones.slice(0, 8).map((zone) => (
-                      <button
-                        className="border-app-line-2 text-app-muted min-h-9 cursor-not-allowed rounded-full border px-3.5 text-[13px] font-semibold whitespace-nowrap disabled:opacity-55"
-                        disabled
-                        key={zone.id}
-                        title="Приймання поки не зберігає зону за замовчуванням"
-                        type="button"
-                      >
-                        {zone.code}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </FormCard>
-            ) : null}
-
-            <FormCard
-              step={canPlace ? '03' : '02'}
-              title="Дата й відповідальний"
-            >
+            <FormCard step="02" title="Дата й відповідальний">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Дата приймання">
                   <TextInput
@@ -1632,18 +1489,6 @@ function IntakeForm({
                     onChange={update('purchasedAt')}
                     type="date"
                     value={values.purchasedAt.slice(0, 10)}
-                  />
-                </Field>
-                <Field
-                  hint="Номера накладної приймання поки не зберігає"
-                  label="Документ постачальника"
-                >
-                  <TextInput
-                    className="font-mono"
-                    disabled
-                    name="document"
-                    placeholder="4471"
-                    value=""
                   />
                 </Field>
               </div>
@@ -1669,11 +1514,11 @@ function IntakeForm({
                   ? `Сума придбання ділиться між позиціями партії — зараз їх ${String(positions)}.`
                   : 'Сума придбання ділиться між позиціями партії й формує їхню собівартість.'
               }
-              step={canPlace ? '04' : '03'}
+              step="03"
               title="Вартість партії"
             >
               {canManageFinance ? (
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4">
                   <Field
                     error={fieldErrors.totalCost}
                     hint="Скільки заплачено за всю партію, у доларах"
@@ -1686,18 +1531,6 @@ function IntakeForm({
                       onChange={update('totalCost')}
                       placeholder="6120"
                       value={values.totalCost}
-                    />
-                  </Field>
-                  <Field
-                    hint="Доставка й розмитнення окремо поки не зберігаються"
-                    label="Супутні витрати"
-                  >
-                    <TextInput
-                      className="font-mono"
-                      disabled
-                      name="extraCost"
-                      placeholder="320"
-                      value=""
                     />
                   </Field>
                 </div>
@@ -1717,7 +1550,7 @@ function IntakeForm({
             </FormCard>
 
             {!intakeId ? (
-              <FormCard step={canPlace ? '05' : '04'} title="Фото партії">
+              <FormCard step="04" title="Фото партії">
                 <MediaPicker
                   entityType="intakes"
                   items={media}

@@ -115,6 +115,8 @@ it('renders response currencies, textual trends, authoritative totals, and decor
   expect(screen.getByText('+2')).toHaveClass('text-state-ok')
   expect(screen.getAllByText(/менше, ніж у попередній період/)).toHaveLength(1)
   expect(screen.getByText('Фара ліва')).toBeInTheDocument()
+  expect(screen.getAllByText('$').length).toBeGreaterThan(0)
+  expect(screen.queryByText('USD')).not.toBeInTheDocument()
   const charts = document.querySelectorAll(
     '[aria-label="Декоративна діаграма"]',
   )

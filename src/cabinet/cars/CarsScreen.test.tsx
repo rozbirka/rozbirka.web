@@ -154,7 +154,34 @@ beforeEach(() => {
   })
   vi.mocked(carsApi.get).mockResolvedValue(detail)
   vi.mocked(mediaApi.remove).mockResolvedValue(undefined)
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: string | URL | Request) => {
+      const href =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve(
+            href.includes('GetModels')
+              ? { Results: [{ Model_ID: 1719, Model_Name: 'X5' }] }
+              : { Results: [{ MakeId: 452, MakeName: 'BMW' }] },
+          ),
+      })
+    }),
+  )
 })
+
+const chooseBmwX5 = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(screen.getByRole('button', { name: 'Марка' }))
+  await user.click(await screen.findByRole('button', { name: 'BMW' }))
+  await user.click(screen.getByRole('button', { name: 'Модель' }))
+  await user.click(await screen.findByRole('button', { name: 'X5' }))
+}
 
 it('blocks a direct create route for a view-only member', async () => {
   vi.mocked(useCabinet).mockReturnValue(
@@ -610,6 +637,77 @@ it('retains successful files when another media upload fails and reports that fi
   expect(errors[1]).toHaveTextContent('large.jpg: Файл завеликий.')
 })
 
+it('chooses make and model from bottom sheets and keeps photos local until submit', async () => {
+  const user = userEvent.setup()
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({ Results: [{ MakeId: 452, MakeName: 'BMW' }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({ Results: [{ Model_ID: 1719, Model_Name: 'X5' }] }),
+      }),
+  )
+  vi.mocked(mediaApi.upload).mockResolvedValue({
+    storageKey: 'pending/cars/photo',
+    url: 'https://cdn.example/photo.jpg',
+  })
+  vi.mocked(carsApi.create).mockResolvedValue(detail)
+
+  render(
+    <MemoryRouter initialEntries={['/app/demo/cars/new']}>
+      <Routes>
+        <Route path="/app/:tenant/cars/new" element={<CarsScreen />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(screen.getByText('Додаткові витрати')).toBeVisible()
+  await user.click(screen.getByRole('button', { name: 'Марка' }))
+  await user.click(await screen.findByRole('button', { name: 'BMW' }))
+  await user.click(screen.getByRole('button', { name: 'Модель' }))
+  await user.click(await screen.findByRole('button', { name: 'X5' }))
+
+  const photo = new File(['photo'], 'photo.jpg', { type: 'image/jpeg' })
+  await user.upload(screen.getByLabelText('Додати фото'), photo)
+  expect(await screen.findByText('photo.jpg')).toBeVisible()
+  expect(mediaApi.upload).not.toHaveBeenCalled()
+
+  await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-001')
+  await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2020')
+  await user.type(
+    screen.getByRole('textbox', { name: 'Ціна придбання' }),
+    '12000',
+  )
+  await user.click(
+    screen.getAllByRole('button', { name: 'Створити автомобіль' })[0]!,
+  )
+
+  await waitFor(() =>
+    expect(mediaApi.upload).toHaveBeenCalledWith(
+      photo,
+      'cars',
+      expect.objectContaining({
+        signal: expect.any(AbortSignal) as AbortSignal,
+      }),
+    ),
+  )
+  expect(carsApi.create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      brand: 'BMW',
+      model: 'X5',
+      photoKeys: ['pending/cars/photo'],
+    }),
+    expect.anything(),
+  )
+})
+
 it('allows pending car media upload and removal when the car quota is full', async () => {
   const currentCabinet = cabinet(
     ['cars.view', 'cars.manage', 'finance.manage'],
@@ -669,8 +767,7 @@ it('retries only remaining initial expenses after partial failure without recrea
   )
 
   await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-001')
-  await user.type(screen.getByRole('textbox', { name: 'Марка' }), 'BMW')
-  await user.type(screen.getByRole('textbox', { name: 'Модель' }), 'X5')
+  await chooseBmwX5(user)
   await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2020')
   await user.type(
     screen.getByRole('textbox', { name: 'Ціна придбання' }),
@@ -727,8 +824,7 @@ it('validates every initial expense before creating the car', async () => {
   )
 
   await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-001')
-  await user.type(screen.getByRole('textbox', { name: 'Марка' }), 'BMW')
-  await user.type(screen.getByRole('textbox', { name: 'Модель' }), 'X5')
+  await chooseBmwX5(user)
   await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2020')
   await user.type(
     screen.getByRole('textbox', { name: 'Ціна придбання' }),
@@ -741,7 +837,7 @@ it('validates every initial expense before creating the car', async () => {
   )
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Перевірте правильність початкових витрат. Кожна потребує назви до 200 символів і суми більшої за нуль.',
+    'Перевірте правильність додаткових витрат. Кожна потребує назви до 200 символів і суми більшої за нуль.',
   )
   expect(carsApi.create).not.toHaveBeenCalled()
 })
@@ -764,8 +860,7 @@ it('rechecks the latest car permission before dispatching create', async () => {
   )
 
   await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-001')
-  await user.type(screen.getByRole('textbox', { name: 'Марка' }), 'BMW')
-  await user.type(screen.getByRole('textbox', { name: 'Модель' }), 'X5')
+  await chooseBmwX5(user)
   await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2020')
   await user.type(
     screen.getByRole('textbox', { name: 'Ціна придбання' }),

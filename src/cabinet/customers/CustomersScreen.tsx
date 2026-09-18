@@ -133,6 +133,23 @@ const customerInitials = (name: string) =>
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('') || '?'
 
+const AVATAR_TONES = [
+  'bg-amber-400/15 text-amber-300',
+  'bg-sky-400/15 text-sky-300',
+  'bg-emerald-400/15 text-emerald-300',
+  'bg-violet-400/15 text-violet-300',
+  'bg-rose-400/15 text-rose-300',
+  'bg-cyan-400/15 text-cyan-300',
+] as const
+const customerAvatarTone = (value: string) => {
+  let hash = 0
+  for (const character of value)
+    hash = (hash * 31 + character.codePointAt(0)!) >>> 0
+  return AVATAR_TONES[hash % AVATAR_TONES.length]
+}
+const currencySymbol = (currency: string | null) =>
+  ({ UAH: '₴', USD: '$', EUR: '€' })[currency ?? ''] ?? currency ?? ''
+
 /** How a customer is grouped by how often they buy. */
 const CUSTOMER_SEGMENTS = [
   { value: 'all' as const, label: 'Усі' },
@@ -397,7 +414,10 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
                     <span className="flex min-w-0 items-center gap-3.5">
                       <span
                         aria-hidden
-                        className="bg-brand/15 text-brand flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-bold"
+                        className={cn(
+                          'flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-bold',
+                          customerAvatarTone(customer.id),
+                        )}
                       >
                         {customerInitials(customer.name)}
                       </span>
@@ -629,7 +649,16 @@ function CustomerDetailScreen({
   const orderHref = (orderId: string) =>
     `/app/${cabinet.targetTenant?.slug ?? ''}/orders/${orderId}`
   const money = (value: number | null) =>
-    value === null ? '—' : `${new Intl.NumberFormat('uk-UA').format(value)} $`
+    value === null
+      ? '—'
+      : `${new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 2 }).format(value)} $`
+  const averageAmount =
+    customer.totalAmount !== null &&
+    customer.ordersCount !== null &&
+    customer.ordersCount > 0
+      ? customer.totalAmount / customer.ordersCount
+      : null
+  const customersPath = `/app/${cabinet.targetTenant?.slug ?? ''}/customers`
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
@@ -637,7 +666,7 @@ function CustomerDetailScreen({
         <div className="flex min-w-0 items-center gap-5">
           <Link
             className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-            to=".."
+            to={customersPath}
           >
             <ChevronLeft aria-hidden className="size-3.5" />
             До клієнтів
@@ -685,7 +714,10 @@ function CustomerDetailScreen({
         <div className="flex flex-wrap items-start gap-x-6 gap-y-5">
           <span
             aria-hidden
-            className="bg-brand/15 text-brand flex size-16 shrink-0 items-center justify-center rounded-full text-[22px] font-bold"
+            className={cn(
+              'flex size-16 shrink-0 items-center justify-center rounded-full text-[22px] font-bold',
+              customerAvatarTone(customer.id),
+            )}
           >
             {customerInitials(customer.name)}
           </span>
@@ -771,12 +803,10 @@ function CustomerDetailScreen({
                   <dd
                     className={cn(
                       'mt-2 text-[28px] leading-none font-bold tracking-[-0.02em] tabular-nums',
-                      (customer.averageAmount ?? 0) > 0
-                        ? 'text-white'
-                        : 'text-app-dim',
+                      (averageAmount ?? 0) > 0 ? 'text-white' : 'text-app-dim',
                     )}
                   >
-                    {money(customer.averageAmount)}
+                    {money(averageAmount)}
                   </dd>
                 </div>
               </>
@@ -879,7 +909,7 @@ function CustomerDetailScreen({
                       <span className="font-mono text-[15px] whitespace-nowrap text-white tabular-nums">
                         {order.totalAmount === null
                           ? '—'
-                          : `${new Intl.NumberFormat('uk-UA').format(order.totalAmount)} ${order.currency ?? ''}`.trim()}
+                          : `${new Intl.NumberFormat('uk-UA').format(order.totalAmount)} ${currencySymbol(order.currency)}`.trim()}
                       </span>
                     </Link>
                   </li>
@@ -891,17 +921,6 @@ function CustomerDetailScreen({
           <div className="flex min-w-0 flex-[1_1_18rem] flex-col gap-5">
             <Card title="Деталі">
               <dl className="grid grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-3.5">
-                <dt className="text-app-muted text-[14px] font-semibold">
-                  Телефон
-                </dt>
-                <dd
-                  className={cn(
-                    'font-mono text-[14px]',
-                    customer.phone === null ? 'text-app-dim' : 'text-app-ink',
-                  )}
-                >
-                  {customer.phone ?? '—'}
-                </dd>
                 <dt
                   className="text-app-muted text-[14px] font-semibold"
                   title="Сервер не зберігає, звідки прийшов клієнт"

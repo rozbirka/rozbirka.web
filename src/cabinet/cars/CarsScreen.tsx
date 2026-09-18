@@ -40,6 +40,7 @@ import {
   FormDialog,
   Gallery,
   SectionPanel,
+  Sheet,
   EmptyState,
   Field,
   ErrorState,
@@ -305,8 +306,8 @@ function CarCard({
       </span>
 
       <span className="grid gap-2.5 p-4">
-        <span className="flex items-baseline justify-between gap-3">
-          <span className="truncate text-[18px] font-bold text-white">
+        <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3">
+          <span className="min-w-0 truncate text-[18px] font-bold text-white">
             {car.code}
           </span>
           {showMoney ? (
@@ -315,8 +316,8 @@ function CarCard({
             </span>
           ) : null}
         </span>
-        <span className="flex items-baseline justify-between gap-3">
-          <span className="text-app-muted truncate text-[14px]">
+        <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3">
+          <span className="text-app-muted min-w-0 truncate text-[14px]">
             {car.brand} {car.model} ({car.year})
           </span>
           {showMoney ? (
@@ -1409,6 +1410,8 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     notes: '',
   })
   const [media, setMedia] = useState<MediaUploadResult[]>([])
+  const [pendingMedia, setPendingMedia] = useState<PendingMedia[]>([])
+  const [makeId, setMakeId] = useState<number | null>(null)
   const [expenses, setExpenses] = useState<
     { id: number; name: string; amount: string }[]
   >([])
@@ -1500,7 +1503,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
       )
     ) {
       setProblem(
-        'Перевірте правильність початкових витрат. Кожна потребує назви до 200 символів і суми більшої за нуль.',
+        'Перевірте правильність додаткових витрат. Кожна потребує назви до 200 символів і суми більшої за нуль.',
       )
       return
     }
@@ -1525,10 +1528,25 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
         savedCarId = car.id
       } else {
         if (!savedCarId) {
+          const uploaded = await Promise.all(
+            pendingMedia.map((item) => {
+              const uploadScope = requireLatestMutation({ quota: false })
+              requireLatestMutation({
+                permission: 'finance.manage',
+                quota: false,
+              })
+              return mediaApi.upload(item.file, 'cars', {
+                signal: uploadScope.signal,
+              })
+            }),
+          )
+          const allMedia = [...media, ...uploaded]
+          setMedia(allMedia)
+          setPendingMedia([])
           const createRequest: CreateCarRequest = {
             ...request,
             purchasePrice,
-            photoKeys: media.map((item) => item.storageKey),
+            photoKeys: allMedia.map((item) => item.storageKey),
           }
           const scope = requireLatestMutation()
           requireLatestMutation({
@@ -1769,20 +1787,34 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                       required
                     />
                   </Field>
-                  <Field label="Марка" required>
-                    <TextInput
-                      {...bind('brand')}
-                      placeholder="Tesla"
-                      required
-                    />
-                  </Field>
-                  <Field label="Модель" required>
-                    <TextInput
-                      {...bind('model')}
-                      placeholder="Model Y"
-                      required
-                    />
-                  </Field>
+                  <VehicleCatalogPicker
+                    disabled={busy}
+                    label="Марка"
+                    onSelect={(option) => {
+                      setMakeId(option.id)
+                      setValues((current) => ({
+                        ...current,
+                        brand: option.name,
+                        model: '',
+                      }))
+                    }}
+                    type="make"
+                    value={values.brand}
+                  />
+                  <VehicleCatalogPicker
+                    disabled={busy || values.brand === ''}
+                    label="Модель"
+                    makeId={makeId}
+                    makeName={values.brand}
+                    onSelect={(option) =>
+                      setValues((current) => ({
+                        ...current,
+                        model: option.name,
+                      }))
+                    }
+                    type="model"
+                    value={values.model}
+                  />
                 </div>
 
                 <div className="mt-4">
@@ -1892,7 +1924,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                 <CarStep
                   hint="Те, що вже витрачено на авто: транспортування, розмитнення, мийка. Разом із ціною придбання це інвестована сума."
                   number="03"
-                  title="Початкові витрати"
+                  title="Додаткові витрати"
                 >
                   {carId ? (
                     <CarFormExpenses
@@ -1940,12 +1972,10 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                     </p>
                   </>
                 ) : (
-                  <MediaPicker
-                    additionalPermission="finance.manage"
-                    bare
-                    entityType="cars"
-                    items={media}
-                    onChange={setMedia}
+                  <PendingMediaPicker
+                    disabled={busy}
+                    items={pendingMedia}
+                    onChange={setPendingMedia}
                   />
                 )}
               </CarStep>
@@ -2434,6 +2464,254 @@ function CarParts({
         />
       ) : null}
     </SectionPanel>
+  )
+}
+
+interface VehicleOption {
+  id: number
+  name: string
+}
+interface PendingMedia {
+  id: string
+  file: File
+  previewUrl: string
+}
+
+const vehicleCatalogUrl = 'https://vpic.nhtsa.dot.gov/api/vehicles'
+
+async function loadMakes(): Promise<VehicleOption[]> {
+  const response = await fetch(
+    `${vehicleCatalogUrl}/GetMakesForVehicleType/car?format=json`,
+  )
+  if (!response.ok) throw new Error('Не вдалося завантажити марки')
+  const payload = (await response.json()) as {
+    Results?: {
+      MakeId?: number
+      Make_ID?: number
+      MakeName?: string
+      Make_Name?: string
+    }[]
+  }
+  return (payload.Results ?? [])
+    .map((item) => ({
+      id: item.MakeId ?? item.Make_ID ?? 0,
+      name: item.MakeName ?? item.Make_Name ?? '',
+    }))
+    .filter((item) => item.id > 0 && item.name !== '')
+    .sort((left, right) => left.name.localeCompare(right.name))
+}
+
+async function loadModels(makeId: number): Promise<VehicleOption[]> {
+  const response = await fetch(
+    `${vehicleCatalogUrl}/GetModelsForMakeId/${String(makeId)}?format=json`,
+  )
+  if (!response.ok) throw new Error('Не вдалося завантажити моделі')
+  const payload = (await response.json()) as {
+    Results?: { Model_ID?: number; Model_Name?: string }[]
+  }
+  return (payload.Results ?? [])
+    .map((item) => ({ id: item.Model_ID ?? 0, name: item.Model_Name ?? '' }))
+    .filter((item) => item.id > 0 && item.name !== '')
+    .sort((left, right) => left.name.localeCompare(right.name))
+}
+
+function VehicleCatalogPicker({
+  disabled,
+  label,
+  makeId,
+  makeName,
+  onSelect,
+  type,
+  value,
+}: {
+  disabled: boolean
+  label: string
+  makeId?: number | null
+  makeName?: string
+  onSelect: (option: VehicleOption) => void
+  type: 'make' | 'model'
+  value: string
+}) {
+  const objectLabel = label === 'Марка' ? 'марку' : 'модель'
+  const [open, setOpen] = useState(false)
+  const [options, setOptions] = useState<VehicleOption[]>([])
+  const [query, setQuery] = useState('')
+  const [problem, setProblem] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    const request = async () => {
+      if (type === 'make') return loadMakes()
+      let resolvedMakeId = makeId ?? null
+      if (resolvedMakeId === null) {
+        const makes = await loadMakes()
+        resolvedMakeId =
+          makes.find(
+            (make) =>
+              make.name.toLowerCase() === (makeName ?? '').toLowerCase(),
+          )?.id ?? null
+      }
+      if (resolvedMakeId === null) return []
+      return loadModels(resolvedMakeId)
+    }
+    void request()
+      .then(
+        (items) => {
+          if (!cancelled) setOptions(items)
+        },
+        () => {
+          if (!cancelled)
+            setProblem('Не вдалося завантажити список. Спробуйте ще раз.')
+        },
+      )
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [makeId, makeName, open, type])
+  const shown = options.filter((option) =>
+    option.name
+      .toLocaleLowerCase('uk')
+      .includes(query.trim().toLocaleLowerCase('uk')),
+  )
+  const openPicker = () => {
+    setLoading(true)
+    setProblem(null)
+    setOpen(true)
+  }
+  return (
+    <Field label={label} required>
+      <button
+        aria-label={label}
+        className="border-app-line-2 bg-app-input text-app-ink min-h-11 w-full rounded-control border px-3.5 text-left text-[14.5px] disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={disabled}
+        onClick={openPicker}
+        type="button"
+      >
+        {value || `Оберіть ${objectLabel}`}
+      </button>
+      <Sheet
+        onOpenChange={setOpen}
+        open={open}
+        title={`Оберіть ${objectLabel}`}
+      >
+        <TextInput
+          aria-label={`Пошук: ${label}`}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Почніть вводити назву"
+          value={query}
+        />
+        {loading ? (
+          <p className="text-app-muted py-5 text-center text-sm">
+            Завантажуємо…
+          </p>
+        ) : null}
+        {problem ? <Notice tone="danger">{problem}</Notice> : null}
+        {!loading && !problem ? (
+          <div className="grid gap-1">
+            {shown.map((option) => (
+              <button
+                className="hover:bg-white/[0.06] min-h-11 rounded-[10px] px-3 text-left text-sm font-semibold text-white"
+                key={option.id}
+                onClick={() => {
+                  onSelect(option)
+                  setOpen(false)
+                  setQuery('')
+                }}
+                type="button"
+              >
+                {option.name}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </Sheet>
+    </Field>
+  )
+}
+
+function PendingMediaPicker({
+  disabled,
+  items,
+  onChange,
+}: {
+  disabled: boolean
+  items: PendingMedia[]
+  onChange: (items: PendingMedia[]) => void
+}) {
+  const choose = (files: FileList | null) => {
+    if (!files) return
+    const next = Array.from(files).map((file, index) => ({
+      id: `${file.name}-${file.size}-${file.lastModified}-${String(index)}`,
+      file,
+      previewUrl:
+        typeof URL.createObjectURL === 'function'
+          ? URL.createObjectURL(file)
+          : '',
+    }))
+    onChange([...items, ...next])
+  }
+  const remove = (id: string) => {
+    const item = items.find((candidate) => candidate.id === id)
+    if (item?.previewUrl && typeof URL.revokeObjectURL === 'function')
+      URL.revokeObjectURL(item.previewUrl)
+    onChange(items.filter((candidate) => candidate.id !== id))
+  }
+  return (
+    <fieldset className="grid gap-3">
+      <label className="border-app-line-2 bg-app-input hover:border-brand flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-[14px] border border-dashed px-5 text-center">
+        <ImagePlus aria-hidden className="text-app-muted size-6" />
+        <span className="mt-2 text-sm font-bold text-white">Вибрати фото</span>
+        <span className="text-app-dim mt-1 text-xs">
+          Файли завантажаться після створення автомобіля
+        </span>
+        <input
+          accept="image/*"
+          aria-label="Додати фото"
+          className="sr-only"
+          disabled={disabled}
+          multiple
+          onChange={(event) => choose(event.target.files)}
+          type="file"
+        />
+      </label>
+      {items.length === 0 ? (
+        <p className="text-app-dim text-[13.5px]">Файлів ще не вибрано.</p>
+      ) : (
+        <ul className="grid gap-2 sm:grid-cols-2">
+          {items.map((item) => (
+            <li
+              className="border-app-line flex min-w-0 items-center gap-3 rounded-control border p-2"
+              key={item.id}
+            >
+              {item.previewUrl ? (
+                <img
+                  alt="Попередній перегляд фото"
+                  className="size-12 rounded-control object-cover"
+                  src={item.previewUrl}
+                />
+              ) : (
+                <ImagePlus aria-hidden className="text-app-dim size-8" />
+              )}
+              <span className="text-app-ink min-w-0 flex-1 truncate text-sm">
+                {item.file.name}
+              </span>
+              <Button
+                aria-label={`Прибрати ${item.file.name}`}
+                disabled={disabled}
+                onClick={() => remove(item.id)}
+                size="icon"
+              >
+                <Trash2 aria-hidden />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </fieldset>
   )
 }
 
