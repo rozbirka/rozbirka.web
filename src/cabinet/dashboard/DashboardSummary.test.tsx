@@ -51,7 +51,12 @@ const getByExactText = (text: string) =>
     .at(-1)!
 
 it('renders common and owner totals in Ukrainian formats', () => {
-  render(<DashboardSummary data={summary()} />)
+  render(
+    <DashboardSummary
+      cashBalances={{ UAH: 123_456, USD: 3_820 }}
+      data={summary()}
+    />,
+  )
 
   expect(screen.getByRole('region', { name: 'Зведення' })).toContainElement(
     screen.getByText('Продажів сьогодні'),
@@ -60,6 +65,7 @@ it('renders common and owner totals in Ukrainian formats', () => {
   expect(getByExactText('5\u00a0678')).toBeInTheDocument()
   expect(getByExactText('45\u00a0600\u00a0₴')).toBeInTheDocument()
   expect(getByExactText('123\u00a0456\u00a0₴')).toBeInTheDocument()
+  expect(getByExactText('3\u00a0820\u00a0$')).toBeInTheDocument()
   const activity = screen.getByRole('region', { name: 'Остання активність' })
   expect(activity).toHaveTextContent(/28\.08\.2026, 16:45/)
   expect(activity).toHaveTextContent(/Додано запчастину/)

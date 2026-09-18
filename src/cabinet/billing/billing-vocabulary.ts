@@ -11,6 +11,7 @@ const featureLabels: Record<string, string> = {
   compat_suggest: 'Підбір сумісності',
   multi_cash_registers: 'Декілька кас',
   extended_photos: 'Більше фото на позицію',
+  qr_codes: 'QR-коди',
 }
 
 export const featureLabel = (code: string) => featureLabels[code] ?? code

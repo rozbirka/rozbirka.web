@@ -81,7 +81,17 @@ const useOrderIdempotencyKeys = () => {
 const money = (value: number | null | undefined, currency?: string | null) => {
   if (value === null || value === undefined || !Number.isFinite(value))
     return '—'
-  return currency ? `${value} ${currency}` : String(value)
+  if (!currency) return String(value)
+  try {
+    return new Intl.NumberFormat('uk-UA', {
+      style: 'currency',
+      currency,
+      currencyDisplay: 'narrowSymbol',
+      maximumFractionDigits: 2,
+    }).format(value)
+  } catch {
+    return `${value} ${currency}`
+  }
 }
 const lineTotal = (quantity: number, unitPrice: number) => {
   const total = quantity * unitPrice
@@ -352,7 +362,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
                 <button
                   aria-checked={active}
                   className={cn(
-                    'focus-visible:outline-brand flex min-h-11 cursor-pointer items-center gap-2.5 rounded-[9px] px-3.5 text-[14px] font-semibold',
+                    'focus-visible:outline-brand flex min-h-11 cursor-pointer items-baseline gap-2.5 rounded-[9px] px-3.5 text-[14px] font-semibold',
                     active
                       ? 'text-app-ink bg-white/[0.09]'
                       : 'text-app-muted hover:bg-white/[0.05]',
@@ -368,7 +378,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
                   />
                   {option.label}
                   {counts === null ? null : (
-                    <span className="text-app-muted font-mono text-[12px] font-medium">
+                    <span className="text-app-muted font-mono text-[12px] leading-none font-medium tabular-nums">
                       {counts[option.value] ?? 0}
                     </span>
                   )}
@@ -1296,7 +1306,7 @@ function OrderDetailScreen({
 
         <div className="flex flex-wrap-reverse items-end gap-6">
           <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
-            <Card title="Нотатки">
+            <Card className="order-1" title="Нотатки">
               {itemsEditable ? (
                 <div className="grid gap-3">
                   <Field label="Нотатки замовлення">
@@ -1356,6 +1366,7 @@ function OrderDetailScreen({
 
             {itemsEditable ? (
               <SectionPanel
+                className="order-3"
                 aside={
                   <span className="text-app-muted text-[13.5px] tabular-nums">
                     Разом за позиціями {money(draftsTotal, currency)}
@@ -1579,6 +1590,7 @@ function OrderDetailScreen({
 
             {financeAllowed && order.status === 'pending' && (
               <SectionPanel
+                className="order-2"
                 description="Підтвердження фіксує оплату й переводить замовлення у статус «Підтверджено»."
                 footer={
                   <>
@@ -1716,6 +1728,7 @@ function OrderDetailScreen({
             )}
 
             <Card
+              className="order-2"
               aside={
                 <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
                   {order.payments.length}{' '}
@@ -1744,7 +1757,7 @@ function OrderDetailScreen({
                     align: 'end',
                     cell: (payment) => (
                       <span className="font-bold text-white">
-                        {payment.amount} {payment.currency}
+                        {money(payment.amount, payment.currency)}
                       </span>
                     ),
                   },

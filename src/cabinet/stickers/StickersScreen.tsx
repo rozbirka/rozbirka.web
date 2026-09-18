@@ -484,12 +484,13 @@ function TenantStickerQueue({
         >
           {preview.map((sticker, index) => (
             <article
-              className="grid gap-2 rounded bg-white p-3 text-black"
+              className="grid min-w-0 max-w-full gap-2 overflow-hidden rounded bg-white p-3 text-black"
               key={`${sticker.id}-${index}`}
             >
               <div
                 aria-label={`QR-код ${sticker.name}`}
                 dangerouslySetInnerHTML={{ __html: sticker.qrSvg }}
+                className="max-w-full overflow-hidden [&_svg]:h-auto [&_svg]:max-w-full [&_svg]:w-full"
                 role="img"
               />
               <strong>{sticker.name}</strong>

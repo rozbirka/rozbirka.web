@@ -198,6 +198,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 function LocationProbe() {
@@ -495,9 +496,27 @@ it('provides an accessible multi-file media selector backed by the confirmed con
     'accept',
     'image/*',
   )
+  expect(
+    screen.getByText(/Файли завантажаться разом зі створенням деталі/),
+  ).toBeInTheDocument()
 })
 
 it('creates a part with every supported source, inventory, price, and compatibility field', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({ Results: [{ MakeId: 1, MakeName: 'Ford' }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({ Results: [{ Model_ID: 2, Model_Name: 'Focus' }] }),
+      }),
+  )
   render(
     <MemoryRouter initialEntries={['/app/yard/parts/new']}>
       <Routes>
@@ -514,18 +533,19 @@ it('creates a part with every supported source, inventory, price, and compatibil
   })
   for (const [label, value] of [
     ['Кількість', '3'],
-    ['Одиниця', 'pcs'],
     ['Стан', 'used'],
     ['Нотатки', 'Scratch'],
     ['OEM-код', 'OEM-1'],
     ['Тип деталі', 'body'],
     ['Бажана ціна', '125.5'],
-    ['Марка сумісності', 'Ford'],
-    ['Модель сумісності', 'Focus'],
     ['Рік сумісності', '2018'],
   ] as const) {
     fireEvent.change(screen.getByLabelText(label), { target: { value } })
   }
+  fireEvent.click(screen.getByRole('button', { name: 'Марка сумісності' }))
+  fireEvent.click(await screen.findByRole('option', { name: 'Ford' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Модель сумісності' }))
+  fireEvent.click(await screen.findByRole('option', { name: 'Focus' }))
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
   expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
@@ -534,7 +554,7 @@ it('creates a part with every supported source, inventory, price, and compatibil
       sourceType: 'free',
       name: 'Front bumper',
       quantity: 3,
-      unit: 'pcs',
+      unit: 'шт',
       condition: 'used',
       notes: 'Scratch',
       oemCode: 'OEM-1',
@@ -584,6 +604,11 @@ it('retains successful media uploads while exposing retry and remove for each fa
     },
   })
 
+  expect(screen.getByText('bumper.jpg · Вибрано')).toBeInTheDocument()
+  expect(screen.getByText('mirror.jpg · Вибрано')).toBeInTheDocument()
+  expect(mediaMocks.upload).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
+
   expect(
     await screen.findByText('bumper.jpg · Завантажено'),
   ).toBeInTheDocument()
@@ -607,7 +632,7 @@ it('retains successful media uploads while exposing retry and remove for each fa
   )
 })
 
-it('removes a newly uploaded file through the confirmed media contract before save', async () => {
+it('removes a selected file without uploading it before save', async () => {
   mediaMocks.upload.mockResolvedValue({
     storageKey: 'pending/parts/bumper.jpg',
     url: 'https://cdn.example/bumper.jpg',
@@ -630,19 +655,13 @@ it('removes a newly uploaded file through the confirmed media contract before sa
       files: [new File(['one'], 'bumper.jpg', { type: 'image/jpeg' })],
     },
   })
-  await screen.findByText('bumper.jpg · Завантажено')
+  expect(screen.getByText('bumper.jpg · Вибрано')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Прибрати bumper.jpg' }))
-  await vi.waitFor(() =>
-    expect(mediaMocks.remove).toHaveBeenCalledWith(
-      'pending/parts/bumper.jpg',
-      expect.objectContaining({
-        signal: expect.any(AbortSignal) as AbortSignal,
-      }),
-    ),
-  )
   await vi.waitFor(() =>
     expect(screen.queryByText(/bumper.jpg ·/)).not.toBeInTheDocument(),
   )
+  expect(mediaMocks.upload).not.toHaveBeenCalled()
+  expect(mediaMocks.remove).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
   expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
@@ -654,7 +673,7 @@ it('removes a newly uploaded file through the confirmed media contract before sa
   )
 })
 
-it('allows pending part media upload and removal after quota becomes full', async () => {
+it('allows pending part media selection and removal after quota becomes full', async () => {
   mediaMocks.upload.mockResolvedValue({
     storageKey: 'pending/parts/bumper.jpg',
     url: 'https://cdn.example/bumper.jpg',
@@ -675,11 +694,14 @@ it('allows pending part media upload and removal after quota becomes full', asyn
       files: [new File(['one'], 'bumper.jpg', { type: 'image/jpeg' })],
     },
   })
-  await screen.findByText('bumper.jpg · Завантажено')
+  expect(screen.getByText('bumper.jpg · Вибрано')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Прибрати bumper.jpg' }))
 
-  await vi.waitFor(() => expect(mediaMocks.upload).toHaveBeenCalledOnce())
-  await vi.waitFor(() => expect(mediaMocks.remove).toHaveBeenCalledOnce())
+  await vi.waitFor(() =>
+    expect(screen.queryByText(/bumper.jpg ·/)).not.toBeInTheDocument(),
+  )
+  expect(mediaMocks.upload).not.toHaveBeenCalled()
+  expect(mediaMocks.remove).not.toHaveBeenCalled()
 })
 
 it('persists a tenant-authorized labeled car selection without exposing its raw id', async () => {
@@ -716,6 +738,7 @@ it('persists a tenant-authorized labeled car selection without exposing its raw 
       carId: 'car-1',
       name: 'Bumper',
       quantity: 1,
+      unit: 'шт',
       photoKeys: [],
     },
     expect.objectContaining({
@@ -856,7 +879,7 @@ it('loads existing edit values and updates every field accepted by the immutable
       notes: 'Old note',
       quantity: 4,
       partType: 'body',
-      unit: 'pcs',
+      unit: 'шт',
       photoKeys: ['tenant-secret/existing.jpg'],
       desiredSalePrice: { isSet: true, value: null },
     },
@@ -1606,14 +1629,10 @@ it('lists each chosen photo with its size and a way to drop it', async () => {
   })
 
   const photos = await screen.findByRole('list', { name: 'Вибрані фото' })
-  expect(
-    await screen.findByText('bumper.jpg · Завантажено'),
-  ).toBeInTheDocument()
+  expect(screen.getByText('bumper.jpg · Вибрано')).toBeInTheDocument()
   expect(screen.getByText('3 Б')).toBeInTheDocument()
-  expect(screen.getByRole('link', { name: 'bumper.jpg' })).toHaveAttribute(
-    'href',
-    'https://cdn.example/bumper.jpg',
-  )
+  expect(screen.queryByRole('link', { name: 'bumper.jpg' })).toBeNull()
+  expect(mediaMocks.upload).not.toHaveBeenCalled()
   expect(
     screen.getByRole('button', { name: 'Прибрати bumper.jpg' }),
   ).toBeInTheDocument()

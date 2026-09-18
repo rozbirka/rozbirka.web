@@ -40,7 +40,6 @@ import {
   FormDialog,
   Gallery,
   SectionPanel,
-  Sheet,
   EmptyState,
   Field,
   ErrorState,
@@ -138,7 +137,7 @@ const day = (value: string) => {
 const partStatus = (status: string): { label: string; tone: StatusTone } => {
   if (status === 'available') return { label: 'Доступна', tone: 'ok' }
   if (status === 'reserved') return { label: 'У резерві', tone: 'warn' }
-  if (status === 'sold') return { label: 'Продана', tone: 'neutral' }
+  if (status === 'sold') return { label: 'Продана', tone: 'danger' }
   return { label: status, tone: 'neutral' }
 }
 const positiveInteger = (value: string | null, fallback: number) => {
@@ -2515,7 +2514,7 @@ async function loadModels(makeId: number): Promise<VehicleOption[]> {
     .sort((left, right) => left.name.localeCompare(right.name))
 }
 
-function VehicleCatalogPicker({
+export function VehicleCatalogPicker({
   disabled,
   label,
   makeId,
@@ -2532,7 +2531,7 @@ function VehicleCatalogPicker({
   type: 'make' | 'model'
   value: string
 }) {
-  const objectLabel = label === 'Марка' ? 'марку' : 'модель'
+  const objectLabel = type === 'make' ? 'марку' : 'модель'
   const [open, setOpen] = useState(false)
   const [options, setOptions] = useState<VehicleOption[]>([])
   const [query, setQuery] = useState('')
@@ -2577,58 +2576,66 @@ function VehicleCatalogPicker({
       .toLocaleLowerCase('uk')
       .includes(query.trim().toLocaleLowerCase('uk')),
   )
-  const openPicker = () => {
+  const togglePicker = () => {
+    if (open) {
+      setOpen(false)
+      return
+    }
     setLoading(true)
     setProblem(null)
     setOpen(true)
   }
   return (
-    <Field label={label} required>
+    <Field className="relative" label={label} required>
       <button
+        aria-expanded={open}
+        aria-haspopup="listbox"
         aria-label={label}
         className="border-app-line-2 bg-app-input text-app-ink min-h-11 w-full rounded-control border px-3.5 text-left text-[14.5px] disabled:cursor-not-allowed disabled:opacity-50"
         disabled={disabled}
-        onClick={openPicker}
+        onClick={togglePicker}
         type="button"
       >
         {value || `Оберіть ${objectLabel}`}
       </button>
-      <Sheet
-        onOpenChange={setOpen}
-        open={open}
-        title={`Оберіть ${objectLabel}`}
-      >
-        <TextInput
-          aria-label={`Пошук: ${label}`}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Почніть вводити назву"
-          value={query}
-        />
-        {loading ? (
-          <p className="text-app-muted py-5 text-center text-sm">
-            Завантажуємо…
-          </p>
-        ) : null}
-        {problem ? <Notice tone="danger">{problem}</Notice> : null}
-        {!loading && !problem ? (
-          <div className="grid gap-1">
-            {shown.map((option) => (
-              <button
-                className="hover:bg-white/[0.06] min-h-11 rounded-[10px] px-3 text-left text-sm font-semibold text-white"
-                key={option.id}
-                onClick={() => {
-                  onSelect(option)
-                  setOpen(false)
-                  setQuery('')
-                }}
-                type="button"
-              >
-                {option.name}
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </Sheet>
+      {open ? (
+        <div
+          aria-label={label}
+          className="border-app-line-2 bg-app-overlay absolute top-full right-0 left-0 z-40 mt-2 grid max-h-72 gap-2 overflow-y-auto rounded-[14px] border p-2 shadow-2xl"
+          role="listbox"
+        >
+          <TextInput
+            aria-label={`Пошук: ${label}`}
+            autoFocus
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Почніть вводити назву"
+            value={query}
+          />
+          {loading ? (
+            <p className="text-app-muted py-4 text-center text-sm">
+              Завантажуємо…
+            </p>
+          ) : null}
+          {problem ? <Notice tone="danger">{problem}</Notice> : null}
+          {!loading && !problem
+            ? shown.map((option) => (
+                <button
+                  className="hover:bg-white/[0.06] min-h-11 rounded-[10px] px-3 text-left text-sm font-semibold text-white"
+                  key={option.id}
+                  onClick={() => {
+                    onSelect(option)
+                    setOpen(false)
+                    setQuery('')
+                  }}
+                  role="option"
+                  type="button"
+                >
+                  {option.name}
+                </button>
+              ))
+            : null}
+        </div>
+      ) : null}
     </Field>
   )
 }

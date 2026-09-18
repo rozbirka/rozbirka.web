@@ -98,7 +98,7 @@ const statusPresentation = (
 ): { label: string; tone: StatusTone } => {
   if (status === 'available') return { label: 'Доступно', tone: 'ok' }
   if (status === 'reserved') return { label: 'У резерві', tone: 'warn' }
-  if (status === 'sold') return { label: 'Продано', tone: 'neutral' }
+  if (status === 'sold') return { label: 'Продано', tone: 'danger' }
   return { label: status, tone: 'neutral' }
 }
 

@@ -27,7 +27,7 @@ const dateFormatter = new Intl.DateTimeFormat('uk-UA', {
 
 interface SummaryItem {
   label: string
-  value: string
+  value: string | string[]
   /** Sits under the figure: what the figure is counting. */
   meta?: string
   tone?: 'ok' | 'warn'
@@ -35,9 +35,15 @@ interface SummaryItem {
   bar?: { filled: number; tone: 'ok' } | undefined
 }
 
-export function DashboardSummary({ data }: { data: DashboardData }) {
+export function DashboardSummary({
+  data,
+  cashBalances,
+}: {
+  data: DashboardData
+  cashBalances?: Record<string, number> | null | undefined
+}) {
   const money = compact([
-    moneyItem('Баланс кас', data.totalBalanceUah, 'UAH'),
+    balanceItem(data.totalBalanceUah, cashBalances),
     moneyItem('Інвестовано всього', data.totalInvested, CAR_CURRENCY, {
       ...(data.activeCarsCount === null
         ? {}
@@ -139,7 +145,13 @@ function SummaryStrip({
                       : 'text-white',
                 )}
               >
-                {value}
+                {Array.isArray(value)
+                  ? value.map((line) => (
+                      <span className="block" key={line}>
+                        {line}
+                      </span>
+                    ))
+                  : value}
               </span>
               {bar === undefined ? null : (
                 <span className="bg-app-line-2 mt-4 block h-1.5 overflow-hidden rounded-full">
@@ -203,6 +215,25 @@ function moneyItem(
   return value === null
     ? null
     : { label, value: currencyFormatter(currency).format(value), ...extra }
+}
+
+function balanceItem(
+  totalBalanceUah: number | null,
+  balances: Record<string, number> | null | undefined,
+): SummaryItem | null {
+  const entries: [string, number][] =
+    balances === undefined || balances === null
+      ? totalBalanceUah === null
+        ? []
+        : [['UAH', totalBalanceUah]]
+      : Object.entries(balances)
+  if (entries.length === 0) return null
+  return {
+    label: 'Баланс кас',
+    value: entries
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([currency, value]) => currencyFormatter(currency).format(value)),
+  }
 }
 
 /**

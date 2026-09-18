@@ -178,9 +178,9 @@ beforeEach(() => {
 
 const chooseBmwX5 = async (user: ReturnType<typeof userEvent.setup>) => {
   await user.click(screen.getByRole('button', { name: 'Марка' }))
-  await user.click(await screen.findByRole('button', { name: 'BMW' }))
+  await user.click(await screen.findByRole('option', { name: 'BMW' }))
   await user.click(screen.getByRole('button', { name: 'Модель' }))
-  await user.click(await screen.findByRole('button', { name: 'X5' }))
+  await user.click(await screen.findByRole('option', { name: 'X5' }))
 }
 
 it('blocks a direct create route for a view-only member', async () => {
@@ -637,7 +637,7 @@ it('retains successful files when another media upload fails and reports that fi
   expect(errors[1]).toHaveTextContent('large.jpg: Файл завеликий.')
 })
 
-it('chooses make and model from bottom sheets and keeps photos local until submit', async () => {
+it('chooses make and model from inline lists and keeps photos local until submit', async () => {
   const user = userEvent.setup()
   vi.stubGlobal(
     'fetch',
@@ -670,9 +670,12 @@ it('chooses make and model from bottom sheets and keeps photos local until submi
 
   expect(screen.getByText('Додаткові витрати')).toBeVisible()
   await user.click(screen.getByRole('button', { name: 'Марка' }))
-  await user.click(await screen.findByRole('button', { name: 'BMW' }))
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(await screen.findByRole('listbox', { name: 'Марка' })).toBeVisible()
+  await user.click(await screen.findByRole('option', { name: 'BMW' }))
   await user.click(screen.getByRole('button', { name: 'Модель' }))
-  await user.click(await screen.findByRole('button', { name: 'X5' }))
+  expect(await screen.findByRole('listbox', { name: 'Модель' })).toBeVisible()
+  await user.click(await screen.findByRole('option', { name: 'X5' }))
 
   const photo = new File(['photo'], 'photo.jpg', { type: 'image/jpeg' })
   await user.upload(screen.getByLabelText('Додати фото'), photo)

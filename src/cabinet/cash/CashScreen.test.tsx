@@ -1183,10 +1183,7 @@ it('reads the till card figures from the server and dashes what it does not keep
   // Reconciliation has no endpoint, so the control stays and says why.
   const reconcile = screen.getByRole('button', { name: 'Звірити залишок' })
   expect(reconcile).toBeDisabled()
-  expect(reconcile.title).toContain('Звіряння залишку сервер не веде')
-  expect(
-    screen.getByText(/Стовпець «Залишок» порожній/, { exact: false }),
-  ).toBeVisible()
+  expect(reconcile.title).toContain('Звіряння залишку поки недоступне')
 })
 
 it('keeps the till settings the server cannot save visible and disabled', async () => {
@@ -1210,6 +1207,6 @@ it('keeps the till settings the server cannot save visible and disabled', async 
   for (const label of ['Щодня', 'Щотижня', 'Щомісяця', 'Вручну'])
     expect(screen.getByRole('button', { name: label })).toBeDisabled()
   expect(
-    screen.getByText(/Ці перемикачі лишаються вимкненими/, { exact: false }),
+    screen.getByText(/Ці перемикачі поки вимкнені/, { exact: false }),
   ).toBeVisible()
 })

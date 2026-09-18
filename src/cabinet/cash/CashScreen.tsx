@@ -510,7 +510,7 @@ function CashRegisterDetail({
                 Запис у журнал цієї каси без переказу та без документа.
               </p>
             </div>
-            <div className="flex flex-wrap gap-3">
+            <div className="grid items-start gap-3 md:grid-cols-3">
               <Field className="min-w-40 flex-1" label="Тип операції">
                 <SelectInput
                   value={type}

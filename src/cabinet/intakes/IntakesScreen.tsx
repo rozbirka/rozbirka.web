@@ -595,7 +595,7 @@ const partStatusPill = (
 ): { label: string; tone: StatusTone } => {
   if (status === 'available') return { label: 'Доступна', tone: 'ok' }
   if (status === 'reserved') return { label: 'У резерві', tone: 'warn' }
-  if (status === 'sold') return { label: 'Продана', tone: 'neutral' }
+  if (status === 'sold') return { label: 'Продана', tone: 'danger' }
   return { label: status, tone: 'neutral' }
 }
 
@@ -2003,7 +2003,7 @@ function PartForm({
               step="02"
               title="Кількість і ціна"
             >
-              <div className="grid gap-4 sm:grid-cols-[auto_1fr_1fr]">
+              <div className="grid items-start gap-4 sm:grid-cols-3">
                 <Field label="Кількість" required>
                   <QuantityStepper
                     label="Кількість деталей"
@@ -2012,12 +2012,12 @@ function PartForm({
                     value={values.quantity}
                   />
                 </Field>
-                <Field hint="шт, компл, кг" label="Одиниця">
+                <Field hint="Фіксована одиниця обліку" label="Одиниця">
                   <TextInput
                     autoComplete="off"
                     name="unit"
-                    onChange={(event) => update('unit', event.target.value)}
-                    value={values.unit}
+                    readOnly
+                    value="шт"
                   />
                 </Field>
                 <Field hint="Бажана ціна, у доларах" label="Ціна продажу">
