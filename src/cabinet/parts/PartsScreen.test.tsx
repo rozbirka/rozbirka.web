@@ -551,7 +551,7 @@ it('creates a part with every supported source, inventory, price, and compatibil
   )
 })
 
-it('retains successful media uploads while exposing retry and remove for each failed file', async () => {
+it('uploads chosen photos only on submit and keeps the failed ones retryable', async () => {
   mediaMocks.upload
     .mockResolvedValueOnce({
       storageKey: 'pending/parts/bumper.jpg',
@@ -584,15 +584,20 @@ it('retains successful media uploads while exposing retry and remove for each fa
     },
   })
 
+  // Choosing a file sends nothing anywhere.
+  expect(await screen.findByText('bumper.jpg · Вибрано')).toBeInTheDocument()
+  expect(screen.getByText('mirror.jpg · Вибрано')).toBeInTheDocument()
+  expect(mediaMocks.upload).not.toHaveBeenCalled()
+  expect(screen.getByRole('button', { name: 'Створити деталь' })).toBeEnabled()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
+
+  // One file failed, so the part is not created and the failure names it.
   expect(
-    await screen.findByText('bumper.jpg · Завантажено'),
+    await screen.findByText(/не вдалося завантажити фото \(mirror\.jpg\)/),
   ).toBeInTheDocument()
-  expect(
-    screen.getByText('mirror.jpg · Помилка завантаження'),
-  ).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Створити деталь' })).toBeDisabled()
-  fireEvent.click(screen.getByRole('button', { name: 'Повторити mirror.jpg' }))
-  await screen.findByText('mirror.jpg · Завантажено')
+  expect(partMocks.create).not.toHaveBeenCalled()
+
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
   expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
@@ -607,7 +612,7 @@ it('retains successful media uploads while exposing retry and remove for each fa
   )
 })
 
-it('removes a newly uploaded file through the confirmed media contract before save', async () => {
+it('drops a chosen file locally and never touches media storage for it', async () => {
   mediaMocks.upload.mockResolvedValue({
     storageKey: 'pending/parts/bumper.jpg',
     url: 'https://cdn.example/bumper.jpg',
@@ -630,22 +635,17 @@ it('removes a newly uploaded file through the confirmed media contract before sa
       files: [new File(['one'], 'bumper.jpg', { type: 'image/jpeg' })],
     },
   })
-  await screen.findByText('bumper.jpg · Завантажено')
+  await screen.findByText('bumper.jpg · Вибрано')
   fireEvent.click(screen.getByRole('button', { name: 'Прибрати bumper.jpg' }))
-  await vi.waitFor(() =>
-    expect(mediaMocks.remove).toHaveBeenCalledWith(
-      'pending/parts/bumper.jpg',
-      expect.objectContaining({
-        signal: expect.any(AbortSignal) as AbortSignal,
-      }),
-    ),
-  )
   await vi.waitFor(() =>
     expect(screen.queryByText(/bumper.jpg ·/)).not.toBeInTheDocument(),
   )
+  // The file never left the browser, so there is nothing to delete.
+  expect(mediaMocks.remove).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
   expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
+  expect(mediaMocks.upload).not.toHaveBeenCalled()
   expect(partMocks.create).toHaveBeenCalledWith(
     expect.objectContaining({ photoKeys: [] }),
     expect.objectContaining({
@@ -654,7 +654,7 @@ it('removes a newly uploaded file through the confirmed media contract before sa
   )
 })
 
-it('allows pending part media upload and removal after quota becomes full', async () => {
+it('still lets photos be chosen and dropped after the parts quota fills up', async () => {
   mediaMocks.upload.mockResolvedValue({
     storageKey: 'pending/parts/bumper.jpg',
     url: 'https://cdn.example/bumper.jpg',
@@ -675,11 +675,16 @@ it('allows pending part media upload and removal after quota becomes full', asyn
       files: [new File(['one'], 'bumper.jpg', { type: 'image/jpeg' })],
     },
   })
-  await screen.findByText('bumper.jpg · Завантажено')
+  await screen.findByText('bumper.jpg · Вибрано')
   fireEvent.click(screen.getByRole('button', { name: 'Прибрати bumper.jpg' }))
 
-  await vi.waitFor(() => expect(mediaMocks.upload).toHaveBeenCalledOnce())
-  await vi.waitFor(() => expect(mediaMocks.remove).toHaveBeenCalledOnce())
+  await vi.waitFor(() =>
+    expect(screen.queryByText(/bumper.jpg ·/)).not.toBeInTheDocument(),
+  )
+  // Picking files is local work: the exhausted quota stops the part, not the
+  // file chooser, and nothing reached storage either way.
+  expect(mediaMocks.upload).not.toHaveBeenCalled()
+  expect(mediaMocks.remove).not.toHaveBeenCalled()
 })
 
 it('persists a tenant-authorized labeled car selection without exposing its raw id', async () => {
@@ -892,7 +897,7 @@ it('guards duplicate creates with aria-busy and exposes mutation failures', asyn
   fireEvent.click(submit)
   expect(submit).toHaveAttribute('aria-busy', 'true')
   expect(submit).toBeDisabled()
-  expect(partMocks.create).toHaveBeenCalledTimes(1)
+  await vi.waitFor(() => expect(partMocks.create).toHaveBeenCalledTimes(1))
   rejectCreate?.(new Error('failed'))
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Не вдалося створити деталь.',
@@ -936,7 +941,7 @@ it('guards duplicate edits with aria-busy and exposes mutation failures', async 
   fireEvent.click(submit)
   expect(submit).toHaveAttribute('aria-busy', 'true')
   expect(submit).toBeDisabled()
-  expect(partMocks.update).toHaveBeenCalledTimes(1)
+  await vi.waitFor(() => expect(partMocks.update).toHaveBeenCalledTimes(1))
   rejectUpdate?.(new Error('failed'))
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Не вдалося зберегти зміни.',
@@ -1607,14 +1612,10 @@ it('lists each chosen photo with its size and a way to drop it', async () => {
   })
 
   const photos = await screen.findByRole('list', { name: 'Вибрані фото' })
-  expect(
-    await screen.findByText('bumper.jpg · Завантажено'),
-  ).toBeInTheDocument()
+  expect(await screen.findByText('bumper.jpg · Вибрано')).toBeInTheDocument()
   expect(screen.getByText('3 Б')).toBeInTheDocument()
-  expect(screen.getByRole('link', { name: 'bumper.jpg' })).toHaveAttribute(
-    'href',
-    'https://cdn.example/bumper.jpg',
-  )
+  // A file that has not been uploaded has no address to link to yet.
+  expect(screen.queryByRole('link', { name: 'bumper.jpg' })).toBeNull()
   expect(
     screen.getByRole('button', { name: 'Прибрати bumper.jpg' }),
   ).toBeInTheDocument()

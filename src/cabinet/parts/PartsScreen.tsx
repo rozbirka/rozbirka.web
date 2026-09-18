@@ -2117,6 +2117,7 @@ const emptyPartForm: PartFormValues = {
 }
 
 type PartMediaStatus =
+  | 'selected'
   | 'uploading'
   | 'uploaded'
   | 'upload-error'
@@ -2137,6 +2138,83 @@ const committedPhotoKeys = (items: PartMediaItem[]) =>
   items.flatMap((item) =>
     item.status === 'uploaded' && item.storageKey ? [item.storageKey] : [],
   )
+
+/** Files chosen but not sent anywhere yet. */
+const selectedFiles = (items: PartMediaItem[]) =>
+  items.filter(
+    (item) => item.status === 'selected' || item.status === 'upload-error',
+  )
+
+/** Names of the photos that failed, so the form can say which to retry. */
+class PartPhotoUploadError extends Error {
+  readonly names: string[]
+  constructor(names: string[]) {
+    super('part-photo-upload-failed')
+    this.name = 'PartPhotoUploadError'
+    this.names = names
+  }
+}
+
+/**
+ * Sends the files that were only chosen so far and answers with the storage
+ * keys of every photo the part should carry. Nothing is uploaded before this
+ * runs, so a form that is filled in and abandoned leaves no orphans behind.
+ */
+async function commitPartPhotos(
+  items: PartMediaItem[],
+  setItems: React.Dispatch<React.SetStateAction<PartMediaItem[]>>,
+  signal: AbortSignal,
+): Promise<string[]> {
+  const pending = selectedFiles(items)
+  if (pending.length === 0) return committedPhotoKeys(items)
+  const ids = new Set(pending.map((item) => item.id))
+  setItems((current) =>
+    current.map((item) =>
+      ids.has(item.id) ? { ...item, status: 'uploading' } : item,
+    ),
+  )
+  const results = await Promise.all(
+    pending.map(async (item) => {
+      if (!item.file)
+        return { id: item.id, name: item.name, ok: false as const }
+      try {
+        const uploaded = await mediaApi.upload(item.file, 'parts', { signal })
+        return {
+          id: item.id,
+          name: item.name,
+          ok: true as const,
+          storageKey: uploaded.storageKey,
+          url: uploaded.url,
+        }
+      } catch {
+        return { id: item.id, name: item.name, ok: false as const }
+      }
+    }),
+  )
+  setItems((current) =>
+    current.map((item) => {
+      const result = results.find((one) => one.id === item.id)
+      if (!result) return item
+      return result.ok
+        ? {
+            ...item,
+            status: 'uploaded' as const,
+            storageKey: result.storageKey,
+            url: result.url,
+          }
+        : { ...item, status: 'upload-error' as const }
+    }),
+  )
+  const failed = results.filter((result) => !result.ok)
+  if (failed.length > 0)
+    throw new PartPhotoUploadError(failed.map((result) => result.name))
+  return [
+    ...committedPhotoKeys(items),
+    ...results.flatMap((result) =>
+      result.ok && result.storageKey ? [result.storageKey] : [],
+    ),
+  ]
+}
 
 const safeMediaUrl = (value: string | undefined) => {
   if (!value) return null
@@ -2186,7 +2264,7 @@ function PartMediaFields({
       current.map((item) => (item.id === id ? { ...item, ...update } : item)),
     )
   }
-  const upload = async (item: PartMediaItem) => {
+  const uploadOne = async (item: PartMediaItem) => {
     if (!item.file) return
     updateItem(item.id, { status: 'uploading' })
     try {
@@ -2205,15 +2283,16 @@ function PartMediaFields({
   }
   const addFiles = (files: FileList | null) => {
     if (!files?.length) return
+    // Nothing leaves the browser until the form is submitted: a photo picked
+    // for a part that is never created has no business sitting in storage.
     const additions = Array.from(files, (file) => ({
       id: `new-media-${sequenceRef.current++}`,
       name: file.name,
-      status: 'uploading' as const,
+      status: 'selected' as const,
       existing: false,
       file,
     }))
     setItems((current) => [...current, ...additions])
-    additions.forEach((item) => void upload(item))
   }
   const remove = async (item: PartMediaItem) => {
     if (item.existing || !item.storageKey) {
@@ -2231,6 +2310,7 @@ function PartMediaFields({
     }
   }
   const statusLabel = (item: PartMediaItem) => {
+    if (item.status === 'selected') return 'Вибрано'
     if (item.status === 'uploading') return 'Завантаження…'
     if (item.status === 'uploaded') return 'Завантажено'
     if (item.status === 'upload-error') return 'Помилка завантаження'
@@ -2242,7 +2322,7 @@ function PartMediaFields({
   )
   return (
     <SectionPanel
-      description="Фото завантажуються одразу після вибору. Деталь можна зберегти, коли всі файли завантажені."
+      description="Фото вирушають на сервер разом зі збереженням деталі — доти вони лишаються у вас."
       title="Фото"
     >
       <Field
@@ -2294,7 +2374,7 @@ function PartMediaFields({
                   {item.status === 'upload-error' ? (
                     <Button
                       aria-label={`Повторити ${item.name}`}
-                      onClick={() => void upload(item)}
+                      onClick={() => void uploadOne(item)}
                     >
                       Повторити
                     </Button>
@@ -2693,7 +2773,9 @@ function PartForm({
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showErrors, setShowErrors] = useState(false)
-  const mediaPending = mediaItems.some((item) => item.status !== 'uploaded')
+  const mediaPending = mediaItems.some(
+    (item) => item.status === 'uploading' || item.status === 'removing',
+  )
   const requireSource = values.sourceType !== 'free'
   const errors = showErrors ? partFieldErrors(values, { requireSource }) : {}
   const submit = async (event: React.FormEvent) => {
@@ -2714,7 +2796,7 @@ function PartForm({
     const partType = optional(values.partType)
     const carBrand = optional(values.carBrand)
     const carModel = optional(values.carModel)
-    const request: CreatePartRequest = {
+    const request = (photoKeys: string[]): CreatePartRequest => ({
       sourceType: values.sourceType,
       ...(values.sourceType === 'car' ? { carId: values.sourceId.trim() } : {}),
       ...(values.sourceType === 'batch'
@@ -2722,7 +2804,7 @@ function PartForm({
         : {}),
       name: values.name.trim(),
       quantity: parsed.quantity,
-      photoKeys: committedPhotoKeys(mediaItems),
+      photoKeys,
       ...(unit !== undefined ? { unit } : {}),
       ...(condition !== undefined ? { condition } : {}),
       ...(notes !== undefined ? { notes } : {}),
@@ -2732,28 +2814,37 @@ function PartForm({
       ...(carBrand !== undefined ? { carBrand } : {}),
       ...(carModel !== undefined ? { carModel } : {}),
       ...(parsed.year !== undefined ? { carYear: parsed.year } : {}),
-    }
+    })
     pendingRef.current = true
     setPending(true)
     setStatus(null)
     setError(null)
     try {
       const scope = requireLatestMutation()
-      if (request.sourceType === 'car')
+      if (values.sourceType === 'car')
         carMutation.requireLatestMutation({
           permission: 'cars.view',
           quota: false,
         })
-      if (request.sourceType === 'batch')
+      if (values.sourceType === 'batch')
         intakeMutation.requireLatestMutation({
           permission: 'intakes.view',
           quota: false,
         })
-      await partsApi.create(request, { signal: scope.signal })
+      // The photos go up first and only now: the form is filled in, valid and
+      // confirmed, so nothing lands in storage for a part that never appears.
+      const photoKeys = await commitPartPhotos(
+        mediaItems,
+        setMediaItems,
+        scope.signal,
+      )
+      await partsApi.create(request(photoKeys), { signal: scope.signal })
       setStatus('Деталь створено.')
-    } catch {
+    } catch (failure) {
       setError(
-        'Не вдалося створити деталь. Перевірте зв’язок і надішліть форму ще раз.',
+        failure instanceof PartPhotoUploadError
+          ? `Деталь не створено: не вдалося завантажити фото (${failure.names.join(', ')}). Повторіть завантаження або приберіть ці файли.`
+          : 'Не вдалося створити деталь. Перевірте зв’язок і надішліть форму ще раз.',
       )
     } finally {
       pendingRef.current = false
@@ -2837,7 +2928,9 @@ function PartEdit({
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showErrors, setShowErrors] = useState(false)
-  const mediaPending = mediaItems.some((item) => item.status !== 'uploaded')
+  const mediaPending = mediaItems.some(
+    (item) => item.status === 'uploading' || item.status === 'removing',
+  )
   const errors =
     showErrors && values
       ? partFieldErrors(values, { requireSource: false })
@@ -2909,6 +3002,11 @@ function PartEdit({
     setError(null)
     try {
       const scope = requireLatestMutation({ quota: false })
+      const photoKeys = await commitPartPhotos(
+        mediaItems,
+        setMediaItems,
+        scope.signal,
+      )
       await partsApi.update(
         partId,
         {
@@ -2918,7 +3016,7 @@ function PartEdit({
           quantity: parsed.quantity,
           partType: optional(values.partType) ?? null,
           unit: optional(values.unit) ?? null,
-          photoKeys: committedPhotoKeys(mediaItems),
+          photoKeys,
           desiredSalePrice: {
             isSet: true,
             value: parsed.price ?? null,
@@ -2927,9 +3025,11 @@ function PartEdit({
         { signal: scope.signal },
       )
       setStatus('Зміни збережено.')
-    } catch {
+    } catch (failure) {
       setError(
-        'Не вдалося зберегти зміни. Перевірте зв’язок і надішліть форму ще раз.',
+        failure instanceof PartPhotoUploadError
+          ? `Зміни не збережено: не вдалося завантажити фото (${failure.names.join(', ')}). Повторіть завантаження або приберіть ці файли.`
+          : 'Не вдалося зберегти зміни. Перевірте зв’язок і надішліть форму ще раз.',
       )
     } finally {
       pendingRef.current = false
