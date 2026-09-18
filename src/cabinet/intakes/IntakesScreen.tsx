@@ -53,7 +53,11 @@ import { cn, plural } from '@/lib/utils'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { MediaPicker } from '../cars/CarsScreen'
-import type { MediaUploadResult } from '@/api/media'
+import {
+  PhotoUploadError,
+  uploadPickedPhotos,
+  type PickedPhoto,
+} from '../cars/picked-photos'
 import { cabinetModules } from '../module-registry'
 import { evaluateModuleAccess } from '../policy'
 import type { ModuleAccessDecision } from '../policy'
@@ -675,7 +679,11 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
       await intakesApi.remove(intakeId, { signal: scope.signal })
       void navigate(base)
     } catch (error: unknown) {
-      setProblem(normalizeApiProblem(error).message)
+      setProblem(
+        error instanceof PhotoUploadError
+          ? `Не вдалося завантажити фото (${error.names.join(', ')}). Повторіть спробу або приберіть ці файли.`
+          : normalizeApiProblem(error).message,
+      )
       setBusy(false)
     }
   }
@@ -1247,7 +1255,7 @@ function IntakeForm({
     totalCost: '',
     notes: '',
   })
-  const [media, setMedia] = useState<MediaUploadResult[]>([])
+  const [media, setMedia] = useState<PickedPhoto[]>([])
   const [intake, setIntake] = useState<Intake | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<{ totalCost?: string }>({})
@@ -1329,7 +1337,15 @@ function IntakeForm({
       const saved = await submit(
         intakeId
           ? request
-          : { ...request, photoKeys: media.map((item) => item.storageKey) },
+          : {
+              ...request,
+              // Photos go up with the intake, not when they were picked.
+              photoKeys: await uploadPickedPhotos(
+                media,
+                'intakes',
+                scope.signal,
+              ),
+            },
         scope.signal,
       )
       void navigate(`${base}/${saved.id}`)
@@ -1568,11 +1584,7 @@ function IntakeForm({
 
             {!intakeId ? (
               <FormCard step="04" title="Фото партії">
-                <MediaPicker
-                  entityType="intakes"
-                  items={media}
-                  onChange={setMedia}
-                />
+                <MediaPicker items={media} onChange={setMedia} />
               </FormCard>
             ) : null}
           </div>
@@ -1740,7 +1752,7 @@ function PartForm({
     zoneId: '',
     notes: '',
   })
-  const [media, setMedia] = useState<MediaUploadResult[]>([])
+  const [media, setMedia] = useState<PickedPhoto[]>([])
   const [problem, setProblem] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<{ name?: string }>({})
   const [intake, setIntake] = useState<Intake | null>(null)
@@ -1809,20 +1821,20 @@ function PartForm({
       return
     }
     setFieldErrors({})
-    const request: AddIntakePartRequest = {
-      name: values.name.trim(),
-      partType: values.partType.trim() || null,
-      condition: values.condition || null,
-      quantity: values.quantity,
-      unit: values.unit || null,
-      notes: values.notes.trim() || null,
-      photoKeys: media.map((item) => item.storageKey),
-      ...(values.zoneId ? { inventoryZoneIds: [values.zoneId] } : {}),
-    }
     setBusy(true)
     try {
       const intakeScope = intakeMutation.requireLatestMutation({ quota: false })
       partMutation.requireLatestMutation({ permission: 'parts.view' })
+      const request: AddIntakePartRequest = {
+        name: values.name.trim(),
+        partType: values.partType.trim() || null,
+        condition: values.condition || null,
+        quantity: values.quantity,
+        unit: values.unit || null,
+        notes: values.notes.trim() || null,
+        photoKeys: await uploadPickedPhotos(media, 'parts', intakeScope.signal),
+        ...(values.zoneId ? { inventoryZoneIds: [values.zoneId] } : {}),
+      }
       const created = await intakesApi.addPart(intakeId, request, {
         signal: intakeScope.signal,
       })
@@ -2076,18 +2088,7 @@ function PartForm({
 
             <FormCard step="03" title="Фото й нотатки">
               {canUploadMedia ? (
-                <MediaPicker
-                  beforeDispatch={() => {
-                    intakeMutation.requireLatestMutation({ quota: false })
-                    partMutation.requireLatestMutation({
-                      permission: 'parts.view',
-                      quota: false,
-                    })
-                  }}
-                  entityType="parts"
-                  items={media}
-                  onChange={setMedia}
-                />
+                <MediaPicker items={media} onChange={setMedia} />
               ) : null}
               <Field label="Нотатки">
                 <TextArea

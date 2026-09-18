@@ -9,6 +9,7 @@ import { mediaApi } from '@/api/media'
 import type { PlanUsageDto } from '@/api/types'
 import { useCabinet } from '../CabinetContext'
 import { CarsScreen, MediaPicker } from './CarsScreen'
+import type { PickedPhoto } from './picked-photos'
 
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are invoked only through their owning singleton. */
 
@@ -578,73 +579,30 @@ it('normalizes a failed parts preview and retries without an unhandled rejection
   expect(carsApi.listParts).toHaveBeenCalledTimes(2)
 })
 
-it('retains successful files when another media upload fails and reports that file', async () => {
+it('keeps picked car photos in the browser until the form is sent', async () => {
   const user = userEvent.setup()
-  vi.mocked(mediaApi.upload)
-    .mockResolvedValueOnce({
-      storageKey: 'pending/cars/ok',
-      url: 'https://cdn.example/ok.jpg',
-    })
-    .mockRejectedValueOnce({
-      kind: 'validation',
-      message: 'Непідтримуваний формат.',
-    })
-    .mockRejectedValueOnce({
-      kind: 'validation',
-      message: 'Файл завеликий.',
-    })
   function Harness() {
-    const [items, setItems] = useState<{ storageKey: string; url: string }[]>(
-      [],
-    )
-    return <MediaPicker entityType="cars" items={items} onChange={setItems} />
+    const [items, setItems] = useState<PickedPhoto[]>([])
+    return <MediaPicker items={items} onChange={setItems} />
   }
   render(<Harness />)
 
   await user.upload(screen.getByLabelText('Додати фото'), [
     new File(['ok'], 'ok.jpg', { type: 'image/jpeg' }),
-    new File(['bad'], 'bad.heic', { type: 'image/heic' }),
-    new File(['large'], 'large.jpg', { type: 'image/jpeg' }),
+    new File(['second'], 'second.jpg', { type: 'image/jpeg' }),
   ])
 
-  expect(
-    await screen.findByRole('img', { name: 'Попередній перегляд фото' }),
-  ).toHaveAttribute('src', 'https://cdn.example/ok.jpg')
   expect(screen.getByText('ok.jpg')).toBeVisible()
-  const errors = within(screen.getByRole('alert')).getAllByRole('listitem')
-  expect(errors).toHaveLength(2)
-  expect(errors[0]).toHaveTextContent('bad.heic: Непідтримуваний формат.')
-  expect(errors[1]).toHaveTextContent('large.jpg: Файл завеликий.')
-})
+  expect(screen.getByText('second.jpg')).toBeVisible()
+  // Nothing has been sent anywhere: the thumbnails are local previews.
+  expect(mediaApi.upload).not.toHaveBeenCalled()
 
-it('allows pending car media upload and removal when the car quota is full', async () => {
-  const currentCabinet = cabinet(
-    ['cars.view', 'cars.manage', 'finance.manage'],
-    { cars: { used: 5, max: 5 } },
-  )
-  vi.mocked(useCabinet).mockReturnValue(currentCabinet)
-  vi.mocked(mediaApi.upload).mockResolvedValue({
-    storageKey: 'pending/cars/photo',
-    url: 'https://cdn.example/photo.jpg',
-  })
-  const user = userEvent.setup()
-  function Harness() {
-    const [items, setItems] = useState<{ storageKey: string; url: string }[]>(
-      [],
-    )
-    return <MediaPicker entityType="cars" items={items} onChange={setItems} />
-  }
-  render(<Harness />)
+  await user.click(screen.getAllByRole('button', { name: 'Прибрати фото' })[0]!)
 
-  await user.upload(
-    screen.getByLabelText('Додати фото'),
-    new File(['photo'], 'photo.jpg', { type: 'image/jpeg' }),
-  )
-  await screen.findByRole('img', { name: 'Попередній перегляд фото' })
-  await user.click(screen.getByRole('button', { name: 'Прибрати фото' }))
-
-  expect(mediaApi.upload).toHaveBeenCalledOnce()
-  expect(mediaApi.remove).toHaveBeenCalledOnce()
+  expect(screen.queryByText('ok.jpg')).toBeNull()
+  expect(screen.getByText('second.jpg')).toBeVisible()
+  // A photo that never left the browser needs no deletion on the server.
+  expect(mediaApi.remove).not.toHaveBeenCalled()
 })
 
 it('retries only remaining initial expenses after partial failure without recreating the car', async () => {

@@ -21,7 +21,6 @@ import {
   Copy,
   CarFront,
   Search,
-  ImagePlus,
   Pencil,
   Plus,
   Trash2,
@@ -65,12 +64,9 @@ import {
   isCarStatus,
 } from '@/api/cars'
 import { carCatalogApi, type CarCatalogItem } from '@/api/car-catalog'
+import { uploadPickedPhotos, type PickedPhoto } from './picked-photos'
 import { normalizeApiProblem } from '@/api/errors'
-import {
-  mediaApi,
-  type MediaEntityType,
-  type MediaUploadResult,
-} from '@/api/media'
+import { type MediaUploadResult } from '@/api/media'
 import { useCabinet } from '../CabinetContext'
 import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
@@ -1403,7 +1399,9 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     purchasePrice: '',
     notes: '',
   })
-  const [media, setMedia] = useState<MediaUploadResult[]>([])
+  const [media, setMedia] = useState<PickedPhoto[]>([])
+  /** Photos the saved car already has; the update endpoint does not touch them. */
+  const [savedPhotos, setSavedPhotos] = useState<MediaUploadResult[]>([])
   const [expenses, setExpenses] = useState<
     { id: number; name: string; amount: string }[]
   >([])
@@ -1440,7 +1438,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
           purchasePrice: String(car.purchasePrice),
           notes: car.notes ?? '',
         })
-        setMedia(
+        setSavedPhotos(
           car.photos.map((photo) => ({
             storageKey: photo.storageKey,
             url: photo.url,
@@ -1520,16 +1518,18 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
         savedCarId = car.id
       } else {
         if (!savedCarId) {
-          const createRequest: CreateCarRequest = {
-            ...request,
-            purchasePrice,
-            photoKeys: media.map((item) => item.storageKey),
-          }
           const scope = requireLatestMutation()
           requireLatestMutation({
             permission: 'finance.manage',
             quota: false,
           })
+          // The photos go up only now — the form is filled in and confirmed,
+          // so nothing lands in storage for a car that never appears.
+          const createRequest: CreateCarRequest = {
+            ...request,
+            purchasePrice,
+            photoKeys: await uploadPickedPhotos(media, 'cars', scope.signal),
+          }
           const car = await carsApi.create(createRequest, {
             signal: scope.signal,
           })
@@ -1984,13 +1984,13 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
               >
                 {carId ? (
                   <>
-                    {media.length === 0 ? (
+                    {savedPhotos.length === 0 ? (
                       <p className="border-app-line-2 text-app-muted rounded-[14px] border border-dashed bg-white/[0.02] px-6 py-8 text-center text-sm">
                         Фото немає.
                       </p>
                     ) : (
                       <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        {media.map((item, index) => (
+                        {savedPhotos.map((item, index) => (
                           <li key={item.storageKey}>
                             <img
                               alt={`Поточне фото автомобіля ${String(index + 1)}`}
@@ -2007,13 +2007,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                     </p>
                   </>
                 ) : (
-                  <MediaPicker
-                    additionalPermission="finance.manage"
-                    bare
-                    entityType="cars"
-                    items={media}
-                    onChange={setMedia}
-                  />
+                  <MediaPicker bare items={media} onChange={setMedia} />
                 )}
               </CarStep>
 
@@ -2502,96 +2496,38 @@ function CarParts({
   )
 }
 
+let pickedSequence = 0
+
 export function MediaPicker({
-  additionalPermission,
-  beforeDispatch,
   bare = false,
-  entityType,
   items,
   onChange,
 }: {
-  additionalPermission?: Permission
-  beforeDispatch?: () => unknown
   /** Drops the picker's own frame and heading, for a host that has one. */
   bare?: boolean
-  entityType: Exclude<MediaEntityType, 'tenants'>
-  items: MediaUploadResult[]
-  onChange: (items: MediaUploadResult[]) => void
+  items: PickedPhoto[]
+  onChange: (items: PickedPhoto[]) => void
 }) {
-  const definition = cabinetModules[entityType]
-  const { requireLatestMutation } = useLatestMutationGuard(definition)
-  const [busy, setBusy] = useState(false)
-  const [problems, setProblems] = useState<string[]>([])
-  /** Uploads answer with a storage key only, so the file name is kept here. */
-  const [names, setNames] = useState<Record<string, string>>({})
-  const upload = async (files: FileList | null) => {
-    if (!files || busy) return
-    setBusy(true)
-    const selected = Array.from(files)
-    const results = await Promise.allSettled(
-      selected.map((file) =>
-        Promise.resolve().then(() => {
-          beforeDispatch?.()
-          const scope = requireLatestMutation({ quota: false })
-          if (additionalPermission)
-            requireLatestMutation({
-              permission: additionalPermission,
-              quota: false,
-            })
-          return mediaApi.upload(file, entityType, { signal: scope.signal })
-        }),
-      ),
-    )
-    const uploaded = results.flatMap((result) =>
-      result.status === 'fulfilled' ? [result.value] : [],
-    )
-    const uploadedNames = results.flatMap((result, index) => {
-      const file = selected[index]
-      return result.status === 'fulfilled' && file
-        ? [[result.value.storageKey, file.name] as const]
-        : []
-    })
-    if (uploadedNames.length > 0)
-      setNames((current) => ({
-        ...current,
-        ...Object.fromEntries(uploadedNames),
-      }))
-    if (uploaded.length > 0) onChange([...items, ...uploaded])
-    const errors = results.flatMap((result, index) => {
-      const file = selected[index]
-      return result.status === 'rejected' && file
-        ? [`${file.name}: ${normalizeApiProblem(result.reason).message}`]
-        : []
-    })
-    setProblems(errors)
-    setBusy(false)
+  const add = (files: FileList | null) => {
+    if (!files?.length) return
+    onChange([
+      ...items,
+      ...Array.from(files, (file) => ({
+        id: `picked-${String(pickedSequence++)}`,
+        name: file.name,
+        size: file.size,
+        file,
+        preview: URL.createObjectURL(file),
+      })),
+    ])
   }
-  const remove = async (item: MediaUploadResult) => {
-    if (busy) return
-    setBusy(true)
-    try {
-      beforeDispatch?.()
-      const scope = requireLatestMutation({ quota: false })
-      if (additionalPermission)
-        requireLatestMutation({
-          permission: additionalPermission,
-          quota: false,
-        })
-      await mediaApi.remove(item.storageKey, { signal: scope.signal })
-      onChange(items.filter((value) => value.storageKey !== item.storageKey))
-    } catch (error: unknown) {
-      setProblems([normalizeApiProblem(error).message])
-    } finally {
-      setBusy(false)
-    }
+  const drop = (photo: PickedPhoto) => {
+    URL.revokeObjectURL(photo.preview)
+    onChange(items.filter((item) => item.id !== photo.id))
   }
+
   return (
-    <fieldset
-      className={cn(
-        'grid min-w-0 gap-3',
-        !bare && 'border-app-line rounded-panel bg-app-raised border p-4',
-      )}
-    >
+    <fieldset className={cn('grid gap-3', bare && 'contents')}>
       <legend
         className={cn(
           'px-1 text-base font-semibold text-white',
@@ -2610,59 +2546,40 @@ export function MediaPicker({
         aria-label="Додати фото"
         capture="environment"
         className="bg-app-input text-app-muted border-app-line-2 rounded-control file:bg-app-raised file:text-app-ink file:rounded-control min-h-11 w-full cursor-pointer border px-3 py-2 text-sm file:mr-3 file:min-h-8 file:cursor-pointer file:border-0 file:px-3 file:text-[14px] disabled:cursor-not-allowed disabled:opacity-55"
-        disabled={busy}
         multiple
-        onChange={(event) => void upload(event.target.files)}
+        onChange={(event) => {
+          add(event.target.files)
+          event.target.value = ''
+        }}
         type="file"
       />
-      {problems.length > 0 ? (
-        <div
-          className="border-state-danger/30 bg-state-danger-soft rounded-control border px-3.5 py-2.5"
-          role="alert"
-        >
-          <p className="text-state-danger text-[14.5px] font-medium">
-            Ці файли не завантажилися. Виберіть інші або спробуйте ще раз.
-          </p>
-          <ul className="text-app-ink mt-1.5 grid gap-1 text-[14px]">
-            {problems.map((problem) => (
-              <li key={problem}>{problem}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      <p className="text-app-dim text-[12.5px] leading-5 text-pretty">
+        Фото вирушать на сервер разом зі збереженням — доти вони лишаються у
+        вас.
+      </p>
       {items.length > 0 ? (
         <ul className="grid gap-2">
           {items.map((item) => (
             <li
               className="border-app-line rounded-control flex flex-wrap items-center gap-3 border p-2"
-              key={item.storageKey}
+              key={item.id}
             >
               <img
                 alt="Попередній перегляд фото"
                 className="rounded-control size-12 shrink-0 object-cover"
-                src={item.url}
+                src={item.preview}
               />
               <span className="text-app-ink min-w-0 flex-1 truncate text-[14.5px]">
-                {names[item.storageKey] ??
-                  item.storageKey.split('/').pop() ??
-                  'Фото'}
+                {item.name}
               </span>
-              <Button disabled={busy} onClick={() => void remove(item)}>
+              <Button onClick={() => drop(item)}>
                 <Trash2 aria-hidden />
                 Прибрати фото
               </Button>
             </li>
           ))}
         </ul>
-      ) : (
-        <p className="text-app-dim text-[13.5px]">
-          <ImagePlus
-            aria-hidden
-            className="mr-1.5 inline size-4 align-text-bottom"
-          />
-          Файлів ще не вибрано.
-        </p>
-      )}
+      ) : null}
     </fieldset>
   )
 }
