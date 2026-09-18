@@ -1107,7 +1107,7 @@ it('hides cash mutations without finance.manage and renders quota failures', asy
   )
 })
 
-it('reads the till card figures from the server and dashes what it does not keep', async () => {
+it('reads the till card figures from Core and dashes what it does not keep', async () => {
   const register = {
     id: 'cash-1',
     name: 'Основна каса',
@@ -1183,7 +1183,7 @@ it('reads the till card figures from the server and dashes what it does not keep
   // Reconciliation has no endpoint, so the control stays and says why.
   const reconcile = screen.getByRole('button', { name: 'Звірити залишок' })
   expect(reconcile).toBeDisabled()
-  expect(reconcile.title).toContain('Звіряння залишку сервер не веде')
+  expect(reconcile.title).toContain('Звіряння залишку кабінет поки не веде')
   expect(
     screen.getByText(/Стовпець «Залишок» порожній/, { exact: false }),
   ).toBeVisible()

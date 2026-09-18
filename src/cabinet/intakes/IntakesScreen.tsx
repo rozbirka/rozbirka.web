@@ -52,6 +52,7 @@ import {
 } from '@/api/inventory'
 import { partsApi } from '@/api/parts'
 import { normalizeApiProblem } from '@/api/errors'
+import { partStatusPresentation } from '../parts/part-labels'
 import { cn, plural } from '@/lib/utils'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
@@ -410,13 +411,11 @@ function IntakesList({ base }: { base: string }) {
           <IntakeStat
             label="Позицій"
             meta="на цій сторінці"
-            unit="шт"
             value={String(positions)}
           />
           <IntakeStat
             label="Продано"
             meta="на цій сторінці"
-            unit="шт"
             value={String(sold)}
           />
           {financeView ? (
@@ -609,14 +608,12 @@ const INTAKE_PART_FILTERS = [
 
 type IntakePartFilter = (typeof INTAKE_PART_FILTERS)[number]['value']
 
-const partStatusPill = (
-  status: string,
-): { label: string; tone: StatusTone } => {
-  if (status === 'available') return { label: 'Доступна', tone: 'ok' }
-  if (status === 'reserved') return { label: 'У резерві', tone: 'warn' }
-  if (status === 'sold') return { label: 'Продана', tone: 'neutral' }
-  return { label: status, tone: 'neutral' }
-}
+/**
+ * What a position is measured in when nobody said otherwise. It is a default,
+ * not a rule: the single-part form lets it be changed to компл, кг or anything
+ * else the yard counts in.
+ */
+const DEFAULT_UNIT = 'шт'
 
 /** One cell of the strip under the title: a figure with its unit and a note. */
 function IntakeStat({
@@ -1028,7 +1025,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                       label: 'Стан',
                       align: 'end',
                       cell: (part) => {
-                        const pill = partStatusPill(part.status)
+                        const pill = partStatusPresentation(part.status)
                         return (
                           <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
                         )
@@ -1493,7 +1490,7 @@ function IntakeForm({
                   <span>
                     {positions}{' '}
                     {plural(positions, ['позиція', 'позиції', 'позицій'])} ·{' '}
-                    {units} шт
+                    {units} {plural(units, ['одиниця', 'одиниці', 'одиниць'])}
                   </span>
                   <span aria-hidden className="text-white/20">
                     ·
@@ -1894,7 +1891,7 @@ function PartForm({
     oemCode: '',
     condition: 'good',
     quantity: 1,
-    unit: 'шт',
+    unit: DEFAULT_UNIT,
     price: '',
     zoneId: '',
     notes: '',
@@ -2007,7 +2004,7 @@ function PartForm({
           id: created.id,
           name: request.name,
           quantity: values.quantity,
-          unit: values.unit || 'шт',
+          unit: values.unit || DEFAULT_UNIT,
           zone: zone?.code ?? null,
         },
         ...current,
@@ -2276,7 +2273,7 @@ function PartForm({
                     {zone ? `Доступно · ${zone.code}` : 'Без комірки'}
                   </StatusPill>
                   <span className="text-app-muted font-mono text-[13px]">
-                    {values.quantity} {values.unit || 'шт'}
+                    {values.quantity} {values.unit || DEFAULT_UNIT}
                   </span>
                 </div>
               </div>
@@ -2504,7 +2501,7 @@ function BatchPartsForm({
         partType: null,
         condition,
         quantity: Math.max(1, Math.round(batchNumber(row.quantity)) || 1),
-        unit: 'шт',
+        unit: DEFAULT_UNIT,
         notes: null,
         photoKeys: [],
         ...(zoneId ? { inventoryZoneIds: [zoneId] } : {}),
@@ -2795,7 +2792,7 @@ function BatchPartsForm({
                   Одиниць
                 </dt>
                 <dd className="font-mono text-[15px] text-white tabular-nums">
-                  {units} шт
+                  {units}
                 </dd>
                 {canManageFinance ? (
                   <>

@@ -1362,11 +1362,12 @@ it('counts every filter value from the server and narrows the search by it', asy
   )
 
   const conditions = await screen.findByRole('region', { name: 'Стан деталі' })
-  // The numbers are the server's, counted under the rest of the filter.
+  // The numbers are the server's, counted under the rest of the filter; the
+  // word beside them is ours — the server sends the code `good`.
   expect(
-    within(conditions).getByRole('button', { name: /good/ }),
+    within(conditions).getByRole('button', { name: /б\/в/ }),
   ).toHaveTextContent('812')
-  fireEvent.click(within(conditions).getByRole('button', { name: /good/ }))
+  fireEvent.click(within(conditions).getByRole('button', { name: /б\/в/ }))
 
   await vi.waitFor(() =>
     expect(partMocks.search).toHaveBeenLastCalledWith(

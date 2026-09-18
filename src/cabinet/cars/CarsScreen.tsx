@@ -28,6 +28,7 @@ import {
   Wallet,
   Wrench,
 } from 'lucide-react'
+import { partStatusPresentation } from '../parts/part-labels'
 import { cn, plural } from '@/lib/utils'
 import {
   ActionMenu,
@@ -51,7 +52,6 @@ import {
   StatusPill,
   TextArea,
   TextInput,
-  type StatusTone,
 } from '@/components/app'
 import {
   carsApi,
@@ -133,12 +133,6 @@ const day = (value: string) => {
   return Number.isNaN(parsed.getTime())
     ? value
     : new Intl.DateTimeFormat('uk-UA', { dateStyle: 'medium' }).format(parsed)
-}
-const partStatus = (status: string): { label: string; tone: StatusTone } => {
-  if (status === 'available') return { label: 'Доступна', tone: 'ok' }
-  if (status === 'reserved') return { label: 'У резерві', tone: 'warn' }
-  if (status === 'sold') return { label: 'Продана', tone: 'neutral' }
-  return { label: status, tone: 'neutral' }
 }
 const positiveInteger = (value: string | null, fallback: number) => {
   const parsed = Number(value)
@@ -1892,7 +1886,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                 <CarStep
                   hint="Те, що вже витрачено на авто: транспортування, розмитнення, мийка. Разом із ціною придбання це інвестована сума."
                   number="03"
-                  title="Початкові витрати"
+                  title="Додаткові витрати"
                 >
                   {carId ? (
                     <CarFormExpenses
@@ -2407,7 +2401,7 @@ function CarParts({
               key: 'status',
               label: 'Статус',
               cell: (part: CarPartListItem) => {
-                const presentation = partStatus(part.status)
+                const presentation = partStatusPresentation(part.status)
                 return (
                   <StatusPill tone={presentation.tone}>
                     {presentation.label}

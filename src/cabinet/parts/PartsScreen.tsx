@@ -48,14 +48,16 @@ import {
   TextArea,
   TextInput,
   type NoticeTone,
-  type StatusTone,
 } from '@/components/app'
 import { cn, plural } from '@/lib/utils'
 import {
+  conditionFacetLabel,
   conditionLabel,
   historyDetails,
   historyLabel,
   originLabel,
+  partStatusDot,
+  partStatusPresentation,
   sourceLabel,
 } from './part-labels'
 import {
@@ -116,14 +118,6 @@ const positiveInteger = (value: string | null, fallback: number) => {
 const pageSizeParam = (value: string | null, fallback: number) => {
   const parsed = positiveInteger(value, fallback)
   return parsed <= 100 ? parsed : fallback
-}
-const statusPresentation = (
-  status: string,
-): { label: string; tone: StatusTone } => {
-  if (status === 'available') return { label: 'Доступно', tone: 'ok' }
-  if (status === 'reserved') return { label: 'У резерві', tone: 'warn' }
-  if (status === 'sold') return { label: 'Продано', tone: 'neutral' }
-  return { label: status, tone: 'neutral' }
 }
 
 const optional = (value: string) => value.trim() || undefined
@@ -817,10 +811,14 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                 {
                   value: 'available',
                   label: 'В наявності',
-                  dot: 'bg-state-ok',
+                  dot: partStatusDot.available,
                 },
-                { value: 'reserved', label: 'У резерві', dot: 'bg-state-warn' },
-                { value: 'sold', label: 'Продано', dot: 'bg-app-line-2' },
+                {
+                  value: 'reserved',
+                  label: 'У резерві',
+                  dot: partStatusDot.reserved,
+                },
+                { value: 'sold', label: 'Продано', dot: partStatusDot.sold },
               ].map((option) => (
                 <FilterRow
                   active={filters.status === option.value}
@@ -916,7 +914,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                   count={value.count}
                   dot="bg-transparent"
                   key={value.id}
-                  label={value.name || value.id}
+                  label={conditionFacetLabel(value.id, value.name)}
                   onSelect={() => updateFilter('condition', value.id)}
                 />
               ))}
@@ -1135,7 +1133,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                         key: 'status',
                         label: 'Стан',
                         cell: (part) => {
-                          const presentation = statusPresentation(
+                          const presentation = partStatusPresentation(
                             part.status ?? '',
                           )
                           return presentation.label === '' ? (
@@ -1711,8 +1709,8 @@ function PartDetailScreen({
         <div className="flex flex-wrap items-start justify-between gap-x-10 gap-y-6">
           <div className="min-w-0">
             {detail === null ? null : (
-              <StatusPill tone={statusPresentation(detail.status).tone}>
-                {statusPresentation(detail.status).label}
+              <StatusPill tone={partStatusPresentation(detail.status).tone}>
+                {partStatusPresentation(detail.status).label}
               </StatusPill>
             )}
             <h1 className="mt-4 text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">

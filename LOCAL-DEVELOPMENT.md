@@ -13,10 +13,13 @@
 ## Existing local backend and data
 
 The selected checkout for this task is
-`/Users/admin/code/rozbirka/rozbirka.core/.worktrees/part-search-web-fields`.
+`/Users/admin/code/rozbirka/rozbirka.core/.worktrees/import-optimizations`
+on `feature/roz-132-adaptive-parts-import` (selected by the user on 2026-09-17).
 Revalidate the checkout with the user if the requested branch changes.
 
-Its ignored `orchestration/Rozbirka.AppHost/appsettings.Development.json` pins:
+The existing local database must be explicitly pinned when launching this
+checkout using `ROZBIRKA_POSTGRES_VOLUME` (see command below). The prior
+`part-search-web-fields` checkout used these local volume settings:
 
 ```json
 {
@@ -35,7 +38,7 @@ Inspect existing listeners/processes first. Reuse a healthy matching backend.
 If absent, run in a persistent terminal from that Core checkout:
 
 ```sh
-ROZBIRKA_GATEWAY_URL=http://localhost:8088 dotnet run --project orchestration/Rozbirka.AppHost/Rozbirka.AppHost.csproj --launch-profile http
+ROZBIRKA_GATEWAY_URL=http://localhost:8088 ROZBIRKA_POSTGRES_VOLUME=rozbirka.apphost-841cb8679a-postgres-data dotnet run --project orchestration/Rozbirka.AppHost/Rozbirka.AppHost.csproj --launch-profile http
 ```
 
 Wait for `/health/core` and `/health/identity` on localhost:8088 to return 200.

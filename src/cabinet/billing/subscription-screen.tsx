@@ -49,13 +49,13 @@ const HISTORY_SIZE = 4
 
 /** What the billing endpoints do not carry, said where the design asks for it. */
 const NO_CARD_MANAGEMENT =
-  'Замінити картку через кабінет не можна: у білінгу є оформлення, скасування й історія платежів — окремої ручки для картки немає.'
+  'Замінити картку тут не можна: у кабінеті є оформлення, скасування й історія платежів.'
 const NO_CARD_EXPIRY =
-  'Строку дії картки сервер не повертає — лише бренд і останні чотири цифри.'
+  'Строку дії картки кабінет не показує — лише бренд і останні чотири цифри.'
 const NO_CYCLE_DISCOUNT =
-  'Річних циклів зі знижкою каталог не позначає: у тарифі є сума, валюта й інтервал, і жодного відсотка економії. Що є — видно в «Усіх тарифах».'
+  'Річних циклів зі знижкою тут не позначено: у тарифі є сума, валюта й період, і жодного відсотка економії. Що є — видно в «Усіх тарифах».'
 const NO_RETENTION_POLICY =
-  'Скільки днів дані живуть після скасування, сервер не повідомляє — це питання до підтримки, а не до кабінету.'
+  'Скільки днів дані живуть після скасування — питання до підтримки: у кабінеті цього строку немає.'
 
 /** A result that arrived for a tenant we have already left changes nothing. */
 type MutationOutcome = 'applied' | 'stale'
@@ -342,7 +342,7 @@ function SubscriptionPanel({
           </p>
           <p className="text-app-muted mt-2 text-[13.5px] leading-5 text-pretty">
             {nextChargeAt === null ? (
-              'Сервер не повідомляє наступної дати списання.'
+              'Наступної дати списання поки немає.'
             ) : (
               <>
                 Наступне списання{' '}
@@ -363,9 +363,7 @@ function SubscriptionPanel({
               <>
                 Картка {(subscription.cardBrand ?? 'Card').toUpperCase()} ••••{' '}
                 {subscription.cardLast4}.{' '}
-                <span title={NO_CARD_EXPIRY}>
-                  Строку дії сервер не повідомляє.
-                </span>
+                <span title={NO_CARD_EXPIRY}>Строку дії не показуємо.</span>
               </>
             ) : (
               'Картка ще не привʼязана.'
@@ -398,8 +396,8 @@ function SubscriptionPanel({
           }
           meta={
             nextChargeAt === null
-              ? 'дати сервер не повідомляє'
-              : `дата від сервера, дні рахує сторінка`
+              ? 'дати списання поки немає'
+              : 'до наступного списання'
           }
           tone={daysLeft !== null && daysLeft < 0 ? 'warn' : 'plain'}
           value={daysLeft === null ? '—' : String(daysLeft)}
@@ -460,7 +458,7 @@ function SubscriptionPanel({
           <ul className="mt-4 grid gap-2">
             {features.length === 0 ? (
               <li className="text-app-dim text-[13.5px]">
-                Перелік можливостей тарифу сервер не повернув.
+                Перелік можливостей цього тарифу порожній.
               </li>
             ) : (
               features.map((code) => (

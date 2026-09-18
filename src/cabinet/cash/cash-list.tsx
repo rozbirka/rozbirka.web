@@ -28,9 +28,9 @@ const SEGMENTS = [
  * a plausible-looking blank.
  */
 const NO_RECONCILIATION =
-  'Звіряння залишку сервер не веде: ні дати останнього перерахунку, ні розбіжностей у відповіді немає.'
+  'Звіряння залишку кабінет поки не веде: ні дати останнього перерахунку, ні розбіжностей.'
 const NO_OWNER =
-  'Відповідального за касу сервер не зберігає — каса належить розбірці, а не людині.'
+  'Каса належить розбірці, а не людині: відповідального за нею не закріплюють.'
 
 /**
  * Гроші · Каси — the till list. Balances are shown per currency and never
@@ -145,7 +145,7 @@ export function CashList({
           />
           <Kpi
             label="Потребує звіряння"
-            meta="сервер не рахує"
+            meta="поки не ведеться"
             title={NO_RECONCILIATION}
             tone="dim"
             value="—"
@@ -240,7 +240,7 @@ export function CashList({
                         className="text-app-dim mt-1 text-[13px]"
                         title={NO_OWNER}
                       >
-                        Відповідального сервер не зберігає
+                        Відповідального не закріплено
                       </p>
                     </div>
 
@@ -361,8 +361,7 @@ export function CashList({
             </div>
           )}
           <p className="text-app-dim border-app-line border-t px-5.5 py-3.5 text-[13px] leading-5 text-pretty">
-            Спільної стрічки операцій API не має — це останні рухи кожної каси,
-            зведені разом
+            Це останні рухи кожної каси, зведені разом
             {feedTruncated ? ' по перших касах списку' : ''}. Повний журнал — на
             картці каси.
           </p>
