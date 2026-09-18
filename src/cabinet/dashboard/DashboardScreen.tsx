@@ -14,6 +14,7 @@ import { DashboardAnalytics } from './DashboardAnalytics'
 import { DashboardBillingBanner } from './DashboardBillingBanner'
 import { DashboardErrorState } from './DashboardErrorState'
 import { DashboardSummary } from './DashboardSummary'
+import { useCashBalances } from './use-cash-balances'
 import { getDashboardBillingPath } from './dashboard-billing-access'
 
 export function DashboardScreen() {
@@ -148,8 +149,10 @@ function DashboardSummaryState({
   loadable: DashboardLoadable<DashboardData>
   retry: () => Promise<void>
 }) {
+  const cashBalances = useCashBalances()
+
   if (loadable.status === 'ready') {
-    return <DashboardSummary data={loadable.data} />
+    return <DashboardSummary cashBalances={cashBalances} data={loadable.data} />
   }
 
   if (loadable.status === 'error') {
