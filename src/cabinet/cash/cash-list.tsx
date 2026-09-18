@@ -93,7 +93,7 @@ export function CashList({
     <RedesignShell
       actions={
         <>
-          <span className="border-app-line bg-app-raised focus-within:border-app-line-2 flex h-10 min-w-0 flex-[0_1_260px] items-center gap-2.5 rounded-[10px] border px-3">
+          <span className="border-app-line bg-app-raised focus-within:border-app-line-2 flex h-10 w-full min-w-0 items-center gap-2.5 rounded-[10px] border px-3 sm:w-[260px]">
             <Search aria-hidden className="text-app-dim size-4 shrink-0" />
             <input
               aria-label="Пошук кас"

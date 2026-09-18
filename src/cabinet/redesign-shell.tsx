@@ -23,7 +23,9 @@ export function RedesignShell({
           {crumb}
         </p>
         {actions === undefined ? null : (
-          <div className="flex flex-wrap items-center gap-2.5">{actions}</div>
+          <div className="flex flex-wrap items-center justify-end gap-2.5 sm:flex-nowrap">
+            {actions}
+          </div>
         )}
       </div>
       <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-10 pb-16 sm:px-6 md:px-8 lg:px-12">
