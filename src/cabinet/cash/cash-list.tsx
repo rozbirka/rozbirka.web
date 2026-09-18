@@ -27,6 +27,10 @@ const SEGMENTS = [
  * thing the API has no concept of, so the screen says that rather than leaving
  * a plausible-looking blank.
  */
+const NO_RECONCILIATION =
+  'Звіряння залишку сервер не веде: ні дати останнього перерахунку, ні розбіжностей у відповіді немає.'
+const NO_OWNER =
+  'Відповідального за касу сервер не зберігає — каса належить розбірці, а не людині.'
 
 /**
  * Гроші · Каси — the till list. Balances are shown per currency and never
@@ -139,6 +143,13 @@ export function CashList({
             }
             value={count(operations)}
           />
+          <Kpi
+            label="Потребує звіряння"
+            meta="сервер не рахує"
+            title={NO_RECONCILIATION}
+            tone="dim"
+            value="—"
+          />
         </KpiStrip>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -225,6 +236,12 @@ export function CashList({
                           ? ` · ${registerTypeHints[register.type]}`
                           : ''}
                       </p>
+                      <p
+                        className="text-app-dim mt-1 text-[13px]"
+                        title={NO_OWNER}
+                      >
+                        Відповідального сервер не зберігає
+                      </p>
                     </div>
 
                     <dl className="grid min-w-0 flex-[1_1_220px] gap-1.5">
@@ -234,8 +251,13 @@ export function CashList({
                         </p>
                       ) : (
                         currencies.map(([currency, balance]) => (
-                          <div className="flex justify-end" key={currency}>
-                            <dt className="sr-only">{currency}</dt>
+                          <div
+                            className="flex items-baseline justify-between gap-4"
+                            key={currency}
+                          >
+                            <dt className="text-app-muted font-mono text-[12px] tracking-[0.1em]">
+                              {currency}
+                            </dt>
                             <dd
                               className={cn(
                                 'font-mono text-[15px] tabular-nums',
@@ -256,6 +278,12 @@ export function CashList({
                         {summary === null
                           ? 'Операції за день ще рахуються'
                           : `${count(operationCount)} ${plural(operationCount, ['операція', 'операції', 'операцій'])} за ${date}`}
+                      </p>
+                      <p
+                        className="text-app-dim mt-1 text-[13px]"
+                        title={NO_RECONCILIATION}
+                      >
+                        Звіряння — не ведеться
                       </p>
                     </div>
                   </Link>
@@ -333,8 +361,10 @@ export function CashList({
             </div>
           )}
           <p className="text-app-dim border-app-line border-t px-5.5 py-3.5 text-[13px] leading-5 text-pretty">
-            Останні операції з кас. Повний журнал доступний на картці каси
-            {feedTruncated ? ' для показаних вище кас' : ''}.
+            Спільної стрічки операцій API не має — це останні рухи кожної каси,
+            зведені разом
+            {feedTruncated ? ' по перших касах списку' : ''}. Повний журнал — на
+            картці каси.
           </p>
         </section>
       </div>

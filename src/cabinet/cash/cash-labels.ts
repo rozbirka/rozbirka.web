@@ -4,13 +4,11 @@ import type { CashTransaction } from '@/api/cash'
 export const registerTypeLabels: Record<string, string> = {
   cash: 'Готівкова',
   bank: 'Безготівкова',
-  safe: 'Сейф',
 }
 
 export const registerTypeHints: Record<string, string> = {
   cash: 'Фізичні гроші',
   bank: 'Рахунок або картка',
-  safe: 'Готівкові кошти',
 }
 
 /** Movement kinds the ledger returns. Unknown codes are shown as they came. */
@@ -24,7 +22,6 @@ export const movementLabels: Record<string, string> = {
   intake_payment: 'Оплата приймання',
   car_purchase: 'Купівля авто',
   expense: 'Витрата',
-  sale_in: 'Продаж',
 }
 
 export const movementText = (code: string) => movementLabels[code] ?? code

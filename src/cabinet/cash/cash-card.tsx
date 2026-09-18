@@ -21,11 +21,16 @@ import { Kpi, KpiStrip } from '../redesign-kpi'
  * Everything the till card wants to show and the server does not keep. Each
  * string is what the reader gets on hover of the dash that stands in its place.
  */
-const NO_RECONCILIATION = 'Звіряння залишку поки недоступне.'
-const NO_WAREHOUSE = 'Склад не вказано.'
-const NO_CREATED = 'Дата створення не вказана.'
-const NO_RUNNING_BALANCE = 'Залишок для цієї операції недоступний.'
-const NO_TYPE_FILTER = 'Фільтр застосовується до поточної сторінки.'
+const NO_RECONCILIATION =
+  'Звіряння залишку сервер не веде: ні дати перерахунку, ні розбіжності, ні періодичності у відповіді немає.'
+const NO_OWNER =
+  'Відповідального за касу сервер не зберігає — каса належить розбірці, а не людині.'
+const NO_WAREHOUSE = 'Звʼязку каси зі складом у відповіді сервера немає.'
+const NO_CREATED = 'Дату створення каси сервер не повертає.'
+const NO_RUNNING_BALANCE =
+  'Залишок після кожної операції рахує сервер і в журналі його не повертає. Рахувати його в браузері не можна: сторінка журналу — не вся історія.'
+const NO_TYPE_FILTER =
+  'Сервер не фільтрує журнал за типом операції — сегменти впорядковують те, що вже завантажено на цій сторінці.'
 const NO_ACCESS_LIST =
   'Списку доступу на касі немає: право працювати з грошима дає роль у бізнесі, одразу на всі каси.'
 
@@ -86,8 +91,13 @@ function MoneyLines({
   return (
     <dl className="grid gap-1.5">
       {lines.map((line) => (
-        <div className="flex justify-end" key={line.currency}>
-          <dt className="sr-only">{line.currency}</dt>
+        <div
+          className="flex items-baseline justify-between gap-4"
+          key={line.currency}
+        >
+          <dt className="text-app-muted font-mono text-[12px] tracking-[0.1em]">
+            {line.currency}
+          </dt>
           <dd
             className={cn(
               'font-mono text-[15px] tabular-nums',
@@ -189,6 +199,10 @@ export function CashCard({
               {registerTypeHints[register.type]
                 ? ` · ${registerTypeHints[register.type]}`
                 : ''}
+              <span aria-hidden> · </span>
+              <span className="text-app-dim" title={NO_OWNER}>
+                відповідального сервер не зберігає
+              </span>
             </p>
           </div>
           <div className="flex flex-wrap gap-2.5">
@@ -231,7 +245,11 @@ export function CashCard({
         <KpiStrip>
           <Kpi
             label="Надходження за день"
-            meta={daySummary === null ? 'зріз за день ще не прийшов' : date}
+            meta={
+              daySummary === null
+                ? 'зріз за день ще не прийшов'
+                : `${date} · сервер зводить рух лише за добу`
+            }
             value={
               <MoneyLines
                 empty="—"
@@ -372,6 +390,8 @@ export function CashCard({
                 Показано {count(shown.length)} з {count(ledger.length)} на цій
                 сторінці, усього за фільтром — {count(ledgerTotal)}{' '}
                 {plural(ledgerTotal, ['операція', 'операції', 'операцій'])}.
+                Стовпець «Залишок» порожній: сервер рахує баланс сам і в журналі
+                його не повертає.
               </p>
               {pagination}
             </div>
@@ -383,7 +403,8 @@ export function CashCard({
                 <Dash title={NO_RECONCILIATION} />
               </p>
               <p className="text-app-dim mt-3 text-[13px] leading-5 text-pretty">
-                Даних поки немає.
+                Ні дати перерахунку, ні розбіжності сервер не зберігає, тож
+                показати тут нічого.
               </p>
             </Card>
             <Card

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { RefreshCw } from 'lucide-react'
 import { Button, Panel, Skeleton } from '@/components/app'
@@ -15,22 +15,12 @@ import { DashboardBillingBanner } from './DashboardBillingBanner'
 import { DashboardErrorState } from './DashboardErrorState'
 import { DashboardSummary } from './DashboardSummary'
 import { getDashboardBillingPath } from './dashboard-billing-access'
-import { cashApi } from '@/api/cash'
 
 export function DashboardScreen() {
   const { targetTenant, snapshot } = useCabinet()
   const [searchParams, setSearchParams] = useSearchParams()
   const selection = readDashboardPeriod(searchParams)
   const dashboard = useDashboardData(selection.period)
-  const [cashBalanceState, setCashBalanceState] = useState<{
-    balances: Record<string, number>
-    tenantId: string
-  } | null>(null)
-  const cashBalances =
-    snapshot?.permissions.has('finance.view') === true &&
-    cashBalanceState?.tenantId === snapshot.tenantId
-      ? cashBalanceState.balances
-      : undefined
   const tenantName = targetTenant?.name ?? 'вашій розбірці'
   const billingPath =
     snapshot !== null && targetTenant !== null
@@ -43,25 +33,6 @@ export function DashboardScreen() {
       replace: true,
     })
   }, [searchParams, selection, setSearchParams])
-
-  useEffect(() => {
-    if (!snapshot?.permissions.has('finance.view')) return
-    const controller = new AbortController()
-    const tenantId = snapshot.tenantId
-    void cashApi.list(true, { signal: controller.signal }).then(
-      (registers) => {
-        const totals: Record<string, number> = {}
-        for (const register of registers)
-          for (const [currency, amount] of Object.entries(register.balances))
-            totals[currency] = (totals[currency] ?? 0) + amount
-        setCashBalanceState({ balances: totals, tenantId })
-      },
-      () => {
-        if (!controller.signal.aborted) setCashBalanceState(null)
-      },
-    )
-    return () => controller.abort()
-  }, [snapshot])
 
   const selectPeriod = (period: DashboardPeriod) => {
     setSearchParams(writeDashboardPeriod(searchParams, period), {
@@ -144,7 +115,6 @@ export function DashboardScreen() {
           ) : null}
           <DashboardSummaryState
             billingPath={billingPath}
-            cashBalances={cashBalances}
             loadable={dashboard.summary}
             retry={() => dashboard.retrySummary()}
           />
@@ -171,17 +141,15 @@ export function DashboardScreen() {
 
 function DashboardSummaryState({
   billingPath,
-  cashBalances,
   loadable,
   retry,
 }: {
   billingPath: string | null
-  cashBalances: Record<string, number> | undefined
   loadable: DashboardLoadable<DashboardData>
   retry: () => Promise<void>
 }) {
   if (loadable.status === 'ready') {
-    return <DashboardSummary cashBalances={cashBalances} data={loadable.data} />
+    return <DashboardSummary data={loadable.data} />
   }
 
   if (loadable.status === 'error') {

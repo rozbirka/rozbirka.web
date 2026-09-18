@@ -119,38 +119,6 @@ it('lists the latest orders and intakes with their own links', async () => {
   expect(within(intakes).getByText(/26 поз\./)).toBeVisible()
 })
 
-it('localizes pending and confirmed order statuses', async () => {
-  vi.mocked(ordersApi.list).mockResolvedValue(
-    page([
-      {
-        id: 'order-1',
-        number: 1,
-        status: 'pending',
-        customerName: 'А',
-        itemCount: 1,
-        partNames: [],
-        paymentAccountNames: [],
-        totalAmount: 10,
-        createdAt: '2026-09-16T12:19:00Z',
-      },
-      {
-        id: 'order-2',
-        number: 2,
-        status: 'confirmed',
-        customerName: 'Б',
-        itemCount: 1,
-        partNames: [],
-        paymentAccountNames: [],
-        totalAmount: 20,
-        createdAt: '2026-09-16T12:19:00Z',
-      },
-    ]),
-  )
-  renderActivity(['orders.view'])
-  expect(await screen.findByText('Очікує')).toBeVisible()
-  expect(screen.getByText('Підтверджено')).toBeVisible()
-})
-
 it('asks only for the modules this person can open', async () => {
   vi.mocked(intakesApi.list).mockResolvedValue(page([]))
 

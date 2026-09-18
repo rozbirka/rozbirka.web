@@ -7,13 +7,17 @@ import type { CashRegister } from '@/api/cash'
 import { money, registerTypeHints, registerTypeLabels } from './cash-labels'
 
 const NO_TYPE_CHANGE =
-  'Тип каси задається під час створення. Щоб використати інший тип, створіть окрему касу.'
-const NO_OWNER = 'Каса належить розбірці без окремого відповідального.'
-const NO_WAREHOUSE = 'Окремий склад для каси не вказується.'
-const NO_RECONCILIATION = 'Звіряння залишку поки недоступне.'
-const NO_RULES = 'Додаткові правила для каси поки недоступні.'
+  'Тип задають при створенні каси. Змінити його сервер не дає — потрібен інший тип, створюйте окрему касу.'
+const NO_OWNER =
+  'Відповідального за касу сервер не зберігає — каса належить розбірці, а не людині.'
+const NO_WAREHOUSE = 'Звʼязку каси зі складом у відповіді сервера немає.'
+const NO_RECONCILIATION =
+  'Звіряння залишку сервер не веде: ні періодичності, ні дати перерахунку, ні розбіжності.'
+const NO_RULES =
+  'Ліміту залишку, доступності каси в продажах і приховування від колег сервер не зберігає.'
 const NO_TEAM_NOTE = 'Поля для нотатки команді на касі немає.'
-const NO_CURRENCY_CATALOGUE = 'Введіть три літери коду валюти.'
+const NO_CURRENCY_CATALOGUE =
+  'Довідника валют сервер не має — код валюти вводиться вручну, трьома літерами.'
 
 const TYPES = ['cash', 'bank'] as const
 const PERIODS = ['Щодня', 'Щотижня', 'Щомісяця', 'Вручну'] as const
@@ -216,6 +220,10 @@ export function CashEditView({
                   </div>
                 </div>
               </div>
+              <Note>
+                Ні відповідального, ні склад каса не тримає: у відповіді сервера
+                таких полів немає.
+              </Note>
             </Step>
 
             <Step number="03" title="Валюти">
@@ -252,7 +260,7 @@ export function CashEditView({
                           title={
                             balance === 0
                               ? `Видалити ${code}`
-                              : `У касі є залишок ${money(balance, code)}. Спочатку обнуліть його.`
+                              : `У касі є залишок ${money(balance, code)}. Валюту з ненульовим залишком сервер видалити не дасть.`
                           }
                           type="button"
                         >
@@ -325,8 +333,8 @@ export function CashEditView({
                 ))}
               </div>
               <Note>
-                {NO_RECONCILIATION} {NO_RULES} {NO_TEAM_NOTE} Ці перемикачі поки
-                вимкнені.
+                {NO_RECONCILIATION} {NO_RULES} {NO_TEAM_NOTE} Ці перемикачі
+                лишаються вимкненими, доки сервер не навчиться їх зберігати.
               </Note>
             </Step>
           </div>
@@ -430,8 +438,9 @@ export function CashEditView({
                   {register.isActive ? 'Закрити касу' : 'Відкрити касу'}
                 </Button>
                 <p className="text-app-dim mt-4 text-[12.5px] leading-5 text-pretty">
-                  Видалення прибирає касу разом із журналом назавжди. Касу з
-                  операціями потрібно закрити.
+                  Видалення прибирає касу разом із журналом назавжди. Якщо по
+                  касі вже були операції, сервер видалити її не дасть — тоді
+                  закривайте.
                 </p>
                 <Button
                   className="mt-2.5 w-full justify-center"

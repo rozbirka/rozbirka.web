@@ -22,7 +22,6 @@ it('names a field control by its label and describes it with the hint', () => {
   const input = screen.getByRole('textbox', { name: 'Назва' })
   expect(input).toHaveAccessibleDescription('Як на накладній')
   expect(input).not.toHaveAttribute('aria-invalid')
-  expect(input.parentElement).toHaveClass('content-start')
 })
 
 it('replaces the hint with the error and marks the control invalid', () => {

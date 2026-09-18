@@ -81,17 +81,7 @@ const useOrderIdempotencyKeys = () => {
 const money = (value: number | null | undefined, currency?: string | null) => {
   if (value === null || value === undefined || !Number.isFinite(value))
     return '—'
-  if (!currency) return String(value)
-  try {
-    return new Intl.NumberFormat('uk-UA', {
-      style: 'currency',
-      currency,
-      currencyDisplay: 'narrowSymbol',
-      maximumFractionDigits: 2,
-    }).format(value)
-  } catch {
-    return `${value} ${currency}`
-  }
+  return currency ? `${value} ${currency}` : String(value)
 }
 const lineTotal = (quantity: number, unitPrice: number) => {
   const total = quantity * unitPrice
@@ -1306,7 +1296,7 @@ function OrderDetailScreen({
 
         <div className="flex flex-wrap-reverse items-end gap-6">
           <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
-            <Card className="order-1" title="Нотатки">
+            <Card title="Нотатки">
               {itemsEditable ? (
                 <div className="grid gap-3">
                   <Field label="Нотатки замовлення">
@@ -1366,7 +1356,6 @@ function OrderDetailScreen({
 
             {itemsEditable ? (
               <SectionPanel
-                className="order-3"
                 aside={
                   <span className="text-app-muted text-[13.5px] tabular-nums">
                     Разом за позиціями {money(draftsTotal, currency)}
@@ -1590,7 +1579,6 @@ function OrderDetailScreen({
 
             {financeAllowed && order.status === 'pending' && (
               <SectionPanel
-                className="order-2"
                 description="Підтвердження фіксує оплату й переводить замовлення у статус «Підтверджено»."
                 footer={
                   <>
@@ -1728,7 +1716,6 @@ function OrderDetailScreen({
             )}
 
             <Card
-              className="order-2"
               aside={
                 <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
                   {order.payments.length}{' '}
@@ -1757,7 +1744,7 @@ function OrderDetailScreen({
                     align: 'end',
                     cell: (payment) => (
                       <span className="font-bold text-white">
-                        {money(payment.amount, payment.currency)}
+                        {payment.amount} {payment.currency}
                       </span>
                     ),
                   },
