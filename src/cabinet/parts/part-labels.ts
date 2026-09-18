@@ -6,9 +6,9 @@ export const conditionLabel = (value: string) =>
   ({
     new: 'Нова',
     used: 'Вживана',
-    good: 'б/в',
-    fair: 'Задовільна',
-    scrap: 'Під відновлення',
+    good: 'Хороший',
+    fair: 'Задовільний',
+    scrap: 'На запчастини',
     refurbished: 'Відновлена',
     damaged: 'Пошкоджена',
   })[value.toLowerCase()] ?? value

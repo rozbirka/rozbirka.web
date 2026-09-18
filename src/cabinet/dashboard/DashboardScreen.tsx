@@ -102,13 +102,6 @@ export function DashboardScreen() {
           >
             <RefreshCw aria-hidden />
           </Button>
-          {/* The scan screen lives under the parts module, so it opens for
-              anyone who can see parts at all. */}
-          {slug !== null && canOpen('parts') ? (
-            <Button asChild className="px-[18px] text-sm font-semibold">
-              <Link to={`/app/${slug}/scan`}>Сканувати</Link>
-            </Button>
-          ) : null}
           {slug !== null && canOpen('orders') ? (
             <Button
               asChild

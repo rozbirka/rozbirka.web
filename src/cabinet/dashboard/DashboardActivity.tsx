@@ -29,7 +29,7 @@ const money = new Intl.NumberFormat('uk-UA', {
 
 const orderStatus = (status: string): { label: string; tone: StatusTone } => {
   if (status === 'pending') return { label: 'Очікує', tone: 'warn' }
-  if (status === 'confirmed') return { label: 'Підтверджено', tone: 'info' }
+  if (status === 'confirmed') return { label: 'Підтверджено', tone: 'ok' }
   if (status === 'paid') return { label: 'Оплачено', tone: 'ok' }
   if (status === 'reserved') return { label: 'Резерв', tone: 'warn' }
   if (status === 'refunded') return { label: 'Повернено', tone: 'info' }

@@ -148,7 +148,7 @@ it('localizes pending and confirmed order statuses', async () => {
   )
   renderActivity(['orders.view'])
   expect(await screen.findByText('Очікує')).toBeVisible()
-  expect(screen.getByText('Підтверджено')).toBeVisible()
+  expect(screen.getByText('Підтверджено')).toHaveClass('text-state-ok')
 })
 
 it('asks only for the modules this person can open', async () => {

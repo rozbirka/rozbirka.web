@@ -344,20 +344,11 @@ it('resets for an in-place auth transition and ignores the prior update completi
   expect(screen.queryByRole('status')).toBeNull()
 })
 
-it('shows the profile controls the identity service cannot back as disabled', () => {
+it('shows only profile controls available in the mobile product', () => {
   render(<ProfileScreen />)
 
-  // There is no password in the product: login is a one-time SMS code.
-  const password = screen.getByLabelText('Новий пароль')
-  expect(password).toBeDisabled()
-  expect(password.title).toContain('Пароля в системі немає')
-  // The phone is the login, and only the name can be edited.
   expect(screen.getByLabelText('Телефон')).toBeDisabled()
-  for (const label of ['Завантажити фото', 'Прибрати', 'Українська', 'Дашборд'])
-    expect(screen.getByRole('button', { name: label })).toBeDisabled()
-  const sessions = screen.getByRole('button', {
-    name: 'Завершити інші сеанси',
-  })
-  expect(sessions).toBeDisabled()
-  expect(sessions.title).toContain('Переліку сеансів сервер не віддає')
+  expect(screen.queryByText('Інтерфейс')).toBeNull()
+  expect(screen.queryByText('Повідомлення')).toBeNull()
+  expect(screen.queryByText('Безпека')).toBeNull()
 })

@@ -516,6 +516,30 @@ it('shows a Ukrainian photo picker with previews for selected part photos', () =
   ).toBeInTheDocument()
 })
 
+it('uses the fixed mobile condition vocabulary when creating a part', () => {
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/new"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const condition = screen.getByRole('combobox', { name: 'Стан' })
+  expect(within(condition).getByRole('option', { name: 'Хороший' })).toHaveValue(
+    'good',
+  )
+  expect(
+    within(condition).getByRole('option', { name: 'Задовільний' }),
+  ).toHaveValue('fair')
+  expect(
+    within(condition).getByRole('option', { name: 'На запчастини' }),
+  ).toHaveValue('scrap')
+})
+
 it('creates a part with every supported source, inventory, price, and compatibility field', async () => {
   vi.stubGlobal(
     'fetch',
@@ -548,7 +572,6 @@ it('creates a part with every supported source, inventory, price, and compatibil
   })
   for (const [label, value] of [
     ['Кількість', '3'],
-    ['Стан', 'used'],
     ['Нотатки', 'Scratch'],
     ['OEM-код', 'OEM-1'],
     ['Тип деталі', 'body'],
@@ -557,6 +580,9 @@ it('creates a part with every supported source, inventory, price, and compatibil
   ] as const) {
     fireEvent.change(screen.getByLabelText(label), { target: { value } })
   }
+  fireEvent.change(screen.getByLabelText('Стан'), {
+    target: { value: 'good' },
+  })
   fireEvent.click(screen.getByRole('button', { name: 'Марка сумісності' }))
   expect(
     await screen.findByRole('listbox', { name: 'Марка сумісності' }),
@@ -578,7 +604,7 @@ it('creates a part with every supported source, inventory, price, and compatibil
       name: 'Front bumper',
       quantity: 3,
       unit: 'шт',
-      condition: 'used',
+      condition: 'good',
       notes: 'Scratch',
       oemCode: 'OEM-1',
       partType: 'body',
@@ -762,6 +788,7 @@ it('persists a tenant-authorized labeled car selection without exposing its raw 
       name: 'Bumper',
       quantity: 1,
       unit: 'шт',
+      condition: 'good',
       photoKeys: [],
     },
     expect.objectContaining({
@@ -1410,15 +1437,17 @@ it('counts every filter value from the server and narrows the search by it', asy
   const conditions = await screen.findByRole('region', { name: 'Стан деталі' })
   // The numbers are the server's, counted under the rest of the filter.
   expect(
-    within(conditions).getByRole('button', { name: /б\/в/i }),
+    within(conditions).getByRole('button', { name: /Хороший/i }),
   ).toHaveTextContent('812')
   expect(
-    within(conditions).getByRole('button', { name: /Задовільна/i }),
+    within(conditions).getByRole('button', { name: /Задовільний/i }),
   ).toBeVisible()
   expect(
-    within(conditions).getByRole('button', { name: /Під відновлення/i }),
+    within(conditions).getByRole('button', { name: /На запчастини/i }),
   ).toBeVisible()
-  fireEvent.click(within(conditions).getByRole('button', { name: /б\/в/i }))
+  fireEvent.click(
+    within(conditions).getByRole('button', { name: /Хороший/i }),
+  )
 
   await vi.waitFor(() =>
     expect(partMocks.search).toHaveBeenLastCalledWith(
@@ -1736,113 +1765,14 @@ it('does not show selection checkboxes or bulk actions in the parts directory', 
   ).not.toBeInTheDocument()
 })
 
-it('saves the current filters under a name, applies them back, and forgets them', async () => {
-  const user = userEvent.setup()
-  localStorage.clear()
-  partMocks.search.mockResolvedValue({
-    items: pickableRows,
-    page: 1,
-    pageSize: 30,
-    total: 2,
-    totalPages: 1,
-  })
-  render(
-    <MemoryRouter initialEntries={['/app/yard/parts?status=reserved']}>
-      <Routes>
-        <Route
-          element={
-            <>
-              <PartsScreen definition={partsDefinition as never} />
-              <LocationProbe />
-            </>
-          }
-          path="/app/:tenant/parts"
-        />
-      </Routes>
-    </MemoryRouter>,
-  )
+it('does not expose web-only saved filters', async () => {
+  renderDirectory()
 
-  const rail = await screen.findByRole('region', { name: 'Мої подання' })
-  await user.click(
-    within(rail).getByRole('button', { name: 'Зберегти ці фільтри' }),
-  )
-  await user.type(
-    screen.getByRole('textbox', { name: 'Назва подання' }),
-    'Резерв',
-  )
-  await user.click(screen.getByRole('button', { name: 'Зберегти' }))
-
-  const saved = within(
-    screen.getByRole('region', { name: 'Мої подання' }),
-  ).getByRole('button', { name: 'Резерв' })
-  expect(saved).toHaveAttribute('aria-pressed', 'true')
-
-  // Filters move away, then the view brings them back.
-  await user.click(
-    within(screen.getByRole('region', { name: 'Статус' })).getByRole('button', {
-      name: /Продано/,
-    }),
-  )
+  await screen.findByRole('link', { name: 'Фара ліва' })
+  expect(screen.queryByRole('region', { name: 'Мої подання' })).toBeNull()
   expect(
-    within(screen.getByRole('region', { name: 'Мої подання' })).getByRole(
-      'button',
-      { name: 'Резерв' },
-    ),
-  ).toHaveAttribute('aria-pressed', 'false')
-
-  await user.click(
-    within(screen.getByRole('region', { name: 'Мої подання' })).getByRole(
-      'button',
-      { name: 'Резерв' },
-    ),
-  )
-  await vi.waitFor(() =>
-    expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(
-      'status=reserved',
-    ),
-  )
-
-  await user.click(
-    screen.getByRole('button', { name: 'Забути подання: Резерв' }),
-  )
-  expect(
-    within(screen.getByRole('region', { name: 'Мої подання' })).queryByRole(
-      'button',
-      { name: 'Резерв' },
-    ),
-  ).not.toBeInTheDocument()
-})
-
-it('refuses to save filters that are already a view, and says why', async () => {
-  const user = userEvent.setup()
-  localStorage.clear()
-  localStorage.setItem(
-    'rozbirka.views.v1:user-1:tenant-1:parts',
-    JSON.stringify({
-      version: 1,
-      views: [{ id: 'v1', name: 'Резерв', query: 'status=reserved' }],
-    }),
-  )
-  render(
-    <MemoryRouter initialEntries={['/app/yard/parts?status=reserved']}>
-      <Routes>
-        <Route
-          element={<PartsScreen definition={partsDefinition as never} />}
-          path="/app/:tenant/parts"
-        />
-      </Routes>
-    </MemoryRouter>,
-  )
-
-  const save = within(
-    await screen.findByRole('region', { name: 'Мої подання' }),
-  ).getByRole('button', { name: 'Зберегти ці фільтри' })
-  expect(save).toBeDisabled()
-  expect(save).toHaveAttribute('title', 'Ці фільтри вже збережені.')
-  await user.click(save)
-  expect(
-    screen.queryByRole('textbox', { name: 'Назва подання' }),
-  ).not.toBeInTheDocument()
+    screen.queryByRole('button', { name: 'Зберегти ці фільтри' }),
+  ).toBeNull()
 })
 
 it('remembers the tighter row spacing for the next visit to the list', async () => {

@@ -18,17 +18,6 @@ type DeleteState = 'idle' | 'confirming' | 'pending' | 'error'
 
 const FORM_ID = 'profile-form'
 
-const LANGUAGES = ['Українська', 'English', 'Polski'] as const
-const START_SCREENS = ['Дашборд', 'Склад', 'Сканер'] as const
-const NOTIFICATIONS = [
-  { label: 'Мало залишку', hint: 'Коли деталь падає нижче мінімуму' },
-  {
-    label: 'Нові замовлення',
-    hint: 'Сповіщення при створенні замовлення менеджером',
-  },
-  { label: 'Тижневий звіт поштою', hint: 'Щопонеділка — гроші й склад' },
-] as const
-
 /** What the identity service does not offer, said where the design asks for it. */
 const NO_AVATAR =
   'Фото профілю сервер не зберігає: у відповіді є лише імʼя, телефон і роль, тож замість аватара — ініціали.'
@@ -36,12 +25,6 @@ const NO_PHONE_EDIT =
   'Телефон змінити не можна: це логін, і сервер дозволяє редагувати лише імʼя.'
 const NO_EMAIL =
   'Пошти в обліковому записі немає — вхід іде за номером телефону й одноразовим кодом.'
-const NO_PREFERENCES =
-  'Ні мови, ні стартового екрана сервер не зберігає — ендпоінта налаштувань користувача немає.'
-const NO_NOTIFICATIONS =
-  'Налаштувань сповіщень сервер не тримає: увімкнути чи вимкнути їх нема через що.'
-const NO_PASSWORD =
-  'Пароля в системі немає взагалі — вхід підтверджується одноразовим кодом, тож і міняти нічого.'
 const NO_SESSIONS =
   'Переліку сеансів сервер не віддає: ні пристроїв, ні міст, ні кнопки завершити чужий вхід.'
 const NO_JOINED_AT = 'Дати реєстрації користувача у відповіді немає.'
@@ -301,109 +284,6 @@ export function ProfileScreen() {
               </div>
             </Card>
 
-            <Card title="Інтерфейс">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <p className="text-app-muted text-[13px] font-medium">Мова</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {LANGUAGES.map((label) => (
-                      <Dead key={label} title={NO_PREFERENCES}>
-                        {label}
-                      </Dead>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-app-muted text-[13px] font-medium">
-                    Стартовий екран
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {START_SCREENS.map((label) => (
-                      <Dead key={label} title={NO_PREFERENCES}>
-                        {label}
-                      </Dead>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-                {NO_PREFERENCES}
-              </p>
-            </Card>
-
-            <Card title="Повідомлення">
-              <div className="grid gap-2">
-                {NOTIFICATIONS.map((item) => (
-                  <div
-                    className="border-app-line flex items-start gap-3 rounded-[14px] border px-3.5 py-3"
-                    key={item.label}
-                    title={NO_NOTIFICATIONS}
-                  >
-                    <span
-                      aria-hidden
-                      className="bg-app-line mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full px-0.5"
-                    >
-                      <span className="bg-app-dim size-4 rounded-full" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="text-app-dim block text-[13.5px] font-medium">
-                        {item.label}
-                      </span>
-                      <span className="text-app-dim mt-0.5 block text-[12.5px]">
-                        {item.hint}
-                      </span>
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-                {NO_NOTIFICATIONS}
-              </p>
-            </Card>
-
-            <Card title="Безпека">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <label
-                    className="text-app-dim text-[13px] font-medium"
-                    htmlFor="profile-password"
-                  >
-                    Новий пароль
-                  </label>
-                  <input
-                    autoComplete="new-password"
-                    className="bg-app-input border-app-line rounded-control text-app-dim min-h-11 w-full cursor-not-allowed border px-3 text-sm outline-none"
-                    disabled
-                    id="profile-password"
-                    placeholder="паролів у системі немає"
-                    title={NO_PASSWORD}
-                    type="password"
-                    value=""
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label
-                    className="text-app-dim text-[13px] font-medium"
-                    htmlFor="profile-password-repeat"
-                  >
-                    Повторіть пароль
-                  </label>
-                  <input
-                    autoComplete="new-password"
-                    className="bg-app-input border-app-line rounded-control text-app-dim min-h-11 w-full cursor-not-allowed border px-3 text-sm outline-none"
-                    disabled
-                    id="profile-password-repeat"
-                    placeholder="—"
-                    title={NO_PASSWORD}
-                    type="password"
-                    value=""
-                  />
-                </div>
-              </div>
-              <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-                {NO_PASSWORD}
-              </p>
-            </Card>
           </div>
 
           <div className="grid min-w-0 content-start gap-5">
