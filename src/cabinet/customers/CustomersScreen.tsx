@@ -241,7 +241,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="grid w-full gap-4 px-4 pt-10 pb-16 sm:px-6 md:px-8 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[1240px] gap-4 px-4 pt-10 pb-16 sm:px-6 md:px-8 lg:px-12">
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
           <div className="min-w-0">
             <p className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
@@ -708,7 +708,7 @@ function CustomerDetailScreen({
         </div>
       </div>
 
-      <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         {error ? <Notice tone="danger">{error}</Notice> : null}
         {copied ? <Notice tone="ok">Телефон скопійовано.</Notice> : null}
 

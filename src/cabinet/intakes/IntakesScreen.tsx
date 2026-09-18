@@ -390,7 +390,7 @@ function IntakesList({ base }: { base: string }) {
         </div>
       </div>
 
-      <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="min-w-0">
           <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
             Приймання
@@ -815,7 +815,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
         ) : null}
       </div>
 
-      <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-4">
             <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
@@ -1424,7 +1424,7 @@ function IntakeForm({
         </div>
       </div>
 
-      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="min-w-0">
           <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
             {title}
@@ -1931,7 +1931,7 @@ function PartForm({
         </div>
       </div>
 
-      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="min-w-0">
           <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
             Додати деталь
@@ -2420,7 +2420,7 @@ function BatchPartsForm({
         </div>
       </div>
 
-      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="min-w-0">
           <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
             Приймання партією

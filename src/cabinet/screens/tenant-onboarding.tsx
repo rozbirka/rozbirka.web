@@ -333,7 +333,7 @@ export function TenantOnboardingScreen() {
       </header>
 
       <main className="flex flex-1 justify-center px-4 pb-16 sm:px-6">
-        <div className="grid w-full max-w-[640px] content-start gap-6">
+        <div className="grid w-full max-w-[600px] content-start gap-6">
           <div aria-hidden className="flex gap-1.5">
             {STEPS.map((one, index) => (
               <span

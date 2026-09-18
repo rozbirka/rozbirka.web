@@ -309,7 +309,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="grid w-full gap-4 px-4 pt-10 pb-16 sm:px-6 md:px-8 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[1240px] gap-4 px-4 pt-10 pb-16 sm:px-6 md:px-8 lg:px-12">
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
           <div className="min-w-0">
             <p className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
@@ -1199,7 +1199,7 @@ function OrderDetailScreen({
         ) : null}
       </div>
 
-      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-4">
             <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">

@@ -398,7 +398,7 @@ function CarsList({ base }: { base: string }) {
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
           <div className="min-w-0">
             <p className="text-app-dim font-mono text-[12px] tracking-[0.14em] uppercase">
@@ -779,7 +779,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
         ) : null}
       </div>
 
-      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-11 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-11 lg:px-12">
         {problem ? <Notice tone="danger">{problem}</Notice> : null}
         {copyStatus ? <Notice tone="ok">{copyStatus}</Notice> : null}
 
@@ -1720,7 +1720,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
           </div>
         </div>
 
-        <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+        <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
           <div className="min-w-0">
             <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
               {carId

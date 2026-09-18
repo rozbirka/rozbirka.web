@@ -362,7 +362,7 @@ function Overview() {
               </div>
             </div>
 
-            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
                   Інвентаризація
@@ -1019,7 +1019,7 @@ function WarehouseView({ id }: { id: string }) {
               </div>
             </div>
 
-            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-4">
                   <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
@@ -1795,7 +1795,7 @@ function NewSessionView() {
               </div>
             </div>
 
-            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
                   Нова сесія інвентаризації
@@ -2430,7 +2430,7 @@ function SessionView({ id }: { id: string }) {
               </div>
             </div>
 
-            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-4">
                   <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
@@ -3180,7 +3180,7 @@ function ResultsView({ id }: { id: string }) {
               </div>
             </div>
 
-            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-4">
                   <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
@@ -3785,7 +3785,7 @@ function AuditView({ id }: { id: string }) {
               </div>
             </div>
 
-            <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
                   Аудит сесії
@@ -4102,7 +4102,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
               </div>
             </div>
 
-            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
                   Журнал сканувань{zone ? ` · ${zone.zoneCode}` : null}
@@ -4667,7 +4667,7 @@ function PartPlacementView({ partId }: { partId: string }) {
               </div>
             </div>
 
-            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
                   Розміщення на складі

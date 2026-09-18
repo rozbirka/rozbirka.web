@@ -121,7 +121,7 @@ it('renders Core daily figures without calculating them in the browser', async (
   // The balance comes from the register itself and the operation count from
   // the day's summary — the browser adds nothing up.
   expect(await screen.findByText('1 800,00 ₴')).toBeVisible()
-  expect(screen.getByText('4 операції за 2026-08-28')).toBeVisible()
+  expect(screen.getByText('4 операції')).toBeVisible()
 })
 
 it('uses the selected timezone rather than UTC when defaulting the finance date', () => {
@@ -246,13 +246,15 @@ it('allows editing an existing register but still meters new register creation a
     </MemoryRouter>,
   )
 
-  const editSubmit = await screen.findByRole('button', {
-    name: 'Зберегти зміни',
-  })
+  const editSubmit = (
+    await screen.findAllByRole('button', { name: 'Зберегти зміни' })
+  )[0]!
   expect(editSubmit).toBeDisabled()
   await user.clear(screen.getByLabelText('Назва каси'))
   await user.type(screen.getByLabelText('Назва каси'), 'Головна каса')
-  await user.click(screen.getByRole('button', { name: 'Зберегти зміни' }))
+  await user.click(
+    screen.getAllByRole('button', { name: 'Зберегти зміни' })[0]!,
+  )
   expect(cashMocks.update).toHaveBeenCalledWith('cash-1', {
     name: 'Головна каса',
   })

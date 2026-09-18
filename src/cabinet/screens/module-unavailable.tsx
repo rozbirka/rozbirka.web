@@ -97,7 +97,7 @@ export function FeatureUnavailableScreen({
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="grid w-full max-w-[880px] gap-6 px-4 pt-12 pb-16 sm:px-6 md:px-8 md:pt-16 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[880px] gap-6 px-4 pt-14 pb-16 sm:px-6 md:px-8 md:pt-18 lg:px-12">
         <div>
           <span className="border-state-warn/30 bg-state-warn/10 text-state-warn inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[12px] font-bold">
             <span aria-hidden className="bg-state-warn size-1.5 rounded-full" />
@@ -272,7 +272,7 @@ export function SubscriptionStateScreen({
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="grid w-full max-w-[880px] gap-6 px-4 pt-12 pb-16 sm:px-6 md:px-8 md:pt-16 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[880px] gap-6 px-4 pt-14 pb-16 sm:px-6 md:px-8 md:pt-18 lg:px-12">
         <div role="alert">
           <span
             className={cn(
