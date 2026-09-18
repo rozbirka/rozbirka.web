@@ -621,6 +621,7 @@ it('retains successful files when another media upload fails and reports that fi
   }
   render(<Harness />)
 
+  expect(screen.getByText('Вибрати фото')).toBeVisible()
   await user.upload(screen.getByLabelText('Додати фото'), [
     new File(['ok'], 'ok.jpg', { type: 'image/jpeg' }),
     new File(['bad'], 'bad.heic', { type: 'image/heic' }),
@@ -635,6 +636,41 @@ it('retains successful files when another media upload fails and reports that fi
   expect(errors).toHaveLength(2)
   expect(errors[0]).toHaveTextContent('bad.heic: Непідтримуваний формат.')
   expect(errors[1]).toHaveTextContent('large.jpg: Файл завеликий.')
+})
+
+it('previews selected media before its upload finishes', async () => {
+  const user = userEvent.setup()
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: vi.fn(() => 'blob:selected-photo'),
+  })
+  let finishUpload!: (value: { storageKey: string; url: string }) => void
+  vi.mocked(mediaApi.upload).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finishUpload = resolve
+      }),
+  )
+  function Harness() {
+    const [items, setItems] = useState<{ storageKey: string; url: string }[]>(
+      [],
+    )
+    return <MediaPicker entityType="cars" items={items} onChange={setItems} />
+  }
+  render(<Harness />)
+
+  await user.upload(
+    screen.getByLabelText('Додати фото'),
+    new File(['photo'], 'selected.jpg', { type: 'image/jpeg' }),
+  )
+
+  expect(
+    screen.getByRole('img', { name: 'Попередній перегляд selected.jpg' }),
+  ).toHaveAttribute('src', 'blob:selected-photo')
+  finishUpload({
+    storageKey: 'pending/cars/selected',
+    url: 'https://cdn.example/selected.jpg',
+  })
 })
 
 it('chooses make and model from inline lists and keeps photos local until submit', async () => {

@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react'
-import { FileWarning, RotateCcw, Upload, X } from 'lucide-react'
+import { FileWarning, ImagePlus, RotateCcw, Upload, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from './button'
 import { useFieldControl } from './field-context'
@@ -24,6 +24,43 @@ export function FileField({ className, ...props }: ComponentProps<'input'>) {
         className,
       )}
     />
+  )
+}
+
+/**
+ * Image-only picker with one product label across cabinet flows. The native
+ * file control remains available to assistive technology while its
+ * browser-specific text stays hidden.
+ */
+export function PhotoFileField({
+  className,
+  disabled,
+  ...props
+}: ComponentProps<'input'>) {
+  const field = useFieldControl()
+
+  return (
+    <label
+      className={cn(
+        'border-app-line-2 bg-app-input hover:border-brand flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-[14px] border border-dashed px-5 text-center transition-colors',
+        disabled && 'cursor-not-allowed opacity-55',
+        className,
+      )}
+    >
+      <ImagePlus aria-hidden className="text-app-muted size-6" />
+      <span className="mt-2 text-sm font-bold text-white">Вибрати фото</span>
+      <span className="text-app-dim mt-1 text-xs">
+        Можна вибрати кілька фотографій одразу
+      </span>
+      <input
+        {...field}
+        accept="image/*"
+        className="sr-only"
+        disabled={disabled}
+        type="file"
+        {...props}
+      />
+    </label>
   )
 }
 

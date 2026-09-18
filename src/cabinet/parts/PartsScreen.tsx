@@ -21,7 +21,7 @@ import {
   ActionMenu,
   Amount,
   DateValue,
-  FileField,
+  PhotoFileField,
   Gallery,
   Quantity,
   Card,
@@ -31,7 +31,6 @@ import {
   SkeletonRows,
   SpecGrid,
   SpecNote,
-  BulkBar,
   Button,
   ConfirmDialog,
   DataTable,
@@ -47,7 +46,6 @@ import {
   StatusPill,
   TextArea,
   TextInput,
-  type NoticeTone,
   type StatusTone,
 } from '@/components/app'
 import { cn, plural } from '@/lib/utils'
@@ -250,7 +248,6 @@ const allowedToView = (
 export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
-  const navigate = useNavigate()
   const { partId } = useParams<{ partId: string }>()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -282,21 +279,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   )
   const canManage = manageDecision.kind === 'allowed'
 
-  // A working set, not a highlight: what is ticked here is what the next action
-  // runs on. It is dropped whenever the query changes, so an action can never
-  // reach a row the current filter no longer shows.
-  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set())
-  const [pickedFor, setPickedFor] = useState<PartSearchRequest | null>(null)
-  const [asking, setAsking] = useState<'price' | 'delete' | null>(null)
-  const [bulkPrice, setBulkPrice] = useState('')
-  const [progress, setProgress] = useState<{
-    done: number
-    total: number
-  } | null>(null)
-  const [bulkResult, setBulkResult] = useState<{
-    tone: NoticeTone
-    text: string
-  } | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
   const viewUserId = cabinet.snapshot?.userId ?? null
   const viewTenantId = cabinet.targetTenant?.id ?? null
@@ -329,7 +311,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     intakes: allowedToView(cabinetModules.intakes, cabinet),
     orders: allowedToView(cabinetModules.orders, cabinet),
     inventory: allowedToView(cabinetModules.inventory, cabinet),
-    stickers: allowedToView(cabinetModules.stickers, cabinet),
   }
   const filters = useMemo(() => {
     const one = (name: string) => searchParams.get(name)?.trim() ?? ''
@@ -377,14 +358,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     }),
     [filters],
   )
-
-  // A new query is a new set of rows, so the working set starts over with it.
-  // Adjusting during render rather than in an effect keeps the list from
-  // painting once with a selection that belongs to the previous query.
-  if (pickedFor !== searchRequest) {
-    setPickedFor(searchRequest)
-    if (picked.size > 0) setPicked(new Set())
-  }
 
   useEffect(() => {
     if (partId || isNew) return
@@ -611,97 +584,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     } catch {
       return 'Не вдалося зберегти. Спробуйте ще раз.'
     }
-  }
-
-  const pickedIds = [...picked]
-  const pickedNoun = plural(pickedIds.length, ['деталь', 'деталі', 'деталей'])
-
-  /**
-   * Runs one request per part and keeps counting when one of them fails, so a
-   * single bad row does not hide the twenty-nine that worked. The report says
-   * how many went through and how many did not.
-   */
-  const runOverPicked = async (
-    ids: readonly string[],
-    each: (id: string, signal: AbortSignal) => Promise<unknown>,
-    done: (ok: number, failed: number) => { tone: NoticeTone; text: string },
-  ) => {
-    if (ids.length === 0 || progress !== null) return
-    setAsking(null)
-    setBulkResult(null)
-    setProgress({ done: 0, total: ids.length })
-    let ok = 0
-    let failed = 0
-    for (const [index, id] of ids.entries()) {
-      try {
-        const scope = requireLatestMutation({ quota: false })
-        await each(id, scope.signal)
-        ok += 1
-      } catch {
-        failed += 1
-      }
-      setProgress({ done: index + 1, total: ids.length })
-    }
-    setProgress(null)
-    setPicked(new Set())
-    setBulkResult(done(ok, failed))
-    setReloadToken((value) => value + 1)
-  }
-
-  const setPickedPrice = () => {
-    const value = bulkPrice.trim() === '' ? null : Number(bulkPrice.trim())
-    if (value !== null && (!Number.isFinite(value) || value < 0)) return
-    void runOverPicked(
-      pickedIds,
-      async (id, signal) => {
-        // PUT /parts/{id} replaces the record and only the price carries an
-        // is-set wrapper, so sending the price alone would clear the name,
-        // notes, photos and quantity. Each part is read back first and written
-        // whole, with the price as the single difference.
-        const current = await partsApi.get(id, { signal })
-        await partsApi.update(
-          id,
-          {
-            name: current.name,
-            condition: current.condition,
-            notes: current.notes,
-            quantity: current.quantityTotal,
-            partType: current.partType,
-            unit: current.unit,
-            photoKeys: current.photos.map((photo) => photo.storageKey),
-            desiredSalePrice: { isSet: true, value },
-          },
-          { signal },
-        )
-      },
-      (ok, failed) =>
-        failed === 0
-          ? {
-              tone: 'ok',
-              text: `Ціну змінено на ${String(ok)} ${plural(ok, ['деталі', 'деталях', 'деталях'])}.`,
-            }
-          : {
-              tone: 'warn',
-              text: `Ціну змінено на ${String(ok)} з ${String(ok + failed)}. Решту не вдалося зберегти.`,
-            },
-    )
-  }
-
-  const deletePicked = () => {
-    void runOverPicked(
-      pickedIds,
-      (id, signal) => partsApi.delete(id, { signal }),
-      (ok, failed) =>
-        failed === 0
-          ? {
-              tone: 'ok',
-              text: `Видалено ${String(ok)} ${plural(ok, ['деталь', 'деталі', 'деталей'])}.`,
-            }
-          : {
-              tone: 'warn',
-              text: `Видалено ${String(ok)} з ${String(ok + failed)}. Решта лишилася — деталь у замовленні видалити не можна.`,
-            },
-    )
   }
 
   return (
@@ -1028,90 +910,10 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
               />
             ) : (
               <>
-                {bulkResult === null ? null : (
-                  <Notice tone={bulkResult.tone}>{bulkResult.text}</Notice>
-                )}
-                {picked.size === 0 ? null : (
-                  <BulkBar
-                    actions={[
-                      {
-                        key: 'stickers',
-                        label: 'Надрукувати стікери',
-                        onRun: () => {
-                          const query = new URLSearchParams()
-                          for (const id of pickedIds) query.append('part', id)
-                          void navigate(`../stickers?${query.toString()}`)
-                        },
-                        ...(links.stickers
-                          ? {}
-                          : {
-                              unavailable: 'Немає доступу до модуля «Стікери».',
-                            }),
-                      },
-                      {
-                        key: 'price',
-                        label: 'Змінити бажану ціну',
-                        onRun: () => {
-                          setBulkPrice('')
-                          setAsking('price')
-                        },
-                        ...(canManage
-                          ? {}
-                          : { unavailable: 'Немає права змінювати деталі.' }),
-                      },
-                      {
-                        key: 'sold',
-                        label: 'Перевести в «Продано»',
-                        onRun: () => undefined,
-                        unavailable:
-                          'Статус деталі рахується з залишку й замовлень — окремо його виставити не можна.',
-                      },
-                      {
-                        key: 'archive',
-                        label: 'Архівувати',
-                        onRun: () => undefined,
-                        unavailable:
-                          'Деталь не можна архівувати: в API є лише видалення.',
-                      },
-                      {
-                        key: 'delete',
-                        label: 'Видалити',
-                        onRun: () => {
-                          setAsking('delete')
-                        },
-                        tone: 'danger',
-                        ...(canManage
-                          ? {}
-                          : { unavailable: 'Немає права видаляти деталі.' }),
-                      },
-                    ]}
-                    count={picked.size}
-                    noun={pickedNoun}
-                    onClear={() => setPicked(new Set())}
-                    onSelectPage={() =>
-                      setPicked(new Set(items.map((part) => part.id)))
-                    }
-                    pageCount={items.length}
-                    {...(progress === null
-                      ? {}
-                      : {
-                          busy: (
-                            <span className="text-app-muted text-sm tabular-nums">
-                              {progress.done} з {progress.total}
-                            </span>
-                          ),
-                        })}
-                  />
-                )}
                 <div className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border">
                   <DataTable
                     caption="Деталі на складі"
                     density={density}
-                    selection={{
-                      selected: picked,
-                      onChange: setPicked,
-                      rowLabel: (part) => `Обрати: ${part.name}`,
-                    }}
                     columns={[
                       {
                         key: 'name',
@@ -1254,30 +1056,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       </div>
 
       <FormDialog
-        onOpenChange={(open) => {
-          if (!open) setAsking(null)
-        }}
-        onSubmit={(event) => {
-          event.preventDefault()
-          setPickedPrice()
-        }}
-        open={asking === 'price'}
-        submitLabel="Змінити ціну"
-        title={`Бажана ціна для ${String(pickedIds.length)} ${pickedNoun}`}
-      >
-        <Field
-          hint="Порожнє поле прибирає бажану ціну. Ціна продажу від цього не змінюється."
-          label="Бажана ціна, USD"
-        >
-          <TextInput
-            inputMode="decimal"
-            onChange={(event) => setBulkPrice(event.target.value)}
-            value={bulkPrice}
-          />
-        </Field>
-      </FormDialog>
-
-      <FormDialog
         description="Подання зберігає поточні фільтри разом із пошуком. Воно лишається в цьому браузері — на іншому пристрої його не буде."
         onOpenChange={(open) => {
           if (!open) setNaming(false)
@@ -1302,18 +1080,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
           />
         </Field>
       </FormDialog>
-
-      <ConfirmDialog
-        confirmLabel="Видалити"
-        consequence={`Буде видалено ${String(pickedIds.length)} ${pickedNoun}. Ті, що стоять у замовленнях, лишаться — про них буде сказано окремо.`}
-        onConfirm={deletePicked}
-        onOpenChange={(open) => {
-          if (!open) setAsking(null)
-        }}
-        open={asking === 'delete'}
-        destructive
-        title="Видалити обрані деталі?"
-      />
     </div>
   )
 }
@@ -2135,6 +1901,7 @@ interface PartMediaItem {
   file?: File
   storageKey?: string
   url?: string
+  previewUrl?: string
 }
 
 const committedPhotoKeys = (items: PartMediaItem[]) =>
@@ -2146,7 +1913,9 @@ const safeMediaUrl = (value: string | undefined) => {
   if (!value) return null
   try {
     const url = new URL(value, window.location.origin)
-    return url.protocol === 'http:' || url.protocol === 'https:'
+    return url.protocol === 'http:' ||
+      url.protocol === 'https:' ||
+      url.protocol === 'blob:'
       ? url.href
       : null
   } catch {
@@ -2179,9 +1948,17 @@ function PartMediaFields({
 }) {
   const sequenceRef = useRef(0)
   const mountedRef = useRef(true)
+  const itemsRef = useRef(items)
+  useEffect(() => {
+    itemsRef.current = items
+  }, [items])
   useEffect(
     () => () => {
       mountedRef.current = false
+      for (const item of itemsRef.current) {
+        if (item.previewUrl && typeof URL.revokeObjectURL === 'function')
+          URL.revokeObjectURL(item.previewUrl)
+      }
     },
     [],
   )
@@ -2211,17 +1988,26 @@ function PartMediaFields({
   }
   const addFiles = (files: FileList | null) => {
     if (!files?.length) return
-    const additions = Array.from(files, (file) => ({
-      id: `new-media-${sequenceRef.current++}`,
-      name: file.name,
-      status: deferUploads ? ('selected' as const) : ('uploading' as const),
-      existing: false,
-      file,
-    }))
+    const additions = Array.from(files, (file) => {
+      const previewUrl =
+        typeof URL.createObjectURL === 'function'
+          ? URL.createObjectURL(file)
+          : null
+      return {
+        id: `new-media-${sequenceRef.current++}`,
+        name: file.name,
+        status: deferUploads ? ('selected' as const) : ('uploading' as const),
+        existing: false,
+        file,
+        ...(previewUrl ? { previewUrl } : {}),
+      }
+    })
     setItems((current) => [...current, ...additions])
     if (!deferUploads) additions.forEach((item) => void upload(item))
   }
   const remove = async (item: PartMediaItem) => {
+    if (item.previewUrl && typeof URL.revokeObjectURL === 'function')
+      URL.revokeObjectURL(item.previewUrl)
     if (item.existing || !item.storageKey) {
       setItems((current) => current.filter(({ id }) => id !== item.id))
       return
@@ -2260,8 +2046,7 @@ function PartMediaFields({
         hint="Формати зображень, кілька файлів за раз."
         label="Фото деталі"
       >
-        <FileField
-          accept="image/*"
+        <PhotoFileField
           aria-label="Фото деталі"
           multiple
           onChange={(event) => {
@@ -2279,12 +2064,20 @@ function PartMediaFields({
       {items.length ? (
         <ul aria-label="Вибрані фото" className="grid gap-2">
           {items.map((item) => {
+            const previewUrl = safeMediaUrl(item.previewUrl ?? item.url)
             const url = safeMediaUrl(item.url)
             return (
               <li
                 className="border-app-line rounded-control flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border px-3 py-2"
                 key={item.id}
               >
+                {previewUrl ? (
+                  <img
+                    alt={`Попередній перегляд ${item.name}`}
+                    className="size-14 shrink-0 rounded-control object-cover"
+                    src={previewUrl}
+                  />
+                ) : null}
                 <div className="min-w-0 flex-1 basis-40">
                   <p className="text-app-ink text-[14.5px] break-words">
                     {item.name} · {statusLabel(item)}

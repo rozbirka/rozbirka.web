@@ -2,6 +2,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -45,6 +46,7 @@ import {
   ErrorState,
   Notice,
   PageBody,
+  PhotoFileField,
   PillGroup,
   SkeletonRows,
   SpecGrid,
@@ -2537,8 +2539,36 @@ export function VehicleCatalogPicker({
   const [query, setQuery] = useState('')
   const [problem, setProblem] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const requestKey =
+    type === 'make' ? 'make' : `${String(makeId)}:${makeName ?? ''}`
+  const [loadedFor, setLoadedFor] = useState<string | null>(null)
+  const pickerRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!open) return
+    const closeOutside = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !pickerRef.current?.contains(event.target)
+      ) {
+        setOpen(false)
+        setQuery('')
+      }
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setOpen(false)
+      setQuery('')
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [open])
+  useEffect(() => {
+    if (!open) return
+    if (loadedFor === requestKey) return
     let cancelled = false
     const request = async () => {
       if (type === 'make') return loadMakes()
@@ -2557,7 +2587,10 @@ export function VehicleCatalogPicker({
     void request()
       .then(
         (items) => {
-          if (!cancelled) setOptions(items)
+          if (!cancelled) {
+            setOptions(items)
+            setLoadedFor(requestKey)
+          }
         },
         () => {
           if (!cancelled)
@@ -2570,7 +2603,7 @@ export function VehicleCatalogPicker({
     return () => {
       cancelled = true
     }
-  }, [makeId, makeName, open, type])
+  }, [loadedFor, makeId, makeName, open, requestKey, type])
   const shown = options.filter((option) =>
     option.name
       .toLocaleLowerCase('uk')
@@ -2581,62 +2614,64 @@ export function VehicleCatalogPicker({
       setOpen(false)
       return
     }
-    setLoading(true)
+    setLoading(loadedFor !== requestKey)
     setProblem(null)
     setOpen(true)
   }
   return (
-    <Field className="relative" label={label} required>
-      <button
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-label={label}
-        className="border-app-line-2 bg-app-input text-app-ink min-h-11 w-full rounded-control border px-3.5 text-left text-[14.5px] disabled:cursor-not-allowed disabled:opacity-50"
-        disabled={disabled}
-        onClick={togglePicker}
-        type="button"
-      >
-        {value || `Оберіть ${objectLabel}`}
-      </button>
-      {open ? (
-        <div
+    <div ref={pickerRef}>
+      <Field className="relative" label={label} required>
+        <button
+          aria-expanded={open}
+          aria-haspopup="listbox"
           aria-label={label}
-          className="border-app-line-2 bg-app-overlay absolute top-full right-0 left-0 z-40 mt-2 grid max-h-72 gap-2 overflow-y-auto rounded-[14px] border p-2 shadow-2xl"
-          role="listbox"
+          className="border-app-line-2 bg-app-input text-app-ink min-h-11 w-full rounded-control border px-3.5 text-left text-[14.5px] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={disabled}
+          onClick={togglePicker}
+          type="button"
         >
-          <TextInput
-            aria-label={`Пошук: ${label}`}
-            autoFocus
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Почніть вводити назву"
-            value={query}
-          />
-          {loading ? (
-            <p className="text-app-muted py-4 text-center text-sm">
-              Завантажуємо…
-            </p>
-          ) : null}
-          {problem ? <Notice tone="danger">{problem}</Notice> : null}
-          {!loading && !problem
-            ? shown.map((option) => (
-                <button
-                  className="hover:bg-white/[0.06] min-h-11 rounded-[10px] px-3 text-left text-sm font-semibold text-white"
-                  key={option.id}
-                  onClick={() => {
-                    onSelect(option)
-                    setOpen(false)
-                    setQuery('')
-                  }}
-                  role="option"
-                  type="button"
-                >
-                  {option.name}
-                </button>
-              ))
-            : null}
-        </div>
-      ) : null}
-    </Field>
+          {value || `Оберіть ${objectLabel}`}
+        </button>
+        {open ? (
+          <div
+            aria-label={label}
+            className="border-app-line-2 bg-app-overlay absolute top-full right-0 left-0 z-40 mt-2 grid max-h-72 gap-2 overflow-y-auto rounded-[14px] border p-2 shadow-2xl"
+            role="listbox"
+          >
+            <TextInput
+              aria-label={`Пошук: ${label}`}
+              autoFocus
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Почніть вводити назву"
+              value={query}
+            />
+            {loading ? (
+              <p className="text-app-muted py-4 text-center text-sm">
+                Завантажуємо…
+              </p>
+            ) : null}
+            {problem ? <Notice tone="danger">{problem}</Notice> : null}
+            {!loading && !problem
+              ? shown.map((option) => (
+                  <button
+                    className="hover:bg-white/[0.06] min-h-11 rounded-[10px] px-3 text-left text-sm font-semibold text-white"
+                    key={option.id}
+                    onClick={() => {
+                      onSelect(option)
+                      setOpen(false)
+                      setQuery('')
+                    }}
+                    role="option"
+                    type="button"
+                  >
+                    {option.name}
+                  </button>
+                ))
+              : null}
+          </div>
+        ) : null}
+      </Field>
+    </div>
   )
 }
 
@@ -2742,12 +2777,40 @@ export function MediaPicker({
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const [busy, setBusy] = useState(false)
   const [problems, setProblems] = useState<string[]>([])
+  const [pendingPreviews, setPendingPreviews] = useState<
+    { id: string; name: string; url: string }[]
+  >([])
+  const pendingPreviewsRef = useRef(pendingPreviews)
+  useEffect(() => {
+    pendingPreviewsRef.current = pendingPreviews
+  }, [pendingPreviews])
+  useEffect(
+    () => () => {
+      if (typeof URL.revokeObjectURL !== 'function') return
+      pendingPreviewsRef.current.forEach((item) =>
+        URL.revokeObjectURL(item.url),
+      )
+    },
+    [],
+  )
   /** Uploads answer with a storage key only, so the file name is kept here. */
   const [names, setNames] = useState<Record<string, string>>({})
   const upload = async (files: FileList | null) => {
     if (!files || busy) return
     setBusy(true)
     const selected = Array.from(files)
+    const previews = selected.flatMap((file, index) =>
+      typeof URL.createObjectURL === 'function'
+        ? [
+            {
+              id: `${file.name}-${String(file.lastModified)}-${String(index)}`,
+              name: file.name,
+              url: URL.createObjectURL(file),
+            },
+          ]
+        : [],
+    )
+    setPendingPreviews(previews)
     const results = await Promise.allSettled(
       selected.map((file) =>
         Promise.resolve().then(() => {
@@ -2784,6 +2847,9 @@ export function MediaPicker({
         : []
     })
     setProblems(errors)
+    if (typeof URL.revokeObjectURL === 'function')
+      previews.forEach((item) => URL.revokeObjectURL(item.url))
+    setPendingPreviews([])
     setBusy(false)
   }
   const remove = async (item: MediaUploadResult) => {
@@ -2825,16 +2891,33 @@ export function MediaPicker({
           Можна вибрати кілька файлів одразу або зняти на камеру.
         </p>
       )}
-      <input
-        accept="image/*"
+      <PhotoFileField
         aria-label="Додати фото"
         capture="environment"
-        className="bg-app-input text-app-muted border-app-line-2 rounded-control file:bg-app-raised file:text-app-ink file:rounded-control min-h-11 w-full cursor-pointer border px-3 py-2 text-sm file:mr-3 file:min-h-8 file:cursor-pointer file:border-0 file:px-3 file:text-[14px] disabled:cursor-not-allowed disabled:opacity-55"
         disabled={busy}
         multiple
         onChange={(event) => void upload(event.target.files)}
-        type="file"
       />
+      {pendingPreviews.length > 0 ? (
+        <ul aria-label="Вибрані фото" className="grid gap-2 sm:grid-cols-2">
+          {pendingPreviews.map((item) => (
+            <li
+              className="border-app-line flex min-w-0 items-center gap-3 rounded-control border p-2"
+              key={item.id}
+            >
+              <img
+                alt={`Попередній перегляд ${item.name}`}
+                className="size-12 shrink-0 rounded-control object-cover"
+                src={item.url}
+              />
+              <span className="text-app-ink min-w-0 flex-1 truncate text-sm">
+                {item.name}
+              </span>
+              <span className="text-app-dim text-xs">Завантаження…</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {problems.length > 0 ? (
         <div
           className="border-state-danger/30 bg-state-danger-soft rounded-control border px-3.5 py-2.5"

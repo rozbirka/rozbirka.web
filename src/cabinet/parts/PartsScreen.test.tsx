@@ -479,7 +479,7 @@ it('shows server-authoritative compatibility as read-only when mutation is absen
   expect(screen.queryByLabelText('Марка сумісності')).not.toBeInTheDocument()
 })
 
-it('provides an accessible multi-file media selector backed by the confirmed contract', () => {
+it('shows a Ukrainian photo picker with previews for selected part photos', () => {
   render(
     <MemoryRouter initialEntries={['/app/yard/parts/new']}>
       <Routes>
@@ -496,6 +496,21 @@ it('provides an accessible multi-file media selector backed by the confirmed con
     'accept',
     'image/*',
   )
+  expect(screen.getByText('Вибрати фото')).toBeVisible()
+
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: vi.fn(() => 'blob:part-photo'),
+  })
+  fireEvent.change(screen.getByLabelText('Фото деталі'), {
+    target: {
+      files: [new File(['photo'], 'bumper.jpg', { type: 'image/jpeg' })],
+    },
+  })
+
+  expect(
+    screen.getByRole('img', { name: 'Попередній перегляд bumper.jpg' }),
+  ).toHaveAttribute('src', 'blob:part-photo')
   expect(
     screen.getByText(/Файли завантажаться разом зі створенням деталі/),
   ).toBeInTheDocument()
@@ -542,6 +557,14 @@ it('creates a part with every supported source, inventory, price, and compatibil
   ] as const) {
     fireEvent.change(screen.getByLabelText(label), { target: { value } })
   }
+  fireEvent.click(screen.getByRole('button', { name: 'Марка сумісності' }))
+  expect(
+    await screen.findByRole('listbox', { name: 'Марка сумісності' }),
+  ).toBeVisible()
+  fireEvent.pointerDown(screen.getByRole('heading', { name: 'Нова деталь' }))
+  expect(
+    screen.queryByRole('listbox', { name: 'Марка сумісності' }),
+  ).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Марка сумісності' }))
   fireEvent.click(await screen.findByRole('option', { name: 'Ford' }))
   fireEvent.click(screen.getByRole('button', { name: 'Модель сумісності' }))
@@ -1703,143 +1726,14 @@ function renderDirectory() {
   )
 }
 
-it('offers bulk actions only once rows are picked, and counts what is picked', async () => {
-  const user = userEvent.setup()
+it('does not show selection checkboxes or bulk actions in the parts directory', async () => {
   renderDirectory()
 
+  await screen.findByRole('link', { name: 'Фара ліва' })
+  expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   expect(
     screen.queryByRole('region', { name: 'Дії над обраними' }),
   ).not.toBeInTheDocument()
-
-  await user.click(
-    await screen.findByRole('checkbox', { name: 'Обрати: Фара ліва' }),
-  )
-
-  const bar = screen.getByRole('region', { name: 'Дії над обраними' })
-  expect(bar).toHaveTextContent('1 деталь обрано')
-
-  await user.click(
-    within(bar).getByRole('button', { name: 'Обрати всі на сторінці (2)' }),
-  )
-  expect(
-    screen.getByRole('region', { name: 'Дії над обраними' }),
-  ).toHaveTextContent('2 деталі обрано')
-
-  await user.click(screen.getByRole('button', { name: 'Зняти вибір' }))
-  expect(
-    screen.queryByRole('region', { name: 'Дії над обраними' }),
-  ).not.toBeInTheDocument()
-})
-
-it('says why a bulk action the API cannot serve is out of reach', async () => {
-  const user = userEvent.setup()
-  renderDirectory()
-  await user.click(
-    await screen.findByRole('checkbox', { name: 'Обрати: Фара ліва' }),
-  )
-
-  const bar = screen.getByRole('region', { name: 'Дії над обраними' })
-  const sold = within(bar).getByRole('button', {
-    name: 'Перевести в «Продано»',
-  })
-  expect(sold).toBeDisabled()
-  expect(sold).toHaveAttribute(
-    'title',
-    'Статус деталі рахується з залишку й замовлень — окремо його виставити не можна.',
-  )
-  expect(within(bar).getByRole('button', { name: 'Архівувати' })).toBeDisabled()
-})
-
-it('rewrites each picked part whole so a bulk price change cannot clear other fields', async () => {
-  const user = userEvent.setup()
-  partMocks.get.mockImplementation((id: string) =>
-    Promise.resolve({
-      id,
-      name: id === 'part-1' ? 'Фара ліва' : 'Бампер передній',
-      condition: 'good',
-      notes: 'знята з Focus',
-      quantityTotal: 2,
-      partType: 'optics',
-      unit: 'шт',
-      photos: [
-        {
-          id: 'p1',
-          storageKey: 'key-1',
-          url: '',
-          thumbnailUrl: '',
-          sortOrder: 0,
-        },
-      ],
-    }),
-  )
-  renderDirectory()
-
-  await user.click(
-    await screen.findByRole('checkbox', { name: 'Обрати: Фара ліва' }),
-  )
-  await user.click(
-    within(screen.getByRole('region', { name: 'Дії над обраними' })).getByRole(
-      'button',
-      { name: 'Змінити бажану ціну' },
-    ),
-  )
-  await user.type(
-    screen.getByRole('textbox', { name: 'Бажана ціна, USD' }),
-    '420',
-  )
-  await user.click(screen.getByRole('button', { name: 'Змінити ціну' }))
-
-  await vi.waitFor(() =>
-    expect(partMocks.update).toHaveBeenCalledWith(
-      'part-1',
-      {
-        name: 'Фара ліва',
-        condition: 'good',
-        notes: 'знята з Focus',
-        quantity: 2,
-        partType: 'optics',
-        unit: 'шт',
-        photoKeys: ['key-1'],
-        desiredSalePrice: { isSet: true, value: 420 },
-      },
-      expect.anything(),
-    ),
-  )
-  expect(await screen.findByText('Ціну змінено на 1 деталі.')).toBeVisible()
-})
-
-it('reports how many of a bulk delete went through when some rows refuse', async () => {
-  const user = userEvent.setup()
-  partMocks.delete.mockImplementation((id: string) =>
-    id === 'part-2'
-      ? Promise.reject(new Error('in an order'))
-      : Promise.resolve(undefined),
-  )
-  renderDirectory()
-
-  await user.click(
-    await screen.findByRole('checkbox', { name: 'Обрати: Фара ліва' }),
-  )
-  await user.click(
-    screen.getByRole('checkbox', { name: 'Обрати: Бампер передній' }),
-  )
-  await user.click(
-    within(screen.getByRole('region', { name: 'Дії над обраними' })).getByRole(
-      'button',
-      { name: 'Видалити' },
-    ),
-  )
-  await user.click(
-    within(await screen.findByRole('dialog')).getByRole('button', {
-      name: 'Видалити',
-    }),
-  )
-
-  expect(
-    await screen.findByText(
-      'Видалено 1 з 2. Решта лишилася — деталь у замовленні видалити не можна.',
-    ),
-  ).toBeVisible()
 })
 
 it('saves the current filters under a name, applies them back, and forgets them', async () => {
