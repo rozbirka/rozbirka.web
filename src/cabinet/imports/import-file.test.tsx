@@ -100,7 +100,7 @@ it('shows what the machine read, with the header row it used', () => {
 it('says the server does not keep the filename when the session did not pick it', () => {
   renderStep()
 
-  expect(screen.getByText(/Назву файлу сервер не зберігає/)).toBeVisible()
+  expect(screen.getByText(/Назва файлу відома лише в сеансі/)).toBeVisible()
 })
 
 it('counts the file against the limits the server reported', () => {

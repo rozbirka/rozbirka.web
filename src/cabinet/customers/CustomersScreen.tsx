@@ -348,7 +348,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
         {totalPages > 1 ? (
           <p className="text-app-dim text-[13px]">
             Сегмент і сортування застосовуються до завантаженої сторінки —
-            сервер не приймає їх у запиті. Знайдено {total}{' '}
+            фільтр і сортування працюють по ній. Знайдено {total}{' '}
             {plural(total, ['клієнта', 'клієнти', 'клієнтів'])}.
           </p>
         ) : null}
@@ -940,7 +940,7 @@ function CustomerDetailScreen({
                 </dd>
                 <dt
                   className="text-app-muted text-[14px] font-semibold"
-                  title="Сервер не зберігає, звідки прийшов клієнт"
+                  title="Звідки прийшов клієнт, кабінет не зберігає"
                 >
                   Канал
                 </dt>

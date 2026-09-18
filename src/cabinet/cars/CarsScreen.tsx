@@ -1900,7 +1900,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
 
                 <div className="mt-4">
                   <Field
-                    hint="17 символів з техпаспорта. Декодування VIN сервер не виконує — марку, модель і рік заповнюємо вручну."
+                    hint="17 символів з техпаспорта. VIN не декодується — марку, модель і рік заповнюємо вручну."
                     label="VIN"
                   >
                     <TextInput
@@ -2134,7 +2134,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                   <p className="text-app-muted text-[13px] leading-[1.5]">
                     {loaded.profitability == null
                       ? 'Видалення прибирає авто разом з його історією.'
-                      : `На авто закріплено ${String(loaded.profitability.partsTotal)} ${plural(loaded.profitability.partsTotal, ['запчастину', 'запчастини', 'запчастин'])}. Сервер відмовить у видаленні, поки позиції в продажу.`}
+                      : `На авто закріплено ${String(loaded.profitability.partsTotal)} ${plural(loaded.profitability.partsTotal, ['запчастину', 'запчастини', 'запчастин'])}. Поки позиції в продажу, видалити авто не вийде.`}
                   </p>
                   <Button
                     className="mt-3 min-h-10 w-full text-[13px] font-bold"
@@ -2154,7 +2154,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
 
       <ConfirmDialog
         confirmLabel="Видалити автомобіль"
-        consequence="Автомобіль зникне разом зі своєю історією. Якщо на ньому ще висять позиції в продажу, сервер відмовить у видаленні."
+        consequence="Автомобіль зникне разом зі своєю історією. Якщо на ньому ще висять позиції в продажу, видалити його не вийде."
         destructive
         onConfirm={() => void remove()}
         onOpenChange={(next) => {
@@ -2554,8 +2554,7 @@ export function MediaPicker({
         type="file"
       />
       <p className="text-app-dim text-[12.5px] leading-5 text-pretty">
-        Фото вирушать на сервер разом зі збереженням — доти вони лишаються у
-        вас.
+        Фото вирушать разом зі збереженням — доти вони лишаються у вас.
       </p>
       {items.length > 0 ? (
         <ul className="grid gap-2">

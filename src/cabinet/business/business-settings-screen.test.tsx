@@ -181,5 +181,5 @@ it('shows the business fields the tenant record cannot hold as disabled', async 
     expect(screen.getByRole('button', { name: label })).toBeDisabled()
   expect(
     screen.getByRole('button', { name: 'Видалити кабінет' }).title,
-  ).toContain('Видалити розбірку через API не можна')
+  ).toContain('Видалити розбірку з кабінету не можна')
 })

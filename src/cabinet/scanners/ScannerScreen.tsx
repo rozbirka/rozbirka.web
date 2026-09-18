@@ -366,7 +366,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
       <PageHeader eyebrow="Склад" title="QR-сканер" />
       <p className="text-app-muted text-sm">
         Наведіть камеру на стікер деталі. Дані деталі не показуються до
-        серверної перевірки доступу.
+        перевірки доступу.
       </p>
 
       {cameraLive ? (
@@ -713,7 +713,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
       </SectionPanel>
 
       <p className="text-app-dim text-[13.5px]">
-        VIN та OEM-декодування недоступні: відповідних серверних операцій немає.
+        VIN та OEM-декодування поки недоступні.
       </p>
     </PageBody>
   )

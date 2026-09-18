@@ -840,12 +840,10 @@ it('says what the team endpoints do not carry instead of inventing it', async ()
 
   // No last-seen field exists, so the activity column says so rather than
   // dressing the join date up as a login.
-  expect(
-    await screen.findByText(/Останнього входу сервер не зберігає/),
-  ).toBeVisible()
-  expect(screen.getByText('пошти й телефону сервер не повертає')).toBeVisible()
+  expect(await screen.findByText(/Останній вхід не зберігається/)).toBeVisible()
+  expect(screen.getByText('пошти й телефону не вказано')).toBeVisible()
   // An invitation is a code, not a letter: there is nothing to resend.
   const resend = screen.getByRole('button', { name: 'Надіслати ще' })
   expect(resend).toBeDisabled()
-  expect(resend.title).toContain('сервер не шле листів')
+  expect(resend.title).toContain('кабінет не шле листів')
 })

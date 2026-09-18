@@ -7,7 +7,7 @@ import {
 } from 'react'
 import { Link } from 'react-router'
 import { Plus } from 'lucide-react'
-import { Button, Notice } from '@/components/app'
+import { Button, Field, Notice, TextInput } from '@/components/app'
 import { businessApi } from '@/api/business'
 import { inventoryApi, type Warehouse } from '@/api/inventory'
 import { useCabinet } from '../CabinetContext'
@@ -44,23 +44,23 @@ const RULES = [
 
 /** What `PATCH /tenants/{id}` does not take, said where the design asks for it. */
 const NO_LEGAL_FORM =
-  'Юридичної форми сервер не зберігає: у розбірці є назва, місто й логотип, і більше нічого з реквізитів.'
+  'Юридичної форми розбірка не тримає: у ній є назва, місто й логотип, і більше нічого з реквізитів.'
 const NO_TAX_ID = 'Поля для ЄДРПОУ чи ІПН у розбірці немає.'
-const NO_PHONE = 'Телефону розбірки сервер не зберігає.'
+const NO_PHONE = 'Телефон розбірки поки не зберігається.'
 const NO_ADDRESS =
   'Повної адреси немає — з місця розбірка тримає лише місто, і воно тут поруч.'
 const NO_ACCOUNTING_CURRENCY =
-  'Основної валюти обліку сервер не веде: ціни приходять у своїй валюті, а каси рахують кожну окремо й без конвертації.'
+  'Основної валюти обліку кабінет не веде: ціни лишаються у своїй валюті, а каси рахують кожну окремо й без конвертації.'
 const NO_COSTING =
-  'Способу рахувати собівартість деталі в налаштуваннях немає — сервер не питає, як ділити ціну авто.'
+  'Способу рахувати собівартість деталі в налаштуваннях немає — як ділити ціну авто, кабінет не питає.'
 const NO_RULES =
-  'Ці правила обліку сервер не зберігає: ні контролю мінімального залишку, ні вимоги VIN, ні дозволу на відʼємний залишок.'
+  'Цих правил обліку кабінет поки не має: ні контролю мінімального залишку, ні вимоги VIN, ні дозволу на відʼємний залишок.'
 const NO_EXPORT =
-  'Вивантаження всіх даних кабінету сервер не вміє — окремого експорту немає в жодному розділі.'
+  'Вивантажити всі дані кабінету одним файлом поки не можна — окремого експорту немає в жодному розділі.'
 const NO_TENANT_DELETE =
-  'Видалити розбірку через API не можна: є лише зміна назви, міста й логотипа. Звертайтеся в підтримку.'
+  'Видалити розбірку з кабінету не можна — звертайтеся в підтримку.'
 const NO_WAREHOUSE_PARTS =
-  'Скільки деталей лежить на складі, у відповіді складу немає — там код, зони й стан.'
+  'Скільки деталей лежить на складі, тут не рахується — у складу є код, зони й стан.'
 
 function Step({
   number,
@@ -110,11 +110,6 @@ function Note({ children }: { children: ReactNode }) {
     </p>
   )
 }
-
-const fieldClass =
-  'bg-app-input border-app-line-2 rounded-control text-app-ink focus-visible:border-brand min-h-11 w-full border px-3 text-sm outline-none transition-colors disabled:opacity-55'
-const deadFieldClass =
-  'bg-app-input border-app-line rounded-control text-app-dim min-h-11 w-full cursor-not-allowed border px-3 text-sm outline-none'
 
 export function BusinessSettingsScreen() {
   const cabinet = useCabinet()
@@ -278,17 +273,13 @@ export function BusinessSettingsScreen() {
                 id={FORM_ID}
                 onSubmit={(event) => void save(event)}
               >
-                <div className="grid gap-2">
-                  <label
-                    className="text-app-muted text-[13px] font-medium"
-                    htmlFor="business-name"
-                  >
-                    Назва бізнесу
-                  </label>
-                  <input
-                    className={fieldClass}
+                <Field
+                  hint="Показується в документах, стікерах і рахунках."
+                  label="Назва бізнесу"
+                  required
+                >
+                  <TextInput
                     disabled={busy}
-                    id="business-name"
                     onChange={(event) => {
                       setName(event.target.value)
                       if (!busy) setSaveState('idle')
@@ -296,19 +287,10 @@ export function BusinessSettingsScreen() {
                     placeholder="Розбірка Коваль"
                     value={name}
                   />
-                  <Note>Показується в документах, стікерах і рахунках.</Note>
-                </div>
-                <div className="grid gap-2">
-                  <label
-                    className="text-app-muted text-[13px] font-medium"
-                    htmlFor="business-city"
-                  >
-                    Місто
-                  </label>
-                  <input
-                    className={fieldClass}
+                </Field>
+                <Field label="Місто">
+                  <TextInput
                     disabled={busy}
-                    id="business-city"
                     onChange={(event) => {
                       setCity(event.target.value)
                       if (!busy) setSaveState('idle')
@@ -316,7 +298,7 @@ export function BusinessSettingsScreen() {
                     placeholder="Львів"
                     value={city}
                   />
-                </div>
+                </Field>
               </form>
               <div className="grid gap-3.5 sm:grid-cols-2">
                 <div>
@@ -331,56 +313,32 @@ export function BusinessSettingsScreen() {
                     ))}
                   </div>
                 </div>
-                <div className="grid gap-2">
-                  <label
-                    className="text-app-dim text-[13px] font-medium"
-                    htmlFor="business-tax"
-                  >
-                    ЄДРПОУ / ІПН
-                  </label>
-                  <input
-                    className={deadFieldClass}
+                <Field label="ЄДРПОУ / ІПН">
+                  <TextInput
                     disabled
-                    id="business-tax"
                     placeholder="не зберігається"
                     title={NO_TAX_ID}
                     value=""
                   />
-                </div>
+                </Field>
               </div>
               <div className="grid gap-3.5 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <label
-                    className="text-app-dim text-[13px] font-medium"
-                    htmlFor="business-phone"
-                  >
-                    Телефон
-                  </label>
-                  <input
-                    className={deadFieldClass}
+                <Field label="Телефон">
+                  <TextInput
                     disabled
-                    id="business-phone"
                     placeholder="не зберігається"
                     title={NO_PHONE}
                     value=""
                   />
-                </div>
-                <div className="grid gap-2">
-                  <label
-                    className="text-app-dim text-[13px] font-medium"
-                    htmlFor="business-address"
-                  >
-                    Адреса
-                  </label>
-                  <input
-                    className={deadFieldClass}
+                </Field>
+                <Field label="Адреса">
+                  <TextInput
                     disabled
-                    id="business-address"
                     placeholder="є тільки місто"
                     title={NO_ADDRESS}
                     value=""
                   />
-                </div>
+                </Field>
               </div>
               <Note>
                 {NO_LEGAL_FORM} {NO_ADDRESS}
@@ -449,8 +407,8 @@ export function BusinessSettingsScreen() {
                 </ul>
               )}
               <Note>
-                Склади й зони живуть в «Інвентаризації» — тут вони показані
-                такими, як їх віддає сервер. {NO_WAREHOUSE_PARTS}
+                Склади й зони живуть в «Інвентаризації» — тут вони лише
+                показані. {NO_WAREHOUSE_PARTS}
               </Note>
             </Step>
 
@@ -569,7 +527,7 @@ export function BusinessSettingsScreen() {
               </Button>
               <p className="text-app-dim mt-3 text-[12.5px] leading-5 text-pretty">
                 {normalizedName.length > 1
-                  ? 'Зберігаються назва й місто — решта реквізитів серверу невідома.'
+                  ? 'Зберігаються назва й місто — решти реквізитів розбірка не тримає.'
                   : 'Вкажіть назву бізнесу.'}
               </p>
             </section>

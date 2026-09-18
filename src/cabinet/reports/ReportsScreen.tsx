@@ -476,7 +476,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
         title={<span id="reports-title">Звіти</span>}
       />
       <p className="text-app-muted max-w-[60ch] text-sm">
-        Звіт про продажі за обраний період: сервер формує PDF у фоні, а список
+        Звіт про продажі за обраний період: PDF формується у фоні, а список
         нижче показує, на якому він етапі.
       </p>
 
@@ -627,7 +627,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                       <span className="text-app-muted text-[12.5px]">
                         {report.errorMessage
                           ? `Причина: ${report.errorMessage}.`
-                          : 'Сервер не назвав причини.'}{' '}
+                          : 'Причина невідома.'}{' '}
                         {canManage
                           ? 'Створіть заміну — вона візьме період із форми вгорі.'
                           : 'Попросіть власника кабінету сформувати звіт ще раз.'}

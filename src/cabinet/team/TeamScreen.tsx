@@ -106,13 +106,13 @@ const MEMBER_SEGMENTS = [
 
 /** What the team endpoints do not carry, said out loud where it is missing. */
 const NO_LAST_SEEN =
-  'Останній вхід учасника сервер не зберігає: у відповіді є лише дата приєднання.'
+  'Останній вхід учасника не зберігається — відома лише дата приєднання.'
 const NO_EMAIL =
-  'Пошти учасника у відповіді немає — сервер повертає лише імʼя й телефон, і телефон тут порожній.'
+  'Пошти в учасника немає — кабінет знає імʼя й телефон, а телефон тут не вказано.'
 const NO_RESEND =
-  'Надіслати запрошення повторно нема куди: сервер не шле листів, він лише видає код. Потрібен новий — створіть запрошення нижче.'
+  'Надіслати запрошення повторно нема куди: кабінет не шле листів, він лише видає код. Потрібен новий — створіть запрошення нижче.'
 const NO_EMAIL_INVITE =
-  'Листів сервер не надсилає й пошти не питає: запрошення — це код, який ви передаєте людині самі. Місце в тарифі рахується за учасниками, а не за виданими кодами.'
+  'Листів кабінет не надсилає й пошти не питає: запрошення — це код, який ви передаєте людині самі. Місце в тарифі рахується за учасниками, а не за виданими кодами.'
 
 /** Two letters standing in for a photo the API does not keep. */
 const initials = (name: string) =>
@@ -684,7 +684,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                                       className="text-app-dim text-[12.5px]"
                                       title={NO_EMAIL}
                                     >
-                                      пошти й телефону сервер не повертає
+                                      пошти й телефону не вказано
                                     </span>
                                   )}
                                 </span>
@@ -817,11 +817,11 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                 <div className="border-app-line flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t px-5.5 py-3.5">
                   <p className="text-app-dim text-[13px] leading-5 text-pretty">
                     <span title={NO_LAST_SEEN}>
-                      Останнього входу сервер не зберігає — у колонці
-                      «Активність» лише дата приєднання.
+                      Останній вхід не зберігається — у колонці «Активність»
+                      лише дата приєднання.
                     </span>{' '}
                     {seats === null
-                      ? 'Скільки місць дає тариф, сервер зараз не повідомляє.'
+                      ? 'Скільки місць дає тариф, зараз невідомо.'
                       : seats.max == null
                         ? `Зайнято ${String(seats.used)} — тариф не обмежує кількість людей.`
                         : `Зайнято ${String(seats.used)} з ${String(seats.max)} місць тарифу.`}

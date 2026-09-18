@@ -2134,7 +2134,7 @@ it('names the network as the reason when the stock list cannot be reached', asyn
   expect(
     await screen.findByRole('heading', { name: 'Склад не відповідає' }),
   ).toBeVisible()
-  expect(screen.getByText(/Немає звʼязку з сервером/)).toBeVisible()
+  expect(screen.getByText(/Немає звʼязку з мережею/)).toBeVisible()
 })
 
 it('blames the server, not the network, when the request came back 500', async () => {

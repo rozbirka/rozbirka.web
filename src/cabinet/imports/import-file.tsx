@@ -141,7 +141,7 @@ export function ImportFileStep({
         title: 'Файл прочитати не вдалося',
         body:
           status.errorCode === null
-            ? 'Сервер не зміг прочитати цю таблицю. Спробуйте інші налаштування читання або інший файл.'
+            ? 'Не вдалося прочитати цю таблицю. Спробуйте інші налаштування читання або інший файл.'
             : issueText(status.errorCode),
         fix: null,
       }
@@ -194,7 +194,7 @@ export function ImportFileStep({
         {file === null ? null : (
           <p className="text-app-muted text-sm">
             Обрано {file.name} · {fileSize(file.size)}. Натисніть «Завантажити
-            файл», щоб сервер його прочитав.
+            файл», щоб почати читання.
           </p>
         )}
       </div>
@@ -215,7 +215,7 @@ export function ImportFileStep({
           </p>
           <p className="text-app-muted mt-1 text-[13px]">
             {file === null
-              ? 'Назву файлу сервер не зберігає — вона відома лише в сеансі, де його обрали.'
+              ? 'Назва файлу відома лише в сеансі, де його обрали, і після перезавантаження не показується.'
               : `${fileSize(file.size)} · передано й прочитано`}
             {' · '}
             {new Date(status.createdAt).toLocaleString('uk-UA', {

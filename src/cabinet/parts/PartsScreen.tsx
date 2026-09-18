@@ -1011,7 +1011,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
               <ErrorState
                 description={
                   error.kind === 'network' || error.kind === 'timeout'
-                    ? 'Немає звʼязку з сервером. Фільтри лишилися на місці — повторіть, коли мережа повернеться.'
+                    ? 'Немає звʼязку з мережею. Фільтри лишилися на місці — повторіть, коли звʼязок повернеться.'
                     : 'Не вдалося завантажити склад. Дані на місці — потрібно лише повторити запит.'
                 }
                 onRetry={() =>
@@ -2072,7 +2072,7 @@ function PartDetailScreen({
 
       <ConfirmDialog
         confirmLabel="Видалити"
-        consequence="Історія продажів, резерви та фото цієї деталі зникнуть назавжди. Сервер відхилить видалення, якщо деталь уже в замовленні."
+        consequence="Історія продажів, резерви та фото цієї деталі зникнуть назавжди. Деталь, яка вже в замовленні, видалити не вийде."
         error={deleteError}
         onConfirm={() => void remove()}
         onOpenChange={setConfirmingDelete}
@@ -2322,7 +2322,7 @@ function PartMediaFields({
   )
   return (
     <SectionPanel
-      description="Фото вирушають на сервер разом зі збереженням деталі — доти вони лишаються у вас."
+      description="Фото вирушають разом зі збереженням деталі — доти вони лишаються у вас."
       title="Фото"
     >
       <Field
@@ -2895,7 +2895,7 @@ function PartForm({
       </form>
       <div className="text-app-dim grid gap-1 text-[13.5px]">
         <p>
-          VIN та OEM-декодування недоступні: сервер не визначає операцію
+          VIN та OEM-декодування недоступні: за кодом не визначається операція
           декодування.
         </p>
         <p>Сумісність недоступна для редагування</p>
@@ -3192,10 +3192,7 @@ function PartEdit({
                       value={values.partType}
                     />
                   </Field>
-                  <Field
-                    hint="Редагування OEM поки не приймає сервер"
-                    label="OEM-код"
-                  >
+                  <Field hint="OEM-код поки не редагується" label="OEM-код">
                     <TextInput
                       className="font-mono"
                       disabled
@@ -3365,7 +3362,7 @@ function PartEdit({
               <Card title="Видалення">
                 <p className="text-app-muted text-sm">
                   {detail && detail.quantityReserved > 0
-                    ? 'Деталь у резерві під замовлення — сервер відхилить видалення.'
+                    ? 'Деталь у резерві під замовлення — видалити її не вийде.'
                     : 'Деталь не входить у відкриті замовлення — її можна видалити.'}
                 </p>
                 <Button

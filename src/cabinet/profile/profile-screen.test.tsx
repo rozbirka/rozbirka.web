@@ -359,5 +359,5 @@ it('shows the profile controls the identity service cannot back as disabled', ()
     name: 'Завершити інші сеанси',
   })
   expect(sessions).toBeDisabled()
-  expect(sessions.title).toContain('Переліку сеансів сервер не віддає')
+  expect(sessions.title).toContain('Переліку сеансів поки немає')
 })

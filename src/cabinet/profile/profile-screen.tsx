@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from 'react'
 import { LogOut } from 'lucide-react'
-import { Button, DateValue, Notice } from '@/components/app'
+import { Button, DateValue, Field, Notice, TextInput } from '@/components/app'
 import { useAuth } from '@/auth/AuthContext'
 import { credentials } from '@/api/credentials'
 import { profileApi } from '@/api/profile'
@@ -31,21 +31,20 @@ const NOTIFICATIONS = [
 
 /** What the identity service does not offer, said where the design asks for it. */
 const NO_AVATAR =
-  'Фото профілю сервер не зберігає: у відповіді є лише імʼя, телефон і роль, тож замість аватара — ініціали.'
+  'Фото профілю не зберігається: обліковий запис знає імʼя, телефон і роль, тож замість аватара — ініціали.'
 const NO_PHONE_EDIT =
-  'Телефон змінити не можна: це логін, і сервер дозволяє редагувати лише імʼя.'
+  'Телефон змінити не можна: це логін. Редагується тільки імʼя.'
 const NO_EMAIL =
   'Пошти в обліковому записі немає — вхід іде за номером телефону й одноразовим кодом.'
-const NO_PREFERENCES =
-  'Ні мови, ні стартового екрана сервер не зберігає — ендпоінта налаштувань користувача немає.'
+const NO_PREFERENCES = 'Ні мова, ні стартовий екран поки не зберігаються.'
 const NO_NOTIFICATIONS =
-  'Налаштувань сповіщень сервер не тримає: увімкнути чи вимкнути їх нема через що.'
+  'Налаштувань сповіщень поки немає — увімкнути чи вимкнути їх нема де.'
 const NO_PASSWORD =
   'Пароля в системі немає взагалі — вхід підтверджується одноразовим кодом, тож і міняти нічого.'
 const NO_SESSIONS =
-  'Переліку сеансів сервер не віддає: ні пристроїв, ні міст, ні кнопки завершити чужий вхід.'
-const NO_JOINED_AT = 'Дати реєстрації користувача у відповіді немає.'
-const NO_LAST_LOGIN = 'Сервер ще не повідомив дату останнього входу.'
+  'Переліку сеансів поки немає: ні пристроїв, ні міст, ні можливості завершити чужий вхід.'
+const NO_JOINED_AT = 'Дата реєстрації не зберігається.'
+const NO_LAST_LOGIN = 'Дата останнього входу ще не відома.'
 
 /** Two letters standing in for the photo the API does not keep. */
 const initials = (name: string) =>
@@ -245,39 +244,23 @@ export function ProfileScreen() {
                 id={FORM_ID}
                 onSubmit={(event) => void handleSubmit(event)}
               >
-                <div className="grid gap-2">
-                  <label
-                    className="text-app-muted text-[13px] font-medium"
-                    htmlFor="profile-name"
-                  >
-                    Ім’я та прізвище
-                  </label>
-                  <input
+                <Field label="Ім’я та прізвище" required>
+                  <TextInput
                     autoComplete="name"
-                    className="bg-app-input border-app-line-2 rounded-control text-app-ink focus-visible:border-brand min-h-11 w-full border px-3 text-sm outline-none transition-colors disabled:opacity-55"
                     disabled={busy}
-                    id="profile-name"
                     onChange={(event) => handleNameChange(event.target.value)}
                     placeholder="Дмитро Кравець"
                     value={name}
                   />
-                </div>
-                <div className="grid gap-2">
-                  <label
-                    className="text-app-muted text-[13px] font-medium"
-                    htmlFor="profile-phone"
-                  >
-                    Телефон
-                  </label>
-                  <input
-                    className="bg-app-input border-app-line rounded-control text-app-dim min-h-11 w-full cursor-not-allowed border px-3 text-sm outline-none"
+                </Field>
+                <Field label="Телефон">
+                  <TextInput
                     disabled
-                    id="profile-phone"
                     readOnly
                     title={NO_PHONE_EDIT}
                     value={phone ?? 'не вказано'}
                   />
-                </div>
+                </Field>
               </form>
               <p className="text-app-dim mt-3 text-[12.5px] leading-5 text-pretty">
                 {NO_PHONE_EDIT}
@@ -363,42 +346,26 @@ export function ProfileScreen() {
 
             <Card title="Безпека">
               <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-2">
-                  <label
-                    className="text-app-dim text-[13px] font-medium"
-                    htmlFor="profile-password"
-                  >
-                    Новий пароль
-                  </label>
-                  <input
+                <Field label="Новий пароль">
+                  <TextInput
                     autoComplete="new-password"
-                    className="bg-app-input border-app-line rounded-control text-app-dim min-h-11 w-full cursor-not-allowed border px-3 text-sm outline-none"
                     disabled
-                    id="profile-password"
                     placeholder="паролів у системі немає"
                     title={NO_PASSWORD}
                     type="password"
                     value=""
                   />
-                </div>
-                <div className="grid gap-2">
-                  <label
-                    className="text-app-dim text-[13px] font-medium"
-                    htmlFor="profile-password-repeat"
-                  >
-                    Повторіть пароль
-                  </label>
-                  <input
+                </Field>
+                <Field label="Повторіть пароль">
+                  <TextInput
                     autoComplete="new-password"
-                    className="bg-app-input border-app-line rounded-control text-app-dim min-h-11 w-full cursor-not-allowed border px-3 text-sm outline-none"
                     disabled
-                    id="profile-password-repeat"
                     placeholder="—"
                     title={NO_PASSWORD}
                     type="password"
                     value=""
                   />
-                </div>
+                </Field>
               </div>
               <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
                 {NO_PASSWORD}
@@ -468,8 +435,8 @@ export function ProfileScreen() {
                 Вийти з системи
               </Button>
               <p className="text-app-dim mt-3 text-[12.5px] leading-5 text-pretty">
-                Вихід діє лише в цьому браузері — інші сеанси сервер завершити
-                не дає.
+                Вихід діє лише в цьому браузері — завершити інші сеанси поки не
+                можна.
               </p>
             </Card>
 
