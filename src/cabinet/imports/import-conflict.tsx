@@ -21,7 +21,7 @@ function saidAs(
   const rule = mapping?.rules.find((one) => one.target === target)
   if (rule === undefined) return 'не зіставлено'
   if (rule.sources.length > 0) {
-    const column = columns?.fields.find((one) => one.id === rule.sources[0])
+    const column = columns?.fields?.find((one) => one.id === rule.sources[0])
     return `з колонки «${column?.header ?? rule.sources[0] ?? '—'}»`
   }
   const constant = rule.constant ?? ''

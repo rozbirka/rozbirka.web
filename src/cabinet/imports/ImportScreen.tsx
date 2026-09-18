@@ -138,7 +138,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
     }
     statusRef.current = s
     setStatus(s)
-    if (s.source?.warnings.length || (s.source && !s.source.fields.length))
+    if (s.source && (s.source.warnings?.length || !s.source.fields?.length))
       setReadSettings(true)
   }
   async function readRows(s: ImportStatus, signal: AbortSignal) {
@@ -513,7 +513,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
             disabled={
               busy ||
               (step === 1 && !status?.source && !file) ||
-              (step === 1 && status?.source?.fields.length === 0) ||
+              (step === 1 && !status?.source?.fields?.length) ||
               (step === 2 && !editable)
             }
             onClick={next}
@@ -545,9 +545,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
                     }
                     disabled={
                       busy ||
-                      (i > 1 &&
-                        (!status?.source ||
-                          status.source.fields.length === 0)) ||
+                      (i > 1 && !status?.source?.fields?.length) ||
                       (i === 4 && !canConfirm) ||
                       (i === 5 && !status?.execution)
                     }

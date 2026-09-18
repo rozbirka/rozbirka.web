@@ -224,3 +224,16 @@ it('stays quiet when the text read fine', () => {
     screen.queryByRole('region', { name: 'Спробуйте' }),
   ).not.toBeInTheDocument()
 })
+
+it('survives a source whose empty collections came back missing', () => {
+  // The server leaves empty arrays out of the payload entirely.
+  renderStep({
+    status: {
+      ...status,
+      source: { selection: status.source!.selection },
+    } as unknown as typeof status,
+    rows: [],
+  })
+
+  expect(screen.getByText('Рядків даних')).toBeVisible()
+})

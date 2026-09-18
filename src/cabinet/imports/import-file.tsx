@@ -105,7 +105,11 @@ export function ImportFileStep({
   onContinue: () => void
 }) {
   const source = status === null ? null : status.source
+  // Empty collections come back missing, not empty, so every one of them is
+  // read through a default before anything maps over it.
   const columns = source?.fields ?? []
+  const warnings = source?.warnings ?? []
+  const tables = source?.tables ?? []
   const preview = rows.slice(0, 5)
   const format = (file?.name.split('.').pop() ?? 'CSV').toUpperCase()
 
@@ -393,7 +397,7 @@ export function ImportFileStep({
                 : `Роздільник ${DELIMITERS.find((one) => one.value === selection.delimiter)?.label.toLowerCase() ?? selection.delimiter}, кодування ${selection.encoding}, заголовки в рядку ${String(selection.headerRow ?? 1)}. Змініть, якщо дані виглядають не так.`}
             </p>
 
-            {source.warnings.map((warning) => (
+            {warnings.map((warning) => (
               <Notice className="mt-3" key={warning} tone="warn">
                 {issueText(warning)}
               </Notice>
@@ -401,7 +405,7 @@ export function ImportFileStep({
 
             {settingsOpen ? (
               <div className="mt-4 grid gap-3.5">
-                {source.tables.length > 0 ? (
+                {tables.length > 0 ? (
                   <Field label="Аркуш">
                     <SelectInput
                       onChange={(event) =>
@@ -413,7 +417,7 @@ export function ImportFileStep({
                       value={selection.sheet ?? ''}
                     >
                       <option value="">Оберіть аркуш</option>
-                      {source.tables.map((table) => (
+                      {tables.map((table) => (
                         <option key={table.id} value={table.id}>
                           {table.name}
                         </option>
@@ -496,7 +500,7 @@ export function ImportFileStep({
                   </SelectInput>
                 </Field>
 
-                {source.warnings.includes('HIDDEN_ROWS') ? (
+                {warnings.includes('HIDDEN_ROWS') ? (
                   <label className="text-app-muted flex min-h-11 items-center gap-2.5 text-[14px]">
                     <input
                       checked={selection.acceptHiddenRows ?? false}
@@ -512,7 +516,7 @@ export function ImportFileStep({
                     Підтверджую включення прихованих рядків
                   </label>
                 ) : null}
-                {source.warnings.includes('HIDDEN_COLUMNS') ? (
+                {warnings.includes('HIDDEN_COLUMNS') ? (
                   <label className="text-app-muted flex min-h-11 items-center gap-2.5 text-[14px]">
                     <input
                       checked={selection.acceptHiddenColumns ?? false}

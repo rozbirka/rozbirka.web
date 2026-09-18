@@ -64,11 +64,16 @@ export interface SourceRow {
   cells: { column: number; raw: string | null; display?: string | null }[]
 }
 export interface ImportSource {
-  fields: { id: string; column: number; header: string; type: string }[]
-  tables: { id: string; name: string; hidden: boolean }[]
+  /**
+   * The server leaves these collections out of the payload when they are
+   * empty, so every one of them is optional here — a read that assumed an
+   * array took the whole screen down with «reading 'warnings' of undefined».
+   */
+  fields?: { id: string; column: number; header: string; type: string }[]
+  tables?: { id: string; name: string; hidden: boolean }[]
   selection: ImportSelection
-  warnings: string[]
-  rows: SourceRow[]
+  warnings?: string[]
+  rows?: SourceRow[]
 }
 export interface ImportRow {
   rowId: string
