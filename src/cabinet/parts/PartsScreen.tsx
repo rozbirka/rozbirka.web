@@ -15,7 +15,6 @@ import {
   Printer,
   Search,
   Trash2,
-  X,
 } from 'lucide-react'
 import {
   ActionMenu,
@@ -34,7 +33,6 @@ import {
   Button,
   ConfirmDialog,
   DataTable,
-  FormDialog,
   EmptyState,
   ErrorState,
   Field,
@@ -595,7 +593,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
 
         <div className="flex flex-wrap items-start gap-6">
           <aside className="border-app-line bg-app-raised grid min-w-0 flex-[0_1_320px] gap-6 rounded-[20px] border p-5 sm:min-w-[260px]">
-
             <FilterGroup label="Статус">
               <FilterRow
                 active={filters.status === ''}
@@ -960,7 +957,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
           </div>
         </div>
       </div>
-
     </div>
   )
 }

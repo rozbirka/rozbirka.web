@@ -485,10 +485,7 @@ function IntakesList({ base }: { base: string }) {
                       {intake.name ?? 'Без назви'}
                     </span>
                     <span className="text-app-muted text-[13px]">
-                      {[
-                        intake.supplier ?? 'без постачальника',
-                        intake.createdBy.displayName,
-                      ].join(' · ')}
+                      {intake.createdBy.displayName}
                     </span>
                   </Link>
                 ),
@@ -650,6 +647,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [filter, setFilter] = useState<IntakePartFilter>('all')
+  const [partsPage, setPartsPage] = useState(1)
   const canPrintStickers = allowedToView(cabinetModules.stickers, cabinet)
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.intakes,
@@ -706,8 +704,19 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
     available: available.length,
     sold: sold.length,
   }
-  const rows =
+  const filteredRows =
     filter === 'all' ? intake.parts : filter === 'sold' ? sold : available
+  const partsPageSize = 20
+  const partsTotalPages = Math.max(
+    1,
+    Math.ceil(filteredRows.length / partsPageSize),
+  )
+  const currentPartsPage = Math.min(partsPage, partsTotalPages)
+  const rows = filteredRows.slice(
+    (currentPartsPage - 1) * partsPageSize,
+    currentPartsPage * partsPageSize,
+  )
+  const partsBase = base.replace(/\/intakes$/, '/parts')
   /** What one position of this batch cost: the batch price over its positions. */
   const unitCost =
     intake.totalCost !== null && intake.partsCount > 0
@@ -814,10 +823,6 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
             <StatusPill tone={saleState.tone}>{saleState.label}</StatusPill>
           </div>
           <p className="text-app-muted mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-[15px]">
-            <span>{intake.supplier ?? 'Постачальника не вказано'}</span>
-            <span aria-hidden className="text-white/20">
-              ·
-            </span>
             <span>
               {intake.purchasedAt === null
                 ? 'без дати придбання'
@@ -938,7 +943,10 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                               : 'text-app-muted hover:text-app-ink',
                           )}
                           key={option.value}
-                          onClick={() => setFilter(option.value)}
+                          onClick={() => {
+                            setFilter(option.value)
+                            setPartsPage(1)
+                          }}
                           role="radio"
                           type="button"
                         >
@@ -968,14 +976,17 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                       label: 'Назва',
                       variant: 'primary',
                       cell: (part) => (
-                        <span className="grid gap-0.5">
+                        <Link
+                          className="hover:text-brand grid gap-0.5"
+                          to={`${partsBase}/${part.id}`}
+                        >
                           <span className="font-semibold text-white">
                             {part.name}
                           </span>
                           <span className="text-app-dim font-mono text-[12px]">
                             {part.partType ?? 'без типу'}
                           </span>
-                        </span>
+                        </Link>
                       ),
                     },
                     {
@@ -1027,6 +1038,21 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                           : 'Порожньо за фільтром'
                       }
                     />
+                  }
+                  footer={
+                    filteredRows.length > partsPageSize ? (
+                      <div className="border-app-line flex items-center justify-between gap-4 border-t px-6 py-4">
+                        <p className="text-app-dim text-[13px]">
+                          Показано {rows.length} з {filteredRows.length}
+                        </p>
+                        <Pagination
+                          label="Пагінація позицій приймання"
+                          onPage={setPartsPage}
+                          page={currentPartsPage}
+                          totalPages={partsTotalPages}
+                        />
+                      </div>
+                    ) : null
                   }
                   rowKey={(part) => part.id}
                   rows={rows}
@@ -1196,22 +1222,6 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                 </Button>
               ) : null}
             </Card>
-
-            <Card title="Постачальник">
-              <div className="flex items-center gap-3.5">
-                <span className="text-app-ink grid size-10 shrink-0 place-items-center rounded-full bg-white/[0.08] text-sm font-bold">
-                  {initials(intake.supplier ?? '—')}
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-[17px] font-bold tracking-[-0.015em] text-white">
-                    {intake.supplier ?? 'Не вказано'}
-                  </span>
-                  <span className="text-app-muted mt-0.5 block text-xs">
-                    Постачальники поки не ведуться окремим довідником
-                  </span>
-                </span>
-              </div>
-            </Card>
           </aside>
         </div>
       </div>
@@ -1246,7 +1256,6 @@ function IntakeForm({
   const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
   const [values, setValues] = useState({
     name: '',
-    supplier: '',
     purchasedAt: '',
     totalCost: '',
     notes: '',
@@ -1274,7 +1283,6 @@ function IntakeForm({
         setIntake(next)
         setValues({
           name: next.name ?? '',
-          supplier: next.supplier ?? '',
           purchasedAt: next.purchasedAt ?? '',
           totalCost:
             canManageFinance && next.totalCost !== null
@@ -1296,7 +1304,6 @@ function IntakeForm({
   const units =
     intake?.parts.reduce((total, part) => total + part.quantity, 0) ?? 0
   const named = values.name.trim().length > 0
-  const supplied = values.supplier.trim().length > 0
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -1318,7 +1325,7 @@ function IntakeForm({
     try {
       const request = {
         name: values.name.trim() || null,
-        supplier: values.supplier.trim() || null,
+        supplier: null,
         purchasedAt: values.purchasedAt || null,
         ...(canManageFinance ? { totalCost: amount } : {}),
         notes: values.notes.trim() || null,
@@ -1359,7 +1366,6 @@ function IntakeForm({
   const saveLabel = intakeId ? 'Зберегти зміни' : 'Створити приймання'
   const checks = [
     { done: named, label: 'Назва партії вказана' },
-    { done: supplied, label: 'Постачальник вказаний' },
     ...(canManageFinance
       ? [{ done: hasCost, label: 'Сума придбання вказана' }]
       : []),
@@ -1459,17 +1465,8 @@ function IntakeForm({
         >
           <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
             <FormCard step="01" title="Основні дані">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field hint="Від кого прийшла партія" label="Постачальник">
-                  <TextInput
-                    autoComplete="off"
-                    name="supplier"
-                    onChange={update('supplier')}
-                    placeholder="Європа Авто"
-                    value={values.supplier}
-                  />
-                </Field>
-                <Field hint="Як у накладній постачальника" label="Назва">
+              <div className="grid gap-4">
+                <Field hint="Назва приймання у списку" label="Назва">
                   <TextInput
                     autoComplete="off"
                     name="name"
@@ -1568,10 +1565,10 @@ function IntakeForm({
                 <p
                   className={cn(
                     'text-[17px] font-bold tracking-[-0.015em]',
-                    supplied ? 'text-white' : 'text-app-dim',
+                    named ? 'text-white' : 'text-app-dim',
                   )}
                 >
-                  {supplied ? values.supplier : 'Постачальник не вказаний'}
+                  {named ? values.name : 'Назва не вказана'}
                 </p>
                 <p className="text-app-muted mt-1.5 text-sm">
                   {[
@@ -2423,7 +2420,7 @@ function BatchPartsForm({
             Приймання партією
           </h1>
           <p className="text-app-muted mt-3 text-[15px]">
-            {[intake?.name, intake?.supplier].filter(Boolean).join(' · ')}
+            {intake?.name ?? 'Приймання без назви'}
             {intake ? ' · ' : null}
             додавайте позиції рядками; собівартість розподілиться по всій
             партії.

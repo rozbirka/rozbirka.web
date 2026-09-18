@@ -6,9 +6,8 @@ import {
   Notice,
   PageBody,
   PageHeader,
-  SelectInput,
-  TextInput,
-  Toolbar,
+  Pagination,
+  SearchInput,
 } from '@/components/app'
 import { partsApi, type PartListItem } from '@/api/parts'
 import { stickersApi } from '@/api/stickers'
@@ -169,9 +168,12 @@ function TenantStickerQueue({
     next.delete('part')
     setSearchParams(next, { replace: true })
   }, [requested, searchParams, setSearchParams])
-  const [id, setId] = useState('')
-  const [quantity, setQuantity] = useState('1')
+  const [search, setSearch] = useState('')
+  const [partsPage, setPartsPage] = useState(1)
+  const [partsTotal, setPartsTotal] = useState(0)
+  const [partsTotalPages, setPartsTotalPages] = useState(1)
   const [parts, setParts] = useState<PartListItem[]>([])
+  const [partLabels, setPartLabels] = useState<Record<string, string>>({})
   const [partsUnavailable, setPartsUnavailable] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [printable, setPrintable] = useState<PrintableSticker[]>([])
@@ -190,11 +192,24 @@ function TenantStickerQueue({
   useEffect(() => {
     const controller = new AbortController()
     void partsApi
-      .list({ page: 1, pageSize: 100, signal: controller.signal })
+      .list({
+        page: partsPage,
+        pageSize: 30,
+        ...(search.trim() ? { q: search.trim() } : {}),
+        signal: controller.signal,
+      })
       .then(
         (page) => {
           if (controller.signal.aborted) return
           setParts(page.items)
+          setPartsTotal(page.total)
+          setPartsTotalPages(Math.max(1, page.totalPages))
+          setPartLabels((current) => ({
+            ...current,
+            ...Object.fromEntries(
+              page.items.map((part) => [part.id, part.name]),
+            ),
+          }))
           setPartsUnavailable(false)
         },
         () => {
@@ -202,7 +217,7 @@ function TenantStickerQueue({
         },
       )
     return () => controller.abort()
-  }, [])
+  }, [partsPage, search])
   useEffect(() => {
     if (!scope) return
     const unregister = tenantResetRegistry.register((resetScope) => {
@@ -220,35 +235,23 @@ function TenantStickerQueue({
     })
     return unregister
   }, [scope])
-  const add = () => {
+  const selectPart = (partId: string, selected: boolean) => {
     if (!canGenerate || partsUnavailable) return
-    const nextId = id.trim()
-    const nextQuantity = Number(quantity)
-    if (!nextId || !Number.isInteger(nextQuantity) || nextQuantity < 1) {
-      setError('Вкажіть ID деталі та цілу кількість стікерів.')
-      return
-    }
-    if (total + nextQuantity > MAX_STICKERS) {
+    if (selected && total >= MAX_STICKERS) {
       setError(
         `За один раз можна підготувати не більше ${MAX_STICKERS} стікерів.`,
       )
       return
     }
     setQueue((current) => {
-      const found = current.find((item) => item.id === nextId)
-      return found
-        ? current.map((item) =>
-            item.id === nextId
-              ? { ...item, quantity: item.quantity + nextQuantity }
-              : item,
-          )
-        : [...current, { id: nextId, quantity: nextQuantity }]
+      if (!selected) return current.filter((item) => item.id !== partId)
+      return current.some((item) => item.id === partId)
+        ? current
+        : [...current, { id: partId, quantity: 1 }]
     })
     setError(null)
     setPrintable([])
     setPreview([])
-    setId('')
-    setQuantity('1')
   }
   const clear = () => {
     setQueue([])
@@ -356,8 +359,7 @@ function TenantStickerQueue({
   }
 
   const labelFor = (partId: string) =>
-    parts.find((part) => part.id === partId)?.name ??
-    'Деталь недоступна у поточній вибірці'
+    partLabels[partId] ?? 'Деталь недоступна у поточній вибірці'
 
   return (
     <PageBody width="narrow">
@@ -371,42 +373,71 @@ function TenantStickerQueue({
           та розбірки.
         </Notice>
       ) : null}
-      <Toolbar>
-        <Field className="min-w-52 flex-1" label="Деталь">
-          <SelectInput
-            aria-label="Деталь"
-            disabled={!canGenerate || partsUnavailable}
-            onChange={(event) => setId(event.target.value)}
-            value={id}
+      <section className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border">
+        <div className="grid gap-3 p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+          <Field label="Пошук запчастин">
+            <SearchInput
+              aria-label="Пошук запчастин"
+              onChange={(event) => {
+                setSearch(event.target.value)
+                setPartsPage(1)
+              }}
+              placeholder="Назва або QR-код"
+              value={search}
+            />
+          </Field>
+          <Button
+            disabled={!canGenerate || partsUnavailable || parts.length === 0}
+            onClick={() => {
+              setQueue((current) => {
+                const selected = new Set(current.map((item) => item.id))
+                const additions = parts
+                  .filter((part) => !selected.has(part.id))
+                  .slice(0, Math.max(0, MAX_STICKERS - current.length))
+                  .map((part) => ({ id: part.id, quantity: 1 }))
+                return [...current, ...additions]
+              })
+              setError(null)
+              setPrintable([])
+              setPreview([])
+            }}
           >
-            <option value="">Оберіть деталь</option>
-            {parts.map((part) => (
-              <option key={part.id} value={part.id}>
-                {part.name}
-              </option>
-            ))}
-            {id && !parts.some((part) => part.id === id) ? (
-              <option value={id}>Деталь недоступна у поточній вибірці</option>
-            ) : null}
-          </SelectInput>
-        </Field>
-        <Field className="min-w-40" label="Кількість стікерів">
-          <TextInput
-            aria-label="Кількість стікерів"
-            min="1"
-            onChange={(event) => setQuantity(event.target.value)}
-            type="number"
-            value={quantity}
-          />
-        </Field>
-        <Button
-          disabled={!canGenerate || partsUnavailable}
-          onClick={add}
-          variant="primary"
+            Обрати все
+          </Button>
+          <Button disabled={!queue.length} onClick={clear}>
+            Скинути
+          </Button>
+        </div>
+        <ul
+          className="divide-app-line grid divide-y"
+          aria-label="Список запчастин"
         >
-          Додати
-        </Button>
-      </Toolbar>
+          {parts.map((part) => (
+            <li key={part.id}>
+              <label className="hover:bg-white/[0.03] flex min-h-14 cursor-pointer items-center gap-3 px-4 py-3 text-sm text-white">
+                <input
+                  checked={queue.some((item) => item.id === part.id)}
+                  className="accent-brand size-4"
+                  disabled={!canGenerate || partsUnavailable}
+                  onChange={(event) =>
+                    selectPart(part.id, event.target.checked)
+                  }
+                  type="checkbox"
+                />
+                <span className="font-semibold">{part.name}</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+        <Pagination
+          label="Пагінація запчастин для стікерів"
+          onPage={setPartsPage}
+          page={partsPage}
+          pageSize={30}
+          total={partsTotal}
+          totalPages={partsTotalPages}
+        />
+      </section>
       {partsUnavailable ? (
         <p className="text-app-dim text-[13.5px]" role="status">
           Вибір деталей недоступний: список не завантажено, пошук за внутрішнім

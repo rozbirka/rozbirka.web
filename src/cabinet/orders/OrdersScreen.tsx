@@ -37,6 +37,10 @@ import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import {
+  newCustomerPhoneDraft,
+  normalizeCustomerPhoneDraft,
+} from '../customers/customer-phone'
 
 const idFromPath = (path: string) => /\/orders\/([^/]+)/.exec(path)?.[1] ?? null
 const errorMessage = (error: unknown) => {
@@ -540,13 +544,19 @@ function OrderForm({
   const [partId, setPartId] = useState('')
   const [partQuery, setPartQuery] = useState('')
   const [partResults, setPartResults] = useState<PartListItem[]>([])
+  const [partPickerOpen, setPartPickerOpen] = useState(false)
+  const partPickerRef = useRef<HTMLDivElement>(null)
   const [customerId, setCustomerId] = useState(params.get('customerId') ?? '')
   const [customerQuery, setCustomerQuery] = useState('')
   const [customerResults, setCustomerResults] = useState<CustomerSearchItem[]>(
     [],
   )
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false)
+  const customerPickerRef = useRef<HTMLDivElement>(null)
   const [newCustomerName, setNewCustomerName] = useState('')
-  const [newCustomerPhone, setNewCustomerPhone] = useState('')
+  const [newCustomerPhone, setNewCustomerPhone] = useState(
+    newCustomerPhoneDraft,
+  )
   const [customerConflict, setCustomerConflict] =
     useState<CustomerPhoneConflict | null>(null)
   const [customerBusy, setCustomerBusy] = useState(false)
@@ -568,6 +578,26 @@ function OrderForm({
         : 'loading'
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    const closePickers = (event: PointerEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (!partPickerRef.current?.contains(target)) setPartPickerOpen(false)
+      if (!customerPickerRef.current?.contains(target))
+        setCustomerPickerOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setPartPickerOpen(false)
+      setCustomerPickerOpen(false)
+    }
+    document.addEventListener('pointerdown', closePickers)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closePickers)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [])
   useEffect(() => {
     const q = partQuery.trim()
     if (!partSearchAllowed || !q) return
@@ -699,7 +729,10 @@ function OrderForm({
       const result = await customersApi.create(
         {
           name: newCustomerName.trim(),
-          phone: newCustomerPhone.trim() || null,
+          phone:
+            newCustomerPhone.trim() === newCustomerPhoneDraft()
+              ? null
+              : newCustomerPhone.trim() || null,
           notes: null,
         },
         { signal: scope.signal },
@@ -707,7 +740,8 @@ function OrderForm({
       if (scope.signal.aborted) return
       setCustomerId(result.customer.id)
       setNewCustomerName('')
-      setNewCustomerPhone('')
+      setNewCustomerPhone(newCustomerPhoneDraft())
+      setCustomerPickerOpen(false)
     } catch (requestError) {
       const conflict = readCustomerPhoneConflict(requestError)
       if (conflict) setCustomerConflict(conflict)
@@ -811,38 +845,49 @@ function OrderForm({
         >
           <div className="grid gap-3">
             {partSearchAllowed && (
-              <div className="grid gap-2">
+              <div className="grid gap-2" ref={partPickerRef}>
                 <Field
                   hint="Введіть назву — знайдені запчастини з’являться нижче."
                   label="Пошук запчастини"
                 >
                   <SearchInput
-                    onChange={(event) => setPartQuery(event.target.value)}
+                    onChange={(event) => {
+                      setPartQuery(event.target.value)
+                      setPartPickerOpen(true)
+                    }}
+                    onFocus={() => setPartPickerOpen(true)}
                     value={partQuery}
                   />
                 </Field>
-                {partQuery.trim() && partResults.length > 0 && (
-                  <ul className="grid gap-1.5">
-                    {partResults.map((part) => (
-                      <li key={part.id}>
-                        <Button
-                          aria-label={`Обрати запчастину ${part.name}`}
-                          className={
-                            part.id === partId
-                              ? 'border-brand/40 bg-brand/[0.1] w-full justify-between'
-                              : 'w-full justify-between'
-                          }
-                          onClick={() => setPartId(part.id)}
-                        >
-                          <span className="min-w-0 truncate">{part.name}</span>
-                          <span className="text-app-dim text-[13px] tabular-nums">
-                            {part.quantityAvailable} шт
-                          </span>
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                {partPickerOpen &&
+                  partQuery.trim() &&
+                  partResults.length > 0 && (
+                    <ul className="grid gap-1.5">
+                      {partResults.map((part) => (
+                        <li key={part.id}>
+                          <Button
+                            aria-label={`Обрати запчастину ${part.name}`}
+                            className={
+                              part.id === partId
+                                ? 'border-brand/40 bg-brand/[0.1] w-full justify-between'
+                                : 'w-full justify-between'
+                            }
+                            onClick={() => {
+                              setPartId(part.id)
+                              setPartPickerOpen(false)
+                            }}
+                          >
+                            <span className="min-w-0 truncate">
+                              {part.name}
+                            </span>
+                            <span className="text-app-dim text-[13px] tabular-nums">
+                              {part.quantityAvailable} шт
+                            </span>
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
               </div>
             )}
             <Field
@@ -883,7 +928,7 @@ function OrderForm({
             description="Замовлення можна створити й без клієнта — тоді поле лишається порожнім."
             title="Клієнт"
           >
-            <div className="grid gap-3">
+            <div className="grid gap-3" ref={customerPickerRef}>
               <Field
                 hint={
                   selectedCustomer
@@ -895,34 +940,43 @@ function OrderForm({
                 label="Пошук клієнта"
               >
                 <SearchInput
-                  onChange={(event) => setCustomerQuery(event.target.value)}
+                  onChange={(event) => {
+                    setCustomerQuery(event.target.value)
+                    setCustomerPickerOpen(true)
+                  }}
+                  onFocus={() => setCustomerPickerOpen(true)}
                   value={customerQuery}
                 />
               </Field>
-              {customerQuery.trim() && customerResults.length > 0 && (
-                <ul className="grid gap-1.5">
-                  {customerResults.map((customer) => (
-                    <li key={customer.id}>
-                      <Button
-                        aria-label={`Обрати клієнта ${customer.name}`}
-                        className={
-                          customer.id === customerId
-                            ? 'border-brand/40 bg-brand/[0.1] w-full justify-between'
-                            : 'w-full justify-between'
-                        }
-                        onClick={() => setCustomerId(customer.id)}
-                      >
-                        <span className="min-w-0 truncate">
-                          {customer.name}
-                        </span>
-                        <span className="text-app-dim text-[13px]">
-                          {customer.phone ?? 'без телефону'}
-                        </span>
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              {customerPickerOpen &&
+                customerQuery.trim() &&
+                customerResults.length > 0 && (
+                  <ul className="grid gap-1.5">
+                    {customerResults.map((customer) => (
+                      <li key={customer.id}>
+                        <Button
+                          aria-label={`Обрати клієнта ${customer.name}`}
+                          className={
+                            customer.id === customerId
+                              ? 'border-brand/40 bg-brand/[0.1] w-full justify-between'
+                              : 'w-full justify-between'
+                          }
+                          onClick={() => {
+                            setCustomerId(customer.id)
+                            setCustomerPickerOpen(false)
+                          }}
+                        >
+                          <span className="min-w-0 truncate">
+                            {customer.name}
+                          </span>
+                          <span className="text-app-dim text-[13px]">
+                            {customer.phone ?? 'без телефону'}
+                          </span>
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               {customerMutationAllowed && (
                 <fieldset className="border-app-line-2 rounded-control grid gap-3 border border-dashed p-3">
                   <legend className="text-app-muted px-1 text-[13.5px]">
@@ -941,7 +995,9 @@ function OrderForm({
                       <TextInput
                         inputMode="tel"
                         onChange={(event) =>
-                          setNewCustomerPhone(event.target.value)
+                          setNewCustomerPhone(
+                            normalizeCustomerPhoneDraft(event.target.value),
+                          )
                         }
                         value={newCustomerPhone}
                       />
@@ -1071,7 +1127,7 @@ function OrderDetailScreen({
   const [refundOpen, setRefundOpen] = useState(false)
   const [rawHistory, setRawHistory] = useState(false)
   const [draftNotes, setDraftNotes] = useState('')
-  const [draftCustomerId, setDraftCustomerId] = useState('')
+  const [itemsPage, setItemsPage] = useState(1)
   const [paymentDrafts, setPaymentDrafts] = useState([
     { accountId: '', amount: '', currency: '' },
   ])
@@ -1079,7 +1135,6 @@ function OrderDetailScreen({
     setOrder(detail)
     setItemDrafts(detail.items)
     setDraftNotes(detail.notes ?? '')
-    setDraftCustomerId(detail.customerId ?? '')
   }, [])
   const reload = useCallback(
     (signal?: AbortSignal) =>
@@ -1156,6 +1211,17 @@ function OrderDetailScreen({
     const total = lineTotal(item.quantity, item.unitPrice)
     return total === null ? sum : sum + total
   }, 0)
+  const itemsPageSize = 20
+  const visibleItems = (itemsEditable ? itemDrafts : order.items).slice(
+    (itemsPage - 1) * itemsPageSize,
+    itemsPage * itemsPageSize,
+  )
+  const itemsTotalPages = Math.max(
+    1,
+    Math.ceil(
+      (itemsEditable ? itemDrafts.length : order.items.length) / itemsPageSize,
+    ),
+  )
   const paymentsTotal = paymentDrafts.reduce((sum, payment) => {
     const amount = Number(payment.amount)
     return payment.amount && Number.isFinite(amount) ? sum + amount : sum
@@ -1327,33 +1393,6 @@ function OrderDetailScreen({
                       Зберегти нотатки
                     </Button>
                   </div>
-                  <Field
-                    className="min-w-52"
-                    hint="Порожнє поле відв’яже клієнта від замовлення."
-                    label="ID клієнта замовлення"
-                  >
-                    <TextInput
-                      onChange={(event) =>
-                        setDraftCustomerId(event.target.value)
-                      }
-                      value={draftCustomerId}
-                    />
-                  </Field>
-                  <div className="flex flex-wrap gap-2.5">
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        void transition(() =>
-                          ordersApi.setCustomer(
-                            order.id,
-                            draftCustomerId || null,
-                          ),
-                        )
-                      }
-                    >
-                      Зберегти клієнта
-                    </Button>
-                  </div>
                 </div>
               ) : (
                 <p className="text-app-ink text-[15px] leading-[1.55] whitespace-pre-line">
@@ -1416,111 +1455,128 @@ function OrderDetailScreen({
                   </p>
                 )}
                 <ul>
-                  {itemDrafts.map((item, index) => (
-                    <li
-                      className="border-app-line grid gap-3 border-b px-4 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
-                      key={item.id}
-                    >
-                      <div className="min-w-0">
-                        <p className="text-app-ink truncate text-sm font-medium">
-                          {item.partName}
-                        </p>
-                        <p className="text-app-dim mt-0.5 text-[12.5px] tabular-nums">
-                          Сума позиції{' '}
-                          {money(
-                            lineTotal(item.quantity, item.unitPrice),
-                            currency,
-                          )}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-end gap-2">
-                        <div className="grid w-20 gap-1.5">
-                          <span
-                            aria-hidden
-                            className="text-app-dim text-[12.5px]"
-                          >
-                            Кількість
-                          </span>
-                          <TextInput
-                            aria-label={`Кількість ${item.partName}`}
-                            className="text-right"
-                            inputMode="numeric"
-                            onChange={(event) =>
-                              setItemDrafts((current) =>
-                                current.map((draft, draftIndex) =>
-                                  draftIndex === index
-                                    ? {
-                                        ...draft,
-                                        quantity: Number(event.target.value),
-                                      }
-                                    : draft,
-                                ),
-                              )
-                            }
-                            value={item.quantity}
-                          />
+                  {visibleItems.map((item, visibleIndex) => {
+                    const index = (itemsPage - 1) * itemsPageSize + visibleIndex
+                    return (
+                      <li
+                        className="border-app-line grid gap-3 border-b px-4 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+                        key={item.id}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-app-ink truncate text-sm font-medium">
+                            {item.partName}
+                          </p>
+                          <p className="text-app-dim mt-0.5 text-[12.5px] tabular-nums">
+                            Сума позиції{' '}
+                            {money(
+                              lineTotal(item.quantity, item.unitPrice),
+                              currency,
+                            )}
+                          </p>
                         </div>
-                        <div className="grid w-28 gap-1.5">
-                          <span
-                            aria-hidden
-                            className="text-app-dim text-[12.5px]"
-                          >
-                            Ціна
-                          </span>
-                          <TextInput
-                            aria-label={`Ціна ${item.partName}`}
-                            className="text-right"
-                            inputMode="decimal"
-                            onChange={(event) =>
-                              setItemDrafts((current) =>
-                                current.map((draft, draftIndex) =>
-                                  draftIndex === index
-                                    ? {
-                                        ...draft,
-                                        unitPrice: Number(event.target.value),
-                                      }
-                                    : draft,
-                                ),
-                              )
-                            }
-                            value={item.unitPrice}
-                          />
-                        </div>
-                        <Button
-                          aria-label={`Видалити ${item.partName}`}
-                          disabled={busy}
-                          onClick={() =>
-                            void transition(() =>
-                              itemDrafts.length === 1
-                                ? ordersApi.cancel(order.id)
-                                : ordersApi.updateItems(
-                                    order.id,
-                                    itemDrafts
-                                      .filter(
-                                        (_, draftIndex) => draftIndex !== index,
-                                      )
-                                      .map(
-                                        ({ partId, quantity, unitPrice }) => ({
-                                          partId,
-                                          quantity,
-                                          unitPrice,
-                                        }),
-                                      ),
+                        <div className="flex flex-wrap items-end gap-2">
+                          <div className="grid w-20 gap-1.5">
+                            <span
+                              aria-hidden
+                              className="text-app-dim text-[12.5px]"
+                            >
+                              Кількість
+                            </span>
+                            <TextInput
+                              aria-label={`Кількість ${item.partName}`}
+                              className="text-right"
+                              inputMode="numeric"
+                              onChange={(event) =>
+                                setItemDrafts((current) =>
+                                  current.map((draft, draftIndex) =>
+                                    draftIndex === index
+                                      ? {
+                                          ...draft,
+                                          quantity: Number(event.target.value),
+                                        }
+                                      : draft,
                                   ),
-                            )
-                          }
-                          size="icon"
-                          variant="danger"
-                        >
-                          <Trash2 aria-hidden />
-                        </Button>
-                      </div>
-                    </li>
-                  ))}
+                                )
+                              }
+                              value={item.quantity}
+                            />
+                          </div>
+                          <div className="grid w-28 gap-1.5">
+                            <span
+                              aria-hidden
+                              className="text-app-dim text-[12.5px]"
+                            >
+                              Ціна
+                            </span>
+                            <TextInput
+                              aria-label={`Ціна ${item.partName}`}
+                              className="text-right"
+                              inputMode="decimal"
+                              onChange={(event) =>
+                                setItemDrafts((current) =>
+                                  current.map((draft, draftIndex) =>
+                                    draftIndex === index
+                                      ? {
+                                          ...draft,
+                                          unitPrice: Number(event.target.value),
+                                        }
+                                      : draft,
+                                  ),
+                                )
+                              }
+                              value={item.unitPrice}
+                            />
+                          </div>
+                          <Button
+                            aria-label={`Видалити ${item.partName}`}
+                            disabled={busy}
+                            onClick={() =>
+                              void transition(() =>
+                                itemDrafts.length === 1
+                                  ? ordersApi.cancel(order.id)
+                                  : ordersApi.updateItems(
+                                      order.id,
+                                      itemDrafts
+                                        .filter(
+                                          (_, draftIndex) =>
+                                            draftIndex !== index,
+                                        )
+                                        .map(
+                                          ({
+                                            partId,
+                                            quantity,
+                                            unitPrice,
+                                          }) => ({
+                                            partId,
+                                            quantity,
+                                            unitPrice,
+                                          }),
+                                        ),
+                                    ),
+                              )
+                            }
+                            size="icon"
+                            variant="danger"
+                          >
+                            <Trash2 aria-hidden />
+                          </Button>
+                        </div>
+                      </li>
+                    )
+                  })}
                 </ul>
+                {itemDrafts.length > itemsPageSize ? (
+                  <Pagination
+                    label="Пагінація позицій замовлення"
+                    onPage={setItemsPage}
+                    page={itemsPage}
+                    totalPages={itemsTotalPages}
+                  />
+                ) : null}
               </SectionPanel>
             ) : (
               <Card
+                className="order-3"
                 aside={
                   <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
                     {order.items.length}{' '}
@@ -1573,17 +1629,27 @@ function OrderDetailScreen({
                     />
                   }
                   footer={
-                    <div className="border-app-line flex flex-wrap items-baseline justify-end gap-5 border-t px-6 py-4">
-                      <span className="text-app-muted text-sm font-semibold">
-                        Разом
-                      </span>
-                      <span className="text-[20px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
-                        {money(order.totalAmount, currency)}
-                      </span>
+                    <div>
+                      <div className="border-app-line flex flex-wrap items-baseline justify-end gap-5 border-t px-6 py-4">
+                        <span className="text-app-muted text-sm font-semibold">
+                          Разом
+                        </span>
+                        <span className="text-[20px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
+                          {money(order.totalAmount, currency)}
+                        </span>
+                      </div>
+                      {order.items.length > itemsPageSize ? (
+                        <Pagination
+                          label="Пагінація позицій замовлення"
+                          onPage={setItemsPage}
+                          page={itemsPage}
+                          totalPages={itemsTotalPages}
+                        />
+                      ) : null}
                     </div>
                   }
                   rowKey={(item) => item.id}
-                  rows={order.items}
+                  rows={visibleItems}
                 />
               </Card>
             )}

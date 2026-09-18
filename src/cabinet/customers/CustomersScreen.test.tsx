@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -254,6 +260,7 @@ it('offers reuse and reactivation for the documented duplicate-phone conflict', 
   const user = userEvent.setup()
   renderScreen('/app/garage/customers/new')
 
+  expect(screen.getByLabelText('Телефон')).toHaveValue('+380')
   await user.type(screen.getByLabelText('Ім’я'), 'Нова Ірина')
   await user.type(screen.getByLabelText('Телефон'), '+380501112233')
   await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
@@ -407,7 +414,7 @@ it('stops an empty name and an unusable phone at their own fields', async () => 
 
   await user.type(nameField, 'Нова Ірина')
   const phoneField = screen.getByRole('textbox', { name: 'Телефон' })
-  await user.type(phoneField, '050-11')
+  fireEvent.change(phoneField, { target: { value: '+38050' } })
   await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
 
   expect(phoneField).toHaveAttribute('aria-invalid', 'true')

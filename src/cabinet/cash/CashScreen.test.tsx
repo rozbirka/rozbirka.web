@@ -866,11 +866,9 @@ it('creates a register with contract-supported currencies and opening balances',
   )
 
   await user.type(screen.getByLabelText('Назва'), 'Основна каса')
-  await user.type(screen.getByLabelText('Валюти'), 'UAH, USD')
-  await user.type(
-    screen.getByLabelText('Початкові баланси'),
-    'UAH: 1000, USD: 25',
-  )
+  await user.click(screen.getByRole('button', { name: /\$.*USD|USD/ }))
+  await user.type(screen.getByLabelText('Баланс UAH'), '1000')
+  await user.type(screen.getByLabelText('Баланс USD'), '25')
   await user.click(screen.getByRole('button', { name: 'Зберегти' }))
 
   expect(cashMocks.create).toHaveBeenCalledWith({
@@ -1062,7 +1060,11 @@ it('describes register form controls and offers a way out of the form', () => {
   expect(
     screen.getByRole('textbox', { name: 'Назва' }),
   ).toHaveAccessibleDescription('Так каса підписана у звітах і переказах')
-  expect(screen.getByRole('combobox', { name: 'Тип' })).toBeVisible()
+  expect(screen.getByRole('group', { name: 'Тип' })).toBeVisible()
+  expect(screen.getByRole('button', { name: /Готівкова/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
   expect(screen.getByRole('link', { name: 'Скасувати' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Зберегти' })).toBeVisible()
 })

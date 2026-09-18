@@ -198,10 +198,8 @@ it('creates a customer inline before canonical order creation', async () => {
   )
 
   await user.type(screen.getByLabelText('Ім’я нового клієнта'), 'Нова Ірина')
-  await user.type(
-    screen.getByLabelText('Телефон нового клієнта'),
-    '+380501112233',
-  )
+  expect(screen.getByLabelText('Телефон нового клієнта')).toHaveValue('+380')
+  await user.type(screen.getByLabelText('Телефон нового клієнта'), '501112233')
   await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
   await user.type(screen.getByLabelText('ID запчастини'), 'part-1')
   await user.type(screen.getByLabelText('Кількість'), '1')
@@ -455,10 +453,18 @@ it('uses the reusable customer and part searches to populate a canonical order',
   await user.click(
     await screen.findByRole('button', { name: 'Обрати запчастину Ліхтар' }),
   )
+  expect(
+    screen.queryByRole('button', { name: 'Обрати запчастину Ліхтар' }),
+  ).toBeNull()
   await user.type(screen.getByLabelText('Пошук клієнта'), 'Ірина')
   await user.click(
     await screen.findByRole('button', { name: 'Обрати клієнта Ірина' }),
   )
+  expect(
+    screen.queryByRole('button', { name: 'Обрати клієнта Ірина' }),
+  ).toBeNull()
+  expect(screen.getByLabelText('Кількість')).toHaveClass('text-right')
+  expect(screen.getByLabelText('Ціна за одиницю')).toHaveClass('text-right')
   await user.type(screen.getByLabelText('Кількість'), '1')
   await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
@@ -1097,10 +1103,9 @@ it('shows authoritative detail and lets orders.manage edit pending fields and ca
   await user.click(screen.getByRole('button', { name: 'Зберегти нотатки' }))
   expect(orderMocks.updateNotes).toHaveBeenCalledWith('order-1', 'Готово')
 
-  await user.clear(screen.getByLabelText('ID клієнта замовлення'))
-  await user.type(screen.getByLabelText('ID клієнта замовлення'), 'customer-2')
-  await user.click(screen.getByRole('button', { name: 'Зберегти клієнта' }))
-  expect(orderMocks.setCustomer).toHaveBeenCalledWith('order-1', 'customer-2')
+  expect(
+    screen.queryByLabelText('ID клієнта замовлення'),
+  ).not.toBeInTheDocument()
 
   expect(
     screen.queryByRole('button', { name: 'Підтвердити' }),

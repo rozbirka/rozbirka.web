@@ -529,9 +529,9 @@ it('uses the fixed mobile condition vocabulary when creating a part', () => {
   )
 
   const condition = screen.getByRole('combobox', { name: 'Стан' })
-  expect(within(condition).getByRole('option', { name: 'Хороший' })).toHaveValue(
-    'good',
-  )
+  expect(
+    within(condition).getByRole('option', { name: 'Хороший' }),
+  ).toHaveValue('good')
   expect(
     within(condition).getByRole('option', { name: 'Задовільний' }),
   ).toHaveValue('fair')
@@ -1445,9 +1445,7 @@ it('counts every filter value from the server and narrows the search by it', asy
   expect(
     within(conditions).getByRole('button', { name: /На запчастини/i }),
   ).toBeVisible()
-  fireEvent.click(
-    within(conditions).getByRole('button', { name: /Хороший/i }),
-  )
+  fireEvent.click(within(conditions).getByRole('button', { name: /Хороший/i }))
 
   await vi.waitFor(() =>
     expect(partMocks.search).toHaveBeenLastCalledWith(

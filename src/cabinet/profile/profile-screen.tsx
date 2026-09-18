@@ -283,7 +283,6 @@ export function ProfileScreen() {
                 </p>
               </div>
             </Card>
-
           </div>
 
           <div className="grid min-w-0 content-start gap-5">

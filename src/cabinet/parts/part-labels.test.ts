@@ -7,9 +7,9 @@ it('translates all current part history event names', () => {
 })
 
 it('translates filter vocabulary regardless of server casing', () => {
-  expect(conditionLabel('Good')).toBe('б/в')
-  expect(conditionLabel('Fair')).toBe('Задовільна')
-  expect(conditionLabel('Scrap')).toBe('Під відновлення')
+  expect(conditionLabel('Good')).toBe('Хороший')
+  expect(conditionLabel('Fair')).toBe('Задовільний')
+  expect(conditionLabel('Scrap')).toBe('На запчастини')
   expect(originLabel('Car', 'Car')).toBe('З авто')
   expect(originLabel('Batch', 'Batch')).toBe('З партії')
 })
