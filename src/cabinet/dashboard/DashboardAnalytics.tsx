@@ -159,8 +159,7 @@ function AnalyticsContent({
             <Figure
               key={currency}
               label={`Виручка, ${currency}`}
-              unit={currency}
-              value={<Amount currency={null} value={total} />}
+              value={<Amount currency={currency} value={total} />}
             />
           ))
         )}
@@ -305,9 +304,8 @@ function TopPart({
         <p>
           <span className="flex items-baseline gap-1.5">
             <span className="text-[26px] leading-none font-extrabold tracking-[-0.03em] tabular-nums text-white">
-              <Amount currency={null} value={data.revenueUsd} />
+              <Amount currency="USD" value={data.revenueUsd} />
             </span>
-            <span className="text-app-muted font-mono text-xs">USD</span>
           </span>
           <span className="text-app-dim mt-1.5 block text-xs">виручка</span>
         </p>
