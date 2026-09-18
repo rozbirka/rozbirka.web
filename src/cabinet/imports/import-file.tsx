@@ -1,3 +1,4 @@
+import { Upload } from 'lucide-react'
 import { Button, Field, Notice, SelectInput } from '@/components/app'
 import { cn, plural } from '@/lib/utils'
 import type { ReactNode } from 'react'
@@ -168,24 +169,41 @@ export function ImportFileStep({
     return (
       <div className="flex min-w-0 flex-col gap-4">
         <label
-          className="import-drop"
+          className={cn(
+            'border-app-line-2 bg-app-input focus-within:border-brand relative grid cursor-pointer justify-items-center gap-3 rounded-[18px] border border-dashed px-6 py-14 text-center transition-colors',
+            busy ? 'cursor-not-allowed opacity-55' : 'hover:border-app-line-2',
+          )}
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => {
             event.preventDefault()
-            onChooseFile(event.dataTransfer.files[0])
+            if (!busy) onChooseFile(event.dataTransfer.files[0])
           }}
         >
-          <strong>
-            Перетягніть файл {capabilities.formats.join(' або ').toUpperCase()}
+          <span
+            aria-hidden
+            className="border-app-line text-app-muted inline-flex size-12 items-center justify-center rounded-[14px] border"
+          >
+            <Upload className="size-5" />
+          </span>
+          <strong className="text-app-ink text-[16px] font-bold tracking-[-0.01em]">
+            {/* Only the formats are shouted; the word between them is not. */}
+            Перетягніть файл{' '}
+            {capabilities.formats.map((one) => one.toUpperCase()).join(' або ')}
           </strong>
-          <span>
-            або виберіть його — до{' '}
+          <span className="text-app-muted text-[13.5px]">
+            до{' '}
             {String(Math.round(capabilities.limits.maxBytes / (1024 * 1024)))}{' '}
             MiB, до {count(capabilities.limits.maxRows)} рядків
           </span>
+          <span className="border-app-line-2 text-app-ink mt-1 inline-flex min-h-11 items-center rounded-[12px] border px-4 text-[13.5px] font-bold">
+            {file === null ? 'Вибрати файл' : 'Вибрати інший файл'}
+          </span>
+          {/* The real control covers the whole zone: invisible, but focusable
+              and a target the size of the drop area rather than of a word. */}
           <input
             accept={capabilities.formats.map((one) => `.${one}`).join(',')}
             aria-label="Файл імпорту"
+            className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
             disabled={busy}
             onChange={(event) => onChooseFile(event.target.files?.[0])}
             type="file"
