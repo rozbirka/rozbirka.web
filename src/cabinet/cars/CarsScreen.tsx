@@ -64,6 +64,7 @@ import {
   type UpdateCarRequest,
   isCarStatus,
 } from '@/api/cars'
+import { carCatalogApi, type CarCatalogItem } from '@/api/car-catalog'
 import { normalizeApiProblem } from '@/api/errors'
 import {
   mediaApi,
@@ -1585,6 +1586,15 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     }
   }
 
+  // Makes and models come from the same public vehicle catalogue the mobile
+  // form uses. They are suggestions under the field, not a gate: a brand the
+  // catalogue has never heard of is still typed in and saved.
+  const [makes, setMakes] = useState<CarCatalogItem[]>([])
+  const [models, setModels] = useState<{
+    makeId: number
+    items: CarCatalogItem[]
+  } | null>(null)
+
   const bind = (key: keyof typeof values) => ({
     disabled: busy,
     name: key,
@@ -1596,6 +1606,41 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     value: values[key],
   })
   const backTo = carId ? `${base}/${carId}` : base
+  const brandInput = values.brand.trim()
+  const chosenMake = makes.find(
+    (make) => make.name.toLowerCase() === brandInput.toLowerCase(),
+  )
+  const makeId = chosenMake?.id ?? null
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void carCatalogApi
+      .getMakes(controller.signal)
+      .then((list) => {
+        if (!controller.signal.aborted) setMakes(list)
+      })
+      .catch(() => {
+        // Suggestions are a convenience: without them the field is still a
+        // plain input and the form works exactly as before.
+      })
+    return () => controller.abort()
+  }, [])
+
+  useEffect(() => {
+    if (makeId === null) return
+    const controller = new AbortController()
+    void carCatalogApi
+      .getModels(makeId, controller.signal)
+      .then((items) => {
+        if (!controller.signal.aborted) setModels({ makeId, items })
+      })
+      .catch(() => undefined)
+    return () => controller.abort()
+  }, [makeId])
+  // Models belong to the make they were loaded for: a brand typed over leaves
+  // the old list behind instead of offering models of another car.
+  const modelOptions =
+    makeId !== null && models?.makeId === makeId ? models.items : []
   const vinLength = values.vin.trim().length
   const priceNumber = Number(values.purchasePrice)
   const priceValid = Number.isFinite(priceNumber) && priceNumber > 0
@@ -1763,19 +1808,47 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                       required
                     />
                   </Field>
-                  <Field label="Марка" required>
+                  <Field
+                    hint={
+                      makes.length === 0
+                        ? undefined
+                        : 'Почніть писати — список зʼявиться під полем'
+                    }
+                    label="Марка"
+                    required
+                  >
                     <TextInput
                       {...bind('brand')}
+                      list="car-make-options"
                       placeholder="Tesla"
                       required
                     />
+                    <datalist id="car-make-options">
+                      {makes.map((make) => (
+                        <option key={make.id} value={make.name} />
+                      ))}
+                    </datalist>
                   </Field>
-                  <Field label="Модель" required>
+                  <Field
+                    hint={
+                      modelOptions.length === 0
+                        ? undefined
+                        : `Моделі ${chosenMake?.name ?? ''}`.trim()
+                    }
+                    label="Модель"
+                    required
+                  >
                     <TextInput
                       {...bind('model')}
+                      list="car-model-options"
                       placeholder="Model Y"
                       required
                     />
+                    <datalist id="car-model-options">
+                      {modelOptions.map((model) => (
+                        <option key={model.id} value={model.name} />
+                      ))}
+                    </datalist>
                   </Field>
                 </div>
 

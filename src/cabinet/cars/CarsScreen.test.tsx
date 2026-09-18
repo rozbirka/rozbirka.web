@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router'
+import { carCatalogApi } from '@/api/car-catalog'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { carsApi } from '@/api/cars'
 import { mediaApi } from '@/api/media'
@@ -11,6 +12,12 @@ import { CarsScreen, MediaPicker } from './CarsScreen'
 
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are invoked only through their owning singleton. */
 
+vi.mock('@/api/car-catalog', () => ({
+  carCatalogApi: {
+    getMakes: vi.fn(() => Promise.resolve([])),
+    getModels: vi.fn(() => Promise.resolve([])),
+  },
+}))
 vi.mock('@/api/cars', () => ({
   isCarStatus: (value: unknown) => value === 'active' || value === 'archived',
   carsApi: {
@@ -669,8 +676,8 @@ it('retries only remaining initial expenses after partial failure without recrea
   )
 
   await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-001')
-  await user.type(screen.getByRole('textbox', { name: 'Марка' }), 'BMW')
-  await user.type(screen.getByRole('textbox', { name: 'Модель' }), 'X5')
+  await user.type(screen.getByRole('combobox', { name: 'Марка' }), 'BMW')
+  await user.type(screen.getByRole('combobox', { name: 'Модель' }), 'X5')
   await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2020')
   await user.type(
     screen.getByRole('textbox', { name: 'Ціна придбання' }),
@@ -727,8 +734,8 @@ it('validates every initial expense before creating the car', async () => {
   )
 
   await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-001')
-  await user.type(screen.getByRole('textbox', { name: 'Марка' }), 'BMW')
-  await user.type(screen.getByRole('textbox', { name: 'Модель' }), 'X5')
+  await user.type(screen.getByRole('combobox', { name: 'Марка' }), 'BMW')
+  await user.type(screen.getByRole('combobox', { name: 'Модель' }), 'X5')
   await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2020')
   await user.type(
     screen.getByRole('textbox', { name: 'Ціна придбання' }),
@@ -764,8 +771,8 @@ it('rechecks the latest car permission before dispatching create', async () => {
   )
 
   await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-001')
-  await user.type(screen.getByRole('textbox', { name: 'Марка' }), 'BMW')
-  await user.type(screen.getByRole('textbox', { name: 'Модель' }), 'X5')
+  await user.type(screen.getByRole('combobox', { name: 'Марка' }), 'BMW')
+  await user.type(screen.getByRole('combobox', { name: 'Модель' }), 'X5')
   await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2020')
   await user.type(
     screen.getByRole('textbox', { name: 'Ціна придбання' }),
@@ -1060,4 +1067,38 @@ it('opens the gallery viewer and pages through the shots', async () => {
   await waitFor(() =>
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
   )
+})
+
+it('suggests makes and models under the field without forcing the catalogue', async () => {
+  vi.mocked(carCatalogApi.getMakes).mockResolvedValue([
+    { id: 1, name: 'BMW' },
+    { id: 2, name: 'Tesla' },
+  ])
+  vi.mocked(carCatalogApi.getModels).mockResolvedValue([
+    { id: 11, name: 'X5' },
+    { id: 12, name: 'X7' },
+  ])
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/demo/cars/new']}>
+      <Routes>
+        <Route path="/app/:tenant/cars/new" element={<CarsScreen />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const brand = await screen.findByRole('combobox', { name: 'Марка' })
+  await user.type(brand, 'BMW')
+  // The models load for the make that was typed, and stay under the field.
+  await waitFor(() =>
+    expect(carCatalogApi.getModels).toHaveBeenCalledWith(1, expect.anything()),
+  )
+  expect(
+    await screen.findByText('Моделі BMW', { exact: false }),
+  ).toBeInTheDocument()
+
+  // A brand the catalogue has never heard of is still accepted as typed.
+  await user.clear(brand)
+  await user.type(brand, 'Богдан')
+  expect(brand).toHaveValue('Богдан')
 })
