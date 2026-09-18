@@ -1387,9 +1387,15 @@ it('counts every filter value from the server and narrows the search by it', asy
   const conditions = await screen.findByRole('region', { name: 'Стан деталі' })
   // The numbers are the server's, counted under the rest of the filter.
   expect(
-    within(conditions).getByRole('button', { name: /good/ }),
+    within(conditions).getByRole('button', { name: /б\/в/i }),
   ).toHaveTextContent('812')
-  fireEvent.click(within(conditions).getByRole('button', { name: /good/ }))
+  expect(
+    within(conditions).getByRole('button', { name: /Задовільна/i }),
+  ).toBeVisible()
+  expect(
+    within(conditions).getByRole('button', { name: /Під відновлення/i }),
+  ).toBeVisible()
+  fireEvent.click(within(conditions).getByRole('button', { name: /б\/в/i }))
 
   await vi.waitFor(() =>
     expect(partMocks.search).toHaveBeenLastCalledWith(
@@ -1402,6 +1408,12 @@ it('counts every filter value from the server and narrows the search by it', asy
     expect.anything(),
     expect.anything(),
   )
+
+  const origins = screen.getByRole('region', { name: 'Походження' })
+  expect(within(origins).getByRole('button', { name: /З авто/i })).toBeVisible()
+  expect(
+    within(origins).getByRole('button', { name: /З партії/i }),
+  ).toBeVisible()
 })
 
 it('opens the model filter only once a make is chosen', async () => {

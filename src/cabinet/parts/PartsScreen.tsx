@@ -919,7 +919,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                   count={value.count}
                   dot="bg-transparent"
                   key={value.id}
-                  label={value.name || value.id}
+                  label={conditionLabel(value.id)}
                   onSelect={() => updateFilter('condition', value.id)}
                 />
               ))}

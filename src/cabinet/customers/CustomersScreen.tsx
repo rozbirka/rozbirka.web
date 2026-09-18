@@ -287,7 +287,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
                 <button
                   aria-checked={active}
                   className={cn(
-                    'focus-visible:outline-brand flex min-h-11 cursor-pointer items-baseline gap-2 rounded-[9px] px-3.5 text-[14px] font-semibold',
+                    'focus-visible:outline-brand flex min-h-11 cursor-pointer items-center gap-2 rounded-[9px] px-3.5 text-[14px] font-semibold',
                     active
                       ? 'text-app-ink bg-white/[0.09]'
                       : 'text-app-muted hover:bg-white/[0.05]',
@@ -298,7 +298,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
                   type="button"
                 >
                   {option.label}{' '}
-                  <span className="text-app-muted font-mono text-[12px] leading-none font-medium tabular-nums">
+                  <span className="text-app-muted font-mono text-[12px] font-medium">
                     {counts[option.value]}
                   </span>
                 </button>

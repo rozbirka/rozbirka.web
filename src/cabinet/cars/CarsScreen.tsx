@@ -2245,7 +2245,7 @@ function NewCarExpenses({
             return (
               <li
                 className={cn(
-                  'grid gap-3 py-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] sm:items-end',
+                  'grid gap-3 py-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] sm:items-start',
                   index > 0 && 'border-app-line border-t',
                 )}
                 key={expense.id}
@@ -2290,7 +2290,7 @@ function NewCarExpenses({
                     value={expense.amount}
                   />
                 </Field>
-                <div className="flex items-center justify-end gap-2 pb-0.5">
+                <div className="flex items-center justify-end gap-2 sm:pt-[27px]">
                   {saved ? <StatusPill tone="ok">Збережено</StatusPill> : null}
                   <Button
                     aria-label={`Прибрати витрату ${String(index + 1)}`}

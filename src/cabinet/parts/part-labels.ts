@@ -11,13 +11,17 @@ export const conditionLabel = (value: string) =>
     scrap: 'Під відновлення',
     refurbished: 'Відновлена',
     damaged: 'Пошкоджена',
-  })[value] ?? value
+  })[value.toLowerCase()] ?? value
 
 export const sourceLabel = (value: string) =>
-  ({ car: 'Авто', batch: 'Приймання', free: 'Без джерела' })[value] ?? value
+  ({ car: 'Авто', batch: 'Приймання', free: 'Без джерела' })[
+    value.toLowerCase()
+  ] ?? value
 
 export const originLabel = (id: string, name: string) =>
-  (({ car: 'З авто', batch: 'З партії', free: 'Вільна' })[id] ?? name) || id
+  (({ car: 'З авто', batch: 'З партії', free: 'Вільна' })[id.toLowerCase()] ??
+    name) ||
+  id
 
 /** Event names from the part history, in plain words. */
 export const historyLabel = (value: string) =>
