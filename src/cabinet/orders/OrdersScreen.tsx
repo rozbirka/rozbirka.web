@@ -220,8 +220,11 @@ const ORDER_STATUS_FILTERS = [
 /** Statuses whose money never reached the till. */
 const UNPAID_STATUSES = new Set(['cancelled', 'refunded'])
 
-const orderMoney = (value: number | null) =>
-  value === null ? '—' : `${new Intl.NumberFormat('uk-UA').format(value)} $`
+/** A sum that never came back is an em dash — never NaN, never «undefined». */
+const orderMoney = (value: number | null | undefined) =>
+  typeof value === 'number' && Number.isFinite(value)
+    ? `${new Intl.NumberFormat('uk-UA').format(value)} $`
+    : '—'
 
 function OrderDirectory({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
