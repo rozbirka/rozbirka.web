@@ -709,23 +709,25 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
               Деталі
             </h1>
           </div>
-          {manageDecision.kind === 'allowed' ? (
-            <Button asChild>
-              <Link to="imports">Імпорт запчастин</Link>
-            </Button>
-          ) : null}
-          {createDecision.kind === 'allowed' ? (
-            <Button
-              asChild
-              className="px-5 text-sm font-bold"
-              variant="primary"
-            >
-              <Link to="new">
-                <Plus aria-hidden />
-                Додати деталь
-              </Link>
-            </Button>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {manageDecision.kind === 'allowed' ? (
+              <Button asChild>
+                <Link to="imports">Імпорт запчастин</Link>
+              </Button>
+            ) : null}
+            {createDecision.kind === 'allowed' ? (
+              <Button
+                asChild
+                className="px-5 text-sm font-bold"
+                variant="primary"
+              >
+                <Link to="new">
+                  <Plus aria-hidden />
+                  Додати деталь
+                </Link>
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         <span className="border-app-line bg-app-raised focus-within:border-app-line-2 flex h-13 items-center gap-3 rounded-[14px] border px-4">

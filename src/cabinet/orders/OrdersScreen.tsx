@@ -1296,64 +1296,6 @@ function OrderDetailScreen({
 
         <div className="flex flex-wrap-reverse items-end gap-6">
           <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
-            <Card title="Нотатки">
-              {itemsEditable ? (
-                <div className="grid gap-3">
-                  <Field label="Нотатки замовлення">
-                    <TextArea
-                      onChange={(event) => setDraftNotes(event.target.value)}
-                      value={draftNotes}
-                    />
-                  </Field>
-                  <div className="flex flex-wrap items-end gap-2.5">
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        void transition(() =>
-                          ordersApi.updateNotes(order.id, draftNotes),
-                        )
-                      }
-                    >
-                      Зберегти нотатки
-                    </Button>
-                  </div>
-                  <Field
-                    className="min-w-52"
-                    hint="Порожнє поле відв’яже клієнта від замовлення."
-                    label="ID клієнта замовлення"
-                  >
-                    <TextInput
-                      onChange={(event) =>
-                        setDraftCustomerId(event.target.value)
-                      }
-                      value={draftCustomerId}
-                    />
-                  </Field>
-                  <div className="flex flex-wrap gap-2.5">
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        void transition(() =>
-                          ordersApi.setCustomer(
-                            order.id,
-                            draftCustomerId || null,
-                          ),
-                        )
-                      }
-                    >
-                      Зберегти клієнта
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-app-ink text-[15px] leading-[1.55] whitespace-pre-line">
-                  {order.notes === null || order.notes === ''
-                    ? 'Нотаток немає.'
-                    : order.notes}
-                </p>
-              )}
-            </Card>
-
             {itemsEditable ? (
               <SectionPanel
                 aside={
@@ -1758,6 +1700,64 @@ function OrderDetailScreen({
                 rowKey={(payment) => payment.id}
                 rows={order.payments}
               />
+            </Card>
+
+            <Card title="Нотатки">
+              {itemsEditable ? (
+                <div className="grid gap-3">
+                  <Field label="Нотатки замовлення">
+                    <TextArea
+                      onChange={(event) => setDraftNotes(event.target.value)}
+                      value={draftNotes}
+                    />
+                  </Field>
+                  <div className="flex flex-wrap items-end gap-2.5">
+                    <Button
+                      disabled={busy}
+                      onClick={() =>
+                        void transition(() =>
+                          ordersApi.updateNotes(order.id, draftNotes),
+                        )
+                      }
+                    >
+                      Зберегти нотатки
+                    </Button>
+                  </div>
+                  <Field
+                    className="min-w-52"
+                    hint="Порожнє поле відв’яже клієнта від замовлення."
+                    label="ID клієнта замовлення"
+                  >
+                    <TextInput
+                      onChange={(event) =>
+                        setDraftCustomerId(event.target.value)
+                      }
+                      value={draftCustomerId}
+                    />
+                  </Field>
+                  <div className="flex flex-wrap gap-2.5">
+                    <Button
+                      disabled={busy}
+                      onClick={() =>
+                        void transition(() =>
+                          ordersApi.setCustomer(
+                            order.id,
+                            draftCustomerId || null,
+                          ),
+                        )
+                      }
+                    >
+                      Зберегти клієнта
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-app-ink text-[15px] leading-[1.55] whitespace-pre-line">
+                  {order.notes === null || order.notes === ''
+                    ? 'Нотаток немає.'
+                    : order.notes}
+                </p>
+              )}
             </Card>
           </div>
 

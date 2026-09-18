@@ -678,10 +678,10 @@ it('retries only remaining initial expenses after partial failure without recrea
   )
   await user.click(screen.getByRole('button', { name: 'Додати витрату' }))
   await user.type(screen.getByLabelText('Назва витрати 1'), 'Доставка')
-  await user.type(screen.getByLabelText('Сума витрати 1'), '500')
+  await user.type(screen.getByLabelText('Сума, $ витрати 1'), '500')
   await user.click(screen.getByRole('button', { name: 'Додати витрату' }))
   await user.type(screen.getByLabelText('Назва витрати 2'), 'Мито')
-  await user.type(screen.getByLabelText('Сума витрати 2'), '250')
+  await user.type(screen.getByLabelText('Сума, $ витрати 2'), '250')
   await user.click(
     screen.getAllByRole('button', { name: 'Створити автомобіль' })[0]!,
   )

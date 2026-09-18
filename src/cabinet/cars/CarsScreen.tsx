@@ -2233,11 +2233,9 @@ function NewCarExpenses({
                     value={expense.name}
                   />
                 </Field>
-                <Field
-                  hint={index === 0 ? 'У доларах' : undefined}
-                  label="Сума"
-                  srLabel={`витрати ${String(index + 1)}`}
-                >
+                {/* The currency rides in the label: a hint under the first
+                    row only would push «Назва» and «Сума» out of line. */}
+                <Field label="Сума, $" srLabel={`витрати ${String(index + 1)}`}>
                   <TextInput
                     className="font-mono"
                     disabled={busy || saved}
