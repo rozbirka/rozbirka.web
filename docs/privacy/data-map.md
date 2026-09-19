@@ -6,13 +6,14 @@ copy must match its factual sections and version. No reviewer-specific variant.
 
 ## Code-supported processing
 
-| Data                                                                       | Purpose / source                                                | Service boundary                                                       |
-| -------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Phone, name, account identifier, membership                                | Core Users/auth, OTP login, permissions                         | Google Cloud Core/database; Cloudflare trusted auth relay; Twilio SMS  |
-| IP address and session identifiers                                         | Trusted edge request metadata, rate limiting and authentication | Cloudflare Worker; Core Redis and refresh-session store                |
-| Company inventory, orders, customer information, finance, photos/documents | Shared business records and storage                             | Core/Google Cloud; Cloudflare request delivery                         |
-| Payment identifiers, status, card mask and payment token                   | Subscription and payment accounting                             | Core Mono billing integration / Monobank                               |
-| Existing store subscription identifiers/status/history                     | Historical Apple/Google billing reconciliation where applicable | Core RevenueCat events/subscriber integration; Apple/Google/RevenueCat |
+| Data                                                                       | Purpose / source                                                | Service boundary                                                        |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Phone, name, account identifier, membership                                | Core Users/auth, OTP login, permissions                         | Google Cloud Core/database; Cloudflare trusted auth relay; Twilio SMS   |
+| IP address and session identifiers                                         | Trusted edge request metadata, rate limiting and authentication | Cloudflare Worker; Core Redis and refresh-session store                 |
+| Company inventory, orders, customer information, finance, photos/documents | Shared business records and storage                             | Core/Google Cloud; Cloudflare request delivery                          |
+| Payment identifiers, status, card mask and payment token                   | Subscription and payment accounting                             | Core Mono billing integration / Monobank                                |
+| Existing store subscription identifiers/status/history                     | Historical Apple/Google billing reconciliation where applicable | Core RevenueCat events/subscriber integration; Apple/Google/RevenueCat  |
+| Vehicle catalog parameters, VIN and network metadata                       | Direct client catalog/decoding requests                         | NHTSA vPIC; Mobile `src/api/vinDecode.ts`, Web `src/api/car-catalog.ts` |
 
 Relevant Core source: `AuthModule/Auth/TwilioSmsService.cs`,
 `AuthModule/Auth/PostgresRefreshSessionStore.cs`, Billing/RevenueCatSubscriberClient,
