@@ -8,14 +8,11 @@ import {
 import { LogOut } from 'lucide-react'
 import { Button, DateValue, Field, Notice, TextInput } from '@/components/app'
 import { useAuth } from '@/auth/AuthContext'
-import { credentials } from '@/api/credentials'
-import { profileApi } from '@/api/profile'
-import { tenantPreference } from '@/api/tenant-preference'
+import { AccountDeletion } from '@/components/account/account-deletion'
 import { useCabinet } from '../CabinetContext'
 import { RedesignShell, RedesignTitle } from '../redesign-shell'
 
 type SaveState = 'idle' | 'pending' | 'success' | 'error'
-type DeleteState = 'idle' | 'confirming' | 'pending' | 'error'
 
 const FORM_ID = 'profile-form'
 
@@ -69,33 +66,15 @@ export function ProfileScreen() {
   const [name, setName] = useState(currentName)
   const [savedName, setSavedName] = useState(currentName.trim())
   const [saveState, setSaveState] = useState<SaveState>('idle')
-  const [deleteState, setDeleteState] = useState<DeleteState>('idle')
   const mountedRef = useRef(true)
-  const deleteRequestRef = useRef<AbortController | null>(null)
-  const deletionDispatchedRef = useRef(false)
-  const privateStateClearedRef = useRef(false)
   const authRef = useRef(auth)
   const profileGenerationRef = useRef(0)
-
-  function clearPrivateState() {
-    if (privateStateClearedRef.current) return
-    privateStateClearedRef.current = true
-    credentials.clear()
-    tenantPreference.clear()
-    void auth.signOut({ silent: true }).catch(() => undefined)
-  }
 
   useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
-      if (deletionDispatchedRef.current) {
-        deleteRequestRef.current?.abort('profile-unmounted')
-        deleteRequestRef.current = null
-        clearPrivateState()
-      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- cleanup must run only on unmount, using the latest render closure is not required after deletion dispatch.
   }, [])
 
   useEffect(() => {
@@ -149,27 +128,6 @@ export function ProfileScreen() {
       }
       setSaveState('error')
     }
-  }
-
-  const handleDelete = async () => {
-    if (deleteState !== 'confirming') return
-
-    const controller = new AbortController()
-    deleteRequestRef.current = controller
-    deletionDispatchedRef.current = true
-    setDeleteState('pending')
-    let deletionFailed = false
-    try {
-      await profileApi.deleteAccount({ signal: controller.signal })
-    } catch {
-      deletionFailed = true
-    } finally {
-      clearPrivateState()
-      if (deleteRequestRef.current === controller) {
-        deleteRequestRef.current = null
-      }
-    }
-    if (deletionFailed && mountedRef.current) setDeleteState('error')
   }
 
   const role = cabinet.snapshot?.role
@@ -435,59 +393,7 @@ export function ProfileScreen() {
             </p>
           </Card>
 
-          <section className="border-state-danger/30 bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5">
-            <h2 className="text-app-ink text-[15px] font-bold">
-              Видалити акаунт
-            </h2>
-            <p className="text-app-muted mt-2.5 text-[13px] leading-5 text-pretty">
-              Цю дію неможливо скасувати. Ви втратите доступ до всіх розбірок.
-            </p>
-            {deleteState === 'error' && (
-              <div className="mt-3">
-                <Notice tone="danger">
-                  Не вдалося видалити акаунт. Спробуйте ще раз.
-                </Notice>
-              </div>
-            )}
-            {deleteState === 'confirming' || deleteState === 'pending' ? (
-              <div
-                aria-labelledby="delete-account-title"
-                aria-live="polite"
-                className="border-state-danger/30 rounded-panel mt-3.5 grid gap-3 border p-4"
-                role="group"
-              >
-                <p className="text-sm text-white" id="delete-account-title">
-                  Підтвердіть видалення акаунта. Ця дія незворотна.
-                </p>
-                {deleteState === 'pending' ? (
-                  <p className="text-app-muted text-sm" role="status">
-                    Видалення розпочато. Локальний вихід буде виконано для
-                    безпеки.
-                  </p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    <Button onClick={() => setDeleteState('idle')}>
-                      Скасувати
-                    </Button>
-                    <Button
-                      onClick={() => void handleDelete()}
-                      variant="danger"
-                    >
-                      Так, видалити акаунт
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <Button
-                className="mt-3.5 w-full justify-center"
-                onClick={() => setDeleteState('confirming')}
-                variant="danger"
-              >
-                Видалити акаунт
-              </Button>
-            )}
-          </section>
+          <AccountDeletion key={auth.user?.id} />
         </div>
       </div>
     </RedesignShell>

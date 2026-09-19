@@ -20,3 +20,7 @@ the cabinet's cards, auto-fit plan grid, status tones and mutation gates.
 Behavior and component ownership are recorded in `UX-CONTRACT.md`. Scope this
 record to touched auth/billing flows; it is not a claim that older screens have
 all been audited.
+
+Legal pages retain existing type/colors and readable long-form layout, with plain
+text branding and mailto contacts only. Personal account controls use app Button
+and Notice primitives and remain accessible outside company entitlement gates.

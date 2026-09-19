@@ -141,3 +141,14 @@ describe('production route boundary', () => {
     },
   )
 })
+
+it('keeps personal account controls outside tenant and entitlement providers', async () => {
+  const route = createAppRoutes(false).find(
+    (item) => item.path === '/account/security',
+  )!
+  const loaded = await loadRoute(route)
+  expect(elementTypeNames(loaded.element)).toEqual([
+    'RequireAuth',
+    'AccountSecurityScreen',
+  ])
+})

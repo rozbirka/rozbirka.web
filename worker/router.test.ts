@@ -169,7 +169,7 @@ describe('edge routing', () => {
     expect(await response.text()).toContain('branded 404')
   })
 
-  it.each(['/privacy', '/login', '/account'])(
+  it.each(['/privacy', '/login', '/account', '/account/security'])(
     'serves the SPA shell for %s',
     async (path) => {
       const response = await handleRequest(

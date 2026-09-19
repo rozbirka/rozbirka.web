@@ -315,6 +315,9 @@ export function TenantOnboardingScreen() {
       <header className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-10">
         <BrandLogo />
         <div className="flex flex-wrap items-center gap-3">
+          <Link to="/account/security" className="text-brand underline">
+            Особистий акаунт
+          </Link>
           {/* Not uppercased: in the mono face «З» and «3» are the same glyph,
               and «КРОК 1 З 4» reads as a broken number. */}
           <span className="text-app-dim text-[13px]">

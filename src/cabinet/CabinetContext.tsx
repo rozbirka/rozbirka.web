@@ -473,7 +473,15 @@ export function CabinetProvider({ children }: { children: ReactNode }) {
 function ShellFrame({ children }: { children: ReactNode }) {
   return (
     <div className="bg-app-canvas grid min-h-dvh place-items-center px-4 py-10">
-      <div className="w-full max-w-md">{children}</div>
+      <div className="w-full max-w-md">
+        {children}
+        <Link
+          to="/account/security"
+          className="text-brand mt-6 inline-block underline"
+        >
+          Особистий акаунт
+        </Link>
+      </div>
     </div>
   )
 }

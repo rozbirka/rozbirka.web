@@ -1,20 +1,11 @@
-import { Link } from 'react-router'
-import { BrandLogo } from '@/components/site/brand-logo'
-
 export function PrivacyScreen() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border/40">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-5">
-          <Link to="/" aria-label="Rozbirka">
-            <BrandLogo />
-          </Link>
-          <Link
-            to="/"
-            className="text-sm font-medium text-muted-foreground hover:text-foreground"
-          >
-            На головну →
-          </Link>
+        <div className="mx-auto max-w-4xl px-6 py-5">
+          <span className="text-brand text-2xl font-semibold tracking-tight">
+            rozbirka
+          </span>
         </div>
       </header>
 
@@ -26,7 +17,7 @@ export function PrivacyScreen() {
           Як ми поводимось з даними
         </h1>
         <p className="mt-3 text-sm text-muted-foreground">
-          Чинна з: 06 червня 2026 р.
+          Версія від 19 вересня 2026 р.
         </p>
 
         <div className="prose-content mt-12 space-y-10 text-[15px] leading-relaxed text-foreground/85">
@@ -37,7 +28,7 @@ export function PrivacyScreen() {
             <p>
               Rozbirka — платформа для обліку діяльності авторозбірок: облік
               авто, складу запчастин, замовлень, кас і команди. Доступна як
-              веб-застосунок на rozbirka.com та мобільний додаток для iOS.
+              веб-застосунок та мобільний застосунок.
             </p>
             <p className="mt-3">
               Контролером даних (data controller) щодо персональних даних
@@ -70,13 +61,15 @@ export function PrivacyScreen() {
               <li>
                 <strong>Платіжні дані:</strong> для оплати підписки ми не
                 зберігаємо номери карток. Платежі обробляє{' '}
-                <strong>Monobank (Mono Acquiring)</strong> згідно з PCI DSS. Ми
-                отримуємо тільки маскований номер картки (останні 4 цифри) та
-                платіжний токен.
+                <strong>Monobank (Mono Acquiring)</strong>. Ми зберігаємо
+                ідентифікатори та статуси платежів, відомості про підписку,
+                масковані реквізити картки й платіжні токени, які надає
+                платіжний сервіс.
               </li>
               <li>
-                <strong>Технічні дані:</strong> IP-адреса, тип пристрою, версія
-                ОС, журнал входів/дій — для безпеки та усунення помилок.
+                <strong>Технічні дані:</strong> IP-адреса, ідентифікатори
+                акаунта та сеансів, технічні журнали запитів і дій — для безпеки
+                та усунення помилок.
               </li>
             </ul>
           </section>
@@ -120,12 +113,15 @@ export function PrivacyScreen() {
                 на захищених серверах.
               </li>
               <li>
-                <strong>SMS-провайдер</strong> — для доставки одноразових кодів
-                авторизації на номер телефону.
+                <strong>Twilio (SMS-провайдер)</strong> — для доставки
+                одноразових кодів авторизації на номер телефону.
               </li>
               <li>
-                <strong>Apple / Google</strong> — для розповсюдження мобільного
-                застосунку та аналітики аварій (опційно).
+                <strong>Apple, Google та RevenueCat</strong> — якщо підписку
+                раніше було оформлено через магазин застосунків, відомості про
+                її статус та історію платежів можуть оброблятися для обліку вже
+                оформленого доступу. Це не означає, що нові покупки доступні в
+                поточному мобільному застосунку.
               </li>
               <li>
                 <strong>Державні органи</strong> — лише на вимогу законодавства
@@ -139,10 +135,25 @@ export function PrivacyScreen() {
               5. Скільки ми зберігаємо ваші дані
             </h2>
             <p>
-              Дані зберігаються, поки активний ваш обліковий запис. Після
-              видалення акаунту персональні дані видаляються або знеособлюються
-              впродовж 30 днів, окрім випадків коли законодавство (бухгалтерія,
-              податковий облік) вимагає тривалішого зберігання.
+              Після успішного видалення акаунта сервіс видаляє його телефон,
+              ім’я, активні сеанси та членства в компаніях. Історичні посилання
+              на автора бізнес-операцій замінюються нейтральним записом без
+              імені й телефону. Спільні записи компанії, документи та медіа не
+              видаляються разом з особистим акаунтом: вони належать до обліку
+              компанії та потребують окремого розгляду.
+            </p>
+            <p className="mt-3">
+              Технічна позначка видаленого акаунта не містить його імені або
+              телефону й використовується для запобігання відновленню старого
+              доступу. Видалення з робочої бази не означає негайне стирання
+              резервних копій або записів у платіжних та інших постачальників.
+              Питання про ці дані й застосовні вимоги до їх зберігання можна
+              надіслати на контактну адресу нижче.
+            </p>
+            <p className="mt-3">
+              Видалення особистого акаунта не скасовує підписку компанії або
+              раніше оформлену підписку магазину застосунків. Керування такою
+              підпискою відбувається окремо у відповідного постачальника.
             </p>
           </section>
 
@@ -159,8 +170,9 @@ export function PrivacyScreen() {
                 через налаштування акаунту або написавши нам.
               </li>
               <li>
-                <strong>Видалення:</strong> видалити обліковий запис разом з
-                усіма пов'язаними даними.
+                <strong>Видалення:</strong> видалити особистий акаунт у
+                налаштуваннях застосунку або звернутися до підтримки. Обсяг
+                видалення й винятки для спільних даних описані вище.
               </li>
               <li>
                 <strong>Експорт:</strong> отримати ваші дані у машинно-читаному
@@ -179,7 +191,7 @@ export function PrivacyScreen() {
               >
                 support@rozbirka.com
               </a>
-              . Ми відповімо протягом 30 днів.
+              .
             </p>
           </section>
 
@@ -188,10 +200,10 @@ export function PrivacyScreen() {
               7. Безпека
             </h2>
             <p>
-              Усе передається через HTTPS (TLS 1.2+). Паролі/токени зберігаємо в
-              захешованому вигляді. Регулярно оновлюємо залежності й моніторимо
-              доступ. Жодна система не дає 100% гарантії, але ми застосовуємо
-              галузеві стандарти захисту.
+              Сервіс використовує HTTPS для передавання даних, одноразові коди
+              для входу та перевірку прав доступу до даних компанії. Сеанси
+              відкликаються під час видалення акаунта. Жодна система не дає
+              абсолютної гарантії безпеки.
             </p>
           </section>
 
@@ -212,9 +224,8 @@ export function PrivacyScreen() {
               9. Зміни цієї політики
             </h2>
             <p>
-              Якщо ми внесемо суттєві зміни, повідомимо вас через email або
-              сповіщенням у застосунку щонайменше за 14 днів до набрання
-              чинності. Поточну версію завжди можна знайти за цією адресою.
+              Поточна версія політики та дата її оновлення доступні за цією
+              адресою.
             </p>
           </section>
 
@@ -248,14 +259,17 @@ export function PrivacyScreen() {
               Monobank to process subscription payments and don't store card
               numbers ourselves. We never sell your data or use it for
               advertising. You can request access, correction, export, or
-              deletion at any time by emailing{' '}
+              deletion by emailing{' '}
               <a
                 href="mailto:support@rozbirka.com"
                 className="text-brand underline-offset-2 hover:underline"
               >
                 support@rozbirka.com
               </a>
-              .
+              . Successful account deletion removes personal account identity,
+              sessions and memberships; shared company records and media remain.
+              Backups and provider records are handled separately. Deleting an
+              account does not cancel an existing company or store subscription.
             </p>
           </section>
         </div>

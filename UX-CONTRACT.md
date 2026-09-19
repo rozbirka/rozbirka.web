@@ -24,3 +24,11 @@ and ended-access users can start web checkout when Core's flags permit it.
 Only a confirmed server trial deadline is displayed. Pending unexpired invoices
 can be reopened; expired invoices require a new checkout. Existing tenant and
 permission gates remain authoritative.
+
+Personal account controls live at `/account/security`, protected only by login.
+They do not mount company or entitlement providers. Onboarding, active cabinet,
+and cabinet recovery states link to this route. `AccountDeletion` owns the same
+confirmation in the cabinet profile and standalone account page. Only confirmed
+successful deletion clears the matching session; failures retain retry and stale
+responses never clear a newer owner. Shared company records and subscriptions
+are explicitly distinguished from personal identity deletion.

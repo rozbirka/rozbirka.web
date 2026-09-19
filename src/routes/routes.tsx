@@ -278,6 +278,21 @@ export function createAppRoutes(
       },
     },
     {
+      path: '/account/security',
+      hydrateFallbackElement,
+      lazy: async () => {
+        const { AccountSecurityScreen } =
+          await import('@/screens/account-security')
+        return {
+          element: (
+            <RequireAuth>
+              <AccountSecurityScreen />
+            </RequireAuth>
+          ),
+        }
+      },
+    },
+    {
       path: '/account',
       hydrateFallbackElement,
       lazy: async () => {

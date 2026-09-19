@@ -220,7 +220,7 @@ it('requires a second destructive confirmation before deleting the account', asy
   expect(signOut).toHaveBeenCalledWith({ silent: true })
 })
 
-it('clears the local session fail-safe when account deletion is ambiguous', async () => {
+it('preserves the local session when account deletion fails', async () => {
   vi.mocked(profileApi.deleteAccount).mockRejectedValue(new Error('offline'))
   credentials.setAccess('private-access')
   tenantPreference.set(tenant.id)
@@ -233,9 +233,9 @@ it('clears the local session fail-safe when account deletion is ambiguous', asyn
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Не вдалося видалити акаунт. Спробуйте ще раз.',
   )
-  expect(signOut).toHaveBeenCalledWith({ silent: true })
-  expect(credentials.getAccess()).toBeNull()
-  expect(tenantPreference.get()).toBeNull()
+  expect(signOut).not.toHaveBeenCalled()
+  expect(credentials.getAccess()).toBe('private-access')
+  expect(tenantPreference.get()).toBe(tenant.id)
 })
 
 it('clears local private state after deletion even when sign-out rejects', async () => {
@@ -255,7 +255,7 @@ it('clears local private state after deletion even when sign-out rejects', async
   expect(screen.queryByRole('alert')).toBeNull()
 })
 
-it('clears local private state when a dispatched account deletion is aborted by unmount', async () => {
+it('preserves private state after unmount until deletion is confirmed', async () => {
   const pending = deferred<void>()
   vi.mocked(profileApi.deleteAccount).mockReturnValue(pending.promise)
   credentials.setAccess('private-access')
@@ -267,9 +267,9 @@ it('clears local private state when a dispatched account deletion is aborted by 
   await user.click(screen.getByRole('button', { name: 'Так, видалити акаунт' }))
   view.unmount()
 
-  expect(credentials.getAccess()).toBeNull()
-  expect(tenantPreference.get()).toBeNull()
-  expect(signOut).toHaveBeenCalledWith({ silent: true })
+  expect(credentials.getAccess()).toBe('private-access')
+  expect(tenantPreference.get()).toBe(tenant.id)
+  expect(signOut).not.toHaveBeenCalled()
   await act(() => {
     pending.reject(new DOMException('Aborted', 'AbortError'))
     return pending.promise.catch(() => undefined)
@@ -287,7 +287,7 @@ it('does not offer cancellation after account deletion has been dispatched', asy
 
   expect(screen.queryByRole('button', { name: 'Скасувати' })).toBeNull()
   expect(screen.getByRole('status')).toHaveTextContent(
-    'Видалення розпочато. Локальний вихід буде виконано для безпеки.',
+    'Видалення акаунта… Дочекайтеся підтвердження.',
   )
   await act(() => {
     pending.reject(new Error('offline'))
@@ -360,4 +360,21 @@ it('shows the profile controls the identity service cannot back as disabled', ()
   })
   expect(sessions).toBeDisabled()
   expect(sessions.title).toContain('Переліку сеансів поки немає')
+})
+
+it('does not clear a newer session after old-account deletion completes', async () => {
+  const pending = deferred<void>()
+  vi.mocked(profileApi.deleteAccount).mockReturnValue(pending.promise)
+  credentials.startSession('A')
+  const user = userEvent.setup()
+  render(<ProfileScreen />)
+  await user.click(screen.getByRole('button', { name: 'Видалити акаунт' }))
+  await user.click(screen.getByRole('button', { name: 'Так, видалити акаунт' }))
+  credentials.startSession('B')
+  await act(async () => {
+    pending.resolve()
+    await pending.promise
+  })
+  expect(credentials.getAccess()).toBe('B')
+  expect(signOut).not.toHaveBeenCalled()
 })
