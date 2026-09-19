@@ -226,3 +226,60 @@ it('normalizes a synchronous refresh failure and releases the flight', async () 
   )
   expect(refresh).toHaveBeenCalledTimes(2)
 })
+
+it.each(['success', 'failure'])(
+  'ignores stale refresh %s after a new login',
+  async (outcome) => {
+    const { credentials } = await import('./credentials')
+    credentials.startSession('A')
+    let resolve!: (token: string) => void
+    let reject!: (error: Error) => void
+    const setAccess = vi.fn()
+    const clearAccess = vi.fn()
+    const replay = vi.fn()
+    const coordinator = createRefreshCoordinator({
+      refresh: () =>
+        new Promise<string>((yes, no) => {
+          resolve = yes
+          reject = no
+        }),
+      setAccess,
+      clearAccess,
+      replay,
+    })
+    const pending = coordinator.recover(unauthorized('/auth/me/name'))
+    const rejected = expect(pending).rejects.toMatchObject({
+      code: 'ERR_CANCELED',
+    })
+    credentials.startSession('B')
+    if (outcome === 'success') resolve('A-refreshed')
+    else reject(new Error('expired A'))
+    await rejected
+    expect(setAccess).not.toHaveBeenCalled()
+    expect(clearAccess).not.toHaveBeenCalled()
+    expect(replay).not.toHaveBeenCalled()
+    expect(credentials.getAccess()).toBe('B')
+  },
+)
+
+it('rejects a delayed name PATCH 401 from a prior owner before refreshing', async () => {
+  const { credentials } = await import('./credentials')
+  credentials.startSession('A')
+  const error = unauthorized('/auth/me/name')
+  error.config!._sessionGeneration = credentials.getSessionGeneration()
+  error.config!.method = 'patch'
+  credentials.startSession('B')
+  const refresh = vi.fn()
+  const replay = vi.fn()
+  const coordinator = createRefreshCoordinator({
+    refresh,
+    replay,
+    setAccess: vi.fn(),
+    clearAccess: vi.fn(),
+  })
+  await expect(coordinator.recover(error)).rejects.toMatchObject({
+    code: 'ERR_CANCELED',
+  })
+  expect(refresh).not.toHaveBeenCalled()
+  expect(replay).not.toHaveBeenCalled()
+})

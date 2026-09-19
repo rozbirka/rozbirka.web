@@ -20,6 +20,7 @@ let delayedLogout = null
 let delayedDashboard = null
 const refreshTokens = new Set()
 const accessTokens = new Set()
+let otpChallenge = null
 
 const dashboardSummaries = {
   'tenant-1': {
@@ -396,15 +397,45 @@ const server = createServer(async (request, response) => {
       return
     }
 
-    if (request.method === 'POST' && url.pathname === '/auth/phone') {
+    const isRegistration = url.pathname.startsWith('/auth/registration/')
+    if (
+      isRegistration &&
+      (request.headers['x-rozbirka-registration-key'] !==
+        'e2e-registration-fixture-only' ||
+        !request.headers['x-rozbirka-registration-session'])
+    ) {
+      sendProblem(
+        response,
+        401,
+        'AUTH_REGISTRATION_UNAUTHORIZED',
+        'Unauthorized',
+      )
+      return
+    }
+
+    if (
+      request.method === 'POST' &&
+      ['/auth/login/phone', '/auth/registration/phone', '/auth/phone'].includes(
+        url.pathname,
+      )
+    ) {
       const body = await readJson(request)
       if (!isObject(body) || typeof body.phone !== 'string') {
         sendProblem(response, 400, 'INVALID_SEND', 'Invalid send payload')
         return
       }
+      otpChallenge = {
+        phone: body.phone,
+        registration: isRegistration,
+        session: request.headers['x-rozbirka-registration-session'],
+        consumed: false,
+      }
       sendRequests += 1
       sendJson(response, 200, {
         data: {
+          challengeId: 'fixture-challenge',
+          expiresAt: new Date(Date.now() + 300_000).toISOString(),
+          resendAt: new Date().toISOString(),
           cooldownSeconds: 0,
           retryAfterSeconds: 0,
           internalSecret: 'identity-send-internal-secret',
@@ -413,7 +444,14 @@ const server = createServer(async (request, response) => {
       return
     }
 
-    if (request.method === 'POST' && url.pathname === '/auth/verify') {
+    if (
+      request.method === 'POST' &&
+      [
+        '/auth/login/verify',
+        '/auth/registration/verify',
+        '/auth/verify',
+      ].includes(url.pathname)
+    ) {
       const body = await readJson(request)
       if (
         !isObject(body) ||
@@ -424,7 +462,19 @@ const server = createServer(async (request, response) => {
         return
       }
       verifyRequests += 1
-      if (body.code !== validOtp) {
+      if (
+        body.code !== validOtp ||
+        (url.pathname !== '/auth/verify' &&
+          (body.challengeId !== 'fixture-challenge' ||
+            !otpChallenge ||
+            otpChallenge.consumed ||
+            otpChallenge.phone !== body.phone ||
+            otpChallenge.registration !== isRegistration ||
+            (isRegistration &&
+              otpChallenge.session !==
+                request.headers['x-rozbirka-registration-session']) ||
+            (newUser && !isRegistration)))
+      ) {
         sendJson(
           response,
           400,
@@ -442,6 +492,7 @@ const server = createServer(async (request, response) => {
         )
         return
       }
+      if (otpChallenge) otpChallenge.consumed = true
       const session = issueSession()
       sendJson(response, 200, {
         data: {

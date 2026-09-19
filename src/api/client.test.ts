@@ -288,3 +288,33 @@ it('strips pre-existing idempotency keys unless a mutation explicitly opts in', 
     { method: 'post', key: 'injected-key' },
   ])
 })
+
+it('does not refresh or replay a delayed PATCH 401 under a new account', async () => {
+  credentials.startSession('A')
+  let rejectRequest!: () => void
+  let entered!: () => void
+  const started = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  const adapter = vi.fn(
+    (config: InternalAxiosRequestConfig) =>
+      new Promise<AxiosResponse>((_resolve, reject) => {
+        expect(config.headers.get('Authorization')).toBe('Bearer A')
+        rejectRequest = () => reject(failure(config, 401))
+        entered()
+      }),
+  )
+  identityClient.defaults.adapter = adapter
+  const refresh = vi.spyOn(sessionApi, 'refresh')
+  const pending = identityClient.patch('/auth/me/name', {
+    displayName: 'Account A name',
+  })
+  const rejected = expect(pending).rejects.toBeDefined()
+  await started
+  credentials.startSession('B')
+  rejectRequest()
+  await rejected
+  expect(refresh).not.toHaveBeenCalled()
+  expect(adapter).toHaveBeenCalledOnce()
+  expect(credentials.getAccess()).toBe('B')
+})

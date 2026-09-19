@@ -50,6 +50,14 @@ export const withIdempotency = <T extends AxiosRequestConfig>(
 ): T => (option ? { ...config, idempotency: option } : config)
 
 const attachAuth = (config: InternalAxiosRequestConfig) => {
+  const generation = credentials.getSessionGeneration()
+  if (
+    config._sessionGeneration !== undefined &&
+    config._sessionGeneration !== generation
+  ) {
+    throw new axios.CanceledError()
+  }
+  config._sessionGeneration = generation
   const access = credentials.getAccess()
   if (access) {
     config.headers.set('Authorization', `Bearer ${access}`)
@@ -153,6 +161,7 @@ declare module 'axios' {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars -- must match Axios declaration exactly
   interface InternalAxiosRequestConfig<D = any> {
     _sessionRetry?: boolean
+    _sessionGeneration?: number
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars -- must match Axios declaration exactly

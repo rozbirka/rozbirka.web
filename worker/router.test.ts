@@ -4,7 +4,7 @@ import { handleRequest, type EdgeEnv } from './router'
 
 function env(): EdgeEnv {
   return {
-    IDENTITY_ORIGIN: 'https://identity.example',
+    CORE_ORIGIN: 'https://identity.example',
     ASSETS: {
       // eslint-disable-next-line @typescript-eslint/require-await
       fetch: vi.fn(async (request: Request) => {

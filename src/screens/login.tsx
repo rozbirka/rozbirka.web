@@ -39,6 +39,12 @@ const errorMessages: Record<string, string> = {
   // Пінується e2e-перевіркою помилки коду — текст має лишатися рівно таким.
   OTP_INVALID: 'Невірний код',
   OTP_EXPIRED: 'Код вже не дійсний — запитайте новий',
+  REGISTRATION_SESSION_EXPIRED:
+    'Сеанс реєстрації завершився. Почніть реєстрацію ще раз',
+  RATE_LIMIT_EXCEEDED: 'Забагато спроб. Спробуйте пізніше',
+  OTP_UNAVAILABLE: 'Надсилання SMS тимчасово недоступне. Спробуйте пізніше',
+  REGISTRATION_UNAVAILABLE:
+    'Реєстрація тимчасово недоступна. Спробуйте пізніше',
   OTP_MAX_ATTEMPTS: 'Забагато невірних спроб. Запитайте новий код',
 }
 
@@ -54,7 +60,7 @@ function extractError(err: unknown, fallback: string): string {
 }
 
 const cooldownFrom = (response: SendOtpResponse): number =>
-  Math.max(response.cooldownSeconds ?? 60, response.retryAfterSeconds ?? 0)
+  Math.max(0, Math.ceil((Date.parse(response.resendAt) - Date.now()) / 1000))
 
 const toE164 = (formatted: string) => '+' + formatted.replace(/\D/g, '')
 
@@ -94,6 +100,10 @@ export function LoginScreen() {
       ? 'name'
       : 'phone',
   )
+  const [purpose, setPurpose] = useState<'login' | 'registration'>('login')
+  const [challenge, setChallenge] = useState<SendOtpResponse | null>(null)
+  const requestControllerRef = useRef<AbortController | null>(null)
+  const cancellationRef = useRef<Promise<void> | null>(null)
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState('')
   const [name, setName] = useState('')
@@ -101,6 +111,7 @@ export function LoginScreen() {
   const [codeError, setCodeError] = useState<string | null>(null)
   const [nameError, setNameError] = useState<string | null>(null)
   const [resendIn, setResendIn] = useState(0)
+  const resendDeadlineRef = useRef(0)
   const mountedRef = useRef(false)
   const navigationGenerationRef = useRef(0)
   const navigationTimerRef = useRef<number | null>(null)
@@ -109,6 +120,7 @@ export function LoginScreen() {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      requestControllerRef.current?.abort()
       navigationGenerationRef.current += 1
       if (navigationTimerRef.current !== null) {
         window.clearTimeout(navigationTimerRef.current)
@@ -149,33 +161,76 @@ export function LoginScreen() {
 
   useEffect(() => {
     if (resendIn <= 0) return
-    const id = window.setTimeout(() => setResendIn((s) => s - 1), 1000)
+    const id = window.setTimeout(
+      () =>
+        setResendIn(
+          Math.max(
+            0,
+            Math.ceil((resendDeadlineRef.current - Date.now()) / 1000),
+          ),
+        ),
+      1000,
+    )
     return () => window.clearTimeout(id)
   }, [resendIn])
 
-  const requestOtp = useCallback(
-    () => authApi.otpSend({ phone: toE164(phone) }),
-    [phone],
-  )
+  const requestOtp = useCallback(async () => {
+    requestControllerRef.current?.abort()
+    const controller = new AbortController()
+    requestControllerRef.current = controller
+    const request = { phone: toE164(phone) }
+    const options = { signal: controller.signal }
+    await cancellationRef.current
+    const response =
+      purpose === 'registration'
+        ? await authApi.registrationSend(request, options)
+        : await authApi.otpSend(request, options)
+    if (!mountedRef.current || controller.signal.aborted) return null
+    return response
+  }, [phone, purpose])
 
-  const sendOtp = useOperation<SendOtpResponse>(requestOtp, {
+  const sendOtp = useOperation<SendOtpResponse | null>(requestOtp, {
     errorMessage: (error) =>
       extractError(error, 'Не вдалося надіслати код. Спробуйте ще раз'),
     onSuccess: (response) => {
+      if (!response) return
+      setChallenge(response)
       setOtp('')
       setCodeError(null)
       setStep('otp')
+      resendDeadlineRef.current = Date.parse(response.resendAt)
       setResendIn(cooldownFrom(response))
+    },
+    onError: (error) => {
+      const problem = normalizeApiProblem(error)
+      if (problem.retryAfterSeconds !== undefined) {
+        resendDeadlineRef.current =
+          Date.now() + problem.retryAfterSeconds * 1000
+        setResendIn(problem.retryAfterSeconds)
+      }
     },
   })
 
   const verifyOtp = useOperation<VerifyOutcome | null>(
     useCallback(async () => {
       const generation = beginNavigationOperation()
-      const response = await authApi.otpVerify({
+      if (!challenge || Date.parse(challenge.expiresAt) <= Date.now())
+        throw Object.assign(new Error(errorMessages['OTP_EXPIRED']), {
+          kind: 'validation',
+          code: 'OTP_EXPIRED',
+        })
+      const controller = new AbortController()
+      requestControllerRef.current = controller
+      const request = {
         phone: toE164(phone),
         code: otp,
-      })
+        challengeId: challenge.challengeId,
+      }
+      const options = { signal: controller.signal }
+      const response =
+        purpose === 'registration'
+          ? await authApi.registrationVerify(request, options)
+          : await authApi.otpVerify(request, options)
       if (!isCurrentNavigationOperation(generation)) return null
       // Existing user — straight to success. Brand-new user — ask their name first.
       if (response.isNewUser) return { generation, next: 'name' }
@@ -188,6 +243,8 @@ export function LoginScreen() {
       isCurrentNavigationOperation,
       otp,
       phone,
+      purpose,
+      challenge,
     ]),
     {
       errorMessage: (error) => extractError(error, 'Невірний код'),
@@ -203,18 +260,28 @@ export function LoginScreen() {
     },
   )
 
-  const resendOtp = useOperation<SendOtpResponse>(requestOtp, {
+  const resendOtp = useOperation<SendOtpResponse | null>(requestOtp, {
     errorMessage: (error) =>
       extractError(error, 'Не вдалося надіслати код. Спробуйте ще раз'),
     onSuccess: (response) => {
+      if (!response) return
+      setChallenge(response)
       setOtp('')
+      resendDeadlineRef.current = Date.parse(response.resendAt)
       setResendIn(cooldownFrom(response))
     },
     onError: (error) => {
       const problem = normalizeApiProblem(error)
       if (problem.retryAfterSeconds !== undefined) {
-        setResendIn((current) =>
-          Math.max(current, problem.retryAfterSeconds ?? 0),
+        resendDeadlineRef.current = Math.max(
+          resendDeadlineRef.current,
+          Date.now() + problem.retryAfterSeconds * 1000,
+        )
+        setResendIn(
+          Math.max(
+            0,
+            Math.ceil((resendDeadlineRef.current - Date.now()) / 1000),
+          ),
         )
       }
     },
@@ -223,7 +290,9 @@ export function LoginScreen() {
   const saveName = useOperation<number | null>(
     useCallback(async () => {
       const generation = beginNavigationOperation()
-      await authApi.updateName(name.trim())
+      const controller = new AbortController()
+      requestControllerRef.current = controller
+      await authApi.updateName(name.trim(), { signal: controller.signal })
       if (!isCurrentNavigationOperation(generation)) return null
       await auth.hydrate()
       if (!isCurrentNavigationOperation(generation)) return null
@@ -289,6 +358,13 @@ export function LoginScreen() {
 
   const backToPhone = () => {
     if (busy) return
+    beginNavigationOperation()
+    requestControllerRef.current?.abort()
+    setChallenge(null)
+    if (purpose === 'registration')
+      cancellationRef.current = authApi
+        .cancelRegistration()
+        .catch(() => undefined)
     setStep('phone')
     setOtp('')
     setCodeError(null)
@@ -314,6 +390,22 @@ export function LoginScreen() {
         <div className="w-full max-w-[420px]">
           {step === 'phone' && (
             <PhoneStep
+              purpose={purpose}
+              onPurposeChange={() => {
+                if (busy) return
+                beginNavigationOperation()
+                requestControllerRef.current?.abort()
+                setChallenge(null)
+                setOtp('')
+                setResendIn(0)
+                setPhoneError(null)
+                sendOtp.reset()
+                if (purpose === 'registration')
+                  cancellationRef.current = authApi
+                    .cancelRegistration()
+                    .catch(() => undefined)
+                setPurpose(purpose === 'login' ? 'registration' : 'login')
+              }}
               error={sendOtp.error}
               fieldError={phoneError}
               onChange={(value) => {
@@ -322,6 +414,7 @@ export function LoginScreen() {
               }}
               onSubmit={handlePhoneSubmit}
               pending={sendOtp.pending}
+              resendIn={resendIn}
               phone={phone}
             />
           )}
@@ -392,6 +485,9 @@ function StepHeader({
 }
 
 function PhoneStep({
+  resendIn,
+  purpose,
+  onPurposeChange,
   phone,
   onChange,
   onSubmit,
@@ -399,6 +495,9 @@ function PhoneStep({
   error,
   fieldError,
 }: {
+  resendIn: number
+  purpose: 'login' | 'registration'
+  onPurposeChange: () => void
   phone: string
   onChange: (v: string) => void
   onSubmit: (e: FormEvent) => void
@@ -408,9 +507,18 @@ function PhoneStep({
 }) {
   return (
     <div className="anim-fade-up flex flex-col gap-6">
-      <StepHeader eyebrow="Вхід" title="Вхід за номером телефону">
+      <StepHeader
+        eyebrow={purpose === 'login' ? 'Вхід' : 'Реєстрація'}
+        title={
+          purpose === 'login'
+            ? 'Вхід за номером телефону'
+            : 'Створіть обліковий запис'
+        }
+      >
         <p className="text-app-muted text-[13.5px] leading-[1.5]">
-          Надішлемо одноразовий код у SMS — вводити пароль не треба.
+          {purpose === 'login'
+            ? 'Увійдіть до наявного облікового запису за кодом з SMS.'
+            : 'Підтвердьте номер, щоб створити обліковий запис. Якщо вас запросили до команди, після реєстрації повернемося до запрошення.'}
         </p>
       </StepHeader>
 
@@ -423,6 +531,7 @@ function PhoneStep({
           label="Номер телефону"
         >
           <TextInput
+            disabled={pending}
             autoComplete="tel"
             autoFocus
             className="min-h-12 px-4 text-[16px] tracking-[0.02em] tabular-nums"
@@ -441,7 +550,7 @@ function PhoneStep({
         <Button
           aria-busy={pending}
           className="min-h-12 text-[15px]"
-          disabled={pending}
+          disabled={pending || resendIn > 0}
           size="wide"
           type="submit"
           variant="primary"
@@ -450,6 +559,11 @@ function PhoneStep({
           {!pending && <ArrowRight />}
         </Button>
 
+        {resendIn > 0 && (
+          <p role="status" className="text-app-dim text-center text-[12px]">
+            Спробуйте ще раз через {resendIn} с
+          </p>
+        )}
         <p className="text-app-dim text-center text-[12px] leading-[1.5]">
           Продовжуючи, ви погоджуєтесь з{' '}
           <a className="text-app-muted hover:text-white" href="#offer">
@@ -457,6 +571,11 @@ function PhoneStep({
           </a>
         </p>
       </form>
+      <Button variant="quiet" disabled={pending} onClick={onPurposeChange}>
+        {purpose === 'login'
+          ? 'Немає облікового запису? Зареєструватися'
+          : 'Вже маєте обліковий запис? Увійти'}
+      </Button>
     </div>
   )
 }

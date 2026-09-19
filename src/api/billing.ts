@@ -51,6 +51,57 @@ export function resolveProviderManagement(
   return { kind: 'unavailable' }
 }
 
+/** Checkout eligibility is separate from management of an existing subscription. */
+export function canStartWebCheckout(
+  subscription:
+    | Pick<
+        SubscriptionDto,
+        | 'state'
+        | 'planCode'
+        | 'currentPeriodEnd'
+        | 'trialEndsAt'
+        | 'canSubscribe'
+        | 'canReactivate'
+      >
+    | null
+    | undefined,
+): boolean {
+  if (!subscription) return false
+  const provider = subscription as ProviderAwareSubscriptionDto
+  if (resolveProviderManagement(provider).kind === 'mono') return true
+  if (provider.source === 'apple_iap' || provider.source === 'google_play') {
+    // Core clears manageVia for Expired rows. Cancelled rows retain their
+    // provider destination and canSubscribe; active/past-due rows cannot.
+    // Require ended access and an elapsed period. Trial DTOs expose their
+    // window only through trialEndsAt; never use that for a paid plan.
+    const periodEnd = Date.parse(
+      subscription.currentPeriodEnd ??
+        (subscription.planCode === 'trial' ? subscription.trialEndsAt : null) ??
+        '',
+    )
+    return (
+      subscription.state === 'blocked' &&
+      periodEnd <= Date.now() &&
+      ((provider.manageVia === null && subscription.canReactivate) ||
+        (resolveProviderManagement(provider).kind === 'provider' &&
+          subscription.canSubscribe))
+    )
+  }
+  if (provider.manageVia !== null) return false
+  if (provider.source === 'mono') {
+    return (
+      subscription.state === 'blocked' &&
+      (subscription.canSubscribe || subscription.canReactivate)
+    )
+  }
+  return (
+    provider.source === null &&
+    subscription.canSubscribe &&
+    subscription.planCode === null &&
+    (subscription.state === 'none' || subscription.state === 'blocked')
+  )
+}
+
 const requestConfig = (options: RequestOptions) =>
   options.signal ? { signal: options.signal } : {}
 

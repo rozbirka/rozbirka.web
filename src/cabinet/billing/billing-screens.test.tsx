@@ -91,7 +91,7 @@ const pendingPayment = {
   currency: 'USD',
   providerInvoiceId: 'invoice-1',
   checkoutUrl: 'https://pay.example/checkout',
-  checkoutExpiresAt: '2026-08-15T12:00:00Z',
+  checkoutExpiresAt: '2099-08-15T12:00:00Z',
   createdAt: '2026-08-15T10:00:00Z',
 }
 
@@ -746,4 +746,289 @@ it('keeps the card-change control on the subscription overview disabled', async 
   const card = screen.getByRole('button', { name: 'Змінити карту' })
   expect(card).toBeDisabled()
   expect(card.title).toContain('Замінити картку тут не можна')
+})
+
+it.each([
+  { source: null, manageVia: null, state: 'blocked', planCode: null },
+  { source: 'mono', manageVia: 'web', state: 'trial', planCode: 'trial' },
+] as const)(
+  'offers selected-plan checkout for initial billing state %j',
+  async (initial) => {
+    vi.mocked(useCabinet).mockReturnValue(
+      cabinet(undefined, {
+        ...subscription,
+        ...initial,
+        canSubscribe: true,
+      }),
+    )
+    vi.mocked(billingApi.getPlans).mockResolvedValue([litePlan])
+    vi.mocked(billingApi.subscribe).mockRejectedValue(new Error('offline'))
+    renderScreen(<PlansScreen />)
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('button', { name: 'Обрати' }))
+    await waitFor(() =>
+      expect(billingApi.subscribe).toHaveBeenCalledWith(
+        { planCode: 'lite_monthly' },
+        { signal: tenantRequestScope.signal },
+      ),
+    )
+    expect(await screen.findByRole('alert')).toBeVisible()
+  },
+)
+
+it('offers checkout without billing history from the subscription overview', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, {
+      ...subscription,
+      source: null,
+      manageVia: null,
+      state: 'blocked',
+      planCode: null,
+    }),
+  )
+  vi.mocked(billingApi.subscribe).mockRejectedValue(new Error('offline'))
+  renderScreen(<SubscriptionScreen />)
+  await screen.findByText('Платежів ще не було.')
+  await userEvent
+    .setup()
+    .click(screen.getByRole('button', { name: 'Оформити підписку' }))
+  await waitFor(() => expect(billingApi.subscribe).toHaveBeenCalled())
+})
+
+it.each(['apple_iap', 'google_play'] as const)(
+  'blocks checkout for cancelled unexpired %s access',
+  async (source) => {
+    vi.mocked(useCabinet).mockReturnValue(
+      cabinet(undefined, {
+        ...subscription,
+        source,
+        manageVia: source === 'apple_iap' ? 'apple' : 'google',
+        state: 'cancelled',
+        currentPeriodEnd: '2099-01-01T00:00:00Z',
+        canSubscribe: true,
+      }),
+    )
+    vi.mocked(billingApi.getPlans).mockResolvedValue([litePlan])
+    renderScreen(<PlansScreen />)
+    await screen.findByRole('heading', { name: 'Lite' })
+    expect(screen.queryByRole('button', { name: 'Обрати' })).toBeNull()
+    expect(billingApi.subscribe).not.toHaveBeenCalled()
+  },
+)
+
+it.each([
+  ['mono', null, false],
+  ['apple_iap', null, false],
+  ['google_play', null, false],
+  ['apple_iap', 'apple', true],
+  ['google_play', 'google', true],
+] as const)(
+  'offers checkout after confirmed expired access (%s, %s)',
+  async (source, manageVia, canSubscribe) => {
+    vi.mocked(useCabinet).mockReturnValue(
+      cabinet(undefined, {
+        ...subscription,
+        source,
+        manageVia,
+        state: 'blocked',
+        planCode: 'lite_monthly',
+        currentPeriodEnd: '2020-01-01T00:00:00Z',
+        canSubscribe,
+        canReactivate: true,
+      }),
+    )
+    vi.mocked(billingApi.getPlans).mockResolvedValue([litePlan])
+    renderScreen(<PlansScreen />)
+    expect(await screen.findByRole('button', { name: 'Обрати' })).toBeEnabled()
+  },
+)
+
+it.each([
+  {
+    source: null,
+    manageVia: null,
+    state: 'blocked',
+    canSubscribe: false,
+    canReactivate: true,
+    currentPeriodEnd: null,
+  },
+  {
+    source: 'apple_iap',
+    manageVia: 'apple',
+    state: 'blocked',
+    canSubscribe: false,
+    canReactivate: true,
+    currentPeriodEnd: '2020-01-01T00:00:00Z',
+  },
+  {
+    source: 'google_play',
+    manageVia: null,
+    state: 'blocked',
+    canSubscribe: false,
+    canReactivate: true,
+    currentPeriodEnd: '2099-01-01T00:00:00Z',
+  },
+  {
+    source: 'apple_iap',
+    manageVia: null,
+    state: 'blocked',
+    canSubscribe: false,
+    canReactivate: true,
+    currentPeriodEnd: null,
+  },
+] as const)(
+  'fails closed for ambiguous or ineligible checkout %j',
+  async (billingState) => {
+    vi.mocked(useCabinet).mockReturnValue(
+      cabinet(undefined, {
+        ...subscription,
+        ...billingState,
+        planCode: null,
+      }),
+    )
+    vi.mocked(billingApi.getPlans).mockResolvedValue([litePlan])
+    renderScreen(<PlansScreen />)
+    await screen.findByRole('heading', { name: 'Lite' })
+    expect(screen.queryByRole('button', { name: 'Обрати' })).toBeNull()
+  },
+)
+
+it.each([
+  { source: null, manageVia: null, currentPeriodEnd: null },
+  {
+    source: 'apple_iap',
+    manageVia: null,
+    currentPeriodEnd: '2020-01-01T00:00:00Z',
+  },
+] as const)(
+  'resumes and cancels an abandoned new checkout before Mono activation %j',
+  async (provider) => {
+    vi.mocked(useCabinet).mockReturnValue(
+      cabinet(undefined, {
+        ...subscription,
+        ...provider,
+        state: 'blocked',
+        planCode: null,
+        canSubscribe: true,
+        canReactivate: true,
+      }),
+    )
+    vi.mocked(billingApi.getPayments).mockResolvedValue(paymentPage())
+    vi.mocked(billingApi.cancelPayment).mockResolvedValue()
+    renderScreen(<PaymentsScreen />)
+    expect(
+      await screen.findByRole('link', { name: 'Продовжити оплату' }),
+    ).toHaveAttribute('href', pendingPayment.checkoutUrl)
+    await userEvent
+      .setup()
+      .click(screen.getByRole('button', { name: 'Скасувати' }))
+    await waitFor(() =>
+      expect(billingApi.cancelPayment).toHaveBeenCalledWith('payment-1', {
+        signal: tenantRequestScope.signal,
+      }),
+    )
+  },
+)
+
+it('does not resume an expired checkout but still allows cancelling it', async () => {
+  vi.mocked(billingApi.getPayments).mockResolvedValue(
+    paymentPage([
+      { ...pendingPayment, checkoutExpiresAt: '2020-01-01T00:00:00Z' },
+    ]),
+  )
+  renderScreen(<PaymentsScreen />)
+  await screen.findByRole('button', { name: 'Скасувати' })
+  expect(screen.queryByRole('link', { name: 'Продовжити оплату' })).toBeNull()
+})
+
+it('rechecks checkout expiry when following an already rendered payment link', async () => {
+  vi.mocked(billingApi.getPayments).mockResolvedValue(paymentPage())
+  renderScreen(<PaymentsScreen />)
+  const checkout = await screen.findByRole('link', {
+    name: 'Продовжити оплату',
+  })
+  const now = vi
+    .spyOn(Date, 'now')
+    .mockReturnValue(Date.parse('2100-01-01T00:00:00Z'))
+  try {
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+    checkout.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Строк оплати рахунку минув',
+    )
+  } finally {
+    now.mockRestore()
+  }
+})
+
+it('does not offer duplicate default checkout for a blocked but still active Mono subscription', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, {
+      ...cancellableSubscription,
+      state: 'blocked',
+      canReactivate: true,
+    }),
+  )
+  renderScreen(<SubscriptionScreen />)
+  await screen.findByText('Платежів ще не було.')
+  expect(screen.queryByRole('button', { name: 'Оформити підписку' })).toBeNull()
+})
+
+it('keeps the active Mono plan current even when access is blocked', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, {
+      ...cancellableSubscription,
+      state: 'blocked',
+      planCode: litePlan.code,
+      canReactivate: true,
+    }),
+  )
+  vi.mocked(billingApi.getPlans).mockResolvedValue([litePlan])
+  renderScreen(<PlansScreen />)
+  await screen.findByRole('heading', { name: 'Lite' })
+  expect(screen.queryByRole('button', { name: 'Обрати' })).toBeNull()
+})
+
+it.each(['apple_iap', 'google_play'] as const)(
+  'allows web checkout after a confirmed expired %s trial',
+  async (source) => {
+    vi.mocked(useCabinet).mockReturnValue(
+      cabinet(undefined, {
+        ...subscription,
+        source,
+        manageVia: source === 'apple_iap' ? 'apple' : 'google',
+        state: 'blocked',
+        planCode: 'trial',
+        currentPeriodEnd: null,
+        trialEndsAt: '2020-01-01T00:00:00Z',
+        canSubscribe: true,
+        canReactivate: true,
+      }),
+    )
+    vi.mocked(billingApi.getPlans).mockResolvedValue([litePlan])
+    renderScreen(<PlansScreen />)
+    expect(await screen.findByRole('button', { name: 'Обрати' })).toBeEnabled()
+  },
+)
+
+it('does not substitute trial dates for an unknown paid-store period end', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, {
+      ...subscription,
+      source: 'apple_iap',
+      manageVia: 'apple',
+      state: 'blocked',
+      planCode: 'pro_monthly',
+      currentPeriodEnd: null,
+      trialEndsAt: '2020-01-01T00:00:00Z',
+      canSubscribe: true,
+      canReactivate: true,
+    }),
+  )
+  vi.mocked(billingApi.getPlans).mockResolvedValue([litePlan])
+  renderScreen(<PlansScreen />)
+  await screen.findByRole('heading', { name: 'Lite' })
+  expect(screen.queryByRole('button', { name: 'Обрати' })).toBeNull()
 })

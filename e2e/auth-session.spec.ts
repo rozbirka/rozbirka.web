@@ -564,7 +564,11 @@ test('OTP login stores refresh only in HttpOnly cookie and no credentials in sto
   expect(sendResponse.status()).toBe(200)
   expect(sendResponse.headers()['content-type']).toContain('application/json')
   const sendPayload: unknown = await sendResponse.json()
-  expect(sendPayload).toEqual({ cooldownSeconds: 0, retryAfterSeconds: 0 })
+  expect(sendPayload).toMatchObject({
+    cooldownSeconds: 0,
+    retryAfterSeconds: 0,
+    challengeId: 'fixture-challenge',
+  })
   expect(JSON.stringify(sendPayload)).not.toContain(fixtureSendSecret)
 
   const verifyResponse = await verifyResponsePromise
@@ -726,7 +730,7 @@ test('logout expires the cookie and leaves the user as guest @auth-smoke', async
   await expect(page).toHaveURL(/\/login$/)
 })
 
-test('invitation resumes after OTP and optional name into the accepted tenant', async ({
+test('invitation resumes after explicit registration and name into the accepted tenant @registration-smoke', async ({
   page,
   request,
 }) => {
@@ -738,6 +742,10 @@ test('invitation resumes after OTP and optional name into the accepted tenant', 
   ).toBeVisible()
   await page.getByRole('link', { name: 'Прийняти запрошення' }).click()
 
+  await page
+    .getByRole('button', { name: 'Немає облікового запису? Зареєструватися' })
+    .click()
+  await page.screenshot({ path: test.info().outputPath('registration.png') })
   await completeOtpLogin(page)
   await expect(
     page.getByRole('heading', { name: 'Як вас називати?' }),
@@ -771,4 +779,30 @@ test('scan deep link resumes after OTP without accepting an external return URL'
   await completeOtpLogin(page)
   await expect(page).toHaveURL('/app/koval/dashboard?scan=QR-123~part')
   expect(new URL(page.url()).origin).toBe(appOrigin)
+})
+
+test('native auth relay keeps raw tokens out of browser cookies and blocks registration @native-auth-smoke', async ({
+  request,
+}) => {
+  const send = await request.post(`${appOrigin}/auth/login/phone`, {
+    data: { phone: '+380501112233' },
+  })
+  expect(send.status()).toBe(200)
+  const verify = await request.post(`${appOrigin}/auth/login/verify`, {
+    data: {
+      phone: '+380501112233',
+      code: otp,
+      challengeId: 'fixture-challenge',
+    },
+  })
+  expect(verify.status()).toBe(200)
+  expect(verify.headers()['set-cookie']).toBeUndefined()
+  const result: unknown = await verify.json()
+  expect(result).toMatchObject({
+    data: { refreshToken: 'refresh-1', accessToken: 'access-1' },
+  })
+  const denied = await request.post(`${appOrigin}/auth/registration/phone`, {
+    data: { phone: '+380501112233' },
+  })
+  expect(denied.status()).toBe(404)
 })

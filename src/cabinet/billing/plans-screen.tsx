@@ -12,6 +12,7 @@ import {
 } from '@/components/app'
 import {
   billingApi,
+  canStartWebCheckout,
   resolveProviderManagement,
   type ProviderAwareSubscriptionDto,
 } from '@/api/billing'
@@ -120,7 +121,7 @@ export function PlansScreen() {
       const scope = requireLatestMutation()
       if (
         planCode === null ||
-        !hasMonoManagement(latestSnapshotRef.current?.subscription)
+        !canStartWebCheckout(latestSnapshotRef.current?.subscription)
       ) {
         throw new BillingManagementUnavailableError()
       }
@@ -186,6 +187,7 @@ export function PlansScreen() {
   const management = providerSubscription
     ? resolveProviderManagement(providerSubscription)
     : { kind: 'unavailable' as const }
+  const canCheckout = canStartWebCheckout(providerSubscription)
   const recommendedCode = 'pro_monthly'
   const allPlans = currentPlansState.plans
   const intervals = [...new Set(allPlans.map((plan) => plan.interval))]
@@ -238,14 +240,20 @@ export function PlansScreen() {
           налаштуваннях магазину.
         </Notice>
       )}
-      {management.kind === 'unavailable' && <BillingUnavailableNotice />}
+      {management.kind === 'unavailable' && !canCheckout && (
+        <BillingUnavailableNotice />
+      )}
 
       <ul
         className="grid min-w-0 items-start gap-5 sm:grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))]"
         role="list"
       >
         {plans.map((plan) => {
-          const isCurrent = plan.code === currentCode
+          const isCurrent =
+            plan.code === currentCode &&
+            (providerSubscription?.canCancel === true ||
+              (!providerSubscription?.canSubscribe &&
+                !providerSubscription?.canReactivate))
           const isSelected = plan.code === selectedPlanCode
           return (
             <li
@@ -342,7 +350,7 @@ export function PlansScreen() {
               <div className="mt-auto pt-1">
                 {isCurrent ? (
                   <p className="text-app-dim text-[13px]">Цей тариф уже діє.</p>
-                ) : management.kind === 'mono' ? (
+                ) : canCheckout ? (
                   <BillingMutationGate decision={controlDecision}>
                     <Button
                       onClick={() => {
@@ -440,19 +448,6 @@ function PlansFrame({
     >
       {children}
     </BillingShell>
-  )
-}
-
-function hasMonoManagement(subscription: unknown) {
-  return (
-    subscription !== null &&
-    subscription !== undefined &&
-    resolveProviderManagement(
-      subscription as Pick<
-        ProviderAwareSubscriptionDto,
-        'source' | 'manageVia'
-      >,
-    ).kind === 'mono'
   )
 }
 

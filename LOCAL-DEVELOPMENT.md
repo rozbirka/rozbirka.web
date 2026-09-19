@@ -5,7 +5,7 @@
 - Browser origin: `http://localhost:5173`. Do not alternate with 127.0.0.1 in
   browser URLs: cookies are host-specific.
 - Browser API: `VITE_API_URL=http://localhost:8088`.
-- BFF: `IDENTITY_ORIGIN=http://localhost:8088`, explicitly overridden at launch.
+- BFF: `CORE_ORIGIN=http://localhost:8088`, explicitly overridden at launch.
 - Never use QA API/auth/database as a fallback. Preserve cookies, volumes,
   `.dev.vars`, and `.wrangler/state`.
 - Do not switch branches or discard dirty work to start the app.
@@ -76,7 +76,7 @@ npx tsc -b && VITE_API_URL=http://localhost:8088 npx vite build --mode developme
 After successful build, run in a persistent terminal:
 
 ```sh
-npx wrangler dev --local --ip 127.0.0.1 --port 5173 --var IDENTITY_ORIGIN:http://localhost:8088
+npx wrangler dev --local --ip 127.0.0.1 --port 5173 --var CORE_ORIGIN:http://localhost:8088
 ```
 
 For a restart, resolve and stop only this existing web process, then relaunch.
@@ -101,3 +101,53 @@ a Vite hot-reload setup. Do not claim fresh source is served without rebuilding.
 
 Keep long-running terminals alive. Report exactly what was verified, including
 any remaining login or browser-level blocker.
+
+## Integrated Core authentication and registration
+
+For the auth cutover, start the coordinated Core checkout on the current feature
+branch; the earlier workstation checkout above does not implement this contract.
+`CORE_ORIGIN` now points to the local gateway (`http://localhost:8088`); its auth
+routes run in Core. Preserve the selected database volume and run the separate
+migration procedure before attempting authentication against existing users.
+
+The Worker requires private secret `AUTH_REGISTRATION_KEY`, matching Core's
+`AuthRegistration__ApiKey`. For local development only, put
+`AUTH_REGISTRATION_KEY=rozbirka-local-registration-development-only` in the
+ignored `.dev.vars` when Core's AppHost uses its matching Development default.
+There is no Worker runtime fallback. Never use this development value in QA or
+production, and never put the key in a `VITE_*` variable or Wrangler `vars`.
+
+Before a reviewed QA/production rollout, provision `core-registration-key` in
+the corresponding GCP Secret Manager project and set that same value as the
+Worker's `AUTH_REGISTRATION_KEY` secret in the matching environment. Keep values
+out of terminal output, logs, Git and browser bundles. This document does not
+execute provisioning or deployment. Missing secret disables registration safely;
+existing-account login remains available.
+
+Web `/login` has explicit login and registration modes. Registration send/verify
+use `/session/registration/*`, exact same-origin JSON requests and a short-lived,
+HttpOnly, Secure, SameSite=Strict signed cookie. Core checks its service key and
+session-bound, single-use OTP challenge. The cookie is cleared after success or
+cancel; refresh tokens remain in the separate HttpOnly session cookie. Login
+uses `/auth/login/*` and never accepts an account-creation flag. Phone/mode changes
+reset the challenge; a reload starts a fresh challenge unless an authenticated
+session can already be restored.
+
+### Native auth transport through the existing Worker
+
+QA mobile auth uses `https://qa.rozbirka.pro`; production uses
+`https://rozbirka.pro`. The existing Worker relays only POST
+`/auth/login/phone`, `/auth/login/verify`, `/auth/refresh`, `/auth/logout`,
+GET/DELETE `/auth/me`, and PATCH `/auth/me/name` to Core. `/auth/registration/*`
+is never relayed. It ignores browser cookies, caller service keys, caller
+session bindings and custom forwarded-IP headers, forwarding only the trusted
+Cloudflare `CF-Connecting-IP` under the Worker service key. Core verifies the
+key before accepting the IP, including on refresh/logout, so rate limits do not
+collapse all clients into the Worker's egress IP. This relay requires the Worker
+secret even for login; provision the secret and release this Worker before the
+mobile auth-origin change. Core still owns all authentication and storage.
+
+Native responses retain Core's JSON envelope and native refresh credentials;
+no Set-Cookie headers are emitted. Browser code continues to use `/session/*`
+and its HttpOnly refresh cookie. Local native development can use the Core
+Aspire gateway directly; device-specific local origin selection stays in mobile.

@@ -9,6 +9,12 @@ import { identityClient } from './client'
 import { credentials } from './credentials'
 import { sessionApi } from './session'
 
+const challengeData = (seconds = 0) => ({
+  challengeId: 'test-challenge',
+  expiresAt: '2099-01-01T00:00:00.000Z',
+  resendAt: new Date(Date.UTC(2099, 0, 1) + seconds * 1000).toISOString(),
+})
+
 function response<T>(
   config: InternalAxiosRequestConfig,
   data: T,
@@ -34,13 +40,17 @@ afterEach(() => {
 })
 
 it('delegates OTP sending to the browser session facade', async () => {
-  const payload = { cooldownSeconds: 60, retryAfterSeconds: 300 }
+  const payload = {
+    ...challengeData(),
+    cooldownSeconds: 60,
+    retryAfterSeconds: 300,
+  }
   const send = vi.spyOn(sessionApi, 'send').mockResolvedValue(payload)
 
   await expect(authApi.otpSend({ phone: '+380501112233' })).resolves.toEqual(
     payload,
   )
-  expect(send).toHaveBeenCalledWith({ phone: '+380501112233' })
+  expect(send).toHaveBeenCalledWith({ phone: '+380501112233' }, 'login', {})
 })
 
 it('delegates OTP verification to the browser session facade', async () => {
@@ -56,13 +66,21 @@ it('delegates OTP verification to the browser session facade', async () => {
   const verify = vi.spyOn(sessionApi, 'verify').mockResolvedValue(payload)
 
   await expect(
-    authApi.otpVerify({ phone: '+380501112233', code: '123456' }),
+    authApi.otpVerify({
+      phone: '+380501112233',
+      challengeId: 'test-challenge',
+      code: '123456',
+    }),
   ).resolves.toEqual(payload)
-  expect(verify).toHaveBeenCalledWith({
-    phone: '+380501112233',
-    code: '123456',
-    allowRegistration: true,
-  })
+  expect(verify).toHaveBeenCalledWith(
+    {
+      phone: '+380501112233',
+      challengeId: 'test-challenge',
+      code: '123456',
+    },
+    'login',
+    {},
+  )
 })
 
 it('delegates logout to the browser session facade', async () => {

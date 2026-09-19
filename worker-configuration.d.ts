@@ -3,7 +3,7 @@
 // Runtime types generated with workerd@1.20260701.1 2026-07-08 nodejs_compat
 interface __BaseEnv_Env {
 	ASSETS: Fetcher;
-	IDENTITY_ORIGIN: "https://qaapi.rozbirka.pro" | "https://api.rozbirka.pro";
+	CORE_ORIGIN: "https://qaapi.rozbirka.pro" | "https://api.rozbirka.pro";
 }
 declare namespace Cloudflare {
 	interface GlobalProps {
@@ -11,11 +11,11 @@ declare namespace Cloudflare {
 	}
 	interface QaEnv {
 		ASSETS: Fetcher;
-		IDENTITY_ORIGIN: "https://qaapi.rozbirka.pro";
+		CORE_ORIGIN: "https://qaapi.rozbirka.pro";
 	}
 	interface ProductionEnv {
 		ASSETS: Fetcher;
-		IDENTITY_ORIGIN: "https://api.rozbirka.pro";
+		CORE_ORIGIN: "https://api.rozbirka.pro";
 	}
 	interface Env extends __BaseEnv_Env {}
 }
@@ -24,7 +24,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "IDENTITY_ORIGIN">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "CORE_ORIGIN">> {}
 }
 
 // Begin runtime types

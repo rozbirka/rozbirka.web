@@ -520,3 +520,27 @@ it('awaits session invalidation before silent sign-out can resolve', async () =>
   expect(screen.getByTestId('status')).toHaveTextContent('guest')
   expect(credentials.getAccess()).toBeNull()
 })
+
+it('does not reset a new login when an earlier sign-out finishes', async () => {
+  credentials.startSession('A')
+  const logout = deferred<void>()
+  vi.mocked(authApi.logout).mockReturnValue(logout.promise)
+  const userEventApi = userEvent.setup()
+  render(
+    <AuthProvider>
+      <AuthProbe />
+    </AuthProvider>,
+  )
+  await expectStatus('authenticated')
+  await userEventApi.click(screen.getByRole('button', { name: 'sign out' }))
+  await expectStatus('guest')
+  credentials.startSession('B')
+  await userEventApi.click(screen.getByRole('button', { name: 'hydrate' }))
+  await expectStatus('authenticated')
+  await act(async () => {
+    logout.resolve()
+    await logout.promise
+  })
+  expect(credentials.getAccess()).toBe('B')
+  expect(screen.getByTestId('status')).toHaveTextContent('authenticated')
+})

@@ -226,6 +226,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback<AuthContextValue['signOut']>(
     async ({ silent } = {}) => {
       invalidateAuth()
+      const generation = authGenerationRef.current
+      const owner = credentials.getSessionGeneration()
       try {
         if (silent) {
           await sessionApi.invalidate()
@@ -235,8 +237,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         // ignore — server may be offline; we still want to drop local state
       }
-      credentials.clear()
-      reset()
+      if (owner === credentials.getSessionGeneration()) credentials.clear()
+      if (generation === authGenerationRef.current && !credentials.getAccess())
+        reset()
     },
     [invalidateAuth, reset],
   )

@@ -1,6 +1,14 @@
+import {
+  registrationCookie,
+  readRegistrationSession,
+  createRegistrationSession,
+} from './registration-session'
 const COOKIE_NAME = 'rozbirka_refresh'
 const REFRESH_MAX_AGE = 90 * 24 * 60 * 60
 const SESSION_PATHS = new Set([
+  '/session/registration/send',
+  '/session/registration/verify',
+  '/session/registration/cancel',
   '/session/otp/send',
   '/session/otp/verify',
   '/session/refresh',
@@ -8,7 +16,8 @@ const SESSION_PATHS = new Set([
 ])
 
 export interface SessionEnv {
-  IDENTITY_ORIGIN: string
+  CORE_ORIGIN: string
+  AUTH_REGISTRATION_KEY?: string
 }
 
 type JsonRecord = Record<string, unknown>
@@ -16,6 +25,9 @@ type JsonRecord = Record<string, unknown>
 interface SendBrowserDto {
   cooldownSeconds: number
   retryAfterSeconds: number
+  challengeId: string
+  expiresAt: string
+  resendAt: string
 }
 
 interface VerifyBrowserDto {
@@ -39,8 +51,15 @@ const SAFE_OTP_ERROR_CODES = new Set([
   'OTP_RATE_LIMITED',
   'OTP_EXPIRED',
   'OTP_MAX_ATTEMPTS',
+  'OTP_UNAVAILABLE',
+  'RATE_LIMIT_EXCEEDED',
 ])
-const SAFE_OTP_SEND_ERROR_CODES = new Set(['OTP_COOLDOWN', 'OTP_RATE_LIMITED'])
+const SAFE_OTP_SEND_ERROR_CODES = new Set([
+  'OTP_COOLDOWN',
+  'OTP_RATE_LIMITED',
+  'OTP_UNAVAILABLE',
+  'RATE_LIMIT_EXCEEDED',
+])
 
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -52,14 +71,14 @@ function responseHeaders(extra?: HeadersInit) {
   return headers
 }
 
-function json(value: unknown, init?: ResponseInit) {
+export function json(value: unknown, init?: ResponseInit) {
   return Response.json(value, {
     ...init,
     headers: responseHeaders(init?.headers),
   })
 }
 
-function jsonProblem(
+export function jsonProblem(
   status: number,
   code: string,
   message: string,
@@ -106,16 +125,49 @@ function refreshCookie(url: URL, refreshToken: string | null) {
   return parts.join('; ')
 }
 
+export async function boundedJson(
+  input: Request | Response,
+  limit = 16_384,
+): Promise<unknown> {
+  const reader = input.body?.getReader()
+  if (!reader) return null
+  const chunks: Uint8Array[] = []
+  let size = 0
+  try {
+    while (true) {
+      const next = await reader.read()
+      if (next.done) break
+      size += next.value.byteLength
+      if (size > limit) {
+        await reader.cancel()
+        return null
+      }
+      chunks.push(next.value)
+    }
+    const bytes = new Uint8Array(size)
+    let offset = 0
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+    return JSON.parse(new TextDecoder().decode(bytes)) as unknown
+  } catch {
+    return null
+  } finally {
+    reader.releaseLock()
+  }
+}
+
 async function requestBody(request: Request) {
   try {
-    const body: unknown = await request.json()
+    const body: unknown = await boundedJson(request, 4096)
     return isRecord(body) ? body : null
   } catch {
     return null
   }
 }
 
-function identityFailure(status = 502) {
+export function identityFailure(status = 502) {
   return jsonProblem(
     status,
     'IDENTITY_REQUEST_FAILED',
@@ -131,11 +183,16 @@ function isNonNegativeSafeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 }
 
-function sendBrowserData(data: unknown): SendBrowserDto | null {
+export function sendBrowserData(data: unknown): SendBrowserDto | null {
   if (
     !isRecord(data) ||
     !isNonNegativeSafeInteger(data.cooldownSeconds) ||
-    !isNonNegativeSafeInteger(data.retryAfterSeconds)
+    !isNonNegativeSafeInteger(data.retryAfterSeconds) ||
+    !isNonEmptyString(data.challengeId) ||
+    !isNonEmptyString(data.expiresAt) ||
+    !Number.isFinite(Date.parse(data.expiresAt)) ||
+    !isNonEmptyString(data.resendAt) ||
+    !Number.isFinite(Date.parse(data.resendAt))
   ) {
     return null
   }
@@ -143,10 +200,13 @@ function sendBrowserData(data: unknown): SendBrowserDto | null {
   return {
     cooldownSeconds: data.cooldownSeconds,
     retryAfterSeconds: data.retryAfterSeconds,
+    challengeId: data.challengeId,
+    expiresAt: data.expiresAt,
+    resendAt: data.resendAt,
   }
 }
 
-function verifyBrowserData(data: unknown): {
+export function verifyBrowserData(data: unknown): {
   browser: VerifyBrowserDto
   refreshToken: string
 } | null {
@@ -176,7 +236,7 @@ function verifyBrowserData(data: unknown): {
   }
 }
 
-function refreshBrowserData(data: unknown): {
+export function refreshBrowserData(data: unknown): {
   browser: RefreshBrowserDto
   refreshToken: string
 } | null {
@@ -212,14 +272,14 @@ async function otpFailure(response: Response) {
   )
 }
 
-async function safeOtpFailure(
+export async function safeOtpFailure(
   response: Response,
   safeCodes: ReadonlySet<string>,
   message: string,
 ) {
   let code: string | undefined
   try {
-    const payload: unknown = await response.json()
+    const payload: unknown = await boundedJson(response)
     if (isRecord(payload) && isRecord(payload.error)) {
       const candidate = payload.error.code
       if (typeof candidate === 'string' && safeCodes.has(candidate)) {
@@ -240,28 +300,41 @@ async function safeOtpFailure(
   )
 }
 
-async function callIdentity(
+export async function callIdentity(
   url: string,
   body: JsonRecord,
   authorization?: string | null,
+  registration?: { key: string; session?: string; clientIp?: string | null },
+  method = 'POST',
 ) {
   const headers = new Headers({ 'Content-Type': 'application/json' })
   if (authorization) headers.set('Authorization', authorization)
+  if (registration) {
+    headers.set('X-Rozbirka-Registration-Key', registration.key)
+    if (registration.session)
+      headers.set('X-Rozbirka-Registration-Session', registration.session)
+    if (registration.clientIp)
+      headers.set('X-Rozbirka-Client-IP', registration.clientIp)
+  }
 
   try {
-    return await fetch(url, {
-      method: 'POST',
+    const response = await fetch(url, {
+      method,
+      redirect: 'manual',
       headers,
-      body: JSON.stringify(body),
+      ...(method === 'GET' || method === 'DELETE'
+        ? {}
+        : { body: JSON.stringify(body) }),
     })
+    return response.status >= 300 && response.status < 400 ? null : response
   } catch {
     return null
   }
 }
 
-async function upstreamData(response: Response) {
+export async function upstreamData(response: Response) {
   try {
-    const payload: unknown = await response.json()
+    const payload: unknown = await boundedJson(response)
     if (!isRecord(payload) || !('data' in payload)) return undefined
     return payload.data
   } catch {
@@ -271,7 +344,7 @@ async function upstreamData(response: Response) {
 
 function withCookie(response: Response, cookie: string) {
   const headers = new Headers(response.headers)
-  headers.set('Set-Cookie', cookie)
+  headers.append('Set-Cookie', cookie)
   headers.set('Cache-Control', 'no-store')
   return new Response(response.body, {
     status: response.status,
@@ -298,47 +371,114 @@ export async function handleSessionRequest(
     })
   }
 
-  if (url.pathname === '/session/otp/send') {
-    const body = await requestBody(request)
-    if (!body || !isNonEmptyString(body.phone)) {
-      return jsonProblem(400, 'INVALID_REQUEST', 'Invalid request')
+  const registration = url.pathname.startsWith('/session/registration/')
+  if (registration) {
+    // Browser JSON requests must carry an exact origin. Never trust forwarded origin/platform headers.
+    if (
+      origin !== url.origin ||
+      (request.headers.has('sec-fetch-site') &&
+        request.headers.get('sec-fetch-site') !== 'same-origin') ||
+      !request.headers
+        .get('content-type')
+        ?.toLowerCase()
+        .startsWith('application/json')
+    ) {
+      return jsonProblem(403, 'INVALID_ORIGIN', 'Request origin is not allowed')
     }
-
-    const response = await callIdentity(`${env.IDENTITY_ORIGIN}/auth/phone`, {
-      phone: body.phone,
-    })
-    if (!response) return identityFailure()
-    if (!response.ok) {
-      return safeOtpFailure(
-        response,
-        SAFE_OTP_SEND_ERROR_CODES,
-        'OTP send failed',
+    if (url.pathname.endsWith('/cancel')) {
+      return withCookie(
+        new Response(null, { status: 204 }),
+        registrationCookie(url, null),
       )
     }
-
-    const data = await upstreamData(response)
-    const validated = sendBrowserData(data)
-    return validated ? json(validated) : identityFailure()
+    if (!env.AUTH_REGISTRATION_KEY)
+      return jsonProblem(
+        503,
+        'REGISTRATION_UNAVAILABLE',
+        'Registration is temporarily unavailable',
+      )
   }
 
-  if (url.pathname === '/session/otp/verify') {
+  const sending =
+    url.pathname === '/session/otp/send' ||
+    url.pathname === '/session/registration/send'
+  const verifying =
+    url.pathname === '/session/otp/verify' ||
+    url.pathname === '/session/registration/verify'
+  if (sending || verifying) {
     const body = await requestBody(request)
-    if (!body) return jsonProblem(400, 'INVALID_REQUEST', 'Invalid request')
-
-    const response = await callIdentity(`${env.IDENTITY_ORIGIN}/auth/verify`, {
-      allowRegistration: true,
-      ...body,
-    })
+    if (
+      !body ||
+      !isNonEmptyString(body.phone) ||
+      body.phone.length > 32 ||
+      (verifying &&
+        (!isNonEmptyString(body.code) ||
+          body.code.length > 12 ||
+          !isNonEmptyString(body.challengeId) ||
+          body.challengeId.length > 128))
+    ) {
+      return jsonProblem(400, 'INVALID_REQUEST', 'Invalid request')
+    }
+    let session: { token: string; id: string } | null = null
+    if (registration) {
+      session = await readRegistrationSession(
+        request,
+        env.AUTH_REGISTRATION_KEY!,
+      )
+      if (!session && verifying)
+        return jsonProblem(
+          401,
+          'REGISTRATION_SESSION_EXPIRED',
+          'Restart registration',
+        )
+      if (sending)
+        session = await createRegistrationSession(
+          url,
+          env.AUTH_REGISTRATION_KEY!,
+          session?.id,
+        )
+      session ??= await createRegistrationSession(
+        url,
+        env.AUTH_REGISTRATION_KEY!,
+      )
+    }
+    const response = await callIdentity(
+      `${env.CORE_ORIGIN}/auth/${registration ? 'registration' : 'login'}/${sending ? 'phone' : 'verify'}`,
+      sending
+        ? { phone: body.phone }
+        : { phone: body.phone, code: body.code, challengeId: body.challengeId },
+      undefined,
+      env.AUTH_REGISTRATION_KEY
+        ? {
+            key: env.AUTH_REGISTRATION_KEY,
+            ...(session ? { session: session.id } : {}),
+            clientIp: request.headers.get('CF-Connecting-IP'),
+          }
+        : undefined,
+    )
     if (!response) return identityFailure()
-    if (!response.ok) return otpFailure(response)
-
+    if (!response.ok)
+      return sending
+        ? safeOtpFailure(response, SAFE_OTP_SEND_ERROR_CODES, 'OTP send failed')
+        : otpFailure(response)
     const data = await upstreamData(response)
+    if (sending) {
+      const validated = sendBrowserData(data)
+      if (!validated) return identityFailure()
+      const result = json(validated)
+      return session
+        ? withCookie(result, registrationCookie(url, session.token))
+        : result
+    }
     const validated = verifyBrowserData(data)
     if (!validated) return identityFailure()
-    return withCookie(
+    const result = withCookie(
       json(validated.browser),
       refreshCookie(url, validated.refreshToken),
     )
+    return registration
+      ? withCookie(result, registrationCookie(url, null))
+      : result
   }
 
   const refreshToken = cookieValue(request)
@@ -354,9 +494,19 @@ export async function handleSessionRequest(
   }
 
   if (url.pathname === '/session/refresh') {
-    const response = await callIdentity(`${env.IDENTITY_ORIGIN}/auth/refresh`, {
-      refreshToken,
-    })
+    const response = await callIdentity(
+      `${env.CORE_ORIGIN}/auth/refresh`,
+      {
+        refreshToken,
+      },
+      undefined,
+      env.AUTH_REGISTRATION_KEY
+        ? {
+            key: env.AUTH_REGISTRATION_KEY,
+            clientIp: request.headers.get('CF-Connecting-IP'),
+          }
+        : undefined,
+    )
     if (!response) return identityFailure()
     if (!response.ok) return identityFailure(response.status)
 
@@ -370,9 +520,15 @@ export async function handleSessionRequest(
   }
 
   const response = await callIdentity(
-    `${env.IDENTITY_ORIGIN}/auth/logout`,
+    `${env.CORE_ORIGIN}/auth/logout`,
     { refreshToken },
     request.headers.get('authorization'),
+    env.AUTH_REGISTRATION_KEY
+      ? {
+          key: env.AUTH_REGISTRATION_KEY,
+          clientIp: request.headers.get('CF-Connecting-IP'),
+        }
+      : undefined,
   )
   const expiredCookie = refreshCookie(url, null)
   if (!response) return withCookie(identityFailure(), expiredCookie)

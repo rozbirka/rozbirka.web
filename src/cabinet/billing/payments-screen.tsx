@@ -14,6 +14,7 @@ import {
 } from '@/components/app'
 import {
   billingApi,
+  canStartWebCheckout,
   resolveProviderManagement,
   type ProviderAwareSubscriptionDto,
 } from '@/api/billing'
@@ -130,7 +131,7 @@ export function PaymentsScreen() {
       const scope = requireLatestMutation()
       if (
         paymentId === null ||
-        !hasMonoManagement(latestSnapshotRef.current?.subscription)
+        !canStartWebCheckout(latestSnapshotRef.current?.subscription)
       ) {
         throw new BillingManagementUnavailableError()
       }
@@ -188,10 +189,10 @@ export function PaymentsScreen() {
     currentPaymentsState.kind === 'ready' &&
     currentPaymentsState.page.items.some(
       (item) =>
-        hasMonoManagement(cabinet.snapshot?.subscription ?? null) &&
+        canStartWebCheckout(cabinet.snapshot?.subscription ?? null) &&
         item.status === 'pending',
     )
-  const canManageMonoPayments = hasMonoManagement(
+  const canManageMonoPayments = canStartWebCheckout(
     cabinet.snapshot?.subscription ?? null,
   )
   const mutationError =
@@ -227,10 +228,22 @@ export function PaymentsScreen() {
     currentPaymentsState.kind === 'ready'
       ? currentPaymentsState.page.total
       : items.length
-  const guardCheckout = (event: { preventDefault: () => void }) => {
+  const guardCheckout = (
+    event: { preventDefault: () => void },
+    payment: PaymentDto,
+  ) => {
+    if (!isCheckoutCurrent(payment)) {
+      event.preventDefault()
+      setGuardError({
+        generation,
+        message:
+          'Строк оплати рахунку минув. Оберіть тариф, щоб створити новий рахунок.',
+      })
+      return
+    }
     try {
       requireLatestMutation()
-      if (!hasMonoManagement(latestSnapshotRef.current?.subscription)) {
+      if (!canStartWebCheckout(latestSnapshotRef.current?.subscription)) {
         event.preventDefault()
         resetCancel()
         setGuardError({ generation, message: BILLING_MANAGEMENT_UNAVAILABLE })
@@ -425,12 +438,14 @@ export function PaymentsScreen() {
                           {canManageMonoPayments &&
                           item.status === 'pending' ? (
                             <span className="flex min-w-0 flex-wrap justify-end gap-2">
-                              {item.checkoutUrl && (
+                              {item.checkoutUrl && isCheckoutCurrent(item) && (
                                 <BillingMutationGate decision={controlDecision}>
                                   <Button asChild variant="ghost">
                                     <a
                                       href={item.checkoutUrl}
-                                      onClick={guardCheckout}
+                                      onClick={(event) =>
+                                        guardCheckout(event, item)
+                                      }
                                       rel="noopener noreferrer"
                                       target="_blank"
                                     >
@@ -599,15 +614,10 @@ function PaymentMethod({
   )
 }
 
-function hasMonoManagement(subscription: unknown) {
+function isCheckoutCurrent(payment: PaymentDto): boolean {
   return (
-    subscription !== null &&
-    subscription !== undefined &&
-    resolveProviderManagement(
-      subscription as Pick<
-        ProviderAwareSubscriptionDto,
-        'source' | 'manageVia'
-      >,
-    ).kind === 'mono'
+    payment.status === 'pending' &&
+    (payment.checkoutExpiresAt === null ||
+      Date.parse(payment.checkoutExpiresAt) > Date.now())
   )
 }

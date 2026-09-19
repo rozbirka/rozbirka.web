@@ -1,3 +1,4 @@
+import axios from 'axios'
 import { identityClient } from './client'
 import type { RequestOptions } from './contracts'
 import { credentials } from './credentials'
@@ -17,11 +18,20 @@ export const profileApi = {
     name: string,
     options: RequestOptions = {},
   ): Promise<ProfileUser> {
+    const sessionGeneration = credentials.getSessionGeneration()
     const response = await identityClient.patch<UpdateNameResponse>(
       '/auth/me/name',
       { name },
       requestConfig(options),
     )
+    if (
+      options.signal?.aborted ||
+      sessionGeneration !== credentials.getSessionGeneration()
+    ) {
+      throw new axios.CanceledError(
+        'Profile request belongs to an ended session',
+      )
+    }
     credentials.setAccess(response.data.accessToken)
     return response.data.user
   },

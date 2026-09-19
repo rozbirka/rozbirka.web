@@ -1,4 +1,4 @@
-// === Auth (rozbirka.identity) ===
+// === Core authentication ===
 
 export interface SendOtpRequest {
   phone: string
@@ -7,13 +7,15 @@ export interface SendOtpRequest {
 export interface SendOtpResponse {
   retryAfterSeconds: number
   cooldownSeconds: number
+  challengeId: string
+  expiresAt: string
+  resendAt: string
 }
 
 export interface VerifyOtpRequest {
   phone: string
   code: string
-  /** Web allows creating a new account on first verify. Mobile omits this (sign-in only). */
-  allowRegistration?: boolean
+  challengeId: string
 }
 
 export interface VerifyUser {

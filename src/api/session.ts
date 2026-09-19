@@ -29,41 +29,77 @@ export const createSessionApi = (
     timeout: 15000,
     withCredentials: true,
   })
-  let sessionGeneration = 0
   let sessionMutationDepth = 0
+  // Serialize cookie-changing responses, not only in-memory token updates.
+  let mutationTail = Promise.resolve()
+  const acquireMutation = async () => {
+    const previous = mutationTail
+    let release!: () => void
+    mutationTail = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    await previous
+    return release
+  }
   const activeRefreshes = new Set<ActiveRefresh>()
 
   const invalidateRefreshes = async () => {
-    sessionGeneration += 1
     credentials.clear()
     const refreshes = [...activeRefreshes]
     refreshes.forEach(({ controller }) => controller.abort())
     await Promise.all(refreshes.map(({ settled }) => settled))
-    credentials.clear()
   }
 
   return {
-    async send(req: SendOtpRequest): Promise<SendOtpResponse> {
+    async send(
+      req: SendOtpRequest,
+      purpose: 'login' | 'registration' = 'login',
+      options: { signal?: AbortSignal } = {},
+    ): Promise<SendOtpResponse> {
       try {
         const response = await client.post<SendOtpResponse>(
-          '/session/otp/send',
+          purpose === 'registration'
+            ? '/session/registration/send'
+            : '/session/otp/send',
           req,
+          options,
         )
         return {
           cooldownSeconds: response.data.cooldownSeconds,
           retryAfterSeconds: response.data.retryAfterSeconds,
+          challengeId: response.data.challengeId,
+          expiresAt: response.data.expiresAt,
+          resendAt: response.data.resendAt,
         }
       } catch (error) {
         throw problemError(normalizeApiProblem(error))
       }
     },
 
-    async verify(req: VerifyOtpRequest): Promise<SessionVerifyResponse> {
+    async verify(
+      req: VerifyOtpRequest,
+      purpose: 'login' | 'registration' = 'login',
+      options: { signal?: AbortSignal } = {},
+    ): Promise<SessionVerifyResponse> {
+      sessionMutationDepth += 1
+      const release = await acquireMutation()
       try {
+        await invalidateRefreshes()
+        if (options.signal?.aborted) throw new axios.CanceledError()
+        const generation = credentials.getSessionGeneration()
         const response = await client.post<SessionVerifyResponse>(
-          '/session/otp/verify',
+          purpose === 'registration'
+            ? '/session/registration/verify'
+            : '/session/otp/verify',
           req,
+          options,
         )
+        if (
+          options.signal?.aborted ||
+          generation !== credentials.getSessionGeneration()
+        ) {
+          throw new axios.CanceledError()
+        }
         const payload: SessionVerifyResponse = {
           accessToken: response.data.accessToken,
           user: {
@@ -73,11 +109,22 @@ export const createSessionApi = (
           },
           isNewUser: response.data.isNewUser,
         }
-        credentials.setAccess(payload.accessToken)
+        credentials.startSession(payload.accessToken)
         return payload
       } catch (error) {
         throw problemError(normalizeApiProblem(error))
+      } finally {
+        sessionMutationDepth -= 1
+        release()
       }
+    },
+
+    async cancelRegistration(): Promise<void> {
+      await client.post(
+        '/session/registration/cancel',
+        {},
+        { headers: { 'Content-Type': 'application/json' } },
+      )
     },
 
     async refresh(): Promise<SessionRefreshResponse> {
@@ -85,7 +132,7 @@ export const createSessionApi = (
         throw problemError(normalizeApiProblem(new axios.CanceledError()))
       }
 
-      const generation = sessionGeneration
+      const generation = credentials.getSessionGeneration()
       const controller = new AbortController()
       let settle!: () => void
       const activeRefresh: ActiveRefresh = {
@@ -103,7 +150,7 @@ export const createSessionApi = (
           undefined,
           { signal: controller.signal },
         )
-        if (generation !== sessionGeneration) {
+        if (generation !== credentials.getSessionGeneration()) {
           throw new axios.CanceledError()
         }
         const payload: SessionRefreshResponse = {
@@ -122,17 +169,20 @@ export const createSessionApi = (
 
     async invalidate(): Promise<void> {
       sessionMutationDepth += 1
+      const release = await acquireMutation()
       try {
         await invalidateRefreshes()
       } finally {
         credentials.clear()
         sessionMutationDepth -= 1
+        release()
       }
     },
 
     async logout(): Promise<void> {
       const accessToken = credentials.getAccess()
       sessionMutationDepth += 1
+      const release = await acquireMutation()
 
       try {
         await invalidateRefreshes()
@@ -148,6 +198,7 @@ export const createSessionApi = (
       } finally {
         credentials.clear()
         sessionMutationDepth -= 1
+        release()
       }
     },
   }

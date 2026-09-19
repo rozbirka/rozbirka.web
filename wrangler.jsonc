@@ -16,19 +16,19 @@
     "head_sampling_rate": 1,
   },
   "vars": {
-    "IDENTITY_ORIGIN": "https://qaapi.rozbirka.pro",
+    "CORE_ORIGIN": "https://qaapi.rozbirka.pro",
   },
   "env": {
     "qa": {
       "name": "qa-rozbirka-pro-web",
       "vars": {
-        "IDENTITY_ORIGIN": "https://qaapi.rozbirka.pro",
+        "CORE_ORIGIN": "https://qaapi.rozbirka.pro",
       },
     },
     "production": {
       "name": "rozbirka-pro-web",
       "vars": {
-        "IDENTITY_ORIGIN": "https://api.rozbirka.pro",
+        "CORE_ORIGIN": "https://api.rozbirka.pro",
       },
       "routes": [
         {

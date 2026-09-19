@@ -1,3 +1,4 @@
+import { handleNativeAuth } from './native-auth'
 import { handleSessionRequest, type SessionEnv } from './session'
 
 export interface EdgeEnv extends SessionEnv {
@@ -129,6 +130,8 @@ async function notFound(request: Request, env: EdgeEnv) {
 }
 
 export async function handleRequest(request: Request, env: EdgeEnv) {
+  const nativeAuthResponse = await handleNativeAuth(request, env)
+  if (nativeAuthResponse) return nativeAuthResponse
   const sessionResponse = await handleSessionRequest(request, env)
   if (sessionResponse) return sessionResponse
 

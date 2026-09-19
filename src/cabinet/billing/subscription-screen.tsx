@@ -14,6 +14,7 @@ import {
 } from '@/components/app'
 import {
   billingApi,
+  canStartWebCheckout,
   resolveProviderManagement,
   type ProviderAwareSubscriptionDto,
 } from '@/api/billing'
@@ -103,7 +104,7 @@ export function SubscriptionScreen() {
   const checkout = useOperation<MutationOutcome>(
     async () => {
       const scope = requireLatestMutation()
-      if (!hasMonoManagement(latestSnapshotRef.current?.subscription)) {
+      if (!canStartWebCheckout(latestSnapshotRef.current?.subscription)) {
         throw new BillingManagementUnavailableError()
       }
       let checkoutUrl: string
@@ -255,6 +256,11 @@ function SubscriptionPanel({
   const canReactivate =
     subscription.canReactivate && subscription.state !== 'blocked'
   const isMono = management.kind === 'mono'
+  const canCheckout =
+    canStartWebCheckout(subscription) &&
+    (subscription.canSubscribe ||
+      canReactivate ||
+      (subscription.canReactivate && !isMono))
   const nextChargeAt =
     subscription.nextChargeAt ?? subscription.currentPeriodEnd
   const daysLeft =
@@ -277,7 +283,7 @@ function SubscriptionPanel({
           <Button asChild>
             <Link to={paymentsPath}>Платежі</Link>
           </Button>
-          {isMono && (subscription.canSubscribe || canReactivate) && (
+          {canCheckout && (
             <BillingMutationGate decision={manageDecision}>
               <Button
                 aria-busy={busy}
@@ -317,7 +323,9 @@ function SubscriptionPanel({
           </a>
         </Notice>
       )}
-      {management.kind === 'unavailable' && <BillingUnavailableNotice />}
+      {management.kind === 'unavailable' && !canCheckout && (
+        <BillingUnavailableNotice />
+      )}
 
       <div
         className={cn(
@@ -372,7 +380,7 @@ function SubscriptionPanel({
         </div>
         <div className="flex flex-wrap gap-2.5">
           <BillingDead title={NO_CARD_MANAGEMENT}>Змінити карту</BillingDead>
-          {isMono && (subscription.canSubscribe || canReactivate) && (
+          {canCheckout && (
             <BillingMutationGate decision={manageDecision}>
               <Button
                 aria-busy={busy}
