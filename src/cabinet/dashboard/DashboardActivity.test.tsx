@@ -138,3 +138,35 @@ it('keeps quiet when neither module is open', () => {
   expect(ordersApi.list).not.toHaveBeenCalled()
   expect(intakesApi.list).not.toHaveBeenCalled()
 })
+
+it('names the order status in Ukrainian instead of the raw code', async () => {
+  vi.mocked(ordersApi.list).mockResolvedValue({
+    items: [
+      {
+        id: 'order-1',
+        number: 286,
+        customerName: 'Ірина Олійник',
+        status: 'confirmed',
+        totalAmount: 103,
+        currency: 'USD',
+        createdAt: '2026-08-26T18:19:00Z',
+      },
+    ],
+    page: 1,
+    pageSize: 4,
+    total: 1,
+    totalPages: 1,
+  } as never)
+  vi.mocked(intakesApi.list).mockResolvedValue({
+    items: [],
+    page: 1,
+    pageSize: 4,
+    total: 0,
+    totalPages: 0,
+  })
+
+  renderActivity(['orders.view'])
+
+  expect(await screen.findByText('Підтверджено')).toBeVisible()
+  expect(screen.queryByText('confirmed')).toBeNull()
+})

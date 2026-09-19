@@ -35,9 +35,16 @@ interface SummaryItem {
   bar?: { filled: number; tone: 'ok' } | undefined
 }
 
-export function DashboardSummary({ data }: { data: DashboardData }) {
+export function DashboardSummary({
+  cashBalances,
+  data,
+}: {
+  /** Per-currency till totals, when the reader may see the money. */
+  cashBalances?: Record<string, number> | null
+  data: DashboardData
+}) {
   const money = compact([
-    moneyItem('Баланс кас', data.totalBalanceUah, 'UAH'),
+    ...cashItems(cashBalances, data.totalBalanceUah),
     moneyItem('Інвестовано всього', data.totalInvested, CAR_CURRENCY, {
       ...(data.activeCarsCount === null
         ? {}
@@ -192,6 +199,28 @@ function item(
   return value === null
     ? null
     : { label, value: numberFormatter.format(value), ...extra }
+}
+
+/**
+ * The till balances, one tile per currency. Every currency stands on its own —
+ * the cabinet converts nothing — so two currencies make two tiles rather than
+ * one invented sum. Without the till list the dashboard's own figure stands.
+ */
+function cashItems(
+  balances: Record<string, number> | null | undefined,
+  fallbackUah: number | null,
+): (SummaryItem | null)[] {
+  const entries = Object.entries(balances ?? {}).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )
+  if (entries.length === 0) return [moneyItem('Баланс кас', fallbackUah, 'UAH')]
+  if (entries.length === 1) {
+    const [currency, amount] = entries[0]!
+    return [moneyItem('Баланс кас', amount, currency)]
+  }
+  return entries.map(([currency, amount]) =>
+    moneyItem(`Баланс кас, ${currency}`, amount, currency),
+  )
 }
 
 function moneyItem(

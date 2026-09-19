@@ -21,7 +21,7 @@ function saidAs(
   const rule = mapping?.rules.find((one) => one.target === target)
   if (rule === undefined) return 'не зіставлено'
   if (rule.sources.length > 0) {
-    const column = columns?.fields.find((one) => one.id === rule.sources[0])
+    const column = columns?.fields?.find((one) => one.id === rule.sources[0])
     return `з колонки «${column?.header ?? rule.sources[0] ?? '—'}»`
   }
   const constant = rule.constant ?? ''
@@ -90,7 +90,7 @@ export function ImportConflict({
           <p className="text-app-muted mt-1.5 text-[14px] leading-6 text-pretty">
             Поки ви були на цій сторінці, налаштування імпорту змінилися.
             Підтвердження, яке ви бачите, розраховане за старими налаштуваннями,
-            тому запуск заблокований. Хто саме змінив — сервер не повідомляє.
+            тому запуск заблокований. Хто саме змінив — невідомо.
           </p>
         </div>
       </div>

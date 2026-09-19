@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { cn, plural } from '@/lib/utils'
 import {
+  Amount,
   Button,
   Card,
   ConfirmDialog,
@@ -124,6 +125,26 @@ const day = (value: string) => {
     : new Intl.DateTimeFormat('uk-UA', { dateStyle: 'short' }).format(parsed)
 }
 
+/**
+ * Avatar colours. The server keeps none, so the chip picks one by the name —
+ * the same person gets the same colour on every screen and every reload, and
+ * a wall of identical orange circles stops being a wall.
+ */
+const AVATAR_TONES = [
+  'bg-brand/15 text-brand',
+  'bg-state-ok/15 text-state-ok',
+  'bg-state-info/15 text-state-info',
+  'bg-state-warn/15 text-state-warn',
+  'bg-white/[0.08] text-app-ink',
+] as const
+
+const avatarTone = (seed: string) => {
+  let hash = 0
+  for (const character of seed)
+    hash = (hash * 31 + character.codePointAt(0)!) % 9973
+  return AVATAR_TONES[hash % AVATAR_TONES.length] ?? AVATAR_TONES[0]
+}
+
 /** Two initials for the avatar chip; a single word gives one. */
 const customerInitials = (name: string) =>
   name
@@ -220,7 +241,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="grid w-full gap-4 px-4 pt-10 pb-16 sm:px-6 md:px-8 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[1240px] gap-4 px-4 pt-10 pb-16 sm:px-6 md:px-8 lg:px-12">
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
           <div className="min-w-0">
             <p className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
@@ -270,7 +291,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
                 <button
                   aria-checked={active}
                   className={cn(
-                    'focus-visible:outline-brand flex min-h-11 cursor-pointer items-center gap-2 rounded-[9px] px-3.5 text-[14px] font-semibold',
+                    'focus-visible:outline-brand flex min-h-11 cursor-pointer items-center gap-2.5 rounded-[9px] px-3.5 text-[14px] font-semibold',
                     active
                       ? 'text-app-ink bg-white/[0.09]'
                       : 'text-app-muted hover:bg-white/[0.05]',
@@ -280,7 +301,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
                   role="radio"
                   type="button"
                 >
-                  {option.label}{' '}
+                  {option.label}
                   <span className="text-app-muted font-mono text-[12px] font-medium">
                     {counts[option.value]}
                   </span>
@@ -327,7 +348,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
         {totalPages > 1 ? (
           <p className="text-app-dim text-[13px]">
             Сегмент і сортування застосовуються до завантаженої сторінки —
-            сервер не приймає їх у запиті. Знайдено {total}{' '}
+            фільтр і сортування працюють по ній. Знайдено {total}{' '}
             {plural(total, ['клієнта', 'клієнти', 'клієнтів'])}.
           </p>
         ) : null}
@@ -397,7 +418,10 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
                     <span className="flex min-w-0 items-center gap-3.5">
                       <span
                         aria-hidden
-                        className="bg-brand/15 text-brand flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-bold"
+                        className={cn(
+                          'flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-bold',
+                          avatarTone(customer.name),
+                        )}
                       >
                         {customerInitials(customer.name)}
                       </span>
@@ -458,9 +482,11 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
                         )}
                       >
                         {customer.totalAmount === null ||
-                        customer.totalAmount === 0
-                          ? '—'
-                          : `${new Intl.NumberFormat('uk-UA').format(customer.totalAmount)} $`}
+                        customer.totalAmount === 0 ? (
+                          '—'
+                        ) : (
+                          <Amount currency="USD" value={customer.totalAmount} />
+                        )}
                       </span>
                     ) : null}
                   </Link>
@@ -628,8 +654,12 @@ function CustomerDetailScreen({
   const orderPath = `/app/${cabinet.targetTenant?.slug ?? ''}/orders/new?customerId=${encodeURIComponent(customer.id)}`
   const orderHref = (orderId: string) =>
     `/app/${cabinet.targetTenant?.slug ?? ''}/orders/${orderId}`
-  const money = (value: number | null) =>
-    value === null ? '—' : `${new Intl.NumberFormat('uk-UA').format(value)} $`
+  const money = (value: number | null | undefined) =>
+    typeof value === 'number' && Number.isFinite(value) ? (
+      <Amount currency="USD" value={value} />
+    ) : (
+      '—'
+    )
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
@@ -678,14 +708,17 @@ function CustomerDetailScreen({
         </div>
       </div>
 
-      <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         {error ? <Notice tone="danger">{error}</Notice> : null}
         {copied ? <Notice tone="ok">Телефон скопійовано.</Notice> : null}
 
         <div className="flex flex-wrap items-start gap-x-6 gap-y-5">
           <span
             aria-hidden
-            className="bg-brand/15 text-brand flex size-16 shrink-0 items-center justify-center rounded-full text-[22px] font-bold"
+            className={cn(
+              'flex size-16 shrink-0 items-center justify-center rounded-full text-[22px] font-bold',
+              avatarTone(customer.name),
+            )}
           >
             {customerInitials(customer.name)}
           </span>
@@ -877,9 +910,12 @@ function CustomerDetailScreen({
                         </span>
                       </span>
                       <span className="font-mono text-[15px] whitespace-nowrap text-white tabular-nums">
-                        {order.totalAmount === null
-                          ? '—'
-                          : `${new Intl.NumberFormat('uk-UA').format(order.totalAmount)} ${order.currency ?? ''}`.trim()}
+                        {/* The code the server sends becomes the symbol
+                            people read: USD is $, UAH is ₴, EUR is €. */}
+                        <Amount
+                          currency={order.currency ?? null}
+                          value={order.totalAmount}
+                        />
                       </span>
                     </Link>
                   </li>
@@ -904,7 +940,7 @@ function CustomerDetailScreen({
                 </dd>
                 <dt
                   className="text-app-muted text-[14px] font-semibold"
-                  title="Сервер не зберігає, звідки прийшов клієнт"
+                  title="Звідки прийшов клієнт, кабінет не зберігає"
                 >
                   Канал
                 </dt>

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { StatusPill, type StatusTone } from '@/components/app'
+import { StatusPill } from '@/components/app'
 import { intakesApi, type IntakeListItem } from '@/api/intakes'
 import { ordersApi, type OrderListItem } from '@/api/orders'
 import type { Tenant } from '@/api/types'
 import type { TenantAccessSnapshot } from '../access-types'
+import { orderStatusPresentation } from '../orders/order-labels'
 import { cabinetPath } from '../cabinet-paths'
 import { cabinetModules } from '../module-registry'
 import { evaluateModuleAccess } from '../policy'
@@ -26,14 +27,6 @@ const money = new Intl.NumberFormat('uk-UA', {
   currencyDisplay: 'narrowSymbol',
   maximumFractionDigits: 0,
 })
-
-const orderStatus = (status: string): { label: string; tone: StatusTone } => {
-  if (status === 'paid') return { label: 'Оплачено', tone: 'ok' }
-  if (status === 'reserved') return { label: 'Резерв', tone: 'warn' }
-  if (status === 'refunded') return { label: 'Повернено', tone: 'info' }
-  if (status === 'cancelled') return { label: 'Скасовано', tone: 'neutral' }
-  return { label: status, tone: 'neutral' }
-}
 
 const when = (timestamp: string) => {
   const date = new Date(timestamp)
@@ -107,7 +100,7 @@ export function DashboardActivity({
           title="Останні замовлення"
         >
           {(orders ?? []).map((order) => {
-            const status = orderStatus(order.status)
+            const status = orderStatusPresentation(order.status)
             return (
               <li key={order.id}>
                 <Link

@@ -100,7 +100,7 @@ it('shows what the machine read, with the header row it used', () => {
 it('says the server does not keep the filename when the session did not pick it', () => {
   renderStep()
 
-  expect(screen.getByText(/Назву файлу сервер не зберігає/)).toBeVisible()
+  expect(screen.getByText(/Назва файлу відома лише в сеансі/)).toBeVisible()
 })
 
 it('counts the file against the limits the server reported', () => {
@@ -223,4 +223,54 @@ it('stays quiet when the text read fine', () => {
   expect(
     screen.queryByRole('region', { name: 'Спробуйте' }),
   ).not.toBeInTheDocument()
+})
+
+it('survives a source whose empty collections came back missing', () => {
+  // The server leaves empty arrays out of the payload entirely.
+  renderStep({
+    status: {
+      ...status,
+      source: { selection: status.source!.selection },
+    } as unknown as typeof status,
+    rows: [],
+  })
+
+  expect(screen.getByText('Рядків даних')).toBeVisible()
+})
+
+it('reports the transfer with its own steps while the file is on the wire', () => {
+  renderStep({
+    status: null,
+    rows: [],
+    file: new File(['x'], 'залишки.xlsx'),
+    transfer: { loaded: 2_800_000, total: 4_400_000 },
+    onCancelTransfer: vi.fn(),
+  })
+
+  expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '64')
+  expect(screen.getByText('Передавання файлу')).toBeVisible()
+  expect(screen.getByText('64%')).toBeVisible()
+  expect(screen.getByText('Читання структури')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Скасувати' })).toBeVisible()
+})
+
+it('moves on to reading the structure once every byte is sent', () => {
+  renderStep({
+    status: null,
+    rows: [],
+    file: new File(['x'], 'залишки.xlsx'),
+    transfer: { loaded: 4_400_000, total: 4_400_000 },
+  })
+
+  expect(screen.getByText(/передано повністю/)).toBeVisible()
+  expect(screen.getByText('готово')).toBeVisible()
+  expect(screen.getByText('триває')).toBeVisible()
+})
+
+it('states the limits beside the dropzone', () => {
+  renderStep({ status: null, rows: [] })
+
+  const limits = screen.getByText('Обмеження').closest('section')!
+  expect(within(limits).getByText('CSV, XLSX')).toBeVisible()
+  expect(within(limits).getByText('до 10 MiB')).toBeVisible()
 })

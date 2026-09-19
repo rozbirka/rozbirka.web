@@ -50,11 +50,11 @@ const day = (value: string | null) => {
  * The execution never reports how long it ran, who started it or what the
  * uploaded file was called — so those cells say so instead of guessing.
  */
-const NO_TIMING = 'Сервер не повідомляє час початку й завершення виконання.'
+const NO_TIMING = 'Час початку й завершення виконання не показується.'
 const NO_TOTALS =
-  'Після запуску сервер повертає лише кількість створених і невдалих рядків — решта сутностей не розбивається за типом.'
+  'Після запуску відомі лише кількість створених і невдалих рядків — решта сутностей за типом не розбивається.'
 const NO_FILE_NAME =
-  'Назва файлу не повертається сервером після перезавантаження сторінки.'
+  'Після перезавантаження сторінки назва файлу вже не показується.'
 
 /** Rows the server will pick up again; everything else needs the file fixed. */
 const RETRYABLE = ['Pending', 'RetryableFailure']
@@ -318,7 +318,7 @@ export function ImportResultStep({
         />
         <Kpi
           label="Тривалість"
-          meta="сервер не повідомляє"
+          meta="невідомо"
           title={NO_TIMING}
           tone="dim"
           value="—"
@@ -540,8 +540,8 @@ export function ImportResultStep({
             ))}
           </dl>
           <p className="text-app-dim mt-4 text-[13px] leading-5 text-pretty">
-            Скільки надходжень, зон і замовлень створив імпорт, сервер після
-            запуску не повідомляє.
+            Скільки надходжень, зон і замовлень створив імпорт, після запуску не
+            повідомляє.
           </p>
           <div className="mt-4">
             <Button asChild>

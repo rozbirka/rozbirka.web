@@ -155,3 +155,23 @@ it('renders an empty yard as a successful onboarding state', () => {
   expect(screen.getByText('Почніть наповнювати розбірку')).toBeInTheDocument()
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
+
+it('shows a till balance tile for every currency the yard keeps', () => {
+  render(
+    <DashboardSummary
+      cashBalances={{ USD: 14280, UAH: 186400 }}
+      data={summary({ totalBalanceUah: 186400 })}
+    />,
+  )
+
+  // Two currencies, two figures — the cabinet converts nothing, so it never
+  // adds them together.
+  expect(screen.getByText('Баланс кас, USD')).toBeVisible()
+  expect(screen.getByText('Баланс кас, UAH')).toBeVisible()
+})
+
+it('keeps the dashboard figure when the till list is unavailable', () => {
+  render(<DashboardSummary data={summary({ totalBalanceUah: 186400 })} />)
+
+  expect(screen.getByText('Баланс кас')).toBeVisible()
+})

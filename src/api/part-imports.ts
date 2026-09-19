@@ -64,11 +64,16 @@ export interface SourceRow {
   cells: { column: number; raw: string | null; display?: string | null }[]
 }
 export interface ImportSource {
-  fields: { id: string; column: number; header: string; type: string }[]
-  tables: { id: string; name: string; hidden: boolean }[]
+  /**
+   * The server leaves these collections out of the payload when they are
+   * empty, so every one of them is optional here — a read that assumed an
+   * array took the whole screen down with «reading 'warnings' of undefined».
+   */
+  fields?: { id: string; column: number; header: string; type: string }[]
+  tables?: { id: string; name: string; hidden: boolean }[]
   selection: ImportSelection
-  warnings: string[]
-  rows: SourceRow[]
+  warnings?: string[]
+  rows?: SourceRow[]
 }
 export interface ImportRow {
   rowId: string
@@ -208,8 +213,12 @@ export const partImportsApi = {
     file: File,
     key: string,
     selection: ImportSelection,
-    options: RequestOptions = {},
+    options: RequestOptions & {
+      /** Bytes on the wire so far, straight from the browser. */
+      onProgress?: (loaded: number, total: number) => void
+    } = {},
   ) {
+    const { onProgress, ...request } = options
     const form = new FormData()
     form.append('file', file)
     form.append('key', key)
@@ -217,8 +226,15 @@ export const partImportsApi = {
     form.append('encoding', selection.encoding)
     return (
       await apiClient.post<{ id: string }>(base, form, {
-        ...options,
+        ...request,
         headers: { 'Content-Type': 'multipart/form-data' },
+        ...(onProgress === undefined
+          ? {}
+          : {
+              onUploadProgress: (event) => {
+                onProgress(event.loaded, event.total ?? file.size)
+              },
+            }),
       })
     ).data
   },

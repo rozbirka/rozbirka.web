@@ -58,9 +58,9 @@ type MutationOutcome = 'applied' | 'stale'
 
 /** What the plan catalogue does not carry, said where the design asks for it. */
 const NO_PRORATION =
-  'Як перераховується залишок оплаченого періоду при зміні тарифу, API не повідомляє — оплата починається з нового рахунку.'
+  'Залишок оплаченого періоду кабінет не перераховує — оплата починається з нового рахунку.'
 const NO_PLAN_COPY =
-  'Опису «кому цей тариф» і позначок знижки в каталозі теж немає: тариф віддає назву, суму, валюту, інтервал, ліміти й перелік можливостей.'
+  'Опису «кому цей тариф» і позначок знижки в тарифах теж немає: є назва, сума, валюта, період, ліміти й перелік можливостей.'
 
 export function PlansScreen() {
   const [searchParams] = useSearchParams()
@@ -241,7 +241,7 @@ export function PlansScreen() {
       {management.kind === 'unavailable' && <BillingUnavailableNotice />}
 
       <ul
-        className="grid min-w-0 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3"
+        className="grid min-w-0 items-start gap-5 sm:grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))]"
         role="list"
       >
         {plans.map((plan) => {

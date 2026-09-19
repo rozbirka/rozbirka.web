@@ -13,10 +13,13 @@
 ## Existing local backend and data
 
 The selected checkout for this task is
-`/Users/admin/code/rozbirka/rozbirka.core/.worktrees/part-search-web-fields`.
+`/Users/admin/code/rozbirka/rozbirka.core/.worktrees/import-optimizations`
+on `feature/roz-132-adaptive-parts-import` (selected by the user on 2026-09-17).
 Revalidate the checkout with the user if the requested branch changes.
 
-Its ignored `orchestration/Rozbirka.AppHost/appsettings.Development.json` pins:
+The existing local database must be explicitly pinned when launching this
+checkout using `ROZBIRKA_POSTGRES_VOLUME` (see command below). The prior
+`part-search-web-fields` checkout used these local volume settings:
 
 ```json
 {
@@ -35,8 +38,26 @@ Inspect existing listeners/processes first. Reuse a healthy matching backend.
 If absent, run in a persistent terminal from that Core checkout:
 
 ```sh
-ROZBIRKA_GATEWAY_URL=http://localhost:8088 dotnet run --project orchestration/Rozbirka.AppHost/Rozbirka.AppHost.csproj --launch-profile http
+ROZBIRKA_GATEWAY_URL=http://localhost:8088 ROZBIRKA_POSTGRES_VOLUME=rozbirka.apphost-841cb8679a-postgres-data ROZBIRKA_QA_MEDIA_BUCKET=rozbirka-local-media ROZBIRKA_QA_MEDIA_PUBLIC_BASE_URL=http://localhost:4443/rozbirka-local-media Storage__EmulatorEndpoint=http://localhost:4443 Storage__ImportsBucketName=rozbirka-local-imports PartImportApi__Enabled=true PubSub__ImportListenerEnabled=true dotnet run --project orchestration/Rozbirka.AppHost/Rozbirka.AppHost.csproj --launch-profile http
 ```
+
+### Local import storage (enabled 2026-09-18)
+
+Before launching the import-enabled backend, start the existing Docker container
+`rozbirka-local-import-storage` if stopped (`docker start rozbirka-local-import-storage`).
+It exposes only `127.0.0.1:4443`, uses volume `rozbirka-local-import-storage`,
+and runs `fsouza/fake-gcs-server` with HTTP and external URL
+`http://localhost:4443`. Its three emulator buckets are `rozbirka-local-imports`,
+`rozbirka-local-reports`, and `rozbirka-local-media`. Never provision these in GCS
+as a workaround. Existing remote media URLs remain remote; new storage operations
+in this launch profile use the local emulator.
+
+Check `http://localhost:4443/storage/v1/b` before launch. Preserve the container
+and volume across restarts. The import listener and API flags above must reach
+both API and Worker; the local Pub/Sub emulator must contain subscription
+`rozbirka-async-imports-worker-v1`. Signed source-download URLs still require
+IAM-capable credentials in the current implementation; emulator upload/read
+support does not prove signed-download support.
 
 Wait for `/health/core` and `/health/identity` on localhost:8088 to return 200.
 Aspire starts dependencies and AsyncWorker; do not create duplicates. A running
