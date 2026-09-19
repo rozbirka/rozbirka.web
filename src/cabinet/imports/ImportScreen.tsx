@@ -50,7 +50,7 @@ const titles = [
 ]
 const descriptions = [
   'Перенесення залишків із власної таблиці CSV або XLSX.',
-  'CSV або XLSX до 10 МіБ. Перевірте, що система прочитала таблицю правильно.',
+  'CSV або XLSX до 10 MiB. Перевірте, що система прочитала таблицю правильно.',
   'Зіставте колонки файлу з полями Розбірки. Спільні значення застосовуються до всіх рядків.',
   'Виберіть рядки для імпорту та вирішіть проблеми. Один рядок із кількістю 5 створює одну позицію з п’ятьма одиницями товару.',
   'Це те, що буде створено. Після запуску зміни виконуються у фоні.',
@@ -88,7 +88,11 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
   const [status, setStatus] = useState<ImportStatus | null>(null),
     [rows, setRows] = useState<ImportRow[]>([]),
     [step, setStep] = useState(importId || fresh ? 1 : 0)
-  const [busy, setBusy] = useState(false),
+  const [transfer, setTransfer] = useState<{
+      loaded: number
+      total: number
+    } | null>(null),
+    [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
     [file, setFile] = useState<File | null>(null)
   const [selection, setSelection] = useState<ImportSelection>({
@@ -114,6 +118,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
   const lifetime = useRef<AbortController | null>(null),
     working = useRef(false),
     uploadKey = useRef(crypto.randomUUID()),
+    uploadAbort = useRef<AbortController | null>(null),
     commitKey = useRef(crypto.randomUUID()),
     version = useRef(''),
     statusRef = useRef<ImportStatus | null>(null)
@@ -434,10 +439,27 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
     } else if (step === 1 && status?.source) setStep(2)
     else if (step === 1 && file)
       void action(async (signal) => {
-        const uploaded = await api.upload(file, uploadKey.current, selection, {
-          signal,
-        })
-        if (!signal.aborted) void navigate(`${base}/${uploaded.id}`)
+        const controller = new AbortController()
+        uploadAbort.current = controller
+        setTransfer({ loaded: 0, total: file.size })
+        try {
+          const uploaded = await api.upload(
+            file,
+            uploadKey.current,
+            selection,
+            {
+              signal: AbortSignal.any([signal, controller.signal]),
+              onProgress: (loaded, total) => {
+                if (live()) setTransfer({ loaded, total })
+              },
+            },
+          )
+          if (!signal.aborted && !controller.signal.aborted)
+            void navigate(`${base}/${uploaded.id}`)
+        } finally {
+          uploadAbort.current = null
+          if (live()) setTransfer(null)
+        }
       })
     else if (step === 2) void action(saveMapping)
     else if (step === 3) void action(validate)
@@ -570,7 +592,11 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
           <p className="import-description">
             {step === 1 && status?.status === 'Failed'
               ? 'Файл прочитати не вдалося. Нижче — що саме сталося й що можна зробити.'
-              : descriptions[step]}
+              : step === 1 && transfer !== null
+                ? transfer.loaded < transfer.total
+                  ? 'Файл передається на сервер. Не закривайте вкладку до кінця передавання.'
+                  : 'Файл на сервері. Читаємо структуру таблиці — це кілька секунд.'
+                : descriptions[step]}
           </p>
         )}
         {error && !(step === 4 && conflict) ? (
@@ -631,12 +657,14 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
                 }
               })
             }
+            onCancelTransfer={() => uploadAbort.current?.abort()}
             onSelection={setSelection}
             onToggleSettings={() => setReadSettings((value) => !value)}
             rows={rows}
             selection={selection}
             settingsOpen={readSettings}
             status={status}
+            transfer={transfer}
           />
         ) : null}
         {step === 2 && status?.source ? (

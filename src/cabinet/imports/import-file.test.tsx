@@ -237,3 +237,40 @@ it('survives a source whose empty collections came back missing', () => {
 
   expect(screen.getByText('Рядків даних')).toBeVisible()
 })
+
+it('reports the transfer with its own steps while the file is on the wire', () => {
+  renderStep({
+    status: null,
+    rows: [],
+    file: new File(['x'], 'залишки.xlsx'),
+    transfer: { loaded: 2_800_000, total: 4_400_000 },
+    onCancelTransfer: vi.fn(),
+  })
+
+  expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '64')
+  expect(screen.getByText('Передавання файлу')).toBeVisible()
+  expect(screen.getByText('64%')).toBeVisible()
+  expect(screen.getByText('Читання структури')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Скасувати' })).toBeVisible()
+})
+
+it('moves on to reading the structure once every byte is sent', () => {
+  renderStep({
+    status: null,
+    rows: [],
+    file: new File(['x'], 'залишки.xlsx'),
+    transfer: { loaded: 4_400_000, total: 4_400_000 },
+  })
+
+  expect(screen.getByText(/передано повністю/)).toBeVisible()
+  expect(screen.getByText('готово')).toBeVisible()
+  expect(screen.getByText('триває')).toBeVisible()
+})
+
+it('states the limits beside the dropzone', () => {
+  renderStep({ status: null, rows: [] })
+
+  const limits = screen.getByText('Обмеження').closest('section')!
+  expect(within(limits).getByText('CSV, XLSX')).toBeVisible()
+  expect(within(limits).getByText('до 10 MiB')).toBeVisible()
+})

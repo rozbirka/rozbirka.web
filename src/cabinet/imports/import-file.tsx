@@ -88,6 +88,8 @@ export function ImportFileStep({
   onChooseFile,
   onReanalyze,
   onContinue,
+  onCancelTransfer,
+  transfer,
 }: {
   capabilities: ImportCapabilities
   status: ImportStatus | null
@@ -103,6 +105,10 @@ export function ImportFileStep({
   onChooseFile: (file: File | undefined) => void
   onReanalyze: (override?: ImportSelection) => void
   onContinue: () => void
+  /** Stops the upload in flight. */
+  onCancelTransfer?: () => void
+  /** Bytes on the wire, while the file is being sent. */
+  transfer?: { loaded: number; total: number } | null
 }) {
   const source = status === null ? null : status.source
   // Empty collections come back missing, not empty, so every one of them is
@@ -169,56 +175,197 @@ export function ImportFileStep({
         }
       : null
 
+  const maxMiB = String(
+    Math.round(capabilities.limits.maxBytes / (1024 * 1024)),
+  )
+  const maxColumns = capabilities.limits.maxColumns
+  const sending = transfer != null && transfer.loaded < transfer.total
+  const transferPercent =
+    transfer == null || transfer.total === 0
+      ? 0
+      : Math.min(100, Math.round((transfer.loaded / transfer.total) * 100))
+  // The three things that happen between picking a file and seeing its rows.
+  // Each is a state the screen is already in, not a guess at the server.
+  const transferSteps = [
+    {
+      label: 'Передавання файлу',
+      state: sending ? 'running' : 'done',
+      note: sending ? `${String(transferPercent)}%` : 'готово',
+    },
+    {
+      label: 'Читання структури',
+      state: sending ? 'waiting' : 'running',
+      note: sending ? 'очікує' : 'триває',
+    },
+    { label: 'Перегляд перших рядків', state: 'waiting', note: 'очікує' },
+  ] as const
+
+  if (transfer != null)
+    return (
+      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
+        <div className="border-app-line bg-app-raised grid min-w-0 gap-4 rounded-[18px] border px-5.5 py-5">
+          <div className="flex flex-wrap items-center gap-4">
+            <span
+              aria-hidden
+              className="bg-state-info-soft text-state-info inline-flex size-10.5 flex-none items-center justify-center rounded-[11px] font-mono text-[11px] font-medium"
+            >
+              {format}
+            </span>
+            <div className="min-w-0 flex-[1_1_200px]">
+              <p className="text-app-ink text-[16px] font-bold tracking-[-0.01em]">
+                {file?.name ?? 'Файл імпорту'}
+              </p>
+              <p className="text-app-muted mt-1 text-[13px]">
+                {fileSize(transfer.total)} ·{' '}
+                {transfer.loaded < transfer.total
+                  ? `передано ${fileSize(transfer.loaded)}`
+                  : 'передано повністю'}
+              </p>
+            </div>
+            {onCancelTransfer === undefined ? null : (
+              <Button onClick={onCancelTransfer}>Скасувати</Button>
+            )}
+          </div>
+          <div
+            aria-label="Передавання файлу"
+            aria-valuemax={100}
+            aria-valuemin={0}
+            aria-valuenow={transferPercent}
+            className="bg-app-input h-2 w-full overflow-hidden rounded-full"
+            role="progressbar"
+          >
+            <div
+              className="bg-state-info h-full transition-[width] duration-300"
+              style={{ width: `${String(transferPercent)}%` }}
+            />
+          </div>
+          <ol className="grid gap-3.5">
+            {transferSteps.map((one) => (
+              <li className="flex items-center gap-3" key={one.label}>
+                <span
+                  aria-hidden
+                  className={cn(
+                    'inline-flex size-6 flex-none items-center justify-center rounded-full text-[12px] font-bold',
+                    one.state === 'done' && 'bg-state-ok-soft text-state-ok',
+                    one.state === 'running' && 'bg-state-info text-app-canvas',
+                    one.state === 'waiting' && 'border-app-line-2 border',
+                  )}
+                >
+                  {one.state === 'done' ? '✓' : ''}
+                </span>
+                <span
+                  className={cn(
+                    'min-w-0 flex-1 text-[14.5px] font-semibold',
+                    one.state === 'waiting' ? 'text-app-dim' : 'text-app-ink',
+                  )}
+                >
+                  {one.label}
+                </span>
+                <span className="text-app-muted font-mono text-[12.5px]">
+                  {one.note}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+        <section className="border-app-line bg-app-raised min-w-0 rounded-[18px] border px-5 py-4.5">
+          <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+            Поки триває
+          </h2>
+          <p className="text-app-muted mt-3 text-[13.5px] leading-6 text-pretty">
+            {transfer.loaded < transfer.total
+              ? 'Передавання не відновлюється після закриття вкладки. Читання структури почнеться автоматично.'
+              : 'Визначаємо рядок заголовків, типи колонок і кількість рядків. Вкладку можна закрити — результат буде в історії.'}
+          </p>
+        </section>
+      </div>
+    )
+
   if (status === null || source === null)
     return (
-      <div className="flex min-w-0 flex-col gap-4">
-        <label
-          className={cn(
-            'border-app-line-2 bg-app-input focus-within:border-brand relative grid cursor-pointer justify-items-center gap-3 rounded-[18px] border border-dashed px-6 py-14 text-center transition-colors',
-            busy ? 'cursor-not-allowed opacity-55' : 'hover:border-app-line-2',
-          )}
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={(event) => {
-            event.preventDefault()
-            if (!busy) onChooseFile(event.dataTransfer.files[0])
-          }}
-        >
-          <span
-            aria-hidden
-            className="border-app-line text-app-muted inline-flex size-12 items-center justify-center rounded-[14px] border"
+      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
+        <div className="grid min-w-0 gap-4">
+          <label
+            className={cn(
+              'border-app-line-2 bg-app-input focus-within:border-brand relative grid cursor-pointer justify-items-center gap-3 rounded-[18px] border border-dashed px-6 py-14 text-center transition-colors',
+              busy
+                ? 'cursor-not-allowed opacity-55'
+                : 'hover:border-app-line-2',
+            )}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault()
+              if (!busy) onChooseFile(event.dataTransfer.files[0])
+            }}
           >
-            <Upload className="size-5" />
-          </span>
-          <strong className="text-app-ink text-[16px] font-bold tracking-[-0.01em]">
-            {/* Only the formats are shouted; the word between them is not. */}
-            Перетягніть файл{' '}
-            {capabilities.formats.map((one) => one.toUpperCase()).join(' або ')}
-          </strong>
-          <span className="text-app-muted text-[13.5px]">
-            до{' '}
-            {String(Math.round(capabilities.limits.maxBytes / (1024 * 1024)))}{' '}
-            MiB, до {count(capabilities.limits.maxRows)} рядків
-          </span>
-          <span className="border-app-line-2 text-app-ink mt-1 inline-flex min-h-11 items-center rounded-[12px] border px-4 text-[13.5px] font-bold">
-            {file === null ? 'Вибрати файл' : 'Вибрати інший файл'}
-          </span>
-          {/* The real control covers the whole zone: invisible, but focusable
+            <span
+              aria-hidden
+              className="border-app-line text-app-muted inline-flex size-12 items-center justify-center rounded-[14px] border"
+            >
+              <Upload className="size-5" />
+            </span>
+            <strong className="text-app-ink text-[16px] font-bold tracking-[-0.01em]">
+              {/* Only the formats are shouted; the word between them is not. */}
+              Перетягніть файл{' '}
+              {capabilities.formats
+                .map((one) => one.toUpperCase())
+                .join(' або ')}
+            </strong>
+            <span className="text-app-muted text-[13.5px]">
+              до {maxMiB} MiB · до {count(capabilities.limits.maxRows)} рядків
+              {maxColumns === undefined
+                ? ''
+                : ` і ${count(maxColumns)} колонок`}
+            </span>
+            <span className="bg-brand text-brand-foreground mt-1 inline-flex min-h-11 items-center rounded-[12px] px-5 text-[14px] font-bold">
+              {file === null ? 'Вибрати файл' : 'Вибрати інший файл'}
+            </span>
+            {/* The real control covers the whole zone: invisible, but focusable
               and a target the size of the drop area rather than of a word. */}
-          <input
-            accept={capabilities.formats.map((one) => `.${one}`).join(',')}
-            aria-label="Файл імпорту"
-            className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
-            disabled={busy}
-            onChange={(event) => onChooseFile(event.target.files?.[0])}
-            type="file"
-          />
-        </label>
-        {file === null ? null : (
-          <p className="text-app-muted text-sm">
-            Обрано {file.name} · {fileSize(file.size)}. Натисніть «Завантажити
-            файл», щоб почати читання.
-          </p>
-        )}
+            <input
+              accept={capabilities.formats.map((one) => `.${one}`).join(',')}
+              aria-label="Файл імпорту"
+              className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
+              disabled={busy}
+              onChange={(event) => onChooseFile(event.target.files?.[0])}
+              type="file"
+            />
+          </label>
+          {file === null ? null : (
+            <p className="text-app-muted text-sm">
+              Обрано {file.name} · {fileSize(file.size)}. Натисніть «Завантажити
+              файл», щоб почати читання.
+            </p>
+          )}
+        </div>
+        <section className="border-app-line bg-app-raised min-w-0 rounded-[18px] border px-5 py-4.5">
+          <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+            Обмеження
+          </h2>
+          <dl className="mt-3.5 grid gap-2.5 text-[13.5px]">
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-app-muted">Формати</dt>
+              <dd className="text-app-ink font-mono">
+                {capabilities.formats
+                  .map((one) => one.toUpperCase())
+                  .join(', ')}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-app-muted">Розмір</dt>
+              <dd className="text-app-ink font-mono">до {maxMiB} MiB</dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-app-muted">
+                {maxColumns === undefined ? 'Рядків' : 'Рядків і колонок'}
+              </dt>
+              <dd className="text-app-ink font-mono tabular-nums">
+                {count(capabilities.limits.maxRows)}
+                {maxColumns === undefined ? '' : ` / ${count(maxColumns)}`}
+              </dd>
+            </div>
+          </dl>
+        </section>
       </div>
     )
 
