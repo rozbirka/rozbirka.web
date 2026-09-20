@@ -470,17 +470,29 @@ export function CabinetProvider({ children }: { children: ReactNode }) {
  * below is one centred card on the app canvas, and each one names its own live
  * region so a screen reader can never confuse loading with switching.
  */
-function ShellFrame({ children }: { children: ReactNode }) {
+function ShellFrame({
+  account = false,
+  children,
+}: {
+  /**
+   * A way out for someone the cabinet cannot let in: personal account controls
+   * live outside company access. Offered only in the states a person is stuck
+   * in — under a spinner it would be noise.
+   */
+  account?: boolean
+  children: ReactNode
+}) {
   return (
     <div className="bg-app-canvas grid min-h-dvh place-items-center px-4 py-10">
       <div className="w-full max-w-md">
         {children}
-        <Link
-          to="/account/security"
-          className="text-brand mt-6 inline-block underline"
-        >
-          Особистий акаунт
-        </Link>
+        {account && (
+          <div className="mt-5 flex justify-center">
+            <Button asChild variant="quiet">
+              <Link to="/account/security">Особистий акаунт</Link>
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -522,7 +534,7 @@ function ShellSwitching({ target }: { target: Tenant | null }) {
 
 function ShellLoadFailure({ onRetry }: { onRetry: () => void }) {
   return (
-    <ShellFrame>
+    <ShellFrame account>
       <ErrorState
         description="Не вдалося отримати доступи до розбірки. Перевірте зв’язок і спробуйте ще раз — дані залишилися на місці."
         label="Помилка завантаження розбірки"
@@ -535,7 +547,7 @@ function ShellLoadFailure({ onRetry }: { onRetry: () => void }) {
 
 function ShellCleanupFailure() {
   return (
-    <ShellFrame>
+    <ShellFrame account>
       <ErrorState
         actions={
           <Button onClick={() => window.location.reload()} variant="primary">
@@ -565,7 +577,7 @@ function ShellRecovery({
   recoveryTenant: Tenant | null
 }) {
   return (
-    <ShellFrame>
+    <ShellFrame account>
       <StateScreen
         actions={
           <Button asChild variant="primary">

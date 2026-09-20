@@ -531,9 +531,9 @@ function PhoneStep({
           label="Номер телефону"
         >
           <TextInput
-            disabled={pending}
             autoComplete="tel"
             autoFocus
+            disabled={pending}
             className="min-h-12 px-4 text-[16px] tracking-[0.02em] tabular-nums"
             inputMode="numeric"
             maxLength={19}
@@ -560,10 +560,24 @@ function PhoneStep({
         </Button>
 
         {resendIn > 0 && (
-          <p role="status" className="text-app-dim text-center text-[12px]">
+          <p className="text-app-dim text-center text-[12px]" role="status">
             Спробуйте ще раз через {resendIn} с
           </p>
         )}
+
+        <div className="flex justify-center">
+          <Button
+            className="text-[13px]"
+            disabled={pending}
+            onClick={onPurposeChange}
+            variant="quiet"
+          >
+            {purpose === 'login'
+              ? 'Немає облікового запису? Зареєструватися'
+              : 'Вже маєте обліковий запис? Увійти'}
+          </Button>
+        </div>
+
         <p className="text-app-dim text-center text-[12px] leading-[1.5]">
           Продовжуючи, ви погоджуєтесь з{' '}
           <a className="text-app-muted hover:text-white" href="#offer">
@@ -571,11 +585,6 @@ function PhoneStep({
           </a>
         </p>
       </form>
-      <Button variant="quiet" disabled={pending} onClick={onPurposeChange}>
-        {purpose === 'login'
-          ? 'Немає облікового запису? Зареєструватися'
-          : 'Вже маєте обліковий запис? Увійти'}
-      </Button>
     </div>
   )
 }

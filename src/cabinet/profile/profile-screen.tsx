@@ -5,6 +5,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react'
+import { Link } from 'react-router'
 import { LogOut } from 'lucide-react'
 import { Button, DateValue, Field, Notice, TextInput } from '@/components/app'
 import { useAuth } from '@/auth/AuthContext'
@@ -391,6 +392,18 @@ export function ProfileScreen() {
               Вихід діє лише в цьому браузері — завершити інші сеанси поки не
               можна.
             </p>
+          </Card>
+
+          <Card title="Особистий акаунт">
+            <p className="text-app-muted text-[13px] leading-5 text-pretty">
+              Окрема сторінка з тими самими діями над акаунтом. Вона
+              відкривається навіть тоді, коли доступу до розбірки немає.
+            </p>
+            <div className="mt-3.5">
+              <Button asChild className="w-full justify-center">
+                <Link to="/account/security">Відкрити</Link>
+              </Button>
+            </div>
           </Card>
 
           <AccountDeletion key={auth.user?.id} />

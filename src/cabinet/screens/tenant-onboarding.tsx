@@ -315,7 +315,10 @@ export function TenantOnboardingScreen() {
       <header className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-10">
         <BrandLogo />
         <div className="flex flex-wrap items-center gap-3">
-          <Link to="/account/security" className="text-brand underline">
+          <Link
+            className="text-app-muted hover:text-app-ink text-[13px] transition-colors"
+            to="/account/security"
+          >
             Особистий акаунт
           </Link>
           {/* Not uppercased: in the mono face «З» and «3» are the same glyph,
