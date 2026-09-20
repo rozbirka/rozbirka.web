@@ -126,8 +126,9 @@ const pendingPaymentPage = {
       currency: 'UAH',
       providerInvoiceId: 'invoice-pending-1',
       checkoutUrl: 'https://pay.example/secure-checkout',
-      checkoutExpiresAt: '2026-08-15T12:00:00.000Z',
-      createdAt: '2026-08-15T10:00:00.000Z',
+      // Keep this pending-checkout fixture valid regardless of the CI date.
+      checkoutExpiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      createdAt: new Date(Date.now() - 3_600_000).toISOString(),
     },
   ],
   page: 1,
@@ -537,7 +538,8 @@ async function installCabinetApiBoundary(
             requestedAt: '2026-08-20T10:00:00.000Z',
             startedAt: '2026-08-20T10:00:01.000Z',
             completedAt: '2026-08-20T10:00:03.000Z',
-            expiresAt: '2026-09-20T10:00:03.000Z',
+            // A ready-report fixture must not expire as calendar time advances.
+            expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
             errorMessage: null,
             fileSizeBytes: 2048,
           },
