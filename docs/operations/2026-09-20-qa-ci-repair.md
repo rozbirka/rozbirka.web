@@ -15,3 +15,7 @@ Failed run: https://github.com/rozbirka/rozbirka.web/actions/runs/35527437395
 Run `npm run check`, `npm run build:qa`, and manifest download plus `npm run contracts:check`. Contract HTTP fixture tests require local loopback access; a sandbox EPERM was resolved by running the same gate with loopback permission.
 
 Browser coverage is verified in the repeated GitHub Actions matrix (chromium,firefox,webkit,ios,android), without local browser/CUA use. Record the new run's result before declaring QA CI green. These repairs do not deploy production or alter live billing products.
+
+## Confirmed result
+
+Run https://github.com/rozbirka/rozbirka.web/actions/runs/35528246007 completed **success** on commit `78a4edbacc5af914b34572f1072194d4b248b7cd`: Quality, all five browser profiles, authenticated Chromium smoke, release artifact and QA deployment passed. Cloudflare QA Worker version: `7e0c52b0-4137-4611-bc03-ec9189fc0669`. Local `npm run check`, `npm run build:qa` and downloaded immutable contract drift check also passed. Production unchanged.
