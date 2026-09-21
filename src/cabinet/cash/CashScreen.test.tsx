@@ -121,7 +121,7 @@ it('renders Core daily figures without calculating them in the browser', async (
   // The balance comes from the register itself and the operation count from
   // the day's summary — the browser adds nothing up.
   expect(await screen.findByText('1 800,00 ₴')).toBeVisible()
-  expect(screen.getByText('4 операції за 2026-08-28')).toBeVisible()
+  expect(screen.getByText('4 операції')).toBeVisible()
 })
 
 it('uses the selected timezone rather than UTC when defaulting the finance date', () => {
@@ -246,13 +246,15 @@ it('allows editing an existing register but still meters new register creation a
     </MemoryRouter>,
   )
 
-  const editSubmit = await screen.findByRole('button', {
-    name: 'Зберегти зміни',
-  })
+  const editSubmit = (
+    await screen.findAllByRole('button', { name: 'Зберегти зміни' })
+  )[0]!
   expect(editSubmit).toBeDisabled()
   await user.clear(screen.getByLabelText('Назва каси'))
   await user.type(screen.getByLabelText('Назва каси'), 'Головна каса')
-  await user.click(screen.getByRole('button', { name: 'Зберегти зміни' }))
+  await user.click(
+    screen.getAllByRole('button', { name: 'Зберегти зміни' })[0]!,
+  )
   expect(cashMocks.update).toHaveBeenCalledWith('cash-1', {
     name: 'Головна каса',
   })
@@ -1109,7 +1111,7 @@ it('hides cash mutations without finance.manage and renders quota failures', asy
   )
 })
 
-it('reads the till card figures from the server and dashes what it does not keep', async () => {
+it('reads the till card figures from Core and dashes what it does not keep', async () => {
   const register = {
     id: 'cash-1',
     name: 'Основна каса',
@@ -1185,7 +1187,10 @@ it('reads the till card figures from the server and dashes what it does not keep
   // Reconciliation has no endpoint, so the control stays and says why.
   const reconcile = screen.getByRole('button', { name: 'Звірити залишок' })
   expect(reconcile).toBeDisabled()
-  expect(reconcile.title).toContain('Звіряння залишку поки недоступне')
+  expect(reconcile.title).toContain('Звіряння залишку кабінет поки не веде')
+  expect(
+    screen.getByText(/Стовпець «Залишок» порожній/, { exact: false }),
+  ).toBeVisible()
 })
 
 it('keeps the till settings the server cannot save visible and disabled', async () => {
@@ -1209,6 +1214,6 @@ it('keeps the till settings the server cannot save visible and disabled', async 
   for (const label of ['Щодня', 'Щотижня', 'Щомісяця', 'Вручну'])
     expect(screen.getByRole('button', { name: label })).toBeDisabled()
   expect(
-    screen.getByText(/Ці перемикачі поки вимкнені/, { exact: false }),
+    screen.getByText(/Ці перемикачі лишаються вимкненими/, { exact: false }),
   ).toBeVisible()
 })

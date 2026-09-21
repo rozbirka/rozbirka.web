@@ -27,7 +27,7 @@ const dateFormatter = new Intl.DateTimeFormat('uk-UA', {
 
 interface SummaryItem {
   label: string
-  value: string | string[]
+  value: string
   /** Sits under the figure: what the figure is counting. */
   meta?: string
   tone?: 'ok' | 'warn'
@@ -36,14 +36,15 @@ interface SummaryItem {
 }
 
 export function DashboardSummary({
-  data,
   cashBalances,
+  data,
 }: {
+  /** Per-currency till totals, when the reader may see the money. */
+  cashBalances?: Record<string, number> | null
   data: DashboardData
-  cashBalances?: Record<string, number> | null | undefined
 }) {
   const money = compact([
-    balanceItem(data.totalBalanceUah, cashBalances),
+    ...cashItems(cashBalances, data.totalBalanceUah),
     moneyItem('Інвестовано всього', data.totalInvested, CAR_CURRENCY, {
       ...(data.activeCarsCount === null
         ? {}
@@ -145,13 +146,7 @@ function SummaryStrip({
                       : 'text-white',
                 )}
               >
-                {Array.isArray(value)
-                  ? value.map((line) => (
-                      <span className="block" key={line}>
-                        {line}
-                      </span>
-                    ))
-                  : value}
+                {value}
               </span>
               {bar === undefined ? null : (
                 <span className="bg-app-line-2 mt-4 block h-1.5 overflow-hidden rounded-full">
@@ -206,6 +201,28 @@ function item(
     : { label, value: numberFormatter.format(value), ...extra }
 }
 
+/**
+ * The till balances, one tile per currency. Every currency stands on its own —
+ * the cabinet converts nothing — so two currencies make two tiles rather than
+ * one invented sum. Without the till list the dashboard's own figure stands.
+ */
+function cashItems(
+  balances: Record<string, number> | null | undefined,
+  fallbackUah: number | null,
+): (SummaryItem | null)[] {
+  const entries = Object.entries(balances ?? {}).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )
+  if (entries.length === 0) return [moneyItem('Баланс кас', fallbackUah, 'UAH')]
+  if (entries.length === 1) {
+    const [currency, amount] = entries[0]!
+    return [moneyItem('Баланс кас', amount, currency)]
+  }
+  return entries.map(([currency, amount]) =>
+    moneyItem(`Баланс кас, ${currency}`, amount, currency),
+  )
+}
+
 function moneyItem(
   label: string,
   value: number | null,
@@ -215,25 +232,6 @@ function moneyItem(
   return value === null
     ? null
     : { label, value: currencyFormatter(currency).format(value), ...extra }
-}
-
-function balanceItem(
-  totalBalanceUah: number | null,
-  balances: Record<string, number> | null | undefined,
-): SummaryItem | null {
-  const entries: [string, number][] =
-    balances === undefined || balances === null
-      ? totalBalanceUah === null
-        ? []
-        : [['UAH', totalBalanceUah]]
-      : Object.entries(balances)
-  if (entries.length === 0) return null
-  return {
-    label: 'Баланс кас',
-    value: entries
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([currency, value]) => currencyFormatter(currency).format(value)),
-  }
 }
 
 /**

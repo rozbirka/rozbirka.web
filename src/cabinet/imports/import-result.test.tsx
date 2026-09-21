@@ -102,14 +102,14 @@ it('counts from the execution, not from the rows it happens to have', () => {
   expect(screen.getByText('3 одиниці товару на цій сторінці')).toBeVisible()
 })
 
-it('never claims a duration the server does not report', () => {
+it('never claims a duration that is not reported', () => {
   show(record('Completed', execution(237, 0, 240)), [])
   const strip = screen.getByText('Тривалість').closest('div')
   expect(strip).not.toBeNull()
   expect(within(strip!).getByText('—')).toBeVisible()
   expect(strip).toHaveAttribute(
     'title',
-    'Сервер не повідомляє час початку й завершення виконання.',
+    'Час початку й завершення виконання не показується.',
   )
 })
 

@@ -515,13 +515,16 @@ function TenantStickerQueue({
         >
           {preview.map((sticker, index) => (
             <article
-              className="grid min-w-0 max-w-full gap-2 overflow-hidden rounded bg-white p-3 text-black"
+              className="grid gap-2 rounded bg-white p-3 text-black"
               key={`${sticker.id}-${index}`}
             >
+              {/* The SVG arrives without a size of its own. Left alone it
+                  spills past the sticker; a bounded box with a white quiet
+                  zone around it is what a scanner needs to read the code. */}
               <div
                 aria-label={`QR-код ${sticker.name}`}
+                className="mx-auto w-full max-w-[168px] bg-white p-2 [&>svg]:block [&>svg]:h-auto [&>svg]:w-full"
                 dangerouslySetInnerHTML={{ __html: sticker.qrSvg }}
-                className="max-w-full overflow-hidden [&_svg]:h-auto [&_svg]:max-w-full [&_svg]:w-full"
                 role="img"
               />
               <strong>{sticker.name}</strong>

@@ -473,7 +473,7 @@ it('presents a resolved scan as a record with one obvious way onward', async () 
   expect(await screen.findByText('Bumper')).toBeInTheDocument()
   // The pill states the part's own status and what is left of it, rather than
   // repeating that the lookup succeeded.
-  expect(screen.getByText(/Доступно/)).toBeInTheDocument()
+  expect(screen.getByText(/Доступна/)).toBeInTheDocument()
   expect(screen.getByText('QR-123')).toBeInTheDocument()
   expect(
     screen.getByRole('link', { name: 'Відкрити картку деталі' }),

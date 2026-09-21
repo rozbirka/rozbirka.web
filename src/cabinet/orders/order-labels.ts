@@ -13,5 +13,8 @@ export const orderStatusPresentation = (
   if (status === 'pending') return { label: 'Очікує', tone: 'warn' }
   if (status === 'cancelled') return { label: 'Скасовано', tone: 'neutral' }
   if (status === 'refunded') return { label: 'Повернено', tone: 'info' }
+  // The dashboard summary speaks of an order's money rather than its state.
+  if (status === 'paid') return { label: 'Оплачено', tone: 'ok' }
+  if (status === 'reserved') return { label: 'Резерв', tone: 'warn' }
   return { label: status, tone: 'neutral' }
 }

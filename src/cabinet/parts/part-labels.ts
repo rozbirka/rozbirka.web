@@ -1,3 +1,5 @@
+import type { StatusTone } from '@/components/app'
+
 /**
  * Server vocabularies said the way the yard says them. Kept in one place so a
  * part reads the same on its own screen, in the scanner and in a list.
@@ -11,17 +13,43 @@ export const conditionLabel = (value: string) =>
     scrap: 'На запчастини',
     refurbished: 'Відновлена',
     damaged: 'Пошкоджена',
-  })[value.toLowerCase()] ?? value
+  })[value] ?? value
 
 export const sourceLabel = (value: string) =>
-  ({ car: 'Авто', batch: 'Приймання', free: 'Без джерела' })[
-    value.toLowerCase()
-  ] ?? value
+  ({ car: 'Авто', batch: 'Приймання', free: 'Без джерела' })[value] ?? value
 
 export const originLabel = (id: string, name: string) =>
-  (({ car: 'З авто', batch: 'З партії', free: 'Вільна' })[id.toLowerCase()] ??
-    name) ||
-  id
+  (({ car: 'З авто', batch: 'З партії', free: 'Вільна' })[id] ?? name) || id
+
+/**
+ * A facet value said in Ukrainian. The server sends the code and its own name;
+ * where we know the code, our word wins, otherwise the server's name stands.
+ */
+export const conditionFacetLabel = (id: string, name: string) => {
+  const known = conditionLabel(id)
+  return known === id ? name || id : known
+}
+
+/**
+ * The three states a part can be in, with the colour the yard expects:
+ * available is green, reserved is amber, sold is red — sold is the state that
+ * takes a part off the shelf, and grey made it read as "nothing happened".
+ */
+export const partStatusPresentation = (
+  status: string,
+): { label: string; tone: StatusTone } => {
+  if (status === 'available') return { label: 'Доступна', tone: 'ok' }
+  if (status === 'reserved') return { label: 'У резерві', tone: 'warn' }
+  if (status === 'sold') return { label: 'Продана', tone: 'danger' }
+  return { label: status, tone: 'neutral' }
+}
+
+/** The dot that stands in for the pill in a filter row. */
+export const partStatusDot = {
+  available: 'bg-state-ok',
+  reserved: 'bg-state-warn',
+  sold: 'bg-state-danger',
+} as const
 
 /** Event names from the part history, in plain words. */
 export const historyLabel = (value: string) =>
@@ -30,9 +58,6 @@ export const historyLabel = (value: string) =>
     updated: 'Змінено',
     edited: 'Змінено',
     reserved: 'Зарезервовано',
-    reservationcancelled: 'Резерв скасовано',
-    reservation_cancelled: 'Резерв скасовано',
-    added: 'Додано',
     released: 'Резерв знято',
     sold: 'Продано',
     returned: 'Повернено',

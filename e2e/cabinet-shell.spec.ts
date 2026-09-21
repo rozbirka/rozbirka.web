@@ -1854,7 +1854,10 @@ test('released Team dialogs and Reports actions keep 44px targets', async ({
   await loginFrom(page)
 
   await expectReleasedScreenSettled(page, '/app/koval/team')
-  await page.getByRole('button', { name: 'Права Іван Менеджер' }).click()
+  await page
+    .getByRole('button', { name: 'Дії з учасником Іван Менеджер' })
+    .click()
+  await page.getByRole('menuitem', { name: 'Права' }).click()
   const permissions = page.getByRole('dialog', {
     name: 'Права: Іван Менеджер',
   })

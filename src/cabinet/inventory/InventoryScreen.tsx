@@ -362,7 +362,7 @@ function Overview() {
               </div>
             </div>
 
-            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
                   Інвентаризація
@@ -1019,7 +1019,7 @@ function WarehouseView({ id }: { id: string }) {
               </div>
             </div>
 
-            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-4">
                   <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
@@ -1068,7 +1068,7 @@ function WarehouseView({ id }: { id: string }) {
                   </Button>
                   <Button
                     disabled
-                    title="Сервер поки не віддає залишки складу файлом"
+                    title="Вивантажити залишки складу файлом поки не можна"
                     variant="ghost"
                   >
                     Експорт залишків
@@ -1107,7 +1107,7 @@ function WarehouseView({ id }: { id: string }) {
                 />
                 <WarehouseStat
                   label="Вартість залишку"
-                  meta="сервер не рахує вартість складу"
+                  meta="вартість складу не рахується"
                   unit="USD"
                   value="—"
                 />
@@ -1795,7 +1795,7 @@ function NewSessionView() {
               </div>
             </div>
 
-            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
                   Нова сесія інвентаризації
@@ -1990,7 +1990,7 @@ function NewSessionView() {
                           <li key={person.userId}>
                             <span
                               className="border-app-line text-app-muted flex min-h-11 items-center gap-2.5 rounded-full border py-0 pr-4 pl-2 text-[14px] font-semibold"
-                              title="Сервер не закріплює сесію за виконавцями — кожне сканування записується на того, хто його зробив"
+                              title="Сесія не закріплюється за виконавцями — кожне сканування записується на того, хто його зробив"
                             >
                               <span
                                 aria-hidden
@@ -2029,7 +2029,7 @@ function NewSessionView() {
                     </ul>
                     <div className="mt-4">
                       <Field
-                        hint="Сервер не зберігає коментар до сесії — причину можна написати при скасуванні або в коригуванні."
+                        hint="Коментар до сесії не зберігається — причину можна написати при скасуванні або в коригуванні."
                         label="Коментар до сесії"
                       >
                         <TextArea
@@ -2080,7 +2080,7 @@ function NewSessionView() {
                     </dd>
                     <dt
                       className="text-app-muted text-[14px] font-semibold"
-                      title="Сервер не закріплює сесію за виконавцями"
+                      title="Сесія не закріплюється за виконавцями"
                     >
                       Виконавців
                     </dt>
@@ -2091,7 +2091,7 @@ function NewSessionView() {
                     />
                     <dt
                       className="text-[15px] font-bold text-white"
-                      title="Сервер не оцінює тривалість підрахунку"
+                      title="Тривалість підрахунку не оцінюється"
                     >
                       Орієнтовно
                     </dt>
@@ -2430,7 +2430,7 @@ function SessionView({ id }: { id: string }) {
               </div>
             </div>
 
-            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-4">
                   <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
@@ -2469,7 +2469,7 @@ function SessionView({ id }: { id: string }) {
                   </Button>
                   <Button
                     disabled
-                    title="Сервер не вміє ставити сесію на паузу — її можна лише завершити або скасувати"
+                    title="Поставити сесію на паузу не можна — її можна лише завершити або скасувати"
                     variant="ghost"
                   >
                     Призупинити
@@ -3173,14 +3173,14 @@ function ResultsView({ id }: { id: string }) {
                 </Button>
                 <Button
                   disabled
-                  title="Сервер поки не віддає результати сесії файлом"
+                  title="Вивантажити результати сесії файлом поки не можна"
                 >
                   Експорт
                 </Button>
               </div>
             </div>
 
-            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-4">
                   <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
@@ -3443,8 +3443,8 @@ function ResultsView({ id }: { id: string }) {
                     className="text-app-dim mt-4 text-[13px] leading-[1.5]"
                     title="Підсумки сесії не несуть собівартості позицій"
                   >
-                    Вартість списаного й оприбуткованого сервер у підсумках не
-                    повертає — тут лише кількість.
+                    Вартість списаного й оприбуткованого в підсумках не повертає
+                    — тут лише кількість.
                   </p>
                 </Card>
 
@@ -3778,14 +3778,14 @@ function AuditView({ id }: { id: string }) {
                 </Button>
                 <Button
                   disabled
-                  title="Сервер поки не віддає журнал аудиту файлом"
+                  title="Вивантажити журнал аудиту файлом поки не можна"
                 >
                   Експорт журналу
                 </Button>
               </div>
             </div>
 
-            <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
                   Аудит сесії
@@ -4102,7 +4102,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
               </div>
             </div>
 
-            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
                   Журнал сканувань{zone ? ` · ${zone.zoneCode}` : null}
@@ -4194,7 +4194,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                         role="radio"
                         title={
                           locked
-                            ? 'Порівняння з обліком з’явиться, коли сервер порахує підсумки сесії'
+                            ? 'Порівняння з обліком з’явиться, коли підсумки сесії будуть готові'
                             : undefined
                         }
                         type="button"
@@ -4667,7 +4667,7 @@ function PartPlacementView({ partId }: { partId: string }) {
               </div>
             </div>
 
-            <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
                   Розміщення на складі
@@ -4874,7 +4874,7 @@ function PartPlacementView({ partId }: { partId: string }) {
                     <div className="flex flex-wrap items-center gap-4.5">
                       <span
                         className="border-app-line bg-app-canvas text-app-muted flex items-center gap-1 rounded-xl border p-[3px]"
-                        title="Сервер не ділить залишок між зонами — запчастина лежить у зоні цілком"
+                        title="Залишок між зонами не ділиться — запчастина лежить у зоні цілком"
                       >
                         <span
                           aria-hidden
@@ -4893,7 +4893,7 @@ function PartPlacementView({ partId }: { partId: string }) {
                         </span>
                       </span>
                       <p className="text-app-muted min-w-[12rem] flex-1 text-[14px]">
-                        Сервер не ділить залишок між зонами: запчастина лежить у
+                        Залишок між зонами не ділиться: запчастина лежить у
                         вибраних зонах цілком, тому кількість тут не
                         редагується.
                       </p>
@@ -4990,7 +4990,7 @@ function PartPlacementView({ partId }: { partId: string }) {
                     />
                     <dt
                       className="text-app-muted text-[14px] font-semibold"
-                      title="Сервер не рахує місткість зони"
+                      title="Місткість зони не рахується"
                     >
                       Місткість зони
                     </dt>

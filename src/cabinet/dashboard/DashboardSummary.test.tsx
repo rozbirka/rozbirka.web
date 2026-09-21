@@ -51,12 +51,7 @@ const getByExactText = (text: string) =>
     .at(-1)!
 
 it('renders common and owner totals in Ukrainian formats', () => {
-  render(
-    <DashboardSummary
-      cashBalances={{ UAH: 123_456, USD: 3_820 }}
-      data={summary()}
-    />,
-  )
+  render(<DashboardSummary data={summary()} />)
 
   expect(screen.getByRole('region', { name: 'Зведення' })).toContainElement(
     screen.getByText('Продажів сьогодні'),
@@ -65,7 +60,6 @@ it('renders common and owner totals in Ukrainian formats', () => {
   expect(getByExactText('5\u00a0678')).toBeInTheDocument()
   expect(getByExactText('45\u00a0600\u00a0₴')).toBeInTheDocument()
   expect(getByExactText('123\u00a0456\u00a0₴')).toBeInTheDocument()
-  expect(getByExactText('3\u00a0820\u00a0$')).toBeInTheDocument()
   const activity = screen.getByRole('region', { name: 'Остання активність' })
   expect(activity).toHaveTextContent(/28\.08\.2026, 16:45/)
   expect(activity).toHaveTextContent(/Додано запчастину/)
@@ -160,4 +154,24 @@ it('renders an empty yard as a successful onboarding state', () => {
 
   expect(screen.getByText('Почніть наповнювати розбірку')).toBeInTheDocument()
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+it('shows a till balance tile for every currency the yard keeps', () => {
+  render(
+    <DashboardSummary
+      cashBalances={{ USD: 14280, UAH: 186400 }}
+      data={summary({ totalBalanceUah: 186400 })}
+    />,
+  )
+
+  // Two currencies, two figures — the cabinet converts nothing, so it never
+  // adds them together.
+  expect(screen.getByText('Баланс кас, USD')).toBeVisible()
+  expect(screen.getByText('Баланс кас, UAH')).toBeVisible()
+})
+
+it('keeps the dashboard figure when the till list is unavailable', () => {
+  render(<DashboardSummary data={summary({ totalBalanceUah: 186400 })} />)
+
+  expect(screen.getByText('Баланс кас')).toBeVisible()
 })

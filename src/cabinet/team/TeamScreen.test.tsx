@@ -122,6 +122,17 @@ const teamScreen = () => (
 )
 const renderScreen = () => render(teamScreen())
 
+/** The member row keeps its actions in a menu, as the design has it. */
+const openMemberMenu = async (
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+) => {
+  await user.click(
+    await screen.findByRole('button', { name: `Дії з учасником ${name}` }),
+  )
+  return within(await screen.findByRole('menu'))
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   let reject!: (reason?: unknown) => void
@@ -236,7 +247,6 @@ it('revalidates team.manage immediately before member, role, permission, and inv
 
   await screen.findByText('Олена')
   const changeRole = screen.getByLabelText('Роль для Олена')
-  const permissions = screen.getByRole('button', { name: 'Права Олена' })
   const createRole = screen.getByRole('button', { name: 'Створити роль' })
   const createInvitation = screen.getByRole('button', {
     name: 'Створити запрошення',
@@ -248,13 +258,17 @@ it('revalidates team.manage immediately before member, role, permission, and inv
   currentCabinet.snapshot?.permissions.delete('team.manage')
 
   await user.selectOptions(changeRole, 'role-owner')
-  await user.click(permissions)
   await user.click(createRole)
   await user.click(createInvitation)
   await user.click(revokeInvitation)
   await user.click(deleteRole)
 
   expect(teamApi.changeRole).not.toHaveBeenCalled()
+  // Losing the permission takes the whole row menu away, so the actions it
+  // holds cannot be dispatched at all.
+  expect(
+    screen.queryByRole('button', { name: 'Дії з учасником Олена' }),
+  ).toBeNull()
   expect(teamApi.getUserPermissions).not.toHaveBeenCalled()
   expect(teamApi.createRole).not.toHaveBeenCalled()
   expect(teamApi.createInvitation).not.toHaveBeenCalled()
@@ -279,7 +293,11 @@ it('confirms and completes member, role, permission, and invitation mutations', 
     }),
   )
 
-  await user.click(screen.getByRole('button', { name: 'Права Олена' }))
+  await user.click(
+    (await openMemberMenu(user, 'Олена')).getByRole('menuitem', {
+      name: 'Права',
+    }),
+  )
   await screen.findByRole('dialog', { name: 'Права: Олена' })
   await user.click(screen.getByRole('button', { name: 'Зберегти права' }))
   expect(teamApi.updateUserPermissions).toHaveBeenCalledWith(
@@ -457,7 +475,9 @@ it('reloads only the current cabinet identity after a retry changes generation',
   })
 
   await user.click(
-    await screen.findByRole('button', { name: 'Вимкнути Олена' }),
+    (await openMemberMenu(user, 'Олена')).getByRole('menuitem', {
+      name: 'Вимкнути',
+    }),
   )
   await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
   await waitFor(() => expect(currentCabinet.retry).toHaveBeenCalledOnce())
@@ -575,7 +595,9 @@ it('denies a confirmation when team.manage is revoked after the dialog opens', a
   renderScreen()
 
   await user.click(
-    await screen.findByRole('button', { name: 'Вимкнути Олена' }),
+    (await openMemberMenu(user, 'Олена')).getByRole('menuitem', {
+      name: 'Вимкнути',
+    }),
   )
   expect(screen.getByRole('alertdialog')).toBeInTheDocument()
   currentCabinet.snapshot?.permissions.delete('team.manage')
@@ -594,7 +616,11 @@ it('denies direct permission edits when team.manage is revoked after the editor 
   const user = userEvent.setup()
   renderScreen()
 
-  await user.click(await screen.findByRole('button', { name: 'Права Олена' }))
+  await user.click(
+    (await openMemberMenu(user, 'Олена')).getByRole('menuitem', {
+      name: 'Права',
+    }),
+  )
   await screen.findByRole('dialog', { name: 'Права: Олена' })
   currentCabinet.snapshot?.permissions.delete('team.manage')
   await user.click(screen.getByRole('button', { name: 'Зберегти права' }))
@@ -649,12 +675,18 @@ it('refreshes access after member, role, and invitation confirmation mutations',
   renderScreen()
 
   await user.click(
-    await screen.findByRole('button', { name: 'Вимкнути Олена' }),
+    (await openMemberMenu(user, 'Олена')).getByRole('menuitem', {
+      name: 'Вимкнути',
+    }),
   )
   await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
   await waitFor(() => expect(teamApi.deactivateMember).toHaveBeenCalledOnce())
 
-  await user.click(screen.getByRole('button', { name: 'Видалити Олена' }))
+  await user.click(
+    (await openMemberMenu(user, 'Олена')).getByRole('menuitem', {
+      name: 'Видалити',
+    }),
+  )
   await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
   await waitFor(() => expect(teamApi.deleteMember).toHaveBeenCalledOnce())
 
@@ -680,7 +712,9 @@ it('refreshes access after activating a member', async () => {
   renderScreen()
 
   await user.click(
-    await screen.findByRole('button', { name: 'Активувати Олена' }),
+    (await openMemberMenu(user, 'Олена')).getByRole('menuitem', {
+      name: 'Активувати',
+    }),
   )
   await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
 
@@ -741,7 +775,9 @@ it('refreshes visible member data after a successful member mutation', async () 
   renderScreen()
 
   await user.click(
-    await screen.findByRole('button', { name: 'Вимкнути Олена' }),
+    (await openMemberMenu(user, 'Олена')).getByRole('menuitem', {
+      name: 'Вимкнути',
+    }),
   )
   await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
 
@@ -758,7 +794,9 @@ it('keeps mutation success without calling it a failure when authoritative acces
   renderScreen()
 
   await user.click(
-    await screen.findByRole('button', { name: 'Вимкнути Олена' }),
+    (await openMemberMenu(user, 'Олена')).getByRole('menuitem', {
+      name: 'Вимкнути',
+    }),
   )
   await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
   await waitFor(() => expect(currentCabinet.retry).toHaveBeenCalledOnce())
@@ -809,7 +847,9 @@ it('keeps old data hidden across a retry generation switch until the current ide
   })
 
   await user.click(
-    await screen.findByRole('button', { name: 'Вимкнути Олена' }),
+    (await openMemberMenu(user, 'Олена')).getByRole('menuitem', {
+      name: 'Вимкнути',
+    }),
   )
   await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
   await waitFor(() => expect(currentCabinet.retry).toHaveBeenCalledOnce())
@@ -840,12 +880,10 @@ it('says what the team endpoints do not carry instead of inventing it', async ()
 
   // No last-seen field exists, so the activity column says so rather than
   // dressing the join date up as a login.
-  expect(
-    await screen.findByText(/Останнього входу сервер не зберігає/),
-  ).toBeVisible()
-  expect(screen.getByText('пошти й телефону сервер не повертає')).toBeVisible()
+  expect(await screen.findByText(/Останній вхід не зберігається/)).toBeVisible()
+  expect(screen.getByText('пошти й телефону не вказано')).toBeVisible()
   // An invitation is a code, not a letter: there is nothing to resend.
   const resend = screen.getByRole('button', { name: 'Надіслати ще' })
   expect(resend).toBeDisabled()
-  expect(resend.title).toContain('сервер не шле листів')
+  expect(resend.title).toContain('кабінет не шле листів')
 })

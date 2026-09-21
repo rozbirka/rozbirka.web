@@ -25,10 +25,13 @@ import {
   Thumbnail,
   TextInput,
   type NoticeTone,
-  type StatusTone,
 } from '@/components/app'
 import { cn } from '@/lib/utils'
-import { conditionLabel, historyLabel } from '../parts/part-labels'
+import {
+  partStatusPresentation,
+  conditionLabel,
+  historyLabel,
+} from '../parts/part-labels'
 import { scannersApi } from '@/api/scanners'
 import { partsApi, type PartHistory } from '@/api/parts'
 import { inventoryApi, type PartInventoryZone } from '@/api/inventory'
@@ -91,15 +94,6 @@ interface RecentScan {
   code: string
   name: string
   at: string
-}
-
-const statusPresentation = (
-  status: string,
-): { label: string; tone: StatusTone } => {
-  if (status === 'available') return { label: 'Доступно', tone: 'ok' }
-  if (status === 'reserved') return { label: 'У резерві', tone: 'warn' }
-  if (status === 'sold') return { label: 'Продано', tone: 'danger' }
-  return { label: status, tone: 'neutral' }
 }
 
 export function ScannerScreen(_props: CabinetModuleScreenProps) {
@@ -390,14 +384,14 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
   }
 
   const cameraLive = cameraState === 'active'
-  const partStatus = part?.status ? statusPresentation(part.status) : null
+  const partStatus = part?.status ? partStatusPresentation(part.status) : null
 
   return (
     <PageBody width="narrow">
       <PageHeader eyebrow="Склад" title="QR-сканер" />
       <p className="text-app-muted text-sm">
         Наведіть камеру на стікер деталі. Дані деталі не показуються до
-        серверної перевірки доступу.
+        перевірки доступу.
       </p>
 
       {cameraLive ? (
@@ -754,7 +748,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
       </SectionPanel>
 
       <p className="text-app-dim text-[13.5px]">
-        VIN та OEM-декодування недоступні: відповідних серверних операцій немає.
+        VIN та OEM-декодування поки недоступні.
       </p>
     </PageBody>
   )

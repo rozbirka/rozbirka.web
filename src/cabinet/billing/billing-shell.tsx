@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { RedesignShell, RedesignTitle } from '../redesign-shell'
 
 /**
  * The frame the three billing screens share. It is the same redesign shell the
@@ -20,27 +21,10 @@ export function BillingShell({
   children: ReactNode
 }) {
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-          <div className="min-w-0">
-            <p className="text-app-dim font-mono text-[12px] tracking-[0.14em] uppercase">
-              {crumb}
-            </p>
-            <h1 className="mt-1.5 text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
-              {title}
-            </h1>
-            <p className="text-app-muted mt-2.5 max-w-[62ch] text-[14.5px] leading-6 text-pretty">
-              {lead}
-            </p>
-          </div>
-          {actions === undefined ? null : (
-            <div className="flex flex-wrap items-center gap-2.5">{actions}</div>
-          )}
-        </div>
-        {children}
-      </div>
-    </div>
+    <RedesignShell actions={actions} crumb={crumb}>
+      <RedesignTitle lead={lead} title={title} />
+      {children}
+    </RedesignShell>
   )
 }
 

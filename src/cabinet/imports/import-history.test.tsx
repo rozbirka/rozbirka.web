@@ -164,6 +164,6 @@ it('states the limits on the empty screen from the same capabilities', () => {
   expect(screen.getByText('CSV, XLSX')).toBeVisible()
   expect(screen.getByText(/до 10 MiB, до 10 000 рядків/)).toBeVisible()
   expect(
-    screen.getByText('Сервер не повідомляє ліміт фото для цього середовища.'),
+    screen.getByText('Ліміт фото для цього середовища невідомий.'),
   ).toBeVisible()
 })

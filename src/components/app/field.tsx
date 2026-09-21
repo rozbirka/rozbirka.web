@@ -39,7 +39,7 @@ export function Field({
       : undefined
 
   return (
-    <div className={cn('grid content-start gap-1.5', className)}>
+    <div className={cn('grid gap-1.5', className)}>
       <div className="flex items-baseline gap-1">
         <label className="text-app-muted text-[13.5px]" htmlFor={id}>
           {label}

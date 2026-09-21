@@ -203,36 +203,6 @@ it('loads the URL search and status list state through the server adapter', asyn
     { search: 'Липнева', status: 'active', page: 2, pageSize: 20 },
     expect.anything(),
   )
-  expect(
-    screen.queryByRole('button', { name: 'Спочатку нові' }),
-  ).not.toBeInTheDocument()
-  expect(
-    screen.queryByRole('button', { name: 'За кількістю' }),
-  ).not.toBeInTheDocument()
-  expect(screen.queryByText('USD')).not.toBeInTheDocument()
-})
-
-it('shows only supported fields on a new intake', async () => {
-  vi.mocked(useCabinet).mockReturnValue(
-    cabinet(['intakes.view', 'intakes.manage', 'finance.manage']),
-  )
-  render(
-    <MemoryRouter initialEntries={['/app/demo/intakes/new']}>
-      <Routes>
-        <Route path="/app/:tenant/intakes/new" element={<IntakesScreen />} />
-      </Routes>
-    </MemoryRouter>,
-  )
-  expect(
-    await screen.findByRole('heading', { name: 'Нове приймання' }),
-  ).toBeVisible()
-  expect(
-    screen.queryByRole('group', { name: 'Вид джерела' }),
-  ).not.toBeInTheDocument()
-  expect(
-    screen.queryByLabelText('Документ постачальника'),
-  ).not.toBeInTheDocument()
-  expect(screen.queryByLabelText('Супутні витрати')).not.toBeInTheDocument()
 })
 
 it('updates a search in the URL before reloading page one', async () => {

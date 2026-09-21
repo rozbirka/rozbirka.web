@@ -50,8 +50,8 @@ export function CabinetNotFoundScreen() {
   }
 
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="grid w-full max-w-[720px] gap-6 px-4 pt-16 pb-16 sm:px-6 md:px-8 md:pt-20 lg:px-12">
+    <div className="type-redesign -mx-4 -mt-6 grid min-h-[70dvh] place-items-center sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+      <div className="grid w-full max-w-[620px] gap-6 px-4 py-16 sm:px-6 md:px-8 lg:px-12">
         <div role="alert">
           <p className="text-app-dim font-mono text-[12px] tracking-[0.14em] uppercase">
             Помилка 404
