@@ -31,6 +31,7 @@ import {
 } from '@/components/app'
 import { normalizeApiProblem } from '@/api/errors'
 import { orderStatusPresentation } from './order-labels'
+import { DeliverySection } from './delivery/DeliverySection'
 import { cn, plural } from '@/lib/utils'
 import {
   customersApi,
@@ -2070,6 +2071,14 @@ function OrderDetailScreen({
                 </Link>
               </Card>
             )}
+
+            <DeliverySection
+              customerId={order.customerId}
+              customerName={order.customerName}
+              mutationsAllowed={mutationsAllowed}
+              orderId={order.id}
+              totalAmount={order.totalAmount}
+            />
 
             <Card title="Історія">
               {historyRows.length === 0 ? (

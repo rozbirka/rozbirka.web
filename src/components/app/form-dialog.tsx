@@ -128,25 +128,46 @@ export function Sheet({
   open,
   onOpenChange,
   title,
+  description,
   children,
   footer,
+  size = 'md',
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   title: string
+  /** One line under the title; the sheet stays labelled without it. */
+  description?: ReactNode
   children: ReactNode
   footer?: ReactNode
+  /** Wider panel for a form that carries its own sections. */
+  size?: 'md' | 'lg'
 }) {
   return (
     <Dialog.Root onOpenChange={onOpenChange} open={open}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
-        <Dialog.Content className="bg-app-overlay border-app-line-2 fixed inset-x-0 bottom-0 z-50 grid max-h-[85dvh] grid-rows-[auto_1fr_auto] overflow-hidden rounded-t-2xl border-t text-white shadow-2xl sm:inset-y-0 sm:right-0 sm:left-auto sm:w-full sm:max-w-md sm:rounded-none sm:rounded-l-2xl sm:border-t-0 sm:border-l">
-          <header className="border-app-line flex items-center justify-between gap-3 border-b px-5 py-4">
-            <Dialog.Title className="text-base font-semibold">
-              {title}
-            </Dialog.Title>
-            <Dialog.Description className="sr-only">{title}</Dialog.Description>
+        <Dialog.Content
+          className={cn(
+            'bg-app-overlay border-app-line-2 fixed inset-x-0 bottom-0 z-50 grid max-h-[85dvh] grid-rows-[auto_1fr_auto] overflow-hidden rounded-t-2xl border-t text-white shadow-2xl sm:inset-y-0 sm:right-0 sm:left-auto sm:w-full sm:max-h-none sm:rounded-none sm:rounded-l-2xl sm:border-t-0 sm:border-l',
+            size === 'lg' ? 'sm:max-w-[620px]' : 'sm:max-w-md',
+          )}
+        >
+          <header className="border-app-line flex items-start justify-between gap-3 border-b px-5 py-4">
+            <div className="grid gap-1">
+              <Dialog.Title className="text-base font-semibold">
+                {title}
+              </Dialog.Title>
+              {description === undefined ? (
+                <Dialog.Description className="sr-only">
+                  {title}
+                </Dialog.Description>
+              ) : (
+                <Dialog.Description className="text-app-muted text-[13px] leading-5 text-pretty">
+                  {description}
+                </Dialog.Description>
+              )}
+            </div>
             <Dialog.Close asChild>
               <Button aria-label="Закрити" size="icon" variant="quiet">
                 <X aria-hidden />
