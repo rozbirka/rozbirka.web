@@ -463,7 +463,8 @@ it('uses the reusable customer and part searches to populate a canonical order',
   expect(
     screen.queryByRole('button', { name: 'Обрати клієнта Ірина' }),
   ).toBeNull()
-  expect(screen.getByLabelText('Кількість')).toHaveClass('text-left')
+  expect(screen.getByRole('button', { name: 'Менше' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Більше' })).toBeEnabled()
   expect(screen.getByLabelText('Ціна за одиницю')).toHaveClass('text-left')
   await user.type(screen.getByLabelText('Кількість'), '1')
   await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
@@ -544,8 +545,10 @@ it('builds a multi-part order and shows its total in dollars', async () => {
   await user.type(screen.getByLabelText('Ціна за одиницю'), '75')
   await user.click(screen.getByRole('button', { name: 'Додати деталь' }))
 
-  expect(screen.getByText('Разом за замовлення')).toBeVisible()
-  expect(screen.getByText('$175')).toBeVisible()
+  const summary = screen.getByLabelText('Підсумок замовлення')
+  expect(within(summary).getByText('Разом за замовлення')).toBeVisible()
+  expect(within(summary).getByText('2 позиції')).toBeVisible()
+  expect(within(summary).getByText('$175')).toBeVisible()
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
 
   expect(orderMocks.create).toHaveBeenCalledWith({

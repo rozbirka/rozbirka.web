@@ -15,6 +15,7 @@ import {
   PageHeader,
   Pagination,
   Panel,
+  QuantityStepper,
   SearchInput,
   SkeletonRows,
   StatusPill,
@@ -978,11 +979,11 @@ function OrderForm({
             </Field>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Кількість">
-                <TextInput
-                  className="text-left"
-                  inputMode="numeric"
-                  onChange={(event) => setQuantity(event.target.value)}
-                  value={quantity}
+                <QuantityStepper
+                  label="Кількість"
+                  min={0}
+                  onChange={(value) => setQuantity(String(value))}
+                  value={Number(quantity || '0')}
                 />
               </Field>
               <Field label="Ціна за одиницю">
@@ -1190,10 +1191,38 @@ function OrderForm({
             </div>
           </SectionPanel>
         )}
+        {orderId === null && draftItems.length > 0 && (
+          <Panel
+            aria-label="Підсумок замовлення"
+            className="border-brand/25 bg-brand/[0.055]"
+          >
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <p className="text-app-muted text-[13.5px]">
+                  Разом за замовлення
+                </p>
+                <p className="text-app-dim mt-1 text-[12.5px]">
+                  {draftItems.length}{' '}
+                  {plural(draftItems.length, ['позиція', 'позиції', 'позицій'])}
+                </p>
+              </div>
+              <p className="text-brand text-[28px] leading-none font-extrabold tracking-[-0.02em] tabular-nums">
+                ${new Intl.NumberFormat('uk-UA').format(draftItemsTotal)}
+              </p>
+            </div>
+          </Panel>
+        )}
         <Panel>
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-            <div className="grid min-w-0 gap-1">
-              {orderId !== null && (
+          <div
+            className={cn(
+              'grid gap-3 sm:items-end',
+              orderId !== null
+                ? 'sm:grid-cols-[minmax(0,1fr)_auto]'
+                : 'sm:justify-items-end',
+            )}
+          >
+            {orderId !== null && (
+              <div className="grid min-w-0 gap-1">
                 <TotalLine
                   label="Уже в замовленні"
                   value={
@@ -1202,21 +1231,13 @@ function OrderForm({
                       : '—'
                   }
                 />
-              )}
-              <TotalLine
-                label={orderId ? 'Разом за позицію' : 'Разом за замовлення'}
-                strong
-                value={
-                  orderId
-                    ? money(draftLineTotal)
-                    : draftItems.length > 0
-                      ? `$${new Intl.NumberFormat('uk-UA').format(draftItemsTotal)}`
-                      : draftLineTotal === null
-                        ? '—'
-                        : `$${new Intl.NumberFormat('uk-UA').format(draftLineTotal)}`
-                }
-              />
-            </div>
+                <TotalLine
+                  label="Разом за позицію"
+                  strong
+                  value={money(draftLineTotal)}
+                />
+              </div>
+            )}
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="quiet">
                 <Link to={backPath}>
