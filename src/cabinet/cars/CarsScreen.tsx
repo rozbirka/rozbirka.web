@@ -2351,6 +2351,8 @@ function CarParts({
   /** The warehouse, already filtered to this car. */
   partsHref: string
 }) {
+  const navigate = useNavigate()
+  const partsBase = partsHref.split('?')[0]
   const [requestVersion, setRequestVersion] = useState(0)
   const [state, setState] = useState<{
     parts: Awaited<ReturnType<typeof carsApi.listParts>> | null
@@ -2432,7 +2434,15 @@ function CarParts({
               key: 'name',
               label: 'Деталь',
               variant: 'primary',
-              cell: (part: CarPartListItem) => part.name,
+              cell: (part: CarPartListItem) => (
+                <Link
+                  className="hover:text-brand focus-visible:ring-brand rounded-sm outline-none focus-visible:ring-2"
+                  onClick={(event) => event.stopPropagation()}
+                  to={`${partsBase}/${part.id}`}
+                >
+                  {part.name}
+                </Link>
+              ),
             },
             {
               key: 'status',
@@ -2453,6 +2463,7 @@ function CarParts({
               cell: (part: CarPartListItem) => part.quantityAvailable,
             },
           ]}
+          onRowClick={(part) => navigate(`${partsBase}/${part.id}`)}
           empty={
             <EmptyState
               description="Деталі зʼявляться тут, щойно ви розберете авто й додасте запчастини на склад."

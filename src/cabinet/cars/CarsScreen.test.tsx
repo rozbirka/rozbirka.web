@@ -511,6 +511,7 @@ it('renders car identity, gallery, and VIN copy', async () => {
 })
 
 it('previews the first parts and links to the warehouse filtered by this car', async () => {
+  const user = userEvent.setup()
   vi.mocked(useCabinet).mockReturnValue(
     cabinet(['cars.view', 'cars.manage', 'parts.view']),
   )
@@ -532,6 +533,10 @@ it('previews the first parts and links to the warehouse filtered by this car', a
     <MemoryRouter initialEntries={['/app/demo/cars/car-1']}>
       <Routes>
         <Route path="/app/:tenant/cars/:carId" element={<CarsScreen />} />
+        <Route
+          path="/app/:tenant/parts/:partId"
+          element={<h1>Картка запчастини</h1>}
+        />
       </Routes>
     </MemoryRouter>,
   )
@@ -540,6 +545,10 @@ it('previews the first parts and links to the warehouse filtered by this car', a
   expect(section).toHaveTextContent('12 позицій з цього авто')
   expect(section).toHaveTextContent('Показано 1 із 12')
   const partRow = within(section).getByRole('row', { name: /Бампер/ })
+  expect(within(partRow).getByRole('link', { name: 'Бампер' })).toHaveAttribute(
+    'href',
+    '/app/demo/parts/part-1',
+  )
   expect(within(partRow).getByRole('cell', { name: 'Доступна' })).toBeVisible()
   expect(
     within(section).getByRole('link', { name: 'Відкрити на складі' }),
@@ -548,6 +557,10 @@ it('previews the first parts and links to the warehouse filtered by this car', a
   expect(request?.[0]).toBe('car-1')
   expect(request?.[1]).toEqual({ pageSize: 5 })
   expect(request?.[2]?.signal).toBeInstanceOf(AbortSignal)
+  await user.click(within(partRow).getByRole('cell', { name: 'Доступна' }))
+  expect(
+    await screen.findByRole('heading', { name: 'Картка запчастини' }),
+  ).toBeVisible()
 })
 
 it('normalizes a failed parts preview and retries without an unhandled rejection', async () => {
