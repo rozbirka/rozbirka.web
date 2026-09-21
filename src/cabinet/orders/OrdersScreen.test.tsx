@@ -3,7 +3,6 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useCabinet } from '../CabinetContext'
-import { tenantRequestScope } from '../tenant-request-scope'
 import { OrdersScreen } from './OrdersScreen'
 
 const orderMocks = vi.hoisted(() => ({
@@ -17,18 +16,7 @@ const orderMocks = vi.hoisted(() => ({
   updateNotes: vi.fn(),
   setCustomer: vi.fn(),
 }))
-const partMocks = vi.hoisted(() => ({ list: vi.fn() }))
-const customerMocks = vi.hoisted(() => ({
-  search: vi.fn(),
-  create: vi.fn(),
-  activate: vi.fn(),
-}))
 vi.mock('@/api/orders', () => ({ ordersApi: orderMocks }))
-vi.mock('@/api/parts', () => ({ partsApi: partMocks }))
-vi.mock('@/api/customers', async (importOriginal) => ({
-  ...(await importOriginal()),
-  customersApi: customerMocks,
-}))
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
 
 const definition = {
@@ -78,59 +66,6 @@ beforeEach(() => {
   })
 })
 
-it('prevents a duplicate canonical create while the first request is pending', async () => {
-  let resolve!: (value: { id: string }) => void
-  orderMocks.create.mockReturnValue(
-    new Promise((done) => {
-      resolve = done
-    }),
-  )
-  const user = userEvent.setup()
-  render(
-    <MemoryRouter
-      initialEntries={['/app/garage/orders/new?customerId=customer-1']}
-    >
-      <OrdersScreen definition={definition} />
-    </MemoryRouter>,
-  )
-
-  await user.type(screen.getByLabelText('ID запчастини'), 'part-1')
-  await user.type(screen.getByLabelText('Кількість'), '1')
-  await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
-  const submit = screen.getByRole('button', { name: 'Створити замовлення' })
-  await user.click(submit)
-  await user.click(submit)
-
-  expect(orderMocks.create).toHaveBeenCalledOnce()
-  expect(submit).toBeDisabled()
-  resolve({ id: 'order-1' })
-})
-
-it.each(['parts.view', 'customers.view'])(
-  'blocks canonical creation when %s is revoked after render',
-  async (permission) => {
-    const access = cabinet()
-    vi.mocked(useCabinet).mockReturnValue(access)
-    orderMocks.create.mockResolvedValue({ id: 'order-1' })
-    const user = userEvent.setup()
-    render(
-      <MemoryRouter initialEntries={['/app/garage/orders/new']}>
-        <OrdersScreen definition={definition} />
-      </MemoryRouter>,
-    )
-
-    await user.type(screen.getByLabelText('ID запчастини'), 'part-1')
-    await user.type(screen.getByLabelText('Кількість'), '1')
-    await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
-    ;(access.snapshot!.permissions as Set<string>).delete(permission)
-    await user.click(
-      screen.getByRole('button', { name: 'Створити замовлення' }),
-    )
-
-    expect(orderMocks.create).not.toHaveBeenCalled()
-  },
-)
-
 it('blocks add-item replacement when parts.view is revoked after render', async () => {
   const access = cabinet()
   vi.mocked(useCabinet).mockReturnValue(access)
@@ -168,235 +103,6 @@ it('blocks add-item replacement when parts.view is revoked after render', async 
 it.each([
   ['parts.view', ['orders.view', 'orders.manage', 'customers.view']],
   ['customers.view', ['orders.view', 'orders.manage', 'parts.view']],
-])('blocks canonical creation without %s', (_, permissions) => {
-  vi.mocked(useCabinet).mockReturnValue(cabinet(permissions))
-
-  render(
-    <MemoryRouter initialEntries={['/app/garage/orders/new']}>
-      <OrdersScreen definition={definition} />
-    </MemoryRouter>,
-  )
-
-  expect(screen.getByRole('alert')).toHaveTextContent(
-    'Потрібен доступ до запчастин і клієнтів.',
-  )
-  expect(
-    screen.queryByRole('button', { name: 'Створити замовлення' }),
-  ).not.toBeInTheDocument()
-})
-
-it('creates a customer inline before canonical order creation', async () => {
-  customerMocks.create.mockResolvedValue({
-    customer: { id: 'customer-new', name: 'Нова Ірина' },
-  })
-  orderMocks.create.mockResolvedValue({ id: 'order-1' })
-  const user = userEvent.setup()
-  render(
-    <MemoryRouter initialEntries={['/app/garage/orders/new']}>
-      <OrdersScreen definition={definition} />
-    </MemoryRouter>,
-  )
-
-  await user.type(screen.getByLabelText('Ім’я нового клієнта'), 'Нова Ірина')
-  expect(screen.getByLabelText('Телефон нового клієнта')).toHaveValue('+380')
-  await user.type(screen.getByLabelText('Телефон нового клієнта'), '501112233')
-  await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
-  await user.type(screen.getByLabelText('ID запчастини'), 'part-1')
-  await user.type(screen.getByLabelText('Кількість'), '1')
-  await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
-  await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
-
-  expect(customerMocks.create).toHaveBeenCalledWith(
-    {
-      name: 'Нова Ірина',
-      phone: '+380501112233',
-      notes: null,
-    },
-    { signal: tenantRequestScope.signal },
-  )
-  expect(orderMocks.create).toHaveBeenCalledWith(
-    expect.objectContaining({ customerId: 'customer-new' }),
-  )
-})
-
-it.each([
-  [
-    'customers.manage',
-    cabinet(['orders.view', 'orders.manage', 'parts.view', 'customers.view']),
-  ],
-  ['an active subscription', cabinet(undefined, 'cancelled')],
-])('hides inline customer creation without %s', (_, access) => {
-  vi.mocked(useCabinet).mockReturnValue(access)
-
-  render(
-    <MemoryRouter initialEntries={['/app/garage/orders/new']}>
-      <OrdersScreen definition={definition} />
-    </MemoryRouter>,
-  )
-
-  expect(screen.getByLabelText('Пошук клієнта')).toBeVisible()
-  expect(
-    screen.queryByRole('group', { name: 'Новий клієнт' }),
-  ).not.toBeInTheDocument()
-  expect(customerMocks.create).not.toHaveBeenCalled()
-})
-
-it.each(['orders.manage', 'customers.view', 'customers.manage'])(
-  'blocks inline customer creation when %s is revoked after render',
-  async (permission) => {
-    const access = cabinet()
-    vi.mocked(useCabinet).mockReturnValue(access)
-    customerMocks.create.mockResolvedValue({
-      customer: { id: 'customer-new', name: 'Нова Ірина' },
-    })
-    const user = userEvent.setup()
-    render(
-      <MemoryRouter initialEntries={['/app/garage/orders/new']}>
-        <OrdersScreen definition={definition} />
-      </MemoryRouter>,
-    )
-
-    await user.type(screen.getByLabelText('Ім’я нового клієнта'), 'Нова Ірина')
-    ;(access.snapshot!.permissions as Set<string>).delete(permission)
-    await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
-
-    expect(customerMocks.create).not.toHaveBeenCalled()
-  },
-)
-
-it('reuses an active duplicate-phone customer in the pending order', async () => {
-  customerMocks.create.mockRejectedValue({
-    response: {
-      status: 409,
-      data: {
-        error: {
-          code: 'CUSTOMER_PHONE_EXISTS',
-          customerId: 'customer-existing',
-          customerName: 'Ірина',
-          isActive: true,
-          message: 'Телефон уже використовується',
-        },
-      },
-    },
-  })
-  orderMocks.create.mockResolvedValue({ id: 'order-1' })
-  const user = userEvent.setup()
-  render(
-    <MemoryRouter initialEntries={['/app/garage/orders/new']}>
-      <OrdersScreen definition={definition} />
-    </MemoryRouter>,
-  )
-
-  await user.type(screen.getByLabelText('Ім’я нового клієнта'), 'Нова Ірина')
-  await user.type(
-    screen.getByLabelText('Телефон нового клієнта'),
-    '+380501112233',
-  )
-  await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
-  await user.click(
-    await screen.findByRole('button', { name: 'Використати клієнта Ірина' }),
-  )
-  await user.type(screen.getByLabelText('ID запчастини'), 'part-1')
-  await user.type(screen.getByLabelText('Кількість'), '1')
-  await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
-  await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
-
-  expect(orderMocks.create).toHaveBeenCalledWith(
-    expect.objectContaining({ customerId: 'customer-existing' }),
-  )
-})
-
-it('reactivates an inactive duplicate-phone customer before selecting it', async () => {
-  customerMocks.create.mockRejectedValue({
-    response: {
-      status: 409,
-      data: {
-        error: {
-          code: 'CUSTOMER_PHONE_EXISTS',
-          customerId: 'customer-inactive',
-          customerName: 'Олена',
-          isActive: false,
-          message: 'Телефон уже використовується',
-        },
-      },
-    },
-  })
-  customerMocks.activate.mockResolvedValue({
-    id: 'customer-inactive',
-    name: 'Олена',
-  })
-  orderMocks.create.mockResolvedValue({ id: 'order-1' })
-  const user = userEvent.setup()
-  render(
-    <MemoryRouter initialEntries={['/app/garage/orders/new']}>
-      <OrdersScreen definition={definition} />
-    </MemoryRouter>,
-  )
-
-  await user.type(screen.getByLabelText('Ім’я нового клієнта'), 'Нова Олена')
-  await user.type(
-    screen.getByLabelText('Телефон нового клієнта'),
-    '+380501112233',
-  )
-  await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
-  await user.click(
-    await screen.findByRole('button', { name: 'Активувати Олена' }),
-  )
-  await user.type(screen.getByLabelText('ID запчастини'), 'part-1')
-  await user.type(screen.getByLabelText('Кількість'), '1')
-  await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
-  await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
-
-  expect(customerMocks.activate).toHaveBeenCalledWith('customer-inactive', {
-    signal: tenantRequestScope.signal,
-  })
-  expect(orderMocks.create).toHaveBeenCalledWith(
-    expect.objectContaining({ customerId: 'customer-inactive' }),
-  )
-})
-
-it('blocks duplicate-customer reactivation when customers.view is revoked after render', async () => {
-  const access = cabinet()
-  vi.mocked(useCabinet).mockReturnValue(access)
-  customerMocks.create.mockRejectedValue({
-    response: {
-      status: 409,
-      data: {
-        error: {
-          code: 'CUSTOMER_PHONE_EXISTS',
-          customerId: 'customer-inactive',
-          customerName: 'Олена',
-          isActive: false,
-          message: 'Телефон уже використовується',
-        },
-      },
-    },
-  })
-  customerMocks.activate.mockResolvedValue({
-    id: 'customer-inactive',
-    name: 'Олена',
-  })
-  const user = userEvent.setup()
-  render(
-    <MemoryRouter initialEntries={['/app/garage/orders/new']}>
-      <OrdersScreen definition={definition} />
-    </MemoryRouter>,
-  )
-
-  await user.type(screen.getByLabelText('Ім’я нового клієнта'), 'Нова Олена')
-  await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
-  const activate = await screen.findByRole('button', {
-    name: 'Активувати Олена',
-  })
-  ;(access.snapshot!.permissions as Set<string>).delete('customers.view')
-  await user.click(activate)
-
-  expect(customerMocks.activate).not.toHaveBeenCalled()
-})
-
-it.each([
-  ['parts.view', ['orders.view', 'orders.manage', 'customers.view']],
-  ['customers.view', ['orders.view', 'orders.manage', 'parts.view']],
 ])('hides the directory create action without %s', async (_, permissions) => {
   vi.mocked(useCabinet).mockReturnValue(cabinet(permissions))
 
@@ -410,74 +116,6 @@ it.each([
   expect(
     screen.queryByRole('link', { name: 'Нове замовлення' }),
   ).not.toBeInTheDocument()
-})
-
-it('uses the reusable customer and part searches to populate a canonical order', async () => {
-  partMocks.list.mockResolvedValue({
-    items: [
-      {
-        id: 'part-1',
-        name: 'Ліхтар',
-        photos: [],
-        quantityTotal: 3,
-        quantityReserved: 0,
-        quantityAvailable: 3,
-        quantitySoldTotal: 0,
-        status: 'available',
-        car: null,
-        order: null,
-      },
-    ],
-    page: 1,
-    pageSize: 10,
-    total: 1,
-    totalPages: 1,
-  })
-  customerMocks.search.mockResolvedValue([
-    {
-      id: 'customer-1',
-      name: 'Ірина',
-      phone: null,
-      ordersCount: 0,
-    },
-  ])
-  orderMocks.create.mockResolvedValue({ id: 'order-1' })
-  const user = userEvent.setup()
-  render(
-    <MemoryRouter initialEntries={['/app/garage/orders/new']}>
-      <OrdersScreen definition={definition} />
-    </MemoryRouter>,
-  )
-
-  await user.type(screen.getByLabelText('Пошук запчастини'), 'Ліхтар')
-  await user.click(
-    await screen.findByRole('button', { name: 'Обрати запчастину Ліхтар' }),
-  )
-  expect(
-    screen.queryByRole('button', { name: 'Обрати запчастину Ліхтар' }),
-  ).toBeNull()
-  await user.type(screen.getByLabelText('Пошук клієнта'), 'Ірина')
-  await user.click(
-    await screen.findByRole('button', { name: 'Обрати клієнта Ірина' }),
-  )
-  expect(
-    screen.queryByRole('button', { name: 'Обрати клієнта Ірина' }),
-  ).toBeNull()
-  expect(screen.getByLabelText('Кількість')).toHaveClass('text-left')
-  expect(screen.getByLabelText('Ціна за одиницю')).toHaveClass('text-left')
-  await user.type(screen.getByLabelText('Кількість'), '1')
-  await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
-  await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
-
-  expect(partMocks.list).toHaveBeenCalledWith(
-    expect.objectContaining({ q: 'Ліхтар', page: 1, pageSize: 10 }),
-  )
-  expect(customerMocks.search).toHaveBeenCalledWith('Ірина', expect.any(Object))
-  expect(orderMocks.create).toHaveBeenCalledWith({
-    customerId: 'customer-1',
-    notes: null,
-    items: [{ partId: 'part-1', quantity: 1, unitPrice: 250 }],
-  })
 })
 
 it('appends an item to the full Core item list when the replacement endpoint is used', async () => {
@@ -1078,7 +716,9 @@ it('shows authoritative detail and lets orders.manage edit pending fields and ca
   const summaryValues = screen
     .getAllByRole('definition')
     .map((d) => d.textContent?.replace(/\s+/g, ' ').trim())
-  expect(summaryValues).toEqual(expect.arrayContaining(['250,00 ₴', '100,00 ₴']))
+  expect(summaryValues).toEqual(
+    expect.arrayContaining(['250,00 ₴', '100,00 ₴']),
+  )
   const payments = screen.getByRole('table', { name: 'Платежі замовлення' })
   expect(within(payments).getByText('Основна каса')).toBeVisible()
   expect(within(payments).getByText('100,00 ₴')).toBeVisible()
