@@ -896,6 +896,8 @@ it('merges an added quantity into the existing part instead of duplicating it', 
         totalPrice: 150,
       },
     ],
+    // Core answers with the full order; the api layer fills the collections
+    // it omits when empty, so the fixture carries them too.
     payments: [],
     history: [],
     totalAmount: 250,

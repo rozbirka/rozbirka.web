@@ -54,3 +54,34 @@ describe('ordersApi', () => {
     )
   })
 })
+
+it('fills in the collections Core omits when they are empty', async () => {
+  const bare = {
+    id: 'order-1',
+    number: 286,
+    status: 'new',
+    customerId: null,
+    customerName: null,
+    notes: null,
+    totalAmount: null,
+    totalPaid: null,
+    paymentCurrency: null,
+    createdAt: '2026-09-21T09:44:00Z',
+    createdByName: 'Дмитро',
+  }
+  vi.spyOn(apiClient, 'get').mockResolvedValue({ data: bare })
+  vi.spyOn(apiClient, 'post').mockResolvedValue({ data: bare })
+
+  const loaded = await ordersApi.getById('order-1')
+  const created = await ordersApi.create({
+    customerId: null,
+    notes: null,
+    items: [],
+  })
+
+  for (const order of [loaded, created]) {
+    expect(order.items).toEqual([])
+    expect(order.payments).toEqual([])
+    expect(order.history).toEqual([])
+  }
+})
