@@ -69,6 +69,22 @@ afterEach(() => {
 })
 beforeEach(() => {
   vi.mocked(useCabinet).mockReturnValue(cabinet())
+  orderMocks.getById.mockResolvedValue({
+    id: 'order-1',
+    number: 1,
+    status: 'pending',
+    customerId: null,
+    customerName: null,
+    notes: null,
+    items: [],
+    payments: [],
+    history: [],
+    totalAmount: 0,
+    totalPaid: 0,
+    paymentCurrency: 'USD',
+    createdAt: '2026-09-21T10:00:00Z',
+    createdByName: 'Олена',
+  })
   orderMocks.list.mockResolvedValue({
     items: [],
     page: 1,
@@ -104,6 +120,34 @@ it('prevents a duplicate canonical create while the first request is pending', a
   expect(orderMocks.create).toHaveBeenCalledOnce()
   expect(submit).toBeDisabled()
   resolve({ id: 'order-1' })
+})
+
+it('opens the created order inside the orders route', async () => {
+  orderMocks.create.mockResolvedValue({ id: 'order-1' })
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant/orders/new',
+        element: <OrdersScreen definition={definition} />,
+      },
+      {
+        path: '/app/:tenant/orders/:orderId',
+        element: <p>Картка замовлення</p>,
+      },
+    ],
+    { initialEntries: ['/app/garage/orders/new'] },
+  )
+  const user = userEvent.setup()
+  render(<RouterProvider router={router} />)
+
+  await user.type(screen.getByLabelText('ID запчастини'), 'part-1')
+  await user.type(screen.getByLabelText('Кількість'), '1')
+  await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
+  await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
+
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe('/app/garage/orders/order-1'),
+  )
 })
 
 it.each(['parts.view', 'customers.view'])(

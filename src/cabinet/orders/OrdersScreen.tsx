@@ -725,7 +725,10 @@ function OrderForm({
             items: creationItems,
           })
       if (scope.signal.aborted) return
-      await navigate(`../${detail.id}`, { replace: true })
+      const detailPath = orderId
+        ? location.pathname.replace(/\/items\/new$/, '')
+        : `${location.pathname.replace(/\/new$/, '')}/${detail.id}`
+      await navigate(detailPath, { replace: true })
     } catch (error) {
       setError(errorMessage(error))
       setBusy(false)
