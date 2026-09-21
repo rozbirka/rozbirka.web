@@ -141,6 +141,20 @@ it('searches available parts and adds one with the quantity stepper', async () =
   expect(screen.getByRole('button', { name: 'Далі' })).toBeDisabled()
   await user.type(screen.getByLabelText('Ціна за одиницю Ліхтар'), '0')
   expect(screen.getByRole('button', { name: 'Далі' })).toBeEnabled()
+  customerMocks.search.mockResolvedValue([
+    { id: 'customer-1', name: 'Ірина', phone: '+380501112233', ordersCount: 2 },
+  ])
+  await user.click(screen.getByRole('button', { name: 'Далі' }))
+  expect(screen.getByRole('heading', { name: 'Клієнт' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Далі' })).toBeEnabled()
+  await user.type(screen.getByLabelText('Пошук клієнта'), 'Ірина')
+  await user.click(
+    await screen.findByRole('button', { name: 'Обрати клієнта Ірина' }),
+  )
+  expect(screen.getByText('+380501112233')).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: 'Обрати клієнта Ірина' }),
+  ).not.toBeInTheDocument()
 })
 
 it('opens canonical creation as a four-step workflow without scanning', () => {

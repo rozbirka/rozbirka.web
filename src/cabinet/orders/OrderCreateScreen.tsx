@@ -21,6 +21,7 @@ import {
   OrderCreatePartsStep,
   OrderCreatePricesStep,
 } from './OrderCreatePartsStep'
+import { OrderCreateCustomerStep } from './OrderCreateCustomerStep'
 
 const STEPS: readonly { id: OrderCreateStep; label: string }[] = [
   { id: 'parts', label: 'Запчастини' },
@@ -120,6 +121,14 @@ export function OrderCreateScreen({ definition }: CabinetModuleScreenProps) {
             onItemsChange={(items) =>
               setDraft((current) => ({ ...current, items }))
             }
+          />
+        ) : step.id === 'customer' ? (
+          <OrderCreateCustomerStep
+            definition={definition}
+            onSelectCustomer={(selectedCustomer) =>
+              setDraft((current) => ({ ...current, selectedCustomer }))
+            }
+            selectedCustomer={draft.selectedCustomer}
           />
         ) : (
           <p className="text-app-dim text-sm">Наступний крок замовлення.</p>
