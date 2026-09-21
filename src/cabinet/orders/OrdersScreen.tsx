@@ -566,6 +566,15 @@ function OrderForm({
   const [existingItems, setExistingItems] = useState<
     { partId: string; quantity: number; unitPrice: number }[]
   >([])
+  const [draftItems, setDraftItems] = useState<
+    {
+      part: PartListItem
+      quantity: number
+      unitPrice: number
+    }[]
+  >([])
+  const [selectedPartDraft, setSelectedPartDraft] =
+    useState<PartListItem | null>(null)
   const [existingItemsLoad, setExistingItemsLoad] = useState<{
     orderId: string | null
     status: 'not-needed' | 'loaded' | 'failed'
@@ -653,13 +662,30 @@ function OrderForm({
   }, [orderId])
   const submit = async (event: FormEvent) => {
     event.preventDefault()
+    const directItem =
+      partId && quantity && unitPrice
+        ? {
+            partId,
+            quantity: Number(quantity),
+            unitPrice: Number(unitPrice),
+          }
+        : null
+    const creationItems =
+      draftItems.length > 0
+        ? draftItems.map((item) => ({
+            partId: item.part.id,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+          }))
+        : directItem
+          ? [directItem]
+          : []
     if (
       busy ||
       !dependenciesAllowed ||
       (orderId !== null && existingItemsLoadStatus !== 'loaded') ||
-      !partId ||
-      !quantity ||
-      !unitPrice
+      (orderId !== null && !directItem) ||
+      (orderId === null && creationItems.length === 0)
     )
       return
     setBusy(true)
@@ -695,13 +721,7 @@ function OrderForm({
         : await ordersApi.create({
             customerId: customerId || null,
             notes: notes || null,
-            items: [
-              {
-                partId,
-                quantity: Number(quantity),
-                unitPrice: Number(unitPrice),
-              },
-            ],
+            items: creationItems,
           })
       if (scope.signal.aborted) return
       await navigate(`../${detail.id}`, { replace: true })
@@ -794,6 +814,47 @@ function OrderForm({
       setCustomerBusy(false)
     }
   }
+  const addDraftItem = () => {
+    if (orderId !== null || !selectedPartDraft || !quantity || !unitPrice)
+      return
+    const parsedQuantity = Number(quantity)
+    const parsedUnitPrice = Number(unitPrice)
+    if (
+      !Number.isInteger(parsedQuantity) ||
+      parsedQuantity < 1 ||
+      !Number.isFinite(parsedUnitPrice) ||
+      parsedUnitPrice < 0
+    )
+      return
+    setDraftItems((current) => {
+      const existing = current.find(
+        (item) => item.part.id === selectedPartDraft.id,
+      )
+      if (!existing)
+        return [
+          ...current,
+          {
+            part: selectedPartDraft,
+            quantity: parsedQuantity,
+            unitPrice: parsedUnitPrice,
+          },
+        ]
+      return current.map((item) =>
+        item.part.id === selectedPartDraft.id
+          ? {
+              ...item,
+              quantity: item.quantity + parsedQuantity,
+              unitPrice: parsedUnitPrice,
+            }
+          : item,
+      )
+    })
+    setPartId('')
+    setSelectedPartDraft(null)
+    setPartQuery('')
+    setQuantity('')
+    setUnitPrice('')
+  }
   if (!dependenciesAllowed) {
     return (
       <PageBody width="narrow">
@@ -805,7 +866,8 @@ function OrderForm({
       </PageBody>
     )
   }
-  const selectedPart = partResults.find((part) => part.id === partId)
+  const selectedPart =
+    selectedPartDraft ?? partResults.find((part) => part.id === partId)
   const selectedCustomer = customerResults.find(
     (customer) => customer.id === customerId,
   )
@@ -817,6 +879,10 @@ function OrderForm({
     (sum, item) => sum + item.quantity * item.unitPrice,
     0,
   )
+  const draftItemsTotal = draftItems.reduce(
+    (sum, item) => sum + item.quantity * item.unitPrice,
+    0,
+  )
   const backPath = orderId
     ? location.pathname.replace(/\/items\/new$/, '')
     : location.pathname.replace(/\/new$/, '')
@@ -824,9 +890,10 @@ function OrderForm({
     !mutationsAllowed ||
     busy ||
     (orderId !== null && existingItemsLoadStatus !== 'loaded') ||
-    !partId ||
-    !quantity ||
-    !unitPrice
+    (orderId !== null && (!partId || !quantity || !unitPrice)) ||
+    (orderId === null &&
+      draftItems.length === 0 &&
+      (!partId || !quantity || !unitPrice))
   return (
     <PageBody width="narrow">
       <PageHeader
@@ -839,7 +906,7 @@ function OrderForm({
           description={
             orderId
               ? 'Знайдіть запчастину, вкажіть кількість і ціну — позиція долучиться до наявних у замовленні.'
-              : 'Замовлення створюється з однією позицією. Решту можна додати на сторінці замовлення.'
+              : 'Оберіть запчастину, вкажіть кількість і ціну, а потім додайте її до замовлення.'
           }
           title="Позиція"
         >
@@ -853,6 +920,10 @@ function OrderForm({
                   <SearchInput
                     onChange={(event) => {
                       setPartQuery(event.target.value)
+                      if (event.target.value !== selectedPartDraft?.name) {
+                        setPartId('')
+                        setSelectedPartDraft(null)
+                      }
                       setPartPickerOpen(true)
                     }}
                     onFocus={() => setPartPickerOpen(true)}
@@ -874,6 +945,8 @@ function OrderForm({
                             }
                             onClick={() => {
                               setPartId(part.id)
+                              setSelectedPartDraft(part)
+                              setPartQuery(part.name)
                               setPartPickerOpen(false)
                             }}
                           >
@@ -921,6 +994,64 @@ function OrderForm({
                 />
               </Field>
             </div>
+            {orderId === null && (
+              <Button
+                className="w-full justify-center border-dashed"
+                disabled={
+                  !selectedPartDraft ||
+                  !quantity ||
+                  !unitPrice ||
+                  Number(quantity) < 1 ||
+                  Number(unitPrice) < 0
+                }
+                onClick={addDraftItem}
+              >
+                <Plus aria-hidden />
+                Додати деталь
+              </Button>
+            )}
+            {orderId === null && draftItems.length > 0 && (
+              <div
+                aria-label="Позиції замовлення"
+                className="border-app-line grid gap-2 border-t pt-4"
+              >
+                {draftItems.map((item) => (
+                  <div
+                    className="border-app-line bg-app-canvas/45 grid gap-3 rounded-[14px] border p-3.5 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center"
+                    key={item.part.id}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-app-ink truncate text-[14px] font-bold">
+                        {item.part.name}
+                      </p>
+                      <p className="text-app-muted mt-1 text-[13px] tabular-nums">
+                        {item.quantity} × ${item.unitPrice}
+                      </p>
+                    </div>
+                    <p className="text-brand text-right text-[16px] font-extrabold tabular-nums">
+                      $
+                      {new Intl.NumberFormat('uk-UA').format(
+                        item.quantity * item.unitPrice,
+                      )}
+                    </p>
+                    <Button
+                      aria-label={`Прибрати ${item.part.name}`}
+                      className="size-10 justify-center px-0"
+                      onClick={() =>
+                        setDraftItems((current) =>
+                          current.filter(
+                            (draft) => draft.part.id !== item.part.id,
+                          ),
+                        )
+                      }
+                      variant="quiet"
+                    >
+                      <Trash2 aria-hidden />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </SectionPanel>
         {customerSearchAllowed && (
@@ -1075,7 +1206,15 @@ function OrderForm({
               <TotalLine
                 label={orderId ? 'Разом за позицію' : 'Разом за замовлення'}
                 strong
-                value={money(draftLineTotal)}
+                value={
+                  orderId
+                    ? money(draftLineTotal)
+                    : draftItems.length > 0
+                      ? `$${new Intl.NumberFormat('uk-UA').format(draftItemsTotal)}`
+                      : draftLineTotal === null
+                        ? '—'
+                        : `$${new Intl.NumberFormat('uk-UA').format(draftLineTotal)}`
+                }
               />
             </div>
             <div className="flex flex-wrap gap-2">

@@ -2463,7 +2463,7 @@ function CarParts({
               cell: (part: CarPartListItem) => part.quantityAvailable,
             },
           ]}
-          onRowClick={(part) => navigate(`${partsBase}/${part.id}`)}
+          onRowClick={(part) => void navigate(`${partsBase}/${part.id}`)}
           empty={
             <EmptyState
               description="Деталі зʼявляться тут, щойно ви розберете авто й додасте запчастини на склад."

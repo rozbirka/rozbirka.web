@@ -480,6 +480,84 @@ it('uses the reusable customer and part searches to populate a canonical order',
   })
 })
 
+it('builds a multi-part order and shows its total in dollars', async () => {
+  partMocks.list.mockResolvedValue({
+    items: [
+      {
+        id: 'part-1',
+        name: 'Ліхтар',
+        photos: [],
+        quantityTotal: 3,
+        quantityReserved: 0,
+        quantityAvailable: 3,
+        quantitySoldTotal: 0,
+        status: 'available',
+        car: null,
+        order: null,
+      },
+      {
+        id: 'part-2',
+        name: 'Двері',
+        photos: [],
+        quantityTotal: 2,
+        quantityReserved: 0,
+        quantityAvailable: 2,
+        quantitySoldTotal: 0,
+        status: 'available',
+        car: null,
+        order: null,
+      },
+    ],
+    page: 1,
+    pageSize: 10,
+    total: 2,
+    totalPages: 1,
+  })
+  orderMocks.create.mockResolvedValue({ id: 'order-1' })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/new']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  const search = screen.getByLabelText('Пошук запчастини')
+  await user.type(search, 'Ліх')
+  await user.click(
+    await screen.findByRole('button', { name: 'Обрати запчастину Ліхтар' }),
+  )
+  expect(search).toHaveValue('Ліхтар')
+  await user.type(screen.getByLabelText('Кількість'), '2')
+  await user.type(screen.getByLabelText('Ціна за одиницю'), '50')
+  await user.click(screen.getByRole('button', { name: 'Додати деталь' }))
+
+  const items = screen.getByLabelText('Позиції замовлення')
+  expect(within(items).getByText('Ліхтар')).toBeVisible()
+  expect(within(items).getByText('2 × $50')).toBeVisible()
+  expect(within(items).getByText('$100')).toBeVisible()
+
+  await user.type(search, 'Двер')
+  await user.click(
+    await screen.findByRole('button', { name: 'Обрати запчастину Двері' }),
+  )
+  await user.type(screen.getByLabelText('Кількість'), '1')
+  await user.type(screen.getByLabelText('Ціна за одиницю'), '75')
+  await user.click(screen.getByRole('button', { name: 'Додати деталь' }))
+
+  expect(screen.getByText('Разом за замовлення')).toBeVisible()
+  expect(screen.getByText('$175')).toBeVisible()
+  await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
+
+  expect(orderMocks.create).toHaveBeenCalledWith({
+    customerId: null,
+    notes: null,
+    items: [
+      { partId: 'part-1', quantity: 2, unitPrice: 50 },
+      { partId: 'part-2', quantity: 1, unitPrice: 75 },
+    ],
+  })
+})
+
 it('appends an item to the full Core item list when the replacement endpoint is used', async () => {
   const order = {
     id: 'order-1',
@@ -1078,7 +1156,9 @@ it('shows authoritative detail and lets orders.manage edit pending fields and ca
   const summaryValues = screen
     .getAllByRole('definition')
     .map((d) => d.textContent?.replace(/\s+/g, ' ').trim())
-  expect(summaryValues).toEqual(expect.arrayContaining(['250,00 ₴', '100,00 ₴']))
+  expect(summaryValues).toEqual(
+    expect.arrayContaining(['250,00 ₴', '100,00 ₴']),
+  )
   const payments = screen.getByRole('table', { name: 'Платежі замовлення' })
   expect(within(payments).getByText('Основна каса')).toBeVisible()
   expect(within(payments).getByText('100,00 ₴')).toBeVisible()
