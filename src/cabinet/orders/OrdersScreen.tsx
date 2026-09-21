@@ -24,6 +24,12 @@ import {
 import { normalizeApiProblem } from '@/api/errors'
 import { orderStatusPresentation } from './order-labels'
 import { cn, plural } from '@/lib/utils'
+import {
+  customersApi,
+  readCustomerPhoneConflict,
+  type CustomerPhoneConflict,
+  type CustomerSearchItem,
+} from '@/api/customers'
 import { ordersApi, type OrderDetail, type OrderListItem } from '@/api/orders'
 import { partsApi, type PartListItem } from '@/api/parts'
 import { useCabinet } from '../CabinetContext'
@@ -31,7 +37,10 @@ import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
-import { OrderCreateScreen } from './OrderCreateScreen'
+import {
+  newCustomerPhoneDraft,
+  normalizeCustomerPhoneDraft,
+} from '../customers/customer-phone'
 
 const idFromPath = (path: string) => /\/orders\/([^/]+)/.exec(path)?.[1] ?? null
 const errorMessage = (error: unknown) => {
@@ -156,16 +165,19 @@ function TotalLine({
 export function OrdersScreen({ definition }: CabinetModuleScreenProps) {
   const location = useLocation()
   const id = idFromPath(location.pathname)
-  if (location.pathname.endsWith('/items/new')) {
+  if (location.pathname.endsWith('/new')) {
+    const isItemForm = location.pathname.endsWith('/items/new')
     return (
       <OrderForm
         definition={definition}
-        orderId={idFromPath(location.pathname.replace('/items/new', ''))!}
+        orderId={
+          isItemForm
+            ? idFromPath(location.pathname.replace('/items/new', ''))
+            : null
+        }
       />
     )
   }
-  if (location.pathname.endsWith('/new'))
-    return <OrderCreateScreen definition={definition} />
   return id ? (
     <OrderDetailScreen definition={definition} orderId={id} />
   ) : (
@@ -514,52 +526,78 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
 function OrderForm({
   definition,
   orderId,
-}: CabinetModuleScreenProps & { orderId: string }) {
+}: CabinetModuleScreenProps & { orderId: string | null }) {
   const cabinet = useCabinet()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const mutationsAllowed = canMutate(definition, cabinet)
+  const [params] = useSearchParams()
   const location = useLocation()
   const navigate = useNavigate()
   const partSearchAllowed =
     cabinet.snapshot?.permissions.has('parts.view') === true
+  const customerSearchAllowed =
+    !orderId && cabinet.snapshot?.permissions.has('customers.view') === true
+  const customerMutationAllowed =
+    !orderId && canMutate(definition, cabinet, 'customers.manage')
+  const dependenciesAllowed =
+    partSearchAllowed && (orderId !== null || customerSearchAllowed)
   const [partId, setPartId] = useState('')
   const [partQuery, setPartQuery] = useState('')
   const [partResults, setPartResults] = useState<PartListItem[]>([])
   const [partPickerOpen, setPartPickerOpen] = useState(false)
   const partPickerRef = useRef<HTMLDivElement>(null)
+  const [customerId, setCustomerId] = useState(params.get('customerId') ?? '')
+  const [customerQuery, setCustomerQuery] = useState('')
+  const [customerResults, setCustomerResults] = useState<CustomerSearchItem[]>(
+    [],
+  )
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false)
+  const customerPickerRef = useRef<HTMLDivElement>(null)
+  const [newCustomerName, setNewCustomerName] = useState('')
+  const [newCustomerPhone, setNewCustomerPhone] = useState(
+    newCustomerPhoneDraft,
+  )
+  const [customerConflict, setCustomerConflict] =
+    useState<CustomerPhoneConflict | null>(null)
+  const [customerBusy, setCustomerBusy] = useState(false)
   const [quantity, setQuantity] = useState('')
   const [unitPrice, setUnitPrice] = useState('')
+  const [notes, setNotes] = useState('')
   const [existingItems, setExistingItems] = useState<
     { partId: string; quantity: number; unitPrice: number }[]
   >([])
   const [existingItemsLoad, setExistingItemsLoad] = useState<{
-    orderId: string
-    status: 'loaded' | 'failed'
-  } | null>(null)
+    orderId: string | null
+    status: 'not-needed' | 'loaded' | 'failed'
+  }>({ orderId: null, status: 'not-needed' })
   const existingItemsLoadStatus =
-    existingItemsLoad?.orderId === orderId
-      ? existingItemsLoad.status
-      : 'loading'
+    orderId === null
+      ? 'not-needed'
+      : existingItemsLoad.orderId === orderId
+        ? existingItemsLoad.status
+        : 'loading'
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
   useEffect(() => {
-    const closePicker = (event: PointerEvent) => {
+    const closePickers = (event: PointerEvent) => {
       const target = event.target
-      if (target instanceof Node && !partPickerRef.current?.contains(target))
-        setPartPickerOpen(false)
+      if (!(target instanceof Node)) return
+      if (!partPickerRef.current?.contains(target)) setPartPickerOpen(false)
+      if (!customerPickerRef.current?.contains(target))
+        setCustomerPickerOpen(false)
     }
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setPartPickerOpen(false)
+      if (event.key !== 'Escape') return
+      setPartPickerOpen(false)
+      setCustomerPickerOpen(false)
     }
-    document.addEventListener('pointerdown', closePicker)
+    document.addEventListener('pointerdown', closePickers)
     document.addEventListener('keydown', closeOnEscape)
     return () => {
-      document.removeEventListener('pointerdown', closePicker)
+      document.removeEventListener('pointerdown', closePickers)
       document.removeEventListener('keydown', closeOnEscape)
     }
   }, [])
-
   useEffect(() => {
     const q = partQuery.trim()
     if (!partSearchAllowed || !q) return
@@ -574,36 +612,51 @@ function OrderForm({
       })
     return () => controller.abort()
   }, [partQuery, partSearchAllowed])
-
   useEffect(() => {
+    const q = customerQuery.trim()
+    if (!customerSearchAllowed || !q) return
+    const controller = new AbortController()
+    void customersApi
+      .search(q, { signal: controller.signal })
+      .then((result) => {
+        if (!controller.signal.aborted) setCustomerResults(result)
+      })
+      .catch((requestError) => {
+        if (!controller.signal.aborted) setError(errorMessage(requestError))
+      })
+    return () => controller.abort()
+  }, [customerQuery, customerSearchAllowed])
+  useEffect(() => {
+    if (!orderId) return
     const controller = new AbortController()
     void ordersApi
       .getById(orderId, { signal: controller.signal })
       .then((order) => {
-        if (controller.signal.aborted) return
-        setExistingItems(
-          order.items.map(({ partId, quantity, unitPrice }) => ({
-            partId,
-            quantity,
-            unitPrice,
-          })),
-        )
-        setExistingItemsLoad({ orderId, status: 'loaded' })
+        if (!controller.signal.aborted) {
+          setExistingItems(
+            order.items.map(({ partId, quantity, unitPrice }) => ({
+              partId,
+              quantity,
+              unitPrice,
+            })),
+          )
+          setExistingItemsLoad({ orderId, status: 'loaded' })
+        }
       })
       .catch((requestError) => {
-        if (controller.signal.aborted) return
-        setExistingItemsLoad({ orderId, status: 'failed' })
-        setError(errorMessage(requestError))
+        if (!controller.signal.aborted) {
+          setExistingItemsLoad({ orderId, status: 'failed' })
+          setError(errorMessage(requestError))
+        }
       })
     return () => controller.abort()
   }, [orderId])
-
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     if (
       busy ||
-      !partSearchAllowed ||
-      existingItemsLoadStatus !== 'loaded' ||
+      !dependenciesAllowed ||
+      (orderId !== null && existingItemsLoadStatus !== 'loaded') ||
       !partId ||
       !quantity ||
       !unitPrice
@@ -612,50 +665,150 @@ function OrderForm({
     setBusy(true)
     setError(null)
     try {
-      const scope = requireLatestMutation({ quota: false })
+      const scope = requireLatestMutation({ quota: orderId === null })
       requireLatestMutation({ permission: 'parts.view', quota: false })
-      const detail = await ordersApi.updateItems(
-        orderId,
-        existingItems.some((item) => item.partId === partId)
-          ? existingItems.map((item) =>
-              item.partId === partId
-                ? {
-                    ...item,
-                    quantity: item.quantity + Number(quantity),
+      if (orderId === null) {
+        requireLatestMutation({ permission: 'customers.view', quota: false })
+      }
+      const detail = orderId
+        ? await ordersApi.updateItems(
+            orderId,
+            existingItems.some((item) => item.partId === partId)
+              ? existingItems.map((item) =>
+                  item.partId === partId
+                    ? {
+                        ...item,
+                        quantity: item.quantity + Number(quantity),
+                        unitPrice: Number(unitPrice),
+                      }
+                    : item,
+                )
+              : [
+                  ...existingItems,
+                  {
+                    partId,
+                    quantity: Number(quantity),
                     unitPrice: Number(unitPrice),
-                  }
-                : item,
-            )
-          : [
-              ...existingItems,
+                  },
+                ],
+          )
+        : await ordersApi.create({
+            customerId: customerId || null,
+            notes: notes || null,
+            items: [
               {
                 partId,
                 quantity: Number(quantity),
                 unitPrice: Number(unitPrice),
               },
             ],
-      )
+          })
       if (scope.signal.aborted) return
       await navigate(`../${detail.id}`, { replace: true })
-    } catch (requestError) {
-      setError(errorMessage(requestError))
+    } catch (error) {
+      setError(errorMessage(error))
       setBusy(false)
     }
   }
-
-  if (!partSearchAllowed) {
+  const createCustomerInline = async () => {
+    if (customerBusy || !newCustomerName.trim() || !customerMutationAllowed)
+      return
+    setCustomerBusy(true)
+    setError(null)
+    setCustomerConflict(null)
+    try {
+      requireLatestMutation()
+      requireLatestMutation({
+        permission: 'customers.manage',
+        quota: false,
+      })
+      const scope = requireLatestMutation({
+        permission: 'customers.view',
+        quota: false,
+      })
+      const result = await customersApi.create(
+        {
+          name: newCustomerName.trim(),
+          phone:
+            newCustomerPhone.trim() === newCustomerPhoneDraft()
+              ? null
+              : newCustomerPhone.trim() || null,
+          notes: null,
+        },
+        { signal: scope.signal },
+      )
+      if (scope.signal.aborted) return
+      setCustomerId(result.customer.id)
+      setNewCustomerName('')
+      setNewCustomerPhone(newCustomerPhoneDraft())
+      setCustomerPickerOpen(false)
+    } catch (requestError) {
+      const conflict = readCustomerPhoneConflict(requestError)
+      if (conflict) setCustomerConflict(conflict)
+      else setError(errorMessage(requestError))
+    } finally {
+      setCustomerBusy(false)
+    }
+  }
+  const selectDuplicateCustomer = () => {
+    if (!customerConflict?.isActive || !customerMutationAllowed) return
+    setCustomerId(customerConflict.customerId)
+    setCustomerConflict(null)
+    setNewCustomerName('')
+    setNewCustomerPhone('')
+  }
+  const reactivateDuplicateCustomer = async () => {
+    if (
+      !customerConflict ||
+      customerConflict.isActive ||
+      customerBusy ||
+      !customerMutationAllowed
+    )
+      return
+    setCustomerBusy(true)
+    setError(null)
+    try {
+      requireLatestMutation({ quota: false })
+      requireLatestMutation({
+        permission: 'customers.manage',
+        quota: false,
+      })
+      const scope = requireLatestMutation({
+        permission: 'customers.view',
+        quota: false,
+      })
+      const customer = await customersApi.activate(
+        customerConflict.customerId,
+        {
+          signal: scope.signal,
+        },
+      )
+      if (scope.signal.aborted) return
+      setCustomerId(customer.id)
+      setCustomerConflict(null)
+      setNewCustomerName('')
+      setNewCustomerPhone('')
+    } catch (requestError) {
+      setError(errorMessage(requestError))
+    } finally {
+      setCustomerBusy(false)
+    }
+  }
+  if (!dependenciesAllowed) {
     return (
       <PageBody width="narrow">
         <DeniedState
-          description="Потрібен доступ до запчастин. Попросіть адміністратора розбірки відкрити склад для вашої ролі."
+          description="Потрібен доступ до запчастин і клієнтів. Попросіть адміністратора розбірки відкрити ці розділи для вашої ролі."
           role="alert"
-          title="Позицію не можна додати"
+          title="Замовлення недоступні для створення"
         />
       </PageBody>
     )
   }
-
   const selectedPart = partResults.find((part) => part.id === partId)
+  const selectedCustomer = customerResults.find(
+    (customer) => customer.id === customerId,
+  )
   const draftLineTotal =
     quantity && unitPrice
       ? lineTotal(Number(quantity), Number(unitPrice))
@@ -664,65 +817,79 @@ function OrderForm({
     (sum, item) => sum + item.quantity * item.unitPrice,
     0,
   )
-  const backPath = location.pathname.replace(/\/items\/new$/, '')
+  const backPath = orderId
+    ? location.pathname.replace(/\/items\/new$/, '')
+    : location.pathname.replace(/\/new$/, '')
   const submitBlocked =
     !mutationsAllowed ||
     busy ||
-    existingItemsLoadStatus !== 'loaded' ||
+    (orderId !== null && existingItemsLoadStatus !== 'loaded') ||
     !partId ||
     !quantity ||
     !unitPrice
-
   return (
     <PageBody width="narrow">
-      <PageHeader eyebrow="Продажі · Замовлення" title="Додати позицію" />
+      <PageHeader
+        eyebrow={orderId ? 'Продажі · Замовлення' : 'Продажі'}
+        title={orderId ? 'Додати позицію' : 'Створити замовлення'}
+      />
       <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
         {error && <Notice tone="danger">{error}</Notice>}
         <SectionPanel
-          description="Знайдіть запчастину, вкажіть кількість і ціну — позиція долучиться до наявних у замовленні."
+          description={
+            orderId
+              ? 'Знайдіть запчастину, вкажіть кількість і ціну — позиція долучиться до наявних у замовленні.'
+              : 'Замовлення створюється з однією позицією. Решту можна додати на сторінці замовлення.'
+          }
           title="Позиція"
         >
           <div className="grid gap-3">
-            <div className="grid gap-2" ref={partPickerRef}>
-              <Field
-                hint="Введіть назву — знайдені запчастини з’являться нижче."
-                label="Пошук запчастини"
-              >
-                <SearchInput
-                  onChange={(event) => {
-                    setPartQuery(event.target.value)
-                    setPartPickerOpen(true)
-                  }}
-                  onFocus={() => setPartPickerOpen(true)}
-                  value={partQuery}
-                />
-              </Field>
-              {partPickerOpen && partQuery.trim() && partResults.length > 0 && (
-                <ul className="grid gap-1.5">
-                  {partResults.map((part) => (
-                    <li key={part.id}>
-                      <Button
-                        aria-label={`Обрати запчастину ${part.name}`}
-                        className={
-                          part.id === partId
-                            ? 'border-brand/40 bg-brand/[0.1] w-full justify-between'
-                            : 'w-full justify-between'
-                        }
-                        onClick={() => {
-                          setPartId(part.id)
-                          setPartPickerOpen(false)
-                        }}
-                      >
-                        <span className="min-w-0 truncate">{part.name}</span>
-                        <span className="text-app-dim text-[13px] tabular-nums">
-                          {part.quantityAvailable} шт
-                        </span>
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+            {partSearchAllowed && (
+              <div className="grid gap-2" ref={partPickerRef}>
+                <Field
+                  hint="Введіть назву — знайдені запчастини з’являться нижче."
+                  label="Пошук запчастини"
+                >
+                  <SearchInput
+                    onChange={(event) => {
+                      setPartQuery(event.target.value)
+                      setPartPickerOpen(true)
+                    }}
+                    onFocus={() => setPartPickerOpen(true)}
+                    value={partQuery}
+                  />
+                </Field>
+                {partPickerOpen &&
+                  partQuery.trim() &&
+                  partResults.length > 0 && (
+                    <ul className="grid gap-1.5">
+                      {partResults.map((part) => (
+                        <li key={part.id}>
+                          <Button
+                            aria-label={`Обрати запчастину ${part.name}`}
+                            className={
+                              part.id === partId
+                                ? 'border-brand/40 bg-brand/[0.1] w-full justify-between'
+                                : 'w-full justify-between'
+                            }
+                            onClick={() => {
+                              setPartId(part.id)
+                              setPartPickerOpen(false)
+                            }}
+                          >
+                            <span className="min-w-0 truncate">
+                              {part.name}
+                            </span>
+                            <span className="text-app-dim text-[13px] tabular-nums">
+                              {part.quantityAvailable} шт
+                            </span>
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+              </div>
+            )}
             <Field
               hint={
                 selectedPart
@@ -756,26 +923,166 @@ function OrderForm({
             </div>
           </div>
         </SectionPanel>
+        {customerSearchAllowed && (
+          <SectionPanel
+            description="Замовлення можна створити й без клієнта — тоді поле лишається порожнім."
+            title="Клієнт"
+          >
+            <div className="grid gap-3" ref={customerPickerRef}>
+              <Field
+                hint={
+                  selectedCustomer
+                    ? `Обрано ${selectedCustomer.name}`
+                    : customerId
+                      ? `Обрано клієнта ${customerId}`
+                      : 'Клієнта не обрано'
+                }
+                label="Пошук клієнта"
+              >
+                <SearchInput
+                  onChange={(event) => {
+                    setCustomerQuery(event.target.value)
+                    setCustomerPickerOpen(true)
+                  }}
+                  onFocus={() => setCustomerPickerOpen(true)}
+                  value={customerQuery}
+                />
+              </Field>
+              {customerPickerOpen &&
+                customerQuery.trim() &&
+                customerResults.length > 0 && (
+                  <ul className="grid gap-1.5">
+                    {customerResults.map((customer) => (
+                      <li key={customer.id}>
+                        <Button
+                          aria-label={`Обрати клієнта ${customer.name}`}
+                          className={
+                            customer.id === customerId
+                              ? 'border-brand/40 bg-brand/[0.1] w-full justify-between'
+                              : 'w-full justify-between'
+                          }
+                          onClick={() => {
+                            setCustomerId(customer.id)
+                            setCustomerPickerOpen(false)
+                          }}
+                        >
+                          <span className="min-w-0 truncate">
+                            {customer.name}
+                          </span>
+                          <span className="text-app-dim text-[13px]">
+                            {customer.phone ?? 'без телефону'}
+                          </span>
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              {customerMutationAllowed && (
+                <fieldset className="border-app-line-2 rounded-control grid gap-3 border border-dashed p-3">
+                  <legend className="text-app-muted px-1 text-[13.5px]">
+                    Новий клієнт
+                  </legend>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Ім’я нового клієнта">
+                      <TextInput
+                        onChange={(event) =>
+                          setNewCustomerName(event.target.value)
+                        }
+                        value={newCustomerName}
+                      />
+                    </Field>
+                    <Field label="Телефон нового клієнта">
+                      <TextInput
+                        inputMode="tel"
+                        onChange={(event) =>
+                          setNewCustomerPhone(
+                            normalizeCustomerPhoneDraft(event.target.value),
+                          )
+                        }
+                        value={newCustomerPhone}
+                      />
+                    </Field>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      aria-busy={customerBusy}
+                      disabled={customerBusy || !newCustomerName.trim()}
+                      onClick={() => void createCustomerInline()}
+                    >
+                      {customerBusy ? 'Створюємо клієнта…' : 'Створити клієнта'}
+                    </Button>
+                  </div>
+                </fieldset>
+              )}
+              {customerConflict && (
+                <Notice
+                  action={
+                    customerConflict.isActive ? (
+                      <Button
+                        onClick={selectDuplicateCustomer}
+                        variant="primary"
+                      >
+                        Використати клієнта {customerConflict.customerName}
+                      </Button>
+                    ) : (
+                      <Button
+                        disabled={customerBusy}
+                        onClick={() => void reactivateDuplicateCustomer()}
+                        variant="primary"
+                      >
+                        Активувати {customerConflict.customerName}
+                      </Button>
+                    )
+                  }
+                  className="flex-wrap"
+                  role="alert"
+                  tone="warn"
+                >
+                  {customerConflict.message}
+                </Notice>
+              )}
+            </div>
+          </SectionPanel>
+        )}
+        {orderId === null && (
+          <SectionPanel title="Нотатки">
+            <div>
+              <Field
+                hint="Видно команді розбірки на сторінці замовлення."
+                label="Нотатки"
+              >
+                <TextArea
+                  onChange={(event) => setNotes(event.target.value)}
+                  value={notes}
+                />
+              </Field>
+            </div>
+          </SectionPanel>
+        )}
         <Panel>
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
             <div className="grid min-w-0 gap-1">
+              {orderId !== null && (
+                <TotalLine
+                  label="Уже в замовленні"
+                  value={
+                    existingItemsLoadStatus === 'loaded'
+                      ? money(existingTotal)
+                      : '—'
+                  }
+                />
+              )}
               <TotalLine
-                label="Уже в замовленні"
-                value={
-                  existingItemsLoadStatus === 'loaded'
-                    ? money(existingTotal)
-                    : '—'
-                }
-              />
-              <TotalLine
-                label="Разом за позицію"
+                label={orderId ? 'Разом за позицію' : 'Разом за замовлення'}
                 strong
                 value={money(draftLineTotal)}
               />
             </div>
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="quiet">
-                <Link to={backPath}>До замовлення</Link>
+                <Link to={backPath}>
+                  {orderId ? 'До замовлення' : 'До списку замовлень'}
+                </Link>
               </Button>
               <Button
                 aria-busy={busy || existingItemsLoadStatus === 'loading'}
@@ -783,7 +1090,13 @@ function OrderForm({
                 type="submit"
                 variant="primary"
               >
-                {busy ? 'Додаємо…' : 'Додати позицію'}
+                {busy
+                  ? orderId
+                    ? 'Додаємо…'
+                    : 'Створюємо…'
+                  : orderId
+                    ? 'Додати позицію'
+                    : 'Створити замовлення'}
               </Button>
             </div>
           </div>
