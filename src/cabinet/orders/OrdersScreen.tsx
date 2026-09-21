@@ -906,7 +906,7 @@ function OrderForm({
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Кількість">
                 <TextInput
-                  className="text-right"
+                  className="text-left"
                   inputMode="numeric"
                   onChange={(event) => setQuantity(event.target.value)}
                   value={quantity}
@@ -914,7 +914,7 @@ function OrderForm({
               </Field>
               <Field label="Ціна за одиницю">
                 <TextInput
-                  className="text-right"
+                  className="text-left"
                   inputMode="decimal"
                   onChange={(event) => setUnitPrice(event.target.value)}
                   value={unitPrice}

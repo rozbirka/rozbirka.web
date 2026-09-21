@@ -463,8 +463,8 @@ it('uses the reusable customer and part searches to populate a canonical order',
   expect(
     screen.queryByRole('button', { name: 'Обрати клієнта Ірина' }),
   ).toBeNull()
-  expect(screen.getByLabelText('Кількість')).toHaveClass('text-right')
-  expect(screen.getByLabelText('Ціна за одиницю')).toHaveClass('text-right')
+  expect(screen.getByLabelText('Кількість')).toHaveClass('text-left')
+  expect(screen.getByLabelText('Ціна за одиницю')).toHaveClass('text-left')
   await user.type(screen.getByLabelText('Кількість'), '1')
   await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
