@@ -76,6 +76,20 @@ it('keeps manual and file fallbacks visible after camera denial', async () => {
   ).toBeInTheDocument()
   expect(screen.getByLabelText('QR-код')).toBeInTheDocument()
   expect(screen.getByLabelText('Файл QR-коду')).toBeInTheDocument()
+  expect(screen.getByText('Вибрати фото')).toBeVisible()
+
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: vi.fn(() => 'blob:qr-photo'),
+  })
+  fireEvent.change(screen.getByLabelText('Файл QR-коду'), {
+    target: {
+      files: [new File(['qr'], 'sticker.jpg', { type: 'image/jpeg' })],
+    },
+  })
+  expect(
+    screen.getByRole('img', { name: 'Попередній перегляд sticker.jpg' }),
+  ).toHaveAttribute('src', 'blob:qr-photo')
 })
 
 it('does not reveal a part until manual code submission completes tenant-authorized lookup', async () => {

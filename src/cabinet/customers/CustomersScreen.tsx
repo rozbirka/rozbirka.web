@@ -50,6 +50,10 @@ import {
   type ModuleAccessOperation,
 } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import {
+  newCustomerPhoneDraft,
+  normalizeCustomerPhoneDraft,
+} from './customer-phone'
 
 const loadError = 'Не вдалося завантажити дані. Спробуйте ще раз.'
 const nameExample = 'Наприклад: Ірина Коваль або СТО «Пітстоп»'
@@ -58,7 +62,7 @@ const nameMissing = `Введіть ім’я клієнта — за ним в�
 /** Digits, spaces, brackets, dashes and a leading plus — nothing else. */
 const phoneShape = /^\+?[\d\s()-]+$/
 const phoneProblem = (value: string): string | null => {
-  if (value === '') return null
+  if (value === '' || value === newCustomerPhoneDraft()) return null
   if (!phoneShape.test(value))
     return `Приберіть із номера зайві символи — залиште цифри, пробіли, дужки та «+». ${phoneExample}`
   const digits = value.replace(/\D/g, '')
@@ -1064,7 +1068,7 @@ function CustomerForm({
   const editing = customerId !== null
   const backPath = editing ? `${directoryPath}/${customerId}` : directoryPath
   const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
+  const [phone, setPhone] = useState(newCustomerPhoneDraft)
   const [notes, setNotes] = useState('')
   const [touched, setTouched] = useState({ name: false, phone: false })
   const [duplicate, setDuplicate] = useState<CustomerPhoneConflict | null>(null)
@@ -1082,7 +1086,7 @@ function CustomerForm({
         .then((customer) => {
           if (!controller.signal.aborted) {
             setName(customer.name)
-            setPhone(customer.phone ?? '')
+            setPhone(customer.phone ?? newCustomerPhoneDraft())
             setNotes(customer.notes ?? '')
             setLoadProblem(null)
             setLoading(false)
@@ -1106,7 +1110,10 @@ function CustomerForm({
         requireLatestMutation({ permission: 'orders.view', quota: false })
       const input = {
         name: name.trim(),
-        phone: phone.trim() || null,
+        phone:
+          phone.trim() === newCustomerPhoneDraft()
+            ? null
+            : phone.trim() || null,
         notes: notes.trim() || null,
       }
       return customerId
@@ -1259,7 +1266,9 @@ function CustomerForm({
                 onBlur={() =>
                   setTouched((current) => ({ ...current, phone: true }))
                 }
-                onChange={(event) => setPhone(event.target.value)}
+                onChange={(event) =>
+                  setPhone(normalizeCustomerPhoneDraft(event.target.value))
+                }
                 ref={phoneRef}
                 type="tel"
                 value={phone}

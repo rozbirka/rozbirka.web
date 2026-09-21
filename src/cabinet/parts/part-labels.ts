@@ -8,18 +8,22 @@ export const conditionLabel = (value: string) =>
   ({
     new: 'Нова',
     used: 'Вживана',
-    good: 'б/в',
-    fair: 'Задовільна',
-    scrap: 'Під відновлення',
+    good: 'Хороший',
+    fair: 'Задовільний',
+    scrap: 'На запчастини',
     refurbished: 'Відновлена',
     damaged: 'Пошкоджена',
-  })[value] ?? value
+  })[value.toLowerCase()] ?? value
 
 export const sourceLabel = (value: string) =>
-  ({ car: 'Авто', batch: 'Приймання', free: 'Без джерела' })[value] ?? value
+  ({ car: 'Авто', batch: 'Приймання', free: 'Без джерела' })[
+    value.toLowerCase()
+  ] ?? value
 
 export const originLabel = (id: string, name: string) =>
-  (({ car: 'З авто', batch: 'З партії', free: 'Вільна' })[id] ?? name) || id
+  (({ car: 'З авто', batch: 'З партії', free: 'Вільна' })[id.toLowerCase()] ??
+    name) ||
+  id
 
 /**
  * A facet value said in Ukrainian. The server sends the code and its own name;
@@ -58,6 +62,9 @@ export const historyLabel = (value: string) =>
     updated: 'Змінено',
     edited: 'Змінено',
     reserved: 'Зарезервовано',
+    reservationcancelled: 'Резерв скасовано',
+    reservation_cancelled: 'Резерв скасовано',
+    added: 'Додано',
     released: 'Резерв знято',
     sold: 'Продано',
     returned: 'Повернено',

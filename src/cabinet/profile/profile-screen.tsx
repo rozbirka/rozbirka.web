@@ -17,17 +17,6 @@ type SaveState = 'idle' | 'pending' | 'success' | 'error'
 
 const FORM_ID = 'profile-form'
 
-const LANGUAGES = ['Українська', 'English', 'Polski'] as const
-const START_SCREENS = ['Дашборд', 'Склад', 'Сканер'] as const
-const NOTIFICATIONS = [
-  { label: 'Мало залишку', hint: 'Коли деталь падає нижче мінімуму' },
-  {
-    label: 'Нові замовлення',
-    hint: 'Сповіщення при створенні замовлення менеджером',
-  },
-  { label: 'Тижневий звіт поштою', hint: 'Щопонеділка — гроші й склад' },
-] as const
-
 /** What the identity service does not offer, said where the design asks for it. */
 const NO_AVATAR =
   'Фото профілю не зберігається: обліковий запис знає імʼя, телефон і роль, тож замість аватара — ініціали.'
@@ -35,11 +24,6 @@ const NO_PHONE_EDIT =
   'Телефон змінити не можна: це логін. Редагується тільки імʼя.'
 const NO_EMAIL =
   'Пошти в обліковому записі немає — вхід іде за номером телефону й одноразовим кодом.'
-const NO_PREFERENCES = 'Ні мова, ні стартовий екран поки не зберігаються.'
-const NO_NOTIFICATIONS =
-  'Налаштувань сповіщень поки немає — увімкнути чи вимкнути їх нема де.'
-const NO_PASSWORD =
-  'Пароля в системі немає взагалі — вхід підтверджується одноразовим кодом, тож і міняти нічого.'
 const NO_SESSIONS =
   'Переліку сеансів поки немає: ні пристроїв, ні міст, ні можливості завершити чужий вхід.'
 const NO_JOINED_AT = 'Дата реєстрації не зберігається.'
@@ -236,94 +220,6 @@ export function ProfileScreen() {
                 {NO_EMAIL}
               </p>
             </div>
-          </Card>
-
-          <Card title="Інтерфейс">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <p className="text-app-muted text-[13px] font-medium">Мова</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {LANGUAGES.map((label) => (
-                    <Dead key={label} title={NO_PREFERENCES}>
-                      {label}
-                    </Dead>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-app-muted text-[13px] font-medium">
-                  Стартовий екран
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {START_SCREENS.map((label) => (
-                    <Dead key={label} title={NO_PREFERENCES}>
-                      {label}
-                    </Dead>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-              {NO_PREFERENCES}
-            </p>
-          </Card>
-
-          <Card title="Повідомлення">
-            <div className="grid gap-2">
-              {NOTIFICATIONS.map((item) => (
-                <div
-                  className="border-app-line flex items-start gap-3 rounded-[14px] border px-3.5 py-3"
-                  key={item.label}
-                  title={NO_NOTIFICATIONS}
-                >
-                  <span
-                    aria-hidden
-                    className="bg-app-line mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full px-0.5"
-                  >
-                    <span className="bg-app-dim size-4 rounded-full" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="text-app-dim block text-[13.5px] font-medium">
-                      {item.label}
-                    </span>
-                    <span className="text-app-dim mt-0.5 block text-[12.5px]">
-                      {item.hint}
-                    </span>
-                  </span>
-                </div>
-              ))}
-            </div>
-            <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-              {NO_NOTIFICATIONS}
-            </p>
-          </Card>
-
-          <Card title="Безпека">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Новий пароль">
-                <TextInput
-                  autoComplete="new-password"
-                  disabled
-                  placeholder="паролів у системі немає"
-                  title={NO_PASSWORD}
-                  type="password"
-                  value=""
-                />
-              </Field>
-              <Field label="Повторіть пароль">
-                <TextInput
-                  autoComplete="new-password"
-                  disabled
-                  placeholder="—"
-                  title={NO_PASSWORD}
-                  type="password"
-                  value=""
-                />
-              </Field>
-            </div>
-            <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-              {NO_PASSWORD}
-            </p>
           </Card>
         </div>
 

@@ -393,6 +393,59 @@ it('shows photos and creator but gates linked parts and warehouse actions with p
   ).not.toBeInTheDocument()
 })
 
+it('opens intake positions as part cards and does not expose suppliers in the web UI', async () => {
+  vi.mocked(useCabinet).mockReturnValue(cabinet(['intakes.view', 'parts.view']))
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByRole('link', { name: /Бампер/ })).toHaveAttribute(
+    'href',
+    '/app/demo/parts/part-1',
+  )
+  expect(screen.queryByText('Постачальник')).not.toBeInTheDocument()
+})
+
+it('paginates positions inside an intake', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(cabinet(['intakes.view', 'parts.view']))
+  vi.mocked(intakesApi.get).mockResolvedValue({
+    ...detail,
+    partsCount: 21,
+    parts: Array.from({ length: 21 }, (_, index) => ({
+      ...detail.parts[0]!,
+      id: `part-${String(index + 1)}`,
+      name: `Деталь ${String(index + 1)}`,
+    })),
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(
+    await screen.findByRole('link', { name: 'Деталь 1Кузов' }),
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('link', { name: 'Деталь 21Кузов' }),
+  ).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Наступна сторінка' }))
+  expect(screen.getByRole('link', { name: 'Деталь 21Кузов' })).toBeVisible()
+})
+
 it('renders every linked intake part for parts.view without requiring parts.manage', async () => {
   vi.mocked(useCabinet).mockReturnValue(cabinet(['intakes.view', 'parts.view']))
   render(
@@ -689,7 +742,7 @@ it('allows intake editing without finance.manage while hiding and omitting total
     'intake-1',
     {
       name: 'Липнева партія',
-      supplier: 'Постачальник',
+      supplier: null,
       purchasedAt: '2026-08-01T12:00:00Z',
       notes: 'Перевірено',
     },

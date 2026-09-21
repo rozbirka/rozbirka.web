@@ -24,12 +24,6 @@ import {
 import { normalizeApiProblem } from '@/api/errors'
 import { orderStatusPresentation } from './order-labels'
 import { cn, plural } from '@/lib/utils'
-import {
-  customersApi,
-  readCustomerPhoneConflict,
-  type CustomerPhoneConflict,
-  type CustomerSearchItem,
-} from '@/api/customers'
 import { ordersApi, type OrderDetail, type OrderListItem } from '@/api/orders'
 import { partsApi, type PartListItem } from '@/api/parts'
 import { useCabinet } from '../CabinetContext'
@@ -37,6 +31,7 @@ import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import { OrderCreateScreen } from './OrderCreateScreen'
 
 const idFromPath = (path: string) => /\/orders\/([^/]+)/.exec(path)?.[1] ?? null
 const errorMessage = (error: unknown) => {
@@ -81,7 +76,17 @@ const useOrderIdempotencyKeys = () => {
 const money = (value: number | null | undefined, currency?: string | null) => {
   if (value === null || value === undefined || !Number.isFinite(value))
     return '—'
-  return currency ? `${value} ${currency}` : String(value)
+  if (!currency) return String(value)
+  try {
+    return new Intl.NumberFormat('uk-UA', {
+      style: 'currency',
+      currency,
+      currencyDisplay: 'narrowSymbol',
+      maximumFractionDigits: 2,
+    }).format(value)
+  } catch {
+    return `${value} ${currency}`
+  }
 }
 const lineTotal = (quantity: number, unitPrice: number) => {
   const total = quantity * unitPrice
@@ -151,19 +156,16 @@ function TotalLine({
 export function OrdersScreen({ definition }: CabinetModuleScreenProps) {
   const location = useLocation()
   const id = idFromPath(location.pathname)
-  if (location.pathname.endsWith('/new')) {
-    const isItemForm = location.pathname.endsWith('/items/new')
+  if (location.pathname.endsWith('/items/new')) {
     return (
       <OrderForm
         definition={definition}
-        orderId={
-          isItemForm
-            ? idFromPath(location.pathname.replace('/items/new', ''))
-            : null
-        }
+        orderId={idFromPath(location.pathname.replace('/items/new', ''))!}
       />
     )
   }
+  if (location.pathname.endsWith('/new'))
+    return <OrderCreateScreen definition={definition} />
   return id ? (
     <OrderDetailScreen definition={definition} orderId={id} />
   ) : (
@@ -220,11 +222,8 @@ const ORDER_STATUS_FILTERS = [
 /** Statuses whose money never reached the till. */
 const UNPAID_STATUSES = new Set(['cancelled', 'refunded'])
 
-/** A sum that never came back is an em dash — never NaN, never «undefined». */
-const orderMoney = (value: number | null | undefined) =>
-  typeof value === 'number' && Number.isFinite(value)
-    ? `${new Intl.NumberFormat('uk-UA').format(value)} $`
-    : '—'
+const orderMoney = (value: number | null) =>
+  value === null ? '—' : `${new Intl.NumberFormat('uk-UA').format(value)} $`
 
 function OrderDirectory({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
@@ -309,7 +308,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="mx-auto grid w-full max-w-[1240px] gap-4 px-4 pt-10 pb-16 sm:px-6 md:px-8 lg:px-12">
+      <div className="grid w-full gap-4 px-4 pt-10 pb-16 sm:px-6 md:px-8 lg:px-12">
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
           <div className="min-w-0">
             <p className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
@@ -515,52 +514,52 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
 function OrderForm({
   definition,
   orderId,
-}: CabinetModuleScreenProps & { orderId: string | null }) {
+}: CabinetModuleScreenProps & { orderId: string }) {
   const cabinet = useCabinet()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const mutationsAllowed = canMutate(definition, cabinet)
-  const [params] = useSearchParams()
   const location = useLocation()
   const navigate = useNavigate()
   const partSearchAllowed =
     cabinet.snapshot?.permissions.has('parts.view') === true
-  const customerSearchAllowed =
-    !orderId && cabinet.snapshot?.permissions.has('customers.view') === true
-  const customerMutationAllowed =
-    !orderId && canMutate(definition, cabinet, 'customers.manage')
-  const dependenciesAllowed =
-    partSearchAllowed && (orderId !== null || customerSearchAllowed)
   const [partId, setPartId] = useState('')
   const [partQuery, setPartQuery] = useState('')
   const [partResults, setPartResults] = useState<PartListItem[]>([])
-  const [customerId, setCustomerId] = useState(params.get('customerId') ?? '')
-  const [customerQuery, setCustomerQuery] = useState('')
-  const [customerResults, setCustomerResults] = useState<CustomerSearchItem[]>(
-    [],
-  )
-  const [newCustomerName, setNewCustomerName] = useState('')
-  const [newCustomerPhone, setNewCustomerPhone] = useState('')
-  const [customerConflict, setCustomerConflict] =
-    useState<CustomerPhoneConflict | null>(null)
-  const [customerBusy, setCustomerBusy] = useState(false)
+  const [partPickerOpen, setPartPickerOpen] = useState(false)
+  const partPickerRef = useRef<HTMLDivElement>(null)
   const [quantity, setQuantity] = useState('')
   const [unitPrice, setUnitPrice] = useState('')
-  const [notes, setNotes] = useState('')
   const [existingItems, setExistingItems] = useState<
     { partId: string; quantity: number; unitPrice: number }[]
   >([])
   const [existingItemsLoad, setExistingItemsLoad] = useState<{
-    orderId: string | null
-    status: 'not-needed' | 'loaded' | 'failed'
-  }>({ orderId: null, status: 'not-needed' })
+    orderId: string
+    status: 'loaded' | 'failed'
+  } | null>(null)
   const existingItemsLoadStatus =
-    orderId === null
-      ? 'not-needed'
-      : existingItemsLoad.orderId === orderId
-        ? existingItemsLoad.status
-        : 'loading'
+    existingItemsLoad?.orderId === orderId
+      ? existingItemsLoad.status
+      : 'loading'
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const closePicker = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && !partPickerRef.current?.contains(target))
+        setPartPickerOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPartPickerOpen(false)
+    }
+    document.addEventListener('pointerdown', closePicker)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closePicker)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [])
+
   useEffect(() => {
     const q = partQuery.trim()
     if (!partSearchAllowed || !q) return
@@ -575,51 +574,36 @@ function OrderForm({
       })
     return () => controller.abort()
   }, [partQuery, partSearchAllowed])
+
   useEffect(() => {
-    const q = customerQuery.trim()
-    if (!customerSearchAllowed || !q) return
-    const controller = new AbortController()
-    void customersApi
-      .search(q, { signal: controller.signal })
-      .then((result) => {
-        if (!controller.signal.aborted) setCustomerResults(result)
-      })
-      .catch((requestError) => {
-        if (!controller.signal.aborted) setError(errorMessage(requestError))
-      })
-    return () => controller.abort()
-  }, [customerQuery, customerSearchAllowed])
-  useEffect(() => {
-    if (!orderId) return
     const controller = new AbortController()
     void ordersApi
       .getById(orderId, { signal: controller.signal })
       .then((order) => {
-        if (!controller.signal.aborted) {
-          setExistingItems(
-            order.items.map(({ partId, quantity, unitPrice }) => ({
-              partId,
-              quantity,
-              unitPrice,
-            })),
-          )
-          setExistingItemsLoad({ orderId, status: 'loaded' })
-        }
+        if (controller.signal.aborted) return
+        setExistingItems(
+          order.items.map(({ partId, quantity, unitPrice }) => ({
+            partId,
+            quantity,
+            unitPrice,
+          })),
+        )
+        setExistingItemsLoad({ orderId, status: 'loaded' })
       })
       .catch((requestError) => {
-        if (!controller.signal.aborted) {
-          setExistingItemsLoad({ orderId, status: 'failed' })
-          setError(errorMessage(requestError))
-        }
+        if (controller.signal.aborted) return
+        setExistingItemsLoad({ orderId, status: 'failed' })
+        setError(errorMessage(requestError))
       })
     return () => controller.abort()
   }, [orderId])
+
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     if (
       busy ||
-      !dependenciesAllowed ||
-      (orderId !== null && existingItemsLoadStatus !== 'loaded') ||
+      !partSearchAllowed ||
+      existingItemsLoadStatus !== 'loaded' ||
       !partId ||
       !quantity ||
       !unitPrice
@@ -628,146 +612,50 @@ function OrderForm({
     setBusy(true)
     setError(null)
     try {
-      const scope = requireLatestMutation({ quota: orderId === null })
+      const scope = requireLatestMutation({ quota: false })
       requireLatestMutation({ permission: 'parts.view', quota: false })
-      if (orderId === null) {
-        requireLatestMutation({ permission: 'customers.view', quota: false })
-      }
-      const detail = orderId
-        ? await ordersApi.updateItems(
-            orderId,
-            existingItems.some((item) => item.partId === partId)
-              ? existingItems.map((item) =>
-                  item.partId === partId
-                    ? {
-                        ...item,
-                        quantity: item.quantity + Number(quantity),
-                        unitPrice: Number(unitPrice),
-                      }
-                    : item,
-                )
-              : [
-                  ...existingItems,
-                  {
-                    partId,
-                    quantity: Number(quantity),
+      const detail = await ordersApi.updateItems(
+        orderId,
+        existingItems.some((item) => item.partId === partId)
+          ? existingItems.map((item) =>
+              item.partId === partId
+                ? {
+                    ...item,
+                    quantity: item.quantity + Number(quantity),
                     unitPrice: Number(unitPrice),
-                  },
-                ],
-          )
-        : await ordersApi.create({
-            customerId: customerId || null,
-            notes: notes || null,
-            items: [
+                  }
+                : item,
+            )
+          : [
+              ...existingItems,
               {
                 partId,
                 quantity: Number(quantity),
                 unitPrice: Number(unitPrice),
               },
             ],
-          })
+      )
       if (scope.signal.aborted) return
       await navigate(`../${detail.id}`, { replace: true })
-    } catch (error) {
-      setError(errorMessage(error))
+    } catch (requestError) {
+      setError(errorMessage(requestError))
       setBusy(false)
     }
   }
-  const createCustomerInline = async () => {
-    if (customerBusy || !newCustomerName.trim() || !customerMutationAllowed)
-      return
-    setCustomerBusy(true)
-    setError(null)
-    setCustomerConflict(null)
-    try {
-      requireLatestMutation()
-      requireLatestMutation({
-        permission: 'customers.manage',
-        quota: false,
-      })
-      const scope = requireLatestMutation({
-        permission: 'customers.view',
-        quota: false,
-      })
-      const result = await customersApi.create(
-        {
-          name: newCustomerName.trim(),
-          phone: newCustomerPhone.trim() || null,
-          notes: null,
-        },
-        { signal: scope.signal },
-      )
-      if (scope.signal.aborted) return
-      setCustomerId(result.customer.id)
-      setNewCustomerName('')
-      setNewCustomerPhone('')
-    } catch (requestError) {
-      const conflict = readCustomerPhoneConflict(requestError)
-      if (conflict) setCustomerConflict(conflict)
-      else setError(errorMessage(requestError))
-    } finally {
-      setCustomerBusy(false)
-    }
-  }
-  const selectDuplicateCustomer = () => {
-    if (!customerConflict?.isActive || !customerMutationAllowed) return
-    setCustomerId(customerConflict.customerId)
-    setCustomerConflict(null)
-    setNewCustomerName('')
-    setNewCustomerPhone('')
-  }
-  const reactivateDuplicateCustomer = async () => {
-    if (
-      !customerConflict ||
-      customerConflict.isActive ||
-      customerBusy ||
-      !customerMutationAllowed
-    )
-      return
-    setCustomerBusy(true)
-    setError(null)
-    try {
-      requireLatestMutation({ quota: false })
-      requireLatestMutation({
-        permission: 'customers.manage',
-        quota: false,
-      })
-      const scope = requireLatestMutation({
-        permission: 'customers.view',
-        quota: false,
-      })
-      const customer = await customersApi.activate(
-        customerConflict.customerId,
-        {
-          signal: scope.signal,
-        },
-      )
-      if (scope.signal.aborted) return
-      setCustomerId(customer.id)
-      setCustomerConflict(null)
-      setNewCustomerName('')
-      setNewCustomerPhone('')
-    } catch (requestError) {
-      setError(errorMessage(requestError))
-    } finally {
-      setCustomerBusy(false)
-    }
-  }
-  if (!dependenciesAllowed) {
+
+  if (!partSearchAllowed) {
     return (
       <PageBody width="narrow">
         <DeniedState
-          description="Потрібен доступ до запчастин і клієнтів. Попросіть адміністратора розбірки відкрити ці розділи для вашої ролі."
+          description="Потрібен доступ до запчастин. Попросіть адміністратора розбірки відкрити склад для вашої ролі."
           role="alert"
-          title="Замовлення недоступні для створення"
+          title="Позицію не можна додати"
         />
       </PageBody>
     )
   }
+
   const selectedPart = partResults.find((part) => part.id === partId)
-  const selectedCustomer = customerResults.find(
-    (customer) => customer.id === customerId,
-  )
   const draftLineTotal =
     quantity && unitPrice
       ? lineTotal(Number(quantity), Number(unitPrice))
@@ -776,68 +664,65 @@ function OrderForm({
     (sum, item) => sum + item.quantity * item.unitPrice,
     0,
   )
-  const backPath = orderId
-    ? location.pathname.replace(/\/items\/new$/, '')
-    : location.pathname.replace(/\/new$/, '')
+  const backPath = location.pathname.replace(/\/items\/new$/, '')
   const submitBlocked =
     !mutationsAllowed ||
     busy ||
-    (orderId !== null && existingItemsLoadStatus !== 'loaded') ||
+    existingItemsLoadStatus !== 'loaded' ||
     !partId ||
     !quantity ||
     !unitPrice
+
   return (
     <PageBody width="narrow">
-      <PageHeader
-        eyebrow={orderId ? 'Продажі · Замовлення' : 'Продажі'}
-        title={orderId ? 'Додати позицію' : 'Створити замовлення'}
-      />
+      <PageHeader eyebrow="Продажі · Замовлення" title="Додати позицію" />
       <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
         {error && <Notice tone="danger">{error}</Notice>}
         <SectionPanel
-          description={
-            orderId
-              ? 'Знайдіть запчастину, вкажіть кількість і ціну — позиція долучиться до наявних у замовленні.'
-              : 'Замовлення створюється з однією позицією. Решту можна додати на сторінці замовлення.'
-          }
+          description="Знайдіть запчастину, вкажіть кількість і ціну — позиція долучиться до наявних у замовленні."
           title="Позиція"
         >
           <div className="grid gap-3">
-            {partSearchAllowed && (
-              <div className="grid gap-2">
-                <Field
-                  hint="Введіть назву — знайдені запчастини з’являться нижче."
-                  label="Пошук запчастини"
-                >
-                  <SearchInput
-                    onChange={(event) => setPartQuery(event.target.value)}
-                    value={partQuery}
-                  />
-                </Field>
-                {partQuery.trim() && partResults.length > 0 && (
-                  <ul className="grid gap-1.5">
-                    {partResults.map((part) => (
-                      <li key={part.id}>
-                        <Button
-                          aria-label={`Обрати запчастину ${part.name}`}
-                          className={
-                            part.id === partId
-                              ? 'border-brand/40 bg-brand/[0.1] w-full justify-between'
-                              : 'w-full justify-between'
-                          }
-                          onClick={() => setPartId(part.id)}
-                        >
-                          <span className="min-w-0 truncate">{part.name}</span>
-                          <span className="text-app-dim text-[13px] tabular-nums">
-                            {part.quantityAvailable} шт
-                          </span>
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
+            <div className="grid gap-2" ref={partPickerRef}>
+              <Field
+                hint="Введіть назву — знайдені запчастини з’являться нижче."
+                label="Пошук запчастини"
+              >
+                <SearchInput
+                  onChange={(event) => {
+                    setPartQuery(event.target.value)
+                    setPartPickerOpen(true)
+                  }}
+                  onFocus={() => setPartPickerOpen(true)}
+                  value={partQuery}
+                />
+              </Field>
+              {partPickerOpen && partQuery.trim() && partResults.length > 0 && (
+                <ul className="grid gap-1.5">
+                  {partResults.map((part) => (
+                    <li key={part.id}>
+                      <Button
+                        aria-label={`Обрати запчастину ${part.name}`}
+                        className={
+                          part.id === partId
+                            ? 'border-brand/40 bg-brand/[0.1] w-full justify-between'
+                            : 'w-full justify-between'
+                        }
+                        onClick={() => {
+                          setPartId(part.id)
+                          setPartPickerOpen(false)
+                        }}
+                      >
+                        <span className="min-w-0 truncate">{part.name}</span>
+                        <span className="text-app-dim text-[13px] tabular-nums">
+                          {part.quantityAvailable} шт
+                        </span>
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <Field
               hint={
                 selectedPart
@@ -854,7 +739,7 @@ function OrderForm({
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Кількість">
                 <TextInput
-                  className="text-right"
+                  className="text-left"
                   inputMode="numeric"
                   onChange={(event) => setQuantity(event.target.value)}
                   value={quantity}
@@ -862,7 +747,7 @@ function OrderForm({
               </Field>
               <Field label="Ціна за одиницю">
                 <TextInput
-                  className="text-right"
+                  className="text-left"
                   inputMode="decimal"
                   onChange={(event) => setUnitPrice(event.target.value)}
                   value={unitPrice}
@@ -871,155 +756,26 @@ function OrderForm({
             </div>
           </div>
         </SectionPanel>
-        {customerSearchAllowed && (
-          <SectionPanel
-            description="Замовлення можна створити й без клієнта — тоді поле лишається порожнім."
-            title="Клієнт"
-          >
-            <div className="grid gap-3">
-              <Field
-                hint={
-                  selectedCustomer
-                    ? `Обрано ${selectedCustomer.name}`
-                    : customerId
-                      ? `Обрано клієнта ${customerId}`
-                      : 'Клієнта не обрано'
-                }
-                label="Пошук клієнта"
-              >
-                <SearchInput
-                  onChange={(event) => setCustomerQuery(event.target.value)}
-                  value={customerQuery}
-                />
-              </Field>
-              {customerQuery.trim() && customerResults.length > 0 && (
-                <ul className="grid gap-1.5">
-                  {customerResults.map((customer) => (
-                    <li key={customer.id}>
-                      <Button
-                        aria-label={`Обрати клієнта ${customer.name}`}
-                        className={
-                          customer.id === customerId
-                            ? 'border-brand/40 bg-brand/[0.1] w-full justify-between'
-                            : 'w-full justify-between'
-                        }
-                        onClick={() => setCustomerId(customer.id)}
-                      >
-                        <span className="min-w-0 truncate">
-                          {customer.name}
-                        </span>
-                        <span className="text-app-dim text-[13px]">
-                          {customer.phone ?? 'без телефону'}
-                        </span>
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {customerMutationAllowed && (
-                <fieldset className="border-app-line-2 rounded-control grid gap-3 border border-dashed p-3">
-                  <legend className="text-app-muted px-1 text-[13.5px]">
-                    Новий клієнт
-                  </legend>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Ім’я нового клієнта">
-                      <TextInput
-                        onChange={(event) =>
-                          setNewCustomerName(event.target.value)
-                        }
-                        value={newCustomerName}
-                      />
-                    </Field>
-                    <Field label="Телефон нового клієнта">
-                      <TextInput
-                        inputMode="tel"
-                        onChange={(event) =>
-                          setNewCustomerPhone(event.target.value)
-                        }
-                        value={newCustomerPhone}
-                      />
-                    </Field>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      aria-busy={customerBusy}
-                      disabled={customerBusy || !newCustomerName.trim()}
-                      onClick={() => void createCustomerInline()}
-                    >
-                      {customerBusy ? 'Створюємо клієнта…' : 'Створити клієнта'}
-                    </Button>
-                  </div>
-                </fieldset>
-              )}
-              {customerConflict && (
-                <Notice
-                  action={
-                    customerConflict.isActive ? (
-                      <Button
-                        onClick={selectDuplicateCustomer}
-                        variant="primary"
-                      >
-                        Використати клієнта {customerConflict.customerName}
-                      </Button>
-                    ) : (
-                      <Button
-                        disabled={customerBusy}
-                        onClick={() => void reactivateDuplicateCustomer()}
-                        variant="primary"
-                      >
-                        Активувати {customerConflict.customerName}
-                      </Button>
-                    )
-                  }
-                  className="flex-wrap"
-                  role="alert"
-                  tone="warn"
-                >
-                  {customerConflict.message}
-                </Notice>
-              )}
-            </div>
-          </SectionPanel>
-        )}
-        {orderId === null && (
-          <SectionPanel title="Нотатки">
-            <div>
-              <Field
-                hint="Видно команді розбірки на сторінці замовлення."
-                label="Нотатки"
-              >
-                <TextArea
-                  onChange={(event) => setNotes(event.target.value)}
-                  value={notes}
-                />
-              </Field>
-            </div>
-          </SectionPanel>
-        )}
         <Panel>
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
             <div className="grid min-w-0 gap-1">
-              {orderId !== null && (
-                <TotalLine
-                  label="Уже в замовленні"
-                  value={
-                    existingItemsLoadStatus === 'loaded'
-                      ? money(existingTotal)
-                      : '—'
-                  }
-                />
-              )}
               <TotalLine
-                label={orderId ? 'Разом за позицію' : 'Разом за замовлення'}
+                label="Уже в замовленні"
+                value={
+                  existingItemsLoadStatus === 'loaded'
+                    ? money(existingTotal)
+                    : '—'
+                }
+              />
+              <TotalLine
+                label="Разом за позицію"
                 strong
                 value={money(draftLineTotal)}
               />
             </div>
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="quiet">
-                <Link to={backPath}>
-                  {orderId ? 'До замовлення' : 'До списку замовлень'}
-                </Link>
+                <Link to={backPath}>До замовлення</Link>
               </Button>
               <Button
                 aria-busy={busy || existingItemsLoadStatus === 'loading'}
@@ -1027,13 +783,7 @@ function OrderForm({
                 type="submit"
                 variant="primary"
               >
-                {busy
-                  ? orderId
-                    ? 'Додаємо…'
-                    : 'Створюємо…'
-                  : orderId
-                    ? 'Додати позицію'
-                    : 'Створити замовлення'}
+                {busy ? 'Додаємо…' : 'Додати позицію'}
               </Button>
             </div>
           </div>
@@ -1064,7 +814,7 @@ function OrderDetailScreen({
   const [refundOpen, setRefundOpen] = useState(false)
   const [rawHistory, setRawHistory] = useState(false)
   const [draftNotes, setDraftNotes] = useState('')
-  const [draftCustomerId, setDraftCustomerId] = useState('')
+  const [itemsPage, setItemsPage] = useState(1)
   const [paymentDrafts, setPaymentDrafts] = useState([
     { accountId: '', amount: '', currency: '' },
   ])
@@ -1072,7 +822,6 @@ function OrderDetailScreen({
     setOrder(detail)
     setItemDrafts(detail.items)
     setDraftNotes(detail.notes ?? '')
-    setDraftCustomerId(detail.customerId ?? '')
   }, [])
   const reload = useCallback(
     (signal?: AbortSignal) =>
@@ -1149,6 +898,17 @@ function OrderDetailScreen({
     const total = lineTotal(item.quantity, item.unitPrice)
     return total === null ? sum : sum + total
   }, 0)
+  const itemsPageSize = 20
+  const visibleItems = (itemsEditable ? itemDrafts : order.items).slice(
+    (itemsPage - 1) * itemsPageSize,
+    itemsPage * itemsPageSize,
+  )
+  const itemsTotalPages = Math.max(
+    1,
+    Math.ceil(
+      (itemsEditable ? itemDrafts.length : order.items.length) / itemsPageSize,
+    ),
+  )
   const paymentsTotal = paymentDrafts.reduce((sum, payment) => {
     const amount = Number(payment.amount)
     return payment.amount && Number.isFinite(amount) ? sum + amount : sum
@@ -1199,7 +959,7 @@ function OrderDetailScreen({
         ) : null}
       </div>
 
-      <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-4">
             <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
@@ -1299,8 +1059,40 @@ function OrderDetailScreen({
 
         <div className="flex flex-wrap-reverse items-end gap-6">
           <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
+            <Card className="order-1" title="Нотатки">
+              {itemsEditable ? (
+                <div className="grid gap-3">
+                  <Field label="Нотатки замовлення">
+                    <TextArea
+                      onChange={(event) => setDraftNotes(event.target.value)}
+                      value={draftNotes}
+                    />
+                  </Field>
+                  <div className="flex flex-wrap items-end gap-2.5">
+                    <Button
+                      disabled={busy}
+                      onClick={() =>
+                        void transition(() =>
+                          ordersApi.updateNotes(order.id, draftNotes),
+                        )
+                      }
+                    >
+                      Зберегти нотатки
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-app-ink text-[15px] leading-[1.55] whitespace-pre-line">
+                  {order.notes === null || order.notes === ''
+                    ? 'Нотаток немає.'
+                    : order.notes}
+                </p>
+              )}
+            </Card>
+
             {itemsEditable ? (
               <SectionPanel
+                className="order-3"
                 aside={
                   <span className="text-app-muted text-[13.5px] tabular-nums">
                     Разом за позиціями {money(draftsTotal, currency)}
@@ -1350,111 +1142,128 @@ function OrderDetailScreen({
                   </p>
                 )}
                 <ul>
-                  {itemDrafts.map((item, index) => (
-                    <li
-                      className="border-app-line grid gap-3 border-b px-4 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
-                      key={item.id}
-                    >
-                      <div className="min-w-0">
-                        <p className="text-app-ink truncate text-sm font-medium">
-                          {item.partName}
-                        </p>
-                        <p className="text-app-dim mt-0.5 text-[12.5px] tabular-nums">
-                          Сума позиції{' '}
-                          {money(
-                            lineTotal(item.quantity, item.unitPrice),
-                            currency,
-                          )}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-end gap-2">
-                        <div className="grid w-20 gap-1.5">
-                          <span
-                            aria-hidden
-                            className="text-app-dim text-[12.5px]"
-                          >
-                            Кількість
-                          </span>
-                          <TextInput
-                            aria-label={`Кількість ${item.partName}`}
-                            className="text-right"
-                            inputMode="numeric"
-                            onChange={(event) =>
-                              setItemDrafts((current) =>
-                                current.map((draft, draftIndex) =>
-                                  draftIndex === index
-                                    ? {
-                                        ...draft,
-                                        quantity: Number(event.target.value),
-                                      }
-                                    : draft,
-                                ),
-                              )
-                            }
-                            value={item.quantity}
-                          />
+                  {visibleItems.map((item, visibleIndex) => {
+                    const index = (itemsPage - 1) * itemsPageSize + visibleIndex
+                    return (
+                      <li
+                        className="border-app-line grid gap-3 border-b px-4 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+                        key={item.id}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-app-ink truncate text-sm font-medium">
+                            {item.partName}
+                          </p>
+                          <p className="text-app-dim mt-0.5 text-[12.5px] tabular-nums">
+                            Сума позиції{' '}
+                            {money(
+                              lineTotal(item.quantity, item.unitPrice),
+                              currency,
+                            )}
+                          </p>
                         </div>
-                        <div className="grid w-28 gap-1.5">
-                          <span
-                            aria-hidden
-                            className="text-app-dim text-[12.5px]"
-                          >
-                            Ціна
-                          </span>
-                          <TextInput
-                            aria-label={`Ціна ${item.partName}`}
-                            className="text-right"
-                            inputMode="decimal"
-                            onChange={(event) =>
-                              setItemDrafts((current) =>
-                                current.map((draft, draftIndex) =>
-                                  draftIndex === index
-                                    ? {
-                                        ...draft,
-                                        unitPrice: Number(event.target.value),
-                                      }
-                                    : draft,
-                                ),
-                              )
-                            }
-                            value={item.unitPrice}
-                          />
-                        </div>
-                        <Button
-                          aria-label={`Видалити ${item.partName}`}
-                          disabled={busy}
-                          onClick={() =>
-                            void transition(() =>
-                              itemDrafts.length === 1
-                                ? ordersApi.cancel(order.id)
-                                : ordersApi.updateItems(
-                                    order.id,
-                                    itemDrafts
-                                      .filter(
-                                        (_, draftIndex) => draftIndex !== index,
-                                      )
-                                      .map(
-                                        ({ partId, quantity, unitPrice }) => ({
-                                          partId,
-                                          quantity,
-                                          unitPrice,
-                                        }),
-                                      ),
+                        <div className="flex flex-wrap items-end gap-2">
+                          <div className="grid w-20 gap-1.5">
+                            <span
+                              aria-hidden
+                              className="text-app-dim text-[12.5px]"
+                            >
+                              Кількість
+                            </span>
+                            <TextInput
+                              aria-label={`Кількість ${item.partName}`}
+                              className="text-right"
+                              inputMode="numeric"
+                              onChange={(event) =>
+                                setItemDrafts((current) =>
+                                  current.map((draft, draftIndex) =>
+                                    draftIndex === index
+                                      ? {
+                                          ...draft,
+                                          quantity: Number(event.target.value),
+                                        }
+                                      : draft,
                                   ),
-                            )
-                          }
-                          size="icon"
-                          variant="danger"
-                        >
-                          <Trash2 aria-hidden />
-                        </Button>
-                      </div>
-                    </li>
-                  ))}
+                                )
+                              }
+                              value={item.quantity}
+                            />
+                          </div>
+                          <div className="grid w-28 gap-1.5">
+                            <span
+                              aria-hidden
+                              className="text-app-dim text-[12.5px]"
+                            >
+                              Ціна
+                            </span>
+                            <TextInput
+                              aria-label={`Ціна ${item.partName}`}
+                              className="text-right"
+                              inputMode="decimal"
+                              onChange={(event) =>
+                                setItemDrafts((current) =>
+                                  current.map((draft, draftIndex) =>
+                                    draftIndex === index
+                                      ? {
+                                          ...draft,
+                                          unitPrice: Number(event.target.value),
+                                        }
+                                      : draft,
+                                  ),
+                                )
+                              }
+                              value={item.unitPrice}
+                            />
+                          </div>
+                          <Button
+                            aria-label={`Видалити ${item.partName}`}
+                            disabled={busy}
+                            onClick={() =>
+                              void transition(() =>
+                                itemDrafts.length === 1
+                                  ? ordersApi.cancel(order.id)
+                                  : ordersApi.updateItems(
+                                      order.id,
+                                      itemDrafts
+                                        .filter(
+                                          (_, draftIndex) =>
+                                            draftIndex !== index,
+                                        )
+                                        .map(
+                                          ({
+                                            partId,
+                                            quantity,
+                                            unitPrice,
+                                          }) => ({
+                                            partId,
+                                            quantity,
+                                            unitPrice,
+                                          }),
+                                        ),
+                                    ),
+                              )
+                            }
+                            size="icon"
+                            variant="danger"
+                          >
+                            <Trash2 aria-hidden />
+                          </Button>
+                        </div>
+                      </li>
+                    )
+                  })}
                 </ul>
+                {itemDrafts.length > itemsPageSize ? (
+                  <Pagination
+                    label="Пагінація позицій замовлення"
+                    onPage={setItemsPage}
+                    page={itemsPage}
+                    totalPages={itemsTotalPages}
+                  />
+                ) : null}
               </SectionPanel>
             ) : (
               <Card
+                className="order-3"
                 aside={
                   <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
                     {order.items.length}{' '}
@@ -1507,23 +1316,34 @@ function OrderDetailScreen({
                     />
                   }
                   footer={
-                    <div className="border-app-line flex flex-wrap items-baseline justify-end gap-5 border-t px-6 py-4">
-                      <span className="text-app-muted text-sm font-semibold">
-                        Разом
-                      </span>
-                      <span className="text-[20px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
-                        {money(order.totalAmount, currency)}
-                      </span>
+                    <div>
+                      <div className="border-app-line flex flex-wrap items-baseline justify-end gap-5 border-t px-6 py-4">
+                        <span className="text-app-muted text-sm font-semibold">
+                          Разом
+                        </span>
+                        <span className="text-[20px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
+                          {money(order.totalAmount, currency)}
+                        </span>
+                      </div>
+                      {order.items.length > itemsPageSize ? (
+                        <Pagination
+                          label="Пагінація позицій замовлення"
+                          onPage={setItemsPage}
+                          page={itemsPage}
+                          totalPages={itemsTotalPages}
+                        />
+                      ) : null}
                     </div>
                   }
                   rowKey={(item) => item.id}
-                  rows={order.items}
+                  rows={visibleItems}
                 />
               </Card>
             )}
 
             {financeAllowed && order.status === 'pending' && (
               <SectionPanel
+                className="order-2"
                 description="Підтвердження фіксує оплату й переводить замовлення у статус «Підтверджено»."
                 footer={
                   <>
@@ -1661,6 +1481,7 @@ function OrderDetailScreen({
             )}
 
             <Card
+              className="order-2"
               aside={
                 <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
                   {order.payments.length}{' '}
@@ -1689,7 +1510,7 @@ function OrderDetailScreen({
                     align: 'end',
                     cell: (payment) => (
                       <span className="font-bold text-white">
-                        {payment.amount} {payment.currency}
+                        {money(payment.amount, payment.currency)}
                       </span>
                     ),
                   },
@@ -1703,64 +1524,6 @@ function OrderDetailScreen({
                 rowKey={(payment) => payment.id}
                 rows={order.payments}
               />
-            </Card>
-
-            <Card title="Нотатки">
-              {itemsEditable ? (
-                <div className="grid gap-3">
-                  <Field label="Нотатки замовлення">
-                    <TextArea
-                      onChange={(event) => setDraftNotes(event.target.value)}
-                      value={draftNotes}
-                    />
-                  </Field>
-                  <div className="flex flex-wrap items-end gap-2.5">
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        void transition(() =>
-                          ordersApi.updateNotes(order.id, draftNotes),
-                        )
-                      }
-                    >
-                      Зберегти нотатки
-                    </Button>
-                  </div>
-                  <Field
-                    className="min-w-52"
-                    hint="Порожнє поле відв’яже клієнта від замовлення."
-                    label="ID клієнта замовлення"
-                  >
-                    <TextInput
-                      onChange={(event) =>
-                        setDraftCustomerId(event.target.value)
-                      }
-                      value={draftCustomerId}
-                    />
-                  </Field>
-                  <div className="flex flex-wrap gap-2.5">
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        void transition(() =>
-                          ordersApi.setCustomer(
-                            order.id,
-                            draftCustomerId || null,
-                          ),
-                        )
-                      }
-                    >
-                      Зберегти клієнта
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-app-ink text-[15px] leading-[1.55] whitespace-pre-line">
-                  {order.notes === null || order.notes === ''
-                    ? 'Нотаток немає.'
-                    : order.notes}
-                </p>
-              )}
             </Card>
           </div>
 

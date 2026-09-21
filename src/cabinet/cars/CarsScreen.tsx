@@ -2,6 +2,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -21,13 +22,13 @@ import {
   Copy,
   CarFront,
   Search,
+  ImagePlus,
   Pencil,
   Plus,
   Trash2,
   Wallet,
   Wrench,
 } from 'lucide-react'
-import { partStatusPresentation } from '../parts/part-labels'
 import { cn, plural } from '@/lib/utils'
 import {
   ActionMenu,
@@ -45,12 +46,14 @@ import {
   ErrorState,
   Notice,
   PageBody,
+  PhotoFileField,
   PillGroup,
   SkeletonRows,
   SpecGrid,
   StatusPill,
   TextArea,
   TextInput,
+  type StatusTone,
 } from '@/components/app'
 import {
   carsApi,
@@ -63,10 +66,12 @@ import {
   type UpdateCarRequest,
   isCarStatus,
 } from '@/api/cars'
-import { carCatalogApi, type CarCatalogItem } from '@/api/car-catalog'
-import { uploadPickedPhotos, type PickedPhoto } from './picked-photos'
 import { normalizeApiProblem } from '@/api/errors'
-import { type MediaUploadResult } from '@/api/media'
+import {
+  mediaApi,
+  type MediaEntityType,
+  type MediaUploadResult,
+} from '@/api/media'
 import { useCabinet } from '../CabinetContext'
 import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
@@ -130,6 +135,12 @@ const day = (value: string) => {
   return Number.isNaN(parsed.getTime())
     ? value
     : new Intl.DateTimeFormat('uk-UA', { dateStyle: 'medium' }).format(parsed)
+}
+const partStatus = (status: string): { label: string; tone: StatusTone } => {
+  if (status === 'available') return { label: 'Доступна', tone: 'ok' }
+  if (status === 'reserved') return { label: 'У резерві', tone: 'warn' }
+  if (status === 'sold') return { label: 'Продана', tone: 'danger' }
+  return { label: status, tone: 'neutral' }
 }
 const positiveInteger = (value: string | null, fallback: number) => {
   const parsed = Number(value)
@@ -296,8 +307,8 @@ function CarCard({
       </span>
 
       <span className="grid gap-2.5 p-4">
-        <span className="flex items-baseline justify-between gap-3">
-          <span className="truncate text-[18px] font-bold text-white">
+        <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3">
+          <span className="min-w-0 truncate text-[18px] font-bold text-white">
             {car.code}
           </span>
           {showMoney ? (
@@ -306,8 +317,8 @@ function CarCard({
             </span>
           ) : null}
         </span>
-        <span className="flex items-baseline justify-between gap-3">
-          <span className="text-app-muted truncate text-[14px]">
+        <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3">
+          <span className="text-app-muted min-w-0 truncate text-[14px]">
             {car.brand} {car.model} ({car.year})
           </span>
           {showMoney ? (
@@ -398,7 +409,7 @@ function CarsList({ base }: { base: string }) {
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
           <div className="min-w-0">
             <p className="text-app-dim font-mono text-[12px] tracking-[0.14em] uppercase">
@@ -779,7 +790,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
         ) : null}
       </div>
 
-      <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-11 lg:px-12">
+      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-11 lg:px-12">
         {problem ? <Notice tone="danger">{problem}</Notice> : null}
         {copyStatus ? <Notice tone="ok">{copyStatus}</Notice> : null}
 
@@ -1399,9 +1410,9 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     purchasePrice: '',
     notes: '',
   })
-  const [media, setMedia] = useState<PickedPhoto[]>([])
-  /** Photos the saved car already has; the update endpoint does not touch them. */
-  const [savedPhotos, setSavedPhotos] = useState<MediaUploadResult[]>([])
+  const [media, setMedia] = useState<MediaUploadResult[]>([])
+  const [pendingMedia, setPendingMedia] = useState<PendingMedia[]>([])
+  const [makeId, setMakeId] = useState<number | null>(null)
   const [expenses, setExpenses] = useState<
     { id: number; name: string; amount: string }[]
   >([])
@@ -1438,7 +1449,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
           purchasePrice: String(car.purchasePrice),
           notes: car.notes ?? '',
         })
-        setSavedPhotos(
+        setMedia(
           car.photos.map((photo) => ({
             storageKey: photo.storageKey,
             url: photo.url,
@@ -1493,7 +1504,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
       )
     ) {
       setProblem(
-        'Перевірте правильність початкових витрат. Кожна потребує назви до 200 символів і суми більшої за нуль.',
+        'Перевірте правильність додаткових витрат. Кожна потребує назви до 200 символів і суми більшої за нуль.',
       )
       return
     }
@@ -1518,18 +1529,31 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
         savedCarId = car.id
       } else {
         if (!savedCarId) {
+          const uploaded = await Promise.all(
+            pendingMedia.map((item) => {
+              const uploadScope = requireLatestMutation({ quota: false })
+              requireLatestMutation({
+                permission: 'finance.manage',
+                quota: false,
+              })
+              return mediaApi.upload(item.file, 'cars', {
+                signal: uploadScope.signal,
+              })
+            }),
+          )
+          const allMedia = [...media, ...uploaded]
+          setMedia(allMedia)
+          setPendingMedia([])
+          const createRequest: CreateCarRequest = {
+            ...request,
+            purchasePrice,
+            photoKeys: allMedia.map((item) => item.storageKey),
+          }
           const scope = requireLatestMutation()
           requireLatestMutation({
             permission: 'finance.manage',
             quota: false,
           })
-          // The photos go up only now — the form is filled in and confirmed,
-          // so nothing lands in storage for a car that never appears.
-          const createRequest: CreateCarRequest = {
-            ...request,
-            purchasePrice,
-            photoKeys: await uploadPickedPhotos(media, 'cars', scope.signal),
-          }
           const car = await carsApi.create(createRequest, {
             signal: scope.signal,
           })
@@ -1586,15 +1610,6 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     }
   }
 
-  // Makes and models come from the same public vehicle catalogue the mobile
-  // form uses. They are suggestions under the field, not a gate: a brand the
-  // catalogue has never heard of is still typed in and saved.
-  const [makes, setMakes] = useState<CarCatalogItem[]>([])
-  const [models, setModels] = useState<{
-    makeId: number
-    items: CarCatalogItem[]
-  } | null>(null)
-
   const bind = (key: keyof typeof values) => ({
     disabled: busy,
     name: key,
@@ -1606,41 +1621,6 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     value: values[key],
   })
   const backTo = carId ? `${base}/${carId}` : base
-  const brandInput = values.brand.trim()
-  const chosenMake = makes.find(
-    (make) => make.name.toLowerCase() === brandInput.toLowerCase(),
-  )
-  const makeId = chosenMake?.id ?? null
-
-  useEffect(() => {
-    const controller = new AbortController()
-    void carCatalogApi
-      .getMakes(controller.signal)
-      .then((list) => {
-        if (!controller.signal.aborted) setMakes(list)
-      })
-      .catch(() => {
-        // Suggestions are a convenience: without them the field is still a
-        // plain input and the form works exactly as before.
-      })
-    return () => controller.abort()
-  }, [])
-
-  useEffect(() => {
-    if (makeId === null) return
-    const controller = new AbortController()
-    void carCatalogApi
-      .getModels(makeId, controller.signal)
-      .then((items) => {
-        if (!controller.signal.aborted) setModels({ makeId, items })
-      })
-      .catch(() => undefined)
-    return () => controller.abort()
-  }, [makeId])
-  // Models belong to the make they were loaded for: a brand typed over leaves
-  // the old list behind instead of offering models of another car.
-  const modelOptions =
-    makeId !== null && models?.makeId === makeId ? models.items : []
   const vinLength = values.vin.trim().length
   const priceNumber = Number(values.purchasePrice)
   const priceValid = Number.isFinite(priceNumber) && priceNumber > 0
@@ -1720,7 +1700,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
           </div>
         </div>
 
-        <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+        <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
           <div className="min-w-0">
             <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
               {carId
@@ -1808,48 +1788,34 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                       required
                     />
                   </Field>
-                  <Field
-                    hint={
-                      makes.length === 0
-                        ? undefined
-                        : 'Почніть писати — список зʼявиться під полем'
-                    }
+                  <VehicleCatalogPicker
+                    disabled={busy}
                     label="Марка"
-                    required
-                  >
-                    <TextInput
-                      {...bind('brand')}
-                      list="car-make-options"
-                      placeholder="Tesla"
-                      required
-                    />
-                    <datalist id="car-make-options">
-                      {makes.map((make) => (
-                        <option key={make.id} value={make.name} />
-                      ))}
-                    </datalist>
-                  </Field>
-                  <Field
-                    hint={
-                      modelOptions.length === 0
-                        ? undefined
-                        : `Моделі ${chosenMake?.name ?? ''}`.trim()
-                    }
+                    onSelect={(option) => {
+                      setMakeId(option.id)
+                      setValues((current) => ({
+                        ...current,
+                        brand: option.name,
+                        model: '',
+                      }))
+                    }}
+                    type="make"
+                    value={values.brand}
+                  />
+                  <VehicleCatalogPicker
+                    disabled={busy || values.brand === ''}
                     label="Модель"
-                    required
-                  >
-                    <TextInput
-                      {...bind('model')}
-                      list="car-model-options"
-                      placeholder="Model Y"
-                      required
-                    />
-                    <datalist id="car-model-options">
-                      {modelOptions.map((model) => (
-                        <option key={model.id} value={model.name} />
-                      ))}
-                    </datalist>
-                  </Field>
+                    makeId={makeId}
+                    makeName={values.brand}
+                    onSelect={(option) =>
+                      setValues((current) => ({
+                        ...current,
+                        model: option.name,
+                      }))
+                    }
+                    type="model"
+                    value={values.model}
+                  />
                 </div>
 
                 <div className="mt-4">
@@ -1900,7 +1866,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
 
                 <div className="mt-4">
                   <Field
-                    hint="17 символів з техпаспорта. VIN не декодується — марку, модель і рік заповнюємо вручну."
+                    hint="17 символів з техпаспорта. Декодування VIN сервер не виконує — марку, модель і рік заповнюємо вручну."
                     label="VIN"
                   >
                     <TextInput
@@ -1984,13 +1950,13 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
               >
                 {carId ? (
                   <>
-                    {savedPhotos.length === 0 ? (
+                    {media.length === 0 ? (
                       <p className="border-app-line-2 text-app-muted rounded-[14px] border border-dashed bg-white/[0.02] px-6 py-8 text-center text-sm">
                         Фото немає.
                       </p>
                     ) : (
                       <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        {savedPhotos.map((item, index) => (
+                        {media.map((item, index) => (
                           <li key={item.storageKey}>
                             <img
                               alt={`Поточне фото автомобіля ${String(index + 1)}`}
@@ -2007,7 +1973,11 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                     </p>
                   </>
                 ) : (
-                  <MediaPicker bare items={media} onChange={setMedia} />
+                  <PendingMediaPicker
+                    disabled={busy}
+                    items={pendingMedia}
+                    onChange={setPendingMedia}
+                  />
                 )}
               </CarStep>
 
@@ -2134,7 +2104,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                   <p className="text-app-muted text-[13px] leading-[1.5]">
                     {loaded.profitability == null
                       ? 'Видалення прибирає авто разом з його історією.'
-                      : `На авто закріплено ${String(loaded.profitability.partsTotal)} ${plural(loaded.profitability.partsTotal, ['запчастину', 'запчастини', 'запчастин'])}. Поки позиції в продажу, видалити авто не вийде.`}
+                      : `На авто закріплено ${String(loaded.profitability.partsTotal)} ${plural(loaded.profitability.partsTotal, ['запчастину', 'запчастини', 'запчастин'])}. Сервер відмовить у видаленні, поки позиції в продажу.`}
                   </p>
                   <Button
                     className="mt-3 min-h-10 w-full text-[13px] font-bold"
@@ -2154,7 +2124,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
 
       <ConfirmDialog
         confirmLabel="Видалити автомобіль"
-        consequence="Автомобіль зникне разом зі своєю історією. Якщо на ньому ще висять позиції в продажу, видалити його не вийде."
+        consequence="Автомобіль зникне разом зі своєю історією. Якщо на ньому ще висять позиції в продажу, сервер відмовить у видаленні."
         destructive
         onConfirm={() => void remove()}
         onOpenChange={(next) => {
@@ -2277,7 +2247,7 @@ function NewCarExpenses({
             return (
               <li
                 className={cn(
-                  'grid gap-3 py-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] sm:items-end',
+                  'grid gap-3 py-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] sm:items-start',
                   index > 0 && 'border-app-line border-t',
                 )}
                 key={expense.id}
@@ -2300,9 +2270,11 @@ function NewCarExpenses({
                     value={expense.name}
                   />
                 </Field>
-                {/* The currency rides in the label: a hint under the first
-                    row only would push «Назва» and «Сума» out of line. */}
-                <Field label="Сума, $" srLabel={`витрати ${String(index + 1)}`}>
+                <Field
+                  hint={index === 0 ? 'У доларах' : undefined}
+                  label="Сума"
+                  srLabel={`витрати ${String(index + 1)}`}
+                >
                   <TextInput
                     className="font-mono"
                     disabled={busy || saved}
@@ -2320,7 +2292,7 @@ function NewCarExpenses({
                     value={expense.amount}
                   />
                 </Field>
-                <div className="flex items-center justify-end gap-2 pb-0.5">
+                <div className="flex items-center justify-end gap-2 sm:pt-[27px]">
                   {saved ? <StatusPill tone="ok">Збережено</StatusPill> : null}
                   <Button
                     aria-label={`Прибрати витрату ${String(index + 1)}`}
@@ -2379,6 +2351,8 @@ function CarParts({
   /** The warehouse, already filtered to this car. */
   partsHref: string
 }) {
+  const navigate = useNavigate()
+  const partsBase = partsHref.split('?')[0]
   const [requestVersion, setRequestVersion] = useState(0)
   const [state, setState] = useState<{
     parts: Awaited<ReturnType<typeof carsApi.listParts>> | null
@@ -2460,13 +2434,21 @@ function CarParts({
               key: 'name',
               label: 'Деталь',
               variant: 'primary',
-              cell: (part: CarPartListItem) => part.name,
+              cell: (part: CarPartListItem) => (
+                <Link
+                  className="hover:text-brand focus-visible:ring-brand rounded-sm outline-none focus-visible:ring-2"
+                  onClick={(event) => event.stopPropagation()}
+                  to={`${partsBase}/${part.id}`}
+                >
+                  {part.name}
+                </Link>
+              ),
             },
             {
               key: 'status',
               label: 'Статус',
               cell: (part: CarPartListItem) => {
-                const presentation = partStatusPresentation(part.status)
+                const presentation = partStatus(part.status)
                 return (
                   <StatusPill tone={presentation.tone}>
                     {presentation.label}
@@ -2481,6 +2463,7 @@ function CarParts({
               cell: (part: CarPartListItem) => part.quantityAvailable,
             },
           ]}
+          onRowClick={(part) => void navigate(`${partsBase}/${part.id}`)}
           empty={
             <EmptyState
               description="Деталі зʼявляться тут, щойно ви розберете авто й додасте запчастини на склад."
@@ -2496,38 +2479,416 @@ function CarParts({
   )
 }
 
-let pickedSequence = 0
+interface VehicleOption {
+  id: number
+  name: string
+}
+interface PendingMedia {
+  id: string
+  file: File
+  previewUrl: string
+}
 
-export function MediaPicker({
-  bare = false,
+const vehicleCatalogUrl = 'https://vpic.nhtsa.dot.gov/api/vehicles'
+
+async function loadMakes(): Promise<VehicleOption[]> {
+  const response = await fetch(
+    `${vehicleCatalogUrl}/GetMakesForVehicleType/car?format=json`,
+  )
+  if (!response.ok) throw new Error('Не вдалося завантажити марки')
+  const payload = (await response.json()) as {
+    Results?: {
+      MakeId?: number
+      Make_ID?: number
+      MakeName?: string
+      Make_Name?: string
+    }[]
+  }
+  return (payload.Results ?? [])
+    .map((item) => ({
+      id: item.MakeId ?? item.Make_ID ?? 0,
+      name: item.MakeName ?? item.Make_Name ?? '',
+    }))
+    .filter((item) => item.id > 0 && item.name !== '')
+    .sort((left, right) => left.name.localeCompare(right.name))
+}
+
+async function loadModels(makeId: number): Promise<VehicleOption[]> {
+  const response = await fetch(
+    `${vehicleCatalogUrl}/GetModelsForMakeId/${String(makeId)}?format=json`,
+  )
+  if (!response.ok) throw new Error('Не вдалося завантажити моделі')
+  const payload = (await response.json()) as {
+    Results?: { Model_ID?: number; Model_Name?: string }[]
+  }
+  return (payload.Results ?? [])
+    .map((item) => ({ id: item.Model_ID ?? 0, name: item.Model_Name ?? '' }))
+    .filter((item) => item.id > 0 && item.name !== '')
+    .sort((left, right) => left.name.localeCompare(right.name))
+}
+
+export function VehicleCatalogPicker({
+  disabled,
+  label,
+  makeId,
+  makeName,
+  onSelect,
+  type,
+  value,
+}: {
+  disabled: boolean
+  label: string
+  makeId?: number | null
+  makeName?: string
+  onSelect: (option: VehicleOption) => void
+  type: 'make' | 'model'
+  value: string
+}) {
+  const objectLabel = type === 'make' ? 'марку' : 'модель'
+  const [open, setOpen] = useState(false)
+  const [options, setOptions] = useState<VehicleOption[]>([])
+  const [query, setQuery] = useState('')
+  const [problem, setProblem] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const requestKey =
+    type === 'make' ? 'make' : `${String(makeId)}:${makeName ?? ''}`
+  const [loadedFor, setLoadedFor] = useState<string | null>(null)
+  const pickerRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const closeOutside = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !pickerRef.current?.contains(event.target)
+      ) {
+        setOpen(false)
+        setQuery('')
+      }
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setOpen(false)
+      setQuery('')
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [open])
+  useEffect(() => {
+    if (!open) return
+    if (loadedFor === requestKey) return
+    let cancelled = false
+    const request = async () => {
+      if (type === 'make') return loadMakes()
+      let resolvedMakeId = makeId ?? null
+      if (resolvedMakeId === null) {
+        const makes = await loadMakes()
+        resolvedMakeId =
+          makes.find(
+            (make) =>
+              make.name.toLowerCase() === (makeName ?? '').toLowerCase(),
+          )?.id ?? null
+      }
+      if (resolvedMakeId === null) return []
+      return loadModels(resolvedMakeId)
+    }
+    void request()
+      .then(
+        (items) => {
+          if (!cancelled) {
+            setOptions(items)
+            setLoadedFor(requestKey)
+          }
+        },
+        () => {
+          if (!cancelled)
+            setProblem('Не вдалося завантажити список. Спробуйте ще раз.')
+        },
+      )
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [loadedFor, makeId, makeName, open, requestKey, type])
+  const shown = options.filter((option) =>
+    option.name
+      .toLocaleLowerCase('uk')
+      .includes(query.trim().toLocaleLowerCase('uk')),
+  )
+  const togglePicker = () => {
+    if (open) {
+      setOpen(false)
+      return
+    }
+    setLoading(loadedFor !== requestKey)
+    setProblem(null)
+    setOpen(true)
+  }
+  return (
+    <div ref={pickerRef}>
+      <Field className="relative" label={label} required>
+        <button
+          aria-expanded={open}
+          aria-haspopup="listbox"
+          aria-label={label}
+          className="border-app-line-2 bg-app-input text-app-ink min-h-11 w-full rounded-control border px-3.5 text-left text-[14.5px] disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={disabled}
+          onClick={togglePicker}
+          type="button"
+        >
+          {value || `Оберіть ${objectLabel}`}
+        </button>
+        {open ? (
+          <div
+            aria-label={label}
+            className="border-app-line-2 bg-app-overlay absolute top-full right-0 left-0 z-40 mt-2 grid max-h-72 gap-2 overflow-y-auto rounded-[14px] border p-2 shadow-2xl"
+            role="listbox"
+          >
+            <TextInput
+              aria-label={`Пошук: ${label}`}
+              autoFocus
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Почніть вводити назву"
+              value={query}
+            />
+            {loading ? (
+              <p className="text-app-muted py-4 text-center text-sm">
+                Завантажуємо…
+              </p>
+            ) : null}
+            {problem ? <Notice tone="danger">{problem}</Notice> : null}
+            {!loading && !problem
+              ? shown.map((option) => (
+                  <button
+                    className="hover:bg-white/[0.06] min-h-11 rounded-[10px] px-3 text-left text-sm font-semibold text-white"
+                    key={option.id}
+                    onClick={() => {
+                      onSelect(option)
+                      setOpen(false)
+                      setQuery('')
+                    }}
+                    role="option"
+                    type="button"
+                  >
+                    {option.name}
+                  </button>
+                ))
+              : null}
+          </div>
+        ) : null}
+      </Field>
+    </div>
+  )
+}
+
+function PendingMediaPicker({
+  disabled,
   items,
   onChange,
 }: {
+  disabled: boolean
+  items: PendingMedia[]
+  onChange: (items: PendingMedia[]) => void
+}) {
+  const choose = (files: FileList | null) => {
+    if (!files) return
+    const next = Array.from(files).map((file, index) => ({
+      id: `${file.name}-${file.size}-${file.lastModified}-${String(index)}`,
+      file,
+      previewUrl:
+        typeof URL.createObjectURL === 'function'
+          ? URL.createObjectURL(file)
+          : '',
+    }))
+    onChange([...items, ...next])
+  }
+  const remove = (id: string) => {
+    const item = items.find((candidate) => candidate.id === id)
+    if (item?.previewUrl && typeof URL.revokeObjectURL === 'function')
+      URL.revokeObjectURL(item.previewUrl)
+    onChange(items.filter((candidate) => candidate.id !== id))
+  }
+  return (
+    <fieldset className="grid gap-3">
+      <label className="border-app-line-2 bg-app-input hover:border-brand flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-[14px] border border-dashed px-5 text-center">
+        <ImagePlus aria-hidden className="text-app-muted size-6" />
+        <span className="mt-2 text-sm font-bold text-white">Вибрати фото</span>
+        <span className="text-app-dim mt-1 text-xs">
+          Файли завантажаться після створення автомобіля
+        </span>
+        <input
+          accept="image/*"
+          aria-label="Додати фото"
+          className="sr-only"
+          disabled={disabled}
+          multiple
+          onChange={(event) => choose(event.target.files)}
+          type="file"
+        />
+      </label>
+      {items.length === 0 ? (
+        <p className="text-app-dim text-[13.5px]">Файлів ще не вибрано.</p>
+      ) : (
+        <ul className="grid gap-2 sm:grid-cols-2">
+          {items.map((item) => (
+            <li
+              className="border-app-line flex min-w-0 items-center gap-3 rounded-control border p-2"
+              key={item.id}
+            >
+              {item.previewUrl ? (
+                <img
+                  alt="Попередній перегляд фото"
+                  className="size-12 rounded-control object-cover"
+                  src={item.previewUrl}
+                />
+              ) : (
+                <ImagePlus aria-hidden className="text-app-dim size-8" />
+              )}
+              <span className="text-app-ink min-w-0 flex-1 truncate text-sm">
+                {item.file.name}
+              </span>
+              <Button
+                aria-label={`Прибрати ${item.file.name}`}
+                disabled={disabled}
+                onClick={() => remove(item.id)}
+                size="icon"
+              >
+                <Trash2 aria-hidden />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </fieldset>
+  )
+}
+
+export function MediaPicker({
+  additionalPermission,
+  beforeDispatch,
+  bare = false,
+  entityType,
+  items,
+  onChange,
+}: {
+  additionalPermission?: Permission
+  beforeDispatch?: () => unknown
   /** Drops the picker's own frame and heading, for a host that has one. */
   bare?: boolean
-  items: PickedPhoto[]
-  onChange: (items: PickedPhoto[]) => void
+  entityType: Exclude<MediaEntityType, 'tenants'>
+  items: MediaUploadResult[]
+  onChange: (items: MediaUploadResult[]) => void
 }) {
-  const add = (files: FileList | null) => {
-    if (!files?.length) return
-    onChange([
-      ...items,
-      ...Array.from(files, (file) => ({
-        id: `picked-${String(pickedSequence++)}`,
-        name: file.name,
-        size: file.size,
-        file,
-        preview: URL.createObjectURL(file),
-      })),
-    ])
+  const definition = cabinetModules[entityType]
+  const { requireLatestMutation } = useLatestMutationGuard(definition)
+  const [busy, setBusy] = useState(false)
+  const [problems, setProblems] = useState<string[]>([])
+  const [pendingPreviews, setPendingPreviews] = useState<
+    { id: string; name: string; url: string }[]
+  >([])
+  const pendingPreviewsRef = useRef(pendingPreviews)
+  useEffect(() => {
+    pendingPreviewsRef.current = pendingPreviews
+  }, [pendingPreviews])
+  useEffect(
+    () => () => {
+      if (typeof URL.revokeObjectURL !== 'function') return
+      pendingPreviewsRef.current.forEach((item) =>
+        URL.revokeObjectURL(item.url),
+      )
+    },
+    [],
+  )
+  /** Uploads answer with a storage key only, so the file name is kept here. */
+  const [names, setNames] = useState<Record<string, string>>({})
+  const upload = async (files: FileList | null) => {
+    if (!files || busy) return
+    setBusy(true)
+    const selected = Array.from(files)
+    const previews = selected.flatMap((file, index) =>
+      typeof URL.createObjectURL === 'function'
+        ? [
+            {
+              id: `${file.name}-${String(file.lastModified)}-${String(index)}`,
+              name: file.name,
+              url: URL.createObjectURL(file),
+            },
+          ]
+        : [],
+    )
+    setPendingPreviews(previews)
+    const results = await Promise.allSettled(
+      selected.map((file) =>
+        Promise.resolve().then(() => {
+          beforeDispatch?.()
+          const scope = requireLatestMutation({ quota: false })
+          if (additionalPermission)
+            requireLatestMutation({
+              permission: additionalPermission,
+              quota: false,
+            })
+          return mediaApi.upload(file, entityType, { signal: scope.signal })
+        }),
+      ),
+    )
+    const uploaded = results.flatMap((result) =>
+      result.status === 'fulfilled' ? [result.value] : [],
+    )
+    const uploadedNames = results.flatMap((result, index) => {
+      const file = selected[index]
+      return result.status === 'fulfilled' && file
+        ? [[result.value.storageKey, file.name] as const]
+        : []
+    })
+    if (uploadedNames.length > 0)
+      setNames((current) => ({
+        ...current,
+        ...Object.fromEntries(uploadedNames),
+      }))
+    if (uploaded.length > 0) onChange([...items, ...uploaded])
+    const errors = results.flatMap((result, index) => {
+      const file = selected[index]
+      return result.status === 'rejected' && file
+        ? [`${file.name}: ${normalizeApiProblem(result.reason).message}`]
+        : []
+    })
+    setProblems(errors)
+    if (typeof URL.revokeObjectURL === 'function')
+      previews.forEach((item) => URL.revokeObjectURL(item.url))
+    setPendingPreviews([])
+    setBusy(false)
   }
-  const drop = (photo: PickedPhoto) => {
-    URL.revokeObjectURL(photo.preview)
-    onChange(items.filter((item) => item.id !== photo.id))
+  const remove = async (item: MediaUploadResult) => {
+    if (busy) return
+    setBusy(true)
+    try {
+      beforeDispatch?.()
+      const scope = requireLatestMutation({ quota: false })
+      if (additionalPermission)
+        requireLatestMutation({
+          permission: additionalPermission,
+          quota: false,
+        })
+      await mediaApi.remove(item.storageKey, { signal: scope.signal })
+      onChange(items.filter((value) => value.storageKey !== item.storageKey))
+    } catch (error: unknown) {
+      setProblems([normalizeApiProblem(error).message])
+    } finally {
+      setBusy(false)
+    }
   }
-
   return (
-    <fieldset className={cn('grid gap-3', bare && 'contents')}>
+    <fieldset
+      className={cn(
+        'grid min-w-0 gap-3',
+        !bare && 'border-app-line rounded-panel bg-app-raised border p-4',
+      )}
+    >
       <legend
         className={cn(
           'px-1 text-base font-semibold text-white',
@@ -2541,44 +2902,81 @@ export function MediaPicker({
           Можна вибрати кілька файлів одразу або зняти на камеру.
         </p>
       )}
-      <input
-        accept="image/*"
+      <PhotoFileField
         aria-label="Додати фото"
         capture="environment"
-        className="bg-app-input text-app-muted border-app-line-2 rounded-control file:bg-app-raised file:text-app-ink file:rounded-control min-h-11 w-full cursor-pointer border px-3 py-2 text-sm file:mr-3 file:min-h-8 file:cursor-pointer file:border-0 file:px-3 file:text-[14px] disabled:cursor-not-allowed disabled:opacity-55"
+        disabled={busy}
         multiple
-        onChange={(event) => {
-          add(event.target.files)
-          event.target.value = ''
-        }}
-        type="file"
+        onChange={(event) => void upload(event.target.files)}
       />
-      <p className="text-app-dim text-[12.5px] leading-5 text-pretty">
-        Фото вирушать разом зі збереженням — доти вони лишаються у вас.
-      </p>
+      {pendingPreviews.length > 0 ? (
+        <ul aria-label="Вибрані фото" className="grid gap-2 sm:grid-cols-2">
+          {pendingPreviews.map((item) => (
+            <li
+              className="border-app-line flex min-w-0 items-center gap-3 rounded-control border p-2"
+              key={item.id}
+            >
+              <img
+                alt={`Попередній перегляд ${item.name}`}
+                className="size-12 shrink-0 rounded-control object-cover"
+                src={item.url}
+              />
+              <span className="text-app-ink min-w-0 flex-1 truncate text-sm">
+                {item.name}
+              </span>
+              <span className="text-app-dim text-xs">Завантаження…</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {problems.length > 0 ? (
+        <div
+          className="border-state-danger/30 bg-state-danger-soft rounded-control border px-3.5 py-2.5"
+          role="alert"
+        >
+          <p className="text-state-danger text-[14.5px] font-medium">
+            Ці файли не завантажилися. Виберіть інші або спробуйте ще раз.
+          </p>
+          <ul className="text-app-ink mt-1.5 grid gap-1 text-[14px]">
+            {problems.map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {items.length > 0 ? (
         <ul className="grid gap-2">
           {items.map((item) => (
             <li
               className="border-app-line rounded-control flex flex-wrap items-center gap-3 border p-2"
-              key={item.id}
+              key={item.storageKey}
             >
               <img
                 alt="Попередній перегляд фото"
                 className="rounded-control size-12 shrink-0 object-cover"
-                src={item.preview}
+                src={item.url}
               />
               <span className="text-app-ink min-w-0 flex-1 truncate text-[14.5px]">
-                {item.name}
+                {names[item.storageKey] ??
+                  item.storageKey.split('/').pop() ??
+                  'Фото'}
               </span>
-              <Button onClick={() => drop(item)}>
+              <Button disabled={busy} onClick={() => void remove(item)}>
                 <Trash2 aria-hidden />
                 Прибрати фото
               </Button>
             </li>
           ))}
         </ul>
-      ) : null}
+      ) : (
+        <p className="text-app-dim text-[13.5px]">
+          <ImagePlus
+            aria-hidden
+            className="mr-1.5 inline size-4 align-text-bottom"
+          />
+          Файлів ще не вибрано.
+        </p>
+      )}
     </fieldset>
   )
 }

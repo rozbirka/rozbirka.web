@@ -15,7 +15,7 @@ import {
   DeniedState,
   EmptyState,
   Field,
-  FileField,
+  PhotoFileField,
   Notice,
   PageBody,
   PageHeader,
@@ -117,6 +117,14 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
   const [placement, setPlacement] = useState<PartInventoryZone[]>([])
   const [recent, setRecent] = useState<RecentScan[]>([])
   const [pending, setPending] = useState(false)
+  const [filePreview, setFilePreview] = useState<{
+    name: string
+    url: string
+  } | null>(null)
+  const filePreviewRef = useRef(filePreview)
+  useEffect(() => {
+    filePreviewRef.current = filePreview
+  }, [filePreview])
 
   const shutdownCamera = useCallback(
     (nextState: 'idle' | 'unavailable' = 'idle') => {
@@ -138,6 +146,11 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
       sequenceRef.current += 1
       fileGenerationRef.current += 1
       requestRef.current?.abort()
+      if (
+        filePreviewRef.current?.url &&
+        typeof URL.revokeObjectURL === 'function'
+      )
+        URL.revokeObjectURL(filePreviewRef.current.url)
       shutdownCamera()
     }
   }, [shutdownCamera])
@@ -316,6 +329,18 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
     }
   }
   const scanFile = async (file: File | null) => {
+    if (
+      filePreviewRef.current?.url &&
+      typeof URL.revokeObjectURL === 'function'
+    )
+      URL.revokeObjectURL(filePreviewRef.current.url)
+    const previewUrl =
+      file && typeof URL.createObjectURL === 'function'
+        ? URL.createObjectURL(file)
+        : null
+    setFilePreview(
+      file && previewUrl ? { name: file.name, url: previewUrl } : null,
+    )
     const Detector = getDetector()
     if (!file || !Detector) {
       setStatus({
@@ -688,14 +713,24 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
             hint="Фото стікера з галереї — код розпізнаємо із зображення."
             label="Файл QR-коду"
           >
-            <FileField
-              accept="image/*"
+            <PhotoFileField
               aria-label="Файл QR-коду"
               onChange={(event) =>
                 void scanFile(event.target.files?.[0] ?? null)
               }
-              type="file"
             />
+            {filePreview ? (
+              <div className="border-app-line flex min-w-0 items-center gap-3 rounded-control border p-2">
+                <img
+                  alt={`Попередній перегляд ${filePreview.name}`}
+                  className="size-14 shrink-0 rounded-control object-cover"
+                  src={filePreview.url}
+                />
+                <span className="text-app-ink min-w-0 flex-1 truncate text-sm">
+                  {filePreview.name}
+                </span>
+              </div>
+            ) : null}
           </Field>
           <Button
             aria-busy={pending}

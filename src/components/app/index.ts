@@ -39,6 +39,7 @@ export {
 export { ActiveFilters, Toolbar, type ActiveFilter } from './toolbar'
 export {
   FileField,
+  PhotoFileField,
   UploadList,
   UploadSummary,
   type UploadItem,

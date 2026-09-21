@@ -59,15 +59,8 @@ const renderScreen = () =>
     </MemoryRouter>,
   )
 
-const add = (id: string, quantity: string) => {
-  fireEvent.change(screen.getByLabelText('Деталь'), {
-    target: { value: id },
-  })
-  fireEvent.change(screen.getByLabelText('Кількість стікерів'), {
-    target: { value: quantity },
-  })
-  fireEvent.click(screen.getByRole('button', { name: 'Додати' }))
-}
+const add = (name: string) =>
+  fireEvent.click(screen.getByRole('checkbox', { name }))
 
 beforeEach(() => {
   localStorage.clear()
@@ -91,19 +84,17 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-it('merges labeled queue entries, enforces the 200-label cap, and removes or clears items', async () => {
+it('selects parts with checkboxes and supports select all, remove, and reset', async () => {
   renderScreen()
-  await screen.findByRole('option', { name: 'Bumper' })
-  add('part-1', '199')
-  add('part-1', '1')
-  expect(screen.getByText('Bumper × 200')).toBeInTheDocument()
-  add('part-2', '1')
-  expect(screen.getByRole('alert')).toHaveTextContent('не більше 200')
+  await screen.findByRole('checkbox', { name: 'Bumper' })
+  add('Bumper')
+  expect(screen.getByText('Bumper × 1')).toBeInTheDocument()
 
   fireEvent.click(screen.getByRole('button', { name: 'Прибрати Bumper' }))
   expect(screen.getByText('У черзі: 0')).toBeInTheDocument()
-  add('part-2', '2')
-  fireEvent.click(screen.getByRole('button', { name: 'Очистити чергу' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Обрати все' }))
+  expect(screen.getByText('У черзі: 2')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Скинути' }))
   expect(screen.getByText('У черзі: 0')).toBeInTheDocument()
 })
 
@@ -125,8 +116,8 @@ it('loads sticker data and renders a real QR SVG preview for each queued copy', 
     ],
   })
   renderScreen()
-  await screen.findByRole('option', { name: 'Bumper' })
-  add('part-1', '2')
+  await screen.findByRole('checkbox', { name: 'Bumper' })
+  add('Bumper')
   fireEvent.click(
     screen.getByRole('button', { name: 'Отримати дані стікерів' }),
   )
@@ -138,8 +129,8 @@ it('loads sticker data and renders a real QR SVG preview for each queued copy', 
       signal: expect.any(AbortSignal) as AbortSignal,
     }),
   )
-  expect(screen.getAllByRole('img', { name: 'QR-код Bumper' })).toHaveLength(2)
-  expect(preview.querySelectorAll('svg')).toHaveLength(2)
+  expect(screen.getAllByRole('img', { name: 'QR-код Bumper' })).toHaveLength(1)
+  expect(preview.querySelectorAll('svg')).toHaveLength(1)
   expect(preview.querySelector('svg path')).not.toBeNull()
   expect(preview).toHaveTextContent('CAR-01 · Ford Focus (2018)')
   expect(preview.innerHTML).not.toContain('QR /1')
@@ -186,8 +177,8 @@ it('downloads, prints, and shares the same printable QR artifact with URL cleanu
     share,
   })
   renderScreen()
-  await screen.findByRole('option', { name: 'Bumper' })
-  add('part-1', '1')
+  await screen.findByRole('checkbox', { name: 'Bumper' })
+  add('Bumper')
   fireEvent.click(
     screen.getByRole('button', { name: 'Отримати дані стікерів' }),
   )
@@ -218,16 +209,16 @@ it('downloads, prints, and shares the same printable QR artifact with URL cleanu
 it('fails closed on generation when stickers.manage is absent', async () => {
   cabinetMock.permissions = new Set(['parts.view'])
   renderScreen()
-  await screen.findByRole('option', { name: 'Bumper' })
+  await screen.findByRole('checkbox', { name: 'Bumper' })
 
-  expect(screen.getByRole('button', { name: 'Додати' })).toBeDisabled()
+  expect(screen.getByRole('checkbox', { name: 'Bumper' })).toBeDisabled()
   expect(screen.getByRole('status')).toHaveTextContent('Недостатньо прав')
 })
 
 it('rechecks the latest sticker permission before requesting batch data', async () => {
   renderScreen()
-  await screen.findByRole('option', { name: 'Bumper' })
-  add('part-1', '1')
+  await screen.findByRole('checkbox', { name: 'Bumper' })
+  add('Bumper')
   cabinetMock.permissions.delete('stickers.manage')
   fireEvent.click(
     screen.getByRole('button', { name: 'Отримати дані стікерів' }),
@@ -239,12 +230,12 @@ it('rechecks the latest sticker permission before requesting batch data', async 
 
 it('persists only a stable user-tenant queue with TTL and clears it on scope cleanup', async () => {
   const first = renderScreen()
-  await screen.findByRole('option', { name: 'Bumper' })
-  add('part-1', '2')
+  await screen.findByRole('checkbox', { name: 'Bumper' })
+  add('Bumper')
   await vi.waitFor(() => expect(localStorage.length).toBe(1))
   first.unmount()
   renderScreen()
-  expect(await screen.findByText('Bumper × 2')).toBeInTheDocument()
+  expect(await screen.findByText('Bumper × 1')).toBeInTheDocument()
 
   await tenantResetRegistry.clear({ userId: 'user-1', tenantId: 'tenant-1' })
   await vi.waitFor(() =>
@@ -255,8 +246,8 @@ it('persists only a stable user-tenant queue with TTL and clears it on scope cle
 
 it('discards an expired persisted queue', async () => {
   const first = renderScreen()
-  await screen.findByRole('option', { name: 'Bumper' })
-  add('part-1', '2')
+  await screen.findByRole('checkbox', { name: 'Bumper' })
+  add('Bumper')
   await vi.waitFor(() => expect(localStorage.length).toBe(1))
   const key = localStorage.key(0)!
   const stored = JSON.parse(localStorage.getItem(key)!) as {

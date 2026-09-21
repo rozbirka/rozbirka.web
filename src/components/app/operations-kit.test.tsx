@@ -45,6 +45,26 @@ it('extends the accessible name without repeating it on screen', () => {
   ).toBeInTheDocument()
 })
 
+it('keeps controls top-aligned when a neighboring field has helper text', () => {
+  render(
+    <div className="grid grid-cols-2">
+      <Field label="Тип деталі">
+        <TextInput />
+      </Field>
+      <Field hint="Пояснення під полем" label="OEM-код">
+        <TextInput />
+      </Field>
+    </div>,
+  )
+
+  expect(screen.getByLabelText('Тип деталі').parentElement).toHaveClass(
+    'content-start',
+  )
+  expect(screen.getByLabelText('OEM-код').parentElement).toHaveClass(
+    'content-start',
+  )
+})
+
 it('formats money, quantities and time for reading in a column', () => {
   render(
     <FactList>

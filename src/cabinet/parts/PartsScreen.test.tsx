@@ -198,6 +198,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 function LocationProbe() {
@@ -478,7 +479,7 @@ it('shows server-authoritative compatibility as read-only when mutation is absen
   expect(screen.queryByLabelText('Марка сумісності')).not.toBeInTheDocument()
 })
 
-it('provides an accessible multi-file media selector backed by the confirmed contract', () => {
+it('shows a Ukrainian photo picker with previews for selected part photos', () => {
   render(
     <MemoryRouter initialEntries={['/app/yard/parts/new']}>
       <Routes>
@@ -495,9 +496,121 @@ it('provides an accessible multi-file media selector backed by the confirmed con
     'accept',
     'image/*',
   )
+  expect(screen.getByText('Вибрати фото')).toBeVisible()
+
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: vi.fn(() => 'blob:part-photo'),
+  })
+  fireEvent.change(screen.getByLabelText('Фото деталі'), {
+    target: {
+      files: [new File(['photo'], 'bumper.jpg', { type: 'image/jpeg' })],
+    },
+  })
+
+  expect(
+    screen.getByRole('img', { name: 'Попередній перегляд bumper.jpg' }),
+  ).toHaveAttribute('src', 'blob:part-photo')
+  expect(
+    screen.getByText(/Файли завантажаться разом зі створенням деталі/),
+  ).toBeInTheDocument()
+})
+
+it('uses the fixed mobile condition vocabulary when creating a part', () => {
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/new"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const conditionCard = screen.getByRole('region', { name: 'Стан деталі' })
+  const condition = within(conditionCard).getByRole('radiogroup', {
+    name: 'Стан деталі',
+  })
+
+  expect(within(condition).getAllByRole('radio')).toHaveLength(3)
+  expect(
+    within(condition).getByRole('radio', { name: 'Хороший' }),
+  ).toHaveAttribute('aria-checked', 'true')
+  expect(
+    within(condition).getByRole('radio', { name: 'Задовільний' }),
+  ).toBeVisible()
+  expect(
+    within(condition).getByRole('radio', { name: 'На запчастини' }),
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('combobox', { name: 'Стан' }),
+  ).not.toBeInTheDocument()
+})
+
+it('shows the fixed condition choices in a separate card when editing a part', async () => {
+  partMocks.get.mockResolvedValueOnce({
+    id: 'part-1',
+    source: 'free',
+    carId: null,
+    intakeId: null,
+    name: 'Дзеркало дверей L',
+    quantityTotal: 1,
+    unit: 'pcs',
+    condition: 'fair',
+    notes: null,
+    oemCode: null,
+    partType: null,
+    desiredSalePrice: null,
+  })
+
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/part-1/edit']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/:partId/edit"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const descriptionCard = await screen.findByRole('region', {
+    name: 'Опис деталі',
+  })
+  const conditionCard = screen.getByRole('region', { name: 'Стан деталі' })
+  const condition = within(conditionCard).getByRole('radiogroup', {
+    name: 'Стан деталі',
+  })
+
+  expect(
+    within(descriptionCard).queryByRole('radiogroup'),
+  ).not.toBeInTheDocument()
+  expect(within(condition).getAllByRole('radio')).toHaveLength(3)
+  expect(
+    within(condition).getByRole('radio', { name: 'Задовільний' }),
+  ).toHaveAttribute('aria-checked', 'true')
+  expect(
+    screen.queryByRole('combobox', { name: 'Стан' }),
+  ).not.toBeInTheDocument()
 })
 
 it('creates a part with every supported source, inventory, price, and compatibility field', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({ Results: [{ MakeId: 1, MakeName: 'Ford' }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({ Results: [{ Model_ID: 2, Model_Name: 'Focus' }] }),
+      }),
+  )
   render(
     <MemoryRouter initialEntries={['/app/yard/parts/new']}>
       <Routes>
@@ -514,18 +627,27 @@ it('creates a part with every supported source, inventory, price, and compatibil
   })
   for (const [label, value] of [
     ['Кількість', '3'],
-    ['Одиниця', 'pcs'],
-    ['Стан', 'used'],
     ['Нотатки', 'Scratch'],
     ['OEM-код', 'OEM-1'],
     ['Тип деталі', 'body'],
     ['Бажана ціна', '125.5'],
-    ['Марка сумісності', 'Ford'],
-    ['Модель сумісності', 'Focus'],
     ['Рік сумісності', '2018'],
   ] as const) {
     fireEvent.change(screen.getByLabelText(label), { target: { value } })
   }
+  fireEvent.click(screen.getByRole('radio', { name: 'Хороший' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Марка сумісності' }))
+  expect(
+    await screen.findByRole('listbox', { name: 'Марка сумісності' }),
+  ).toBeVisible()
+  fireEvent.pointerDown(screen.getByRole('heading', { name: 'Нова деталь' }))
+  expect(
+    screen.queryByRole('listbox', { name: 'Марка сумісності' }),
+  ).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Марка сумісності' }))
+  fireEvent.click(await screen.findByRole('option', { name: 'Ford' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Модель сумісності' }))
+  fireEvent.click(await screen.findByRole('option', { name: 'Focus' }))
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
   expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
@@ -534,8 +656,8 @@ it('creates a part with every supported source, inventory, price, and compatibil
       sourceType: 'free',
       name: 'Front bumper',
       quantity: 3,
-      unit: 'pcs',
-      condition: 'used',
+      unit: 'шт',
+      condition: 'good',
       notes: 'Scratch',
       oemCode: 'OEM-1',
       partType: 'body',
@@ -551,7 +673,7 @@ it('creates a part with every supported source, inventory, price, and compatibil
   )
 })
 
-it('uploads chosen photos only on submit and keeps the failed ones retryable', async () => {
+it('retains successful media uploads while exposing retry and remove for each failed file', async () => {
   mediaMocks.upload
     .mockResolvedValueOnce({
       storageKey: 'pending/parts/bumper.jpg',
@@ -584,20 +706,20 @@ it('uploads chosen photos only on submit and keeps the failed ones retryable', a
     },
   })
 
-  // Choosing a file sends nothing anywhere.
-  expect(await screen.findByText('bumper.jpg · Вибрано')).toBeInTheDocument()
+  expect(screen.getByText('bumper.jpg · Вибрано')).toBeInTheDocument()
   expect(screen.getByText('mirror.jpg · Вибрано')).toBeInTheDocument()
   expect(mediaMocks.upload).not.toHaveBeenCalled()
-  expect(screen.getByRole('button', { name: 'Створити деталь' })).toBeEnabled()
-
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
-  // One file failed, so the part is not created and the failure names it.
   expect(
-    await screen.findByText(/не вдалося завантажити фото \(mirror\.jpg\)/),
+    await screen.findByText('bumper.jpg · Завантажено'),
   ).toBeInTheDocument()
-  expect(partMocks.create).not.toHaveBeenCalled()
-
+  expect(
+    screen.getByText('mirror.jpg · Помилка завантаження'),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Створити деталь' })).toBeDisabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Повторити mirror.jpg' }))
+  await screen.findByText('mirror.jpg · Завантажено')
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
   expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
@@ -612,7 +734,7 @@ it('uploads chosen photos only on submit and keeps the failed ones retryable', a
   )
 })
 
-it('drops a chosen file locally and never touches media storage for it', async () => {
+it('removes a selected file without uploading it before save', async () => {
   mediaMocks.upload.mockResolvedValue({
     storageKey: 'pending/parts/bumper.jpg',
     url: 'https://cdn.example/bumper.jpg',
@@ -635,17 +757,16 @@ it('drops a chosen file locally and never touches media storage for it', async (
       files: [new File(['one'], 'bumper.jpg', { type: 'image/jpeg' })],
     },
   })
-  await screen.findByText('bumper.jpg · Вибрано')
+  expect(screen.getByText('bumper.jpg · Вибрано')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Прибрати bumper.jpg' }))
   await vi.waitFor(() =>
     expect(screen.queryByText(/bumper.jpg ·/)).not.toBeInTheDocument(),
   )
-  // The file never left the browser, so there is nothing to delete.
+  expect(mediaMocks.upload).not.toHaveBeenCalled()
   expect(mediaMocks.remove).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
   expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
-  expect(mediaMocks.upload).not.toHaveBeenCalled()
   expect(partMocks.create).toHaveBeenCalledWith(
     expect.objectContaining({ photoKeys: [] }),
     expect.objectContaining({
@@ -654,7 +775,7 @@ it('drops a chosen file locally and never touches media storage for it', async (
   )
 })
 
-it('still lets photos be chosen and dropped after the parts quota fills up', async () => {
+it('allows pending part media selection and removal after quota becomes full', async () => {
   mediaMocks.upload.mockResolvedValue({
     storageKey: 'pending/parts/bumper.jpg',
     url: 'https://cdn.example/bumper.jpg',
@@ -675,14 +796,12 @@ it('still lets photos be chosen and dropped after the parts quota fills up', asy
       files: [new File(['one'], 'bumper.jpg', { type: 'image/jpeg' })],
     },
   })
-  await screen.findByText('bumper.jpg · Вибрано')
+  expect(screen.getByText('bumper.jpg · Вибрано')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Прибрати bumper.jpg' }))
 
   await vi.waitFor(() =>
     expect(screen.queryByText(/bumper.jpg ·/)).not.toBeInTheDocument(),
   )
-  // Picking files is local work: the exhausted quota stops the part, not the
-  // file chooser, and nothing reached storage either way.
   expect(mediaMocks.upload).not.toHaveBeenCalled()
   expect(mediaMocks.remove).not.toHaveBeenCalled()
 })
@@ -721,6 +840,8 @@ it('persists a tenant-authorized labeled car selection without exposing its raw 
       carId: 'car-1',
       name: 'Bumper',
       quantity: 1,
+      unit: 'шт',
+      condition: 'good',
       photoKeys: [],
     },
     expect.objectContaining({
@@ -861,7 +982,7 @@ it('loads existing edit values and updates every field accepted by the immutable
       notes: 'Old note',
       quantity: 4,
       partType: 'body',
-      unit: 'pcs',
+      unit: 'шт',
       photoKeys: ['tenant-secret/existing.jpg'],
       desiredSalePrice: { isSet: true, value: null },
     },
@@ -897,7 +1018,7 @@ it('guards duplicate creates with aria-busy and exposes mutation failures', asyn
   fireEvent.click(submit)
   expect(submit).toHaveAttribute('aria-busy', 'true')
   expect(submit).toBeDisabled()
-  await vi.waitFor(() => expect(partMocks.create).toHaveBeenCalledTimes(1))
+  expect(partMocks.create).toHaveBeenCalledTimes(1)
   rejectCreate?.(new Error('failed'))
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Не вдалося створити деталь.',
@@ -941,7 +1062,7 @@ it('guards duplicate edits with aria-busy and exposes mutation failures', async 
   fireEvent.click(submit)
   expect(submit).toHaveAttribute('aria-busy', 'true')
   expect(submit).toBeDisabled()
-  await vi.waitFor(() => expect(partMocks.update).toHaveBeenCalledTimes(1))
+  expect(partMocks.update).toHaveBeenCalledTimes(1)
   rejectUpdate?.(new Error('failed'))
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Не вдалося зберегти зміни.',
@@ -1367,12 +1488,17 @@ it('counts every filter value from the server and narrows the search by it', asy
   )
 
   const conditions = await screen.findByRole('region', { name: 'Стан деталі' })
-  // The numbers are the server's, counted under the rest of the filter; the
-  // word beside them is ours — the server sends the code `good`.
+  // The numbers are the server's, counted under the rest of the filter.
   expect(
-    within(conditions).getByRole('button', { name: /б\/в/ }),
+    within(conditions).getByRole('button', { name: /Хороший/i }),
   ).toHaveTextContent('812')
-  fireEvent.click(within(conditions).getByRole('button', { name: /б\/в/ }))
+  expect(
+    within(conditions).getByRole('button', { name: /Задовільний/i }),
+  ).toBeVisible()
+  expect(
+    within(conditions).getByRole('button', { name: /На запчастини/i }),
+  ).toBeVisible()
+  fireEvent.click(within(conditions).getByRole('button', { name: /Хороший/i }))
 
   await vi.waitFor(() =>
     expect(partMocks.search).toHaveBeenLastCalledWith(
@@ -1385,6 +1511,12 @@ it('counts every filter value from the server and narrows the search by it', asy
     expect.anything(),
     expect.anything(),
   )
+
+  const origins = screen.getByRole('region', { name: 'Походження' })
+  expect(within(origins).getByRole('button', { name: /З авто/i })).toBeVisible()
+  expect(
+    within(origins).getByRole('button', { name: /З партії/i }),
+  ).toBeVisible()
 })
 
 it('opens the model filter only once a make is chosen', async () => {
@@ -1612,10 +1744,10 @@ it('lists each chosen photo with its size and a way to drop it', async () => {
   })
 
   const photos = await screen.findByRole('list', { name: 'Вибрані фото' })
-  expect(await screen.findByText('bumper.jpg · Вибрано')).toBeInTheDocument()
+  expect(screen.getByText('bumper.jpg · Вибрано')).toBeInTheDocument()
   expect(screen.getByText('3 Б')).toBeInTheDocument()
-  // A file that has not been uploaded has no address to link to yet.
   expect(screen.queryByRole('link', { name: 'bumper.jpg' })).toBeNull()
+  expect(mediaMocks.upload).not.toHaveBeenCalled()
   expect(
     screen.getByRole('button', { name: 'Прибрати bumper.jpg' }),
   ).toBeInTheDocument()
@@ -1674,252 +1806,24 @@ function renderDirectory() {
   )
 }
 
-it('offers bulk actions only once rows are picked, and counts what is picked', async () => {
-  const user = userEvent.setup()
+it('does not show selection checkboxes or bulk actions in the parts directory', async () => {
   renderDirectory()
 
-  expect(
-    screen.queryByRole('region', { name: 'Дії над обраними' }),
-  ).not.toBeInTheDocument()
-
-  await user.click(
-    await screen.findByRole('checkbox', { name: 'Обрати: Фара ліва' }),
-  )
-
-  const bar = screen.getByRole('region', { name: 'Дії над обраними' })
-  expect(bar).toHaveTextContent('1 деталь обрано')
-
-  await user.click(
-    within(bar).getByRole('button', { name: 'Обрати всі на сторінці (2)' }),
-  )
-  expect(
-    screen.getByRole('region', { name: 'Дії над обраними' }),
-  ).toHaveTextContent('2 деталі обрано')
-
-  await user.click(screen.getByRole('button', { name: 'Зняти вибір' }))
+  await screen.findByRole('link', { name: 'Фара ліва' })
+  expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   expect(
     screen.queryByRole('region', { name: 'Дії над обраними' }),
   ).not.toBeInTheDocument()
 })
 
-it('says why a bulk action the API cannot serve is out of reach', async () => {
-  const user = userEvent.setup()
-  renderDirectory()
-  await user.click(
-    await screen.findByRole('checkbox', { name: 'Обрати: Фара ліва' }),
-  )
-
-  const bar = screen.getByRole('region', { name: 'Дії над обраними' })
-  const sold = within(bar).getByRole('button', {
-    name: 'Перевести в «Продано»',
-  })
-  expect(sold).toBeDisabled()
-  expect(sold).toHaveAttribute(
-    'title',
-    'Статус деталі рахується з залишку й замовлень — окремо його виставити не можна.',
-  )
-  expect(within(bar).getByRole('button', { name: 'Архівувати' })).toBeDisabled()
-})
-
-it('rewrites each picked part whole so a bulk price change cannot clear other fields', async () => {
-  const user = userEvent.setup()
-  partMocks.get.mockImplementation((id: string) =>
-    Promise.resolve({
-      id,
-      name: id === 'part-1' ? 'Фара ліва' : 'Бампер передній',
-      condition: 'good',
-      notes: 'знята з Focus',
-      quantityTotal: 2,
-      partType: 'optics',
-      unit: 'шт',
-      photos: [
-        {
-          id: 'p1',
-          storageKey: 'key-1',
-          url: '',
-          thumbnailUrl: '',
-          sortOrder: 0,
-        },
-      ],
-    }),
-  )
+it('does not expose web-only saved filters', async () => {
   renderDirectory()
 
-  await user.click(
-    await screen.findByRole('checkbox', { name: 'Обрати: Фара ліва' }),
-  )
-  await user.click(
-    within(screen.getByRole('region', { name: 'Дії над обраними' })).getByRole(
-      'button',
-      { name: 'Змінити бажану ціну' },
-    ),
-  )
-  await user.type(
-    screen.getByRole('textbox', { name: 'Бажана ціна, USD' }),
-    '420',
-  )
-  await user.click(screen.getByRole('button', { name: 'Змінити ціну' }))
-
-  await vi.waitFor(() =>
-    expect(partMocks.update).toHaveBeenCalledWith(
-      'part-1',
-      {
-        name: 'Фара ліва',
-        condition: 'good',
-        notes: 'знята з Focus',
-        quantity: 2,
-        partType: 'optics',
-        unit: 'шт',
-        photoKeys: ['key-1'],
-        desiredSalePrice: { isSet: true, value: 420 },
-      },
-      expect.anything(),
-    ),
-  )
-  expect(await screen.findByText('Ціну змінено на 1 деталі.')).toBeVisible()
-})
-
-it('reports how many of a bulk delete went through when some rows refuse', async () => {
-  const user = userEvent.setup()
-  partMocks.delete.mockImplementation((id: string) =>
-    id === 'part-2'
-      ? Promise.reject(new Error('in an order'))
-      : Promise.resolve(undefined),
-  )
-  renderDirectory()
-
-  await user.click(
-    await screen.findByRole('checkbox', { name: 'Обрати: Фара ліва' }),
-  )
-  await user.click(
-    screen.getByRole('checkbox', { name: 'Обрати: Бампер передній' }),
-  )
-  await user.click(
-    within(screen.getByRole('region', { name: 'Дії над обраними' })).getByRole(
-      'button',
-      { name: 'Видалити' },
-    ),
-  )
-  await user.click(
-    within(await screen.findByRole('dialog')).getByRole('button', {
-      name: 'Видалити',
-    }),
-  )
-
+  await screen.findByRole('link', { name: 'Фара ліва' })
+  expect(screen.queryByRole('region', { name: 'Мої подання' })).toBeNull()
   expect(
-    await screen.findByText(
-      'Видалено 1 з 2. Решта лишилася — деталь у замовленні видалити не можна.',
-    ),
-  ).toBeVisible()
-})
-
-it('saves the current filters under a name, applies them back, and forgets them', async () => {
-  const user = userEvent.setup()
-  localStorage.clear()
-  partMocks.search.mockResolvedValue({
-    items: pickableRows,
-    page: 1,
-    pageSize: 30,
-    total: 2,
-    totalPages: 1,
-  })
-  render(
-    <MemoryRouter initialEntries={['/app/yard/parts?status=reserved']}>
-      <Routes>
-        <Route
-          element={
-            <>
-              <PartsScreen definition={partsDefinition as never} />
-              <LocationProbe />
-            </>
-          }
-          path="/app/:tenant/parts"
-        />
-      </Routes>
-    </MemoryRouter>,
-  )
-
-  const rail = await screen.findByRole('region', { name: 'Мої подання' })
-  await user.click(
-    within(rail).getByRole('button', { name: 'Зберегти ці фільтри' }),
-  )
-  await user.type(
-    screen.getByRole('textbox', { name: 'Назва подання' }),
-    'Резерв',
-  )
-  await user.click(screen.getByRole('button', { name: 'Зберегти' }))
-
-  const saved = within(
-    screen.getByRole('region', { name: 'Мої подання' }),
-  ).getByRole('button', { name: 'Резерв' })
-  expect(saved).toHaveAttribute('aria-pressed', 'true')
-
-  // Filters move away, then the view brings them back.
-  await user.click(
-    within(screen.getByRole('region', { name: 'Статус' })).getByRole('button', {
-      name: /Продано/,
-    }),
-  )
-  expect(
-    within(screen.getByRole('region', { name: 'Мої подання' })).getByRole(
-      'button',
-      { name: 'Резерв' },
-    ),
-  ).toHaveAttribute('aria-pressed', 'false')
-
-  await user.click(
-    within(screen.getByRole('region', { name: 'Мої подання' })).getByRole(
-      'button',
-      { name: 'Резерв' },
-    ),
-  )
-  await vi.waitFor(() =>
-    expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(
-      'status=reserved',
-    ),
-  )
-
-  await user.click(
-    screen.getByRole('button', { name: 'Забути подання: Резерв' }),
-  )
-  expect(
-    within(screen.getByRole('region', { name: 'Мої подання' })).queryByRole(
-      'button',
-      { name: 'Резерв' },
-    ),
-  ).not.toBeInTheDocument()
-})
-
-it('refuses to save filters that are already a view, and says why', async () => {
-  const user = userEvent.setup()
-  localStorage.clear()
-  localStorage.setItem(
-    'rozbirka.views.v1:user-1:tenant-1:parts',
-    JSON.stringify({
-      version: 1,
-      views: [{ id: 'v1', name: 'Резерв', query: 'status=reserved' }],
-    }),
-  )
-  render(
-    <MemoryRouter initialEntries={['/app/yard/parts?status=reserved']}>
-      <Routes>
-        <Route
-          element={<PartsScreen definition={partsDefinition as never} />}
-          path="/app/:tenant/parts"
-        />
-      </Routes>
-    </MemoryRouter>,
-  )
-
-  const save = within(
-    await screen.findByRole('region', { name: 'Мої подання' }),
-  ).getByRole('button', { name: 'Зберегти ці фільтри' })
-  expect(save).toBeDisabled()
-  expect(save).toHaveAttribute('title', 'Ці фільтри вже збережені.')
-  await user.click(save)
-  expect(
-    screen.queryByRole('textbox', { name: 'Назва подання' }),
-  ).not.toBeInTheDocument()
+    screen.queryByRole('button', { name: 'Зберегти ці фільтри' }),
+  ).toBeNull()
 })
 
 it('remembers the tighter row spacing for the next visit to the list', async () => {
@@ -2134,7 +2038,7 @@ it('names the network as the reason when the stock list cannot be reached', asyn
   expect(
     await screen.findByRole('heading', { name: 'Склад не відповідає' }),
   ).toBeVisible()
-  expect(screen.getByText(/Немає звʼязку з мережею/)).toBeVisible()
+  expect(screen.getByText(/Немає звʼязку з сервером/)).toBeVisible()
 })
 
 it('blames the server, not the network, when the request came back 500', async () => {

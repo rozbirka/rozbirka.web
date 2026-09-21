@@ -15,13 +15,12 @@ import {
   Printer,
   Search,
   Trash2,
-  X,
 } from 'lucide-react'
 import {
   ActionMenu,
   Amount,
   DateValue,
-  FileField,
+  PhotoFileField,
   Gallery,
   Quantity,
   Card,
@@ -31,11 +30,9 @@ import {
   SkeletonRows,
   SpecGrid,
   SpecNote,
-  BulkBar,
   Button,
   ConfirmDialog,
   DataTable,
-  FormDialog,
   EmptyState,
   ErrorState,
   Field,
@@ -47,17 +44,14 @@ import {
   StatusPill,
   TextArea,
   TextInput,
-  type NoticeTone,
+  type StatusTone,
 } from '@/components/app'
 import { cn, plural } from '@/lib/utils'
 import {
-  conditionFacetLabel,
   conditionLabel,
   historyDetails,
   historyLabel,
   originLabel,
-  partStatusDot,
-  partStatusPresentation,
   sourceLabel,
 } from './part-labels'
 import {
@@ -85,20 +79,14 @@ import { evaluateModuleAccess, type ModuleAccessDecision } from '../policy'
 import { normalizeApiProblem } from '@/api/errors'
 import type { ApiProblem } from '@/api/contracts'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import { VehicleCatalogPicker } from '../cars/CarsScreen'
 import {
   isListDensity,
   readDensity,
   writeDensity,
   type ListDensity,
 } from '../list-density'
-import {
-  readSavedViews,
-  sameView,
-  savedViewLimit,
-  writeSavedViews,
-  type SavedView,
-  type SavedViewScope,
-} from '../saved-views'
+import type { SavedViewScope } from '../saved-views'
 
 const partStatuses = new Set(['available', 'reserved', 'sold'])
 /** Every group the filter panel draws; the server counts each one for us. */
@@ -118,6 +106,14 @@ const positiveInteger = (value: string | null, fallback: number) => {
 const pageSizeParam = (value: string | null, fallback: number) => {
   const parsed = positiveInteger(value, fallback)
   return parsed <= 100 ? parsed : fallback
+}
+const statusPresentation = (
+  status: string,
+): { label: string; tone: StatusTone } => {
+  if (status === 'available') return { label: 'Доступно', tone: 'ok' }
+  if (status === 'reserved') return { label: 'У резерві', tone: 'warn' }
+  if (status === 'sold') return { label: 'Продано', tone: 'danger' }
+  return { label: status, tone: 'neutral' }
 }
 
 const optional = (value: string) => value.trim() || undefined
@@ -243,7 +239,6 @@ const allowedToView = (
 export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
-  const navigate = useNavigate()
   const { partId } = useParams<{ partId: string }>()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -275,21 +270,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   )
   const canManage = manageDecision.kind === 'allowed'
 
-  // A working set, not a highlight: what is ticked here is what the next action
-  // runs on. It is dropped whenever the query changes, so an action can never
-  // reach a row the current filter no longer shows.
-  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set())
-  const [pickedFor, setPickedFor] = useState<PartSearchRequest | null>(null)
-  const [asking, setAsking] = useState<'price' | 'delete' | null>(null)
-  const [bulkPrice, setBulkPrice] = useState('')
-  const [progress, setProgress] = useState<{
-    done: number
-    total: number
-  } | null>(null)
-  const [bulkResult, setBulkResult] = useState<{
-    tone: NoticeTone
-    text: string
-  } | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
   const viewUserId = cabinet.snapshot?.userId ?? null
   const viewTenantId = cabinet.targetTenant?.id ?? null
@@ -303,26 +283,17 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   // Keyed on the identifiers rather than the object, so a fresh context object
   // on every render does not read storage again — or loop.
   const viewKey = `${viewUserId ?? ''}:${viewTenantId ?? ''}`
-  const [views, setViews] = useState<SavedView[]>([])
-  const [viewsFor, setViewsFor] = useState<string | null>(null)
-  const [naming, setNaming] = useState(false)
   const [density, setDensity] = useState<ListDensity>('comfortable')
   const [densityFor, setDensityFor] = useState<string | null>(null)
   if (densityFor !== viewKey) {
     setDensityFor(viewKey)
     setDensity(readDensity(viewScope))
   }
-  const [viewName, setViewName] = useState('')
-  if (viewsFor !== viewKey) {
-    setViewsFor(viewKey)
-    setViews(viewScope ? readSavedViews(viewScope) : [])
-  }
   const links = {
     cars: allowedToView(cabinetModules.cars, cabinet),
     intakes: allowedToView(cabinetModules.intakes, cabinet),
     orders: allowedToView(cabinetModules.orders, cabinet),
     inventory: allowedToView(cabinetModules.inventory, cabinet),
-    stickers: allowedToView(cabinetModules.stickers, cabinet),
   }
   const filters = useMemo(() => {
     const one = (name: string) => searchParams.get(name)?.trim() ?? ''
@@ -370,14 +341,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     }),
     [filters],
   )
-
-  // A new query is a new set of rows, so the working set starts over with it.
-  // Adjusting during render rather than in an effect keeps the list from
-  // painting once with a selection that belongs to the previous query.
-  if (pickedFor !== searchRequest) {
-    setPickedFor(searchRequest)
-    if (picked.size > 0) setPicked(new Set())
-  }
 
   useEffect(() => {
     if (partId || isNew) return
@@ -551,29 +514,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     .concat(filters.carIds.length > 0 ? ['car_ids'] : [])
     .concat(filters.intakeIds.length > 0 ? ['intake_ids'] : [])
 
-  const currentQuery = searchParams.toString()
-  const activeView = views.find((view) => sameView(view.query, currentQuery))
-  const applyView = (view: SavedView) => {
-    setSearchParams(new URLSearchParams(view.query))
-  }
-  const saveCurrentView = () => {
-    const name = viewName.trim()
-    if (!viewScope || name === '' || views.length >= savedViewLimit) return
-    const next = [
-      ...views.filter((view) => view.name !== name),
-      { id: `${Date.now().toString(36)}-${name}`, name, query: currentQuery },
-    ]
-    setViews(next)
-    writeSavedViews(viewScope, next)
-    setNaming(false)
-    setViewName('')
-  }
-  const forgetView = (id: string) => {
-    const next = views.filter((view) => view.id !== id)
-    setViews(next)
-    if (viewScope) writeSavedViews(viewScope, next)
-  }
-
   /**
    * Edits one field of one part in place. PUT /parts/{id} replaces the record,
    * so the current one is read first and written back whole with the single
@@ -606,100 +546,9 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     }
   }
 
-  const pickedIds = [...picked]
-  const pickedNoun = plural(pickedIds.length, ['деталь', 'деталі', 'деталей'])
-
-  /**
-   * Runs one request per part and keeps counting when one of them fails, so a
-   * single bad row does not hide the twenty-nine that worked. The report says
-   * how many went through and how many did not.
-   */
-  const runOverPicked = async (
-    ids: readonly string[],
-    each: (id: string, signal: AbortSignal) => Promise<unknown>,
-    done: (ok: number, failed: number) => { tone: NoticeTone; text: string },
-  ) => {
-    if (ids.length === 0 || progress !== null) return
-    setAsking(null)
-    setBulkResult(null)
-    setProgress({ done: 0, total: ids.length })
-    let ok = 0
-    let failed = 0
-    for (const [index, id] of ids.entries()) {
-      try {
-        const scope = requireLatestMutation({ quota: false })
-        await each(id, scope.signal)
-        ok += 1
-      } catch {
-        failed += 1
-      }
-      setProgress({ done: index + 1, total: ids.length })
-    }
-    setProgress(null)
-    setPicked(new Set())
-    setBulkResult(done(ok, failed))
-    setReloadToken((value) => value + 1)
-  }
-
-  const setPickedPrice = () => {
-    const value = bulkPrice.trim() === '' ? null : Number(bulkPrice.trim())
-    if (value !== null && (!Number.isFinite(value) || value < 0)) return
-    void runOverPicked(
-      pickedIds,
-      async (id, signal) => {
-        // PUT /parts/{id} replaces the record and only the price carries an
-        // is-set wrapper, so sending the price alone would clear the name,
-        // notes, photos and quantity. Each part is read back first and written
-        // whole, with the price as the single difference.
-        const current = await partsApi.get(id, { signal })
-        await partsApi.update(
-          id,
-          {
-            name: current.name,
-            condition: current.condition,
-            notes: current.notes,
-            quantity: current.quantityTotal,
-            partType: current.partType,
-            unit: current.unit,
-            photoKeys: current.photos.map((photo) => photo.storageKey),
-            desiredSalePrice: { isSet: true, value },
-          },
-          { signal },
-        )
-      },
-      (ok, failed) =>
-        failed === 0
-          ? {
-              tone: 'ok',
-              text: `Ціну змінено на ${String(ok)} ${plural(ok, ['деталі', 'деталях', 'деталях'])}.`,
-            }
-          : {
-              tone: 'warn',
-              text: `Ціну змінено на ${String(ok)} з ${String(ok + failed)}. Решту не вдалося зберегти.`,
-            },
-    )
-  }
-
-  const deletePicked = () => {
-    void runOverPicked(
-      pickedIds,
-      (id, signal) => partsApi.delete(id, { signal }),
-      (ok, failed) =>
-        failed === 0
-          ? {
-              tone: 'ok',
-              text: `Видалено ${String(ok)} ${plural(ok, ['деталь', 'деталі', 'деталей'])}.`,
-            }
-          : {
-              tone: 'warn',
-              text: `Видалено ${String(ok)} з ${String(ok + failed)}. Решта лишилася — деталь у замовленні видалити не можна.`,
-            },
-    )
-  }
-
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
           <div className="min-w-0">
             <p className="text-app-dim font-mono text-[12px] tracking-[0.14em] uppercase">
@@ -709,7 +558,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
               Деталі
             </h1>
           </div>
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2.5">
             {manageDecision.kind === 'allowed' ? (
               <Button asChild>
                 <Link to="imports">Імпорт запчастин</Link>
@@ -744,63 +593,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
 
         <div className="flex flex-wrap items-start gap-6">
           <aside className="border-app-line bg-app-raised grid min-w-0 flex-[0_1_320px] gap-6 rounded-[20px] border p-5 sm:min-w-[260px]">
-            {viewScope === null ? null : (
-              <FilterGroup label="Мої подання">
-                {views.length === 0 ? (
-                  <p className="text-app-dim text-[13px] leading-5">
-                    Наберіть фільтри, які ставите щодня, і збережіть їх — вони
-                    лишаться на цьому пристрої.
-                  </p>
-                ) : (
-                  <ul className="grid gap-1.5">
-                    {views.map((view) => (
-                      <li className="flex items-center gap-1.5" key={view.id}>
-                        <button
-                          aria-pressed={activeView?.id === view.id}
-                          className={cn(
-                            'focus-visible:outline-brand min-h-10 min-w-0 flex-1 truncate rounded-[10px] px-3 text-left text-sm transition-colors',
-                            activeView?.id === view.id
-                              ? 'bg-app-input font-semibold text-white'
-                              : 'text-app-muted hover:bg-white/[0.03] hover:text-app-ink',
-                          )}
-                          onClick={() => applyView(view)}
-                          type="button"
-                        >
-                          {view.name}
-                        </button>
-                        <Button
-                          aria-label={`Забути подання: ${view.name}`}
-                          onClick={() => forgetView(view.id)}
-                          size="icon"
-                        >
-                          <X aria-hidden />
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <Button
-                  className="w-full text-sm font-semibold"
-                  disabled={
-                    views.length >= savedViewLimit || activeView !== undefined
-                  }
-                  onClick={() => {
-                    setViewName('')
-                    setNaming(true)
-                  }}
-                  {...(views.length >= savedViewLimit
-                    ? {
-                        title: `Більше ${String(savedViewLimit)} подань на цей список не зберігається.`,
-                      }
-                    : activeView !== undefined
-                      ? { title: 'Ці фільтри вже збережені.' }
-                      : {})}
-                >
-                  Зберегти ці фільтри
-                </Button>
-              </FilterGroup>
-            )}
-
             <FilterGroup label="Статус">
               <FilterRow
                 active={filters.status === ''}
@@ -813,14 +605,10 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                 {
                   value: 'available',
                   label: 'В наявності',
-                  dot: partStatusDot.available,
+                  dot: 'bg-state-ok',
                 },
-                {
-                  value: 'reserved',
-                  label: 'У резерві',
-                  dot: partStatusDot.reserved,
-                },
-                { value: 'sold', label: 'Продано', dot: partStatusDot.sold },
+                { value: 'reserved', label: 'У резерві', dot: 'bg-state-warn' },
+                { value: 'sold', label: 'Продано', dot: 'bg-state-danger' },
               ].map((option) => (
                 <FilterRow
                   active={filters.status === option.value}
@@ -916,7 +704,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                   count={value.count}
                   dot="bg-transparent"
                   key={value.id}
-                  label={conditionFacetLabel(value.id, value.name)}
+                  label={conditionLabel(value.id)}
                   onSelect={() => updateFilter('condition', value.id)}
                 />
               ))}
@@ -1011,7 +799,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
               <ErrorState
                 description={
                   error.kind === 'network' || error.kind === 'timeout'
-                    ? 'Немає звʼязку з мережею. Фільтри лишилися на місці — повторіть, коли звʼязок повернеться.'
+                    ? 'Немає звʼязку з сервером. Фільтри лишилися на місці — повторіть, коли мережа повернеться.'
                     : 'Не вдалося завантажити склад. Дані на місці — потрібно лише повторити запит.'
                 }
                 onRetry={() =>
@@ -1025,90 +813,10 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
               />
             ) : (
               <>
-                {bulkResult === null ? null : (
-                  <Notice tone={bulkResult.tone}>{bulkResult.text}</Notice>
-                )}
-                {picked.size === 0 ? null : (
-                  <BulkBar
-                    actions={[
-                      {
-                        key: 'stickers',
-                        label: 'Надрукувати стікери',
-                        onRun: () => {
-                          const query = new URLSearchParams()
-                          for (const id of pickedIds) query.append('part', id)
-                          void navigate(`../stickers?${query.toString()}`)
-                        },
-                        ...(links.stickers
-                          ? {}
-                          : {
-                              unavailable: 'Немає доступу до модуля «Стікери».',
-                            }),
-                      },
-                      {
-                        key: 'price',
-                        label: 'Змінити бажану ціну',
-                        onRun: () => {
-                          setBulkPrice('')
-                          setAsking('price')
-                        },
-                        ...(canManage
-                          ? {}
-                          : { unavailable: 'Немає права змінювати деталі.' }),
-                      },
-                      {
-                        key: 'sold',
-                        label: 'Перевести в «Продано»',
-                        onRun: () => undefined,
-                        unavailable:
-                          'Статус деталі рахується з залишку й замовлень — окремо його виставити не можна.',
-                      },
-                      {
-                        key: 'archive',
-                        label: 'Архівувати',
-                        onRun: () => undefined,
-                        unavailable:
-                          'Деталь не можна архівувати: в API є лише видалення.',
-                      },
-                      {
-                        key: 'delete',
-                        label: 'Видалити',
-                        onRun: () => {
-                          setAsking('delete')
-                        },
-                        tone: 'danger',
-                        ...(canManage
-                          ? {}
-                          : { unavailable: 'Немає права видаляти деталі.' }),
-                      },
-                    ]}
-                    count={picked.size}
-                    noun={pickedNoun}
-                    onClear={() => setPicked(new Set())}
-                    onSelectPage={() =>
-                      setPicked(new Set(items.map((part) => part.id)))
-                    }
-                    pageCount={items.length}
-                    {...(progress === null
-                      ? {}
-                      : {
-                          busy: (
-                            <span className="text-app-muted text-sm tabular-nums">
-                              {progress.done} з {progress.total}
-                            </span>
-                          ),
-                        })}
-                  />
-                )}
                 <div className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border">
                   <DataTable
                     caption="Деталі на складі"
                     density={density}
-                    selection={{
-                      selected: picked,
-                      onChange: setPicked,
-                      rowLabel: (part) => `Обрати: ${part.name}`,
-                    }}
                     columns={[
                       {
                         key: 'name',
@@ -1135,7 +843,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                         key: 'status',
                         label: 'Стан',
                         cell: (part) => {
-                          const presentation = partStatusPresentation(
+                          const presentation = statusPresentation(
                             part.status ?? '',
                           )
                           return presentation.label === '' ? (
@@ -1249,68 +957,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
           </div>
         </div>
       </div>
-
-      <FormDialog
-        onOpenChange={(open) => {
-          if (!open) setAsking(null)
-        }}
-        onSubmit={(event) => {
-          event.preventDefault()
-          setPickedPrice()
-        }}
-        open={asking === 'price'}
-        submitLabel="Змінити ціну"
-        title={`Бажана ціна для ${String(pickedIds.length)} ${pickedNoun}`}
-      >
-        <Field
-          hint="Порожнє поле прибирає бажану ціну. Ціна продажу від цього не змінюється."
-          label="Бажана ціна, USD"
-        >
-          <TextInput
-            inputMode="decimal"
-            onChange={(event) => setBulkPrice(event.target.value)}
-            value={bulkPrice}
-          />
-        </Field>
-      </FormDialog>
-
-      <FormDialog
-        description="Подання зберігає поточні фільтри разом із пошуком. Воно лишається в цьому браузері — на іншому пристрої його не буде."
-        onOpenChange={(open) => {
-          if (!open) setNaming(false)
-        }}
-        onSubmit={(event) => {
-          event.preventDefault()
-          saveCurrentView()
-        }}
-        open={naming}
-        submitDisabled={viewName.trim() === ''}
-        submitLabel="Зберегти"
-        title="Назвіть подання"
-      >
-        <Field
-          hint="Назвіть його так, як ви це питаєте вголос: «Резерв понад тиждень»."
-          label="Назва подання"
-        >
-          <TextInput
-            maxLength={60}
-            onChange={(event) => setViewName(event.target.value)}
-            value={viewName}
-          />
-        </Field>
-      </FormDialog>
-
-      <ConfirmDialog
-        confirmLabel="Видалити"
-        consequence={`Буде видалено ${String(pickedIds.length)} ${pickedNoun}. Ті, що стоять у замовленнях, лишаться — про них буде сказано окремо.`}
-        onConfirm={deletePicked}
-        onOpenChange={(open) => {
-          if (!open) setAsking(null)
-        }}
-        open={asking === 'delete'}
-        destructive
-        title="Видалити обрані деталі?"
-      />
     </div>
   )
 }
@@ -1402,10 +1048,9 @@ const PART_CURRENCY = 'USD'
 
 /** The conditions the yard sorts by, in the server's own vocabulary. */
 const PART_CONDITIONS = [
-  { value: 'good', label: 'б/в' },
-  { value: 'refurbished', label: 'після ремонту' },
-  { value: 'new', label: 'нова' },
-  { value: 'scrap', label: 'під відновлення' },
+  { value: 'good', label: 'Хороший' },
+  { value: 'fair', label: 'Задовільний' },
+  { value: 'scrap', label: 'На запчастини' },
 ] as const
 
 /** Two letters standing in for a person where a photo would be. */
@@ -1437,8 +1082,8 @@ const stockSegments = (available: number, reserved: number, sold: number) => [
     key: 'sold',
     label: 'Продано',
     value: sold,
-    fill: 'bg-app-line-2',
-    ink: 'text-app-dim',
+    fill: 'bg-state-danger',
+    ink: 'text-state-danger',
   },
 ]
 
@@ -1703,7 +1348,7 @@ function PartDetailScreen({
         </div>
       </div>
 
-      <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-11 lg:px-12">
+      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-11 lg:px-12">
         {deleteError !== null && !confirmingDelete ? (
           <Notice tone="danger">{deleteError}</Notice>
         ) : null}
@@ -1711,8 +1356,8 @@ function PartDetailScreen({
         <div className="flex flex-wrap items-start justify-between gap-x-10 gap-y-6">
           <div className="min-w-0">
             {detail === null ? null : (
-              <StatusPill tone={partStatusPresentation(detail.status).tone}>
-                {partStatusPresentation(detail.status).label}
+              <StatusPill tone={statusPresentation(detail.status).tone}>
+                {statusPresentation(detail.status).label}
               </StatusPill>
             )}
             <h1 className="mt-4 text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
@@ -2072,7 +1717,7 @@ function PartDetailScreen({
 
       <ConfirmDialog
         confirmLabel="Видалити"
-        consequence="Історія продажів, резерви та фото цієї деталі зникнуть назавжди. Деталь, яка вже в замовленні, видалити не вийде."
+        consequence="Історія продажів, резерви та фото цієї деталі зникнуть назавжди. Сервер відхилить видалення, якщо деталь уже в замовленні."
         error={deleteError}
         onConfirm={() => void remove()}
         onOpenChange={setConfirmingDelete}
@@ -2105,8 +1750,8 @@ const emptyPartForm: PartFormValues = {
   sourceId: '',
   name: '',
   quantity: '1',
-  unit: '',
-  condition: '',
+  unit: 'шт',
+  condition: 'good',
   notes: '',
   oemCode: '',
   partType: '',
@@ -2132,6 +1777,7 @@ interface PartMediaItem {
   file?: File
   storageKey?: string
   url?: string
+  previewUrl?: string
 }
 
 const committedPhotoKeys = (items: PartMediaItem[]) =>
@@ -2139,88 +1785,13 @@ const committedPhotoKeys = (items: PartMediaItem[]) =>
     item.status === 'uploaded' && item.storageKey ? [item.storageKey] : [],
   )
 
-/** Files chosen but not sent anywhere yet. */
-const selectedFiles = (items: PartMediaItem[]) =>
-  items.filter(
-    (item) => item.status === 'selected' || item.status === 'upload-error',
-  )
-
-/** Names of the photos that failed, so the form can say which to retry. */
-class PartPhotoUploadError extends Error {
-  readonly names: string[]
-  constructor(names: string[]) {
-    super('part-photo-upload-failed')
-    this.name = 'PartPhotoUploadError'
-    this.names = names
-  }
-}
-
-/**
- * Sends the files that were only chosen so far and answers with the storage
- * keys of every photo the part should carry. Nothing is uploaded before this
- * runs, so a form that is filled in and abandoned leaves no orphans behind.
- */
-async function commitPartPhotos(
-  items: PartMediaItem[],
-  setItems: React.Dispatch<React.SetStateAction<PartMediaItem[]>>,
-  signal: AbortSignal,
-): Promise<string[]> {
-  const pending = selectedFiles(items)
-  if (pending.length === 0) return committedPhotoKeys(items)
-  const ids = new Set(pending.map((item) => item.id))
-  setItems((current) =>
-    current.map((item) =>
-      ids.has(item.id) ? { ...item, status: 'uploading' } : item,
-    ),
-  )
-  const results = await Promise.all(
-    pending.map(async (item) => {
-      if (!item.file)
-        return { id: item.id, name: item.name, ok: false as const }
-      try {
-        const uploaded = await mediaApi.upload(item.file, 'parts', { signal })
-        return {
-          id: item.id,
-          name: item.name,
-          ok: true as const,
-          storageKey: uploaded.storageKey,
-          url: uploaded.url,
-        }
-      } catch {
-        return { id: item.id, name: item.name, ok: false as const }
-      }
-    }),
-  )
-  setItems((current) =>
-    current.map((item) => {
-      const result = results.find((one) => one.id === item.id)
-      if (!result) return item
-      return result.ok
-        ? {
-            ...item,
-            status: 'uploaded' as const,
-            storageKey: result.storageKey,
-            url: result.url,
-          }
-        : { ...item, status: 'upload-error' as const }
-    }),
-  )
-  const failed = results.filter((result) => !result.ok)
-  if (failed.length > 0)
-    throw new PartPhotoUploadError(failed.map((result) => result.name))
-  return [
-    ...committedPhotoKeys(items),
-    ...results.flatMap((result) =>
-      result.ok && result.storageKey ? [result.storageKey] : [],
-    ),
-  ]
-}
-
 const safeMediaUrl = (value: string | undefined) => {
   if (!value) return null
   try {
     const url = new URL(value, window.location.origin)
-    return url.protocol === 'http:' || url.protocol === 'https:'
+    return url.protocol === 'http:' ||
+      url.protocol === 'https:' ||
+      url.protocol === 'blob:'
       ? url.href
       : null
   } catch {
@@ -2239,10 +1810,12 @@ const mediaMetaLabel = (item: PartMediaItem) =>
 
 /** Section of a form: one heading, one purpose, one surface. */
 function PartMediaFields({
+  deferUploads = false,
   items,
   requireLatestMutation,
   setItems,
 }: {
+  deferUploads?: boolean
   items: PartMediaItem[]
   requireLatestMutation: ReturnType<
     typeof useLatestMutationGuard
@@ -2251,9 +1824,17 @@ function PartMediaFields({
 }) {
   const sequenceRef = useRef(0)
   const mountedRef = useRef(true)
+  const itemsRef = useRef(items)
+  useEffect(() => {
+    itemsRef.current = items
+  }, [items])
   useEffect(
     () => () => {
       mountedRef.current = false
+      for (const item of itemsRef.current) {
+        if (item.previewUrl && typeof URL.revokeObjectURL === 'function')
+          URL.revokeObjectURL(item.previewUrl)
+      }
     },
     [],
   )
@@ -2264,7 +1845,7 @@ function PartMediaFields({
       current.map((item) => (item.id === id ? { ...item, ...update } : item)),
     )
   }
-  const uploadOne = async (item: PartMediaItem) => {
+  const upload = async (item: PartMediaItem) => {
     if (!item.file) return
     updateItem(item.id, { status: 'uploading' })
     try {
@@ -2283,18 +1864,26 @@ function PartMediaFields({
   }
   const addFiles = (files: FileList | null) => {
     if (!files?.length) return
-    // Nothing leaves the browser until the form is submitted: a photo picked
-    // for a part that is never created has no business sitting in storage.
-    const additions = Array.from(files, (file) => ({
-      id: `new-media-${sequenceRef.current++}`,
-      name: file.name,
-      status: 'selected' as const,
-      existing: false,
-      file,
-    }))
+    const additions = Array.from(files, (file) => {
+      const previewUrl =
+        typeof URL.createObjectURL === 'function'
+          ? URL.createObjectURL(file)
+          : null
+      return {
+        id: `new-media-${sequenceRef.current++}`,
+        name: file.name,
+        status: deferUploads ? ('selected' as const) : ('uploading' as const),
+        existing: false,
+        file,
+        ...(previewUrl ? { previewUrl } : {}),
+      }
+    })
     setItems((current) => [...current, ...additions])
+    if (!deferUploads) additions.forEach((item) => void upload(item))
   }
   const remove = async (item: PartMediaItem) => {
+    if (item.previewUrl && typeof URL.revokeObjectURL === 'function')
+      URL.revokeObjectURL(item.previewUrl)
     if (item.existing || !item.storageKey) {
       setItems((current) => current.filter(({ id }) => id !== item.id))
       return
@@ -2322,15 +1911,18 @@ function PartMediaFields({
   )
   return (
     <SectionPanel
-      description="Фото вирушають разом зі збереженням деталі — доти вони лишаються у вас."
+      description={
+        deferUploads
+          ? 'Виберіть фото та перевірте перелік. Файли завантажаться разом зі створенням деталі.'
+          : 'Додайте або приберіть фото деталі.'
+      }
       title="Фото"
     >
       <Field
         hint="Формати зображень, кілька файлів за раз."
         label="Фото деталі"
       >
-        <FileField
-          accept="image/*"
+        <PhotoFileField
           aria-label="Фото деталі"
           multiple
           onChange={(event) => {
@@ -2348,12 +1940,20 @@ function PartMediaFields({
       {items.length ? (
         <ul aria-label="Вибрані фото" className="grid gap-2">
           {items.map((item) => {
+            const previewUrl = safeMediaUrl(item.previewUrl ?? item.url)
             const url = safeMediaUrl(item.url)
             return (
               <li
                 className="border-app-line rounded-control flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border px-3 py-2"
                 key={item.id}
               >
+                {previewUrl ? (
+                  <img
+                    alt={`Попередній перегляд ${item.name}`}
+                    className="size-14 shrink-0 rounded-control object-cover"
+                    src={previewUrl}
+                  />
+                ) : null}
                 <div className="min-w-0 flex-1 basis-40">
                   <p className="text-app-ink text-[14.5px] break-words">
                     {item.name} · {statusLabel(item)}
@@ -2374,7 +1974,7 @@ function PartMediaFields({
                   {item.status === 'upload-error' ? (
                     <Button
                       aria-label={`Повторити ${item.name}`}
-                      onClick={() => void uploadOne(item)}
+                      onClick={() => void upload(item)}
                     >
                       Повторити
                     </Button>
@@ -2461,6 +2061,7 @@ function PartFields({
   errors: PartFieldErrors
   edit?: boolean
 }) {
+  const [compatMakeId, setCompatMakeId] = useState<number | null>(null)
   const field =
     (name: keyof PartFormValues) =>
     (
@@ -2640,13 +2241,6 @@ function PartFields({
             />
           </Field>
         </div>
-        <Field hint="Наприклад: б/в, після ремонту, нова" label="Стан">
-          <TextInput
-            aria-label="Стан"
-            onChange={field('condition')}
-            value={values.condition}
-          />
-        </Field>
         <Field hint="Дефекти, комплектність, місце зберігання" label="Нотатки">
           <TextArea
             aria-label="Нотатки"
@@ -2657,10 +2251,22 @@ function PartFields({
         </Field>
       </SectionPanel>
       <SectionPanel
+        description="Оберіть один із трьох сталих станів деталі."
+        title="Стан деталі"
+      >
+        <PillGroup
+          className="flex-wrap"
+          label="Стан деталі"
+          onChange={(condition) => setValues({ ...values, condition })}
+          options={PART_CONDITIONS}
+          value={values.condition}
+        />
+      </SectionPanel>
+      <SectionPanel
         description="Скільки одиниць на складі та за скільки їх продавати."
         title="Кількість і ціна"
       >
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid items-start gap-3 sm:grid-cols-3">
           <Field error={errors.quantity} label="Кількість" required>
             <TextInput
               aria-label="Кількість"
@@ -2671,12 +2277,8 @@ function PartFields({
               value={values.quantity}
             />
           </Field>
-          <Field hint="Наприклад: шт, компл" label="Одиниця">
-            <TextInput
-              aria-label="Одиниця"
-              onChange={field('unit')}
-              value={values.unit}
-            />
+          <Field hint="Фіксована одиниця обліку" label="Одиниця">
+            <TextInput aria-label="Одиниця" readOnly value="шт" />
           </Field>
           <Field
             error={errors.desiredSalePrice}
@@ -2701,20 +2303,31 @@ function PartFields({
           title="Сумісність"
         >
           <div className="grid gap-3 sm:grid-cols-3">
-            <Field label="Марка сумісності">
-              <TextInput
-                aria-label="Марка сумісності"
-                onChange={field('carBrand')}
-                value={values.carBrand}
-              />
-            </Field>
-            <Field label="Модель сумісності">
-              <TextInput
-                aria-label="Модель сумісності"
-                onChange={field('carModel')}
-                value={values.carModel}
-              />
-            </Field>
+            <VehicleCatalogPicker
+              disabled={false}
+              label="Марка сумісності"
+              onSelect={(option) => {
+                setCompatMakeId(option.id)
+                setValues({
+                  ...values,
+                  carBrand: option.name,
+                  carModel: '',
+                })
+              }}
+              type="make"
+              value={values.carBrand}
+            />
+            <VehicleCatalogPicker
+              disabled={values.carBrand === ''}
+              label="Модель сумісності"
+              makeId={compatMakeId}
+              makeName={values.carBrand}
+              onSelect={(option) =>
+                setValues({ ...values, carModel: option.name })
+              }
+              type="model"
+              value={values.carModel}
+            />
             <Field error={errors.carYear} label="Рік сумісності">
               <TextInput
                 aria-label="Рік сумісності"
@@ -2774,7 +2387,7 @@ function PartForm({
   const [error, setError] = useState<string | null>(null)
   const [showErrors, setShowErrors] = useState(false)
   const mediaPending = mediaItems.some(
-    (item) => item.status === 'uploading' || item.status === 'removing',
+    (item) => item.status !== 'uploaded' && item.status !== 'selected',
   )
   const requireSource = values.sourceType !== 'free'
   const errors = showErrors ? partFieldErrors(values, { requireSource }) : {}
@@ -2789,14 +2402,13 @@ function PartForm({
       return
     }
     setShowErrors(false)
-    const unit = optional(values.unit)
     const condition = optional(values.condition)
     const notes = optional(values.notes)
     const oemCode = optional(values.oemCode)
     const partType = optional(values.partType)
     const carBrand = optional(values.carBrand)
     const carModel = optional(values.carModel)
-    const request = (photoKeys: string[]): CreatePartRequest => ({
+    const request: CreatePartRequest = {
       sourceType: values.sourceType,
       ...(values.sourceType === 'car' ? { carId: values.sourceId.trim() } : {}),
       ...(values.sourceType === 'batch'
@@ -2804,8 +2416,8 @@ function PartForm({
         : {}),
       name: values.name.trim(),
       quantity: parsed.quantity,
-      photoKeys,
-      ...(unit !== undefined ? { unit } : {}),
+      unit: 'шт',
+      photoKeys: [],
       ...(condition !== undefined ? { condition } : {}),
       ...(notes !== undefined ? { notes } : {}),
       ...(oemCode !== undefined ? { oemCode } : {}),
@@ -2814,37 +2426,71 @@ function PartForm({
       ...(carBrand !== undefined ? { carBrand } : {}),
       ...(carModel !== undefined ? { carModel } : {}),
       ...(parsed.year !== undefined ? { carYear: parsed.year } : {}),
-    })
+    }
     pendingRef.current = true
     setPending(true)
     setStatus(null)
     setError(null)
     try {
       const scope = requireLatestMutation()
-      if (values.sourceType === 'car')
+      if (request.sourceType === 'car')
         carMutation.requireLatestMutation({
           permission: 'cars.view',
           quota: false,
         })
-      if (values.sourceType === 'batch')
+      if (request.sourceType === 'batch')
         intakeMutation.requireLatestMutation({
           permission: 'intakes.view',
           quota: false,
         })
-      // The photos go up first and only now: the form is filled in, valid and
-      // confirmed, so nothing lands in storage for a part that never appears.
-      const photoKeys = await commitPartPhotos(
-        mediaItems,
-        setMediaItems,
-        scope.signal,
+      const selected = mediaItems.filter(
+        (item) => item.status === 'selected' && item.file,
       )
-      await partsApi.create(request(photoKeys), { signal: scope.signal })
+      let readyMedia = mediaItems
+      if (selected.length > 0) {
+        const selectedIds = new Set(selected.map((item) => item.id))
+        setMediaItems((current) =>
+          current.map((item) =>
+            selectedIds.has(item.id) ? { ...item, status: 'uploading' } : item,
+          ),
+        )
+        const uploads = await Promise.allSettled(
+          selected.map(async (item) => ({
+            item,
+            uploaded: await mediaApi.upload(item.file!, 'parts', {
+              signal: scope.signal,
+            }),
+          })),
+        )
+        const byId = new Map(
+          uploads.map((result, index) => [selected[index]!.id, result]),
+        )
+        readyMedia = mediaItems.map((item) => {
+          const result = byId.get(item.id)
+          if (!result) return item
+          if (result.status === 'rejected')
+            return { ...item, status: 'upload-error' as const }
+          return {
+            ...item,
+            status: 'uploaded' as const,
+            storageKey: result.value.uploaded.storageKey,
+            url: result.value.uploaded.url,
+          }
+        })
+        setMediaItems(readyMedia)
+        if (uploads.some((result) => result.status === 'rejected')) {
+          setError(
+            'Частина фото не завантажилася. Повторіть завантаження або приберіть ці файли.',
+          )
+          return
+        }
+      }
+      request.photoKeys = committedPhotoKeys(readyMedia)
+      await partsApi.create(request, { signal: scope.signal })
       setStatus('Деталь створено.')
-    } catch (failure) {
+    } catch {
       setError(
-        failure instanceof PartPhotoUploadError
-          ? `Деталь не створено: не вдалося завантажити фото (${failure.names.join(', ')}). Повторіть завантаження або приберіть ці файли.`
-          : 'Не вдалося створити деталь. Перевірте зв’язок і надішліть форму ще раз.',
+        'Не вдалося створити деталь. Перевірте зв’язок і надішліть форму ще раз.',
       )
     } finally {
       pendingRef.current = false
@@ -2868,6 +2514,7 @@ function PartForm({
           values={values}
         />
         <PartMediaFields
+          deferUploads
           items={mediaItems}
           requireLatestMutation={requireLatestMutation}
           setItems={setMediaItems}
@@ -2893,13 +2540,6 @@ function PartForm({
           </Button>
         </div>
       </form>
-      <div className="text-app-dim grid gap-1 text-[13.5px]">
-        <p>
-          VIN та OEM-декодування недоступні: за кодом не визначається операція
-          декодування.
-        </p>
-        <p>Сумісність недоступна для редагування</p>
-      </div>
     </PageBody>
   )
 }
@@ -2928,9 +2568,7 @@ function PartEdit({
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showErrors, setShowErrors] = useState(false)
-  const mediaPending = mediaItems.some(
-    (item) => item.status === 'uploading' || item.status === 'removing',
-  )
+  const mediaPending = mediaItems.some((item) => item.status !== 'uploaded')
   const errors =
     showErrors && values
       ? partFieldErrors(values, { requireSource: false })
@@ -2950,13 +2588,13 @@ function PartEdit({
           sourceId: part.carId ?? part.intakeId ?? '',
           name: part.name,
           quantity: String(part.quantityTotal),
-          unit: part.unit,
+          unit: 'шт',
           condition: part.condition,
           notes: part.notes ?? '',
           oemCode: part.oemCode ?? '',
           partType: part.partType ?? '',
           desiredSalePrice:
-            part.desiredSalePrice === null ? '' : String(part.desiredSalePrice),
+            part.desiredSalePrice == null ? '' : String(part.desiredSalePrice),
           carBrand: '',
           carModel: '',
           carYear: '',
@@ -3002,11 +2640,6 @@ function PartEdit({
     setError(null)
     try {
       const scope = requireLatestMutation({ quota: false })
-      const photoKeys = await commitPartPhotos(
-        mediaItems,
-        setMediaItems,
-        scope.signal,
-      )
       await partsApi.update(
         partId,
         {
@@ -3015,8 +2648,8 @@ function PartEdit({
           notes: optional(values.notes) ?? null,
           quantity: parsed.quantity,
           partType: optional(values.partType) ?? null,
-          unit: optional(values.unit) ?? null,
-          photoKeys,
+          unit: 'шт',
+          photoKeys: committedPhotoKeys(mediaItems),
           desiredSalePrice: {
             isSet: true,
             value: parsed.price ?? null,
@@ -3025,11 +2658,9 @@ function PartEdit({
         { signal: scope.signal },
       )
       setStatus('Зміни збережено.')
-    } catch (failure) {
+    } catch {
       setError(
-        failure instanceof PartPhotoUploadError
-          ? `Зміни не збережено: не вдалося завантажити фото (${failure.names.join(', ')}). Повторіть завантаження або приберіть ці файли.`
-          : 'Не вдалося зберегти зміни. Перевірте зв’язок і надішліть форму ще раз.',
+        'Не вдалося зберегти зміни. Перевірте зв’язок і надішліть форму ще раз.',
       )
     } finally {
       pendingRef.current = false
@@ -3092,7 +2723,7 @@ function PartEdit({
         </div>
       </div>
 
-      <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="min-w-0">
           <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
             {detail?.name ?? 'Редагувати деталь'}
@@ -3161,48 +2792,74 @@ function PartEdit({
               </Card>
 
               <Card title="Опис деталі">
-                <p className="text-app-muted text-sm">
-                  Як запчастина виглядає у списку складу та в пошуку.
-                </p>
-                <Field error={errors.name} label="Назва" required>
-                  <TextInput
-                    name="name"
-                    onChange={(event) =>
-                      setValues((current) =>
-                        current
-                          ? { ...current, name: event.target.value }
-                          : current,
-                      )
-                    }
-                    required
-                    value={values.name}
-                  />
-                </Field>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Тип деталі">
+                <div className="grid gap-4">
+                  <p className="text-app-muted text-sm">
+                    Як запчастина виглядає у списку складу та в пошуку.
+                  </p>
+                  <Field error={errors.name} label="Назва" required>
                     <TextInput
-                      name="partType"
+                      name="name"
                       onChange={(event) =>
                         setValues((current) =>
                           current
-                            ? { ...current, partType: event.target.value }
+                            ? { ...current, name: event.target.value }
                             : current,
                         )
                       }
-                      value={values.partType}
+                      required
+                      value={values.name}
                     />
                   </Field>
-                  <Field hint="OEM-код поки не редагується" label="OEM-код">
-                    <TextInput
-                      className="font-mono"
-                      disabled
-                      name="oemCode"
-                      value={values.oemCode}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Тип деталі">
+                      <TextInput
+                        name="partType"
+                        onChange={(event) =>
+                          setValues((current) =>
+                            current
+                              ? { ...current, partType: event.target.value }
+                              : current,
+                          )
+                        }
+                        value={values.partType}
+                      />
+                    </Field>
+                    <Field
+                      hint="Редагування OEM поки не приймає сервер"
+                      label="OEM-код"
+                    >
+                      <TextInput
+                        className="font-mono"
+                        disabled
+                        name="oemCode"
+                        value={values.oemCode}
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Нотатки">
+                    <TextArea
+                      name="notes"
+                      onChange={(event) =>
+                        setValues((current) =>
+                          current
+                            ? { ...current, notes: event.target.value }
+                            : current,
+                        )
+                      }
+                      rows={2}
+                      value={values.notes}
                     />
                   </Field>
                 </div>
-                <Field label="Стан">
+              </Card>
+
+              <Card title="Стан деталі">
+                <div className="grid gap-4">
+                  <p className="text-app-muted text-sm">
+                    Оберіть один із трьох сталих станів деталі.
+                  </p>
                   <PillGroup
+                    className="flex-wrap"
                     label="Стан деталі"
                     onChange={(next) =>
                       setValues((current) =>
@@ -3212,28 +2869,14 @@ function PartEdit({
                     options={PART_CONDITIONS}
                     value={values.condition}
                   />
-                </Field>
-                <Field label="Нотатки">
-                  <TextArea
-                    name="notes"
-                    onChange={(event) =>
-                      setValues((current) =>
-                        current
-                          ? { ...current, notes: event.target.value }
-                          : current,
-                      )
-                    }
-                    rows={2}
-                    value={values.notes}
-                  />
-                </Field>
+                </div>
               </Card>
 
               <Card title="Кількість і ціна">
                 <p className="text-app-muted text-sm">
                   Скільки одиниць на складі та за скільки їх продавати.
                 </p>
-                <div className="grid gap-4 sm:grid-cols-[auto_1fr_1fr]">
+                <div className="grid items-start gap-4 sm:grid-cols-3">
                   <Field error={errors.quantity} label="Кількість" required>
                     <QuantityStepper
                       label="Кількість на складі"
@@ -3248,18 +2891,8 @@ function PartEdit({
                       value={Number(values.quantity) || 0}
                     />
                   </Field>
-                  <Field label="Одиниця">
-                    <TextInput
-                      name="unit"
-                      onChange={(event) =>
-                        setValues((current) =>
-                          current
-                            ? { ...current, unit: event.target.value }
-                            : current,
-                        )
-                      }
-                      value={values.unit}
-                    />
+                  <Field hint="Фіксована одиниця обліку" label="Одиниця">
+                    <TextInput name="unit" readOnly value="шт" />
                   </Field>
                   <Field
                     error={errors.desiredSalePrice}
@@ -3362,7 +2995,7 @@ function PartEdit({
               <Card title="Видалення">
                 <p className="text-app-muted text-sm">
                   {detail && detail.quantityReserved > 0
-                    ? 'Деталь у резерві під замовлення — видалити її не вийде.'
+                    ? 'Деталь у резерві під замовлення — сервер відхилить видалення.'
                     : 'Деталь не входить у відкриті замовлення — її можна видалити.'}
                 </p>
                 <Button

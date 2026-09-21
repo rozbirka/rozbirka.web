@@ -80,6 +80,24 @@ beforeEach(() => {
   } satisfies DashboardDataState)
 })
 
+it('does not expose scanning from the web dashboard', () => {
+  vi.mocked(useCabinet).mockReturnValue({
+    status: 'ready',
+    targetTenant: tenant,
+    snapshot: {
+      ...snapshot,
+      permissions: new Set(['parts.view', 'orders.view', 'orders.manage']),
+    },
+    error: null,
+    retry: vi.fn(),
+    switchTenant: vi.fn(),
+  } satisfies CabinetContextValue)
+
+  renderDashboard(['/app/koval/dashboard'])
+
+  expect(screen.queryByRole('link', { name: 'Сканувати' })).toBeNull()
+})
+
 it('keeps the ready summary mounted when analytics fails and retries analytics only', async () => {
   const user = userEvent.setup()
   const retryAnalytics = vi.fn().mockResolvedValue(undefined)

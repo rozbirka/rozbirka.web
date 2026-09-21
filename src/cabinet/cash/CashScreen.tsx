@@ -19,7 +19,6 @@ import {
   Panel,
   SelectInput,
   SkeletonRows,
-  TextArea,
   TextInput,
   Toolbar,
 } from '@/components/app'
@@ -151,27 +150,6 @@ const useDialogFocus = (open: boolean) => {
 type CashDaySummary = CashDailySummary['registers'][number]
 const eyebrowClass =
   'text-app-dim font-mono text-[11.5px] tracking-[0.12em] uppercase'
-const currenciesFromText = (value: string) => [
-  ...new Set(
-    value
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean),
-  ),
-]
-const balancesFromText = (value: string) =>
-  Object.fromEntries(
-    value
-      .split(/[,\n]/)
-      .map((item) => item.split(':').map((part) => part.trim()))
-      .flatMap(([currency, amount]) => {
-        const parsed = Number(amount)
-        return currency && amount && Number.isFinite(parsed)
-          ? [[currency, parsed] as const]
-          : []
-      }),
-  )
-
 export function CashScreen({ definition }: CabinetModuleScreenProps) {
   const location = useLocation()
   const id = idFromPath(location.pathname)
@@ -929,8 +907,10 @@ function CashRegisterForm({
   const navigate = useNavigate()
   const [name, setName] = useState('')
   const [type, setType] = useState('cash')
-  const [currencies, setCurrencies] = useState('')
-  const [initialBalances, setInitialBalances] = useState('')
+  const [currencies, setCurrencies] = useState<string[]>(['UAH'])
+  const [initialBalances, setInitialBalances] = useState<
+    Record<string, string>
+  >({ UAH: '' })
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   useEffect(() => {
@@ -961,8 +941,12 @@ function CashRegisterForm({
         : await cashApi.create({
             name: name.trim(),
             type,
-            currencies: currenciesFromText(currencies),
-            initialBalances: balancesFromText(initialBalances),
+            currencies,
+            initialBalances: Object.fromEntries(
+              currencies
+                .filter((code) => initialBalances[code]?.trim())
+                .map((code) => [code, Number(initialBalances[code])]),
+            ),
           })
       if (scope.signal.aborted) return
       await navigate(`../${result.id}`, { replace: true })
@@ -995,36 +979,107 @@ function CashRegisterForm({
               </p>
             </div>
           ) : (
-            <Field hint="Після створення тип не змінюється" label="Тип">
-              <SelectInput
-                value={type}
-                onChange={(event) => setType(event.target.value)}
-              >
-                <option value="cash">Готівка</option>
-                <option value="bank">Банк</option>
-              </SelectInput>
-            </Field>
+            <fieldset className="grid gap-2">
+              <legend className="text-app-muted text-sm font-semibold">
+                Тип
+              </legend>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {[
+                  { value: 'cash', label: 'Готівкова', hint: 'Готівка в касі' },
+                  {
+                    value: 'bank',
+                    label: 'Безготівкова',
+                    hint: 'Банківський рахунок',
+                  },
+                ].map((option) => (
+                  <button
+                    aria-pressed={type === option.value}
+                    className={cn(
+                      'border-app-line rounded-control grid min-h-20 gap-1 border p-3 text-left',
+                      type === option.value
+                        ? 'border-brand bg-brand/10'
+                        : 'bg-app-input',
+                    )}
+                    key={option.value}
+                    onClick={() => setType(option.value)}
+                    type="button"
+                  >
+                    <span className="font-semibold text-white">
+                      {option.label}
+                    </span>
+                    <span className="text-app-dim text-xs">{option.hint}</span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
           )}
           {!registerId && (
             <>
-              <Field hint="Коди валют через кому" label="Валюти">
-                <TextInput
-                  value={currencies}
-                  onChange={(event) => setCurrencies(event.target.value)}
-                  placeholder="UAH, USD"
-                />
-              </Field>
-              <Field
-                hint="Пара «код: сума» через кому або з нового рядка. Необовʼязково — можна почати з нуля."
-                label="Початкові баланси"
-              >
-                <TextArea
-                  className="font-mono"
-                  value={initialBalances}
-                  onChange={(event) => setInitialBalances(event.target.value)}
-                  placeholder="UAH: 1000, USD: 25"
-                />
-              </Field>
+              <fieldset className="grid gap-2">
+                <legend className="text-app-muted text-sm font-semibold">
+                  Валюти
+                </legend>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {[
+                    { code: 'UAH', symbol: '₴' },
+                    { code: 'USD', symbol: '$' },
+                    { code: 'EUR', symbol: '€' },
+                  ].map(({ code, symbol }) => {
+                    const selected = currencies.includes(code)
+                    return (
+                      <button
+                        aria-pressed={selected}
+                        className={cn(
+                          'border-app-line rounded-control flex min-h-16 items-center justify-between border p-3',
+                          selected
+                            ? 'border-brand bg-brand/10 text-white'
+                            : 'bg-app-input text-app-muted',
+                        )}
+                        key={code}
+                        onClick={() =>
+                          setCurrencies((current) =>
+                            selected
+                              ? current.length === 1
+                                ? current
+                                : current.filter((item) => item !== code)
+                              : [...current, code],
+                          )
+                        }
+                        type="button"
+                      >
+                        <span className="text-xl font-bold">{symbol}</span>
+                        <span className="font-mono text-sm">{code}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </fieldset>
+              <fieldset className="grid gap-3">
+                <legend className="text-app-muted text-sm font-semibold">
+                  Початкові баланси
+                </legend>
+                <p className="text-app-dim text-xs">
+                  Необов’язково. Порожнє поле означає нульовий баланс.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {currencies.map((code) => (
+                    <Field key={code} label={`Баланс ${code}`}>
+                      <TextInput
+                        inputMode="decimal"
+                        numeric
+                        onChange={(event) =>
+                          setInitialBalances((current) => ({
+                            ...current,
+                            [code]: event.target.value,
+                          }))
+                        }
+                        placeholder="0"
+                        value={initialBalances[code] ?? ''}
+                      />
+                    </Field>
+                  ))}
+                </div>
+              </fieldset>
             </>
           )}
           {!mutationsAllowed && (

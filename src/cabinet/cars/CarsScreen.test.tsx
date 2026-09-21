@@ -2,23 +2,15 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { carCatalogApi } from '@/api/car-catalog'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { carsApi } from '@/api/cars'
 import { mediaApi } from '@/api/media'
 import type { PlanUsageDto } from '@/api/types'
 import { useCabinet } from '../CabinetContext'
 import { CarsScreen, MediaPicker } from './CarsScreen'
-import type { PickedPhoto } from './picked-photos'
 
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are invoked only through their owning singleton. */
 
-vi.mock('@/api/car-catalog', () => ({
-  carCatalogApi: {
-    getMakes: vi.fn(() => Promise.resolve([])),
-    getModels: vi.fn(() => Promise.resolve([])),
-  },
-}))
 vi.mock('@/api/cars', () => ({
   isCarStatus: (value: unknown) => value === 'active' || value === 'archived',
   carsApi: {
@@ -162,7 +154,34 @@ beforeEach(() => {
   })
   vi.mocked(carsApi.get).mockResolvedValue(detail)
   vi.mocked(mediaApi.remove).mockResolvedValue(undefined)
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: string | URL | Request) => {
+      const href =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve(
+            href.includes('GetModels')
+              ? { Results: [{ Model_ID: 1719, Model_Name: 'X5' }] }
+              : { Results: [{ MakeId: 452, MakeName: 'BMW' }] },
+          ),
+      })
+    }),
+  )
 })
+
+const chooseBmwX5 = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(screen.getByRole('button', { name: 'Марка' }))
+  await user.click(await screen.findByRole('option', { name: 'BMW' }))
+  await user.click(screen.getByRole('button', { name: 'Модель' }))
+  await user.click(await screen.findByRole('option', { name: 'X5' }))
+}
 
 it('blocks a direct create route for a view-only member', async () => {
   vi.mocked(useCabinet).mockReturnValue(
@@ -492,6 +511,7 @@ it('renders car identity, gallery, and VIN copy', async () => {
 })
 
 it('previews the first parts and links to the warehouse filtered by this car', async () => {
+  const user = userEvent.setup()
   vi.mocked(useCabinet).mockReturnValue(
     cabinet(['cars.view', 'cars.manage', 'parts.view']),
   )
@@ -513,6 +533,10 @@ it('previews the first parts and links to the warehouse filtered by this car', a
     <MemoryRouter initialEntries={['/app/demo/cars/car-1']}>
       <Routes>
         <Route path="/app/:tenant/cars/:carId" element={<CarsScreen />} />
+        <Route
+          path="/app/:tenant/parts/:partId"
+          element={<h1>Картка запчастини</h1>}
+        />
       </Routes>
     </MemoryRouter>,
   )
@@ -521,6 +545,10 @@ it('previews the first parts and links to the warehouse filtered by this car', a
   expect(section).toHaveTextContent('12 позицій з цього авто')
   expect(section).toHaveTextContent('Показано 1 із 12')
   const partRow = within(section).getByRole('row', { name: /Бампер/ })
+  expect(within(partRow).getByRole('link', { name: 'Бампер' })).toHaveAttribute(
+    'href',
+    '/app/demo/parts/part-1',
+  )
   expect(within(partRow).getByRole('cell', { name: 'Доступна' })).toBeVisible()
   expect(
     within(section).getByRole('link', { name: 'Відкрити на складі' }),
@@ -529,6 +557,10 @@ it('previews the first parts and links to the warehouse filtered by this car', a
   expect(request?.[0]).toBe('car-1')
   expect(request?.[1]).toEqual({ pageSize: 5 })
   expect(request?.[2]?.signal).toBeInstanceOf(AbortSignal)
+  await user.click(within(partRow).getByRole('cell', { name: 'Доступна' }))
+  expect(
+    await screen.findByRole('heading', { name: 'Картка запчастини' }),
+  ).toBeVisible()
 })
 
 it('normalizes a failed parts preview and retries without an unhandled rejection', async () => {
@@ -579,30 +611,183 @@ it('normalizes a failed parts preview and retries without an unhandled rejection
   expect(carsApi.listParts).toHaveBeenCalledTimes(2)
 })
 
-it('keeps picked car photos in the browser until the form is sent', async () => {
+it('retains successful files when another media upload fails and reports that file', async () => {
   const user = userEvent.setup()
+  vi.mocked(mediaApi.upload)
+    .mockResolvedValueOnce({
+      storageKey: 'pending/cars/ok',
+      url: 'https://cdn.example/ok.jpg',
+    })
+    .mockRejectedValueOnce({
+      kind: 'validation',
+      message: 'Непідтримуваний формат.',
+    })
+    .mockRejectedValueOnce({
+      kind: 'validation',
+      message: 'Файл завеликий.',
+    })
   function Harness() {
-    const [items, setItems] = useState<PickedPhoto[]>([])
-    return <MediaPicker items={items} onChange={setItems} />
+    const [items, setItems] = useState<{ storageKey: string; url: string }[]>(
+      [],
+    )
+    return <MediaPicker entityType="cars" items={items} onChange={setItems} />
   }
   render(<Harness />)
 
+  expect(screen.getByText('Вибрати фото')).toBeVisible()
   await user.upload(screen.getByLabelText('Додати фото'), [
     new File(['ok'], 'ok.jpg', { type: 'image/jpeg' }),
-    new File(['second'], 'second.jpg', { type: 'image/jpeg' }),
+    new File(['bad'], 'bad.heic', { type: 'image/heic' }),
+    new File(['large'], 'large.jpg', { type: 'image/jpeg' }),
   ])
 
+  expect(
+    await screen.findByRole('img', { name: 'Попередній перегляд фото' }),
+  ).toHaveAttribute('src', 'https://cdn.example/ok.jpg')
   expect(screen.getByText('ok.jpg')).toBeVisible()
-  expect(screen.getByText('second.jpg')).toBeVisible()
-  // Nothing has been sent anywhere: the thumbnails are local previews.
+  const errors = within(screen.getByRole('alert')).getAllByRole('listitem')
+  expect(errors).toHaveLength(2)
+  expect(errors[0]).toHaveTextContent('bad.heic: Непідтримуваний формат.')
+  expect(errors[1]).toHaveTextContent('large.jpg: Файл завеликий.')
+})
+
+it('previews selected media before its upload finishes', async () => {
+  const user = userEvent.setup()
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: vi.fn(() => 'blob:selected-photo'),
+  })
+  let finishUpload!: (value: { storageKey: string; url: string }) => void
+  vi.mocked(mediaApi.upload).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finishUpload = resolve
+      }),
+  )
+  function Harness() {
+    const [items, setItems] = useState<{ storageKey: string; url: string }[]>(
+      [],
+    )
+    return <MediaPicker entityType="cars" items={items} onChange={setItems} />
+  }
+  render(<Harness />)
+
+  await user.upload(
+    screen.getByLabelText('Додати фото'),
+    new File(['photo'], 'selected.jpg', { type: 'image/jpeg' }),
+  )
+
+  expect(
+    screen.getByRole('img', { name: 'Попередній перегляд selected.jpg' }),
+  ).toHaveAttribute('src', 'blob:selected-photo')
+  finishUpload({
+    storageKey: 'pending/cars/selected',
+    url: 'https://cdn.example/selected.jpg',
+  })
+})
+
+it('chooses make and model from inline lists and keeps photos local until submit', async () => {
+  const user = userEvent.setup()
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({ Results: [{ MakeId: 452, MakeName: 'BMW' }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({ Results: [{ Model_ID: 1719, Model_Name: 'X5' }] }),
+      }),
+  )
+  vi.mocked(mediaApi.upload).mockResolvedValue({
+    storageKey: 'pending/cars/photo',
+    url: 'https://cdn.example/photo.jpg',
+  })
+  vi.mocked(carsApi.create).mockResolvedValue(detail)
+
+  render(
+    <MemoryRouter initialEntries={['/app/demo/cars/new']}>
+      <Routes>
+        <Route path="/app/:tenant/cars/new" element={<CarsScreen />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(screen.getByText('Додаткові витрати')).toBeVisible()
+  await user.click(screen.getByRole('button', { name: 'Марка' }))
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(await screen.findByRole('listbox', { name: 'Марка' })).toBeVisible()
+  await user.click(await screen.findByRole('option', { name: 'BMW' }))
+  await user.click(screen.getByRole('button', { name: 'Модель' }))
+  expect(await screen.findByRole('listbox', { name: 'Модель' })).toBeVisible()
+  await user.click(await screen.findByRole('option', { name: 'X5' }))
+
+  const photo = new File(['photo'], 'photo.jpg', { type: 'image/jpeg' })
+  await user.upload(screen.getByLabelText('Додати фото'), photo)
+  expect(await screen.findByText('photo.jpg')).toBeVisible()
   expect(mediaApi.upload).not.toHaveBeenCalled()
 
-  await user.click(screen.getAllByRole('button', { name: 'Прибрати фото' })[0]!)
+  await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-001')
+  await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2020')
+  await user.type(
+    screen.getByRole('textbox', { name: 'Ціна придбання' }),
+    '12000',
+  )
+  await user.click(
+    screen.getAllByRole('button', { name: 'Створити автомобіль' })[0]!,
+  )
 
-  expect(screen.queryByText('ok.jpg')).toBeNull()
-  expect(screen.getByText('second.jpg')).toBeVisible()
-  // A photo that never left the browser needs no deletion on the server.
-  expect(mediaApi.remove).not.toHaveBeenCalled()
+  await waitFor(() =>
+    expect(mediaApi.upload).toHaveBeenCalledWith(
+      photo,
+      'cars',
+      expect.objectContaining({
+        signal: expect.any(AbortSignal) as AbortSignal,
+      }),
+    ),
+  )
+  expect(carsApi.create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      brand: 'BMW',
+      model: 'X5',
+      photoKeys: ['pending/cars/photo'],
+    }),
+    expect.anything(),
+  )
+})
+
+it('allows pending car media upload and removal when the car quota is full', async () => {
+  const currentCabinet = cabinet(
+    ['cars.view', 'cars.manage', 'finance.manage'],
+    { cars: { used: 5, max: 5 } },
+  )
+  vi.mocked(useCabinet).mockReturnValue(currentCabinet)
+  vi.mocked(mediaApi.upload).mockResolvedValue({
+    storageKey: 'pending/cars/photo',
+    url: 'https://cdn.example/photo.jpg',
+  })
+  const user = userEvent.setup()
+  function Harness() {
+    const [items, setItems] = useState<{ storageKey: string; url: string }[]>(
+      [],
+    )
+    return <MediaPicker entityType="cars" items={items} onChange={setItems} />
+  }
+  render(<Harness />)
+
+  await user.upload(
+    screen.getByLabelText('Додати фото'),
+    new File(['photo'], 'photo.jpg', { type: 'image/jpeg' }),
+  )
+  await screen.findByRole('img', { name: 'Попередній перегляд фото' })
+  await user.click(screen.getByRole('button', { name: 'Прибрати фото' }))
+
+  expect(mediaApi.upload).toHaveBeenCalledOnce()
+  expect(mediaApi.remove).toHaveBeenCalledOnce()
 })
 
 it('retries only remaining initial expenses after partial failure without recreating the car', async () => {
@@ -634,8 +819,7 @@ it('retries only remaining initial expenses after partial failure without recrea
   )
 
   await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-001')
-  await user.type(screen.getByRole('combobox', { name: 'Марка' }), 'BMW')
-  await user.type(screen.getByRole('combobox', { name: 'Модель' }), 'X5')
+  await chooseBmwX5(user)
   await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2020')
   await user.type(
     screen.getByRole('textbox', { name: 'Ціна придбання' }),
@@ -643,10 +827,10 @@ it('retries only remaining initial expenses after partial failure without recrea
   )
   await user.click(screen.getByRole('button', { name: 'Додати витрату' }))
   await user.type(screen.getByLabelText('Назва витрати 1'), 'Доставка')
-  await user.type(screen.getByLabelText('Сума, $ витрати 1'), '500')
+  await user.type(screen.getByLabelText('Сума витрати 1'), '500')
   await user.click(screen.getByRole('button', { name: 'Додати витрату' }))
   await user.type(screen.getByLabelText('Назва витрати 2'), 'Мито')
-  await user.type(screen.getByLabelText('Сума, $ витрати 2'), '250')
+  await user.type(screen.getByLabelText('Сума витрати 2'), '250')
   await user.click(
     screen.getAllByRole('button', { name: 'Створити автомобіль' })[0]!,
   )
@@ -692,8 +876,7 @@ it('validates every initial expense before creating the car', async () => {
   )
 
   await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-001')
-  await user.type(screen.getByRole('combobox', { name: 'Марка' }), 'BMW')
-  await user.type(screen.getByRole('combobox', { name: 'Модель' }), 'X5')
+  await chooseBmwX5(user)
   await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2020')
   await user.type(
     screen.getByRole('textbox', { name: 'Ціна придбання' }),
@@ -706,7 +889,7 @@ it('validates every initial expense before creating the car', async () => {
   )
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Перевірте правильність початкових витрат. Кожна потребує назви до 200 символів і суми більшої за нуль.',
+    'Перевірте правильність додаткових витрат. Кожна потребує назви до 200 символів і суми більшої за нуль.',
   )
   expect(carsApi.create).not.toHaveBeenCalled()
 })
@@ -729,8 +912,7 @@ it('rechecks the latest car permission before dispatching create', async () => {
   )
 
   await user.type(screen.getByRole('textbox', { name: 'Код' }), 'CAR-001')
-  await user.type(screen.getByRole('combobox', { name: 'Марка' }), 'BMW')
-  await user.type(screen.getByRole('combobox', { name: 'Модель' }), 'X5')
+  await chooseBmwX5(user)
   await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2020')
   await user.type(
     screen.getByRole('textbox', { name: 'Ціна придбання' }),
@@ -1025,38 +1207,4 @@ it('opens the gallery viewer and pages through the shots', async () => {
   await waitFor(() =>
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
   )
-})
-
-it('suggests makes and models under the field without forcing the catalogue', async () => {
-  vi.mocked(carCatalogApi.getMakes).mockResolvedValue([
-    { id: 1, name: 'BMW' },
-    { id: 2, name: 'Tesla' },
-  ])
-  vi.mocked(carCatalogApi.getModels).mockResolvedValue([
-    { id: 11, name: 'X5' },
-    { id: 12, name: 'X7' },
-  ])
-  const user = userEvent.setup()
-  render(
-    <MemoryRouter initialEntries={['/app/demo/cars/new']}>
-      <Routes>
-        <Route path="/app/:tenant/cars/new" element={<CarsScreen />} />
-      </Routes>
-    </MemoryRouter>,
-  )
-
-  const brand = await screen.findByRole('combobox', { name: 'Марка' })
-  await user.type(brand, 'BMW')
-  // The models load for the make that was typed, and stay under the field.
-  await waitFor(() =>
-    expect(carCatalogApi.getModels).toHaveBeenCalledWith(1, expect.anything()),
-  )
-  expect(
-    await screen.findByText('Моделі BMW', { exact: false }),
-  ).toBeInTheDocument()
-
-  // A brand the catalogue has never heard of is still accepted as typed.
-  await user.clear(brand)
-  await user.type(brand, 'Богдан')
-  expect(brand).toHaveValue('Богдан')
 })

@@ -119,6 +119,38 @@ it('lists the latest orders and intakes with their own links', async () => {
   expect(within(intakes).getByText(/26 поз\./)).toBeVisible()
 })
 
+it('localizes pending and confirmed order statuses', async () => {
+  vi.mocked(ordersApi.list).mockResolvedValue(
+    page([
+      {
+        id: 'order-1',
+        number: 1,
+        status: 'pending',
+        customerName: 'А',
+        itemCount: 1,
+        partNames: [],
+        paymentAccountNames: [],
+        totalAmount: 10,
+        createdAt: '2026-09-16T12:19:00Z',
+      },
+      {
+        id: 'order-2',
+        number: 2,
+        status: 'confirmed',
+        customerName: 'Б',
+        itemCount: 1,
+        partNames: [],
+        paymentAccountNames: [],
+        totalAmount: 20,
+        createdAt: '2026-09-16T12:19:00Z',
+      },
+    ]),
+  )
+  renderActivity(['orders.view'])
+  expect(await screen.findByText('Очікує')).toBeVisible()
+  expect(screen.getByText('Підтверджено')).toHaveClass('text-state-ok')
+})
+
 it('asks only for the modules this person can open', async () => {
   vi.mocked(intakesApi.list).mockResolvedValue(page([]))
 
@@ -137,36 +169,4 @@ it('keeps quiet when neither module is open', () => {
   expect(container).toBeEmptyDOMElement()
   expect(ordersApi.list).not.toHaveBeenCalled()
   expect(intakesApi.list).not.toHaveBeenCalled()
-})
-
-it('names the order status in Ukrainian instead of the raw code', async () => {
-  vi.mocked(ordersApi.list).mockResolvedValue({
-    items: [
-      {
-        id: 'order-1',
-        number: 286,
-        customerName: 'Ірина Олійник',
-        status: 'confirmed',
-        totalAmount: 103,
-        currency: 'USD',
-        createdAt: '2026-08-26T18:19:00Z',
-      },
-    ],
-    page: 1,
-    pageSize: 4,
-    total: 1,
-    totalPages: 1,
-  } as never)
-  vi.mocked(intakesApi.list).mockResolvedValue({
-    items: [],
-    page: 1,
-    pageSize: 4,
-    total: 0,
-    totalPages: 0,
-  })
-
-  renderActivity(['orders.view'])
-
-  expect(await screen.findByText('Підтверджено')).toBeVisible()
-  expect(screen.queryByText('confirmed')).toBeNull()
 })
