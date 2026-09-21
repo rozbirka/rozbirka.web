@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { useCabinet } from '../CabinetContext'
@@ -11,6 +12,8 @@ const orderMocks = vi.hoisted(() => ({
   updateItems: vi.fn(),
 }))
 const partMocks = vi.hoisted(() => ({ list: vi.fn() }))
+const carMocks = vi.hoisted(() => ({ list: vi.fn() }))
+const intakeMocks = vi.hoisted(() => ({ list: vi.fn() }))
 const customerMocks = vi.hoisted(() => ({
   search: vi.fn(),
   getById: vi.fn(),
@@ -20,6 +23,8 @@ const customerMocks = vi.hoisted(() => ({
 
 vi.mock('@/api/orders', () => ({ ordersApi: orderMocks }))
 vi.mock('@/api/parts', () => ({ partsApi: partMocks }))
+vi.mock('@/api/cars', () => ({ carsApi: carMocks }))
+vi.mock('@/api/intakes', () => ({ intakesApi: intakeMocks }))
 vi.mock('@/api/customers', async (importOriginal) => ({
   ...(await importOriginal()),
   customersApi: customerMocks,
@@ -56,6 +61,77 @@ beforeEach(() => {
     error: null,
   } as never)
   orderMocks.getById.mockResolvedValue({ items: [] })
+  partMocks.list.mockResolvedValue({
+    items: [],
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    totalPages: 0,
+  })
+  carMocks.list.mockResolvedValue({
+    items: [],
+    page: 1,
+    pageSize: 100,
+    total: 0,
+    totalPages: 0,
+  })
+  intakeMocks.list.mockResolvedValue({
+    items: [],
+    page: 1,
+    pageSize: 100,
+    total: 0,
+    totalPages: 0,
+  })
+})
+
+it('searches available parts and adds one with the quantity stepper', async () => {
+  partMocks.list.mockResolvedValue({
+    items: [
+      {
+        id: 'part-1',
+        name: 'Ліхтар',
+        photos: [],
+        quantityTotal: 3,
+        quantityReserved: 0,
+        quantityAvailable: 3,
+        quantitySoldTotal: 0,
+        status: 'available',
+        car: { id: 'car-1', make: 'BMW', model: 'X5', year: 2019 },
+        order: null,
+      },
+    ],
+    page: 1,
+    pageSize: 20,
+    total: 1,
+    totalPages: 1,
+  })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/new']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await waitFor(() =>
+    expect(partMocks.list).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'available', page: 1, pageSize: 20 }),
+    ),
+  )
+  await user.type(screen.getByLabelText('Пошук запчастини'), 'ліхтар')
+  await user.click(await screen.findByRole('button', { name: /Ліхтар/ }))
+
+  expect(
+    screen.getByRole('dialog', { name: 'Додати запчастину' }),
+  ).toBeVisible()
+  expect(screen.getByLabelText('Кількість')).toHaveValue('1')
+  expect(screen.getByRole('button', { name: 'Менше' })).toBeDisabled()
+  await user.click(screen.getByRole('button', { name: 'Більше' }))
+  expect(screen.getByLabelText('Кількість')).toHaveValue('2')
+  await user.type(screen.getByLabelText('Ціна за шт.'), '120,50')
+  await user.click(screen.getByRole('button', { name: 'Додати' }))
+
+  expect(screen.getByText('Ліхтар ×2')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Далі' })).toBeEnabled()
 })
 
 it('opens canonical creation as a four-step workflow without scanning', () => {
@@ -65,9 +141,7 @@ it('opens canonical creation as a four-step workflow without scanning', () => {
     </MemoryRouter>,
   )
 
-  expect(
-    screen.getByRole('heading', { name: 'Нове замовлення' }),
-  ).toBeVisible()
+  expect(screen.getByRole('heading', { name: 'Нове замовлення' })).toBeVisible()
   expect(screen.getByText('1 / 4')).toBeVisible()
   expect(screen.getAllByText('Запчастини')).toHaveLength(2)
   expect(screen.getByRole('button', { name: 'Далі' })).toBeDisabled()
@@ -76,9 +150,7 @@ it('opens canonical creation as a four-step workflow without scanning', () => {
 
 it('keeps the existing add-item route separate from canonical creation', async () => {
   render(
-    <MemoryRouter
-      initialEntries={['/app/garage/orders/order-1/items/new']}
-    >
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1/items/new']}>
       <OrdersScreen definition={definition} />
     </MemoryRouter>,
   )
@@ -86,7 +158,5 @@ it('keeps the existing add-item route separate from canonical creation', async (
   expect(
     await screen.findByRole('heading', { name: 'Додати позицію' }),
   ).toBeVisible()
-  expect(
-    screen.getByRole('button', { name: 'Додати позицію' }),
-  ).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Додати позицію' })).toBeVisible()
 })

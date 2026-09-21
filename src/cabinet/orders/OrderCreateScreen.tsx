@@ -1,6 +1,12 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { Button, DeniedState, PageBody, PageHeader, SectionPanel } from '@/components/app'
+import {
+  Button,
+  DeniedState,
+  PageBody,
+  PageHeader,
+  SectionPanel,
+} from '@/components/app'
 import type { CustomerSearchItem } from '@/api/customers'
 import { cabinetPath } from '../cabinet-paths'
 import { useCabinet } from '../CabinetContext'
@@ -11,15 +17,16 @@ import {
   type OrderCreateStep,
   type OrderDraftItem,
 } from './order-create-model'
+import { OrderCreatePartsStep } from './OrderCreatePartsStep'
 
-const STEPS: ReadonlyArray<{ id: OrderCreateStep; label: string }> = [
+const STEPS: readonly { id: OrderCreateStep; label: string }[] = [
   { id: 'parts', label: 'Запчастини' },
   { id: 'prices', label: 'Ціна' },
   { id: 'customer', label: 'Клієнт' },
   { id: 'summary', label: 'Підсумок' },
 ]
 
-type OrderDraft = {
+interface OrderDraft {
   items: OrderDraftItem[]
   selectedCustomer: CustomerSearchItem | null
   notes: string
@@ -28,7 +35,7 @@ type OrderDraft = {
 export function OrderCreateScreen({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
   const [stepIndex, setStepIndex] = useState(0)
-  const [draft] = useState<OrderDraft>({
+  const [draft, setDraft] = useState<OrderDraft>({
     items: [],
     selectedCustomer: null,
     notes: '',
@@ -41,11 +48,12 @@ export function OrderCreateScreen({ definition }: CabinetModuleScreenProps) {
         ? { status: 'error' as const, snapshot: null, error: cabinet.error }
         : { status: 'loading' as const, snapshot: null, error: null }
   const dependenciesAllowed =
+    cabinet.targetTenant !== null &&
     evaluateModuleAccess(definition, access, 'mutation').kind === 'allowed' &&
     cabinet.snapshot?.permissions.has('parts.view') === true &&
     cabinet.snapshot.permissions.has('customers.view')
 
-  if (!dependenciesAllowed) {
+  if (!dependenciesAllowed || cabinet.targetTenant === null) {
     return (
       <PageBody width="narrow">
         <DeniedState
@@ -57,7 +65,7 @@ export function OrderCreateScreen({ definition }: CabinetModuleScreenProps) {
     )
   }
 
-  const step = STEPS[stepIndex] ?? STEPS[0]
+  const step = STEPS[stepIndex]!
   const ordersPath = cabinetPath(cabinet.targetTenant.slug, 'orders')
 
   return (
@@ -89,11 +97,16 @@ export function OrderCreateScreen({ definition }: CabinetModuleScreenProps) {
         description="Оберіть запчастини, які потрібно додати до замовлення."
         title={step.label}
       >
-        <p className="text-app-dim text-sm">
-          {draft.items.length === 0
-            ? 'У замовленні ще немає запчастин.'
-            : `${draft.items.length} запчастин у замовленні`}
-        </p>
+        {step.id === 'parts' ? (
+          <OrderCreatePartsStep
+            items={draft.items}
+            onItemsChange={(items) =>
+              setDraft((current) => ({ ...current, items }))
+            }
+          />
+        ) : (
+          <p className="text-app-dim text-sm">Наступний крок замовлення.</p>
+        )}
       </SectionPanel>
 
       <div className="border-app-line bg-app-raised flex flex-wrap items-center justify-between gap-3 rounded-panel border p-4">

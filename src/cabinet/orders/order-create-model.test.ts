@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { PartListItem } from '@/api/parts'
 import {
   addDraftItem,
   canContinueOrderStep,
@@ -22,7 +23,7 @@ const part = {
   status: 'available',
   car: null,
   order: null,
-} as const
+} satisfies PartListItem
 
 describe('order create model', () => {
   it('normalizes money and accepts zero', () => {
