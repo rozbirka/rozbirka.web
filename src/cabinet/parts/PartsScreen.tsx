@@ -2241,19 +2241,6 @@ function PartFields({
             />
           </Field>
         </div>
-        <Field label="Стан">
-          <SelectInput
-            aria-label="Стан"
-            onChange={field('condition')}
-            value={values.condition}
-          >
-            {PART_CONDITIONS.map((condition) => (
-              <option key={condition.value} value={condition.value}>
-                {condition.label}
-              </option>
-            ))}
-          </SelectInput>
-        </Field>
         <Field hint="Дефекти, комплектність, місце зберігання" label="Нотатки">
           <TextArea
             aria-label="Нотатки"
@@ -2262,6 +2249,18 @@ function PartFields({
             value={values.notes}
           />
         </Field>
+      </SectionPanel>
+      <SectionPanel
+        description="Оберіть один із трьох сталих станів деталі."
+        title="Стан деталі"
+      >
+        <PillGroup
+          className="flex-wrap"
+          label="Стан деталі"
+          onChange={(condition) => setValues({ ...values, condition })}
+          options={PART_CONDITIONS}
+          value={values.condition}
+        />
       </SectionPanel>
       <SectionPanel
         description="Скільки одиниць на складі та за скільки їх продавати."
@@ -2793,51 +2792,74 @@ function PartEdit({
               </Card>
 
               <Card title="Опис деталі">
-                <p className="text-app-muted text-sm">
-                  Як запчастина виглядає у списку складу та в пошуку.
-                </p>
-                <Field error={errors.name} label="Назва" required>
-                  <TextInput
-                    name="name"
-                    onChange={(event) =>
-                      setValues((current) =>
-                        current
-                          ? { ...current, name: event.target.value }
-                          : current,
-                      )
-                    }
-                    required
-                    value={values.name}
-                  />
-                </Field>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Тип деталі">
+                <div className="grid gap-4">
+                  <p className="text-app-muted text-sm">
+                    Як запчастина виглядає у списку складу та в пошуку.
+                  </p>
+                  <Field error={errors.name} label="Назва" required>
                     <TextInput
-                      name="partType"
+                      name="name"
                       onChange={(event) =>
                         setValues((current) =>
                           current
-                            ? { ...current, partType: event.target.value }
+                            ? { ...current, name: event.target.value }
                             : current,
                         )
                       }
-                      value={values.partType}
+                      required
+                      value={values.name}
                     />
                   </Field>
-                  <Field
-                    hint="Редагування OEM поки не приймає сервер"
-                    label="OEM-код"
-                  >
-                    <TextInput
-                      className="font-mono"
-                      disabled
-                      name="oemCode"
-                      value={values.oemCode}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Тип деталі">
+                      <TextInput
+                        name="partType"
+                        onChange={(event) =>
+                          setValues((current) =>
+                            current
+                              ? { ...current, partType: event.target.value }
+                              : current,
+                          )
+                        }
+                        value={values.partType}
+                      />
+                    </Field>
+                    <Field
+                      hint="Редагування OEM поки не приймає сервер"
+                      label="OEM-код"
+                    >
+                      <TextInput
+                        className="font-mono"
+                        disabled
+                        name="oemCode"
+                        value={values.oemCode}
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Нотатки">
+                    <TextArea
+                      name="notes"
+                      onChange={(event) =>
+                        setValues((current) =>
+                          current
+                            ? { ...current, notes: event.target.value }
+                            : current,
+                        )
+                      }
+                      rows={2}
+                      value={values.notes}
                     />
                   </Field>
                 </div>
-                <Field label="Стан">
+              </Card>
+
+              <Card title="Стан деталі">
+                <div className="grid gap-4">
+                  <p className="text-app-muted text-sm">
+                    Оберіть один із трьох сталих станів деталі.
+                  </p>
                   <PillGroup
+                    className="flex-wrap"
                     label="Стан деталі"
                     onChange={(next) =>
                       setValues((current) =>
@@ -2847,21 +2869,7 @@ function PartEdit({
                     options={PART_CONDITIONS}
                     value={values.condition}
                   />
-                </Field>
-                <Field label="Нотатки">
-                  <TextArea
-                    name="notes"
-                    onChange={(event) =>
-                      setValues((current) =>
-                        current
-                          ? { ...current, notes: event.target.value }
-                          : current,
-                      )
-                    }
-                    rows={2}
-                    value={values.notes}
-                  />
-                </Field>
+                </div>
               </Card>
 
               <Card title="Кількість і ціна">

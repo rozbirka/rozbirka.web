@@ -528,16 +528,71 @@ it('uses the fixed mobile condition vocabulary when creating a part', () => {
     </MemoryRouter>,
   )
 
-  const condition = screen.getByRole('combobox', { name: 'Стан' })
+  const conditionCard = screen.getByRole('region', { name: 'Стан деталі' })
+  const condition = within(conditionCard).getByRole('radiogroup', {
+    name: 'Стан деталі',
+  })
+
+  expect(within(condition).getAllByRole('radio')).toHaveLength(3)
   expect(
-    within(condition).getByRole('option', { name: 'Хороший' }),
-  ).toHaveValue('good')
+    within(condition).getByRole('radio', { name: 'Хороший' }),
+  ).toHaveAttribute('aria-checked', 'true')
   expect(
-    within(condition).getByRole('option', { name: 'Задовільний' }),
-  ).toHaveValue('fair')
+    within(condition).getByRole('radio', { name: 'Задовільний' }),
+  ).toBeVisible()
   expect(
-    within(condition).getByRole('option', { name: 'На запчастини' }),
-  ).toHaveValue('scrap')
+    within(condition).getByRole('radio', { name: 'На запчастини' }),
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('combobox', { name: 'Стан' }),
+  ).not.toBeInTheDocument()
+})
+
+it('shows the fixed condition choices in a separate card when editing a part', async () => {
+  partMocks.get.mockResolvedValueOnce({
+    id: 'part-1',
+    source: 'free',
+    carId: null,
+    intakeId: null,
+    name: 'Дзеркало дверей L',
+    quantityTotal: 1,
+    unit: 'pcs',
+    condition: 'fair',
+    notes: null,
+    oemCode: null,
+    partType: null,
+    desiredSalePrice: null,
+  })
+
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/part-1/edit']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/:partId/edit"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const descriptionCard = await screen.findByRole('region', {
+    name: 'Опис деталі',
+  })
+  const conditionCard = screen.getByRole('region', { name: 'Стан деталі' })
+  const condition = within(conditionCard).getByRole('radiogroup', {
+    name: 'Стан деталі',
+  })
+
+  expect(
+    within(descriptionCard).queryByRole('radiogroup'),
+  ).not.toBeInTheDocument()
+  expect(within(condition).getAllByRole('radio')).toHaveLength(3)
+  expect(
+    within(condition).getByRole('radio', { name: 'Задовільний' }),
+  ).toHaveAttribute('aria-checked', 'true')
+  expect(
+    screen.queryByRole('combobox', { name: 'Стан' }),
+  ).not.toBeInTheDocument()
 })
 
 it('creates a part with every supported source, inventory, price, and compatibility field', async () => {
@@ -580,9 +635,7 @@ it('creates a part with every supported source, inventory, price, and compatibil
   ] as const) {
     fireEvent.change(screen.getByLabelText(label), { target: { value } })
   }
-  fireEvent.change(screen.getByLabelText('Стан'), {
-    target: { value: 'good' },
-  })
+  fireEvent.click(screen.getByRole('radio', { name: 'Хороший' }))
   fireEvent.click(screen.getByRole('button', { name: 'Марка сумісності' }))
   expect(
     await screen.findByRole('listbox', { name: 'Марка сумісності' }),
