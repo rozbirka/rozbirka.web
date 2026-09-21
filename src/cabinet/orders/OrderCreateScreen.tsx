@@ -1,19 +1,29 @@
-import { useState } from 'react'
-import { Link } from 'react-router'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router'
+import { ordersApi } from '@/api/orders'
 import {
   Button,
+  ConfirmDialog,
   DeniedState,
+  Field,
+  Notice,
   PageBody,
   PageHeader,
   SectionPanel,
+  TextArea,
 } from '@/components/app'
 import type { CustomerSearchItem } from '@/api/customers'
 import { cabinetPath } from '../cabinet-paths'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
+import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import {
+  ORDER_NOTES_MAX_LENGTH,
   canContinueOrderStep,
+  normalizeOrderNotes,
+  orderDraftTotal,
+  parseOrderPrice,
   type OrderCreateStep,
   type OrderDraftItem,
 } from './order-create-model'
@@ -38,12 +48,19 @@ interface OrderDraft {
 
 export function OrderCreateScreen({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
+  const navigate = useNavigate()
+  const { requireLatestMutation } = useLatestMutationGuard(definition)
   const [stepIndex, setStepIndex] = useState(0)
   const [draft, setDraft] = useState<OrderDraft>({
     items: [],
     selectedCustomer: null,
     notes: '',
   })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [discardOpen, setDiscardOpen] = useState(false)
+  const savedRef = useRef(false)
+  const submittingRef = useRef(false)
 
   const access =
     cabinet.status === 'ready' && cabinet.snapshot !== null
@@ -56,6 +73,14 @@ export function OrderCreateScreen({ definition }: CabinetModuleScreenProps) {
     evaluateModuleAccess(definition, access, 'mutation').kind === 'allowed' &&
     cabinet.snapshot?.permissions.has('parts.view') === true &&
     cabinet.snapshot.permissions.has('customers.view')
+  const dirty = draft.items.length > 0 || draft.notes.length > 0
+
+  useEffect(() => {
+    if (!dirty || savedRef.current) return
+    const preventUnload = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', preventUnload)
+    return () => window.removeEventListener('beforeunload', preventUnload)
+  }, [dirty])
 
   if (!dependenciesAllowed || cabinet.targetTenant === null) {
     return (
@@ -70,11 +95,50 @@ export function OrderCreateScreen({ definition }: CabinetModuleScreenProps) {
   }
 
   const step = STEPS[stepIndex]!
-  const ordersPath = cabinetPath(cabinet.targetTenant.slug, 'orders')
+  const tenantSlug = cabinet.targetTenant.slug
+  const ordersPath = cabinetPath(tenantSlug, 'orders')
+
+  const submit = async () => {
+    if (
+      submittingRef.current ||
+      busy ||
+      !canContinueOrderStep('prices', draft.items)
+    )
+      return
+    submittingRef.current = true
+    setBusy(true)
+    setError(null)
+    try {
+      requireLatestMutation({ quota: false })
+      requireLatestMutation({ permission: 'parts.view', quota: false })
+      requireLatestMutation({ permission: 'customers.view', quota: false })
+      const created = await ordersApi.create({
+        customerId: draft.selectedCustomer?.id ?? null,
+        notes: normalizeOrderNotes(draft.notes),
+        items: draft.items.map((item) => ({
+          partId: item.part.id,
+          quantity: item.quantity,
+          unitPrice: parseOrderPrice(item.price)!,
+        })),
+      })
+      savedRef.current = true
+      await navigate(cabinetPath(tenantSlug, 'orders', created.id), {
+        replace: true,
+      })
+    } catch {
+      setError(
+        'Не вдалося створити замовлення. Перевірте дані та спробуйте ще раз.',
+      )
+      setBusy(false)
+      submittingRef.current = false
+    }
+  }
 
   return (
     <PageBody width="narrow">
       <PageHeader eyebrow="Продажі · Замовлення" title="Нове замовлення" />
+
+      {error ? <Notice tone="danger">{error}</Notice> : null}
 
       <nav aria-label="Кроки створення замовлення" className="grid gap-2">
         <div className="grid grid-cols-4 gap-2" aria-hidden="true">
@@ -131,14 +195,28 @@ export function OrderCreateScreen({ definition }: CabinetModuleScreenProps) {
             selectedCustomer={draft.selectedCustomer}
           />
         ) : (
-          <p className="text-app-dim text-sm">Наступний крок замовлення.</p>
+          <OrderCreateSummary
+            draft={draft}
+            onNotesChange={(notes) =>
+              setDraft((current) => ({
+                ...current,
+                notes: notes.slice(0, ORDER_NOTES_MAX_LENGTH),
+              }))
+            }
+          />
         )}
       </SectionPanel>
 
       <div className="border-app-line bg-app-raised flex flex-wrap items-center justify-between gap-3 rounded-panel border p-4">
         {stepIndex === 0 ? (
-          <Button asChild variant="ghost">
-            <Link to={ordersPath}>Скасувати</Link>
+          <Button
+            onClick={() => {
+              if (dirty) setDiscardOpen(true)
+              else void navigate(ordersPath)
+            }}
+            variant="ghost"
+          >
+            Скасувати
           </Button>
         ) : (
           <Button
@@ -149,14 +227,95 @@ export function OrderCreateScreen({ definition }: CabinetModuleScreenProps) {
           </Button>
         )}
         <Button
-          disabled={!canContinueOrderStep(step.id, draft.items)}
-          onClick={() =>
-            setStepIndex((current) => Math.min(STEPS.length - 1, current + 1))
-          }
+          aria-busy={busy}
+          disabled={busy || !canContinueOrderStep(step.id, draft.items)}
+          onClick={() => {
+            if (step.id === 'summary') void submit()
+            else
+              setStepIndex((current) => Math.min(STEPS.length - 1, current + 1))
+          }}
+          variant={step.id === 'summary' ? 'primary' : undefined}
         >
-          Далі
+          {step.id === 'summary' ? 'Створити' : 'Далі'}
         </Button>
       </div>
+
+      <ConfirmDialog
+        confirmLabel="Вийти без збереження"
+        consequence="Вибрані запчастини, ціни й нотатки буде втрачено."
+        onConfirm={() => {
+          savedRef.current = true
+          void navigate(ordersPath)
+        }}
+        onOpenChange={setDiscardOpen}
+        open={discardOpen}
+        title="Скасувати створення замовлення?"
+      />
     </PageBody>
+  )
+}
+
+function OrderCreateSummary({
+  draft,
+  onNotesChange,
+}: {
+  draft: OrderDraft
+  onNotesChange: (notes: string) => void
+}) {
+  return (
+    <div className="grid gap-4">
+      {draft.selectedCustomer ? (
+        <div>
+          <p className="text-app-dim text-xs uppercase">Клієнт</p>
+          <p className="mt-1 text-sm font-semibold text-white">
+            {draft.selectedCustomer.name}
+          </p>
+          {draft.selectedCustomer.phone ? (
+            <p className="text-app-muted text-sm">
+              {draft.selectedCustomer.phone}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <Field
+        hint={`${draft.notes.length}/${ORDER_NOTES_MAX_LENGTH}`}
+        label="Нотатки"
+      >
+        <TextArea
+          maxLength={ORDER_NOTES_MAX_LENGTH}
+          onChange={(event) => onNotesChange(event.target.value)}
+          value={draft.notes}
+        />
+      </Field>
+
+      <div className="grid gap-2">
+        {draft.items.map((item) => {
+          const unitPrice = parseOrderPrice(item.price) ?? 0
+          return (
+            <article
+              className="border-app-line bg-app-input grid grid-cols-[1fr_auto] gap-3 rounded-control border p-3"
+              key={item.part.id}
+            >
+              <div className="min-w-0">
+                <h3 className="truncate text-sm font-semibold text-white">
+                  {item.part.name}
+                </h3>
+                <p className="text-app-dim text-xs">
+                  {item.quantity} шт. × {unitPrice} $
+                </p>
+              </div>
+              <strong className="text-sm text-white tabular-nums">
+                {item.quantity * unitPrice} $
+              </strong>
+            </article>
+          )
+        })}
+      </div>
+
+      <p className="border-app-line border-t pt-3 text-right text-lg font-semibold text-white tabular-nums">
+        Разом: {orderDraftTotal(draft.items)} $
+      </p>
+    </div>
   )
 }

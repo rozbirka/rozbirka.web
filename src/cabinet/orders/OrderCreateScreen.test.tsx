@@ -155,6 +155,36 @@ it('searches available parts and adds one with the quantity stepper', async () =
   expect(
     screen.queryByRole('button', { name: 'Обрати клієнта Ірина' }),
   ).not.toBeInTheDocument()
+  const createdOrder = {
+    id: 'order-1',
+    number: 1,
+    status: 'pending',
+    customerId: 'customer-1',
+    customerName: 'Ірина',
+    notes: 'Подзвонити',
+    items: [],
+    payments: [],
+    history: [],
+    totalAmount: 0,
+    totalPaid: 0,
+    paymentCurrency: 'USD',
+    createdAt: '2026-09-21T09:00:00Z',
+    createdByName: 'Олексій',
+  }
+  orderMocks.create.mockResolvedValue(createdOrder)
+  orderMocks.getById.mockResolvedValue(createdOrder)
+  await user.click(screen.getByRole('button', { name: 'Далі' }))
+  expect(screen.getByRole('heading', { name: 'Підсумок' })).toBeVisible()
+  await user.type(screen.getByLabelText('Нотатки'), '  Подзвонити  ')
+  await user.click(screen.getByRole('button', { name: 'Створити' }))
+
+  await waitFor(() =>
+    expect(orderMocks.create).toHaveBeenCalledWith({
+      customerId: 'customer-1',
+      notes: 'Подзвонити',
+      items: [{ partId: 'part-1', quantity: 2, unitPrice: 0 }],
+    }),
+  )
 })
 
 it('opens canonical creation as a four-step workflow without scanning', () => {
