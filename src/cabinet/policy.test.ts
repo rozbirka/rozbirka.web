@@ -603,6 +603,7 @@ describe('cabinetModules', () => {
       '/settings/billing/payments',
       '/settings/billing/plans',
       '/settings/business',
+      '/settings/integrations',
       '/settings/profile',
       '/stickers',
       '/team',

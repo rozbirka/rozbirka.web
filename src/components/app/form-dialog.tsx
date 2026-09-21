@@ -94,7 +94,9 @@ export function FormDialog({
             className="grid min-h-0 grid-rows-[1fr_auto]"
             onSubmit={onSubmit}
           >
-            <div className="grid content-start gap-3 overflow-y-auto px-5 py-4">
+            {/* The dialog sits on a lighter surface than a page, where the
+                page-level hint grey lands a hair under 4.5:1. */}
+            <div className="grid content-start gap-3 overflow-y-auto px-5 py-4 [&_[data-slot=field-hint]]:text-app-muted">
               {error === null ? null : <Notice tone="danger">{error}</Notice>}
               {children}
             </div>

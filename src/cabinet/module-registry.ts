@@ -8,6 +8,7 @@ import {
   CreditCard,
   LayoutDashboard,
   Package,
+  Plug,
   ReceiptText,
   ScanLine,
   Sticker,
@@ -42,6 +43,7 @@ export type CabinetModuleKey =
   | 'payments'
   | 'profile'
   | 'business'
+  | 'integrations'
 
 export type QuotaResource = keyof PlanUsageDto
 
@@ -306,6 +308,23 @@ export const cabinetModules: Readonly<
       label: 'Профіль',
       group: 'settings',
       icon: UserRound,
+      placement: 'account',
+    },
+  },
+  integrations: {
+    key: 'integrations',
+    routeSegment: '/settings/integrations',
+    released: true,
+    rollout: 'cabinet-parity-v1',
+    // Core demands team.manage even to list integrations: a stored API key is
+    // a key to someone else's account, not a read-only setting.
+    viewPermission: 'team.manage',
+    mutationPermission: 'team.manage',
+    allowedSubscriptionStates: BUSINESS_SUBSCRIPTION_STATES,
+    navigation: {
+      label: 'Інтеграції',
+      group: 'settings',
+      icon: Plug,
       placement: 'account',
     },
   },

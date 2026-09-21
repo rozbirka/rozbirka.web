@@ -104,6 +104,11 @@ const releasedCabinetRoutes: Partial<Record<CabinetModuleKey, RouteObject>> = {
     const { CashScreen } = await import('@/cabinet/cash/CashScreen')
     return CashScreen
   }),
+  integrations: cabinetScreenRoute('integrations', async () => {
+    const { IntegrationsScreen } =
+      await import('@/cabinet/integrations/IntegrationsScreen')
+    return IntegrationsScreen
+  }),
   business: cabinetScreenRoute('business', async () => {
     const { BusinessSettingsScreen } =
       await import('@/cabinet/business/business-settings-screen')
@@ -193,6 +198,33 @@ const commerceDetailRoutes: RouteObject[] = [
       return ScannerScreen
     },
     'scan',
+  ),
+  cabinetScreenRoute(
+    'integrations',
+    async () => {
+      const { NovaPoshtaScreen } =
+        await import('@/cabinet/integrations/NovaPoshtaScreen')
+      return NovaPoshtaScreen
+    },
+    'settings/integrations/:integrationId',
+  ),
+  cabinetScreenRoute(
+    'integrations',
+    async () => {
+      const { DispatchPointsScreen } =
+        await import('@/cabinet/integrations/DispatchPointsScreen')
+      return DispatchPointsScreen
+    },
+    'settings/integrations/:integrationId/dispatch-points',
+  ),
+  cabinetScreenRoute(
+    'integrations',
+    async () => {
+      const { WebhookDiagnosticsScreen } =
+        await import('@/cabinet/integrations/WebhookDiagnosticsScreen')
+      return WebhookDiagnosticsScreen
+    },
+    'settings/integrations/:integrationId/webhook',
   ),
   ...[
     'customers/new',

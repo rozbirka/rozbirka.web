@@ -71,7 +71,11 @@ export function Field({
           {error}
         </p>
       ) : describedBy === hintId ? (
-        <p className="text-app-dim text-[12.5px]" id={hintId}>
+        <p
+          className="text-app-dim text-[12.5px]"
+          data-slot="field-hint"
+          id={hintId}
+        >
           {hint}
         </p>
       ) : null}
