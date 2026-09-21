@@ -41,6 +41,7 @@ import {
   newCustomerPhoneDraft,
   normalizeCustomerPhoneDraft,
 } from '../customers/customer-phone'
+import { OrderCreateScreen } from './OrderCreateScreen'
 
 const idFromPath = (path: string) => /\/orders\/([^/]+)/.exec(path)?.[1] ?? null
 const errorMessage = (error: unknown) => {
@@ -165,19 +166,16 @@ function TotalLine({
 export function OrdersScreen({ definition }: CabinetModuleScreenProps) {
   const location = useLocation()
   const id = idFromPath(location.pathname)
-  if (location.pathname.endsWith('/new')) {
-    const isItemForm = location.pathname.endsWith('/items/new')
+  if (location.pathname.endsWith('/items/new')) {
     return (
       <OrderForm
         definition={definition}
-        orderId={
-          isItemForm
-            ? idFromPath(location.pathname.replace('/items/new', ''))
-            : null
-        }
+        orderId={idFromPath(location.pathname.replace('/items/new', ''))}
       />
     )
   }
+  if (location.pathname.endsWith('/new'))
+    return <OrderCreateScreen definition={definition} />
   return id ? (
     <OrderDetailScreen definition={definition} orderId={id} />
   ) : (
