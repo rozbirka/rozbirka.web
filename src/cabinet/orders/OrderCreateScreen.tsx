@@ -17,7 +17,10 @@ import {
   type OrderCreateStep,
   type OrderDraftItem,
 } from './order-create-model'
-import { OrderCreatePartsStep } from './OrderCreatePartsStep'
+import {
+  OrderCreatePartsStep,
+  OrderCreatePricesStep,
+} from './OrderCreatePartsStep'
 
 const STEPS: readonly { id: OrderCreateStep; label: string }[] = [
   { id: 'parts', label: 'Запчастини' },
@@ -94,12 +97,26 @@ export function OrderCreateScreen({ definition }: CabinetModuleScreenProps) {
       </nav>
 
       <SectionPanel
-        description="Оберіть запчастини, які потрібно додати до замовлення."
+        description={
+          step.id === 'parts'
+            ? 'Оберіть запчастини, які потрібно додати до замовлення.'
+            : step.id === 'prices'
+              ? 'Перевірте кількість і вкажіть ціну кожної запчастини.'
+              : undefined
+        }
         title={step.label}
       >
         {step.id === 'parts' ? (
           <OrderCreatePartsStep
             items={draft.items}
+            onItemsChange={(items) =>
+              setDraft((current) => ({ ...current, items }))
+            }
+          />
+        ) : step.id === 'prices' ? (
+          <OrderCreatePricesStep
+            items={draft.items}
+            onAddMore={() => setStepIndex(0)}
             onItemsChange={(items) =>
               setDraft((current) => ({ ...current, items }))
             }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Filter, Image as ImageIcon } from 'lucide-react'
+import { Filter, Image as ImageIcon, Plus, Trash2 } from 'lucide-react'
 import { carsApi, type CarListItem } from '@/api/cars'
 import { intakesApi, type IntakeListItem } from '@/api/intakes'
 import { partsApi, type PartListItem } from '@/api/parts'
@@ -16,8 +16,11 @@ import {
 import {
   addDraftItem,
   normalizeOrderPrice,
+  orderDraftTotal,
   parseOrderPrice,
   remainingPartQuantity,
+  removeDraftItem,
+  updateDraftPrice,
   type OrderDraftItem,
 } from './order-create-model'
 
@@ -386,6 +389,66 @@ export function OrderCreatePartsStep({
           })}
         </div>
       </Sheet>
+    </div>
+  )
+}
+
+export function OrderCreatePricesStep({
+  items,
+  onItemsChange,
+  onAddMore,
+}: {
+  items: OrderDraftItem[]
+  onItemsChange: (items: OrderDraftItem[]) => void
+  onAddMore: () => void
+}) {
+  return (
+    <div className="grid gap-3">
+      {items.map((item) => (
+        <article
+          className="border-app-line bg-app-input grid gap-3 rounded-control border p-3 sm:grid-cols-[1fr_10rem_auto] sm:items-end"
+          key={item.part.id}
+        >
+          <div className="min-w-0">
+            <h3 className="truncate text-sm font-semibold text-white">
+              {item.part.name}
+            </h3>
+            <p className="text-app-dim text-xs">{sourceLabel(item.part)}</p>
+            <p className="text-app-muted mt-1 text-sm tabular-nums">
+              {item.quantity} шт.
+            </p>
+          </div>
+          <Field label="Ціна за одиницю" srLabel={item.part.name} required>
+            <TextInput
+              inputMode="decimal"
+              onChange={(event) =>
+                onItemsChange(
+                  updateDraftPrice(items, item.part.id, event.target.value),
+                )
+              }
+              value={item.price}
+            />
+          </Field>
+          <Button
+            aria-label={`Прибрати ${item.part.name}`}
+            onClick={() => onItemsChange(removeDraftItem(items, item.part.id))}
+            size="icon"
+            variant="quiet"
+          >
+            <Trash2 aria-hidden />
+          </Button>
+        </article>
+      ))}
+
+      <div className="border-app-line flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+        <Button onClick={onAddMore}>
+          <Plus aria-hidden />
+          Додати ще запчастину
+        </Button>
+        <p className="text-base font-semibold text-white tabular-nums">
+          Разом: {orderDraftTotal(items)} $
+        </p>
+      </div>
     </div>
   )
 }

@@ -132,6 +132,15 @@ it('searches available parts and adds one with the quantity stepper', async () =
 
   expect(screen.getByText('Ліхтар ×2')).toBeVisible()
   expect(screen.getByRole('button', { name: 'Далі' })).toBeEnabled()
+  await user.click(screen.getByRole('button', { name: 'Далі' }))
+  expect(screen.getByRole('heading', { name: 'Ціна' })).toBeVisible()
+  expect(screen.getByText('2 шт.')).toBeVisible()
+  expect(screen.getByLabelText('Ціна за одиницю Ліхтар')).toHaveValue('120.50')
+  expect(screen.getByText('Разом: 241 $')).toBeVisible()
+  await user.clear(screen.getByLabelText('Ціна за одиницю Ліхтар'))
+  expect(screen.getByRole('button', { name: 'Далі' })).toBeDisabled()
+  await user.type(screen.getByLabelText('Ціна за одиницю Ліхтар'), '0')
+  expect(screen.getByRole('button', { name: 'Далі' })).toBeEnabled()
 })
 
 it('opens canonical creation as a four-step workflow without scanning', () => {
