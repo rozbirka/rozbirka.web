@@ -1078,10 +1078,10 @@ it('shows authoritative detail and lets orders.manage edit pending fields and ca
   const summaryValues = screen
     .getAllByRole('definition')
     .map((d) => d.textContent?.replace(/\s+/g, ' ').trim())
-  expect(summaryValues).toEqual(expect.arrayContaining(['250 UAH', '100 UAH']))
+  expect(summaryValues).toEqual(expect.arrayContaining(['250,00 ₴', '100,00 ₴']))
   const payments = screen.getByRole('table', { name: 'Платежі замовлення' })
   expect(within(payments).getByText('Основна каса')).toBeVisible()
-  expect(within(payments).getByText('100 UAH')).toBeVisible()
+  expect(within(payments).getByText('100,00 ₴')).toBeVisible()
   const audit = screen.getByRole('list', { name: 'Історія замовлення' })
   expect(within(audit).getByText('Замовлення створено')).toBeVisible()
   expect(within(audit).getByText(/Олена/)).toBeVisible()
