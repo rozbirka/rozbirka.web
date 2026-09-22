@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
-import { ChevronLeft, MoreHorizontal, Plus, Trash2 } from 'lucide-react'
+import {
+  ChevronLeft,
+  CreditCard,
+  MoreHorizontal,
+  Plus,
+  Trash2,
+} from 'lucide-react'
 import {
   Button,
   Card,
@@ -21,6 +27,7 @@ import {
   StatusPill,
   TextArea,
   TextInput,
+  useOptionalToast,
 } from '@/components/app'
 import { normalizeApiProblem } from '@/api/errors'
 import { orderStatusPresentation } from './order-labels'
@@ -32,7 +39,10 @@ import {
   type CustomerSearchItem,
 } from '@/api/customers'
 import { ordersApi, type OrderDetail, type OrderListItem } from '@/api/orders'
-import { partsApi, type PartListItem } from '@/api/parts'
+import {
+  PartSearchPicker,
+  type PartPickerItem,
+} from '@/components/parts/PartSearchPicker'
 import { useCabinet } from '../CabinetContext'
 import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
@@ -42,6 +52,8 @@ import {
   newCustomerPhoneDraft,
   normalizeCustomerPhoneDraft,
 } from '../customers/customer-phone'
+import { OrderPaymentDialog } from './OrderPaymentDialog'
+import { OrderCreateDrawer } from './OrderCreateDrawer'
 
 const idFromPath = (path: string) => /\/orders\/([^/]+)/.exec(path)?.[1] ?? null
 const errorMessage = (error: unknown) => {
@@ -50,6 +62,10 @@ const errorMessage = (error: unknown) => {
     return 'Функція потребує активної підписки. Поновіть підписку в розділі «Підписка» та спробуйте ще раз.'
   if (problem.kind === 'forbidden')
     return 'У вас немає прав для цієї дії. Попросіть адміністратора розбірки розширити вашу роль.'
+  if (problem.code === 'PARTS_NOT_AVAILABLE')
+    return 'Недостатньо доступних запчастин для вказаної кількості.'
+  if (problem.code === 'PART_IN_ACTIVE_INVENTORY')
+    return 'Запчастина зараз бере участь в інвентаризації. Завершіть інвентаризацію та спробуйте ще раз.'
   if (problem.kind === 'conflict')
     return 'Замовлення змінилося. Оновіть сторінку та спробуйте ще раз.'
   return problem.message
@@ -109,18 +125,20 @@ const lineTotal = (quantity: number, unitPrice: number) => {
  */
 const ORDER_EVENTS: Record<string, string> = {
   created: 'Замовлення створено',
-  items_updated: 'Позиції змінено',
-  item_updated: 'Позицію змінено',
-  notes_updated: 'Нотатки змінено',
-  customer_changed: 'Клієнта змінено',
-  confirmed: 'Підтверджено',
-  payment_accepted: 'Платіж прийнято',
-  cancelled: 'Скасовано',
+  itemsupdated: 'Позиції оновлено',
+  itemupdated: 'Позицію оновлено',
+  notesupdated: 'Нотатки оновлено',
+  customerset: 'Клієнта змінено',
+  customerchanged: 'Клієнта змінено',
+  confirmed: 'Замовлення підтверджено',
+  paymentaccepted: 'Платіж прийнято',
+  cancelled: 'Замовлення скасовано',
   refunded: 'Кошти повернено',
 }
 
 const orderEventTitle = (eventType: string) =>
-  ORDER_EVENTS[eventType] ?? eventType
+  ORDER_EVENTS[eventType.toLowerCase().replace(/[^a-z0-9]/g, '')] ??
+  'Замовлення оновлено'
 
 /** Two initials for the avatar chip; a single word gives one. */
 const initials = (name: string) =>
@@ -168,6 +186,13 @@ export function OrdersScreen({ definition }: CabinetModuleScreenProps) {
   const id = idFromPath(location.pathname)
   if (location.pathname.endsWith('/new')) {
     const isItemForm = location.pathname.endsWith('/items/new')
+    if (!isItemForm)
+      return (
+        <>
+          <OrderDirectory definition={definition} />
+          <OrderForm definition={definition} orderId={null} />
+        </>
+      )
     return (
       <OrderForm
         definition={definition}
@@ -524,11 +549,20 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
   )
 }
 
-function OrderForm({
+export function OrderForm({
+  createContext,
   definition,
   orderId,
-}: CabinetModuleScreenProps & { orderId: string | null }) {
+}: CabinetModuleScreenProps & {
+  orderId: string | null
+  createContext?: {
+    customer: { id: string; name: string }
+    onClose: () => void
+    orderBasePath: string
+  }
+}) {
   const cabinet = useCabinet()
+  const toast = useOptionalToast()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const mutationsAllowed = canMutate(definition, cabinet)
   const [params] = useSearchParams()
@@ -544,17 +578,22 @@ function OrderForm({
     partSearchAllowed && (orderId !== null || customerSearchAllowed)
   const [partId, setPartId] = useState('')
   const [partQuery, setPartQuery] = useState('')
-  const [partResults, setPartResults] = useState<PartListItem[]>([])
-  const [partPickerOpen, setPartPickerOpen] = useState(false)
-  const partPickerRef = useRef<HTMLDivElement>(null)
-  const [customerId, setCustomerId] = useState(params.get('customerId') ?? '')
-  const [customerQuery, setCustomerQuery] = useState('')
+  const [customerId, setCustomerId] = useState(
+    createContext?.customer.id ?? params.get('customerId') ?? '',
+  )
+  const [customerQuery, setCustomerQuery] = useState(
+    createContext?.customer.name ?? '',
+  )
+  const [selectedCustomerName, setSelectedCustomerName] = useState(
+    createContext?.customer.name ?? '',
+  )
   const [customerResults, setCustomerResults] = useState<CustomerSearchItem[]>(
     [],
   )
   const [customerPickerOpen, setCustomerPickerOpen] = useState(false)
   const customerPickerRef = useRef<HTMLDivElement>(null)
   const [newCustomerName, setNewCustomerName] = useState('')
+  const [newCustomerFormOpen, setNewCustomerFormOpen] = useState(false)
   const [newCustomerPhone, setNewCustomerPhone] = useState(
     newCustomerPhoneDraft,
   )
@@ -569,13 +608,13 @@ function OrderForm({
   >([])
   const [draftItems, setDraftItems] = useState<
     {
-      part: PartListItem
+      part: PartPickerItem
       quantity: number
       unitPrice: number
     }[]
   >([])
   const [selectedPartDraft, setSelectedPartDraft] =
-    useState<PartListItem | null>(null)
+    useState<PartPickerItem | null>(null)
   const [existingItemsLoad, setExistingItemsLoad] = useState<{
     orderId: string | null
     status: 'not-needed' | 'loaded' | 'failed'
@@ -588,17 +627,35 @@ function OrderForm({
         : 'loading'
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const linkedCustomerId =
+    orderId === null
+      ? (createContext?.customer.id ?? params.get('customerId'))
+      : null
+  useEffect(() => {
+    if (!linkedCustomerId || !customerSearchAllowed || createContext) return
+    const controller = new AbortController()
+    void customersApi
+      .getById(linkedCustomerId, { signal: controller.signal })
+      .then((customer) => {
+        if (controller.signal.aborted) return
+        setCustomerId(customer.id)
+        setSelectedCustomerName(customer.name)
+        setCustomerQuery(customer.name)
+      })
+      .catch((requestError) => {
+        if (!controller.signal.aborted) setError(errorMessage(requestError))
+      })
+    return () => controller.abort()
+  }, [createContext, customerSearchAllowed, linkedCustomerId])
   useEffect(() => {
     const closePickers = (event: PointerEvent) => {
       const target = event.target
       if (!(target instanceof Node)) return
-      if (!partPickerRef.current?.contains(target)) setPartPickerOpen(false)
       if (!customerPickerRef.current?.contains(target))
         setCustomerPickerOpen(false)
     }
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
-      setPartPickerOpen(false)
       setCustomerPickerOpen(false)
     }
     document.addEventListener('pointerdown', closePickers)
@@ -609,22 +666,8 @@ function OrderForm({
     }
   }, [])
   useEffect(() => {
-    const q = partQuery.trim()
-    if (!partSearchAllowed || !q) return
-    const controller = new AbortController()
-    void partsApi
-      .list({ q, page: 1, pageSize: 10, signal: controller.signal })
-      .then((result) => {
-        if (!controller.signal.aborted) setPartResults(result.items)
-      })
-      .catch((requestError) => {
-        if (!controller.signal.aborted) setError(errorMessage(requestError))
-      })
-    return () => controller.abort()
-  }, [partQuery, partSearchAllowed])
-  useEffect(() => {
     const q = customerQuery.trim()
-    if (!customerSearchAllowed || !q) return
+    if (!customerSearchAllowed || !q || customerId) return
     const controller = new AbortController()
     void customersApi
       .search(q, { signal: controller.signal })
@@ -635,7 +678,7 @@ function OrderForm({
         if (!controller.signal.aborted) setError(errorMessage(requestError))
       })
     return () => controller.abort()
-  }, [customerQuery, customerSearchAllowed])
+  }, [customerId, customerQuery, customerSearchAllowed])
   useEffect(() => {
     if (!orderId) return
     const controller = new AbortController()
@@ -727,7 +770,10 @@ function OrderForm({
       if (scope.signal.aborted) return
       const detailPath = orderId
         ? location.pathname.replace(/\/items\/new$/, '')
-        : `${location.pathname.replace(/\/new$/, '')}/${detail.id}`
+        : `${createContext?.orderBasePath ?? location.pathname.replace(/\/new$/, '')}/${detail.id}`
+      if (orderId === null) {
+        toast?.show({ message: 'Замовлення створено.', tone: 'ok' })
+      }
       await navigate(detailPath, { replace: true })
     } catch (error) {
       setError(errorMessage(error))
@@ -763,8 +809,11 @@ function OrderForm({
       )
       if (scope.signal.aborted) return
       setCustomerId(result.customer.id)
+      setSelectedCustomerName(result.customer.name)
+      setCustomerQuery(result.customer.name)
       setNewCustomerName('')
       setNewCustomerPhone(newCustomerPhoneDraft())
+      setNewCustomerFormOpen(false)
       setCustomerPickerOpen(false)
     } catch (requestError) {
       const conflict = readCustomerPhoneConflict(requestError)
@@ -777,6 +826,8 @@ function OrderForm({
   const selectDuplicateCustomer = () => {
     if (!customerConflict?.isActive || !customerMutationAllowed) return
     setCustomerId(customerConflict.customerId)
+    setSelectedCustomerName(customerConflict.customerName)
+    setCustomerQuery(customerConflict.customerName)
     setCustomerConflict(null)
     setNewCustomerName('')
     setNewCustomerPhone('')
@@ -809,6 +860,8 @@ function OrderForm({
       )
       if (scope.signal.aborted) return
       setCustomerId(customer.id)
+      setSelectedCustomerName(customer.name)
+      setCustomerQuery(customer.name)
       setCustomerConflict(null)
       setNewCustomerName('')
       setNewCustomerPhone('')
@@ -870,11 +923,6 @@ function OrderForm({
       </PageBody>
     )
   }
-  const selectedPart =
-    selectedPartDraft ?? partResults.find((part) => part.id === partId)
-  const selectedCustomer = customerResults.find(
-    (customer) => customer.id === customerId,
-  )
   const draftLineTotal =
     quantity && unitPrice
       ? lineTotal(Number(quantity), Number(unitPrice))
@@ -889,7 +937,9 @@ function OrderForm({
   )
   const backPath = orderId
     ? location.pathname.replace(/\/items\/new$/, '')
-    : location.pathname.replace(/\/new$/, '')
+    : createContext?.onClose
+      ? location.pathname
+      : location.pathname.replace(/\/new$/, '')
   const submitBlocked =
     !mutationsAllowed ||
     busy ||
@@ -898,373 +948,373 @@ function OrderForm({
     (orderId === null &&
       draftItems.length === 0 &&
       (!partId || !quantity || !unitPrice))
-  return (
-    <PageBody width="narrow">
-      <PageHeader
-        eyebrow={orderId ? 'Продажі · Замовлення' : 'Продажі'}
-        title={orderId ? 'Додати позицію' : 'Створити замовлення'}
-      />
-      <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
-        {error && <Notice tone="danger">{error}</Notice>}
-        <SectionPanel
-          description={
-            orderId
-              ? 'Знайдіть запчастину, вкажіть кількість і ціну — позиція долучиться до наявних у замовленні.'
-              : 'Оберіть запчастину, вкажіть кількість і ціну, а потім додайте її до замовлення.'
-          }
-          title="Позиція"
-        >
-          <div className="grid gap-3">
-            {partSearchAllowed && (
-              <div className="grid gap-2" ref={partPickerRef}>
-                <Field
-                  hint="Введіть назву — знайдені запчастини з’являться нижче."
-                  label="Пошук запчастини"
-                >
-                  <SearchInput
-                    onChange={(event) => {
-                      setPartQuery(event.target.value)
-                      if (event.target.value !== selectedPartDraft?.name) {
-                        setPartId('')
-                        setSelectedPartDraft(null)
-                      }
-                      setPartPickerOpen(true)
-                    }}
-                    onFocus={() => setPartPickerOpen(true)}
-                    value={partQuery}
-                  />
-                </Field>
-                {partPickerOpen &&
-                  partQuery.trim() &&
-                  partResults.length > 0 && (
-                    <ul className="grid gap-1.5">
-                      {partResults.map((part) => (
-                        <li key={part.id}>
-                          <Button
-                            aria-label={`Обрати запчастину ${part.name}`}
-                            className={
-                              part.id === partId
-                                ? 'border-brand/40 bg-brand/[0.1] w-full justify-between'
-                                : 'w-full justify-between'
-                            }
-                            onClick={() => {
-                              setPartId(part.id)
-                              setSelectedPartDraft(part)
-                              setPartQuery(part.name)
-                              setPartPickerOpen(false)
-                            }}
-                          >
-                            <span className="min-w-0 truncate">
-                              {part.name}
-                            </span>
-                            <span className="text-app-dim text-[13px] tabular-nums">
-                              {part.quantityAvailable} шт
-                            </span>
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-              </div>
-            )}
-            <Field
-              hint={
-                selectedPart
-                  ? `Обрано ${selectedPart.name}`
-                  : 'Заповнюється автоматично, коли ви обираєте запчастину в пошуку.'
-              }
-              label="ID запчастини"
-            >
-              <TextInput
-                onChange={(event) => setPartId(event.target.value)}
-                value={partId}
+  const form = (
+    <form className="grid gap-3" onSubmit={(event) => void submit(event)}>
+      {error && <Notice tone="danger">{error}</Notice>}
+      <SectionPanel
+        className={cn(
+          orderId === null && 'rounded-[16px] [&>header]:pt-3.5 [&>div]:p-3.5',
+        )}
+        description={
+          orderId
+            ? 'Знайдіть запчастину, вкажіть кількість і ціну — позиція долучиться до наявних у замовленні.'
+            : 'Оберіть запчастину, вкажіть кількість і ціну, а потім додайте її до замовлення.'
+        }
+        title="Позиція"
+      >
+        <div className="grid gap-3">
+          {partSearchAllowed && (
+            <PartSearchPicker
+              onClear={() => {
+                setPartId('')
+                setSelectedPartDraft(null)
+              }}
+              onQueryChange={setPartQuery}
+              onSelect={(part) => {
+                setPartId(part.id)
+                setSelectedPartDraft(part)
+                setPartQuery(part.name)
+              }}
+              query={partQuery}
+              value={selectedPartDraft}
+            />
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Кількість">
+              <QuantityStepper
+                label="Кількість"
+                min={0}
+                onChange={(value) => setQuantity(String(value))}
+                value={Number(quantity || '0')}
               />
             </Field>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Кількість">
-                <QuantityStepper
-                  label="Кількість"
-                  min={0}
-                  onChange={(value) => setQuantity(String(value))}
-                  value={Number(quantity || '0')}
-                />
-              </Field>
-              <Field label="Ціна за одиницю">
-                <TextInput
-                  className="text-left"
-                  inputMode="decimal"
-                  onChange={(event) => setUnitPrice(event.target.value)}
-                  value={unitPrice}
-                />
-              </Field>
+            <Field label="Ціна за одиницю">
+              <TextInput
+                className="text-left"
+                inputMode="decimal"
+                onChange={(event) => setUnitPrice(event.target.value)}
+                value={unitPrice}
+              />
+            </Field>
+          </div>
+          {orderId === null && (
+            <Button
+              className="w-full justify-center border-dashed"
+              disabled={
+                !selectedPartDraft ||
+                !quantity ||
+                !unitPrice ||
+                Number(quantity) < 1 ||
+                Number(unitPrice) < 0
+              }
+              onClick={addDraftItem}
+            >
+              <Plus aria-hidden />
+              Додати деталь
+            </Button>
+          )}
+          {orderId === null && draftItems.length > 0 && (
+            <div
+              aria-label="Позиції замовлення"
+              className="border-app-line grid gap-2 border-t pt-4"
+            >
+              {draftItems.map((item) => (
+                <div
+                  className="border-app-line bg-app-canvas/45 grid gap-3 rounded-[14px] border p-3.5 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center"
+                  key={item.part.id}
+                >
+                  <div className="min-w-0">
+                    <p className="text-app-ink truncate text-[14px] font-bold">
+                      {item.part.name}
+                    </p>
+                    <p className="text-app-muted mt-1 text-[13px] tabular-nums">
+                      {item.quantity} × ${item.unitPrice}
+                    </p>
+                  </div>
+                  <p className="text-brand text-right text-[16px] font-extrabold tabular-nums">
+                    $
+                    {new Intl.NumberFormat('uk-UA').format(
+                      item.quantity * item.unitPrice,
+                    )}
+                  </p>
+                  <Button
+                    aria-label={`Прибрати ${item.part.name}`}
+                    className="size-10 justify-center px-0"
+                    onClick={() =>
+                      setDraftItems((current) =>
+                        current.filter(
+                          (draft) => draft.part.id !== item.part.id,
+                        ),
+                      )
+                    }
+                    variant="quiet"
+                  >
+                    <Trash2 aria-hidden />
+                  </Button>
+                </div>
+              ))}
             </div>
-            {orderId === null && (
-              <Button
-                className="w-full justify-center border-dashed"
-                disabled={
-                  !selectedPartDraft ||
-                  !quantity ||
-                  !unitPrice ||
-                  Number(quantity) < 1 ||
-                  Number(unitPrice) < 0
+          )}
+        </div>
+      </SectionPanel>
+      {customerSearchAllowed && (
+        <SectionPanel
+          className="rounded-[16px] [&>header]:pt-3.5 [&>div]:p-3.5"
+          description="Замовлення можна створити й без клієнта — тоді поле лишається порожнім."
+          title="Клієнт"
+        >
+          <div className="grid gap-3" ref={customerPickerRef}>
+            <Field
+              hint={customerId ? undefined : 'Клієнта не обрано'}
+              label="Пошук клієнта"
+            >
+              <SearchInput
+                className={
+                  customerId ? 'border-brand/40 bg-brand/[0.08]' : undefined
                 }
-                onClick={addDraftItem}
+                onChange={(event) => {
+                  const value = event.target.value
+                  if (customerId && value !== selectedCustomerName) {
+                    setCustomerId('')
+                    setSelectedCustomerName('')
+                  }
+                  setCustomerQuery(value)
+                  setCustomerPickerOpen(true)
+                }}
+                onFocus={() => setCustomerPickerOpen(true)}
+                value={customerQuery}
+              />
+            </Field>
+            {customerPickerOpen &&
+              customerQuery.trim() &&
+              customerResults.length > 0 && (
+                <ul className="grid gap-1.5">
+                  {customerResults.map((customer) => (
+                    <li key={customer.id}>
+                      <Button
+                        aria-label={`Обрати клієнта ${customer.name}`}
+                        className={
+                          customer.id === customerId
+                            ? 'border-brand/40 bg-brand/[0.1] w-full justify-between'
+                            : 'w-full justify-between'
+                        }
+                        onClick={() => {
+                          setCustomerId(customer.id)
+                          setSelectedCustomerName(customer.name)
+                          setCustomerQuery(customer.name)
+                          setCustomerPickerOpen(false)
+                        }}
+                      >
+                        <span className="min-w-0 truncate">
+                          {customer.name}
+                        </span>
+                        <span className="text-app-dim text-[13px]">
+                          {customer.phone ?? 'без телефону'}
+                        </span>
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            {customerMutationAllowed && !customerId && !newCustomerFormOpen && (
+              <Button
+                className="w-fit"
+                onClick={() => setNewCustomerFormOpen(true)}
+                type="button"
               >
                 <Plus aria-hidden />
-                Додати деталь
+                Створити нового клієнта
               </Button>
             )}
-            {orderId === null && draftItems.length > 0 && (
-              <div
-                aria-label="Позиції замовлення"
-                className="border-app-line grid gap-2 border-t pt-4"
-              >
-                {draftItems.map((item) => (
-                  <div
-                    className="border-app-line bg-app-canvas/45 grid gap-3 rounded-[14px] border p-3.5 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center"
-                    key={item.part.id}
-                  >
-                    <div className="min-w-0">
-                      <p className="text-app-ink truncate text-[14px] font-bold">
-                        {item.part.name}
-                      </p>
-                      <p className="text-app-muted mt-1 text-[13px] tabular-nums">
-                        {item.quantity} × ${item.unitPrice}
-                      </p>
-                    </div>
-                    <p className="text-brand text-right text-[16px] font-extrabold tabular-nums">
-                      $
-                      {new Intl.NumberFormat('uk-UA').format(
-                        item.quantity * item.unitPrice,
-                      )}
-                    </p>
-                    <Button
-                      aria-label={`Прибрати ${item.part.name}`}
-                      className="size-10 justify-center px-0"
-                      onClick={() =>
-                        setDraftItems((current) =>
-                          current.filter(
-                            (draft) => draft.part.id !== item.part.id,
-                          ),
+            {customerMutationAllowed && !customerId && newCustomerFormOpen && (
+              <fieldset className="border-app-line-2 rounded-control grid gap-3 border border-dashed p-3">
+                <legend className="text-app-muted px-1 text-[13.5px]">
+                  Новий клієнт
+                </legend>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Ім’я нового клієнта">
+                    <TextInput
+                      onChange={(event) =>
+                        setNewCustomerName(event.target.value)
+                      }
+                      value={newCustomerName}
+                    />
+                  </Field>
+                  <Field label="Телефон нового клієнта">
+                    <TextInput
+                      inputMode="tel"
+                      onChange={(event) =>
+                        setNewCustomerPhone(
+                          normalizeCustomerPhoneDraft(event.target.value),
                         )
                       }
-                      variant="quiet"
-                    >
-                      <Trash2 aria-hidden />
+                      value={newCustomerPhone}
+                    />
+                  </Field>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    aria-busy={customerBusy}
+                    disabled={customerBusy || !newCustomerName.trim()}
+                    onClick={() => void createCustomerInline()}
+                  >
+                    {customerBusy ? 'Створюємо клієнта…' : 'Створити клієнта'}
+                  </Button>
+                  <Button
+                    disabled={customerBusy}
+                    onClick={() => setNewCustomerFormOpen(false)}
+                    type="button"
+                    variant="quiet"
+                  >
+                    Скасувати
+                  </Button>
+                </div>
+              </fieldset>
+            )}
+            {customerConflict && (
+              <Notice
+                action={
+                  customerConflict.isActive ? (
+                    <Button onClick={selectDuplicateCustomer} variant="primary">
+                      Використати клієнта {customerConflict.customerName}
                     </Button>
-                  </div>
-                ))}
-              </div>
+                  ) : (
+                    <Button
+                      disabled={customerBusy}
+                      onClick={() => void reactivateDuplicateCustomer()}
+                      variant="primary"
+                    >
+                      Активувати {customerConflict.customerName}
+                    </Button>
+                  )
+                }
+                className="flex-wrap"
+                role="alert"
+                tone="warn"
+              >
+                {customerConflict.message}
+              </Notice>
             )}
           </div>
         </SectionPanel>
-        {customerSearchAllowed && (
-          <SectionPanel
-            description="Замовлення можна створити й без клієнта — тоді поле лишається порожнім."
-            title="Клієнт"
-          >
-            <div className="grid gap-3" ref={customerPickerRef}>
-              <Field
-                hint={
-                  selectedCustomer
-                    ? `Обрано ${selectedCustomer.name}`
-                    : customerId
-                      ? `Обрано клієнта ${customerId}`
-                      : 'Клієнта не обрано'
-                }
-                label="Пошук клієнта"
-              >
-                <SearchInput
-                  onChange={(event) => {
-                    setCustomerQuery(event.target.value)
-                    setCustomerPickerOpen(true)
-                  }}
-                  onFocus={() => setCustomerPickerOpen(true)}
-                  value={customerQuery}
-                />
-              </Field>
-              {customerPickerOpen &&
-                customerQuery.trim() &&
-                customerResults.length > 0 && (
-                  <ul className="grid gap-1.5">
-                    {customerResults.map((customer) => (
-                      <li key={customer.id}>
-                        <Button
-                          aria-label={`Обрати клієнта ${customer.name}`}
-                          className={
-                            customer.id === customerId
-                              ? 'border-brand/40 bg-brand/[0.1] w-full justify-between'
-                              : 'w-full justify-between'
-                          }
-                          onClick={() => {
-                            setCustomerId(customer.id)
-                            setCustomerPickerOpen(false)
-                          }}
-                        >
-                          <span className="min-w-0 truncate">
-                            {customer.name}
-                          </span>
-                          <span className="text-app-dim text-[13px]">
-                            {customer.phone ?? 'без телефону'}
-                          </span>
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              {customerMutationAllowed && (
-                <fieldset className="border-app-line-2 rounded-control grid gap-3 border border-dashed p-3">
-                  <legend className="text-app-muted px-1 text-[13.5px]">
-                    Новий клієнт
-                  </legend>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field label="Ім’я нового клієнта">
-                      <TextInput
-                        onChange={(event) =>
-                          setNewCustomerName(event.target.value)
-                        }
-                        value={newCustomerName}
-                      />
-                    </Field>
-                    <Field label="Телефон нового клієнта">
-                      <TextInput
-                        inputMode="tel"
-                        onChange={(event) =>
-                          setNewCustomerPhone(
-                            normalizeCustomerPhoneDraft(event.target.value),
-                          )
-                        }
-                        value={newCustomerPhone}
-                      />
-                    </Field>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      aria-busy={customerBusy}
-                      disabled={customerBusy || !newCustomerName.trim()}
-                      onClick={() => void createCustomerInline()}
-                    >
-                      {customerBusy ? 'Створюємо клієнта…' : 'Створити клієнта'}
-                    </Button>
-                  </div>
-                </fieldset>
-              )}
-              {customerConflict && (
-                <Notice
-                  action={
-                    customerConflict.isActive ? (
-                      <Button
-                        onClick={selectDuplicateCustomer}
-                        variant="primary"
-                      >
-                        Використати клієнта {customerConflict.customerName}
-                      </Button>
-                    ) : (
-                      <Button
-                        disabled={customerBusy}
-                        onClick={() => void reactivateDuplicateCustomer()}
-                        variant="primary"
-                      >
-                        Активувати {customerConflict.customerName}
-                      </Button>
-                    )
-                  }
-                  className="flex-wrap"
-                  role="alert"
-                  tone="warn"
-                >
-                  {customerConflict.message}
-                </Notice>
-              )}
-            </div>
-          </SectionPanel>
-        )}
-        {orderId === null && (
-          <SectionPanel title="Нотатки">
+      )}
+      {orderId === null && (
+        <SectionPanel
+          className="rounded-[16px] [&>header]:pt-3.5 [&>div]:p-3.5"
+          title="Нотатки"
+        >
+          <div>
+            <Field
+              hint="Видно команді розбірки на сторінці замовлення."
+              label="Нотатки"
+            >
+              <TextArea
+                onChange={(event) => setNotes(event.target.value)}
+                value={notes}
+              />
+            </Field>
+          </div>
+        </SectionPanel>
+      )}
+      {orderId === null && draftItems.length > 0 && (
+        <Panel
+          aria-label="Підсумок замовлення"
+          className="border-brand/25 bg-brand/[0.055]"
+        >
+          <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <Field
-                hint="Видно команді розбірки на сторінці замовлення."
-                label="Нотатки"
-              >
-                <TextArea
-                  onChange={(event) => setNotes(event.target.value)}
-                  value={notes}
-                />
-              </Field>
-            </div>
-          </SectionPanel>
-        )}
-        {orderId === null && draftItems.length > 0 && (
-          <Panel
-            aria-label="Підсумок замовлення"
-            className="border-brand/25 bg-brand/[0.055]"
-          >
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <p className="text-app-muted text-[13.5px]">
-                  Разом за замовлення
-                </p>
-                <p className="text-app-dim mt-1 text-[12.5px]">
-                  {draftItems.length}{' '}
-                  {plural(draftItems.length, ['позиція', 'позиції', 'позицій'])}
-                </p>
-              </div>
-              <p className="text-brand text-[28px] leading-none font-extrabold tracking-[-0.02em] tabular-nums">
-                ${new Intl.NumberFormat('uk-UA').format(draftItemsTotal)}
+              <p className="text-app-muted text-[13.5px]">
+                Разом за замовлення
+              </p>
+              <p className="text-app-dim mt-1 text-[12.5px]">
+                {draftItems.length}{' '}
+                {plural(draftItems.length, ['позиція', 'позиції', 'позицій'])}
               </p>
             </div>
-          </Panel>
-        )}
-        <Panel>
-          <div
-            className={cn(
-              'grid gap-3 sm:items-end',
-              orderId !== null
-                ? 'sm:grid-cols-[minmax(0,1fr)_auto]'
-                : 'sm:justify-items-end',
-            )}
-          >
-            {orderId !== null && (
-              <div className="grid min-w-0 gap-1">
-                <TotalLine
-                  label="Уже в замовленні"
-                  value={
-                    existingItemsLoadStatus === 'loaded'
-                      ? money(existingTotal)
-                      : '—'
-                  }
-                />
-                <TotalLine
-                  label="Разом за позицію"
-                  strong
-                  value={money(draftLineTotal)}
-                />
-              </div>
-            )}
-            <div className="flex flex-wrap gap-2">
+            <p className="text-brand text-[28px] leading-none font-extrabold tracking-[-0.02em] tabular-nums">
+              ${new Intl.NumberFormat('uk-UA').format(draftItemsTotal)}
+            </p>
+          </div>
+        </Panel>
+      )}
+      <Panel>
+        <div
+          className={cn(
+            'grid gap-3 sm:items-end',
+            orderId !== null
+              ? 'sm:grid-cols-[minmax(0,1fr)_auto]'
+              : 'sm:justify-items-end',
+          )}
+        >
+          {orderId !== null && (
+            <div className="grid min-w-0 gap-1">
+              <TotalLine
+                label="Уже в замовленні"
+                value={
+                  existingItemsLoadStatus === 'loaded'
+                    ? money(existingTotal, 'USD')
+                    : '—'
+                }
+              />
+              <TotalLine
+                label="Разом за позицію"
+                strong
+                value={money(draftLineTotal, 'USD')}
+              />
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {createContext ? (
+              <Button
+                onClick={createContext.onClose}
+                type="button"
+                variant="quiet"
+              >
+                Скасувати
+              </Button>
+            ) : (
               <Button asChild variant="quiet">
                 <Link to={backPath}>
                   {orderId ? 'До замовлення' : 'До списку замовлень'}
                 </Link>
               </Button>
-              <Button
-                aria-busy={busy || existingItemsLoadStatus === 'loading'}
-                disabled={submitBlocked}
-                type="submit"
-                variant="primary"
-              >
-                {busy
-                  ? orderId
-                    ? 'Додаємо…'
-                    : 'Створюємо…'
-                  : orderId
-                    ? 'Додати позицію'
-                    : 'Створити замовлення'}
-              </Button>
-            </div>
+            )}
+            <Button
+              aria-busy={busy || existingItemsLoadStatus === 'loading'}
+              disabled={submitBlocked}
+              type="submit"
+              variant="primary"
+            >
+              {busy
+                ? orderId
+                  ? 'Додаємо…'
+                  : 'Створюємо…'
+                : orderId
+                  ? 'Додати позицію'
+                  : 'Створити замовлення'}
+            </Button>
           </div>
-        </Panel>
-      </form>
+        </div>
+      </Panel>
+    </form>
+  )
+  if (orderId === null) {
+    return (
+      <OrderCreateDrawer
+        busy={busy}
+        onClose={() => {
+          if (createContext) createContext.onClose()
+          else void navigate(backPath, { replace: true })
+        }}
+      >
+        {form}
+      </OrderCreateDrawer>
+    )
+  }
+  return (
+    <PageBody width="narrow">
+      <PageHeader eyebrow="Продажі · Замовлення" title="Додати позицію" />
+      {form}
     </PageBody>
   )
 }
@@ -1274,6 +1324,7 @@ function OrderDetailScreen({
   orderId,
 }: CabinetModuleScreenProps & { orderId: string }) {
   const cabinet = useCabinet()
+  const toast = useOptionalToast()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const replayKeys = useOrderIdempotencyKeys()
   const location = useLocation()
@@ -1288,12 +1339,11 @@ function OrderDetailScreen({
   const [refundReason, setRefundReason] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [refundOpen, setRefundOpen] = useState(false)
-  const [rawHistory, setRawHistory] = useState(false)
   const [draftNotes, setDraftNotes] = useState('')
   const [itemsPage, setItemsPage] = useState(1)
-  const [paymentDrafts, setPaymentDrafts] = useState([
-    { accountId: '', amount: '', currency: '' },
-  ])
+  const [editingItems, setEditingItems] = useState(false)
+  const [historyExpanded, setHistoryExpanded] = useState(false)
+  const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null)
   const acceptOrder = useCallback((detail: OrderDetail) => {
     setOrder(detail)
     setItemDrafts(detail.items)
@@ -1324,7 +1374,7 @@ function OrderDetailScreen({
     replay?: { operation: OrderReplayOperation; payload: unknown },
     permission?: Permission,
   ) => {
-    if (busy) return
+    if (busy) return false
     setBusy(true)
     try {
       const scope = requireLatestMutation({ quota: false })
@@ -1343,10 +1393,12 @@ function OrderDetailScreen({
       if (scope.signal.aborted) return
       acceptOrder(updated)
       setError(null)
+      return true
     } catch (error) {
       if (replay && !isAmbiguousMutationFailure(error))
         replayKeys.clear(replay.operation)
       setError(errorMessage(error))
+      return false
     } finally {
       setBusy(false)
     }
@@ -1368,12 +1420,21 @@ function OrderDetailScreen({
       </PageBody>
     )
   const status = orderStatusPresentation(order.status)
-  const currency = order.paymentCurrency
-  const itemsEditable = mutationsAllowed && order.status === 'pending'
+  const orderEditable = mutationsAllowed && order.status === 'pending'
+  const itemsEditable = orderEditable && editingItems
   const draftsTotal = itemDrafts.reduce((sum, item) => {
     const total = lineTotal(item.quantity, item.unitPrice)
     return total === null ? sum : sum + total
   }, 0)
+  const itemDraftsValid =
+    itemDrafts.length > 0 &&
+    itemDrafts.every(
+      (item) =>
+        Number.isInteger(item.quantity) &&
+        item.quantity > 0 &&
+        Number.isFinite(item.unitPrice) &&
+        item.unitPrice >= 0,
+    )
   const itemsPageSize = 20
   const visibleItems = (itemsEditable ? itemDrafts : order.items).slice(
     (itemsPage - 1) * itemsPageSize,
@@ -1385,23 +1446,43 @@ function OrderDetailScreen({
       (itemsEditable ? itemDrafts.length : order.items.length) / itemsPageSize,
     ),
   )
-  const paymentsTotal = paymentDrafts.reduce((sum, payment) => {
-    const amount = Number(payment.amount)
-    return payment.amount && Number.isFinite(amount) ? sum + amount : sum
-  }, 0)
-  const outstanding =
-    order.totalAmount === null || order.totalPaid === null
-      ? null
-      : order.totalAmount - order.totalPaid
+  const computedItemsTotalUsd = order.items.reduce(
+    (sum, item) => sum + item.totalPrice,
+    0,
+  )
+  const orderTotalUsd =
+    typeof order.itemsTotalUsd === 'number' &&
+    Number.isFinite(order.itemsTotalUsd)
+      ? order.itemsTotalUsd
+      : order.items.length > 0
+        ? computedItemsTotalUsd
+        : typeof order.totalAmount === 'number' &&
+            Number.isFinite(order.totalAmount)
+          ? order.totalAmount
+          : null
+  const paymentState =
+    order.status === 'pending'
+      ? { label: 'Очікує оплату', className: 'text-state-warn' }
+      : order.status === 'confirmed'
+        ? { label: 'Оплачено повністю', className: 'text-state-ok' }
+        : order.status === 'refunded'
+          ? { label: 'Кошти повернено', className: 'text-state-info' }
+          : { label: 'Замовлення скасовано', className: 'text-app-dim' }
+  const displayedPayments = order.payments
   const ordersPath = location.pathname.replace(/\/orders\/.*$/, '/orders')
   const customerPath =
     order.customerId === null
       ? null
       : `${location.pathname.replace(/\/orders\/.*$/, '')}/customers/${order.customerId}`
-  const historyRows = order.history.map((entry, index) => ({
-    ...entry,
-    key: `${entry.createdAt}-${entry.eventType}-${entry.userName}-${index}`,
-  }))
+  const historyRows = order.history
+    .map((entry, index) => ({
+      ...entry,
+      key: `${entry.createdAt}-${entry.eventType}-${entry.userName}-${index}`,
+    }))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+  const visibleHistoryRows = historyExpanded
+    ? historyRows
+    : historyRows.slice(0, 3)
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
       <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
@@ -1421,7 +1502,7 @@ function OrderDetailScreen({
             <span className="text-app-muted">Замовлення</span>
           </p>
         </div>
-        {itemsEditable || (financeAllowed && order.status === 'confirmed') ? (
+        {orderEditable || (financeAllowed && order.status === 'confirmed') ? (
           <div className="flex flex-wrap items-center gap-2.5">
             <Button
               aria-expanded={menuOpen}
@@ -1455,7 +1536,7 @@ function OrderDetailScreen({
             className="border-app-line bg-app-raised flex flex-wrap items-center gap-2.5 rounded-[14px] border px-4 py-3"
             role="group"
           >
-            {itemsEditable ? (
+            {orderEditable ? (
               <Button
                 disabled={busy}
                 onClick={() =>
@@ -1531,12 +1612,14 @@ function OrderDetailScreen({
           </section>
         ) : null}
 
-        {error && <Notice tone="danger">{error}</Notice>}
+        {error && paymentOrderId !== order.id ? (
+          <Notice tone="danger">{error}</Notice>
+        ) : null}
 
-        <div className="flex flex-wrap-reverse items-end gap-6">
-          <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
-            <Card className="order-1" title="Нотатки">
-              {itemsEditable ? (
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+          <div className="grid min-w-0 gap-5">
+            <Card title="Нотатки">
+              {orderEditable ? (
                 <div className="grid gap-3">
                   <Field label="Нотатки замовлення">
                     <TextArea
@@ -1566,12 +1649,57 @@ function OrderDetailScreen({
               )}
             </Card>
 
+            <Card
+              aside={
+                <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
+                  {displayedPayments.length}{' '}
+                  {plural(displayedPayments.length, [
+                    'платіж',
+                    'платежі',
+                    'платежів',
+                  ])}
+                </span>
+              }
+              bodyClassName="p-0"
+              headerClassName="border-app-line border-b pb-5"
+              title="Платежі"
+            >
+              {displayedPayments.length > 0 ? (
+                <ul aria-label="Платежі замовлення">
+                  {displayedPayments.map((payment, index) => (
+                    <li
+                      className="border-app-line flex items-center justify-between gap-4 border-b px-6 py-4 last:border-b-0"
+                      key={`${payment.accountId}-${payment.currency}-${index}`}
+                    >
+                      <span className="flex min-w-0 items-center gap-3.5">
+                        <span className="bg-app-input text-app-muted grid size-9 shrink-0 place-items-center rounded-[10px]">
+                          <CreditCard aria-hidden className="size-4" />
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-[15px] font-bold text-white">
+                            {payment.accountName}
+                          </span>
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-mono text-[15px] font-bold text-white tabular-nums">
+                        {money(payment.amount, payment.currency)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyState
+                  description="Платежі з’являться тут після підтвердження замовлення."
+                  title="Платежів немає"
+                />
+              )}
+            </Card>
+
             {itemsEditable ? (
               <SectionPanel
-                className="order-3"
                 aside={
                   <span className="text-app-muted text-[13.5px] tabular-nums">
-                    Разом за позиціями {money(draftsTotal, currency)}
+                    Разом за позиціями {money(draftsTotal, 'USD')}
                   </span>
                 }
                 description={
@@ -1582,8 +1710,8 @@ function OrderDetailScreen({
                 footer={
                   <>
                     <Button
-                      disabled={busy}
-                      onClick={() =>
+                      disabled={busy || !itemDraftsValid}
+                      onClick={() => {
                         void transition(() =>
                           ordersApi.updateItems(
                             order.id,
@@ -1595,17 +1723,24 @@ function OrderDetailScreen({
                               }),
                             ),
                           ),
-                        )
-                      }
+                        ).then((saved) => {
+                          if (saved) setEditingItems(false)
+                        })
+                      }}
                       variant="primary"
                     >
                       Зберегти позиції
                     </Button>
-                    <Button asChild variant="ghost">
-                      <Link to={`${location.pathname}/items/new`}>
-                        <Plus aria-hidden />
-                        Додати позицію
-                      </Link>
+                    <Button
+                      disabled={busy}
+                      onClick={() => {
+                        setItemDrafts(order.items)
+                        setEditingItems(false)
+                        setError(null)
+                      }}
+                      variant="ghost"
+                    >
+                      Скасувати
                     </Button>
                   </>
                 }
@@ -1633,7 +1768,7 @@ function OrderDetailScreen({
                             Сума позиції{' '}
                             {money(
                               lineTotal(item.quantity, item.unitPrice),
-                              currency,
+                              'USD',
                             )}
                           </p>
                         </div>
@@ -1739,7 +1874,6 @@ function OrderDetailScreen({
               </SectionPanel>
             ) : (
               <Card
-                className="order-3"
                 aside={
                   <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
                     {order.items.length}{' '}
@@ -1751,6 +1885,7 @@ function OrderDetailScreen({
                   </span>
                 }
                 bodyClassName="p-0"
+                headerClassName="border-app-line border-b pb-5"
                 title="Позиції"
               >
                 <DataTable
@@ -1772,7 +1907,7 @@ function OrderDetailScreen({
                       key: 'unitPrice',
                       label: 'Ціна',
                       align: 'end',
-                      cell: (item) => money(item.unitPrice, currency),
+                      cell: (item) => money(item.unitPrice, 'USD'),
                     },
                     {
                       key: 'totalPrice',
@@ -1780,7 +1915,7 @@ function OrderDetailScreen({
                       align: 'end',
                       cell: (item) => (
                         <span className="font-bold text-white">
-                          {money(item.totalPrice, currency)}
+                          {money(item.totalPrice, 'USD')}
                         </span>
                       ),
                     },
@@ -1791,6 +1926,7 @@ function OrderDetailScreen({
                       title="Позицій немає"
                     />
                   }
+                  embedded
                   footer={
                     <div>
                       <div className="border-app-line flex flex-wrap items-baseline justify-end gap-5 border-t px-6 py-4">
@@ -1798,9 +1934,29 @@ function OrderDetailScreen({
                           Разом
                         </span>
                         <span className="text-[20px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
-                          {money(order.totalAmount, currency)}
+                          {money(orderTotalUsd, 'USD')}
                         </span>
                       </div>
+                      {orderEditable ? (
+                        <div className="border-app-line flex flex-wrap justify-end gap-2.5 border-t px-6 py-4">
+                          <Button
+                            disabled={busy}
+                            onClick={() => {
+                              setItemDrafts(order.items)
+                              setEditingItems(true)
+                              setError(null)
+                            }}
+                          >
+                            Редагувати
+                          </Button>
+                          <Button asChild variant="primary">
+                            <Link to={`${location.pathname}/items/new`}>
+                              <Plus aria-hidden />
+                              Додати позицію
+                            </Link>
+                          </Button>
+                        </div>
+                      ) : null}
                       {order.items.length > itemsPageSize ? (
                         <Pagination
                           label="Пагінація позицій замовлення"
@@ -1816,238 +1972,82 @@ function OrderDetailScreen({
                 />
               </Card>
             )}
-
-            {financeAllowed && order.status === 'pending' && (
-              <SectionPanel
-                className="order-2"
-                description="Підтвердження фіксує оплату й переводить замовлення у статус «Підтверджено»."
-                footer={
-                  <>
-                    <Button
-                      disabled={
-                        busy ||
-                        paymentDrafts.some(
-                          (payment) =>
-                            !payment.accountId ||
-                            !payment.amount ||
-                            !payment.currency,
-                        )
-                      }
-                      onClick={() => {
-                        const input = {
-                          payments: paymentDrafts.map((payment) => ({
-                            accountId: payment.accountId,
-                            amount: Number(payment.amount),
-                            currency: payment.currency,
-                          })),
-                        }
-                        void transition(
-                          (idempotencyKey) =>
-                            ordersApi.confirm(order.id, input, {
-                              idempotencyKey: idempotencyKey!,
-                            }),
-                          {
-                            operation: 'order-confirm',
-                            payload: { orderId: order.id, input },
-                          },
-                          'finance.manage',
-                        )
-                      }}
-                      variant="primary"
-                    >
-                      Підтвердити
-                    </Button>
-                    <Button
-                      onClick={() =>
-                        setPaymentDrafts((current) => [
-                          ...current,
-                          { accountId: '', amount: '', currency: '' },
-                        ])
-                      }
-                    >
-                      <Plus aria-hidden />
-                      Додати платіж
-                    </Button>
-                  </>
-                }
-                title="Оплата й підтвердження"
-              >
-                <div className="grid gap-3">
-                  {paymentDrafts.map((payment, index) => {
-                    const suffix = index === 0 ? '' : ` ${index + 1}`
-                    const updatePayment = (
-                      field: 'accountId' | 'amount' | 'currency',
-                      value: string,
-                    ) =>
-                      setPaymentDrafts((current) =>
-                        current.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? { ...item, [field]: value }
-                            : item,
-                        ),
-                      )
-                    return (
-                      <fieldset
-                        className="border-app-line-2 rounded-control grid gap-3 border border-dashed p-3"
-                        key={index}
-                      >
-                        <legend className="text-app-muted px-1 text-[13.5px]">
-                          Платіж {index + 1}
-                        </legend>
-                        <div className="grid gap-3 sm:grid-cols-3">
-                          <Field label={`ID рахунку${suffix}`}>
-                            <TextInput
-                              onChange={(event) =>
-                                updatePayment('accountId', event.target.value)
-                              }
-                              value={payment.accountId}
-                            />
-                          </Field>
-                          <Field label={`Сума платежу${suffix}`}>
-                            <TextInput
-                              className="text-right"
-                              inputMode="decimal"
-                              onChange={(event) =>
-                                updatePayment('amount', event.target.value)
-                              }
-                              value={payment.amount}
-                            />
-                          </Field>
-                          <Field label={`Валюта платежу${suffix}`}>
-                            <TextInput
-                              onChange={(event) =>
-                                updatePayment('currency', event.target.value)
-                              }
-                              value={payment.currency}
-                            />
-                          </Field>
-                        </div>
-                        {paymentDrafts.length > 1 && (
-                          <div className="flex flex-wrap">
-                            <Button
-                              onClick={() =>
-                                setPaymentDrafts((current) =>
-                                  current.filter(
-                                    (_, itemIndex) => itemIndex !== index,
-                                  ),
-                                )
-                              }
-                              variant="quiet"
-                            >
-                              Прибрати платіж {index + 1}
-                            </Button>
-                          </div>
-                        )}
-                      </fieldset>
-                    )
-                  })}
-                  <div className="grid gap-1">
-                    <TotalLine
-                      label="Сума платежів"
-                      strong
-                      value={money(paymentsTotal, currency)}
-                    />
-                    <TotalLine
-                      label="Разом за замовленням"
-                      value={money(order.totalAmount, currency)}
-                    />
-                  </div>
-                </div>
-              </SectionPanel>
-            )}
-
-            <Card
-              className="order-2"
-              aside={
-                <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
-                  {order.payments.length}{' '}
-                  {plural(order.payments.length, [
-                    'платіж',
-                    'платежі',
-                    'платежів',
-                  ])}
-                </span>
-              }
-              bodyClassName="p-0"
-              title="Платежі"
-            >
-              <DataTable
-                caption="Платежі замовлення"
-                columns={[
-                  {
-                    key: 'account',
-                    label: 'Рахунок',
-                    variant: 'primary',
-                    cell: (payment) => payment.accountName,
-                  },
-                  {
-                    key: 'amount',
-                    label: 'Сума',
-                    align: 'end',
-                    cell: (payment) => (
-                      <span className="font-bold text-white">
-                        {money(payment.amount, payment.currency)}
-                      </span>
-                    ),
-                  },
-                ]}
-                empty={
-                  <EmptyState
-                    description="Платежі з’являться тут після підтвердження замовлення."
-                    title="Платежів немає"
-                  />
-                }
-                rowKey={(payment) => payment.id}
-                rows={order.payments}
-              />
-            </Card>
           </div>
 
-          <aside className="sticky top-24 grid min-w-[300px] flex-[0_1_340px] gap-5">
-            <Card title="Оплата">
-              <p className="flex flex-wrap items-baseline justify-between gap-3">
-                <span className="text-[34px] leading-none font-extrabold tracking-[-0.03em] text-white tabular-nums">
-                  {money(order.totalAmount, currency)}
-                </span>
+          <aside className="grid min-w-0 gap-5 lg:sticky lg:top-24">
+            <Card
+              aside={
                 <span
                   className={cn(
                     'text-[13px] font-bold',
-                    outstanding === null
-                      ? 'text-app-dim'
-                      : outstanding > 0
-                        ? 'text-state-warn'
-                        : 'text-state-ok',
+                    paymentState.className,
                   )}
                 >
-                  {outstanding === null
-                    ? 'Сума не відома'
-                    : outstanding > 0
-                      ? `Залишок ${money(outstanding, currency)}`
-                      : 'Оплачено повністю'}
+                  {paymentState.label}
                 </span>
+              }
+              title="Оплата"
+            >
+              <p className="text-[34px] leading-none font-extrabold tracking-[-0.03em] text-white tabular-nums">
+                {money(orderTotalUsd, 'USD')}
               </p>
               <dl className="border-app-line mt-4.5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5 border-t pt-4">
-                <dt className="text-app-muted text-sm font-semibold">Клієнт</dt>
-                <dd className="text-sm text-white">
-                  {order.customerName ?? 'Без клієнта'}
-                </dd>
-                <dt className="text-app-muted text-sm font-semibold">Разом</dt>
-                <dd className="font-mono text-[15px] text-white tabular-nums">
-                  {money(order.totalAmount, currency)}
-                </dd>
                 <dt className="text-app-muted text-sm font-semibold">
-                  Сплачено
+                  Сума замовлення
                 </dt>
                 <dd className="font-mono text-[15px] text-white tabular-nums">
-                  {money(order.totalPaid, currency)}
+                  {money(orderTotalUsd, 'USD')}
                 </dd>
                 <dt className="text-app-muted text-sm font-semibold">
-                  Залишок
+                  Платежів
                 </dt>
                 <dd className="font-mono text-[15px] text-white tabular-nums">
-                  {money(outstanding, currency)}
+                  {displayedPayments.length}
                 </dd>
               </dl>
+              {financeAllowed && order.status === 'pending' ? (
+                <div className="mt-5 grid gap-2.5">
+                  <Button
+                    className="w-full justify-center"
+                    disabled={busy}
+                    onClick={() => setPaymentOrderId(order.id)}
+                  >
+                    Додати платіж
+                  </Button>
+                  <Button
+                    className="w-full justify-center"
+                    disabled={
+                      busy ||
+                      ((orderTotalUsd ?? 0) > 0 && order.payments.length === 0)
+                    }
+                    onClick={() => {
+                      const input = {
+                        payments: order.payments.map(
+                          ({ accountId, amount, currency }) => ({
+                            accountId,
+                            amount,
+                            currency,
+                          }),
+                        ),
+                      }
+                      void transition(
+                        (idempotencyKey) =>
+                          ordersApi.confirm(order.id, input, {
+                            idempotencyKey: idempotencyKey!,
+                          }),
+                        {
+                          operation: 'order-confirm',
+                          payload: { orderId: order.id, input },
+                        },
+                        'finance.manage',
+                      )
+                    }}
+                    variant="primary"
+                  >
+                    Підтвердити замовлення
+                  </Button>
+                </div>
+              ) : null}
             </Card>
 
             {order.customerId === null ? null : (
@@ -2071,55 +2071,87 @@ function OrderDetailScreen({
               </Card>
             )}
 
-            <Card
-              aside={
-                <Button
-                  aria-pressed={rawHistory}
-                  className="min-h-8 px-2.5 text-xs font-semibold"
-                  onClick={() => setRawHistory((value) => !value)}
-                >
-                  {rawHistory ? 'Сховати дані' : 'Технічні дані'}
-                </Button>
-              }
-              title="Історія"
-            >
+            <Card title="Історія">
               {historyRows.length === 0 ? (
                 <p className="text-app-muted text-sm">
                   Дії із замовленням зʼявляться тут одразу після збереження.
                 </p>
               ) : (
-                <ol aria-label="Історія замовлення" className="grid">
-                  {historyRows.map((entry, index) => (
-                    <li className="flex gap-3.5" key={entry.key}>
-                      <span aria-hidden className="flex flex-col items-center">
-                        <span className="bg-app-muted mt-1.5 size-2.5 rounded-full" />
-                        {index < historyRows.length - 1 ? (
-                          <span className="bg-app-line w-px flex-1" />
-                        ) : null}
-                      </span>
-                      <span className="min-w-0 flex-1 pb-5">
-                        <span className="block text-[15px] font-bold text-white">
-                          {orderEventTitle(entry.eventType)}
+                <>
+                  <ol aria-label="Історія замовлення" className="grid">
+                    {visibleHistoryRows.map((entry, index) => (
+                      <li className="flex gap-3.5" key={entry.key}>
+                        <span
+                          aria-hidden
+                          className="flex flex-col items-center"
+                        >
+                          <span className="bg-app-muted mt-1.5 size-2.5 rounded-full" />
+                          {index < visibleHistoryRows.length - 1 ? (
+                            <span className="bg-app-line w-px flex-1" />
+                          ) : null}
                         </span>
-                        <span className="text-app-muted mt-1 block text-[13px]">
-                          {entry.userName} ·{' '}
-                          <time dateTime={entry.createdAt}>
-                            {formatTimestamp(entry.createdAt)}
-                          </time>
-                        </span>
-                        {rawHistory && entry.data ? (
-                          <span className="border-app-line bg-app-input text-app-muted mt-2 block rounded-[9px] border px-3 py-2.5 font-mono text-[11px] leading-[1.5] break-all">
-                            {entry.data}
+                        <span className="min-w-0 flex-1 pb-5">
+                          <span className="block text-[15px] font-bold text-white">
+                            {orderEventTitle(entry.eventType)}
                           </span>
-                        ) : null}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
+                          <span className="text-app-muted mt-1 block text-[13px]">
+                            {entry.userName} ·{' '}
+                            <time dateTime={entry.createdAt}>
+                              {formatTimestamp(entry.createdAt)}
+                            </time>
+                          </span>
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                  {historyRows.length > 3 ? (
+                    <button
+                      className="border-app-line-2 text-app-muted hover:border-brand/60 hover:text-brand w-full rounded-xl border px-4 py-3 text-sm font-semibold transition-colors"
+                      onClick={() =>
+                        setHistoryExpanded((expanded) => !expanded)
+                      }
+                      type="button"
+                    >
+                      {historyExpanded
+                        ? 'Згорнути історію'
+                        : 'Показати всю історію'}
+                    </button>
+                  ) : null}
+                </>
               )}
             </Card>
           </aside>
         </div>
+        {financeAllowed &&
+        order.status === 'pending' &&
+        paymentOrderId === order.id ? (
+          <OrderPaymentDialog
+            busy={busy}
+            error={error}
+            initialPayments={order.payments}
+            onSave={(payments) => {
+              const input = payments.map(({ accountId, amount, currency }) => ({
+                accountId,
+                amount,
+                currency,
+              }))
+              void transition(
+                () => ordersApi.updatePayments(order.id, input),
+                undefined,
+                'finance.manage',
+              ).then((saved) => {
+                if (saved) {
+                  setPaymentOrderId(null)
+                  toast?.show({ message: 'Платежі збережено.', tone: 'ok' })
+                }
+              })
+            }}
+            onOpenChange={(open) => setPaymentOrderId(open ? order.id : null)}
+            open
+            orderNumber={order.number}
+            totalAmount={orderTotalUsd}
+          />
+        ) : null}
       </div>
     </div>
   )

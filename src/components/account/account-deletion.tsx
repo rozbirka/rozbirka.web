@@ -3,13 +3,18 @@ import { useAuth } from '@/auth/AuthContext'
 import { credentials } from '@/api/credentials'
 import { profileApi } from '@/api/profile'
 import { tenantPreference } from '@/api/tenant-preference'
-import { Button, Notice } from '@/components/app'
+import { Button, Field, Notice, TextInput } from '@/components/app'
+
+const CONFIRMATION_PHRASE = 'ВИДАЛИТИ'
+const CONFIRMATION_DELAY_SECONDS = 5
 
 export function AccountDeletion() {
   const auth = useAuth()
   const [deleteState, setDeleteState] = useState<
     'idle' | 'confirming' | 'pending' | 'error'
   >('idle')
+  const [confirmation, setConfirmation] = useState('')
+  const [secondsLeft, setSecondsLeft] = useState(CONFIRMATION_DELAY_SECONDS)
   const mounted = useRef(true)
   const active = useRef(false)
   useEffect(() => {
@@ -18,8 +23,27 @@ export function AccountDeletion() {
       mounted.current = false
     }
   }, [])
+  useEffect(() => {
+    if (deleteState !== 'confirming') return
+    const timer = window.setInterval(() => {
+      setSecondsLeft((current) => {
+        if (current <= 1) {
+          window.clearInterval(timer)
+          return 0
+        }
+        return current - 1
+      })
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [deleteState])
   const handleDelete = async () => {
-    if (deleteState !== 'confirming' || active.current) return
+    if (
+      deleteState !== 'confirming' ||
+      confirmation !== CONFIRMATION_PHRASE ||
+      secondsLeft > 0 ||
+      active.current
+    )
+      return
     const owner = credentials.getSessionGeneration()
     active.current = true
     setDeleteState('pending')
@@ -68,18 +92,50 @@ export function AccountDeletion() {
               Видалення акаунта… Дочекайтеся підтвердження.
             </p>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={() => setDeleteState('idle')}>Скасувати</Button>
-              <Button onClick={() => void handleDelete()} variant="danger">
-                Так, видалити акаунт
-              </Button>
+            <div className="grid gap-3">
+              <Field label={`Для підтвердження введіть ${CONFIRMATION_PHRASE}`}>
+                <TextInput
+                  autoComplete="off"
+                  onChange={(event) => setConfirmation(event.target.value)}
+                  value={confirmation}
+                />
+              </Field>
+              <p className="text-app-dim text-[12.5px]" role="status">
+                {secondsLeft > 0
+                  ? `Остаточне видалення буде доступне через ${secondsLeft} с.`
+                  : 'Час очікування завершено.'}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={() => {
+                    setDeleteState('idle')
+                    setConfirmation('')
+                    setSecondsLeft(CONFIRMATION_DELAY_SECONDS)
+                  }}
+                >
+                  Скасувати
+                </Button>
+                <Button
+                  disabled={
+                    confirmation !== CONFIRMATION_PHRASE || secondsLeft > 0
+                  }
+                  onClick={() => void handleDelete()}
+                  variant="danger"
+                >
+                  Так, видалити акаунт
+                </Button>
+              </div>
             </div>
           )}
         </div>
       ) : (
         <Button
           className="mt-3.5 w-full justify-center"
-          onClick={() => setDeleteState('confirming')}
+          onClick={() => {
+            setConfirmation('')
+            setSecondsLeft(CONFIRMATION_DELAY_SECONDS)
+            setDeleteState('confirming')
+          }}
           variant="danger"
         >
           Видалити акаунт

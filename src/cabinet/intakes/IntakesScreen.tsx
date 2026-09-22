@@ -551,6 +551,7 @@ function IntakesList({ base }: { base: string }) {
                 }
               />
             }
+            embedded
             footer={
               <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-t px-6 py-4">
                 <p className="text-app-dim text-[13px]">
@@ -717,11 +718,6 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
     currentPartsPage * partsPageSize,
   )
   const partsBase = base.replace(/\/intakes$/, '/parts')
-  /** What one position of this batch cost: the batch price over its positions. */
-  const unitCost =
-    intake.totalCost !== null && intake.partsCount > 0
-      ? intake.totalCost / intake.partsCount
-      : null
   const profit = intake.profitability ?? null
   const saleState =
     intake.partsCount === 0
@@ -891,11 +887,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
             <>
               <IntakeStat
                 label="Інвестовано"
-                meta={
-                  unitCost === null
-                    ? 'вартість партії не вказано'
-                    : `${money(unitCost)} на позицію`
-                }
+                meta="вартість партії"
                 value={money(profit?.invested ?? intake.totalCost ?? 0)}
               />
               <IntakeStat
@@ -922,7 +914,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                 aria-label="Позиції приймання"
                 className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
               >
-                <div className="flex flex-wrap items-center justify-between gap-4 px-6 pt-5 pb-4">
+                <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-b px-6 pt-5 pb-4">
                   <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
                     Позиції приймання
                   </h2>
@@ -999,20 +991,6 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                         </span>
                       ),
                     },
-                    ...(financeView
-                      ? [
-                          {
-                            key: 'cost',
-                            label: 'Собів.',
-                            align: 'end' as const,
-                            cell: () => (
-                              <span className="text-app-muted font-mono tabular-nums">
-                                {unitCost === null ? '—' : money(unitCost)}
-                              </span>
-                            ),
-                          },
-                        ]
-                      : []),
                     {
                       key: 'status',
                       label: 'Стан',
@@ -1039,6 +1017,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                       }
                     />
                   }
+                  embedded
                   footer={
                     filteredRows.length > partsPageSize ? (
                       <div className="border-app-line flex items-center justify-between gap-4 border-t px-6 py-4">
@@ -1130,46 +1109,6 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
           </div>
 
           <aside className="sticky top-24 grid min-w-[300px] flex-[0_1_340px] gap-5">
-            {financeView ? (
-              <Card title="Собівартість">
-                <p className="flex items-baseline gap-2">
-                  <span className="text-[34px] leading-none font-extrabold tracking-[-0.03em] text-white">
-                    {intake.totalCost === null ? '—' : money(intake.totalCost)}
-                  </span>
-                </p>
-                <dl className="border-app-line mt-4.5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5 border-t pt-4">
-                  <dt className="text-app-muted text-sm font-semibold">
-                    Придбання
-                  </dt>
-                  <dd className="font-mono text-[15px] text-white tabular-nums">
-                    {intake.totalCost === null ? '—' : money(intake.totalCost)}
-                  </dd>
-                  <dt className="text-app-muted text-sm font-semibold">
-                    Доставка
-                  </dt>
-                  <dd
-                    className="text-app-dim font-mono text-[15px] tabular-nums"
-                    title="Супутні витрати приймання поки не зберігає"
-                  >
-                    —
-                  </dd>
-                  <dt className="text-app-muted text-sm font-semibold">
-                    На позицію
-                  </dt>
-                  <dd className="font-mono text-[15px] text-white tabular-nums">
-                    {unitCost === null ? '—' : money(unitCost)}
-                  </dd>
-                  <div className="bg-app-line col-span-2 my-1 h-px" />
-                  <dt className="text-[15px] font-bold text-white">
-                    Повернено
-                  </dt>
-                  <dd className="text-state-ok font-mono text-[19px] tabular-nums">
-                    {money(profit?.recouped ?? 0)}
-                  </dd>
-                </dl>
-              </Card>
-            ) : null}
-
             <Card title="Продаж партії">
               <p className="flex items-baseline gap-2.5">
                 <span className="text-[26px] leading-none font-extrabold tracking-[-0.03em] text-white">
@@ -2303,12 +2242,6 @@ function BatchPartsForm({
   const withoutPrice = filled.filter(
     (row) => batchNumber(row.price) === 0,
   ).length
-  /** The batch price spread over what the intake will hold once this is booked. */
-  const unitCost =
-    intake && intake.totalCost !== null && intake.partsCount + filled.length > 0
-      ? intake.totalCost / (intake.partsCount + filled.length)
-      : null
-
   const fillDown = () =>
     setRows((current) => {
       const source = current.find((row) => row.zoneId !== '')
@@ -2422,8 +2355,7 @@ function BatchPartsForm({
           <p className="text-app-muted mt-3 text-[15px]">
             {intake?.name ?? 'Приймання без назви'}
             {intake ? ' · ' : null}
-            додавайте позиції рядками; собівартість розподілиться по всій
-            партії.
+            додавайте позиції рядками.
           </p>
         </div>
 
@@ -2639,22 +2571,6 @@ function BatchPartsForm({
                       )}
                     >
                       {priceSum > 0 ? money(priceSum) : '—'}
-                    </dd>
-                    <div className="bg-app-line col-span-2 my-1 h-px" />
-                    <dt className="text-app-muted text-sm font-semibold">
-                      Собівартість партії
-                    </dt>
-                    <dd className="font-mono text-[15px] text-white tabular-nums">
-                      {intake?.totalCost === null ||
-                      intake?.totalCost === undefined
-                        ? '—'
-                        : money(intake.totalCost)}
-                    </dd>
-                    <dt className="text-[15px] font-bold text-white">
-                      На позицію
-                    </dt>
-                    <dd className="font-mono text-[19px] text-white tabular-nums">
-                      {unitCost === null ? '—' : money(unitCost)}
                     </dd>
                   </>
                 ) : null}

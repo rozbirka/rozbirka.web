@@ -130,6 +130,29 @@ it('exposes an exclusive choice as a named radio group', async () => {
   expect(onChange).toHaveBeenCalledWith('out')
 })
 
+it('can mark the selected segmented option with a brand outline', () => {
+  render(
+    <Segmented
+      label="Валюта"
+      name="currency"
+      onChange={() => undefined}
+      options={[
+        { value: 'UAH', label: 'UAH' },
+        { value: 'USD', label: 'USD' },
+      ]}
+      selectionTone="brand"
+      value="USD"
+    />,
+  )
+
+  expect(
+    screen.getByRole('radio', { name: 'USD' }).closest('label'),
+  ).toHaveClass('ring-brand')
+  expect(
+    screen.getByRole('radio', { name: 'UAH' }).closest('label'),
+  ).not.toHaveClass('ring-brand')
+})
+
 const photos = [
   { id: '1', url: '/one.jpg', alt: 'Бампер спереду' },
   { id: '2', url: '/two.jpg' },

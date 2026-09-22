@@ -5,9 +5,8 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react'
-import { Link } from 'react-router'
 import { LogOut } from 'lucide-react'
-import { Button, DateValue, Field, Notice, TextInput } from '@/components/app'
+import { Button, Field, Notice, TextInput } from '@/components/app'
 import { useAuth } from '@/auth/AuthContext'
 import { AccountDeletion } from '@/components/account/account-deletion'
 import { useCabinet } from '../CabinetContext'
@@ -17,17 +16,8 @@ type SaveState = 'idle' | 'pending' | 'success' | 'error'
 
 const FORM_ID = 'profile-form'
 
-/** What the identity service does not offer, said where the design asks for it. */
-const NO_AVATAR =
-  'Фото профілю не зберігається: обліковий запис знає імʼя, телефон і роль, тож замість аватара — ініціали.'
 const NO_PHONE_EDIT =
   'Телефон змінити не можна: це логін. Редагується тільки імʼя.'
-const NO_EMAIL =
-  'Пошти в обліковому записі немає — вхід іде за номером телефону й одноразовим кодом.'
-const NO_SESSIONS =
-  'Переліку сеансів поки немає: ні пристроїв, ні міст, ні можливості завершити чужий вхід.'
-const NO_JOINED_AT = 'Дата реєстрації не зберігається.'
-const NO_LAST_LOGIN = 'Дата останнього входу ще не відома.'
 
 /** Two letters standing in for the photo the API does not keep. */
 const initials = (name: string) =>
@@ -120,35 +110,9 @@ export function ProfileScreen() {
     ? (roleLabels[role.toLowerCase()] ?? role)
     : 'Не вказано'
   const phone = auth.user?.phone ?? null
-  const lastLoginAt = auth.user?.lastLoginAt ?? null
-
   return (
-    <RedesignShell
-      actions={
-        <>
-          <Button
-            disabled={busy || normalizedName === savedName}
-            onClick={() => handleNameChange(savedName)}
-          >
-            Скасувати зміни
-          </Button>
-          <Button
-            className="px-5 text-sm font-bold"
-            disabled={!canSave}
-            form={FORM_ID}
-            type="submit"
-            variant="primary"
-          >
-            {busy ? 'Зберігаємо…' : 'Зберегти'}
-          </Button>
-        </>
-      }
-      crumb="Налаштування · Профіль"
-    >
-      <RedesignTitle
-        lead="Ваші особисті дані та вхід у систему."
-        title="Профіль"
-      />
+    <RedesignShell crumb="Налаштування · Профіль">
+      <RedesignTitle lead="Особисті дані та доступ." title="Профіль" />
 
       {saveState === 'success' && (
         <Notice tone="ok">Ім’я успішно оновлено.</Notice>
@@ -160,28 +124,30 @@ export function ProfileScreen() {
       )}
 
       <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="grid min-w-0 content-start gap-5">
-          <Card title="Особисті дані">
-            <div className="flex flex-wrap items-center gap-4">
-              <span
-                aria-hidden
-                className="border-app-line text-app-muted inline-flex size-16 shrink-0 items-center justify-center rounded-full border text-[18px] font-bold"
-              >
-                {initials(normalizedName)}
-              </span>
-              <div className="flex flex-wrap gap-2">
-                <Dead title={NO_AVATAR}>Завантажити фото</Dead>
-                <Dead title={NO_AVATAR}>Прибрати</Dead>
-              </div>
-            </div>
-            <p className="text-app-dim mt-3 text-[12.5px] leading-5 text-pretty">
-              {NO_AVATAR}
-            </p>
-            <form
-              className="mt-5 grid gap-4 sm:grid-cols-2"
-              id={FORM_ID}
-              onSubmit={(event) => void handleSubmit(event)}
+        <Card title="Особисті дані">
+          <div className="flex items-center gap-4">
+            <span
+              aria-hidden
+              className="bg-brand/12 text-brand inline-flex size-14 shrink-0 items-center justify-center rounded-[16px] text-[18px] font-extrabold"
             >
+              {initials(normalizedName)}
+            </span>
+            <div className="min-w-0">
+              <p className="text-app-ink truncate text-[17px] font-bold">
+                {normalizedName || 'Без імені'}
+              </p>
+              <p className="text-app-dim mt-1 text-[13px]">
+                {phone ?? 'Телефон не вказано'}
+              </p>
+            </div>
+          </div>
+
+          <form
+            className="mt-5 grid gap-4"
+            id={FORM_ID}
+            onSubmit={(event) => void handleSubmit(event)}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Ім’я та прізвище" required>
                 <TextInput
                   autoComplete="name"
@@ -199,33 +165,30 @@ export function ProfileScreen() {
                   value={phone ?? 'не вказано'}
                 />
               </Field>
-            </form>
-            <p className="text-app-dim mt-3 text-[12.5px] leading-5 text-pretty">
-              {NO_PHONE_EDIT}
-            </p>
-            <div className="border-app-line mt-5 border-t pt-5">
-              <p className="text-app-muted text-[13px] font-medium">
-                Вхід у систему
-              </p>
-              <p className="text-app-ink mt-2 text-[14px]">
-                {phone ?? '—'}
-                <span
-                  className="border-app-line text-app-dim ml-2.5 rounded-full border px-2.5 py-0.5 align-middle text-[11px]"
-                  title={NO_EMAIL}
-                >
-                  код у SMS
-                </span>
-              </p>
-              <p className="text-app-dim mt-2 text-[12.5px] leading-5 text-pretty">
-                {NO_EMAIL}
-              </p>
             </div>
-          </Card>
-        </div>
+            <div className="border-app-line flex flex-wrap justify-end gap-2 border-t pt-4">
+              <Button
+                disabled={busy || normalizedName === savedName}
+                onClick={() => handleNameChange(savedName)}
+                type="button"
+              >
+                Скасувати зміни
+              </Button>
+              <Button
+                className="px-5 text-sm font-bold"
+                disabled={!canSave}
+                type="submit"
+                variant="primary"
+              >
+                {busy ? 'Зберігаємо…' : 'Зберегти'}
+              </Button>
+            </div>
+          </form>
+        </Card>
 
         <div className="grid min-w-0 content-start gap-5">
-          <Card title="Ваш доступ">
-            <dl className="grid gap-2.5 text-[13.5px]">
+          <Card title="Доступ">
+            <dl className="grid gap-3 text-[13.5px]">
               <div className="flex items-baseline justify-between gap-4">
                 <dt className="text-app-muted">Роль</dt>
                 <dd className="text-app-ink text-right font-medium">
@@ -238,66 +201,14 @@ export function ProfileScreen() {
                   {cabinet.targetTenant?.name ?? 'Не вибрано'}
                 </dd>
               </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">У системі з</dt>
-                <dd className="text-app-dim text-right" title={NO_JOINED_AT}>
-                  —
-                </dd>
-              </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">Останній вхід</dt>
-                <dd className="text-app-ink text-right font-medium">
-                  {lastLoginAt === null ? (
-                    <span className="text-app-dim" title={NO_LAST_LOGIN}>
-                      —
-                    </span>
-                  ) : (
-                    <DateValue value={lastLoginAt} />
-                  )}
-                </dd>
-              </div>
             </dl>
-            <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-              Роль і кабінет змінює власник розбірки в розділі «Команда».
-            </p>
-          </Card>
-
-          <Card title="Активні сеанси">
-            <p className="text-[24px] leading-none font-extrabold">
-              <span className="text-app-dim" title={NO_SESSIONS}>
-                —
-              </span>
-            </p>
-            <p className="text-app-dim mt-3 text-[12.5px] leading-5 text-pretty">
-              {NO_SESSIONS}
-            </p>
-            <div className="mt-3.5">
-              <Dead title={NO_SESSIONS}>Завершити інші сеанси</Dead>
-            </div>
-          </Card>
-
-          <Card title="Сеанс">
-            <Button
-              className="w-full justify-center"
-              onClick={() => void auth.signOut()}
-            >
-              <LogOut aria-hidden />
-              Вийти з системи
-            </Button>
-            <p className="text-app-dim mt-3 text-[12.5px] leading-5 text-pretty">
-              Вихід діє лише в цьому браузері — завершити інші сеанси поки не
-              можна.
-            </p>
-          </Card>
-
-          <Card title="Особистий акаунт">
-            <p className="text-app-muted text-[13px] leading-5 text-pretty">
-              Окрема сторінка з тими самими діями над акаунтом. Вона
-              відкривається навіть тоді, коли доступу до розбірки немає.
-            </p>
-            <div className="mt-3.5">
-              <Button asChild className="w-full justify-center">
-                <Link to="/account/security">Відкрити</Link>
+            <div className="border-app-line mt-4 border-t pt-4">
+              <Button
+                className="w-full justify-center"
+                onClick={() => void auth.signOut()}
+              >
+                <LogOut aria-hidden />
+                Вийти з системи
               </Button>
             </div>
           </Card>
@@ -311,23 +222,12 @@ export function ProfileScreen() {
 
 function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5">
+    <section
+      aria-label={title}
+      className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5"
+    >
       <h2 className="text-app-ink text-[15px] font-bold">{title}</h2>
       <div className="mt-3.5">{children}</div>
     </section>
-  )
-}
-
-/** A control the design asks for and the API cannot back: shown, not faked. */
-function Dead({ children, title }: { children: ReactNode; title: string }) {
-  return (
-    <button
-      className="border-app-line text-app-dim inline-flex min-h-11 cursor-not-allowed items-center rounded-[10px] border px-3.5 text-[13px] font-medium"
-      disabled
-      title={title}
-      type="button"
-    >
-      {children}
-    </button>
   )
 }

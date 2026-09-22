@@ -28,6 +28,8 @@ const dateFormatter = new Intl.DateTimeFormat('uk-UA', {
 interface SummaryItem {
   label: string
   value: string
+  /** Multiple independent figures that belong to the same summary tile. */
+  values?: readonly string[]
   /** Sits under the figure: what the figure is counting. */
   meta?: string
   tone?: 'ok' | 'warn'
@@ -44,7 +46,7 @@ export function DashboardSummary({
   data: DashboardData
 }) {
   const money = compact([
-    ...cashItems(cashBalances, data.totalBalanceUah),
+    cashItem(cashBalances, data.totalBalanceUah),
     moneyItem('Інвестовано всього', data.totalInvested, CAR_CURRENCY, {
       ...(data.activeCarsCount === null
         ? {}
@@ -84,10 +86,17 @@ export function DashboardSummary({
     <section aria-label="Зведення" className="grid gap-4">
       {data.isYardEmpty ? <DashboardEmptyState /> : null}
       {money.length > 0 ? (
-        <SummaryStrip aside="станом на зараз" items={money} title="Гроші" />
+        <SummaryStrip
+          aside="станом на зараз"
+          columns={3}
+          items={money}
+          title="Гроші"
+        />
       ) : null}
       {stock.length > 0 ? <SummaryStrip items={stock} title="Склад" /> : null}
-      {work.length > 0 ? <SummaryStrip items={work} title="Робота" /> : null}
+      {work.length > 0 ? (
+        <SummaryStrip balanced items={work} title="Робота" />
+      ) : null}
       <Activity activity={data.lastActivity} title="Остання активність" />
       <Activity activity={data.lastMyActivity} title="Моя остання активність" />
     </section>
@@ -110,10 +119,14 @@ function DashboardEmptyState() {
 function SummaryStrip({
   title,
   aside,
+  balanced = false,
+  columns,
   items,
 }: {
   title: string
   aside?: string
+  balanced?: boolean
+  columns?: 3
   items: readonly SummaryItem[]
 }) {
   return (
@@ -127,26 +140,49 @@ function SummaryStrip({
           <span className="text-app-dim text-[13px]">{aside}</span>
         )}
       </div>
-      <dl className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-px overflow-hidden rounded-[20px] border">
-        {items.map(({ label, value, meta, tone, bar }) => (
-          <div className="bg-app-raised px-6 pt-[22px] pb-6" key={label}>
+      <dl
+        className={cn(
+          'bg-app-line border-app-line gap-px overflow-hidden rounded-[20px] border',
+          balanced
+            ? 'flex flex-wrap'
+            : cn(
+                'grid',
+                columns === 3
+                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+                  : 'grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))]',
+              ),
+        )}
+      >
+        {items.map(({ label, value, values, meta, tone, bar }) => (
+          <div
+            className={cn(
+              'bg-app-raised px-6 pt-[22px] pb-6',
+              balanced && 'min-w-0 grow basis-[260px]',
+            )}
+            key={label}
+          >
             <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
               {label}
             </dt>
             {/* The bar and the note live inside the value: a definition list
                 allows nothing but dt/dd pairs between its terms. */}
             <dd className="mt-3.5">
-              <span
-                className={cn(
-                  'block text-[30px] leading-none font-extrabold tracking-[-0.03em] tabular-nums',
-                  tone === 'ok'
-                    ? 'text-state-ok'
-                    : tone === 'warn'
-                      ? 'text-state-warn'
-                      : 'text-white',
-                )}
-              >
-                {value}
+              <span className="grid grid-cols-1 gap-3">
+                {(values ?? [value]).map((displayValue) => (
+                  <span
+                    className={cn(
+                      'block text-[30px] leading-none font-extrabold tracking-[-0.03em] tabular-nums',
+                      tone === 'ok'
+                        ? 'text-state-ok'
+                        : tone === 'warn'
+                          ? 'text-state-warn'
+                          : 'text-white',
+                    )}
+                    key={displayValue}
+                  >
+                    {displayValue}
+                  </span>
+                ))}
               </span>
               {bar === undefined ? null : (
                 <span className="bg-app-line-2 mt-4 block h-1.5 overflow-hidden rounded-full">
@@ -202,25 +238,35 @@ function item(
 }
 
 /**
- * The till balances, one tile per currency. Every currency stands on its own —
- * the cabinet converts nothing — so two currencies make two tiles rather than
- * one invented sum. Without the till list the dashboard's own figure stands.
+ * Till currencies share one tile but remain separate figures, so the dashboard
+ * never invents a converted total. Without the till list its own UAH figure
+ * remains as the fallback.
  */
-function cashItems(
+function cashItem(
   balances: Record<string, number> | null | undefined,
   fallbackUah: number | null,
-): (SummaryItem | null)[] {
-  const entries = Object.entries(balances ?? {}).sort(([a], [b]) =>
-    a.localeCompare(b),
-  )
-  if (entries.length === 0) return [moneyItem('Баланс кас', fallbackUah, 'UAH')]
+): SummaryItem | null {
+  const preferredOrder = ['USD', 'UAH']
+  const entries = Object.entries(balances ?? {}).sort(([a], [b]) => {
+    const aIndex = preferredOrder.indexOf(a)
+    const bIndex = preferredOrder.indexOf(b)
+    if (aIndex !== -1 || bIndex !== -1) {
+      return (
+        (aIndex === -1 ? preferredOrder.length : aIndex) -
+        (bIndex === -1 ? preferredOrder.length : bIndex)
+      )
+    }
+    return a.localeCompare(b)
+  })
+  if (entries.length === 0) return moneyItem('Баланс кас', fallbackUah, 'UAH')
   if (entries.length === 1) {
     const [currency, amount] = entries[0]!
-    return [moneyItem('Баланс кас', amount, currency)]
+    return moneyItem('Баланс кас', amount, currency)
   }
-  return entries.map(([currency, amount]) =>
-    moneyItem(`Баланс кас, ${currency}`, amount, currency),
+  const values = entries.map(([currency, amount]) =>
+    currencyFormatter(currency).format(amount),
   )
+  return { label: 'Баланс кас', value: values[0]!, values }
 }
 
 function moneyItem(

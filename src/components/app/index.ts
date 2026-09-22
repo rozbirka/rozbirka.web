@@ -31,6 +31,7 @@ export {
 export { StatusPill, type StatusTone } from './status-pill'
 export { ToastProvider } from './toast'
 export {
+  useOptionalToast,
   useToast,
   type ToastApi,
   type ToastRequest,

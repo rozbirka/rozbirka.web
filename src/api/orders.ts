@@ -49,6 +49,7 @@ export interface OrderDetail {
   totalAmount: number | null
   totalPaid: number | null
   paymentCurrency: string | null
+  itemsTotalUsd?: number | null
   createdAt: string
   createdByName: string
 }
@@ -96,6 +97,14 @@ export const ordersApi = {
   async updateNotes(id: string, notes: string | null): Promise<OrderDetail> {
     return (
       await apiClient.put<OrderDetail>(`${endpoint(id)}/notes`, { notes })
+    ).data
+  },
+  async updatePayments(
+    id: string,
+    payments: ConfirmPayment[],
+  ): Promise<OrderDetail> {
+    return (
+      await apiClient.put<OrderDetail>(`${endpoint(id)}/payments`, { payments })
     ).data
   },
   async setCustomer(

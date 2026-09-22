@@ -66,7 +66,7 @@ import {
   type PartDetail,
   type PartsSummary,
 } from '@/api/parts'
-import { carsApi, type CarListItem } from '@/api/cars'
+import { carsApi, type Car, type CarListItem } from '@/api/cars'
 import { intakesApi, type IntakeListItem } from '@/api/intakes'
 import { mediaApi } from '@/api/media'
 import { useCabinet } from '../CabinetContext'
@@ -80,13 +80,6 @@ import { normalizeApiProblem } from '@/api/errors'
 import type { ApiProblem } from '@/api/contracts'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { VehicleCatalogPicker } from '../cars/CarsScreen'
-import {
-  isListDensity,
-  readDensity,
-  writeDensity,
-  type ListDensity,
-} from '../list-density'
-import type { SavedViewScope } from '../saved-views'
 
 const partStatuses = new Set(['available', 'reserved', 'sold'])
 /** Every group the filter panel draws; the server counts each one for us. */
@@ -250,6 +243,11 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     totalPages: number
   } | null>(null)
   const [detail, setDetail] = useState<PartDetail | null>(null)
+  const [filteredCarResult, setFilteredCarResult] = useState<{
+    key: string
+    cars: Car[]
+  } | null>(null)
+  const appliedCarPresetRef = useRef('')
   const [history, setHistory] = useState<Awaited<
     ReturnType<typeof partsApi.history>
   > | null>(null)
@@ -271,24 +269,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const canManage = manageDecision.kind === 'allowed'
 
   const [reloadToken, setReloadToken] = useState(0)
-  const viewUserId = cabinet.snapshot?.userId ?? null
-  const viewTenantId = cabinet.targetTenant?.id ?? null
-  const viewScope = useMemo<SavedViewScope | null>(
-    () =>
-      viewUserId && viewTenantId
-        ? { userId: viewUserId, tenantId: viewTenantId, screen: 'parts' }
-        : null,
-    [viewUserId, viewTenantId],
-  )
-  // Keyed on the identifiers rather than the object, so a fresh context object
-  // on every render does not read storage again — or loop.
-  const viewKey = `${viewUserId ?? ''}:${viewTenantId ?? ''}`
-  const [density, setDensity] = useState<ListDensity>('comfortable')
-  const [densityFor, setDensityFor] = useState<string | null>(null)
-  if (densityFor !== viewKey) {
-    setDensityFor(viewKey)
-    setDensity(readDensity(viewScope))
-  }
   const links = {
     cars: allowedToView(cabinetModules.cars, cabinet),
     intakes: allowedToView(cabinetModules.intakes, cabinet),
@@ -341,6 +321,80 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     }),
     [filters],
   )
+  const filteredCarKey = filters.carIds.join(',')
+  const filteredCars = useMemo(
+    () =>
+      filteredCarResult?.key === filteredCarKey ? filteredCarResult.cars : [],
+    [filteredCarKey, filteredCarResult],
+  )
+
+  useEffect(() => {
+    if (partId || isNew || !links.cars || filters.carIds.length === 0) return
+    const controller = new AbortController()
+    void Promise.all(
+      filters.carIds.map((id) =>
+        carsApi.get(id, { signal: controller.signal }).then(
+          (car) => car,
+          () => null,
+        ),
+      ),
+    ).then((cars) => {
+      if (!controller.signal.aborted)
+        setFilteredCarResult({
+          key: filteredCarKey,
+          cars: cars.filter((car): car is Car => car !== null),
+        })
+    })
+    return () => controller.abort()
+  }, [filteredCarKey, filters.carIds, isNew, links.cars, partId])
+
+  useEffect(() => {
+    if (
+      partId ||
+      isNew ||
+      filters.carIds.length !== 1 ||
+      filteredCars.length !== 1 ||
+      !facets ||
+      appliedCarPresetRef.current === filteredCarKey
+    )
+      return
+
+    const car = filteredCars[0]
+    if (!car) return
+    const sameName = (left: string, right: string) =>
+      left.trim().localeCompare(right.trim(), undefined, {
+        sensitivity: 'accent',
+      }) === 0
+    const make = facets.makes.find((value) => sameName(value.name, car.brand))
+    const model = facets.models.find((value) => sameName(value.name, car.model))
+    const warehouse =
+      facets.warehouses.length === 1 ? facets.warehouses[0] : undefined
+    const zone = facets.zones.length === 1 ? facets.zones[0] : undefined
+    const next = new URLSearchParams(searchParams)
+
+    if (!filters.makeId && make) next.set('make', make.id)
+    if (!filters.modelId && model) next.set('model', model.id)
+    if (!filters.warehouseId && warehouse) next.set('warehouse', warehouse.id)
+    if (!filters.zoneId && zone) next.set('zone', zone.id)
+    next.delete('page')
+
+    appliedCarPresetRef.current = filteredCarKey
+    if (next.toString() !== searchParams.toString())
+      setSearchParams(next, { replace: true })
+  }, [
+    facets,
+    filteredCarKey,
+    filteredCars,
+    filters.carIds.length,
+    filters.makeId,
+    filters.modelId,
+    filters.warehouseId,
+    filters.zoneId,
+    isNew,
+    partId,
+    searchParams,
+    setSearchParams,
+  ])
 
   useEffect(() => {
     if (partId || isNew) return
@@ -760,8 +814,14 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                   </span>
                   у резерві
                 </span>
+                <span className="text-app-muted flex items-baseline gap-2 text-sm">
+                  <span className="text-state-danger text-[22px] font-bold tabular-nums">
+                    {summary?.sold ?? 0}
+                  </span>
+                  продано
+                </span>
               </p>
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
                 <span className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
                   Розмір сторінки
                 </span>
@@ -774,23 +834,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                     { value: '100', label: '100' },
                   ]}
                   value={String(filters.pageSize)}
-                />
-                <span className="text-app-dim hidden font-mono text-[11px] tracking-[0.14em] uppercase md:inline">
-                  Рядки
-                </span>
-                <PillGroup
-                  className="hidden md:inline-flex"
-                  label="Щільність рядків"
-                  onChange={(next) => {
-                    if (!isListDensity(next)) return
-                    setDensity(next)
-                    writeDensity(viewScope, next)
-                  }}
-                  options={[
-                    { value: 'comfortable', label: 'Просторо' },
-                    { value: 'compact', label: 'Щільно' },
-                  ]}
-                  value={density}
                 />
               </div>
             </div>
@@ -816,7 +859,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                 <div className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border">
                   <DataTable
                     caption="Деталі на складі"
-                    density={density}
                     columns={[
                       {
                         key: 'name',

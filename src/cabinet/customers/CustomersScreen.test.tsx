@@ -74,7 +74,16 @@ const renderScreen = (path: string) =>
 afterEach(() => {
   vi.clearAllMocks()
 })
-beforeEach(() => vi.mocked(useCabinet).mockReturnValue(cabinet()))
+beforeEach(() => {
+  vi.mocked(useCabinet).mockReturnValue(cabinet())
+  customerMocks.list.mockResolvedValue({
+    items: [],
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    totalPages: 0,
+  })
+})
 
 it('renders the server-returned directory result instead of deriving customer statistics locally', async () => {
   const user = userEvent.setup()
@@ -113,14 +122,20 @@ it('renders the server-returned directory result instead of deriving customer st
   )
 })
 
-it('treats the new-customer route as a form rather than a customer identifier', () => {
+it('opens the new-customer form in the standard side drawer over the directory', () => {
+  customerMocks.list.mockReturnValue(new Promise(() => undefined))
   renderScreen('/app/garage/customers/new')
 
-  expect(screen.getByRole('heading', { name: 'Новий клієнт' })).toBeVisible()
+  expect(screen.getByText('Клієнти', { selector: 'h1' })).toBeInTheDocument()
+  const drawer = screen.getByRole('dialog', { name: 'Новий клієнт' })
+  expect(drawer).toHaveClass('sm:max-w-[600px]')
+  expect(screen.getByTestId('customer-create-overlay')).toHaveClass(
+    'bg-black/80',
+  )
   expect(customerMocks.getById).not.toHaveBeenCalled()
 })
 
-it('uses browser-native contact links and carries only the customer id to a new order', async () => {
+it('uses browser-native contact links and opens a new order over the customer card', async () => {
   const user = userEvent.setup()
   const writeText = vi.spyOn(navigator.clipboard, 'writeText')
   customerMocks.getById.mockResolvedValue({
@@ -159,16 +174,56 @@ it('uses browser-native contact links and carries only the customer id to a new 
     'href',
     'sms:+380501112233',
   )
-  expect(
-    screen.getByRole('link', { name: 'Створити замовлення' }),
-  ).toHaveAttribute('href', '/app/garage/orders/new?customerId=customer-1')
   expect(screen.getByRole('link', { name: /#7/ })).toHaveAttribute(
     'href',
     '/app/garage/orders/order-7',
   )
-
+  const average = screen.getByText('Середній чек').closest('div')
+  expect(within(average as HTMLElement).getByText(/1\s167\s\$/)).toBeVisible()
   await user.click(screen.getByRole('button', { name: 'Копіювати телефон' }))
   expect(writeText).toHaveBeenCalledWith('+380501112233')
+
+  await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
+  expect(screen.getByRole('dialog', { name: 'Нове замовлення' })).toBeVisible()
+  expect(screen.getByText('Ірина', { selector: 'h1' })).toBeVisible()
+  expect(screen.getByLabelText('Пошук клієнта')).toHaveValue('Ірина')
+})
+
+it('paginates a customer order history by 20 orders', async () => {
+  const user = userEvent.setup()
+  customerMocks.getById.mockResolvedValue({
+    id: 'customer-1',
+    name: 'Ірина',
+    phone: '+380501112233',
+    notes: null,
+    isActive: true,
+    createdAt: '2026-08-28T00:00:00Z',
+    orders: Array.from({ length: 21 }, (_, index) => ({
+      id: `order-${String(index + 1)}`,
+      number: index + 1,
+      status: 'confirmed',
+      totalAmount: 100,
+      currency: 'USD',
+      partNames: [`Деталь ${String(index + 1)}`],
+      createdAt: '2026-08-28T00:00:00Z',
+    })),
+    ordersCount: 21,
+    totalAmount: 2100,
+    averageAmount: 100,
+    firstOrderAt: '2026-08-28T00:00:00Z',
+    lastOrderAt: '2026-08-28T00:00:00Z',
+  })
+
+  renderScreen('/app/garage/customers/customer-1')
+
+  expect(await screen.findByText('#1')).toBeVisible()
+  expect(screen.getByText('#20')).toBeVisible()
+  expect(screen.queryByText('#21')).toBeNull()
+
+  await user.click(screen.getByRole('button', { name: 'Наступна сторінка' }))
+
+  expect(screen.queryByText('#1')).toBeNull()
+  expect(screen.getByText('#21')).toBeVisible()
 })
 
 it('offers reuse and reactivation for the documented duplicate-phone conflict', async () => {
@@ -344,13 +399,25 @@ it('stops an empty name and an unusable phone at their own fields', async () => 
 
   await user.type(nameField, 'Нова Ірина')
   const phoneField = screen.getByRole('textbox', { name: 'Телефон' })
-  fireEvent.change(phoneField, { target: { value: '+38050' } })
+  fireEvent.change(phoneField, { target: { value: '+38050111223' } })
   await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
 
   expect(phoneField).toHaveAttribute('aria-invalid', 'true')
   expect(phoneField).toHaveAccessibleDescription(/замало цифр/)
   expect(phoneField).toHaveFocus()
   expect(customerMocks.create).not.toHaveBeenCalled()
+})
+
+it('does not allow more than ten Ukrainian phone digits including the leading zero', () => {
+  customerMocks.list.mockReturnValue(new Promise(() => undefined))
+  renderScreen('/app/garage/customers/new')
+
+  const phoneField = screen.getByRole('textbox', { name: 'Телефон' })
+  fireEvent.change(phoneField, {
+    target: { value: '+380777123444444' },
+  })
+
+  expect(phoneField).toHaveValue('+380777123444')
 })
 
 it('keeps a failed save on screen with its reason and lets it be retried', async () => {

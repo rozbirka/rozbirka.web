@@ -9,6 +9,9 @@ describe('ordersApi', () => {
     const post = vi
       .spyOn(apiClient, 'post')
       .mockResolvedValue({ data: { id: 'order-1' } })
+    const put = vi.spyOn(apiClient, 'put').mockResolvedValue({
+      data: { id: 'order-1' },
+    })
     const create = {
       customerId: 'customer-1',
       notes: null,
@@ -17,6 +20,9 @@ describe('ordersApi', () => {
     const key = 'order-confirm-0001'
 
     await ordersApi.create(create)
+    await ordersApi.updatePayments('order-1', [
+      { accountId: 'cash-1', amount: 100, currency: 'USD' },
+    ])
     await ordersApi.confirm(
       'order-1',
       { payments: [{ accountId: 'cash-1', amount: 250, currency: 'UAH' }] },
@@ -30,6 +36,9 @@ describe('ordersApi', () => {
     )
 
     expect(post).toHaveBeenNthCalledWith(1, '/orders', create)
+    expect(put).toHaveBeenCalledWith('/orders/order-1/payments', {
+      payments: [{ accountId: 'cash-1', amount: 100, currency: 'USD' }],
+    })
     expect(post).toHaveBeenNthCalledWith(
       2,
       '/orders/order-1/confirm',

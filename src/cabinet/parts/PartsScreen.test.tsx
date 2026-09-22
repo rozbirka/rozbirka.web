@@ -64,6 +64,7 @@ const partMocks = vi.hoisted(() => ({
 }))
 const selectorMocks = vi.hoisted(() => ({
   cars: vi.fn(),
+  car: vi.fn(),
   intakes: vi.fn(),
 }))
 const mediaMocks = vi.hoisted(() => ({
@@ -109,7 +110,9 @@ const partsDefinition = {
 }
 
 vi.mock('@/api/parts', () => ({ partsApi: partMocks }))
-vi.mock('@/api/cars', () => ({ carsApi: { list: selectorMocks.cars } }))
+vi.mock('@/api/cars', () => ({
+  carsApi: { get: selectorMocks.car, list: selectorMocks.cars },
+}))
 vi.mock('@/api/intakes', () => ({
   intakesApi: { list: selectorMocks.intakes },
 }))
@@ -160,6 +163,13 @@ beforeEach(() => {
     pageSize: 100,
     total: 1,
     totalPages: 1,
+  })
+  selectorMocks.car.mockReset().mockResolvedValue({
+    id: 'car-1',
+    code: 'CAR-01',
+    brand: 'Ford',
+    model: 'Focus',
+    year: 2018,
   })
   selectorMocks.intakes.mockReset().mockResolvedValue({
     items: [
@@ -1519,6 +1529,73 @@ it('counts every filter value from the server and narrows the search by it', asy
   ).toBeVisible()
 })
 
+it('keeps the selected car and fills its compatibility and placement filters', async () => {
+  const carFacets = {
+    statuses: [],
+    warehouses: [{ id: 'w1', name: 'Львів, Городоцька', count: 12 }],
+    zones: [{ id: 'z1', name: 'Стелаж A3', count: 5 }],
+    conditions: [],
+    equipmentTypes: [],
+    makes: [{ id: 'make-ford', name: 'Ford', count: 12 }],
+    models: [{ id: 'model-focus', name: 'Focus', count: 12 }],
+    generations: [],
+    origins: [],
+    qualityFlags: [],
+    inventoryLocks: [],
+    discrepancies: [],
+  }
+  partMocks.facets
+    .mockResolvedValueOnce(carFacets)
+    .mockResolvedValueOnce(carFacets)
+
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts?car_ids=car-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts"
+          element={
+            <>
+              <PartsScreen definition={partsDefinition as never} />
+              <LocationProbe />
+            </>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  await vi.waitFor(() => {
+    expect(screen.getByLabelText('Марка')).toHaveValue('make-ford')
+    expect(screen.getByLabelText('Модель')).toHaveValue('model-focus')
+    expect(screen.getByLabelText('Склад')).toHaveValue('w1')
+    expect(screen.getByLabelText('Зона')).toHaveValue('z1')
+  })
+  expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(
+    'car_ids=car-1',
+  )
+  expect(
+    screen.queryByRole('group', { name: 'Вибраний автомобіль' }),
+  ).toBeNull()
+  expect(
+    screen.queryByRole('group', { name: 'Розміщення вибраного автомобіля' }),
+  ).toBeNull()
+
+  await vi.waitFor(() =>
+    expect(partMocks.search).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        carIds: ['car-1'],
+        compatibility: {
+          makeIds: ['make-ford'],
+          modelIds: ['model-focus'],
+        },
+        warehouseIds: ['w1'],
+        zoneIds: ['z1'],
+      }),
+      expect.anything(),
+    ),
+  )
+})
+
 it('opens the model filter only once a make is chosen', async () => {
   render(
     <MemoryRouter initialEntries={['/app/yard/parts']}>
@@ -1826,9 +1903,7 @@ it('does not expose web-only saved filters', async () => {
   ).toBeNull()
 })
 
-it('remembers the tighter row spacing for the next visit to the list', async () => {
-  const user = userEvent.setup()
-  localStorage.clear()
+it('uses standard row spacing without exposing density controls', async () => {
   partMocks.search.mockResolvedValue({
     items: pickableRows,
     page: 1,
@@ -1836,26 +1911,6 @@ it('remembers the tighter row spacing for the next visit to the list', async () 
     total: 2,
     totalPages: 1,
   })
-  const view = render(
-    <MemoryRouter initialEntries={['/app/yard/parts']}>
-      <Routes>
-        <Route
-          element={<PartsScreen definition={partsDefinition as never} />}
-          path="/app/:tenant/parts"
-        />
-      </Routes>
-    </MemoryRouter>,
-  )
-
-  const density = () =>
-    within(screen.getByRole('radiogroup', { name: 'Щільність рядків' }))
-  expect(await screen.findByRole('table')).toHaveClass('text-[14.5px]')
-  expect(density().getByRole('radio', { name: 'Просторо' })).toBeChecked()
-
-  await user.click(density().getByRole('radio', { name: 'Щільно' }))
-  expect(screen.getByRole('table')).toHaveClass('text-[13.5px]')
-
-  view.unmount()
   render(
     <MemoryRouter initialEntries={['/app/yard/parts']}>
       <Routes>
@@ -1867,12 +1922,28 @@ it('remembers the tighter row spacing for the next visit to the list', async () 
     </MemoryRouter>,
   )
 
-  expect(await screen.findByRole('table')).toHaveClass('text-[13.5px]')
+  expect(await screen.findByRole('table')).toHaveClass('text-[14.5px]')
   expect(
-    within(
-      screen.getByRole('radiogroup', { name: 'Щільність рядків' }),
-    ).getByRole('radio', { name: 'Щільно' }),
-  ).toBeChecked()
+    screen.queryByRole('radiogroup', { name: 'Щільність рядків' }),
+  ).toBeNull()
+  expect(screen.queryByText('Рядки')).toBeNull()
+})
+
+it('shows sold stock and keeps page size controls on the right', async () => {
+  partMocks.summary.mockResolvedValue({
+    total: 1323,
+    available: 925,
+    reserved: 15,
+    sold: 383,
+  })
+
+  renderDirectory()
+
+  const soldLabel = await screen.findByText('продано')
+  expect(soldLabel).toHaveTextContent(/383\s*продано/)
+  expect(screen.getByText('Розмір сторінки').parentElement).toHaveClass(
+    'ml-auto',
+  )
 })
 
 it('edits a quantity in the row by rewriting the whole record', async () => {

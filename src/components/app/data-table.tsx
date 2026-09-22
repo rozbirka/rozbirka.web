@@ -38,6 +38,8 @@ export interface DataTableProps<Row> {
   /** "compact" trades breathing room for rows on screen. Desktop only — the
    * card layout below 768px is already as tight as it reads. */
   density?: 'comfortable' | 'compact'
+  /** Removes the table's own frame when a parent card already supplies it. */
+  embedded?: boolean
 }
 
 /**
@@ -55,6 +57,7 @@ export function DataTable<Row>({
   footer,
   selection,
   density = 'comfortable',
+  embedded = false,
 }: DataTableProps<Row>) {
   const compact = density === 'compact'
   const cellPadding = compact ? 'px-3 py-1.5 md:px-4' : 'px-4 py-3.5'
@@ -86,7 +89,12 @@ export function DataTable<Row>({
     // The footer stays: page 2 of a filtered list can come back empty, and the
     // way back is in the pagination.
     return (
-      <div className="border-app-line rounded-panel bg-app-raised overflow-hidden border">
+      <div
+        className={cn(
+          'overflow-hidden',
+          !embedded && 'border-app-line rounded-panel bg-app-raised border',
+        )}
+      >
         {empty}
         {footer}
       </div>
@@ -94,7 +102,12 @@ export function DataTable<Row>({
   }
 
   return (
-    <div className="border-app-line rounded-panel bg-app-raised relative overflow-hidden border md:overflow-x-auto">
+    <div
+      className={cn(
+        'relative overflow-hidden md:overflow-x-auto',
+        !embedded && 'border-app-line rounded-panel bg-app-raised border',
+      )}
+    >
       <table
         className={cn(
           'data-table w-full border-collapse',
@@ -159,7 +172,7 @@ export function DataTable<Row>({
             return (
               <tr
                 className={cn(
-                  'border-app-line md:border-b',
+                  'border-app-line md:border-b md:last:border-b-0',
                   onRowClick !== undefined &&
                     'cursor-pointer hover:bg-white/[0.025]',
                   picked && 'bg-brand/[0.06]',

@@ -1,9 +1,16 @@
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are asserted directly. */
 import { StrictMode } from 'react'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { Tenant } from '@/api/types'
 import { profileApi } from '@/api/profile'
 import { credentials } from '@/api/credentials'
@@ -44,6 +51,10 @@ const snapshot: TenantAccessSnapshot = {
 const updateName = vi.fn<(name: string) => Promise<void>>()
 const signOut = vi.fn<(opts?: { silent?: boolean }) => Promise<void>>()
 
+afterEach(() => {
+  vi.useRealTimers()
+})
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   let reject!: (reason?: unknown) => void
@@ -52,6 +63,23 @@ function deferred<T>() {
     reject = fail
   })
   return { promise, resolve, reject }
+}
+
+function unlockDeletionConfirmation() {
+  vi.useFakeTimers()
+  fireEvent.click(screen.getByRole('button', { name: 'Видалити акаунт' }))
+  fireEvent.change(
+    screen.getByLabelText('Для підтвердження введіть ВИДАЛИТИ'),
+    { target: { value: 'ВИДАЛИТИ' } },
+  )
+  act(() => {
+    vi.advanceTimersByTime(5_000)
+  })
+  const confirm = screen.getByRole('button', {
+    name: 'Так, видалити акаунт',
+  })
+  vi.useRealTimers()
+  return confirm
 }
 
 beforeEach(() => {
@@ -205,10 +233,9 @@ it('publishes save completion after the StrictMode effect replay', async () => {
 })
 
 it('requires a second destructive confirmation before deleting the account', async () => {
-  const user = userEvent.setup()
   render(<ProfileScreen />, { wrapper: MemoryRouter })
 
-  await user.click(screen.getByRole('button', { name: 'Видалити акаунт' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Видалити акаунт' }))
   expect(
     screen.getByRole('group', {
       name: 'Підтвердіть видалення акаунта. Ця дія незворотна.',
@@ -216,21 +243,43 @@ it('requires a second destructive confirmation before deleting the account', asy
   ).toBeVisible()
   expect(profileApi.deleteAccount).not.toHaveBeenCalled()
 
-  await user.click(screen.getByRole('button', { name: 'Так, видалити акаунт' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Скасувати' }))
+  fireEvent.click(unlockDeletionConfirmation())
 
   expect(profileApi.deleteAccount).toHaveBeenCalledOnce()
-  expect(signOut).toHaveBeenCalledWith({ silent: true })
+  await waitFor(() => expect(signOut).toHaveBeenCalledWith({ silent: true }))
+})
+
+it('requires the exact deletion phrase and a five second delay', () => {
+  vi.useFakeTimers()
+  render(<ProfileScreen />, { wrapper: MemoryRouter })
+
+  fireEvent.click(screen.getByRole('button', { name: 'Видалити акаунт' }))
+  const phrase = screen.getByLabelText('Для підтвердження введіть ВИДАЛИТИ')
+  const confirm = screen.getByRole('button', {
+    name: 'Так, видалити акаунт',
+  })
+
+  fireEvent.change(phrase, { target: { value: 'видалити' } })
+  expect(confirm).toBeDisabled()
+  act(() => {
+    vi.advanceTimersByTime(5_000)
+  })
+  expect(confirm).toBeDisabled()
+  expect(profileApi.deleteAccount).not.toHaveBeenCalled()
+
+  fireEvent.change(phrase, { target: { value: 'ВИДАЛИТИ' } })
+  expect(confirm).toBeEnabled()
+  expect(profileApi.deleteAccount).not.toHaveBeenCalled()
 })
 
 it('preserves the local session when account deletion fails', async () => {
   vi.mocked(profileApi.deleteAccount).mockRejectedValue(new Error('offline'))
   credentials.setAccess('private-access')
   tenantPreference.set(tenant.id)
-  const user = userEvent.setup()
   render(<ProfileScreen />, { wrapper: MemoryRouter })
 
-  await user.click(screen.getByRole('button', { name: 'Видалити акаунт' }))
-  await user.click(screen.getByRole('button', { name: 'Так, видалити акаунт' }))
+  fireEvent.click(unlockDeletionConfirmation())
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Не вдалося видалити акаунт. Спробуйте ще раз.',
@@ -244,11 +293,9 @@ it('clears local private state after deletion even when sign-out rejects', async
   signOut.mockRejectedValue(new Error('session unavailable'))
   credentials.setAccess('private-access')
   tenantPreference.set(tenant.id)
-  const user = userEvent.setup()
   render(<ProfileScreen />, { wrapper: MemoryRouter })
 
-  await user.click(screen.getByRole('button', { name: 'Видалити акаунт' }))
-  await user.click(screen.getByRole('button', { name: 'Так, видалити акаунт' }))
+  fireEvent.click(unlockDeletionConfirmation())
 
   await waitFor(() => {
     expect(credentials.getAccess()).toBeNull()
@@ -262,11 +309,9 @@ it('preserves private state after unmount until deletion is confirmed', async ()
   vi.mocked(profileApi.deleteAccount).mockReturnValue(pending.promise)
   credentials.setAccess('private-access')
   tenantPreference.set(tenant.id)
-  const user = userEvent.setup()
   const view = render(<ProfileScreen />, { wrapper: MemoryRouter })
 
-  await user.click(screen.getByRole('button', { name: 'Видалити акаунт' }))
-  await user.click(screen.getByRole('button', { name: 'Так, видалити акаунт' }))
+  fireEvent.click(unlockDeletionConfirmation())
   view.unmount()
 
   expect(credentials.getAccess()).toBe('private-access')
@@ -281,11 +326,9 @@ it('preserves private state after unmount until deletion is confirmed', async ()
 it('does not offer cancellation after account deletion has been dispatched', async () => {
   const pending = deferred<void>()
   vi.mocked(profileApi.deleteAccount).mockReturnValue(pending.promise)
-  const user = userEvent.setup()
   render(<ProfileScreen />, { wrapper: MemoryRouter })
 
-  await user.click(screen.getByRole('button', { name: 'Видалити акаунт' }))
-  await user.click(screen.getByRole('button', { name: 'Так, видалити акаунт' }))
+  fireEvent.click(unlockDeletionConfirmation())
 
   expect(screen.queryByRole('button', { name: 'Скасувати' })).toBeNull()
   expect(screen.getByRole('status')).toHaveTextContent(
@@ -346,30 +389,44 @@ it('resets for an in-place auth transition and ignores the prior update completi
   expect(screen.queryByRole('status')).toBeNull()
 })
 
-it('shows only profile controls available in the mobile product', () => {
+it('shows a compact profile with only supported account controls', () => {
   render(<ProfileScreen />, { wrapper: MemoryRouter })
 
+  const personal = screen.getByRole('region', { name: 'Особисті дані' })
+  expect(
+    within(personal).getByRole('button', { name: 'Зберегти' }),
+  ).toBeVisible()
+  expect(
+    within(personal).getByRole('button', { name: 'Скасувати зміни' }),
+  ).toBeVisible()
   expect(screen.getByLabelText('Телефон')).toBeDisabled()
-  for (const label of ['Завантажити фото', 'Прибрати'])
-    expect(screen.getByRole('button', { name: label })).toBeDisabled()
-  const sessions = screen.getByRole('button', {
-    name: 'Завершити інші сеанси',
-  })
-  expect(sessions).toBeDisabled()
-  expect(sessions.title).toContain('Переліку сеансів поки немає')
-  expect(screen.queryByText('Інтерфейс')).toBeNull()
-  expect(screen.queryByText('Повідомлення')).toBeNull()
-  expect(screen.queryByText('Безпека')).toBeNull()
+  const access = screen.getByRole('region', { name: 'Доступ' })
+  expect(access).toBeVisible()
+  expect(
+    within(access.parentElement!).getByRole('button', {
+      name: 'Видалити акаунт',
+    }),
+  ).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Вийти з системи' })).toBeVisible()
+  for (const text of [
+    'Завантажити фото',
+    'Прибрати',
+    'Вхід у систему',
+    'У системі з',
+    'Останній вхід',
+    'Активні сеанси',
+    'Особистий акаунт',
+    'Відкрити',
+  ])
+    expect(screen.queryByText(text)).not.toBeInTheDocument()
 })
 
 it('does not clear a newer session after old-account deletion completes', async () => {
   const pending = deferred<void>()
   vi.mocked(profileApi.deleteAccount).mockReturnValue(pending.promise)
   credentials.startSession('A')
-  const user = userEvent.setup()
   render(<ProfileScreen />, { wrapper: MemoryRouter })
-  await user.click(screen.getByRole('button', { name: 'Видалити акаунт' }))
-  await user.click(screen.getByRole('button', { name: 'Так, видалити акаунт' }))
+  fireEvent.click(unlockDeletionConfirmation())
   credentials.startSession('B')
   await act(async () => {
     pending.resolve()

@@ -105,6 +105,24 @@ it('keeps table semantics and labels every cell for the stacked layout', () => {
   )
 })
 
+it('embeds a table without drawing a second rounded frame', () => {
+  render(
+    <DataTable
+      caption="Позиції замовлення"
+      columns={partColumns}
+      embedded
+      rowKey={(part) => part.id}
+      rows={[{ id: '1', name: 'Бампер передній', price: 8400 }]}
+    />,
+  )
+
+  const surface = screen.getByRole('table', {
+    name: 'Позиції замовлення',
+  }).parentElement
+  expect(surface).not.toHaveClass('border')
+  expect(surface).not.toHaveClass('rounded-panel')
+})
+
 it('shows the empty state instead of the body but keeps the footer', () => {
   render(
     <DataTable

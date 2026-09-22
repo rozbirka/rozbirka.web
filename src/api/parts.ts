@@ -4,6 +4,7 @@ import type { Page, RequestOptions } from './contracts'
 export interface PartListItem {
   id: string
   name: string
+  externalCode?: string | null
   photos: string[]
   quantityTotal: number
   quantityReserved: number

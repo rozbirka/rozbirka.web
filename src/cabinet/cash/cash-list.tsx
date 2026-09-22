@@ -19,17 +19,9 @@ import { RedesignShell, RedesignTitle } from '../redesign-shell'
 
 const SEGMENTS = [
   { key: 'all', label: 'Усі' },
-  { key: 'cash', label: 'Готівкові' },
+  { key: 'active', label: 'Активні' },
   { key: 'bank', label: 'Безготівкові' },
 ] as const
-
-/**
- * Reconciling a till — counting the notes and recording the difference — is a
- * thing the API has no concept of, so the screen says that rather than leaving
- * a plausible-looking blank.
- */
-const NO_RECONCILIATION =
-  'Звіряння залишку кабінет поки не веде: ні дати останнього перерахунку, ні розбіжностей.'
 
 /**
  * Гроші · Каси — the till list. Balances are shown per currency and never
@@ -63,12 +55,16 @@ export function CashList({
 
   const counts = {
     all: registers.length,
-    cash: registers.filter((one) => one.type === 'cash').length,
+    active: registers.filter((one) => one.isActive).length,
     bank: registers.filter((one) => one.type === 'bank').length,
   }
   const needle = query.trim().toLowerCase()
   const shown = registers
-    .filter((one) => segment === 'all' || one.type === segment)
+    .filter(
+      (one) =>
+        segment === 'all' ||
+        (segment === 'active' ? one.isActive : one.type === segment),
+    )
     .filter((one) => needle === '' || one.name.toLowerCase().includes(needle))
 
   const active = registers.filter((one) => one.isActive).length
@@ -146,18 +142,11 @@ export function CashList({
           }
           value={count(operations)}
         />
-        <Kpi
-          label="Потребує звіряння"
-          meta="поки не ведеться"
-          title={NO_RECONCILIATION}
-          tone="dim"
-          value="—"
-        />
       </KpiStrip>
 
       <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
         <div
-          aria-label="Тип каси"
+          aria-label="Фільтр кас"
           className="border-app-line bg-app-raised flex min-w-0 flex-wrap gap-1 rounded-[14px] border p-1"
           role="group"
         >
@@ -263,17 +252,11 @@ export function CashList({
                     )}
                   </dl>
 
-                  <div className="border-app-line mt-4.5 flex items-center justify-between gap-3 border-t pt-3.5 text-[13px]">
+                  <div className="border-app-line mt-4.5 border-t pt-3.5 text-[13px]">
                     <span className="text-app-dim">
                       {summary === null
                         ? 'День ще рахується'
                         : `${count(operationCount)} ${plural(operationCount, ['операція', 'операції', 'операцій'])}`}
-                    </span>
-                    <span
-                      className="text-app-dim font-semibold"
-                      title={NO_RECONCILIATION}
-                    >
-                      Звіряння — не ведеться
                     </span>
                   </div>
                 </Link>

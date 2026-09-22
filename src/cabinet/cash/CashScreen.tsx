@@ -1,13 +1,5 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type FormEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
-} from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
-import { ArrowDown } from 'lucide-react'
 import {
   Button,
   ErrorState,
@@ -17,10 +9,10 @@ import {
   PageHeader,
   Pagination,
   Panel,
-  SelectInput,
   SkeletonRows,
   TextInput,
   Toolbar,
+  useOptionalToast,
 } from '@/components/app'
 import { cn } from '@/lib/utils'
 import { normalizeApiProblem } from '@/api/errors'
@@ -29,12 +21,15 @@ import {
   type CashDailySummary,
   type CashRegister,
   type CashTransaction,
+  type CashTransactionInput,
 } from '@/api/cash'
 import { useCabinet } from '../CabinetContext'
 import { CashCard } from './cash-card'
 import { CashEditView } from './cash-edit'
 import { CashList } from './cash-list'
 import { readCashFeed, type CashFeedEntry } from './cash-feed'
+import { CashMovementDrawer } from './CashMovementDrawer'
+import { CashTransferDrawer } from './CashTransferDrawer'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
@@ -117,39 +112,6 @@ const canTransfer = (
     'allowed'
   )
 }
-const useDialogFocus = (open: boolean) => {
-  const dialogRef = useRef<HTMLDivElement>(null)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const trigger = triggerRef.current
-    dialogRef.current
-      ?.querySelector<HTMLElement>('button:not([disabled])')
-      ?.focus()
-    return () => trigger?.focus()
-  }, [open])
-  const containFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== 'Tab') return
-    const controls = dialogRef.current?.querySelectorAll<HTMLElement>(
-      'button:not([disabled])',
-    )
-    if (!controls?.length) return
-    const first = controls[0]
-    const last = controls[controls.length - 1]
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault()
-      last?.focus()
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault()
-      first?.focus()
-    }
-  }
-  return { containFocus, dialogRef, triggerRef }
-}
-/** One register's slice of the day summary. */
-type CashDaySummary = CashDailySummary['registers'][number]
-const eyebrowClass =
-  'text-app-dim font-mono text-[11.5px] tracking-[0.12em] uppercase'
 export function CashScreen({ definition }: CabinetModuleScreenProps) {
   const location = useLocation()
   const id = idFromPath(location.pathname)
@@ -166,8 +128,11 @@ export function CashScreen({ definition }: CabinetModuleScreenProps) {
 
 function CashOverview({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
-  const navigate = useNavigate()
+  const toast = useOptionalToast()
+  const { requireLatestMutation } = useLatestMutationGuard(definition)
+  const replayKeys = useCashIdempotencyKeys()
   const mutationsAllowed = canMutate(definition, cabinet)
+  const transferAllowed = canTransfer(definition, cabinet)
   const [params] = useSearchParams()
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
   const date = params.get('date') ?? localDate(timeZone)
@@ -176,206 +141,44 @@ function CashOverview({ definition }: CabinetModuleScreenProps) {
   const [feed, setFeed] = useState<CashFeedEntry[]>([])
   const [feedTruncated, setFeedTruncated] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  useEffect(() => {
-    const controller = new AbortController()
-    void Promise.all([
-      cashApi.list(undefined, { signal: controller.signal }),
-      cashApi.dailySummary(date, timeZone, { signal: controller.signal }),
-    ])
-      .then(async ([list, daily]) => {
-        if (controller.signal.aborted) return
-        setRegisters(list)
-        setSummary(daily)
-        setError(null)
-        const latest = await readCashFeed(list, controller.signal)
-        if (controller.signal.aborted) return
-        setFeed(latest.entries)
-        setFeedTruncated(latest.truncated)
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) setError(problemMessage(error))
-      })
-    return () => controller.abort()
-  }, [date, timeZone])
-  const transferFrom = registers.find((one) => one.isActive)
-  return (
-    <>
-      {error && <Notice tone="danger">{error}</Notice>}
-      <CashList
-        canCreate={mutationsAllowed}
-        canTransfer={mutationsAllowed && transferFrom !== undefined}
-        date={date}
-        feed={feed}
-        feedTruncated={feedTruncated}
-        onTransfer={() => {
-          if (transferFrom) void navigate(transferFrom.id)
-        }}
-        registers={registers}
-        summary={summary}
-      />
-    </>
-  )
-}
-
-function CashRegisterDetail({
-  definition,
-  registerId,
-}: CabinetModuleScreenProps & { registerId: string }) {
-  const cabinet = useCabinet()
-  const { requireLatestMutation } = useLatestMutationGuard(definition)
-  const replayKeys = useCashIdempotencyKeys()
-  const mutationsAllowed = canMutate(definition, cabinet, false)
-  const transferAllowed = canTransfer(definition, cabinet)
-  const [params, setParams] = useSearchParams()
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
-  const date = localDate(timeZone)
-  const [register, setRegister] = useState<CashRegister | null>(null)
-  const [ledger, setLedger] = useState<CashTransaction[]>([])
-  const [ledgerTotal, setLedgerTotal] = useState(0)
-  const [ledgerTotalPages, setLedgerTotalPages] = useState(0)
-  const [totalOperations, setTotalOperations] = useState<number | null>(null)
-  const [lastOperationAt, setLastOperationAt] = useState<string | null>(null)
-  const [daySummary, setDaySummary] = useState<CashDaySummary | null>(null)
-  const [transferRegisters, setTransferRegisters] = useState<CashRegister[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const [type, setType] = useState<'manual_in' | 'manual_out'>('manual_in')
-  const [amount, setAmount] = useState('')
-  const [currency, setCurrency] = useState('')
-  const [note, setNote] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [toRegisterId, setToRegisterId] = useState('')
-  const [fromCurrency, setFromCurrency] = useState('')
-  const [toCurrency, setToCurrency] = useState('')
-  const [amountOut, setAmountOut] = useState('')
-  const [amountIn, setAmountIn] = useState('')
-  const [transferNote, setTransferNote] = useState('')
+  const [transferOpen, setTransferOpen] = useState(false)
   const [transferBusy, setTransferBusy] = useState(false)
   const [transferError, setTransferError] = useState<string | null>(null)
-  const [transferStatus, setTransferStatus] = useState<string | null>(null)
-  const ledgerCurrency = params.get('currency') ?? undefined
-  const ledgerFrom = params.get('from') ?? undefined
-  const ledgerTo = params.get('to') ?? undefined
-  const ledgerPage = Number(params.get('page') ?? '1') || 1
   const load = useCallback(
     (signal?: AbortSignal) =>
       Promise.all([
-        cashApi.getById(registerId, signal ? { signal } : {}),
-        cashApi.list(true, signal ? { signal } : {}),
-        // The lifetime count and the newest movement have to come from an
-        // unfiltered read: the ledger page below may be narrowed to a
-        // currency, a date range or a later page, and its total would answer a
-        // different question than «операцій усього».
-        cashApi.transactions(
-          registerId,
-          { page: 1, pageSize: 1 },
-          signal ? { signal } : {},
-        ),
-        cashApi.transactions(
-          registerId,
-          {
-            ...(ledgerCurrency === undefined
-              ? {}
-              : { currency: ledgerCurrency }),
-            ...(ledgerFrom === undefined ? {} : { from: ledgerFrom }),
-            ...(ledgerTo === undefined ? {} : { to: ledgerTo }),
-            page: ledgerPage,
-          },
-          signal ? { signal } : {},
-        ),
+        cashApi.list(undefined, signal ? { signal } : {}),
+        cashApi.dailySummary(date, timeZone, signal ? { signal } : {}),
       ])
-        .then(([account, availableRegisters, lifetime, page]) => {
-          if (!signal?.aborted) {
-            setRegister(account)
-            setLedger(page.items)
-            setLedgerTotal(page.total)
-            setLedgerTotalPages(page.totalPages)
-            setTransferRegisters(availableRegisters)
-            setTotalOperations(lifetime.total)
-            setLastOperationAt(lifetime.items[0]?.createdAt ?? null)
-            setError(null)
-          }
+        .then(async ([list, daily]) => {
+          if (signal?.aborted) return
+          setRegisters(list)
+          setSummary(daily)
+          setError(null)
+          const latest = await readCashFeed(
+            list,
+            signal ?? new AbortController().signal,
+          )
+          if (signal?.aborted) return
+          setFeed(latest.entries)
+          setFeedTruncated(latest.truncated)
         })
-        .catch((error) => {
-          if (!signal?.aborted) setError(problemMessage(error))
+        .catch((failure) => {
+          if (!signal?.aborted) setError(problemMessage(failure))
         }),
-    [ledgerCurrency, ledgerFrom, ledgerPage, ledgerTo, registerId],
+    [date, timeZone],
   )
   useEffect(() => {
     const controller = new AbortController()
     void load(controller.signal)
     return () => controller.abort()
   }, [load])
-  useEffect(() => {
-    const controller = new AbortController()
-    void cashApi
-      .dailySummary(date, timeZone, { signal: controller.signal })
-      .then((daily) => {
-        if (controller.signal.aborted) return
-        setDaySummary(
-          daily.registers.find((one) => one.id === registerId) ?? null,
-        )
-      })
-      .catch(() => {
-        // The day slice is an extra: a till card without it still shows the
-        // balances and the ledger, so a failure here stays silent.
-      })
-    return () => controller.abort()
-  }, [date, registerId, timeZone])
-  const saveMovement = async (event: FormEvent) => {
-    event.preventDefault()
-    if (busy || !amount) return
-    setBusy(true)
-    const input = {
-      type,
-      amount: Number(amount),
-      currency: currency || null,
-      note: note || null,
-    }
-    try {
-      requireLatestMutation({ permission: 'finance.view', quota: false })
-      const scope = requireLatestMutation({ quota: false })
-      await cashApi.createTransaction(registerId, input, {
-        idempotencyKey: replayKeys.forPayload(scope.tenantId, 'movement', {
-          registerId,
-          input,
-        }),
-      })
-      replayKeys.clear('movement')
-      if (scope.signal.aborted) return
-      setAmount('')
-      setNote('')
-      await load()
-    } catch (error) {
-      if (!isAmbiguousMutationFailure(error)) replayKeys.clear('movement')
-      setError(problemMessage(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-  const saveTransfer = async (event: FormEvent) => {
-    event.preventDefault()
-    if (
-      transferBusy ||
-      !transferAllowed ||
-      !toRegisterId ||
-      !fromCurrency ||
-      !toCurrency ||
-      !amountOut ||
-      !amountIn
-    )
-      return
+  const saveTransfer = async (
+    input: Parameters<typeof cashApi.transfer>[0],
+  ) => {
+    if (transferBusy || !transferAllowed) return
     setTransferBusy(true)
     setTransferError(null)
-    setTransferStatus(null)
-    const input = {
-      fromRegisterId: registerId,
-      fromCurrency,
-      toRegisterId,
-      toCurrency,
-      amountOut: Number(amountOut),
-      amountIn: Number(amountIn),
-      note: transferNote.trim() || null,
-    }
     try {
       const scope = requireLatestMutation({ quota: false })
       await cashApi.transfer(input, {
@@ -387,17 +190,133 @@ function CashRegisterDetail({
       })
       replayKeys.clear('transfer')
       if (scope.signal.aborted) return
-      setAmountOut('')
-      setAmountIn('')
-      setTransferNote('')
       await load()
-      setTransferStatus('Переказ виконано.')
-    } catch (transferFailure) {
-      if (!isAmbiguousMutationFailure(transferFailure))
-        replayKeys.clear('transfer')
-      setTransferError(problemMessage(transferFailure))
+      setTransferOpen(false)
+      toast?.show({ message: 'Переказ виконано.', tone: 'ok' })
+    } catch (failure) {
+      if (!isAmbiguousMutationFailure(failure)) replayKeys.clear('transfer')
+      setTransferError(problemMessage(failure))
     } finally {
       setTransferBusy(false)
+    }
+  }
+  const activeRegisters = registers.filter((register) => register.isActive)
+  return (
+    <>
+      {error && <Notice tone="danger">{error}</Notice>}
+      <CashList
+        canCreate={mutationsAllowed}
+        canTransfer={transferAllowed && activeRegisters.length > 0}
+        date={date}
+        feed={feed}
+        feedTruncated={feedTruncated}
+        onTransfer={() => {
+          setTransferError(null)
+          setTransferOpen(true)
+        }}
+        registers={registers}
+        summary={summary}
+      />
+      <CashTransferDrawer
+        busy={transferBusy}
+        error={transferError}
+        onOpenChange={setTransferOpen}
+        onSubmit={(input) => void saveTransfer(input)}
+        open={transferOpen}
+        registers={registers}
+      />
+    </>
+  )
+}
+
+function CashRegisterDetail({
+  definition,
+  registerId,
+}: CabinetModuleScreenProps & { registerId: string }) {
+  const cabinet = useCabinet()
+  const toast = useOptionalToast()
+  const { requireLatestMutation } = useLatestMutationGuard(definition)
+  const replayKeys = useCashIdempotencyKeys()
+  const mutationsAllowed = canMutate(definition, cabinet, false)
+  const [params, setParams] = useSearchParams()
+  const [register, setRegister] = useState<CashRegister | null>(null)
+  const [ledger, setLedger] = useState<CashTransaction[]>([])
+  const [ledgerTotal, setLedgerTotal] = useState(0)
+  const [ledgerTotalPages, setLedgerTotalPages] = useState(0)
+  const [totalOperations, setTotalOperations] = useState<number | null>(null)
+  const [lastOperationAt, setLastOperationAt] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [movementOpen, setMovementOpen] = useState(false)
+  const [movementBusy, setMovementBusy] = useState(false)
+  const [movementError, setMovementError] = useState<string | null>(null)
+  const ledgerCurrency = params.get('currency') ?? undefined
+  const ledgerFrom = params.get('from') ?? undefined
+  const ledgerTo = params.get('to') ?? undefined
+  const ledgerPage = Number(params.get('page') ?? '1') || 1
+  const load = useCallback(
+    (signal?: AbortSignal) =>
+      Promise.all([
+        cashApi.getById(registerId, signal ? { signal } : {}),
+        cashApi.transactions(
+          registerId,
+          { page: 1, pageSize: 1 },
+          signal ? { signal } : {},
+        ),
+        cashApi.transactions(
+          registerId,
+          {
+            ...(ledgerCurrency ? { currency: ledgerCurrency } : {}),
+            ...(ledgerFrom ? { from: ledgerFrom } : {}),
+            ...(ledgerTo ? { to: ledgerTo } : {}),
+            page: ledgerPage,
+          },
+          signal ? { signal } : {},
+        ),
+      ])
+        .then(([account, lifetime, page]) => {
+          if (!signal?.aborted) {
+            setRegister(account)
+            setLedger(page.items)
+            setLedgerTotal(page.total)
+            setLedgerTotalPages(page.totalPages)
+            setTotalOperations(lifetime.total)
+            setLastOperationAt(lifetime.items[0]?.createdAt ?? null)
+            setError(null)
+          }
+        })
+        .catch((failure) => {
+          if (!signal?.aborted) setError(problemMessage(failure))
+        }),
+    [ledgerCurrency, ledgerFrom, ledgerPage, ledgerTo, registerId],
+  )
+  useEffect(() => {
+    const controller = new AbortController()
+    void load(controller.signal)
+    return () => controller.abort()
+  }, [load])
+  const saveMovement = async (input: CashTransactionInput) => {
+    if (movementBusy) return
+    setMovementBusy(true)
+    setMovementError(null)
+    try {
+      requireLatestMutation({ permission: 'finance.view', quota: false })
+      const scope = requireLatestMutation({ quota: false })
+      await cashApi.createTransaction(registerId, input, {
+        idempotencyKey: replayKeys.forPayload(scope.tenantId, 'movement', {
+          registerId,
+          input,
+        }),
+      })
+      replayKeys.clear('movement')
+      if (scope.signal.aborted) return
+      await load()
+      setMovementOpen(false)
+      toast?.show({ message: 'Операцію записано.', tone: 'ok' })
+    } catch (failure) {
+      if (!isAmbiguousMutationFailure(failure)) replayKeys.clear('movement')
+      setMovementError(problemMessage(failure))
+    } finally {
+      setMovementBusy(false)
     }
   }
   if (error && !register)
@@ -412,13 +331,7 @@ function CashRegisterDetail({
         <SkeletonRows label="Завантажуємо касу…" rows={3} />
       </PageBody>
     )
-  const transferDestinations = transferRegisters.filter(
-    (candidate) => candidate.id !== registerId && candidate.isActive,
-  )
-  const transferDestination = transferDestinations.find(
-    (candidate) => candidate.id === toRegisterId,
-  )
-  const setFilter = (key: string, value: string) => {
+  const setFilter = (key: 'currency' | 'from' | 'to', value: string) => {
     const next = new URLSearchParams(params)
     if (value) next.set(key, value)
     else next.delete(key)
@@ -426,307 +339,85 @@ function CashRegisterDetail({
     setParams(next)
   }
   return (
-    <CashCard
-      canManage={mutationsAllowed}
-      date={date}
-      daySummary={daySummary}
-      error={error}
-      filters={
-        <Toolbar>
-          <Field className="min-w-36 flex-1" label="Валюта журналу">
-            <TextInput
-              onChange={(event) => setFilter('currency', event.target.value)}
-              placeholder="Усі"
-              value={params.get('currency') ?? ''}
-            />
-          </Field>
-          <Field className="min-w-36 flex-1" label="Від">
-            <TextInput
-              onChange={(event) => setFilter('from', event.target.value)}
-              type="date"
-              value={params.get('from') ?? ''}
-            />
-          </Field>
-          <Field className="min-w-36 flex-1" label="До">
-            <TextInput
-              onChange={(event) => setFilter('to', event.target.value)}
-              type="date"
-              value={params.get('to') ?? ''}
-            />
-          </Field>
-        </Toolbar>
-      }
-      lastOperationAt={lastOperationAt}
-      ledger={ledger}
-      ledgerTotal={ledgerTotal}
-      pagination={
-        <Pagination
-          label="Сторінки журналу"
-          onPage={(nextPage) => {
-            const next = new URLSearchParams(params)
-            next.set('page', String(nextPage))
-            setParams(next)
-          }}
-          page={ledgerPage}
-          totalPages={Math.max(ledgerTotalPages, 1)}
-        />
-      }
-      register={register}
-      totalOperations={totalOperations}
-    >
-      {mutationsAllowed && (
-        <Panel padded={false}>
-          <form
-            onSubmit={(event) => void saveMovement(event)}
-            className="grid gap-4 p-4"
-          >
-            <div className="grid gap-1">
-              <h2 className="text-base font-semibold text-white">
-                Ручна операція
-              </h2>
-              <p className="text-app-dim text-[13.5px]">
-                Запис у журнал цієї каси без переказу та без документа.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Field className="min-w-40 flex-1" label="Тип операції">
-                <SelectInput
-                  value={type}
-                  onChange={(event) =>
-                    setType(event.target.value as 'manual_in' | 'manual_out')
-                  }
-                >
-                  <option value="manual_in">Надходження</option>
-                  <option value="manual_out">Витрата</option>
-                </SelectInput>
-              </Field>
-              <Field className="min-w-36 flex-1" label="Сума">
-                <TextInput
-                  numeric
-                  value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
-                  inputMode="decimal"
-                  placeholder="0"
-                />
-              </Field>
-              <Field
-                className="min-w-36 flex-1"
-                hint="Порожньо — валюта каси за замовчуванням"
-                label="Валюта"
+    <>
+      <CashCard
+        canManage={mutationsAllowed}
+        onNewOperation={
+          mutationsAllowed && register.isActive
+            ? () => {
+                setMovementError(null)
+                setMovementOpen(true)
+              }
+            : undefined
+        }
+        error={error}
+        filters={
+          <Toolbar>
+            <label className="grid min-w-[130px] gap-1 text-[12px] text-app-dim">
+              Валюта
+              <select
+                aria-label="Валюта журналу"
+                className="border-app-line bg-app-input text-app-ink h-10 rounded-[10px] border px-3 text-[14px]"
+                onChange={(event) => setFilter('currency', event.target.value)}
+                value={ledgerCurrency ?? ''}
               >
-                <TextInput
-                  value={currency}
-                  onChange={(event) => setCurrency(event.target.value)}
-                  placeholder="UAH"
-                />
-              </Field>
-            </div>
-            <Field hint="Необовʼязково" label="Нотатка">
-              <TextInput
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
+                <option value="">Усі</option>
+                {Object.keys(register.balances).map((currency) => (
+                  <option key={currency} value={currency}>
+                    {currency}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid min-w-[150px] gap-1 text-[12px] text-app-dim">
+              Від
+              <input
+                aria-label="Операції від"
+                className="border-app-line bg-app-input text-app-ink h-10 rounded-[10px] border px-3 text-[14px]"
+                onChange={(event) => setFilter('from', event.target.value)}
+                type="date"
+                value={ledgerFrom ?? ''}
               />
-            </Field>
-            {amount.trim() !== '' && (
-              <p
-                aria-live="polite"
-                className="border-app-line bg-app-canvas rounded-control flex flex-wrap items-center justify-between gap-3 border px-3.5 py-3"
-              >
-                <span className="text-app-muted text-[13.5px]">
-                  {type === 'manual_in'
-                    ? `Надходження до каси «${register.name}»`
-                    : `Витрата з каси «${register.name}»`}
-                </span>
-                <span
-                  className={cn(
-                    'ml-auto text-[18px] font-semibold tabular-nums',
-                    type === 'manual_in'
-                      ? 'text-state-ok'
-                      : 'text-state-danger',
-                  )}
-                >
-                  {`${type === 'manual_in' ? '+' : '−'}${amount.trim()}${
-                    currency.trim() ? ` ${currency.trim()}` : ''
-                  }`}
-                </span>
-              </p>
-            )}
-            <div className="border-app-line -mx-4 -mb-4 flex flex-wrap justify-end gap-3 border-t px-4 py-4">
-              <Button
-                type="submit"
-                variant="primary"
-                aria-busy={busy}
-                disabled={busy || !amount}
-              >
-                {busy ? 'Зберігаємо…' : 'Записати операцію'}
-              </Button>
-            </div>
-          </form>
-        </Panel>
-      )}
-      {transferAllowed && register.isActive && (
-        <section className="grid gap-3">
-          <h2 className="text-base font-semibold text-white">
-            Переказ між касами
-          </h2>
-          {transferDestinations.length === 0 ? (
-            <Notice role="status" tone="info">
-              Переказ потребує ще однієї активної каси. Створіть другу касу або
-              активуйте наявну.
-            </Notice>
-          ) : (
-            <Panel padded={false}>
-              <form
-                className="grid gap-4 p-4"
-                onSubmit={(event) => void saveTransfer(event)}
-              >
-                <div className="border-app-line bg-app-canvas rounded-control grid gap-3 border p-3">
-                  <div className="grid gap-1">
-                    <p className={eyebrowClass}>Звідки</p>
-                    <p className="text-app-ink text-sm font-medium">
-                      {register.name}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-3">
-                    <Field className="min-w-36 flex-1" label="Валюта списання">
-                      <SelectInput
-                        value={fromCurrency}
-                        onChange={(event) =>
-                          setFromCurrency(event.target.value)
-                        }
-                        required
-                      >
-                        <option value="">Оберіть валюту</option>
-                        {Object.keys(register.balances).map((code) => (
-                          <option key={code} value={code}>
-                            {code}
-                          </option>
-                        ))}
-                      </SelectInput>
-                    </Field>
-                    <Field className="min-w-36 flex-1" label="Сума списання">
-                      <TextInput
-                        numeric
-                        value={amountOut}
-                        onChange={(event) => setAmountOut(event.target.value)}
-                        inputMode="decimal"
-                        placeholder="0"
-                        required
-                      />
-                    </Field>
-                  </div>
-                  {fromCurrency && (
-                    <p
-                      aria-live="polite"
-                      className="text-app-dim text-[12.5px] tabular-nums"
-                    >
-                      Доступно в цій касі:{' '}
-                      {register.balances[fromCurrency] ?? '—'} {fromCurrency}
-                    </p>
-                  )}
-                </div>
-                <div aria-hidden className="flex items-center gap-3">
-                  <span className="bg-app-line h-px flex-1" />
-                  <ArrowDown className="text-app-dim size-4 shrink-0" />
-                  <span className="bg-app-line h-px flex-1" />
-                </div>
-                <div className="border-app-line bg-app-canvas rounded-control grid gap-3 border p-3">
-                  <div className="grid gap-1.5">
-                    <p className={eyebrowClass}>Куди</p>
-                    <Field label="Каса-отримувач">
-                      <SelectInput
-                        value={toRegisterId}
-                        onChange={(event) => {
-                          setToRegisterId(event.target.value)
-                          setToCurrency('')
-                        }}
-                        required
-                      >
-                        <option value="">Оберіть касу</option>
-                        {transferDestinations.map((destination) => (
-                          <option key={destination.id} value={destination.id}>
-                            {destination.name}
-                          </option>
-                        ))}
-                      </SelectInput>
-                    </Field>
-                  </div>
-                  <div className="flex flex-wrap gap-3">
-                    <Field
-                      className="min-w-36 flex-1"
-                      label="Валюта зарахування"
-                    >
-                      <SelectInput
-                        value={toCurrency}
-                        onChange={(event) => setToCurrency(event.target.value)}
-                        disabled={!transferDestination}
-                        required
-                      >
-                        <option value="">Оберіть валюту</option>
-                        {Object.keys(transferDestination?.balances ?? {}).map(
-                          (code) => (
-                            <option key={code} value={code}>
-                              {code}
-                            </option>
-                          ),
-                        )}
-                      </SelectInput>
-                    </Field>
-                    <Field className="min-w-36 flex-1" label="Сума зарахування">
-                      <TextInput
-                        numeric
-                        value={amountIn}
-                        onChange={(event) => setAmountIn(event.target.value)}
-                        inputMode="decimal"
-                        placeholder="0"
-                        required
-                      />
-                    </Field>
-                  </div>
-                  {transferDestination && toCurrency && (
-                    <p
-                      aria-live="polite"
-                      className="text-app-dim text-[12.5px] tabular-nums"
-                    >
-                      Баланс каси-отримувача:{' '}
-                      {transferDestination.balances[toCurrency] ?? '—'}{' '}
-                      {toCurrency}
-                    </p>
-                  )}
-                </div>
-                <Field hint="Необовʼязково" label="Нотатка переказу">
-                  <TextInput
-                    value={transferNote}
-                    onChange={(event) => setTransferNote(event.target.value)}
-                  />
-                </Field>
-                {transferError && (
-                  <Notice tone="danger">{transferError}</Notice>
-                )}
-                {transferStatus && <Notice tone="ok">{transferStatus}</Notice>}
-                <div className="border-app-line -mx-4 -mb-4 flex flex-wrap justify-end gap-3 border-t px-4 py-4">
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    aria-busy={transferBusy}
-                    disabled={
-                      transferBusy ||
-                      !toRegisterId ||
-                      !fromCurrency ||
-                      !toCurrency ||
-                      !amountOut ||
-                      !amountIn
-                    }
-                  >
-                    {transferBusy ? 'Переказуємо…' : 'Переказати кошти'}
-                  </Button>
-                </div>
-              </form>
-            </Panel>
-          )}
-        </section>
-      )}
-    </CashCard>
+            </label>
+            <label className="grid min-w-[150px] gap-1 text-[12px] text-app-dim">
+              До
+              <input
+                aria-label="Операції до"
+                className="border-app-line bg-app-input text-app-ink h-10 rounded-[10px] border px-3 text-[14px]"
+                onChange={(event) => setFilter('to', event.target.value)}
+                type="date"
+                value={ledgerTo ?? ''}
+              />
+            </label>
+          </Toolbar>
+        }
+        lastOperationAt={lastOperationAt}
+        ledger={ledger}
+        ledgerTotal={ledgerTotal}
+        pagination={
+          <Pagination
+            label="Сторінки журналу"
+            onPage={(nextPage) => {
+              const next = new URLSearchParams(params)
+              next.set('page', String(nextPage))
+              setParams(next)
+            }}
+            page={ledgerPage}
+            totalPages={Math.max(ledgerTotalPages, 1)}
+          />
+        }
+        register={register}
+        totalOperations={totalOperations}
+      />
+      <CashMovementDrawer
+        busy={movementBusy}
+        error={movementError}
+        onOpenChange={setMovementOpen}
+        onSubmit={(input) => void saveMovement(input)}
+        open={movementOpen}
+        register={register}
+      />
+    </>
   )
 }
 
@@ -735,16 +426,15 @@ function CashRegisterEdit({
   registerId,
 }: CabinetModuleScreenProps & { registerId: string }) {
   const cabinet = useCabinet()
+  const location = useLocation()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const mutationsAllowed = canMutate(definition, cabinet, false)
   const navigate = useNavigate()
   const [register, setRegister] = useState<CashRegister | null>(null)
   const [name, setName] = useState('')
-  const [newCurrency, setNewCurrency] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [confirmDelete, setConfirmDelete] = useState(false)
-  const { containFocus, dialogRef, triggerRef } = useDialogFocus(confirmDelete)
+  const detailPath = location.pathname.replace(/\/edit\/?$/, '')
   const load = useCallback(
     (signal?: AbortSignal) =>
       cashApi
@@ -765,22 +455,6 @@ function CashRegisterEdit({
     void load(controller.signal)
     return () => controller.abort()
   }, [load])
-  const mutate = async (action: () => Promise<CashRegister | void>) => {
-    if (busy) return
-    setBusy(true)
-    try {
-      const scope = requireLatestMutation({ quota: false })
-      const result = await action()
-      if (scope.signal.aborted) return
-      if (result) setRegister(result)
-      else await load()
-      setError(null)
-    } catch (failure) {
-      setError(problemMessage(failure))
-    } finally {
-      setBusy(false)
-    }
-  }
   const save = async () => {
     if (busy || name.trim() === '') return
     setBusy(true)
@@ -788,20 +462,7 @@ function CashRegisterEdit({
       const scope = requireLatestMutation({ quota: false })
       await cashApi.update(registerId, { name: name.trim() })
       if (scope.signal.aborted) return
-      await navigate(`../${registerId}`, { replace: true })
-    } catch (failure) {
-      setError(problemMessage(failure))
-      setBusy(false)
-    }
-  }
-  const removeRegister = async () => {
-    if (busy) return
-    setBusy(true)
-    try {
-      const scope = requireLatestMutation({ quota: false })
-      await cashApi.remove(registerId)
-      if (scope.signal.aborted) return
-      await navigate('../..', { replace: true })
+      await navigate(detailPath, { replace: true })
     } catch (failure) {
       setError(problemMessage(failure))
       setBusy(false)
@@ -821,45 +482,10 @@ function CashRegisterEdit({
     )
   return (
     <CashEditView
+      backTo={detailPath}
       busy={busy}
       canManage={mutationsAllowed}
-      dialog={
-        confirmDelete ? (
-          <div
-            aria-describedby="cash-delete-description"
-            aria-labelledby="cash-delete-title"
-            aria-modal="true"
-            className="bg-app-overlay border-app-line-2 rounded-sheet grid gap-3 border p-5"
-            onKeyDown={containFocus}
-            ref={dialogRef}
-            role="alertdialog"
-          >
-            <h2
-              className="text-lg font-semibold text-white"
-              id="cash-delete-title"
-            >
-              Підтвердити видалення каси
-            </h2>
-            <p className="text-app-muted text-sm" id="cash-delete-description">
-              Каса та її журнал операцій зникнуть назавжди.
-            </p>
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button disabled={busy} onClick={() => setConfirmDelete(false)}>
-                Скасувати
-              </Button>
-              <Button
-                disabled={busy}
-                onClick={() => void removeRegister()}
-                variant="danger"
-              >
-                Підтвердити видалення
-              </Button>
-            </div>
-          </div>
-        ) : null
-      }
       name={name}
-      newCurrency={newCurrency}
       notice={
         <>
           {!mutationsAllowed && (
@@ -871,27 +497,8 @@ function CashRegisterEdit({
           {error && <Notice tone="danger">{error}</Notice>}
         </>
       }
-      onAddCurrency={() =>
-        void mutate(async () => {
-          await cashApi.addCurrency(registerId, newCurrency.trim())
-          setNewCurrency('')
-        })
-      }
-      deleteRef={triggerRef}
-      onDelete={() => setConfirmDelete(true)}
       onName={setName}
-      onNewCurrency={setNewCurrency}
-      onRemoveCurrency={(code) =>
-        void mutate(() => cashApi.removeCurrency(registerId, code))
-      }
       onSave={() => void save()}
-      onToggleActive={() =>
-        void mutate(() =>
-          register.isActive
-            ? cashApi.deactivate(registerId)
-            : cashApi.activate(registerId),
-        )
-      }
       register={register}
     />
   )

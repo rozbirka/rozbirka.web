@@ -50,10 +50,13 @@ import {
   type ModuleAccessOperation,
 } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import { cabinetModules } from '../module-registry'
+import { OrderForm } from '../orders/OrdersScreen'
 import {
   newCustomerPhoneDraft,
   normalizeCustomerPhoneDraft,
 } from './customer-phone'
+import { CustomerCreateDrawer } from './CustomerCreateDrawer'
 
 const loadError = 'Не вдалося завантажити дані. Спробуйте ще раз.'
 const nameExample = 'Наприклад: Ірина Коваль або СТО «Пітстоп»'
@@ -66,10 +69,10 @@ const phoneProblem = (value: string): string | null => {
   if (!phoneShape.test(value))
     return `Приберіть із номера зайві символи — залиште цифри, пробіли, дужки та «+». ${phoneExample}`
   const digits = value.replace(/\D/g, '')
-  if (digits.length < 9)
-    return `У номері замало цифр. Додайте код оператора та країни. ${phoneExample}`
-  if (digits.length > 15)
-    return `У номері забагато цифр. Перевірте його: у міжнародному форматі їх щонайбільше 15. ${phoneExample}`
+  if (digits.length < 12)
+    return `У номері замало цифр. Український номер має містити 10 цифр разом із початковим нулем. ${phoneExample}`
+  if (digits.length > 12)
+    return `У номері забагато цифр. Український номер має містити 10 цифр разом із початковим нулем. ${phoneExample}`
   return null
 }
 /** Turns a failed save into a reason the user can act on. */
@@ -111,7 +114,12 @@ export function CustomersScreen({ definition }: CabinetModuleScreenProps) {
   const location = useLocation()
   const id = idFromPath(location.pathname)
   if (location.pathname.endsWith('/new'))
-    return <CustomerForm definition={definition} customerId={null} />
+    return (
+      <>
+        <CustomerDirectory definition={definition} />
+        <CustomerForm definition={definition} customerId={null} />
+      </>
+    )
   if (location.pathname.endsWith('/edit'))
     return <CustomerForm definition={definition} customerId={id} />
   return id ? (
@@ -544,6 +552,8 @@ function CustomerDetailScreen({
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [orderDrawerOpen, setOrderDrawerOpen] = useState(false)
+  const [ordersPage, setOrdersPage] = useState(1)
   /** Where focus goes when the delete question is answered or dismissed. */
   const deleteTriggerRef = useRef<HTMLButtonElement>(null)
   const [copied, setCopied] = useState(false)
@@ -558,6 +568,7 @@ function CustomerDetailScreen({
         if (!controller.signal.aborted) {
           setCustomer(result)
           setNotes(result.notes ?? '')
+          setOrdersPage(1)
           setError(null)
         }
       })
@@ -655,9 +666,19 @@ function CustomerDetailScreen({
         <SkeletonRows label="Завантажуємо клієнта…" rows={3} />
       </PageBody>
     )
-  const orderPath = `/app/${cabinet.targetTenant?.slug ?? ''}/orders/new?customerId=${encodeURIComponent(customer.id)}`
+  const ordersPath = `/app/${cabinet.targetTenant?.slug ?? ''}/orders`
   const orderHref = (orderId: string) =>
     `/app/${cabinet.targetTenant?.slug ?? ''}/orders/${orderId}`
+  const ordersPageSize = 20
+  const ordersTotalPages = Math.max(
+    1,
+    Math.ceil(customer.orders.length / ordersPageSize),
+  )
+  const currentOrdersPage = Math.min(ordersPage, ordersTotalPages)
+  const visibleOrders = customer.orders.slice(
+    (currentOrdersPage - 1) * ordersPageSize,
+    currentOrdersPage * ordersPageSize,
+  )
   const money = (value: number | null | undefined) =>
     typeof value === 'number' && Number.isFinite(value) ? (
       <Amount currency="USD" value={value} />
@@ -692,11 +713,11 @@ function CustomerDetailScreen({
           ) : null}
           {orderCreateAllowed && customer.isActive ? (
             <Button
-              asChild
               className="px-5 text-sm font-bold"
+              onClick={() => setOrderDrawerOpen(true)}
               variant="primary"
             >
-              <Link to={orderPath}>Створити замовлення</Link>
+              Створити замовлення
             </Button>
           ) : null}
           {mutationsAllowed ? (
@@ -813,7 +834,11 @@ function CustomerDetailScreen({
                         : 'text-app-dim',
                     )}
                   >
-                    {money(customer.averageAmount)}
+                    {money(
+                      typeof customer.averageAmount === 'number'
+                        ? Math.round(customer.averageAmount)
+                        : null,
+                    )}
                   </dd>
                 </div>
               </>
@@ -880,51 +905,63 @@ function CustomerDetailScreen({
                 </p>
                 {orderCreateAllowed && customer.isActive ? (
                   <Button
-                    asChild
                     className="mt-1.5 px-5 text-sm font-bold"
+                    onClick={() => setOrderDrawerOpen(true)}
                     variant="primary"
                   >
-                    <Link to={orderPath}>Створити замовлення</Link>
+                    Створити замовлення
                   </Button>
                 ) : null}
               </div>
             ) : (
-              <ul className="grid">
-                {customer.orders.map((order) => (
-                  <li
-                    className="border-app-line border-t first:border-t-0"
-                    key={order.id}
-                  >
-                    <Link
-                      className="grid items-center gap-x-4 gap-y-1 px-6 py-4 hover:bg-white/[0.03] sm:grid-cols-[minmax(0,1fr)_auto]"
-                      to={orderHref(order.id)}
+              <>
+                <ul className="grid">
+                  {visibleOrders.map((order) => (
+                    <li
+                      className="border-app-line border-t first:border-t-0"
+                      key={order.id}
                     >
-                      <span className="min-w-0">
-                        <span className="block text-[15px] font-bold text-white">
-                          #{order.number}
+                      <Link
+                        className="grid items-center gap-x-4 gap-y-1 px-6 py-4 hover:bg-white/[0.03] sm:grid-cols-[minmax(0,1fr)_auto]"
+                        to={orderHref(order.id)}
+                      >
+                        <span className="min-w-0">
+                          <span className="block text-[15px] font-bold text-white">
+                            #{order.number}
+                          </span>
+                          <span className="text-app-muted mt-0.5 block truncate text-[13px]">
+                            {[
+                              day(order.createdAt),
+                              orderStatusPresentation(order.status).label,
+                              order.partNames.join(', ') || null,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </span>
                         </span>
-                        <span className="text-app-muted mt-0.5 block truncate text-[13px]">
-                          {[
-                            day(order.createdAt),
-                            orderStatusPresentation(order.status).label,
-                            order.partNames.join(', ') || null,
-                          ]
-                            .filter(Boolean)
-                            .join(' · ')}
+                        <span className="font-mono text-[15px] whitespace-nowrap text-white tabular-nums">
+                          {/* The code the server sends becomes the symbol
+                              people read: USD is $, UAH is ₴, EUR is €. */}
+                          <Amount
+                            currency={order.currency ?? null}
+                            value={order.totalAmount}
+                          />
                         </span>
-                      </span>
-                      <span className="font-mono text-[15px] whitespace-nowrap text-white tabular-nums">
-                        {/* The code the server sends becomes the symbol
-                            people read: USD is $, UAH is ₴, EUR is €. */}
-                        <Amount
-                          currency={order.currency ?? null}
-                          value={order.totalAmount}
-                        />
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+                {ordersTotalPages > 1 ? (
+                  <div className="border-app-line border-t px-6 py-3.5">
+                    <Pagination
+                      label="Сторінки замовлень клієнта"
+                      onPage={setOrdersPage}
+                      page={currentOrdersPage}
+                      totalPages={ordersTotalPages}
+                    />
+                  </div>
+                ) : null}
+              </>
             )}
           </Card>
 
@@ -1049,6 +1086,17 @@ function CustomerDetailScreen({
         pending={busy}
         title="Підтвердити видалення"
       />
+      {orderDrawerOpen ? (
+        <OrderForm
+          createContext={{
+            customer: { id: customer.id, name: customer.name },
+            onClose: () => setOrderDrawerOpen(false),
+            orderBasePath: ordersPath,
+          }}
+          definition={cabinetModules.orders}
+          orderId={null}
+        />
+      ) : null}
     </div>
   )
 }
@@ -1207,18 +1255,19 @@ function CustomerForm({
         <SkeletonRows columns={2} label="Завантажуємо клієнта…" rows={3} />
       </PageBody>
     )
-  return (
-    <PageBody width="narrow">
-      <Button asChild className="justify-self-start" variant="quiet">
-        <Link to={backPath}>
-          <ChevronLeft aria-hidden />
-          {editing ? 'До картки клієнта' : 'До списку клієнтів'}
-        </Link>
-      </Button>
-      <PageHeader
-        eyebrow="Продажі · Клієнти"
-        title={editing ? 'Редагувати клієнта' : 'Новий клієнт'}
-      />
+  const content = (
+    <>
+      {editing ? (
+        <>
+          <Button asChild className="justify-self-start" variant="quiet">
+            <Link to={backPath}>
+              <ChevronLeft aria-hidden />
+              До картки клієнта
+            </Link>
+          </Button>
+          <PageHeader eyebrow="Продажі · Клієнти" title="Редагувати клієнта" />
+        </>
+      ) : null}
       {mutationsAllowed ? null : (
         <Notice tone="warn">
           Дані можна переглянути, але не змінити. Щоб редагувати клієнтів,
@@ -1352,6 +1401,16 @@ function CustomerForm({
           </PanelFooter>
         </Panel>
       </form>
-    </PageBody>
+    </>
+  )
+  return editing ? (
+    <PageBody width="narrow">{content}</PageBody>
+  ) : (
+    <CustomerCreateDrawer
+      busy={save.pending || reactivateDuplicate.pending}
+      onClose={() => void navigate(backPath)}
+    >
+      {content}
+    </CustomerCreateDrawer>
   )
 }

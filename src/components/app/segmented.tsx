@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 export interface SegmentedOption<Value extends string> {
   value: Value
   label: string
+  disabled?: boolean
   /** Announced instead of the label when the label alone is ambiguous. */
   srLabel?: string
 }
@@ -19,6 +20,7 @@ export function Segmented<Value extends string>({
   onChange,
   name,
   as = 'radio',
+  selectionTone = 'neutral',
   className,
 }: {
   /** Names the group for assistive technology. */
@@ -32,6 +34,8 @@ export function Segmented<Value extends string>({
    * Tab-reachable — radios use roving tabindex, which some flows rely against.
    */
   as?: 'radio' | 'toggle'
+  /** Adds a persistent brand outline to the selected option when requested. */
+  selectionTone?: 'neutral' | 'brand'
   className?: string
 }) {
   if (as === 'toggle') {
@@ -71,11 +75,16 @@ export function Segmented<Value extends string>({
               aria-pressed={pressed}
               className={cn(
                 'rounded-control min-h-11 flex-1 px-3 text-[13.5px] transition-colors',
+                option.disabled && 'cursor-not-allowed opacity-40',
                 pressed
                   ? 'bg-white/[0.09] font-medium text-white'
                   : 'text-app-muted hover:bg-white/[0.04]',
+                pressed &&
+                  selectionTone === 'brand' &&
+                  'ring-brand ring-1 ring-inset',
               )}
               key={option.value}
+              disabled={option.disabled}
               onClick={() => onChange(option.value)}
               type="button"
             >
@@ -104,15 +113,20 @@ export function Segmented<Value extends string>({
           <label
             className={cn(
               'rounded-control flex min-h-11 flex-1 cursor-pointer items-center justify-center px-3 text-[13.5px] transition-colors',
+              option.disabled && 'cursor-not-allowed opacity-40',
               checked
                 ? 'bg-white/[0.09] font-medium text-white'
                 : 'text-app-muted hover:bg-white/[0.04]',
+              checked &&
+                selectionTone === 'brand' &&
+                'ring-brand ring-1 ring-inset',
             )}
             key={option.value}
           >
             <input
               checked={checked}
               className="sr-only"
+              disabled={option.disabled}
               name={name}
               onChange={() => onChange(option.value)}
               type="radio"

@@ -2,11 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/app'
 import { cn, plural } from '@/lib/utils'
-import type {
-  CashDailySummary,
-  CashRegister,
-  CashTransaction,
-} from '@/api/cash'
+import type { CashRegister, CashTransaction } from '@/api/cash'
 import {
   count,
   money,
@@ -16,25 +12,10 @@ import {
   registerTypeLabels,
   signedMoney,
 } from './cash-labels'
-import { Kpi, KpiStrip } from '../redesign-kpi'
 import { RedesignShell, RedesignTitle } from '../redesign-shell'
 
-/**
- * Everything the till card wants to show and the server does not keep. Each
- * string is what the reader gets on hover of the dash that stands in its place.
- */
-const NO_RECONCILIATION =
-  'Звіряння залишку кабінет поки не веде: ні дати перерахунку, ні розбіжності, ні періодичності.'
-const NO_OWNER =
-  'Каса належить розбірці, а не людині: відповідального за нею не закріплюють.'
-const NO_WAREHOUSE = 'Каса не привʼязана до складу.'
-const NO_CREATED = 'Дату створення каси кабінет не показує.'
-const NO_RUNNING_BALANCE =
-  'Залишок після операції рахується по всій історії каси, а не по одній сторінці журналу, тож у таблиці його немає.'
 const NO_TYPE_FILTER =
   'Журнал не фільтрується за типом операції — сегменти впорядковують те, що вже завантажено на цій сторінці.'
-const NO_ACCESS_LIST =
-  'Списку доступу на касі немає: право працювати з грошима дає роль у бізнесі, одразу на всі каси.'
 
 const SEGMENTS = [
   { key: 'all', label: 'Усі' },
@@ -51,12 +32,6 @@ const segmentOf = (entry: CashTransaction): SegmentKey =>
     : entry.direction === 'out'
       ? 'out'
       : 'in'
-
-const Dash = ({ title }: { title: string }) => (
-  <span className="text-app-dim" title={title}>
-    —
-  </span>
-)
 
 function Card({
   title,
@@ -80,12 +55,11 @@ function Card({
   )
 }
 
-/** A stack of per-currency money lines — currencies are never added up. */
 function MoneyLines({
   lines,
   empty,
 }: {
-  lines: readonly { currency: string; amount: number; sign?: '+' | '−' }[]
+  lines: readonly { currency: string; amount: number }[]
   empty: string
 }) {
   if (lines.length === 0)
@@ -103,14 +77,9 @@ function MoneyLines({
           <dd
             className={cn(
               'font-mono text-[15px] tabular-nums',
-              line.amount === 0
-                ? 'text-app-dim'
-                : line.sign === '+'
-                  ? 'text-state-ok'
-                  : 'text-app-ink font-medium',
+              line.amount === 0 ? 'text-app-dim' : 'text-app-ink font-medium',
             )}
           >
-            {line.sign === undefined || line.amount === 0 ? '' : line.sign}
             {money(line.amount, line.currency)}
           </dd>
         </div>
@@ -119,46 +88,33 @@ function MoneyLines({
   )
 }
 
-/**
- * Гроші · Каси · картка каси. The ledger, the balances and the day figures all
- * come from the server as they are; everything the server does not keep —
- * reconciliation, an owner, a warehouse, a running balance — stands as a dash
- * that says why on hover.
- */
 export function CashCard({
   register,
   ledger,
   ledgerTotal,
   totalOperations,
   lastOperationAt,
-  daySummary,
-  date,
   canManage,
+  onNewOperation,
   error,
   filters,
   pagination,
   children,
 }: {
   register: CashRegister
-  /** One page of the ledger, exactly as the server returned it. */
   ledger: readonly CashTransaction[]
-  /** Total rows behind the current filter, per the server. */
   ledgerTotal: number
   totalOperations: number | null
   lastOperationAt: string | null
-  daySummary: CashDailySummary['registers'][number] | null
-  date: string
   canManage: boolean
-  /** A failure banner, shown inside the shell so it keeps the page rhythm. */
+  onNewOperation?: (() => void) | undefined
   error: string | null
   filters: ReactNode
   pagination: ReactNode
-  /** The movement and transfer forms, rendered under the card. */
-  children: ReactNode
+  children?: ReactNode
 }) {
   const [segment, setSegment] = useState<SegmentKey>('all')
   const currencies = Object.entries(register.balances)
-  const dayCurrencies = daySummary?.currencies ?? []
   const counts = {
     all: ledger.length,
     in: ledger.filter((one) => segmentOf(one) === 'in').length,
@@ -173,26 +129,18 @@ export function CashCard({
     <RedesignShell
       actions={
         <>
-          <button
-            className="border-app-line text-app-dim inline-flex h-10 cursor-not-allowed items-center rounded-[10px] border px-4 text-[14px] font-semibold"
-            disabled
-            title={NO_RECONCILIATION}
-            type="button"
-          >
-            Звірити залишок
-          </button>
           {canManage ? (
             <Button asChild>
               <Link to="edit">Редагувати</Link>
             </Button>
           ) : null}
-          {canManage ? (
+          {canManage && register.isActive ? (
             <Button
-              asChild
               className="px-5 text-sm font-bold"
+              onClick={onNewOperation}
               variant="primary"
             >
-              <a href="#cash-operations">Нова операція</a>
+              Нова операція
             </Button>
           ) : null}
         </>
@@ -227,18 +175,7 @@ export function CashCard({
             {register.isActive ? 'Активна' : 'Неактивна'}
           </span>
         }
-        lead={
-          <>
-            {registerTypeLabels[register.type] ?? register.type}
-            {registerTypeHints[register.type]
-              ? ` · ${registerTypeHints[register.type]}`
-              : ''}
-            <span aria-hidden> · </span>
-            <span className="text-app-dim" title={NO_OWNER}>
-              відповідального не закріплено
-            </span>
-          </>
-        }
+        lead={`${registerTypeLabels[register.type] ?? register.type}${registerTypeHints[register.type] ? ` · ${registerTypeHints[register.type]}` : ''}`}
         title={register.name}
       />
 
@@ -251,61 +188,21 @@ export function CashCard({
         </p>
       )}
 
-      <KpiStrip>
-        <Kpi
-          label="Надходження за день"
-          meta={
-            daySummary === null
-              ? 'зріз за день ще не прийшов'
-              : `${date} · рух зводиться за добу`
-          }
-          value={
-            <MoneyLines
-              empty="—"
-              lines={dayCurrencies.map((one) => ({
-                currency: one.currency,
-                amount: one.income,
-                sign: '+',
-              }))}
-            />
-          }
-        />
-        <Kpi
-          label="Витрати за день"
-          meta={
-            daySummary === null
-              ? 'зріз за день ще не прийшов'
-              : `${date} · кожна валюта окремо`
-          }
-          value={
-            <MoneyLines
-              empty="—"
-              lines={dayCurrencies.map((one) => ({
-                currency: one.currency,
-                amount: one.expense,
-                sign: '−',
-              }))}
-            />
-          }
-        />
-        <Kpi
-          label="Операцій усього"
-          meta={
-            lastOperationAt === null
-              ? 'журнал порожній'
-              : `остання ${moment(lastOperationAt)}`
-          }
-          value={totalOperations === null ? '—' : count(totalOperations)}
-        />
-      </KpiStrip>
-
       <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <section
           aria-label="Операції"
           className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
         >
           <div className="border-app-line flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-5 py-4">
-            <h2 className="text-app-ink text-[15px] font-bold">Операції</h2>
+            <div>
+              <h2 className="text-app-ink text-[15px] font-bold">Операції</h2>
+              <p className="text-app-dim mt-1 text-[12px]">
+                {totalOperations === null
+                  ? 'Журнал завантажується'
+                  : `${count(totalOperations)} ${plural(totalOperations, ['операція', 'операції', 'операцій'])} усього`}
+                {lastOperationAt ? ` · остання ${moment(lastOperationAt)}` : ''}
+              </p>
+            </div>
             <div
               aria-label="Тип операції на цій сторінці"
               className="flex min-w-0 flex-wrap gap-1"
@@ -337,7 +234,7 @@ export function CashCard({
           {shown.length === 0 ? (
             <p className="text-app-muted px-5 py-8 text-[14px]">
               {ledger.length === 0
-                ? 'Операцій ще немає — журнал заповнюється після першого надходження чи витрати.'
+                ? 'Операцій ще немає.'
                 : 'Операцій за цим фільтром на цій сторінці немає.'}
             </p>
           ) : (
@@ -350,13 +247,7 @@ export function CashCard({
                   <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
                     <th className="px-5 py-2.5 text-left">Дата</th>
                     <th className="px-3 py-2.5 text-left">Призначення</th>
-                    <th className="px-3 py-2.5 text-right">Сума</th>
-                    <th
-                      className="px-5 py-2.5 text-right"
-                      title={NO_RUNNING_BALANCE}
-                    >
-                      Залишок
-                    </th>
+                    <th className="px-5 py-2.5 text-right">Сума</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -375,16 +266,13 @@ export function CashCard({
                       </td>
                       <td
                         className={cn(
-                          'px-3 py-3.5 text-right font-mono tabular-nums',
+                          'px-5 py-3.5 text-right font-mono tabular-nums',
                           entry.direction === 'out'
-                            ? 'text-app-ink'
+                            ? 'text-state-danger'
                             : 'text-state-ok',
                         )}
                       >
                         {signedMoney(entry)}
-                      </td>
-                      <td className="px-5 py-3.5 text-right font-mono">
-                        <Dash title={NO_RUNNING_BALANCE} />
                       </td>
                     </tr>
                   ))}
@@ -393,92 +281,31 @@ export function CashCard({
             </div>
           )}
           <div className="border-app-line grid gap-3 border-t px-5 py-3.5">
-            <p className="text-app-dim text-[13px] leading-5 text-pretty">
+            <p className="text-app-dim text-[13px]">
               Показано {count(shown.length)} з {count(ledger.length)} на цій
               сторінці, усього за фільтром — {count(ledgerTotal)}{' '}
               {plural(ledgerTotal, ['операція', 'операції', 'операцій'])}.
-              Стовпець «Залишок» порожній: баланс рахується по всій історії
-              каси, а не по цій сторінці.
             </p>
             {pagination}
           </div>
         </section>
 
         <div className="grid min-w-0 content-start gap-5">
-          <Card title="Останнє звіряння">
-            <p className="text-[24px] leading-none font-extrabold">
-              <Dash title={NO_RECONCILIATION} />
-            </p>
-            <p className="text-app-dim mt-3 text-[13px] leading-5 text-pretty">
-              Ні дати перерахунку, ні розбіжності каса не зберігає, тож показати
-              тут нічого.
-            </p>
-          </Card>
           <Card
             note="Валюти зберігаються окремо, конвертація не застосовується."
             title="Залишки"
           >
             <MoneyLines
-              empty="Валют ще немає — додайте першу в редагуванні каси."
+              empty="Валют ще немає"
               lines={currencies.map(([currency, amount]) => ({
                 currency,
                 amount,
               }))}
             />
           </Card>
-
-          <Card title="Налаштування">
-            <dl className="grid gap-2.5 text-[13.5px]">
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">Тип</dt>
-                <dd className="text-app-ink text-right font-medium">
-                  {registerTypeLabels[register.type] ?? register.type}
-                </dd>
-              </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">Валюти</dt>
-                <dd className="text-app-ink text-right font-mono font-medium">
-                  {currencies.length === 0
-                    ? '—'
-                    : currencies.map(([code]) => code).join(', ')}
-                </dd>
-              </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">Склад</dt>
-                <dd className="text-right">
-                  <Dash title={NO_WAREHOUSE} />
-                </dd>
-              </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">Звіряння</dt>
-                <dd className="text-right">
-                  <Dash title={NO_RECONCILIATION} />
-                </dd>
-              </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">Створена</dt>
-                <dd className="text-right">
-                  <Dash title={NO_CREATED} />
-                </dd>
-              </div>
-            </dl>
-          </Card>
-
-          <Card title="Доступ">
-            <p
-              className="text-app-muted text-[13.5px] leading-5 text-pretty"
-              title={NO_ACCESS_LIST}
-            >
-              Каса не має власного списку людей: право працювати з грошима дає
-              роль у бізнесі, одразу на всі каси.
-            </p>
-          </Card>
         </div>
       </div>
-
-      <div className="grid gap-5" id="cash-operations">
-        {children}
-      </div>
+      {children}
     </RedesignShell>
   )
 }

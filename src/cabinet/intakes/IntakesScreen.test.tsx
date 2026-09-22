@@ -413,6 +413,29 @@ it('opens intake positions as part cards and does not expose suppliers in the we
   expect(screen.queryByText('Постачальник')).not.toBeInTheDocument()
 })
 
+it('does not show intake cost or per-position cost on the intake card', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'parts.view', 'finance.view']),
+  )
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(
+    await screen.findByRole('heading', { name: 'Липнева партія' }),
+  ).toBeVisible()
+  expect(screen.queryByRole('heading', { name: 'Собівартість' })).toBeNull()
+  expect(screen.queryByRole('columnheader', { name: 'Собів.' })).toBeNull()
+  expect(screen.queryByText(/на позицію/i)).toBeNull()
+})
+
 it('paginates positions inside an intake', async () => {
   const user = userEvent.setup()
   vi.mocked(useCabinet).mockReturnValue(cabinet(['intakes.view', 'parts.view']))
@@ -860,6 +883,8 @@ it('books a batch sheet in one row at a time and prices the rows that carry one'
   expect(
     await screen.findByRole('heading', { name: 'Приймання партією' }),
   ).toBeVisible()
+  expect(screen.queryByText(/собівартість/i)).toBeNull()
+  expect(screen.queryByText('На позицію')).toBeNull()
   await user.type(screen.getByLabelText('Назва позиції 1'), 'Фара права')
   await user.type(screen.getByLabelText('Ціна в рядку 1'), '120')
   await user.type(screen.getByLabelText('Назва позиції 2'), 'Бампер')

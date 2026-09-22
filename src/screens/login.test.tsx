@@ -108,6 +108,7 @@ let auth: AuthContextValue
 
 beforeEach(() => {
   credentials.clear()
+  sessionStorage.clear()
   auth = {
     status: 'guest',
     user: null,
@@ -136,6 +137,21 @@ afterEach(() => {
   vi.useRealTimers()
   vi.resetAllMocks()
   credentials.clear()
+  sessionStorage.clear()
+})
+
+it('restores an active OTP challenge after the login page reloads', async () => {
+  const user = userEvent.setup()
+  const firstRender = renderLogin()
+
+  await reachOtpStep(user)
+  firstRender.unmount()
+
+  renderLogin()
+
+  expect(await screen.findByLabelText('Цифра 1')).toBeInTheDocument()
+  expect(screen.getByText('+380 50 111 22 33')).toBeInTheDocument()
+  expect(otpSend).toHaveBeenCalledTimes(1)
 })
 
 it('disables OTP resend during backend cooldown and applies retryAfterSeconds', async () => {

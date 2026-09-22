@@ -31,6 +31,46 @@ type Step = 'phone' | 'otp' | 'name' | 'success'
 const OTP_LENGTH = 6
 const PHONE_DIGITS = 12
 const PHONE_HINT = 'Формат: +380 XX XXX XX XX'
+const OTP_FLOW_STORAGE_KEY = 'rozbirka.loginOtpFlow'
+
+interface StoredOtpFlow {
+  purpose: 'login' | 'registration'
+  phone: string
+  challenge: SendOtpResponse
+}
+
+function readStoredOtpFlow(): StoredOtpFlow | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.sessionStorage.getItem(OTP_FLOW_STORAGE_KEY)
+    if (!raw) return null
+    const value = JSON.parse(raw) as Partial<StoredOtpFlow>
+    if (
+      (value.purpose !== 'login' && value.purpose !== 'registration') ||
+      typeof value.phone !== 'string' ||
+      typeof value.challenge?.challengeId !== 'string' ||
+      typeof value.challenge.expiresAt !== 'string' ||
+      typeof value.challenge.resendAt !== 'string' ||
+      Date.parse(value.challenge.expiresAt) <= Date.now()
+    ) {
+      window.sessionStorage.removeItem(OTP_FLOW_STORAGE_KEY)
+      return null
+    }
+    return value as StoredOtpFlow
+  } catch {
+    window.sessionStorage.removeItem(OTP_FLOW_STORAGE_KEY)
+    return null
+  }
+}
+
+function storeOtpFlow(flow: StoredOtpFlow) {
+  window.sessionStorage.setItem(OTP_FLOW_STORAGE_KEY, JSON.stringify(flow))
+}
+
+function clearStoredOtpFlow() {
+  if (typeof window !== 'undefined')
+    window.sessionStorage.removeItem(OTP_FLOW_STORAGE_KEY)
+}
 
 const errorMessages: Record<string, string> = {
   OTP_COOLDOWN: 'Код уже надіслано. Дочекайтеся відліку й спробуйте ще раз',
@@ -129,6 +169,24 @@ export function LoginScreen() {
     }
   }, [])
 
+  useEffect(() => {
+    if (auth.status === 'authenticated') {
+      clearStoredOtpFlow()
+      return
+    }
+    const stored = readStoredOtpFlow()
+    if (!stored) return
+    const restoreId = window.setTimeout(() => {
+      setPurpose(stored.purpose)
+      setChallenge(stored.challenge)
+      setPhone(stored.phone)
+      resendDeadlineRef.current = Date.parse(stored.challenge.resendAt)
+      setResendIn(cooldownFrom(stored.challenge))
+      setStep('otp')
+    }, 0)
+    return () => window.clearTimeout(restoreId)
+  }, [auth.status])
+
   const beginNavigationOperation = useCallback(() => {
     navigationGenerationRef.current += 1
     if (navigationTimerRef.current !== null) {
@@ -194,6 +252,7 @@ export function LoginScreen() {
       extractError(error, 'Не вдалося надіслати код. Спробуйте ще раз'),
     onSuccess: (response) => {
       if (!response) return
+      storeOtpFlow({ purpose, phone, challenge: response })
       setChallenge(response)
       setOtp('')
       setCodeError(null)
@@ -232,6 +291,7 @@ export function LoginScreen() {
           ? await authApi.registrationVerify(request, options)
           : await authApi.otpVerify(request, options)
       if (!isCurrentNavigationOperation(generation)) return null
+      clearStoredOtpFlow()
       // Existing user — straight to success. Brand-new user — ask their name first.
       if (response.isNewUser) return { generation, next: 'name' }
       await auth.hydrate(response.accessToken)
@@ -265,6 +325,7 @@ export function LoginScreen() {
       extractError(error, 'Не вдалося надіслати код. Спробуйте ще раз'),
     onSuccess: (response) => {
       if (!response) return
+      storeOtpFlow({ purpose, phone, challenge: response })
       setChallenge(response)
       setOtp('')
       resendDeadlineRef.current = Date.parse(response.resendAt)
@@ -360,6 +421,7 @@ export function LoginScreen() {
     if (busy) return
     beginNavigationOperation()
     requestControllerRef.current?.abort()
+    clearStoredOtpFlow()
     setChallenge(null)
     if (purpose === 'registration')
       cancellationRef.current = authApi
@@ -395,6 +457,7 @@ export function LoginScreen() {
                 if (busy) return
                 beginNavigationOperation()
                 requestControllerRef.current?.abort()
+                clearStoredOtpFlow()
                 setChallenge(null)
                 setOtp('')
                 setResendIn(0)

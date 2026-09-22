@@ -34,3 +34,27 @@ it('encodes the resume URL as real SVG QR markup for preview and printable HTML'
   expect(html).toContain('Front &lt;bumper&gt;')
   expect(html).not.toContain('Front <bumper>')
 })
+
+it('prints every sticker copy on its own 40 by 58 millimetre page', async () => {
+  const html = await buildStickerHtml(
+    [
+      {
+        id: 'part-1',
+        name: 'Bumper',
+        qrCode: 'QR-1',
+        quantity: 2,
+        carLabel: 'Ford Focus',
+      },
+    ],
+    'https://app.example',
+  )
+
+  expect(html.match(/<article class="sticker">/g)).toHaveLength(2)
+  expect(html).toContain('@page{size:40mm 58mm;margin:0}')
+  expect(html).toContain('width:40mm;height:57mm')
+  expect(html).toContain('page-break-after:always')
+  expect(html).toContain(
+    '.sticker:last-child{page-break-after:auto;break-after:auto}',
+  )
+  expect(html).not.toContain('grid-template-columns:repeat(3,1fr)')
+})

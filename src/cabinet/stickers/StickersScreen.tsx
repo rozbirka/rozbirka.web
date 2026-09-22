@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Download, Minus, Plus, Printer, Share2 } from 'lucide-react'
 import { useSearchParams } from 'react-router'
+import { partsApi, type PartListItem } from '@/api/parts'
 import {
   Button,
-  Field,
   Notice,
   PageBody,
-  PageHeader,
   Pagination,
   SearchInput,
 } from '@/components/app'
-import { partsApi, type PartListItem } from '@/api/parts'
 import { stickersApi } from '@/api/stickers'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
@@ -26,6 +25,10 @@ import {
 interface QueueItem {
   id: string
   quantity: number
+  availableQuantity?: number
+  name?: string
+  externalCode?: string | null
+  carLabel?: string | null
 }
 interface QueueScope {
   userId: string
@@ -38,17 +41,26 @@ interface StoredQueue {
 }
 
 const MAX_STICKERS = 200
+const PARTS_PAGE_SIZE = 10
 const QUEUE_TTL_MS = 24 * 60 * 60 * 1000
 const queueKey = ({ userId, tenantId }: QueueScope) =>
   `rozbirka.stickers.queue.v1:${userId}:${tenantId}`
 const validQueueItem = (value: unknown): value is QueueItem => {
   if (typeof value !== 'object' || value === null) return false
   const item = value as Record<string, unknown>
+  const optionalText = (entry: unknown) =>
+    entry === undefined || entry === null || typeof entry === 'string'
   return (
     typeof item['id'] === 'string' &&
     item['id'].length > 0 &&
     Number.isInteger(item['quantity']) &&
-    Number(item['quantity']) > 0
+    Number(item['quantity']) > 0 &&
+    (item['availableQuantity'] === undefined ||
+      (Number.isInteger(item['availableQuantity']) &&
+        Number(item['availableQuantity']) >= Number(item['quantity']))) &&
+    optionalText(item['name']) &&
+    optionalText(item['externalCode']) &&
+    optionalText(item['carLabel'])
   )
 }
 const validQueue = (value: unknown): value is QueueItem[] => {
@@ -173,7 +185,6 @@ function TenantStickerQueue({
   const [partsTotal, setPartsTotal] = useState(0)
   const [partsTotalPages, setPartsTotalPages] = useState(1)
   const [parts, setParts] = useState<PartListItem[]>([])
-  const [partLabels, setPartLabels] = useState<Record<string, string>>({})
   const [partsUnavailable, setPartsUnavailable] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [printable, setPrintable] = useState<PrintableSticker[]>([])
@@ -194,23 +205,35 @@ function TenantStickerQueue({
     void partsApi
       .list({
         page: partsPage,
-        pageSize: 30,
+        pageSize: PARTS_PAGE_SIZE,
+        status: 'available',
         ...(search.trim() ? { q: search.trim() } : {}),
         signal: controller.signal,
       })
       .then(
         (page) => {
           if (controller.signal.aborted) return
-          setParts(page.items)
+          setParts(page.items.filter((part) => part.quantityAvailable > 0))
           setPartsTotal(page.total)
           setPartsTotalPages(Math.max(1, page.totalPages))
-          setPartLabels((current) => ({
-            ...current,
-            ...Object.fromEntries(
-              page.items.map((part) => [part.id, part.name]),
-            ),
-          }))
           setPartsUnavailable(false)
+          const availability = new Map(
+            page.items.map((part) => [part.id, part.quantityAvailable]),
+          )
+          setQueue((current) =>
+            current.flatMap((item) => {
+              const available = availability.get(item.id)
+              if (available === undefined) return [item]
+              if (available <= 0) return []
+              return [
+                {
+                  ...item,
+                  availableQuantity: available,
+                  quantity: Math.min(item.quantity, available),
+                },
+              ]
+            }),
+          )
         },
         () => {
           if (!controller.signal.aborted) setPartsUnavailable(true)
@@ -235,29 +258,78 @@ function TenantStickerQueue({
     })
     return unregister
   }, [scope])
-  const selectPart = (partId: string, selected: boolean) => {
+  const selectPart = (part: PartListItem) => {
     if (!canGenerate || partsUnavailable) return
-    if (selected && total >= MAX_STICKERS) {
+    if (part.quantityAvailable <= 0) {
+      setError('Для цієї запчастини немає доступного залишку.')
+      return
+    }
+    if (total >= MAX_STICKERS) {
       setError(
         `За один раз можна підготувати не більше ${MAX_STICKERS} стікерів.`,
       )
       return
     }
     setQueue((current) => {
-      if (!selected) return current.filter((item) => item.id !== partId)
-      return current.some((item) => item.id === partId)
+      return current.some((item) => item.id === part.id)
         ? current
-        : [...current, { id: partId, quantity: 1 }]
+        : [
+            ...current,
+            {
+              id: part.id,
+              quantity: 1,
+              availableQuantity: part.quantityAvailable,
+              name: part.name,
+              externalCode: part.externalCode ?? null,
+              carLabel: part.car
+                ? `${part.car.make} ${part.car.model} · ${String(part.car.year)}`
+                : null,
+            },
+          ]
     })
     setError(null)
     setPrintable([])
     setPreview([])
+  }
+  const removePart = (partId: string) => {
+    setQueue((current) => current.filter((item) => item.id !== partId))
+    setPrintable([])
+    setPreview([])
+    setError(null)
+  }
+  const togglePart = (part: PartListItem) => {
+    const selected = queue.some((item) => item.id === part.id)
+    if (selected) {
+      removePart(part.id)
+      return
+    }
+    selectPart(part)
   }
   const clear = () => {
     setQueue([])
     setPrintable([])
     setPreview([])
     setError(null)
+  }
+
+  const changeQuantity = (partId: string, delta: number) => {
+    if (delta > 0 && total >= MAX_STICKERS) {
+      setError(
+        `За один раз можна підготувати не більше ${MAX_STICKERS} стікерів.`,
+      )
+      return
+    }
+    setQueue((current) => {
+      const entry = current.find((item) => item.id === partId)
+      if (!entry) return current
+      const available = entry.availableQuantity ?? 1
+      const quantity = Math.min(available, Math.max(1, entry.quantity + delta))
+      return current.map((item) =>
+        item.id === partId ? { ...item, quantity } : item,
+      )
+    })
+    setPrintable([])
+    setPreview([])
   }
 
   const generate = async () => {
@@ -358,92 +430,328 @@ function TenantStickerQueue({
     }
   }
 
-  const labelFor = (partId: string) =>
-    partLabels[partId] ?? 'Деталь недоступна у поточній вибірці'
-
+  const labelFor = (item: QueueItem) =>
+    item.name ?? 'Деталь, додана з іншого екрана'
+  const selectedIds = new Set(queue.map((item) => item.id))
+  const previewCards = preview.length
+    ? preview.slice(0, 6).map((sticker) => ({
+        id: sticker.id,
+        name: sticker.name,
+        detail: sticker.carLabel,
+        qrSvg: sticker.qrSvg,
+      }))
+    : queue
+        .flatMap((item) =>
+          Array.from({ length: item.quantity }, () => ({
+            id: item.id,
+            name: labelFor(item),
+            detail: item.carLabel ?? null,
+            qrSvg: null,
+          })),
+        )
+        .slice(0, 6)
+  const selectVisible = () => {
+    if (!canGenerate || partsUnavailable) return
+    setQueue((current) => {
+      const selected = new Set(current.map((item) => item.id))
+      let remaining =
+        MAX_STICKERS - current.reduce((sum, item) => sum + item.quantity, 0)
+      const additions: QueueItem[] = []
+      for (const part of parts) {
+        if (
+          selected.has(part.id) ||
+          part.quantityAvailable <= 0 ||
+          remaining <= 0
+        )
+          continue
+        additions.push({
+          id: part.id,
+          quantity: 1,
+          availableQuantity: part.quantityAvailable,
+          name: part.name,
+          externalCode: part.externalCode ?? null,
+          carLabel: part.car
+            ? `${part.car.make} ${part.car.model} · ${String(part.car.year)}`
+            : null,
+        })
+        remaining -= 1
+      }
+      return [...current, ...additions]
+    })
+    setError(null)
+    setPrintable([])
+    setPreview([])
+  }
   return (
-    <PageBody width="narrow">
-      <PageHeader eyebrow="Склад" title="Стікери" />
-      <p className="text-app-muted text-sm">
-        Черга стікерів для поточної розбірки
-      </p>
+    <PageBody className="gap-6 pb-8">
+      <header>
+        <h1 className="text-[clamp(34px,4vw,48px)] leading-none font-extrabold tracking-[-0.035em] text-white">
+          Стікери
+        </h1>
+        <p className="text-app-muted mt-3 max-w-3xl text-[14px] leading-6">
+          QR-стікери для запчастин. Сканер відкриває запчастину за її кодом.
+        </p>
+      </header>
       {!scope ? (
         <Notice tone="danger">
           Відновлення черги заблоковано без стабільної ідентичності користувача
           та розбірки.
         </Notice>
       ) : null}
-      <section className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border">
-        <div className="grid gap-3 p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
-          <Field label="Пошук запчастин">
+      <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border">
+          <div className="border-app-line border-b p-4 sm:p-5">
             <SearchInput
-              aria-label="Пошук запчастин"
+              aria-label="Пошук запчастини"
+              className="min-h-14 rounded-[16px]"
+              disabled={!canGenerate}
               onChange={(event) => {
                 setSearch(event.target.value)
                 setPartsPage(1)
               }}
-              placeholder="Назва або QR-код"
+              placeholder="Назва, артикул або QR-код"
               value={search}
             />
-          </Field>
-          <Button
-            disabled={!canGenerate || partsUnavailable || parts.length === 0}
-            onClick={() => {
-              setQueue((current) => {
-                const selected = new Set(current.map((item) => item.id))
-                const additions = parts
-                  .filter((part) => !selected.has(part.id))
-                  .slice(0, Math.max(0, MAX_STICKERS - current.length))
-                  .map((part) => ({ id: part.id, quantity: 1 }))
-                return [...current, ...additions]
-              })
-              setError(null)
-              setPrintable([])
-              setPreview([])
-            }}
+          </div>
+
+          <div className="border-app-line flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5">
+            <p className="text-app-muted text-[13px] tabular-nums">
+              Вибрано {queue.length} обʼєктів · {total} стікерів
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                className="min-h-9 px-3 text-[12.5px]"
+                disabled={
+                  !canGenerate || partsUnavailable || parts.length === 0
+                }
+                onClick={selectVisible}
+              >
+                Вибрати всі
+              </Button>
+              <Button
+                className="min-h-9 px-3 text-[12.5px]"
+                disabled={!queue.length}
+                onClick={clear}
+              >
+                Зняти
+              </Button>
+            </div>
+          </div>
+
+          {partsUnavailable ? (
+            <div className="p-5">
+              <Notice tone="danger">
+                Не вдалося завантажити список запчастин.
+              </Notice>
+            </div>
+          ) : null}
+          <ul
+            className="divide-app-line grid divide-y"
+            aria-label="Список запчастин"
           >
-            Обрати все
-          </Button>
-          <Button disabled={!queue.length} onClick={clear}>
-            Скинути
-          </Button>
-        </div>
-        <ul
-          className="divide-app-line grid divide-y"
-          aria-label="Список запчастин"
-        >
-          {parts.map((part) => (
-            <li key={part.id}>
-              <label className="hover:bg-white/[0.03] flex min-h-14 cursor-pointer items-center gap-3 px-4 py-3 text-sm text-white">
-                <input
-                  checked={queue.some((item) => item.id === part.id)}
-                  className="accent-brand size-4"
-                  disabled={!canGenerate || partsUnavailable}
-                  onChange={(event) =>
-                    selectPart(part.id, event.target.checked)
+            {parts.map((part) => {
+              const selected = selectedIds.has(part.id)
+              const queued = queue.find((item) => item.id === part.id)
+              const vehicle = part.car
+                ? `${part.car.make} ${part.car.model} · ${String(part.car.year)}`
+                : 'Без привʼязки до автомобіля'
+              return (
+                <li
+                  aria-label={`Запчастина ${part.name}`}
+                  className={
+                    selected
+                      ? 'cursor-pointer bg-white/[0.035] shadow-[inset_2px_0_0_var(--color-brand)]'
+                      : 'cursor-pointer transition-colors hover:bg-white/[0.025]'
                   }
-                  type="checkbox"
-                />
-                <span className="font-semibold">{part.name}</span>
-              </label>
-            </li>
-          ))}
-        </ul>
-        <Pagination
-          label="Пагінація запчастин для стікерів"
-          onPage={setPartsPage}
-          page={partsPage}
-          pageSize={30}
-          total={partsTotal}
-          totalPages={partsTotalPages}
-        />
-      </section>
-      {partsUnavailable ? (
-        <p className="text-app-dim text-[13.5px]" role="status">
-          Вибір деталей недоступний: список не завантажено, пошук за внутрішнім
-          ID вимкнено.
-        </p>
-      ) : null}
+                  key={part.id}
+                  onClick={() => togglePart(part)}
+                >
+                  <div className="grid min-h-[72px] grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:px-5">
+                    <input
+                      aria-label={part.name}
+                      checked={selected}
+                      className="accent-brand pointer-events-none size-[18px]"
+                      disabled={!canGenerate || partsUnavailable}
+                      readOnly
+                      type="checkbox"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-[14px] font-bold text-white">
+                        {part.name}
+                      </p>
+                      <p className="text-app-muted mt-1 truncate text-[12.5px]">
+                        {vehicle}
+                        <span
+                          className={
+                            part.quantityAvailable > 0
+                              ? 'text-state-ok ml-2'
+                              : 'text-state-danger ml-2'
+                          }
+                        >
+                          Доступно: {part.quantityAvailable} шт.
+                        </span>
+                      </p>
+                    </div>
+                    {selected && queued ? (
+                      <div
+                        className="border-app-line-2 bg-app-canvas col-start-2 flex h-9 w-fit items-center rounded-[10px] border sm:col-start-auto"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <button
+                          aria-label={`Зменшити кількість ${part.name}`}
+                          className="text-app-muted hover:text-app-ink grid size-9 place-items-center disabled:opacity-35"
+                          disabled={queued.quantity <= 1}
+                          onClick={() => changeQuantity(queued.id, -1)}
+                          type="button"
+                        >
+                          <Minus aria-hidden className="size-3.5" />
+                        </button>
+                        <span className="min-w-7 text-center font-mono text-[13px] font-semibold text-white tabular-nums">
+                          {queued.quantity}
+                        </span>
+                        <button
+                          aria-label={`Збільшити кількість ${part.name}`}
+                          className="text-app-muted hover:text-app-ink grid size-9 place-items-center disabled:opacity-35"
+                          disabled={
+                            total >= MAX_STICKERS ||
+                            queued.quantity >= part.quantityAvailable
+                          }
+                          onClick={() => changeQuantity(queued.id, 1)}
+                          type="button"
+                        >
+                          <Plus aria-hidden className="size-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="hidden sm:block" />
+                    )}
+                    <span className="text-app-dim hidden max-w-28 truncate text-right font-mono text-[12.5px] sm:block">
+                      {part.externalCode ?? '—'}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+          <Pagination
+            label="Пагінація запчастин для стікерів"
+            onPage={setPartsPage}
+            page={partsPage}
+            pageSize={PARTS_PAGE_SIZE}
+            total={partsTotal}
+            totalPages={partsTotalPages}
+          />
+        </section>
+
+        <section
+          aria-label="Аркуш стікерів"
+          className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border xl:sticky xl:top-5"
+        >
+          <div className="border-app-line flex items-center justify-between gap-3 border-b px-5 py-4">
+            <h2 className="font-mono text-[11.5px] tracking-[0.14em] text-white uppercase">
+              Аркуш
+            </h2>
+            <span className="text-app-dim text-[12px]">
+              Попередній перегляд
+            </span>
+          </div>
+          <div className="p-5">
+            <div className="grid min-h-[310px] grid-cols-2 gap-1.5 rounded-[16px] bg-[#eee] p-3">
+              {Array.from({ length: 6 }, (_, index) => {
+                const sticker = previewCards[index]
+                return sticker ? (
+                  <article
+                    aria-label={`Попередній перегляд стікера ${sticker.name}`}
+                    className="grid min-h-[88px] grid-cols-[42px_minmax(0,1fr)] content-center gap-2 overflow-hidden rounded-[7px] border border-black/10 bg-white p-2 text-black"
+                    key={`${sticker.id}-${String(index)}`}
+                  >
+                    {sticker.qrSvg ? (
+                      <div
+                        aria-label={`QR-код ${sticker.name}`}
+                        className="grid size-[42px] place-items-center overflow-hidden bg-white [&>svg]:block [&>svg]:size-full"
+                        dangerouslySetInnerHTML={{ __html: sticker.qrSvg }}
+                        role="img"
+                      />
+                    ) : (
+                      <div className="grid size-[42px] place-items-center rounded-[3px] bg-black font-mono text-[8px] text-white">
+                        QR
+                      </div>
+                    )}
+                    <div className="min-w-0 self-center">
+                      <p className="line-clamp-2 text-[9.5px] leading-[1.2] font-extrabold">
+                        {sticker.name}
+                      </p>
+                      {sticker.detail ? (
+                        <p className="mt-1 line-clamp-2 text-[7.5px] leading-[1.25] text-black/55">
+                          {sticker.detail}
+                        </p>
+                      ) : null}
+                    </div>
+                  </article>
+                ) : (
+                  <div
+                    className="min-h-[88px] rounded-[7px] border border-dashed border-black/10 bg-black/[0.025]"
+                    key={`empty-${String(index)}`}
+                  />
+                )
+              })}
+            </div>
+
+            <p className="text-app-dim mt-3 text-center text-[12px] leading-5">
+              Кожен стікер друкується на окремому аркуші 40×58 мм.
+            </p>
+
+            <dl className="mt-5 grid gap-2.5 text-[13px]">
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-app-muted">Вибрано обʼєктів</dt>
+                <dd className="font-mono text-white tabular-nums">
+                  {queue.length}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <dt className="text-app-muted">Стікерів</dt>
+                <dd className="font-mono text-white tabular-nums">{total}</dd>
+              </div>
+            </dl>
+
+            <Button
+              aria-busy={busy}
+              className="mt-5 w-full justify-center"
+              disabled={!queue.length || !canGenerate || busy}
+              onClick={() => (preview.length ? void print() : void generate())}
+              variant="primary"
+            >
+              <Printer aria-hidden />
+              {busy
+                ? 'Готуємо макет…'
+                : preview.length
+                  ? `Друкувати ${String(total)}`
+                  : `Підготувати ${String(total)}`}
+            </Button>
+            {preview.length ? (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <Button
+                  className="min-w-0 px-2.5 text-[12.5px]"
+                  disabled={busy}
+                  onClick={() => void download()}
+                >
+                  <Download aria-hidden />
+                  Завантажити
+                </Button>
+                <Button
+                  className="min-w-0 px-2.5 text-[12.5px]"
+                  disabled={busy}
+                  onClick={() => void share()}
+                >
+                  <Share2 aria-hidden />
+                  Поділитися
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      </div>
+
       {!canGenerate ? (
         <p className="text-app-dim text-[13.5px]" role="status">
           {generationDecision === 'subscription-blocked'
@@ -455,85 +763,7 @@ function TenantStickerQueue({
                 : 'Недостатньо прав для генерації стікерів.'}
         </p>
       ) : null}
-      <p className="text-app-muted text-sm tabular-nums">У черзі: {total}</p>
-      {queue.map((item) => (
-        <div
-          className="border-app-line rounded-panel bg-app-raised flex flex-wrap items-center justify-between gap-2 border px-3.5 py-2 text-sm text-white"
-          key={item.id}
-        >
-          <span>
-            {labelFor(item.id)} × {item.quantity}
-          </span>
-          <Button
-            aria-label={`Прибрати ${labelFor(item.id)}`}
-            disabled={!canGenerate}
-            onClick={() => {
-              setQueue((current) =>
-                current.filter((entry) => entry.id !== item.id),
-              )
-              setPrintable([])
-              setPreview([])
-            }}
-          >
-            Прибрати
-          </Button>
-        </div>
-      ))}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          aria-busy={busy}
-          disabled={!queue.length || !canGenerate || busy}
-          onClick={() => void generate()}
-          variant="primary"
-        >
-          Отримати дані стікерів
-        </Button>
-        <Button
-          disabled={!preview.length || busy}
-          onClick={() => void download()}
-        >
-          Завантажити макет
-        </Button>
-        <Button disabled={!preview.length || busy} onClick={() => void print()}>
-          Друкувати
-        </Button>
-        <Button disabled={!preview.length || busy} onClick={() => void share()}>
-          Поділитися
-        </Button>
-        <Button disabled={!preview.length || busy} onClick={clear}>
-          Підтвердити друк
-        </Button>
-        <Button disabled={!queue.length || !canGenerate} onClick={clear}>
-          Очистити чергу
-        </Button>
-      </div>
       {error ? <Notice tone="danger">{error}</Notice> : null}
-      {preview.length ? (
-        <section
-          aria-label="Макет стікерів"
-          className="grid gap-3 sm:grid-cols-3"
-        >
-          {preview.map((sticker, index) => (
-            <article
-              className="grid gap-2 rounded bg-white p-3 text-black"
-              key={`${sticker.id}-${index}`}
-            >
-              {/* The SVG arrives without a size of its own. Left alone it
-                  spills past the sticker; a bounded box with a white quiet
-                  zone around it is what a scanner needs to read the code. */}
-              <div
-                aria-label={`QR-код ${sticker.name}`}
-                className="mx-auto w-full max-w-[168px] bg-white p-2 [&>svg]:block [&>svg]:h-auto [&>svg]:w-full"
-                dangerouslySetInnerHTML={{ __html: sticker.qrSvg }}
-                role="img"
-              />
-              <strong>{sticker.name}</strong>
-              {sticker.carLabel ? <span>{sticker.carLabel}</span> : null}
-              <a href={sticker.resumeUrl}>Відкрити сканування</a>
-            </article>
-          ))}
-        </section>
-      ) : null}
     </PageBody>
   )
 }

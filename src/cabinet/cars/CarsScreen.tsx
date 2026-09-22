@@ -27,7 +27,6 @@ import {
   Plus,
   Trash2,
   Wallet,
-  Wrench,
 } from 'lucide-react'
 import { cn, plural } from '@/lib/utils'
 import {
@@ -38,9 +37,7 @@ import {
   ConfirmDialog,
   DataTable,
   DateValue,
-  FormDialog,
   Gallery,
-  SectionPanel,
   EmptyState,
   Field,
   ErrorState,
@@ -53,7 +50,7 @@ import {
   StatusPill,
   TextArea,
   TextInput,
-  type StatusTone,
+  useOptionalToast,
 } from '@/components/app'
 import {
   carsApi,
@@ -61,7 +58,6 @@ import {
   type CarExpense,
   type CarListItem,
   type CarListParams,
-  type CarPartListItem,
   type CreateCarRequest,
   type UpdateCarRequest,
   isCarStatus,
@@ -82,6 +78,7 @@ import {
 import { evaluateModuleAccess } from '../policy'
 import type { ModuleAccessDecision } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import { CarExpenseDrawer } from './CarExpenseDrawer'
 
 /**
  * The shots that make a car card usable to someone who never saw the car. The
@@ -135,12 +132,6 @@ const day = (value: string) => {
   return Number.isNaN(parsed.getTime())
     ? value
     : new Intl.DateTimeFormat('uk-UA', { dateStyle: 'medium' }).format(parsed)
-}
-const partStatus = (status: string): { label: string; tone: StatusTone } => {
-  if (status === 'available') return { label: 'Доступна', tone: 'ok' }
-  if (status === 'reserved') return { label: 'У резерві', tone: 'warn' }
-  if (status === 'sold') return { label: 'Продана', tone: 'danger' }
-  return { label: status, tone: 'neutral' }
 }
 const positiveInteger = (value: string | null, fallback: number) => {
   const parsed = Number(value)
@@ -737,6 +728,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
     (sum, expense) => sum + expense.amount,
     0,
   )
+  const partsHref = `${base.replace(/\/cars$/, '/parts')}?car_ids=${car.id}`
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
@@ -757,35 +749,49 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
             <span>Автомобілі</span>
           </p>
         </div>
-        {manage ? (
+        {manage || partsView ? (
           <div className="flex flex-wrap items-center gap-2.5">
-            <Button
-              asChild
-              className="px-5 text-sm font-bold"
-              variant="primary"
-            >
-              <Link to={`${base}/${car.id}/edit`}>Редагувати автомобіль</Link>
-            </Button>
-            <ActionMenu
-              actions={[
-                {
-                  key: 'archive',
-                  label: 'Архівувати',
-                  icon: <Archive aria-hidden className="size-4" />,
-                  disabled: busy,
-                  onSelect: () => setPendingAction('archive'),
-                },
-                {
-                  key: 'delete',
-                  label: 'Видалити',
-                  icon: <Trash2 aria-hidden className="size-4" />,
-                  destructive: true,
-                  disabled: busy,
-                  onSelect: () => setPendingAction('delete'),
-                },
-              ]}
-              label="Інші дії з автомобілем"
-            />
+            {partsView ? (
+              <Button asChild className="px-4 text-sm font-bold">
+                <Link to={partsHref}>
+                  Відкрити на складі
+                  <ChevronRight aria-hidden />
+                </Link>
+              </Button>
+            ) : null}
+            {manage ? (
+              <>
+                <Button
+                  asChild
+                  className="px-5 text-sm font-bold"
+                  variant="primary"
+                >
+                  <Link to={`${base}/${car.id}/edit`}>
+                    Редагувати автомобіль
+                  </Link>
+                </Button>
+                <ActionMenu
+                  actions={[
+                    {
+                      key: 'archive',
+                      label: 'Архівувати',
+                      icon: <Archive aria-hidden className="size-4" />,
+                      disabled: busy,
+                      onSelect: () => setPendingAction('archive'),
+                    },
+                    {
+                      key: 'delete',
+                      label: 'Видалити',
+                      icon: <Trash2 aria-hidden className="size-4" />,
+                      destructive: true,
+                      disabled: busy,
+                      onSelect: () => setPendingAction('delete'),
+                    },
+                  ]}
+                  label="Інші дії з автомобілем"
+                />
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -874,44 +880,57 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
           ) : null}
         </div>
 
-        <div className="mt-4 flex flex-wrap items-start gap-6">
-          <Card
-            aside={
-              <span className="text-app-dim font-mono text-[12px] tracking-[0.1em] uppercase">
-                {car.photos.length}{' '}
-                {plural(car.photos.length, ['знімок', 'знімки', 'знімків'])}
-              </span>
-            }
-            bodyClassName="p-0"
-            className="min-w-[320px] flex-[1_1_620px]"
-            headerClassName="pb-4"
-            title="Фото"
-          >
-            <Gallery
-              emptyLabel={
-                <span className="grid gap-1">
-                  <span>Фото цього авто ще немає.</span>
-                  <span>
-                    Радимо зняти{' '}
-                    {CAR_SHOTS.slice(0, 3).join(', ').toLowerCase()} — і додати
-                    їх у редагуванні автомобіля.
-                  </span>
+        <div className="mt-4 grid items-start gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
+          <section aria-label="Фото та витрати" className="grid min-w-0 gap-6">
+            <Card
+              aside={
+                <span className="text-app-dim font-mono text-[12px] tracking-[0.1em] uppercase">
+                  {car.photos.length}{' '}
+                  {plural(car.photos.length, ['знімок', 'знімки', 'знімків'])}
                 </span>
               }
-              label={`Фото автомобіля ${car.code}`}
-              photos={car.photos.map((photo, index) => ({
-                id: photo.id,
-                url: photo.url,
-                ...(photo.thumbnailUrl
-                  ? { thumbnailUrl: photo.thumbnailUrl }
-                  : {}),
-                alt: `${CAR_SHOTS[index] ?? `Знімок ${String(index + 1)}`} — фото автомобіля ${car.code}`,
-              }))}
-              variant="framed"
-            />
-          </Card>
+              bodyClassName="p-0"
+              headerClassName="pb-4"
+              title="Фото"
+            >
+              <Gallery
+                emptyLabel={
+                  <span className="grid gap-1">
+                    <span>Фото цього авто ще немає.</span>
+                    <span>
+                      Радимо зняти{' '}
+                      {CAR_SHOTS.slice(0, 3).join(', ').toLowerCase()} — і
+                      додати їх у редагуванні автомобіля.
+                    </span>
+                  </span>
+                }
+                label={`Фото автомобіля ${car.code}`}
+                photos={car.photos.map((photo, index) => ({
+                  id: photo.id,
+                  url: photo.url,
+                  ...(photo.thumbnailUrl
+                    ? { thumbnailUrl: photo.thumbnailUrl }
+                    : {}),
+                  alt: `${CAR_SHOTS[index] ?? `Знімок ${String(index + 1)}`} — фото автомобіля ${car.code}`,
+                }))}
+                variant="framed"
+              />
+            </Card>
 
-          <div className="flex min-w-[320px] flex-[1_1_460px] flex-col gap-6">
+            {financeView ? (
+              <Expenses
+                car={car}
+                canManage={financeManage}
+                onChanged={load}
+                onProblem={setProblem}
+              />
+            ) : null}
+          </section>
+
+          <aside
+            aria-label="Зведення автомобіля"
+            className="grid min-w-0 gap-6"
+          >
             {financeView && profit ? (
               <Card
                 aside={
@@ -1064,24 +1083,8 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
                 ]}
               />
             </Card>
-
-            {financeView ? (
-              <Expenses
-                car={car}
-                canManage={financeManage}
-                onChanged={load}
-                onProblem={setProblem}
-              />
-            ) : null}
-          </div>
+          </aside>
         </div>
-
-        {partsView ? (
-          <CarParts
-            carId={car.id}
-            partsHref={`${base.replace(/\/cars$/, '/parts')}?car_ids=${car.id}`}
-          />
-        ) : null}
       </div>
 
       <ConfirmDialog
@@ -1118,6 +1121,7 @@ function Expenses({
   onProblem: (message: string) => void
 }) {
   const { requireLatestMutation } = useLatestMutationGuard(cabinetModules.cars)
+  const toast = useOptionalToast()
   const [name, setName] = useState('')
   const [amount, setAmount] = useState('')
   const [editing, setEditing] = useState<CarExpense | null>(null)
@@ -1165,13 +1169,15 @@ function Expenses({
           { signal: scope.signal },
         )
       }
+      await onChanged()
+      const message = editing ? 'Витрату оновлено.' : 'Витрату додано.'
       setName('')
       setAmount('')
       setEditing(null)
       setFormOpen(false)
-      await onChanged()
+      toast?.show({ message, tone: 'ok' })
     } catch (error: unknown) {
-      onProblem(normalizeApiProblem(error).message)
+      setFormError(normalizeApiProblem(error).message)
     } finally {
       setBusy(false)
     }
@@ -1210,6 +1216,7 @@ function Expenses({
           Разом понад ціну придбання: {moneyExact(total)}
         </span>
       }
+      bodyClassName="grid gap-6"
       title="Витрати"
     >
       <p className="text-app-dim text-[14px] leading-[1.5]">
@@ -1217,7 +1224,7 @@ function Expenses({
         ціну придбання. Кожна витрата збільшує інвестовану суму.
       </p>
       {expenses.length === 0 ? (
-        <div className="border-app-line flex flex-wrap items-center justify-between gap-3 rounded-[14px] border p-4">
+        <div className="border-app-line grid gap-5 rounded-[14px] border p-5">
           <div className="flex min-w-0 flex-1 items-center gap-3.5">
             <span
               aria-hidden
@@ -1236,7 +1243,7 @@ function Expenses({
           </div>
           {canManage ? (
             <Button
-              className="min-h-12 shrink-0 px-5 text-sm font-bold whitespace-nowrap"
+              className="min-h-12 justify-self-start px-5 text-sm font-bold whitespace-nowrap"
               disabled={busy}
               onClick={() => openForm(null)}
               variant="primary"
@@ -1325,7 +1332,7 @@ function Expenses({
         />
       )}
       {canManage && expenses.length > 0 ? (
-        <div className="flex flex-wrap justify-end">
+        <div className="flex flex-wrap justify-start pt-1">
           <Button
             className="px-4 text-sm font-bold"
             disabled={busy}
@@ -1338,13 +1345,14 @@ function Expenses({
         </div>
       ) : null}
 
-      <FormDialog
-        description={
-          editing
-            ? 'Сума й назва змінюються разом; прибутковість авто перерахується одразу.'
-            : 'Витрата збільшує інвестовану суму й змінює прибутковість авто.'
-        }
+      <CarExpenseDrawer
+        amount={amount}
+        busy={busy}
+        editing={editing}
         error={formError}
+        name={name}
+        onAmountChange={setAmount}
+        onNameChange={setName}
         onOpenChange={(open) => {
           setFormOpen(open)
           if (!open) {
@@ -1354,26 +1362,7 @@ function Expenses({
         }}
         onSubmit={(event) => void create(event)}
         open={formOpen}
-        pending={busy}
-        submitLabel={editing ? 'Зберегти витрату' : 'Додати витрату'}
-        title={
-          editing ? `Редагування витрати «${editing.name}»` : 'Нова витрата'
-        }
-      >
-        <Field label="Назва витрати">
-          <TextInput
-            onChange={(event) => setName(event.target.value)}
-            value={name}
-          />
-        </Field>
-        <Field hint="У доларах" label="Сума витрати">
-          <TextInput
-            inputMode="decimal"
-            onChange={(event) => setAmount(event.target.value)}
-            value={amount}
-          />
-        </Field>
-      </FormDialog>
+      />
 
       <ConfirmDialog
         confirmLabel="Видалити витрату"
@@ -2332,150 +2321,6 @@ function NewCarExpenses({
         </Button>
       </div>
     </>
-  )
-}
-
-/** How many parts the car page shows before handing over to the warehouse. */
-const PARTS_PREVIEW = 5
-
-/**
- * What this car became on the shelf. The page shows the first few parts and
- * then hands over to the warehouse filtered by this car, instead of keeping a
- * second, poorer copy of the parts screen behind its own route.
- */
-function CarParts({
-  carId,
-  partsHref,
-}: {
-  carId: string
-  /** The warehouse, already filtered to this car. */
-  partsHref: string
-}) {
-  const navigate = useNavigate()
-  const partsBase = partsHref.split('?')[0]
-  const [requestVersion, setRequestVersion] = useState(0)
-  const [state, setState] = useState<{
-    parts: Awaited<ReturnType<typeof carsApi.listParts>> | null
-    problem: string | null
-    loading: boolean
-  }>({ parts: null, problem: null, loading: true })
-  useEffect(() => {
-    const controller = new AbortController()
-    void carsApi
-      .listParts(
-        carId,
-        { pageSize: PARTS_PREVIEW },
-        { signal: controller.signal },
-      )
-      .then(
-        (parts) => {
-          if (!controller.signal.aborted)
-            setState({ parts, problem: null, loading: false })
-        },
-        (error: unknown) => {
-          if (!controller.signal.aborted)
-            setState({
-              parts: null,
-              problem: normalizeApiProblem(error).message,
-              loading: false,
-            })
-        },
-      )
-    return () => controller.abort()
-  }, [carId, requestVersion])
-
-  const parts = state.parts
-  const shown = parts?.items.slice(0, PARTS_PREVIEW) ?? []
-
-  return (
-    <SectionPanel
-      aside={
-        parts
-          ? `${String(parts.total)} ${plural(parts.total, ['позиція', 'позиції', 'позицій'])} з цього авто`
-          : undefined
-      }
-      footer={
-        parts && parts.total > 0 ? (
-          <>
-            <span className="text-app-dim text-[13.5px]">
-              {parts.total > shown.length
-                ? `Показано ${String(shown.length)} із ${String(parts.total)}`
-                : 'Показано всі позиції'}
-            </span>
-            <Button asChild variant="primary">
-              <Link to={partsHref}>
-                Відкрити на складі
-                <ChevronRight aria-hidden />
-              </Link>
-            </Button>
-          </>
-        ) : undefined
-      }
-      title="Запчастини авто"
-    >
-      {state.loading ? (
-        <SkeletonRows columns={3} label="Завантажуємо запчастини…" rows={3} />
-      ) : null}
-      {state.problem ? (
-        <ErrorState
-          description={`${state.problem} Перевірте звʼязок і повторіть запит.`}
-          onRetry={() => {
-            setState({ parts: null, problem: null, loading: true })
-            setRequestVersion((current) => current + 1)
-          }}
-          title="Не вдалося завантажити запчастини"
-        />
-      ) : null}
-      {parts ? (
-        <DataTable
-          caption="Запчастини автомобіля на складі"
-          columns={[
-            {
-              key: 'name',
-              label: 'Деталь',
-              variant: 'primary',
-              cell: (part: CarPartListItem) => (
-                <Link
-                  className="hover:text-brand focus-visible:ring-brand rounded-sm outline-none focus-visible:ring-2"
-                  onClick={(event) => event.stopPropagation()}
-                  to={`${partsBase}/${part.id}`}
-                >
-                  {part.name}
-                </Link>
-              ),
-            },
-            {
-              key: 'status',
-              label: 'Статус',
-              cell: (part: CarPartListItem) => {
-                const presentation = partStatus(part.status)
-                return (
-                  <StatusPill tone={presentation.tone}>
-                    {presentation.label}
-                  </StatusPill>
-                )
-              },
-            },
-            {
-              key: 'quantity',
-              label: 'Доступно',
-              align: 'end',
-              cell: (part: CarPartListItem) => part.quantityAvailable,
-            },
-          ]}
-          onRowClick={(part) => void navigate(`${partsBase}/${part.id}`)}
-          empty={
-            <EmptyState
-              description="Деталі зʼявляться тут, щойно ви розберете авто й додасте запчастини на склад."
-              icon={<Wrench aria-hidden />}
-              title="Деталей цього авто ще немає"
-            />
-          }
-          rowKey={(part: CarPartListItem) => part.id}
-          rows={shown}
-        />
-      ) : null}
-    </SectionPanel>
   )
 }
 

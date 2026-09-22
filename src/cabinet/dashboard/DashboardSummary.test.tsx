@@ -104,6 +104,26 @@ it('renders Core-provided work totals for an owner, including a real zero', () =
   )
 })
 
+it('lets every work row fill its width when some figures are unavailable', () => {
+  render(
+    <DashboardSummary
+      data={summary({
+        revenue: { today: [], week: [], month: [] },
+        myPartsToday: null,
+        lastMyActivity: null,
+      })}
+    />,
+  )
+
+  const work = screen.getByRole('region', { name: 'Робота' })
+  const figures = work.querySelector('dl')
+  expect(figures).toHaveClass('flex', 'flex-wrap')
+  expect(figures).toHaveProperty('childElementCount', 5)
+  for (const figure of figures!.children) {
+    expect(figure).toHaveClass('grow', 'basis-[260px]')
+  }
+})
+
 it('renders Core-provided personal totals and activity for a manager', () => {
   render(
     <DashboardSummary
@@ -156,7 +176,7 @@ it('renders an empty yard as a successful onboarding state', () => {
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
-it('shows a till balance tile for every currency the yard keeps', () => {
+it('groups every till currency into one balance tile', () => {
   render(
     <DashboardSummary
       cashBalances={{ USD: 14280, UAH: 186400 }}
@@ -164,10 +184,19 @@ it('shows a till balance tile for every currency the yard keeps', () => {
     />,
   )
 
-  // Two currencies, two figures — the cabinet converts nothing, so it never
-  // adds them together.
-  expect(screen.getByText('Баланс кас, USD')).toBeVisible()
-  expect(screen.getByText('Баланс кас, UAH')).toBeVisible()
+  const money = screen.getByRole('region', { name: 'Гроші' })
+  const balance = screen.getByText('Баланс кас').parentElement
+  const balanceValues = Array.from(
+    balance?.querySelectorAll('dd > span > span') ?? [],
+  ).map((element) => element.textContent)
+
+  expect(balance).toHaveTextContent(/186\s400\s₴/)
+  expect(balance).toHaveTextContent(/14\s280\s\$/)
+  expect(balanceValues).toEqual(['14\u00a0280\u00a0$', '186\u00a0400\u00a0₴'])
+  expect(money.querySelector('dl')).toHaveClass('lg:grid-cols-3')
+  expect(money.querySelector('dl')).toHaveProperty('childElementCount', 3)
+  expect(screen.queryByText('Баланс кас, USD')).not.toBeInTheDocument()
+  expect(screen.queryByText('Баланс кас, UAH')).not.toBeInTheDocument()
 })
 
 it('keeps the dashboard figure when the till list is unavailable', () => {

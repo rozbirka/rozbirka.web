@@ -3382,6 +3382,7 @@ function ResultsView({ id }: { id: string }) {
                       ),
                     },
                   ]}
+                  embedded
                   empty={
                     <EmptyState
                       description={
@@ -4360,6 +4361,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                       },
                     },
                   ]}
+                  embedded
                   empty={
                     <EmptyState
                       description={

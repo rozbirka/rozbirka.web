@@ -2,6 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { ToastProvider } from '@/components/app'
 import { useCabinet } from '../CabinetContext'
 import { tenantRequestScope } from '../tenant-request-scope'
 import { OrdersScreen } from './OrdersScreen'
@@ -15,16 +16,20 @@ const orderMocks = vi.hoisted(() => ({
   refund: vi.fn(),
   updateItems: vi.fn(),
   updateNotes: vi.fn(),
+  updatePayments: vi.fn(),
   setCustomer: vi.fn(),
 }))
-const partMocks = vi.hoisted(() => ({ list: vi.fn() }))
+const partMocks = vi.hoisted(() => ({ get: vi.fn(), list: vi.fn() }))
+const cashMocks = vi.hoisted(() => ({ list: vi.fn() }))
 const customerMocks = vi.hoisted(() => ({
   search: vi.fn(),
+  getById: vi.fn(),
   create: vi.fn(),
   activate: vi.fn(),
 }))
 vi.mock('@/api/orders', () => ({ ordersApi: orderMocks }))
 vi.mock('@/api/parts', () => ({ partsApi: partMocks }))
+vi.mock('@/api/cash', () => ({ cashApi: cashMocks }))
 vi.mock('@/api/customers', async (importOriginal) => ({
   ...(await importOriginal()),
   customersApi: customerMocks,
@@ -63,12 +68,81 @@ const cabinet = (
     },
     error: null,
   }) as unknown as ReturnType<typeof useCabinet>
+
+const pickerPart = (id: string) => ({
+  id,
+  name: `Тестова запчастина ${id}`,
+  externalCode: null,
+  photos: [],
+  quantityTotal: 3,
+  quantityReserved: 0,
+  quantityAvailable: 3,
+  quantitySoldTotal: 0,
+  status: 'available',
+  car: null,
+  order: null,
+})
+
+async function selectPickerPart(
+  user: ReturnType<typeof userEvent.setup>,
+  id: string,
+) {
+  const part = pickerPart(id)
+  partMocks.list.mockResolvedValue({
+    items: [part],
+    page: 1,
+    pageSize: 6,
+    total: 1,
+    totalPages: 1,
+  })
+  await user.type(screen.getByLabelText('Пошук запчастини'), part.name)
+  await user.click(
+    await screen.findByRole('option', {
+      name: `Обрати запчастину ${part.name}`,
+    }),
+  )
+}
+
+async function openInlineCustomerForm(
+  user: ReturnType<typeof userEvent.setup>,
+) {
+  expect(
+    screen.queryByRole('group', { name: 'Новий клієнт' }),
+  ).not.toBeInTheDocument()
+  await user.click(
+    screen.getByRole('button', { name: 'Створити нового клієнта' }),
+  )
+}
+
 afterEach(() => {
   vi.clearAllMocks()
   vi.restoreAllMocks()
 })
 beforeEach(() => {
   vi.mocked(useCabinet).mockReturnValue(cabinet())
+  partMocks.get.mockResolvedValue({ effectiveSalePrice: null })
+  customerMocks.getById.mockResolvedValue({
+    id: 'customer-1',
+    name: 'Ірина',
+    phone: null,
+    isActive: true,
+  })
+  cashMocks.list.mockResolvedValue([
+    {
+      id: 'cash-1',
+      name: 'Сейф',
+      type: 'safe',
+      isActive: true,
+      balances: { USD: 0, UAH: 0 },
+    },
+    {
+      id: 'bank-1',
+      name: 'ФОП Mono',
+      type: 'bank',
+      isActive: true,
+      balances: { UAH: 0 },
+    },
+  ])
   orderMocks.getById.mockResolvedValue({
     id: 'order-1',
     number: 1,
@@ -85,6 +159,33 @@ beforeEach(() => {
     createdAt: '2026-09-21T10:00:00Z',
     createdByName: 'Олена',
   })
+  orderMocks.updatePayments.mockImplementation(
+    (
+      id: string,
+      payments: { accountId: string; amount: number; currency: string }[],
+    ) =>
+      Promise.resolve({
+        id,
+        number: id === 'order-2' ? 2 : 1,
+        status: 'pending',
+        customerId: null,
+        customerName: null,
+        notes: null,
+        items: [],
+        payments: payments.map((payment, index) => ({
+          ...payment,
+          id: `payment-${index + 1}`,
+          accountName: payment.accountId === 'cash-1' ? 'Сейф' : 'ФОП Mono',
+        })),
+        history: [],
+        totalAmount: 250,
+        totalPaid: payments.length === 1 ? (payments[0]?.amount ?? 0) : null,
+        paymentCurrency:
+          payments.length === 1 ? (payments[0]?.currency ?? null) : null,
+        createdAt: '2026-08-28T00:00:00Z',
+        createdByName: 'Олена',
+      }),
+  )
   orderMocks.list.mockResolvedValue({
     items: [],
     page: 1,
@@ -110,7 +211,7 @@ it('prevents a duplicate canonical create while the first request is pending', a
     </MemoryRouter>,
   )
 
-  await user.type(screen.getByLabelText('ID запчастини'), 'part-1')
+  await selectPickerPart(user, 'part-1')
   await user.type(screen.getByLabelText('Кількість'), '1')
   await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
   const submit = screen.getByRole('button', { name: 'Створити замовлення' })
@@ -120,6 +221,41 @@ it('prevents a duplicate canonical create while the first request is pending', a
   expect(orderMocks.create).toHaveBeenCalledOnce()
   expect(submit).toBeDisabled()
   resolve({ id: 'order-1' })
+})
+
+it('opens canonical creation in a side drawer and preselects the linked customer', async () => {
+  customerMocks.getById.mockResolvedValue({
+    id: 'customer-1',
+    name: 'Ірина Коваль',
+    phone: '+380501112233',
+    isActive: true,
+  })
+
+  render(
+    <MemoryRouter
+      initialEntries={['/app/garage/orders/new?customerId=customer-1']}
+    >
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  const drawer = await screen.findByRole('dialog', {
+    name: 'Нове замовлення',
+  })
+  expect(screen.getByText('Замовлення', { selector: 'h1' })).toBeVisible()
+  expect(drawer).toHaveClass('sm:right-0')
+  expect(drawer).toHaveClass('sm:max-w-[600px]')
+  expect(screen.getByTestId('order-create-overlay')).toHaveClass('bg-black/80')
+  expect(await screen.findByLabelText('Пошук клієнта')).toHaveValue(
+    'Ірина Коваль',
+  )
+  expect(
+    screen.queryByRole('group', { name: 'Новий клієнт' }),
+  ).not.toBeInTheDocument()
+  expect(customerMocks.getById).toHaveBeenCalledWith(
+    'customer-1',
+    expect.objectContaining({ signal: expect.any(AbortSignal) as AbortSignal }),
+  )
 })
 
 it('opens the created order inside the orders route', async () => {
@@ -138,9 +274,13 @@ it('opens the created order inside the orders route', async () => {
     { initialEntries: ['/app/garage/orders/new'] },
   )
   const user = userEvent.setup()
-  render(<RouterProvider router={router} />)
+  render(
+    <ToastProvider>
+      <RouterProvider router={router} />
+    </ToastProvider>,
+  )
 
-  await user.type(screen.getByLabelText('ID запчастини'), 'part-1')
+  await selectPickerPart(user, 'part-1')
   await user.type(screen.getByLabelText('Кількість'), '1')
   await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
@@ -148,6 +288,7 @@ it('opens the created order inside the orders route', async () => {
   await waitFor(() =>
     expect(router.state.location.pathname).toBe('/app/garage/orders/order-1'),
   )
+  expect(screen.getByText('Замовлення створено.')).toBeVisible()
 })
 
 it.each(['parts.view', 'customers.view'])(
@@ -163,7 +304,7 @@ it.each(['parts.view', 'customers.view'])(
       </MemoryRouter>,
     )
 
-    await user.type(screen.getByLabelText('ID запчастини'), 'part-1')
+    await selectPickerPart(user, 'part-1')
     await user.type(screen.getByLabelText('Кількість'), '1')
     await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
     ;(access.snapshot!.permissions as Set<string>).delete(permission)
@@ -198,7 +339,7 @@ it('blocks add-item replacement when parts.view is revoked after render', async 
     </MemoryRouter>,
   )
 
-  await user.type(screen.getByLabelText('ID запчастини'), 'part-2')
+  await selectPickerPart(user, 'part-2')
   await user.type(screen.getByLabelText('Кількість'), '1')
   await user.type(screen.getByLabelText('Ціна за одиницю'), '75')
   const submit = await screen.findByRole('button', { name: 'Додати позицію' })
@@ -241,11 +382,12 @@ it('creates a customer inline before canonical order creation', async () => {
     </MemoryRouter>,
   )
 
+  await openInlineCustomerForm(user)
   await user.type(screen.getByLabelText('Ім’я нового клієнта'), 'Нова Ірина')
   expect(screen.getByLabelText('Телефон нового клієнта')).toHaveValue('+380')
   await user.type(screen.getByLabelText('Телефон нового клієнта'), '501112233')
   await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
-  await user.type(screen.getByLabelText('ID запчастини'), 'part-1')
+  await selectPickerPart(user, 'part-1')
   await user.type(screen.getByLabelText('Кількість'), '1')
   await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
@@ -300,6 +442,7 @@ it.each(['orders.manage', 'customers.view', 'customers.manage'])(
       </MemoryRouter>,
     )
 
+    await openInlineCustomerForm(user)
     await user.type(screen.getByLabelText('Ім’я нового клієнта'), 'Нова Ірина')
     ;(access.snapshot!.permissions as Set<string>).delete(permission)
     await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
@@ -331,6 +474,7 @@ it('reuses an active duplicate-phone customer in the pending order', async () =>
     </MemoryRouter>,
   )
 
+  await openInlineCustomerForm(user)
   await user.type(screen.getByLabelText('Ім’я нового клієнта'), 'Нова Ірина')
   await user.type(
     screen.getByLabelText('Телефон нового клієнта'),
@@ -340,7 +484,7 @@ it('reuses an active duplicate-phone customer in the pending order', async () =>
   await user.click(
     await screen.findByRole('button', { name: 'Використати клієнта Ірина' }),
   )
-  await user.type(screen.getByLabelText('ID запчастини'), 'part-1')
+  await selectPickerPart(user, 'part-1')
   await user.type(screen.getByLabelText('Кількість'), '1')
   await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
@@ -377,6 +521,7 @@ it('reactivates an inactive duplicate-phone customer before selecting it', async
     </MemoryRouter>,
   )
 
+  await openInlineCustomerForm(user)
   await user.type(screen.getByLabelText('Ім’я нового клієнта'), 'Нова Олена')
   await user.type(
     screen.getByLabelText('Телефон нового клієнта'),
@@ -386,7 +531,7 @@ it('reactivates an inactive duplicate-phone customer before selecting it', async
   await user.click(
     await screen.findByRole('button', { name: 'Активувати Олена' }),
   )
-  await user.type(screen.getByLabelText('ID запчастини'), 'part-1')
+  await selectPickerPart(user, 'part-1')
   await user.type(screen.getByLabelText('Кількість'), '1')
   await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
@@ -427,6 +572,7 @@ it('blocks duplicate-customer reactivation when customers.view is revoked after 
     </MemoryRouter>,
   )
 
+  await openInlineCustomerForm(user)
   await user.type(screen.getByLabelText('Ім’я нового клієнта'), 'Нова Олена')
   await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
   const activate = await screen.findByRole('button', {
@@ -495,15 +641,17 @@ it('uses the reusable customer and part searches to populate a canonical order',
 
   await user.type(screen.getByLabelText('Пошук запчастини'), 'Ліхтар')
   await user.click(
-    await screen.findByRole('button', { name: 'Обрати запчастину Ліхтар' }),
+    await screen.findByRole('option', { name: 'Обрати запчастину Ліхтар' }),
   )
   expect(
-    screen.queryByRole('button', { name: 'Обрати запчастину Ліхтар' }),
+    screen.queryByRole('option', { name: 'Обрати запчастину Ліхтар' }),
   ).toBeNull()
   await user.type(screen.getByLabelText('Пошук клієнта'), 'Ірина')
   await user.click(
     await screen.findByRole('button', { name: 'Обрати клієнта Ірина' }),
   )
+  expect(screen.getByLabelText('Пошук клієнта')).toHaveValue('Ірина')
+  expect(screen.getByLabelText('Пошук клієнта')).toHaveClass('border-brand/40')
   expect(
     screen.queryByRole('button', { name: 'Обрати клієнта Ірина' }),
   ).toBeNull()
@@ -515,7 +663,7 @@ it('uses the reusable customer and part searches to populate a canonical order',
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
 
   expect(partMocks.list).toHaveBeenCalledWith(
-    expect.objectContaining({ q: 'Ліхтар', page: 1, pageSize: 10 }),
+    expect.objectContaining({ q: 'Ліхтар', page: 1, pageSize: 6 }),
   )
   expect(customerMocks.search).toHaveBeenCalledWith('Ірина', expect.any(Object))
   expect(orderMocks.create).toHaveBeenCalledWith({
@@ -569,7 +717,7 @@ it('builds a multi-part order and shows its total in dollars', async () => {
   const search = screen.getByLabelText('Пошук запчастини')
   await user.type(search, 'Ліх')
   await user.click(
-    await screen.findByRole('button', { name: 'Обрати запчастину Ліхтар' }),
+    await screen.findByRole('option', { name: 'Обрати запчастину Ліхтар' }),
   )
   expect(search).toHaveValue('Ліхтар')
   await user.type(screen.getByLabelText('Кількість'), '2')
@@ -583,7 +731,7 @@ it('builds a multi-part order and shows its total in dollars', async () => {
 
   await user.type(search, 'Двер')
   await user.click(
-    await screen.findByRole('button', { name: 'Обрати запчастину Двері' }),
+    await screen.findByRole('option', { name: 'Обрати запчастину Двері' }),
   )
   await user.type(screen.getByLabelText('Кількість'), '1')
   await user.type(screen.getByLabelText('Ціна за одиницю'), '75')
@@ -638,7 +786,7 @@ it('appends an item to the full Core item list when the replacement endpoint is 
         totalPrice: 150,
       },
     ],
-  } as never
+  }
   orderMocks.getById.mockResolvedValue(order)
   orderMocks.updateItems.mockResolvedValue(order)
   const user = userEvent.setup()
@@ -648,7 +796,7 @@ it('appends an item to the full Core item list when the replacement endpoint is 
     </MemoryRouter>,
   )
 
-  await user.type(screen.getByLabelText('ID запчастини'), 'part-3')
+  await selectPickerPart(user, 'part-3')
   await user.type(screen.getByLabelText('Кількість'), '2')
   await user.type(screen.getByLabelText('Ціна за одиницю'), '75')
   await user.click(screen.getByRole('button', { name: 'Додати позицію' }))
@@ -674,7 +822,7 @@ it('blocks add-item submission until the complete existing order has loaded', as
     </MemoryRouter>,
   )
 
-  await user.type(screen.getByLabelText('ID запчастини'), 'part-2')
+  await selectPickerPart(user, 'part-2')
   await user.type(screen.getByLabelText('Кількість'), '1')
   await user.type(screen.getByLabelText('Ціна за одиницю'), '75')
   const submit = screen.getByRole('button', { name: 'Додати позицію' })
@@ -710,7 +858,7 @@ it('keeps add-item submission blocked when loading the complete order fails', as
     </MemoryRouter>,
   )
 
-  await user.type(screen.getByLabelText('ID запчастини'), 'part-2')
+  await selectPickerPart(user, 'part-2')
   await user.type(screen.getByLabelText('Кількість'), '1')
   await user.type(screen.getByLabelText('Ціна за одиницю'), '75')
 
@@ -725,6 +873,11 @@ it('keeps add-item submission blocked when loading the complete order fails', as
 it('merges an added quantity into the existing part instead of duplicating it', async () => {
   const order = {
     id: 'order-1',
+    number: 1,
+    status: 'pending',
+    customerId: null,
+    customerName: null,
+    notes: null,
     items: [
       {
         id: 'item-1',
@@ -743,6 +896,13 @@ it('merges an added quantity into the existing part instead of duplicating it', 
         totalPrice: 150,
       },
     ],
+    payments: [],
+    history: [],
+    totalAmount: 250,
+    totalPaid: 0,
+    paymentCurrency: 'UAH',
+    createdAt: '2026-08-28T00:00:00Z',
+    createdByName: 'Олена',
   }
   orderMocks.getById.mockResolvedValue(order)
   orderMocks.updateItems.mockResolvedValue(order)
@@ -753,7 +913,7 @@ it('merges an added quantity into the existing part instead of duplicating it', 
     </MemoryRouter>,
   )
 
-  await user.type(screen.getByLabelText('ID запчастини'), 'part-1')
+  await selectPickerPart(user, 'part-1')
   await user.type(screen.getByLabelText('Кількість'), '2')
   await user.type(screen.getByLabelText('Ціна за одиницю'), '75')
   await user.click(
@@ -766,7 +926,7 @@ it('merges an added quantity into the existing part instead of duplicating it', 
   ])
 })
 
-it('passes a payment allocation to Core unchanged when confirming an order', async () => {
+it('persists a payment before confirming a pending order separately', async () => {
   const generatedId = '00000000-0000-4000-8000-000000000001'
   vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(generatedId)
   const order = {
@@ -784,25 +944,81 @@ it('passes a payment allocation to Core unchanged when confirming an order', asy
     paymentCurrency: 'UAH',
     createdAt: '2026-08-28T00:00:00Z',
     createdByName: 'Олена',
-  } as never
+  }
   orderMocks.getById.mockResolvedValue(order)
+  orderMocks.updatePayments.mockImplementation(
+    (
+      _id: string,
+      payments: { accountId: string; amount: number; currency: string }[],
+    ) => {
+      const savedOrder = {
+        ...order,
+        payments: payments.map((payment, index) => ({
+          ...payment,
+          id: `payment-${index + 1}`,
+          accountName: 'Сейф',
+        })),
+      }
+      orderMocks.getById.mockResolvedValue(savedOrder)
+      return Promise.resolve(savedOrder)
+    },
+  )
   orderMocks.confirm.mockResolvedValue(order)
   const user = userEvent.setup()
+  const view = render(
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+        <OrdersScreen definition={definition} />
+      </MemoryRouter>
+    </ToastProvider>,
+  )
+
+  await screen.findByRole('heading', { name: 'Замовлення #1' })
+  await user.click(screen.getByRole('button', { name: 'Додати платіж' }))
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Додати платіж',
+  })
+  expect(cashMocks.list).toHaveBeenCalledWith(true, expect.any(Object))
+  await user.click(within(dialog).getByRole('radio', { name: 'Сейф' }))
+  await user.click(within(dialog).getByRole('radio', { name: 'USD' }))
+  await user.clear(within(dialog).getByLabelText('Сума платежу'))
+  await user.type(within(dialog).getByLabelText('Сума платежу'), '250')
+  await user.click(
+    within(dialog).getByRole('button', {
+      name: 'Зберегти платежі',
+    }),
+  )
+
+  expect(orderMocks.updatePayments).toHaveBeenCalledWith('order-1', [
+    { accountId: 'cash-1', amount: 250, currency: 'USD' },
+  ])
+  expect(orderMocks.confirm).not.toHaveBeenCalled()
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(screen.getByText('Платежі збережено.')).toBeVisible()
+  const payments = screen.getByRole('list', { name: 'Платежі замовлення' })
+  expect(within(payments).getByText('Сейф')).toBeVisible()
+  expect(within(payments).getByText('250,00 $')).toBeVisible()
+
+  view.unmount()
   render(
     <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
       <OrdersScreen definition={definition} />
     </MemoryRouter>,
   )
-
   await screen.findByRole('heading', { name: 'Замовлення #1' })
-  await user.type(screen.getByLabelText('ID рахунку'), 'cash-1')
-  await user.type(screen.getByLabelText('Сума платежу'), '250')
-  await user.type(screen.getByLabelText('Валюта платежу'), 'UAH')
-  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+  const persistedPayments = screen.getByRole('list', {
+    name: 'Платежі замовлення',
+  })
+  expect(within(persistedPayments).getByText('Сейф')).toBeVisible()
+  expect(within(persistedPayments).getByText('250,00 $')).toBeVisible()
+
+  await user.click(
+    screen.getByRole('button', { name: 'Підтвердити замовлення' }),
+  )
 
   expect(orderMocks.confirm).toHaveBeenCalledWith(
     'order-1',
-    { payments: [{ accountId: 'cash-1', amount: 250, currency: 'UAH' }] },
+    { payments: [{ accountId: 'cash-1', amount: 250, currency: 'USD' }] },
     { idempotencyKey: `order-confirm-${generatedId}` },
   )
 })
@@ -847,10 +1063,18 @@ it('reuses a confirmation key after an ambiguous failure and rotates it when the
   )
 
   await screen.findByRole('heading', { name: 'Замовлення #1' })
-  await user.type(screen.getByLabelText('ID рахунку'), 'cash-1')
-  await user.type(screen.getByLabelText('Сума платежу'), '250')
-  await user.type(screen.getByLabelText('Валюта платежу'), 'UAH')
-  const submit = screen.getByRole('button', { name: 'Підтвердити' })
+  await user.click(screen.getByRole('button', { name: 'Додати платіж' }))
+  let dialog = await screen.findByRole('dialog', {
+    name: 'Додати платіж',
+  })
+  await user.click(within(dialog).getByRole('radio', { name: 'Сейф' }))
+  await user.click(within(dialog).getByRole('radio', { name: 'UAH' }))
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Зберегти платежі' }),
+  )
+  const submit = screen.getByRole('button', {
+    name: 'Підтвердити замовлення',
+  })
 
   await user.click(submit)
   expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -879,8 +1103,13 @@ it('reuses a confirmation key after an ambiguous failure and rotates it when the
   )
   expect(randomUUID).toHaveBeenCalledOnce()
 
-  await user.clear(screen.getByLabelText('Сума платежу'))
-  await user.type(screen.getByLabelText('Сума платежу'), '200')
+  await user.click(screen.getByRole('button', { name: 'Додати платіж' }))
+  dialog = await screen.findByRole('dialog', { name: 'Додати платіж' })
+  await user.clear(within(dialog).getByLabelText('Сума платежу'))
+  await user.type(within(dialog).getByLabelText('Сума платежу'), '200')
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Зберегти платежі' }),
+  )
   await user.click(submit)
 
   expect(orderMocks.confirm).toHaveBeenNthCalledWith(
@@ -935,17 +1164,36 @@ it('rotates a confirmation key when client-side navigation changes the order res
   render(<RouterProvider router={router} />)
 
   await screen.findByRole('heading', { name: 'Замовлення #1' })
-  await user.type(screen.getByLabelText('ID рахунку'), 'cash-1')
-  await user.type(screen.getByLabelText('Сума платежу'), '250')
-  await user.type(screen.getByLabelText('Валюта платежу'), 'UAH')
-  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+  await user.click(screen.getByRole('button', { name: 'Додати платіж' }))
+  let dialog = await screen.findByRole('dialog', {
+    name: 'Додати платіж',
+  })
+  await user.click(within(dialog).getByRole('radio', { name: 'Сейф' }))
+  await user.click(within(dialog).getByRole('radio', { name: 'UAH' }))
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Зберегти платежі' }),
+  )
+  await user.click(
+    screen.getByRole('button', { name: 'Підтвердити замовлення' }),
+  )
   expect(await screen.findByRole('alert')).toBeVisible()
 
   await act(async () => {
     await router.navigate('/app/garage/orders/order-2')
   })
   await screen.findByRole('heading', { name: 'Замовлення #2' })
-  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+  await user.click(screen.getByRole('button', { name: 'Додати платіж' }))
+  dialog = await screen.findByRole('dialog', {
+    name: 'Додати платіж',
+  })
+  await user.click(within(dialog).getByRole('radio', { name: 'Сейф' }))
+  await user.click(within(dialog).getByRole('radio', { name: 'UAH' }))
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Зберегти платежі' }),
+  )
+  await user.click(
+    screen.getByRole('button', { name: 'Підтвердити замовлення' }),
+  )
 
   expect(orderMocks.confirm).toHaveBeenNthCalledWith(
     1,
@@ -1081,6 +1329,9 @@ it('hides finance transitions when the snapshot lacks finance.manage', async () 
     screen.queryByRole('button', { name: 'Підтвердити' }),
   ).not.toBeInTheDocument()
   expect(
+    screen.queryByRole('button', { name: 'Додати платіж' }),
+  ).not.toBeInTheDocument()
+  expect(
     screen.queryByRole('button', { name: 'Повернути кошти' }),
   ).not.toBeInTheDocument()
 })
@@ -1142,7 +1393,7 @@ it('keeps server search, status, and pagination in the order URL', async () => {
 
 it('shows authoritative detail and lets orders.manage edit pending fields and cancel', async () => {
   vi.mocked(useCabinet).mockReturnValue(
-    cabinet(['orders.view', 'orders.manage']),
+    cabinet(['orders.view', 'orders.manage', 'finance.manage']),
   )
   const order = {
     id: 'order-1',
@@ -1196,19 +1447,46 @@ it('shows authoritative detail and lets orders.manage edit pending fields and ca
   )
 
   await screen.findByRole('heading', { name: 'Замовлення #1' })
+  expect(
+    screen
+      .getAllByRole('heading', { level: 2 })
+      .map((heading) => heading.textContent)
+      .filter((title) =>
+        ['Нотатки', 'Платежі', 'Позиції'].includes(title ?? ''),
+      ),
+  ).toEqual(['Нотатки', 'Платежі', 'Позиції'])
   const summaryTerms = screen.getAllByRole('term').map((t) => t.textContent)
   expect(summaryTerms).toEqual(
-    expect.arrayContaining(['Клієнт', 'Разом', 'Сплачено']),
+    expect.arrayContaining(['Сума замовлення', 'Платежів']),
   )
   const summaryValues = screen
     .getAllByRole('definition')
     .map((d) => d.textContent?.replace(/\s+/g, ' ').trim())
-  expect(summaryValues).toEqual(
-    expect.arrayContaining(['250,00 ₴', '100,00 ₴']),
-  )
-  const payments = screen.getByRole('table', { name: 'Платежі замовлення' })
+  expect(summaryValues).toEqual(expect.arrayContaining(['250,00 $', '1']))
+  const payments = screen.getByRole('list', { name: 'Платежі замовлення' })
   expect(within(payments).getByText('Основна каса')).toBeVisible()
   expect(within(payments).getByText('100,00 ₴')).toBeVisible()
+  expect(within(payments).queryByText('Завдаток')).not.toBeInTheDocument()
+  expect(within(payments).queryByText('Доплата')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('table', { name: 'Платежі замовлення' }),
+  ).not.toBeInTheDocument()
+  const paymentsCard = screen
+    .getByRole('heading', { name: 'Платежі' })
+    .closest('section')
+  const paymentSummary = screen
+    .getByRole('heading', { name: 'Оплата' })
+    .closest('section')
+  expect(
+    within(paymentsCard!).queryByRole('button', {
+      name: 'Додати платіж',
+    }),
+  ).not.toBeInTheDocument()
+  expect(
+    within(paymentSummary!).getByRole('button', {
+      name: 'Додати платіж',
+    }),
+  ).toBeVisible()
   const audit = screen.getByRole('list', { name: 'Історія замовлення' })
   expect(within(audit).getByText('Замовлення створено')).toBeVisible()
   expect(within(audit).getByText(/Олена/)).toBeVisible()
@@ -1253,7 +1531,8 @@ it('passes multiple payment allocations to Core unchanged', async () => {
     items: [],
     payments: [],
     history: [],
-    totalAmount: 300,
+    totalAmount: 4600,
+    itemsTotalUsd: 300,
     totalPaid: 0,
     paymentCurrency: 'UAH',
     createdAt: '2026-08-28T00:00:00Z',
@@ -1269,20 +1548,51 @@ it('passes multiple payment allocations to Core unchanged', async () => {
   )
 
   await screen.findByRole('heading', { name: 'Замовлення #1' })
-  await user.type(screen.getByLabelText('ID рахунку'), 'cash-1')
-  await user.type(screen.getByLabelText('Сума платежу'), '200')
-  await user.type(screen.getByLabelText('Валюта платежу'), 'UAH')
   await user.click(screen.getByRole('button', { name: 'Додати платіж' }))
-  await user.type(screen.getByLabelText('ID рахунку 2'), 'bank-1')
-  await user.type(screen.getByLabelText('Сума платежу 2'), '100')
-  await user.type(screen.getByLabelText('Валюта платежу 2'), 'UAH')
-  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Додати платіж',
+  })
+  expect(dialog).toHaveClass('sm:right-0')
+  const orderAmount = within(dialog).getByText('Сума замовлення').parentElement
+  expect(orderAmount).toHaveTextContent(/300(?:,00)?\s\$/)
+  expect(within(dialog).queryByText('Залишок')).toBeNull()
+  expect(within(dialog).queryByText(/Залишиться до оплати/i)).toBeNull()
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Прибрати платіж 1' }),
+  )
+  expect(
+    within(dialog).getByRole('button', { name: 'Зберегти платежі' }),
+  ).toBeDisabled()
+  await user.click(within(dialog).getByRole('button', { name: 'Новий платіж' }))
+  await user.click(within(dialog).getByRole('radio', { name: 'Сейф' }))
+  await user.click(within(dialog).getByRole('radio', { name: 'USD' }))
+  await user.clear(within(dialog).getByLabelText('Сума платежу'))
+  await user.type(within(dialog).getByLabelText('Сума платежу'), '200')
+  expect(within(dialog).getByText('Надходження в касу готівкою')).toBeVisible()
+  await user.click(within(dialog).getByRole('button', { name: 'Новий платіж' }))
+  await user.click(
+    within(dialog).getAllByRole('radio', { name: 'ФОП Mono' })[1]!,
+  )
+  await user.clear(within(dialog).getByLabelText('Сума платежу 2'))
+  await user.type(within(dialog).getByLabelText('Сума платежу 2'), '100')
+  expect(
+    within(dialog).getByText('Безготівкове надходження · ФОП Mono'),
+  ).toBeVisible()
+  const contributed = within(dialog).getByText('Вносять зараз').parentElement
+  expect(contributed).toHaveTextContent(/200(?:,00)?\s\$/)
+  expect(contributed).toHaveTextContent(/100(?:,00)?\s₴/)
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Зберегти платежі' }),
+  )
+  await user.click(
+    screen.getByRole('button', { name: 'Підтвердити замовлення' }),
+  )
 
   expect(orderMocks.confirm).toHaveBeenCalledWith(
     'order-1',
     {
       payments: [
-        { accountId: 'cash-1', amount: 200, currency: 'UAH' },
+        { accountId: 'cash-1', amount: 200, currency: 'USD' },
         { accountId: 'bank-1', amount: 100, currency: 'UAH' },
       ],
     },
@@ -1343,6 +1653,12 @@ it('replaces the full pending item set when quantity, price, or removal changes'
   )
 
   await screen.findByRole('heading', { name: 'Замовлення #1' })
+  expect(screen.queryByLabelText('Кількість Ліхтар')).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Ціна Ліхтар')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Редагувати' })).toBeVisible()
+  expect(screen.getByRole('link', { name: 'Додати позицію' })).toBeVisible()
+
+  await user.click(screen.getByRole('button', { name: 'Редагувати' }))
   await user.clear(screen.getByLabelText('Кількість Ліхтар'))
   await user.type(screen.getByLabelText('Кількість Ліхтар'), '2')
   await user.clear(screen.getByLabelText('Ціна Ліхтар'))
@@ -1353,13 +1669,74 @@ it('replaces the full pending item set when quantity, price, or removal changes'
     { partId: 'part-1', quantity: 2, unitPrice: 125 },
     { partId: 'part-2', quantity: 1, unitPrice: 150 },
   ])
+  expect(screen.queryByLabelText('Кількість Ліхтар')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Редагувати' })).toBeVisible()
 
+  await user.click(screen.getByRole('button', { name: 'Редагувати' }))
   await user.click(
     await screen.findByRole('button', { name: 'Видалити Двері' }),
   )
   expect(orderMocks.updateItems).toHaveBeenNthCalledWith(2, 'order-1', [
     { partId: 'part-1', quantity: 2, unitPrice: 125 },
   ])
+})
+
+it('keeps invalid item quantities on the client and explains unavailable stock', async () => {
+  const order = {
+    id: 'order-1',
+    number: 1,
+    status: 'pending',
+    customerId: null,
+    customerName: null,
+    notes: null,
+    items: [
+      {
+        id: 'item-1',
+        partId: 'part-1',
+        partName: 'Ліхтар',
+        quantity: 1,
+        unitPrice: 100,
+        totalPrice: 100,
+      },
+    ],
+    payments: [],
+    history: [],
+    totalAmount: 100,
+    totalPaid: 0,
+    paymentCurrency: 'USD',
+    createdAt: '2026-08-28T00:00:00Z',
+    createdByName: 'Олена',
+  }
+  orderMocks.getById.mockResolvedValue(order)
+  orderMocks.updateItems.mockRejectedValue({
+    kind: 'conflict',
+    code: 'PARTS_NOT_AVAILABLE',
+    message: 'Parts are not available.',
+    status: 409,
+  })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await user.click(await screen.findByRole('button', { name: 'Редагувати' }))
+  const quantity = screen.getByLabelText('Кількість Ліхтар')
+  const save = screen.getByRole('button', { name: 'Зберегти позиції' })
+
+  await user.clear(quantity)
+  expect(save).toBeDisabled()
+  expect(orderMocks.updateItems).not.toHaveBeenCalled()
+
+  await user.type(quantity, '2')
+  await user.click(save)
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Недостатньо доступних запчастин для вказаної кількості.',
+  )
+  expect(screen.getByLabelText('Кількість Ліхтар')).toHaveValue('2')
+  expect(screen.getByRole('button', { name: 'Скасувати' })).toBeVisible()
 })
 
 it('cancels a pending order when its final item is removed', async () => {
@@ -1397,6 +1774,7 @@ it('cancels a pending order when its final item is removed', async () => {
     </MemoryRouter>,
   )
 
+  await user.click(await screen.findByRole('button', { name: 'Редагувати' }))
   await user.click(
     await screen.findByRole('button', { name: 'Видалити Ліхтар' }),
   )
@@ -1405,7 +1783,7 @@ it('cancels a pending order when its final item is removed', async () => {
   expect(orderMocks.updateItems).not.toHaveBeenCalled()
 })
 
-it('renders audit timestamps and data for otherwise identical events', async () => {
+it('renders audit timestamps without exposing technical event data', async () => {
   orderMocks.getById.mockResolvedValue({
     id: 'order-1',
     number: 1,
@@ -1442,17 +1820,221 @@ it('renders audit timestamps and data for otherwise identical events', async () 
   )
 
   await screen.findByRole('heading', { name: 'Замовлення #1' })
+  expect(
+    screen
+      .getAllByRole('heading', { level: 2 })
+      .map((heading) => heading.textContent)
+      .filter((title) =>
+        ['Нотатки', 'Платежі', 'Позиції'].includes(title ?? ''),
+      ),
+  ).toEqual(['Нотатки', 'Платежі', 'Позиції'])
   const stamps = screen.getAllByText(/2026.*10:15/)
   expect(stamps).toHaveLength(2)
   for (const stamp of stamps) {
     expect(stamp.tagName).toBe('TIME')
     expect(stamp).toHaveAttribute('datetime', '2026-08-28T10:15:00Z')
   }
-  // Event payloads are technical detail: shown on request, not by default.
+  // Event payloads are implementation detail and stay out of the order UI.
   expect(screen.queryByText('quantity: 2')).not.toBeInTheDocument()
-  await userEvent
-    .setup()
-    .click(screen.getByRole('button', { name: 'Технічні дані' }))
-  expect(screen.getByText('quantity: 2')).toBeVisible()
-  expect(screen.getByText('unitPrice: 125')).toBeVisible()
+  expect(screen.queryByText('unitPrice: 125')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Технічні дані' }),
+  ).not.toBeInTheDocument()
+})
+
+it('shows the three latest order events in Ukrainian and expands the full history', async () => {
+  const user = userEvent.setup()
+  orderMocks.getById.mockResolvedValue({
+    id: 'order-1',
+    number: 1,
+    status: 'confirmed',
+    customerId: null,
+    customerName: null,
+    notes: null,
+    items: [],
+    payments: [],
+    history: [
+      {
+        eventType: 'created',
+        userName: 'Олена',
+        createdAt: '2026-08-28T10:00:00Z',
+        data: null,
+      },
+      {
+        eventType: 'itemsupdated',
+        userName: 'Олена',
+        createdAt: '2026-08-28T11:00:00Z',
+        data: null,
+      },
+      {
+        eventType: 'notesupdated',
+        userName: 'Олена',
+        createdAt: '2026-08-28T12:00:00Z',
+        data: null,
+      },
+      {
+        eventType: 'customerset',
+        userName: 'Олена',
+        createdAt: '2026-08-28T13:00:00Z',
+        data: null,
+      },
+      {
+        eventType: 'confirmed',
+        userName: 'Олена',
+        createdAt: '2026-08-28T14:00:00Z',
+        data: null,
+      },
+    ],
+    totalAmount: 250,
+    totalPaid: 250,
+    paymentCurrency: 'UAH',
+    createdAt: '2026-08-28T10:00:00Z',
+    createdByName: 'Олена',
+  })
+
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  const history = await screen.findByRole('list', {
+    name: 'Історія замовлення',
+  })
+  expect(within(history).getAllByRole('listitem')).toHaveLength(3)
+  expect(within(history).getByText('Замовлення підтверджено')).toBeVisible()
+  expect(within(history).getByText('Клієнта змінено')).toBeVisible()
+  expect(within(history).getByText('Нотатки оновлено')).toBeVisible()
+  expect(within(history).queryByText('itemsupdated')).not.toBeInTheDocument()
+  expect(
+    within(history).queryByText('Замовлення створено'),
+  ).not.toBeInTheDocument()
+
+  await user.click(screen.getByRole('button', { name: 'Показати всю історію' }))
+  expect(within(history).getAllByRole('listitem')).toHaveLength(5)
+  expect(within(history).getByText('Позиції оновлено')).toBeVisible()
+  expect(within(history).getByText('Замовлення створено')).toBeVisible()
+
+  await user.click(screen.getByRole('button', { name: 'Згорнути історію' }))
+  expect(within(history).getAllByRole('listitem')).toHaveLength(3)
+})
+
+it('shows a pending order with a missing paid total as awaiting payment', async () => {
+  orderMocks.getById.mockResolvedValue({
+    id: 'order-1',
+    number: 358,
+    status: 'pending',
+    customerId: null,
+    customerName: null,
+    notes: null,
+    items: [],
+    payments: [],
+    history: [],
+    totalAmount: 150,
+    totalPaid: undefined,
+    paymentCurrency: 'USD',
+    createdAt: '2026-09-21T10:14:00Z',
+    createdByName: 'Дмитро',
+  })
+
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await screen.findByRole('heading', { name: 'Замовлення #358' })
+  const paymentHeading = screen.getByRole('heading', { name: 'Оплата' })
+  expect(
+    within(paymentHeading.closest('header')!).getByText('Очікує оплату'),
+  ).toBeVisible()
+  const paymentSummary = screen
+    .getByRole('heading', { name: 'Оплата' })
+    .closest('section')
+  expect(within(paymentSummary!).getAllByText('150,00 $')).toHaveLength(2)
+  expect(screen.queryByText('Оплачено повністю')).not.toBeInTheDocument()
+})
+
+it('keeps order prices in USD and renders mixed-currency payments independently', async () => {
+  orderMocks.getById.mockResolvedValue({
+    id: 'order-358',
+    number: 358,
+    status: 'confirmed',
+    customerId: null,
+    customerName: null,
+    notes: null,
+    items: [
+      {
+        id: 'item-1',
+        partId: 'part-1',
+        partName: 'Цапфа FL Rivian gen1',
+        quantity: 1,
+        unitPrice: 150,
+        totalPrice: 150,
+      },
+    ],
+    payments: [
+      {
+        id: 'payment-1',
+        accountId: 'bank-1',
+        accountName: 'ФОП Privat24',
+        amount: 1500,
+        currency: 'UAH',
+      },
+      {
+        id: 'payment-2',
+        accountId: 'cash-1',
+        accountName: 'Готівка',
+        amount: 120,
+        currency: 'USD',
+      },
+    ],
+    history: [],
+    totalAmount: 150,
+    itemsTotalUsd: 150,
+    totalPaid: null,
+    paymentCurrency: null,
+    createdAt: '2026-09-21T10:14:00Z',
+    createdByName: 'Дмитро',
+  })
+
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-358']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await screen.findByRole('heading', { name: 'Замовлення #358' })
+  const payments = screen.getByRole('list', { name: 'Платежі замовлення' })
+  expect(within(payments).getByText('ФОП Privat24')).toBeVisible()
+  expect(within(payments).getByText('Готівка')).toBeVisible()
+  expect(within(payments).getByText('1 500,00 ₴')).toBeVisible()
+  expect(within(payments).getByText('120,00 $')).toBeVisible()
+  expect(within(payments).queryByText('Завдаток')).not.toBeInTheDocument()
+  expect(within(payments).queryByText('Доплата')).not.toBeInTheDocument()
+
+  const positions = screen
+    .getByRole('heading', { name: 'Позиції' })
+    .closest('section')
+  expect(within(positions!).getAllByText('150,00 $')).toHaveLength(3)
+  expect(within(positions!).queryByText(/₴/)).not.toBeInTheDocument()
+
+  const paymentSummary = screen
+    .getByRole('heading', { name: 'Оплата' })
+    .closest('section')
+  expect(
+    within(
+      screen.getByRole('heading', { name: 'Оплата' }).closest('header')!,
+    ).getByText('Оплачено повністю'),
+  ).toBeVisible()
+  expect(
+    within(paymentSummary!).queryByText('Оплату підтверджено'),
+  ).not.toBeInTheDocument()
+  expect(within(paymentSummary!).getAllByText('150,00 $')).toHaveLength(2)
+  expect(within(paymentSummary!).getByText('2')).toBeVisible()
+  expect(
+    within(paymentSummary!).queryByText('Сплачено'),
+  ).not.toBeInTheDocument()
+  expect(within(paymentSummary!).queryByText('Залишок')).not.toBeInTheDocument()
+  expect(within(paymentSummary!).queryByText(/₴/)).not.toBeInTheDocument()
 })

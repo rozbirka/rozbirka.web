@@ -6,6 +6,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { carsApi } from '@/api/cars'
 import { mediaApi } from '@/api/media'
 import type { PlanUsageDto } from '@/api/types'
+import { ToastProvider } from '@/components/app'
 import { useCabinet } from '../CabinetContext'
 import { CarsScreen, MediaPicker } from './CarsScreen'
 
@@ -252,17 +253,24 @@ it('applies car quota only to create while allowing existing-car operations', as
   unmount()
 
   render(
-    <MemoryRouter initialEntries={['/app/demo/cars/car-1']}>
-      <Routes>
-        <Route path="/app/:tenant/cars/:carId" element={<CarsScreen />} />
-      </Routes>
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/demo/cars/car-1']}>
+        <Routes>
+          <Route path="/app/:tenant/cars/:carId" element={<CarsScreen />} />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
   )
 
   expect(
     await screen.findByRole('link', { name: 'Редагувати автомобіль' }),
   ).toBeVisible()
-  expect(screen.getByRole('button', { name: 'Додати витрату' })).toBeVisible()
+  const primaryColumn = screen.getByRole('region', {
+    name: 'Фото та витрати',
+  })
+  expect(
+    within(primaryColumn).getByRole('button', { name: 'Додати витрату' }),
+  ).toBeVisible()
   expect(screen.getByText('Витрат ще немає')).toBeVisible()
 })
 
@@ -333,16 +341,19 @@ it('refetches authoritative detail after an expense mutation and disables duplic
   )
   vi.mocked(carsApi.createExpense).mockReturnValue(expensePending)
   render(
-    <MemoryRouter initialEntries={['/app/demo/cars/car-1']}>
-      <Routes>
-        <Route path="/app/:tenant/cars/:carId" element={<CarsScreen />} />
-      </Routes>
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/demo/cars/car-1']}>
+        <Routes>
+          <Route path="/app/:tenant/cars/:carId" element={<CarsScreen />} />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
   )
 
   await screen.findByRole('heading', { name: /CAR-001/ })
   await user.click(screen.getByRole('button', { name: 'Додати витрату' }))
   const form = within(await screen.findByRole('dialog'))
+  expect(screen.getByRole('dialog')).toHaveClass('sm:right-0')
   await user.type(form.getByLabelText('Назва витрати'), 'Транспорт')
   await user.type(form.getByLabelText('Сума витрати'), '500')
   const save = form.getByRole('button', { name: 'Додати витрату' })
@@ -356,6 +367,8 @@ it('refetches authoritative detail after an expense mutation and disables duplic
   // the labelled stat rather than wherever the number happens to appear first.
   const remaining = await screen.findByText('Лишилось')
   expect(remaining.parentElement).toHaveTextContent(/7\s500/)
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Витрату додано.')
 })
 
 it('rechecks cars.view before dispatching an expense mutation', async () => {
@@ -367,11 +380,13 @@ it('rechecks cars.view before dispatching an expense mutation', async () => {
   vi.mocked(useCabinet).mockReturnValue(currentCabinet)
   const user = userEvent.setup()
   render(
-    <MemoryRouter initialEntries={['/app/demo/cars/car-1']}>
-      <Routes>
-        <Route path="/app/:tenant/cars/:carId" element={<CarsScreen />} />
-      </Routes>
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/demo/cars/car-1']}>
+        <Routes>
+          <Route path="/app/:tenant/cars/:carId" element={<CarsScreen />} />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
   )
 
   await screen.findByRole('heading', { name: /CAR-001/ })
@@ -407,11 +422,13 @@ it('edits an expense with PUT, retains the form while pending, and refetches det
     }),
   )
   render(
-    <MemoryRouter initialEntries={['/app/demo/cars/car-1']}>
-      <Routes>
-        <Route path="/app/:tenant/cars/:carId" element={<CarsScreen />} />
-      </Routes>
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/demo/cars/car-1']}>
+        <Routes>
+          <Route path="/app/:tenant/cars/:carId" element={<CarsScreen />} />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
   )
 
   const expensesTable = await screen.findByRole('table', {
@@ -460,6 +477,8 @@ it('edits an expense with PUT, retains the form while pending, and refetches det
     within(deliveryRow).getByRole('cell', { name: /750\s?\$/ }),
   ).toBeVisible()
   expect(screen.getByText('Разом 1 витрата')).toBeVisible()
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Витрату оновлено.')
 })
 
 it('renders car identity, gallery, and VIN copy', async () => {
@@ -510,105 +529,25 @@ it('renders car identity, gallery, and VIN copy', async () => {
   )
 })
 
-it('previews the first parts and links to the warehouse filtered by this car', async () => {
-  const user = userEvent.setup()
+it('links to the warehouse filtered by this car without duplicating its parts list', async () => {
   vi.mocked(useCabinet).mockReturnValue(
     cabinet(['cars.view', 'cars.manage', 'parts.view']),
   )
-  vi.mocked(carsApi.listParts).mockResolvedValue({
-    items: [
-      {
-        id: 'part-1',
-        name: 'Бампер',
-        status: 'available',
-        quantityAvailable: 1,
-      },
-    ],
-    page: 1,
-    pageSize: 5,
-    total: 12,
-    totalPages: 3,
-  })
   render(
     <MemoryRouter initialEntries={['/app/demo/cars/car-1']}>
       <Routes>
         <Route path="/app/:tenant/cars/:carId" element={<CarsScreen />} />
-        <Route
-          path="/app/:tenant/parts/:partId"
-          element={<h1>Картка запчастини</h1>}
-        />
       </Routes>
     </MemoryRouter>,
   )
 
-  const section = await screen.findByRole('region', { name: 'Запчастини авто' })
-  expect(section).toHaveTextContent('12 позицій з цього авто')
-  expect(section).toHaveTextContent('Показано 1 із 12')
-  const partRow = within(section).getByRole('row', { name: /Бампер/ })
-  expect(within(partRow).getByRole('link', { name: 'Бампер' })).toHaveAttribute(
-    'href',
-    '/app/demo/parts/part-1',
-  )
-  expect(within(partRow).getByRole('cell', { name: 'Доступна' })).toBeVisible()
   expect(
-    within(section).getByRole('link', { name: 'Відкрити на складі' }),
+    await screen.findByRole('link', { name: 'Відкрити на складі' }),
   ).toHaveAttribute('href', '/app/demo/parts?car_ids=car-1')
-  const request = vi.mocked(carsApi.listParts).mock.calls[0]
-  expect(request?.[0]).toBe('car-1')
-  expect(request?.[1]).toEqual({ pageSize: 5 })
-  expect(request?.[2]?.signal).toBeInstanceOf(AbortSignal)
-  await user.click(within(partRow).getByRole('cell', { name: 'Доступна' }))
   expect(
-    await screen.findByRole('heading', { name: 'Картка запчастини' }),
-  ).toBeVisible()
-})
-
-it('normalizes a failed parts preview and retries without an unhandled rejection', async () => {
-  const user = userEvent.setup()
-  vi.mocked(useCabinet).mockReturnValue(
-    cabinet(['cars.view', 'cars.manage', 'parts.view']),
-  )
-  vi.mocked(carsApi.listParts)
-    .mockRejectedValueOnce({
-      kind: 'network',
-      message: 'Склад тимчасово недоступний.',
-    })
-    .mockResolvedValueOnce({
-      items: [
-        {
-          id: 'part-1',
-          name: 'Бампер',
-          status: 'available',
-          quantityAvailable: 1,
-        },
-      ],
-      page: 1,
-      pageSize: 5,
-      total: 1,
-      totalPages: 1,
-    })
-  render(
-    <MemoryRouter initialEntries={['/app/demo/cars/car-1']}>
-      <Routes>
-        <Route path="/app/:tenant/cars/:carId" element={<CarsScreen />} />
-      </Routes>
-    </MemoryRouter>,
-  )
-
-  const section = await screen.findByRole('region', { name: 'Запчастини авто' })
-  expect(await within(section).findByRole('alert')).toHaveTextContent(
-    'Склад тимчасово недоступний.',
-  )
-  await user.click(
-    within(section).getByRole('button', { name: 'Спробувати ще раз' }),
-  )
-
-  const partsTable = await within(section).findByRole('table', {
-    name: 'Запчастини автомобіля на складі',
-  })
-  const partRow = within(partsTable).getByRole('row', { name: /Бампер/ })
-  expect(within(partRow).getByRole('cell', { name: '1' })).toBeVisible()
-  expect(carsApi.listParts).toHaveBeenCalledTimes(2)
+    screen.queryByRole('region', { name: 'Запчастини авто' }),
+  ).not.toBeInTheDocument()
+  expect(carsApi.listParts).not.toHaveBeenCalled()
 })
 
 it('retains successful files when another media upload fails and reports that file', async () => {
