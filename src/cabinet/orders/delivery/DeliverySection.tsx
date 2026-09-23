@@ -3,9 +3,9 @@ import {
   Button,
   Card,
   Field,
-  TextInput,
   Notice,
   StatusPill,
+  TextInput,
   useOptionalToast,
 } from '@/components/app'
 import {
@@ -17,7 +17,11 @@ import { customersApi } from '@/api/customers'
 import { normalizeApiProblem } from '@/api/errors'
 import { NOVA_POSHTA } from '../../integrations/integration-labels'
 import { DeliveryDrawer } from './DeliveryDrawer'
-import { prepayment, shipmentStatePresentation } from './delivery-labels'
+import {
+  agreedTotal,
+  prepayment,
+  shipmentStatePresentation,
+} from './delivery-labels'
 
 const uah = new Intl.NumberFormat('uk-UA', {
   style: 'currency',
@@ -35,7 +39,8 @@ const when = (value: string) =>
   })
 
 interface Ready {
-  needsSetup?: boolean
+  /** Core has no agreed total for this order yet, so no shipment may exist. */
+  needsSetup: boolean
   integrationId: string
   points: NovaPoshtaDispatchPoint[]
   shipment: Shipment | null
@@ -65,7 +70,7 @@ export function DeliverySection({
   const [ready, setReady] = useState<Ready | null>(null)
   const [reloads, setReloads] = useState(0)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [agreedTotal, setAgreedTotal] = useState('')
+  const [totalDraft, setTotalDraft] = useState('')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -88,16 +93,15 @@ export function DeliverySection({
         (item) => item.code === NOVA_POSHTA && item.status === 'active',
       )
       if (nova === undefined) return null
-      let needsSetup = false
-      const [shipment, points, customer] = await Promise.all([
-        shippingApi
-          .get(nova.id, orderId, { signal: controller.signal })
-          .catch((problem: unknown) => {
+      const [delivery, points, customer] = await Promise.all([
+        shippingApi.get(nova.id, orderId, { signal: controller.signal }).then(
+          (shipment) => ({ needsSetup: false, shipment }),
+          (problem: unknown) => {
             if (normalizeApiProblem(problem).code !== 'delivery_not_configured')
               throw problem
-            needsSetup = true
-            return null
-          }),
+            return { needsSetup: true, shipment: null }
+          },
+        ),
         integrationsApi
           .dispatchPoints(nova.id, { signal: controller.signal })
           .catch(() => [] as NovaPoshtaDispatchPoint[]),
@@ -108,10 +112,9 @@ export function DeliverySection({
               .catch(() => null),
       ])
       return {
-        needsSetup,
+        ...delivery,
         integrationId: nova.id,
         points: points.filter((point) => point.isActive),
-        shipment,
         customerPhone: customer?.phone ?? null,
       }
     }
@@ -143,7 +146,28 @@ export function DeliverySection({
     )
   if (ready === null) return null
 
-  if (ready.needsSetup)
+  if (ready.needsSetup) {
+    const configure = async () => {
+      if (busy) return
+      const total = agreedTotal(totalDraft)
+      if (total === null) {
+        setError(
+          'Вкажіть додатну суму в гривнях, не більше двох знаків після коми.',
+        )
+        return
+      }
+      setBusy(true)
+      setError(null)
+      try {
+        await shippingApi.configureOrder(orderId, total)
+        if (mountedRef.current) setReloads((count) => count + 1)
+      } catch (problem) {
+        if (mountedRef.current) setError(normalizeApiProblem(problem).message)
+      } finally {
+        if (mountedRef.current) setBusy(false)
+      }
+    }
+
     return (
       <Card title="Доставка">
         <div className="grid gap-3.5">
@@ -156,48 +180,22 @@ export function DeliverySection({
               className="grid gap-3.5"
               onSubmit={(event) => {
                 event.preventDefault()
-                const value = Number(agreedTotal.trim().replace(',', '.'))
-                if (
-                  !Number.isFinite(value) ||
-                  value <= 0 ||
-                  value > 9999999999 ||
-                  !/^\d+(?:[.,]\d{1,2})?$/.test(agreedTotal.trim())
-                ) {
-                  setError(
-                    'Вкажіть додатну суму в гривнях, не більше двох знаків після коми.',
-                  )
-                  return
-                }
-                if (busy) return
-                setBusy(true)
-                setError(null)
-                void shippingApi
-                  .configureOrder(orderId, value)
-                  .then(() => {
-                    if (mountedRef.current) setReloads((current) => current + 1)
-                  })
-                  .catch((problem: unknown) => {
-                    if (mountedRef.current)
-                      setError(normalizeApiProblem(problem).message)
-                  })
-                  .finally(() => {
-                    if (mountedRef.current) setBusy(false)
-                  })
+                void configure()
               }}
             >
               <Field
-                label="Погоджена сума замовлення, грн"
                 hint="Вартість товарів, погоджена з клієнтом. Вартість доставки розраховується окремо."
+                label="Погоджена сума замовлення, грн"
                 required
               >
                 <TextInput
-                  inputMode="decimal"
-                  value={agreedTotal}
-                  onChange={(event) => setAgreedTotal(event.target.value)}
                   disabled={busy}
+                  inputMode="decimal"
+                  onChange={(event) => setTotalDraft(event.target.value)}
+                  value={totalDraft}
                 />
               </Field>
-              <Button type="submit" disabled={busy} aria-busy={busy}>
+              <Button aria-busy={busy} disabled={busy} type="submit">
                 Налаштувати доставку
               </Button>
             </form>
@@ -205,6 +203,7 @@ export function DeliverySection({
         </div>
       </Card>
     )
+  }
 
   const { integrationId, points, shipment, customerPhone } = ready
   const state = shipment?.state ?? 'Draft'
@@ -220,6 +219,7 @@ export function DeliverySection({
       const result = await action()
       if (!mountedRef.current) return
       setReady({
+        needsSetup: false,
         integrationId,
         points,
         customerPhone,
@@ -393,6 +393,7 @@ export function DeliverySection({
           integrationId={integrationId}
           onChanged={(next) => {
             setReady({
+              needsSetup: false,
               integrationId,
               points,
               customerPhone,

@@ -2,6 +2,7 @@ import { expect, it } from 'vitest'
 import type { Shipment } from '@/api/shipping'
 import {
   QUOTE_TTL_MS,
+  agreedTotal,
   prepayment,
   quotePresentation,
   quoteState,
@@ -87,4 +88,18 @@ it('adds the return estimate the manager entered to the carrier quote', () => {
   expect(prepayment(shipment())).toBe(360)
   expect(prepayment(shipment({ quoteUah: null }))).toBeNull()
   expect(prepayment(null)).toBeNull()
+})
+
+it('takes an agreed total the way a Ukrainian keypad types it', () => {
+  expect(agreedTotal(' 4280,50 ')).toBe(4280.5)
+  expect(agreedTotal('4280.5')).toBe(4280.5)
+})
+
+it('refuses an agreed total Core would reject anyway', () => {
+  expect(agreedTotal('')).toBeNull()
+  expect(agreedTotal('0')).toBeNull()
+  expect(agreedTotal('-10')).toBeNull()
+  expect(agreedTotal('4 280')).toBeNull()
+  expect(agreedTotal('4280,505')).toBeNull()
+  expect(agreedTotal('99999999999')).toBeNull()
 })

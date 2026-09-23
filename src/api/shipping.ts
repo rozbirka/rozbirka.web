@@ -4,7 +4,8 @@ import type { RequestOptions } from './contracts'
 /**
  * Nova Poshta delivery for one order. Everything here hangs off an
  * integration: the carrier account decides what a valid branch is, so the
- * shipment cannot exist without one.
+ * shipment cannot exist without one. The exception is `configureOrder`, which
+ * settles the order's own money before any carrier is involved.
  */
 export type ShipmentState =
   | 'Draft'
@@ -85,6 +86,11 @@ const requestConfig = (options: RequestOptions) =>
   options.signal ? { signal: options.signal } : {}
 
 export const shippingApi = {
+  /**
+   * The first step of the lifecycle: Core refuses a shipment until it knows
+   * what the order is worth. The deposit exception for a trusted customer is
+   * not offered here — the cabinet has nowhere to mark that trust yet.
+   */
   async configureOrder(orderId: string, agreedTotalUah: number): Promise<void> {
     await apiClient.put(`/orders/${encodeURIComponent(orderId)}/delivery`, {
       agreedTotalUah,
@@ -103,6 +109,7 @@ export const shippingApi = {
         requestConfig(options),
       )
     ).data
+    // An order with no delivery answers with an empty object, not null.
     return shipment == null || Object.keys(shipment).length === 0
       ? null
       : withCollections(shipment)

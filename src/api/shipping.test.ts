@@ -5,14 +5,14 @@ import { shippingApi } from './shipping'
 afterEach(() => vi.restoreAllMocks())
 
 it.each([null, {}])(
-  'treats an empty successful shipment response as no shipment: %j',
+  'reads an order that has no delivery as no shipment: %j',
   async (data) => {
     vi.spyOn(apiClient, 'get').mockResolvedValue({ data })
     expect(await shippingApi.get('integration', 'order')).toBeNull()
   },
 )
 
-it('configures the agreed UAH total without waiving the deposit', async () => {
+it('sends the agreed total and never waives the deposit on its own', async () => {
   const put = vi.spyOn(apiClient, 'put').mockResolvedValue({ data: {} })
   await shippingApi.configureOrder('order-1', 4280.5)
   expect(put).toHaveBeenCalledWith('/orders/order-1/delivery', {

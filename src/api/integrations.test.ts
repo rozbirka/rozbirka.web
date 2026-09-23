@@ -4,7 +4,7 @@ import { integrationsApi } from './integrations'
 
 afterEach(() => vi.restoreAllMocks())
 
-it('normalizes omitted nullable integration fields on reads and mutations', async () => {
+it('fills in the nullable fields Core omits, whatever call returned the integration', async () => {
   const bare = { id: 'np-1', code: 'nova_poshta', status: 'draft' }
   const get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: [bare] })
   expect((await integrationsApi.list())[0]).toMatchObject({
@@ -30,7 +30,7 @@ it('normalizes omitted nullable integration fields on reads and mutations', asyn
     })
 })
 
-it('preserves actual provider errors', async () => {
+it('leaves a carrier error code that Core really sent alone', async () => {
   vi.spyOn(apiClient, 'get').mockResolvedValue({
     data: { id: 'np-1', lastErrorCode: 'integration_account_unverified' },
   })
@@ -39,7 +39,7 @@ it('preserves actual provider errors', async () => {
   )
 })
 
-it('normalizes omitted diagnostic errors and empty checks', async () => {
+it('reads a diagnostics run without checks as an empty list, not a missing one', async () => {
   const post = vi.spyOn(apiClient, 'post').mockResolvedValue({
     data: { checks: [{ code: 'authorization', status: 'ok' }] },
   })

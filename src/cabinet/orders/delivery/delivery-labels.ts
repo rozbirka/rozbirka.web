@@ -171,6 +171,21 @@ export function sameDraft(a: ShipmentDraft, b: ShipmentDraft): boolean {
   )
 }
 
+/** Core's own ceiling for an order total. */
+const AGREED_TOTAL_MAX = 9_999_999_999
+
+/**
+ * The agreed order total as Core will take it, or null when what the manager
+ * typed would be refused. A comma counts as the decimal separator: the cabinet
+ * is Ukrainian and the numeric keypad offers one.
+ */
+export function agreedTotal(input: string): number | null {
+  const text = input.trim()
+  if (!/^\d+(?:[.,]\d{1,2})?$/.test(text)) return null
+  const value = Number(text.replace(',', '.'))
+  return value > 0 && value <= AGREED_TOTAL_MAX ? value : null
+}
+
 /** Prepayment is delivery plus the return the manager estimated — not a tariff. */
 export function prepayment(shipment: Shipment | null): number | null {
   if (shipment?.quoteUah === null || shipment === null) return null

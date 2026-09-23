@@ -107,20 +107,25 @@ export interface IntegrationDiagnostics {
   checks: IntegrationDiagnosticCheck[]
 }
 
-// Core omits null properties from JSON. Keep the UI's nullable contract stable.
-const normalizeIntegration = (value: Integration): Integration => ({
-  ...value,
-  verifiedAt: value.verifiedAt ?? null,
-  lastErrorCode: value.lastErrorCode ?? null,
-  settings: value.settings ?? null,
+/**
+ * Core leaves null properties out of its JSON, so a field that is merely empty
+ * arrives as `undefined` and the screens read it as "not loaded yet" — an
+ * integration that was never verified looked like one still loading.
+ */
+const withNulls = (integration: Integration): Integration => ({
+  ...integration,
+  verifiedAt: integration.verifiedAt ?? null,
+  lastErrorCode: integration.lastErrorCode ?? null,
+  settings: integration.settings ?? null,
 })
 
-const normalizeDiagnostics = (
-  value: IntegrationDiagnostics,
+/** The same for a diagnostics run, whose checks Core omits when it made none. */
+const withDiagnosticNulls = (
+  diagnostics: IntegrationDiagnostics,
 ): IntegrationDiagnostics => ({
-  ...value,
-  lastErrorCode: value.lastErrorCode ?? null,
-  checks: (value.checks ?? []).map((check) => ({
+  ...diagnostics,
+  lastErrorCode: diagnostics.lastErrorCode ?? null,
+  checks: (diagnostics.checks ?? []).map((check) => ({
     ...check,
     errorCode: check.errorCode ?? null,
   })),
@@ -147,26 +152,26 @@ export const integrationsApi = {
         '/integrations',
         requestConfig(options),
       )
-    ).data.map(normalizeIntegration)
+    ).data.map(withNulls)
   },
   async getById(
     id: string,
     options: RequestOptions = {},
   ): Promise<Integration> {
-    return normalizeIntegration(
+    return withNulls(
       (await apiClient.get<Integration>(endpoint(id), requestConfig(options)))
         .data,
     )
   },
   async create(definitionId: string): Promise<Integration> {
-    return normalizeIntegration(
+    return withNulls(
       (await apiClient.post<Integration>('/integrations', { definitionId }))
         .data,
     )
   },
   /** The key itself goes one way only — Core stores it encrypted and never returns it. */
   async saveNovaPoshtaKey(id: string, apiKey: string): Promise<Integration> {
-    return normalizeIntegration(
+    return withNulls(
       (
         await apiClient.put<Integration>(`${endpoint(id)}/settings`, {
           settings: { apiKey },
@@ -175,17 +180,17 @@ export const integrationsApi = {
     )
   },
   async verify(id: string): Promise<Integration> {
-    return normalizeIntegration(
+    return withNulls(
       (await apiClient.post<Integration>(`${endpoint(id)}/verify`)).data,
     )
   },
   async activate(id: string): Promise<Integration> {
-    return normalizeIntegration(
+    return withNulls(
       (await apiClient.post<Integration>(`${endpoint(id)}/activate`)).data,
     )
   },
   async deactivate(id: string): Promise<Integration> {
-    return normalizeIntegration(
+    return withNulls(
       (await apiClient.post<Integration>(`${endpoint(id)}/deactivate`)).data,
     )
   },
@@ -289,7 +294,7 @@ export const integrationsApi = {
     id: string,
     options: RequestOptions = {},
   ): Promise<IntegrationDiagnostics> {
-    return normalizeDiagnostics(
+    return withDiagnosticNulls(
       (
         await apiClient.post<IntegrationDiagnostics>(
           `${endpoint(id)}/diagnostics`,
