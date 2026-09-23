@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import {
+  Button,
   Field,
-  FormDialog,
   Notice,
   SelectInput,
+  Sheet,
   TextInput,
 } from '@/components/app'
 import {
@@ -13,9 +14,12 @@ import {
   type NovaPoshtaDivision,
   type NovaPoshtaSettlement,
 } from '@/api/integrations'
+import { SettlementPicker } from './settlement-picker'
 
 /** Core's own contact rule, so a bad phone is caught before the round trip. */
 const PHONE = /^\+?[1-9]\d{7,14}$/
+
+const FORM_ID = 'dispatch-point-form'
 
 export interface DispatchPointDraft {
   point: NovaPoshtaDispatchPoint | null
@@ -135,12 +139,9 @@ export function DispatchPointForm({
   const [isActive, setIsActive] = useState(point?.isActive ?? true)
   const [makeDefault, setMakeDefault] = useState(point?.isDefault ?? false)
 
-  const [query, setQuery] = useState(draft.settlementName ?? '')
-  const [foundSettlements, setFoundSettlements] = useState<{
-    term: string
-    items: NovaPoshtaSettlement[]
-  } | null>(null)
-  const [searching, setSearching] = useState(false)
+  const [settlement, setSettlement] = useState<NovaPoshtaSettlement | null>(
+    null,
+  )
   const [loadedDivisions, setLoadedDivisions] = useState<{
     settlementId: number
     items: NovaPoshtaDivision[]
@@ -152,47 +153,9 @@ export function DispatchPointForm({
   )
   const [lookupError, setLookupError] = useState<string | null>(null)
 
-  // Derived during render, so a shorter query drops the stale suggestions.
-  const term = query.trim()
-  const settlements: NovaPoshtaSettlement[] =
-    term.length >= 2 && foundSettlements?.term === term
-      ? foundSettlements.items
-      : []
-
-  // An untouched search box keeps the point's own settlement; once the box is
-  // used, only a name the catalogue actually returned counts as a choice.
+  // The stored settlement stands until another is picked from the catalogue.
   const settlementId: number | null =
-    term === ''
-      ? (point?.settlementId ?? null)
-      : (settlements.find((item) => item.name === term)?.id ?? null)
-
-  useEffect(() => {
-    if (term.length < 2) return
-    const controller = new AbortController()
-    const timer = window.setTimeout(() => {
-      setSearching(true)
-      void integrationsApi
-        .settlements(integrationId, term, 1, { signal: controller.signal })
-        .then(
-          (page) => {
-            if (controller.signal.aborted) return
-            setFoundSettlements({ term, items: page.items })
-            setSearching(false)
-          },
-          () => {
-            if (controller.signal.aborted) return
-            setLookupError(
-              'Довідник населених пунктів Нової пошти зараз недоступний.',
-            )
-            setSearching(false)
-          },
-        )
-    }, 300)
-    return () => {
-      controller.abort()
-      window.clearTimeout(timer)
-    }
-  }, [integrationId, term])
+    settlement?.id ?? point?.settlementId ?? null
 
   useEffect(() => {
     if (settlementId === null) return
@@ -266,179 +229,185 @@ export function DispatchPointForm({
   const deactivateLocked = point?.isDefault === true
 
   return (
-    <FormDialog
+    <Sheet
       description="Дані точки підставляються у відправника накладної під час оформлення доставки."
-      error={error}
+      footer={
+        <div className="flex w-full flex-wrap items-center gap-2.5">
+          {onDeactivate !== undefined && (
+            <Button
+              disabled={pending || deactivateLocked}
+              onClick={onDeactivate}
+              title={
+                deactivateLocked
+                  ? 'Типову точку не можна вимкнути — спершу зробіть типовою іншу.'
+                  : 'Точка перестане пропонуватися при оформленні. Створені накладні не змінюються.'
+              }
+              variant="danger"
+            >
+              Вимкнути точку
+            </Button>
+          )}
+          <div className="ml-auto flex flex-wrap items-center gap-2.5">
+            <Button disabled={pending} onClick={onClose}>
+              Скасувати
+            </Button>
+            <Button
+              aria-busy={pending}
+              disabled={pending || !ready}
+              form={FORM_ID}
+              type="submit"
+              variant="primary"
+            >
+              {point === null ? 'Додати точку' : 'Зберегти зміни'}
+            </Button>
+          </div>
+        </div>
+      }
       onOpenChange={(open) => {
-        if (!open) onClose()
+        if (!open && !pending) onClose()
       }}
-      onSubmit={submit}
       open
-      pending={pending}
       size="lg"
-      submitDisabled={!ready}
-      submitLabel={point === null ? 'Додати точку' : 'Зберегти зміни'}
       title={
         point === null ? 'Нова точка відправлення' : `Точка «${point.name}»`
       }
     >
-      {lookupError !== null && <Notice tone="warn">{lookupError}</Notice>}
+      <form className="grid gap-3.5" id={FORM_ID} noValidate onSubmit={submit}>
+        {error !== null && <Notice tone="danger">{error}</Notice>}
+        {lookupError !== null && <Notice tone="warn">{lookupError}</Notice>}
 
-      <Field hint="Видно лише всередині Rozbirka." label="Назва точки" required>
-        <TextInput
-          onChange={(event) => setName(event.target.value)}
-          placeholder="напр. Головний склад"
-          value={name}
-        />
-      </Field>
-
-      <Field
-        hint={
-          searching
-            ? 'Шукаємо в довіднику Нової пошти…'
-            : 'Почніть вводити назву — підкажемо з довідника Нової пошти.'
-        }
-        label="Населений пункт"
-        required
-      >
-        <TextInput
-          list="dispatch-settlements"
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Житомир"
-          value={query}
-        />
-      </Field>
-      <datalist id="dispatch-settlements">
-        {settlements.map((item) => (
-          <option key={item.id} value={item.name} />
-        ))}
-      </datalist>
-
-      <Field
-        hint={
-          settlementId === null
-            ? 'Спершу оберіть населений пункт.'
-            : 'Показані лише відділення, які приймають відправлення.'
-        }
-        label="Відділення відправлення"
-        required
-      >
-        <SelectInput
-          disabled={settlementId === null || divisions === null}
-          onChange={(event) =>
-            setDivisionChoice(
-              event.target.value === '' ? null : Number(event.target.value),
-            )
-          }
-          value={divisionId === null ? '' : String(divisionId)}
+        <Field
+          hint="Видно лише всередині Rozbirka."
+          label="Назва точки"
+          required
         >
-          <option value="">
-            {divisions === null ? 'Завантажуємо…' : 'Оберіть відділення'}
-          </option>
-          {(divisions ?? []).map((item) => (
-            <option key={item.id} value={String(item.id)}>
-              {item.name}
-            </option>
-          ))}
-        </SelectInput>
-      </Field>
+          <TextInput
+            onChange={(event) => setName(event.target.value)}
+            placeholder="напр. Головний склад"
+            value={name}
+          />
+        </Field>
 
-      <Field label="Ім’я відправника" required>
-        <TextInput
-          onChange={(event) => setSenderName(event.target.value)}
-          placeholder="ПІБ контактної особи"
-          value={senderName}
-        />
-      </Field>
-
-      <Field
-        error={
-          phone !== '' && !phoneValid
-            ? 'Телефон у міжнародному форматі, напр. +380672147730'
-            : undefined
-        }
-        label="Телефон відправника"
-        required
-      >
-        <TextInput
-          className="font-mono"
-          inputMode="tel"
-          onChange={(event) => setPhone(event.target.value)}
-          placeholder="+380"
-          value={phone}
-        />
-      </Field>
-
-      {isCompany && (
-        <>
-          <Field label="Назва компанії" required>
-            <TextInput
-              onChange={(event) => setCompanyName(event.target.value)}
-              placeholder="Юридична назва"
-              value={companyName}
-            />
-          </Field>
-          <Field label="Ідентифікаційний код" required>
-            <TextInput
-              className="font-mono"
-              onChange={(event) => setCompanyTin(event.target.value)}
-              placeholder="ЄДРПОУ або ІПН"
-              value={companyTin}
-            />
-          </Field>
-        </>
-      )}
-
-      <div className="border-app-line bg-app-input grid gap-4 rounded-[14px] border px-5 py-4.5">
-        <Toggle
-          checked={isCompany}
-          hint="Додає назву та ідентифікаційний код у накладну."
-          label="Відправник — компанія"
-          onChange={setIsCompany}
-        />
-        <Toggle
-          checked={makeDefault}
-          disabled={defaultLocked}
-          hint="Підставляється в оформлення доставки. Менеджер може вибрати іншу."
-          label="Точка за замовчуванням"
-          onChange={setMakeDefault}
-          title={
-            defaultLocked
-              ? 'Ця точка вже типова. Щоб змінити, зробіть типовою іншу точку.'
-              : undefined
+        <SettlementPicker
+          integrationId={integrationId}
+          onPick={setSettlement}
+          picked={settlement}
+          savedHint={
+            point === null
+              ? undefined
+              : 'Збережений пункт залишається, доки не виберете інший.'
           }
+          use="sending"
         />
-        <Toggle
-          checked={isActive}
-          disabled={defaultLocked}
-          hint="Неактивні точки не пропонуються під час оформлення."
-          label="Активна"
-          onChange={setIsActive}
-          title={
-            defaultLocked
-              ? 'Типову точку не можна вимкнути — спершу зробіть типовою іншу.'
-              : undefined
-          }
-        />
-      </div>
 
-      {onDeactivate !== undefined && (
-        <div>
-          <button
-            className="border-state-danger/35 text-state-danger enabled:hover:bg-state-danger-soft inline-flex min-h-11 items-center rounded-[11px] border px-4 text-[14px] font-medium disabled:cursor-not-allowed disabled:opacity-55"
-            disabled={pending || deactivateLocked}
-            onClick={onDeactivate}
-            title={
-              deactivateLocked
-                ? 'Типову точку не можна вимкнути — спершу зробіть типовою іншу.'
-                : 'Точка перестане пропонуватися при оформленні. Створені накладні не змінюються.'
+        <Field
+          hint={
+            settlementId === null
+              ? 'Спершу оберіть населений пункт.'
+              : 'Показані лише відділення, які приймають відправлення.'
+          }
+          label="Відділення відправлення"
+          required
+        >
+          <SelectInput
+            disabled={settlementId === null || divisions === null}
+            onChange={(event) =>
+              setDivisionChoice(
+                event.target.value === '' ? null : Number(event.target.value),
+              )
             }
-            type="button"
+            value={divisionId === null ? '' : String(divisionId)}
           >
-            Вимкнути точку
-          </button>
+            <option value="">
+              {divisions === null ? 'Завантажуємо…' : 'Оберіть відділення'}
+            </option>
+            {(divisions ?? []).map((item) => (
+              <option key={item.id} value={String(item.id)}>
+                {item.name}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+
+        <Field label="Ім’я відправника" required>
+          <TextInput
+            onChange={(event) => setSenderName(event.target.value)}
+            placeholder="ПІБ контактної особи"
+            value={senderName}
+          />
+        </Field>
+
+        <Field
+          error={
+            phone !== '' && !phoneValid
+              ? 'Телефон у міжнародному форматі, напр. +380672147730'
+              : undefined
+          }
+          label="Телефон відправника"
+          required
+        >
+          <TextInput
+            className="font-mono"
+            inputMode="tel"
+            onChange={(event) => setPhone(event.target.value)}
+            placeholder="+380"
+            value={phone}
+          />
+        </Field>
+
+        {isCompany && (
+          <>
+            <Field label="Назва компанії" required>
+              <TextInput
+                onChange={(event) => setCompanyName(event.target.value)}
+                placeholder="Юридична назва"
+                value={companyName}
+              />
+            </Field>
+            <Field label="Ідентифікаційний код" required>
+              <TextInput
+                className="font-mono"
+                onChange={(event) => setCompanyTin(event.target.value)}
+                placeholder="ЄДРПОУ або ІПН"
+                value={companyTin}
+              />
+            </Field>
+          </>
+        )}
+
+        <div className="border-app-line bg-app-input grid gap-4 rounded-[14px] border px-5 py-4.5">
+          <Toggle
+            checked={isCompany}
+            hint="Додає назву та ідентифікаційний код у накладну."
+            label="Відправник — компанія"
+            onChange={setIsCompany}
+          />
+          <Toggle
+            checked={makeDefault}
+            disabled={defaultLocked}
+            hint="Підставляється в оформлення доставки. Менеджер може вибрати іншу."
+            label="Точка за замовчуванням"
+            onChange={setMakeDefault}
+            title={
+              defaultLocked
+                ? 'Ця точка вже типова. Щоб змінити, зробіть типовою іншу точку.'
+                : undefined
+            }
+          />
+          <Toggle
+            checked={isActive}
+            disabled={defaultLocked}
+            hint="Неактивні точки не пропонуються під час оформлення."
+            label="Активна"
+            onChange={setIsActive}
+            title={
+              defaultLocked
+                ? 'Типову точку не можна вимкнути — спершу зробіть типовою іншу.'
+                : undefined
+            }
+          />
         </div>
-      )}
-    </FormDialog>
+      </form>
+    </Sheet>
   )
 }

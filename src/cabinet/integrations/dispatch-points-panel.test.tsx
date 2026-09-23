@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are asserted directly. */
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import {
   integrationsApi,
@@ -9,7 +8,7 @@ import {
 } from '@/api/integrations'
 import type { Tenant } from '@/api/types'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
-import { DispatchPointsScreen } from './DispatchPointsScreen'
+import { DispatchPointsPanel } from './dispatch-points-panel'
 
 vi.mock('@/api/integrations', () => ({
   integrationsApi: {
@@ -142,20 +141,7 @@ beforeEach(() => {
 })
 
 const renderScreen = () =>
-  render(
-    <MemoryRouter
-      initialEntries={[
-        '/app/koval/settings/integrations/integration-1/dispatch-points',
-      ]}
-    >
-      <Routes>
-        <Route
-          element={<DispatchPointsScreen />}
-          path="/app/:slug/settings/integrations/:integrationId/dispatch-points"
-        />
-      </Routes>
-    </MemoryRouter>,
-  )
+  render(<DispatchPointsPanel integrationId="integration-1" />)
 
 it('resolves the branch name from the carrier catalogue instead of showing its code', async () => {
   renderScreen()
@@ -186,7 +172,11 @@ it('adds a point from the carrier catalogue and makes it the default', async () 
   )
   await user.type(screen.getByLabelText(/Назва точки/), 'Львівський розбір')
   await user.type(screen.getByLabelText(/Населений пункт/), 'Житомир')
+  // Typing a name is not a choice: Core only accepts a settlement the
+  // catalogue returned, so the branch list waits for a pick from the list.
   const division = await screen.findByLabelText(/Відділення відправлення/)
+  expect(division).toBeDisabled()
+  await user.click(await screen.findByRole('button', { name: /^Житомир/ }))
   await vi.waitFor(() => expect(division).toBeEnabled())
   await user.selectOptions(division, '8')
   await user.type(screen.getByLabelText(/Ім’я відправника/), 'Андрій Гринь')

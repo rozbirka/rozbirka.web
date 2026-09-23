@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router'
-import { ArrowLeft } from 'lucide-react'
 import { Button, Notice, StatusPill } from '@/components/app'
 import {
   integrationsApi,
@@ -8,9 +6,7 @@ import {
 } from '@/api/integrations'
 import { normalizeApiProblem } from '@/api/errors'
 import { useCabinet } from '../CabinetContext'
-import { cabinetPath } from '../cabinet-paths'
 import { cabinetModules } from '../module-registry'
-import { RedesignShell, RedesignTitle } from '../redesign-shell'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import {
   DispatchPointForm,
@@ -30,13 +26,22 @@ type Editing =
   | { mode: 'edit'; point: NovaPoshtaDispatchPoint }
   | null
 
-export function DispatchPointsScreen() {
+/**
+ * Dispatch points as a tab of the carrier screen: the yard's own addresses,
+ * the sender every waybill is stamped with.
+ */
+export function DispatchPointsPanel({
+  integrationId,
+  onPointsChange,
+}: {
+  integrationId: string
+  onPointsChange?: ((count: number) => void) | undefined
+}) {
   const cabinet = useCabinet()
-  const params = useParams()
-  const integrationId = params['integrationId'] ?? ''
   const tenant = cabinet.targetTenant
   const generation = cabinet.snapshot?.generation
   const scopeKey = `${generation ?? ''}:${tenant?.id ?? ''}:${integrationId}`
+  const report = onPointsChange
   const [loaded, setLoaded] = useState<{
     key: string
     state: LoadState
@@ -70,6 +75,7 @@ export function DispatchPointsScreen() {
         (points) => {
           if (!controller.signal.aborted) {
             setLoaded({ key: scopeKey, state: { kind: 'ready', points } })
+            report?.(points.length)
           }
         },
         () => {
@@ -79,7 +85,7 @@ export function DispatchPointsScreen() {
         },
       )
     return () => controller.abort()
-  }, [integrationId, reloads, scopeKey])
+  }, [integrationId, reloads, report, scopeKey])
 
   const points = state.kind === 'ready' ? state.points : []
 
@@ -123,8 +129,6 @@ export function DispatchPointsScreen() {
       </p>
     )
   }
-
-  const backTo = cabinetPath(tenant.slug, 'integrations', integrationId)
 
   const guard = (): boolean => {
     try {
@@ -182,33 +186,24 @@ export function DispatchPointsScreen() {
   }
 
   return (
-    <RedesignShell
-      actions={
-        <>
-          <Button asChild>
-            <Link to={backTo}>
-              <ArrowLeft aria-hidden />
-              Нова пошта
-            </Link>
-          </Button>
-          <Button
-            disabled={state.kind !== 'ready'}
-            onClick={() => {
-              setFormError(null)
-              setEditing({ mode: 'new' })
-            }}
-            variant="primary"
-          >
-            Додати точку
-          </Button>
-        </>
-      }
-      crumb="Інтеграція · Точки відправлення"
-    >
-      <RedesignTitle
-        lead="Звідки ви відправляєте посилки. Дані точки підставляються у відправника накладної."
-        title="Точки відправлення"
-      />
+    <div className="grid gap-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <p className="text-app-muted max-w-[62ch] text-[14px] leading-6 text-pretty">
+          Звідки ви відправляєте посилки. Дані точки підставляються у
+          відправника накладної, точка за замовчуванням — під час оформлення
+          доставки.
+        </p>
+        <Button
+          disabled={state.kind !== 'ready'}
+          onClick={() => {
+            setFormError(null)
+            setEditing({ mode: 'new' })
+          }}
+          variant="primary"
+        >
+          Додати точку
+        </Button>
+      </div>
 
       {state.kind === 'error' && (
         <Notice tone="danger">
@@ -346,6 +341,6 @@ export function DispatchPointsScreen() {
           pending={saving}
         />
       )}
-    </RedesignShell>
+    </div>
   )
 }

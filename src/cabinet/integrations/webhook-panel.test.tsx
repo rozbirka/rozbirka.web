@@ -1,13 +1,12 @@
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are asserted directly. */
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { integrationsApi } from '@/api/integrations'
 import type { Tenant } from '@/api/types'
 import { ToastProvider } from '@/components/app'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
-import { WebhookDiagnosticsScreen } from './WebhookDiagnosticsScreen'
+import { WebhookPanel } from './webhook-panel'
 
 vi.mock('@/api/integrations', () => ({
   integrationsApi: {
@@ -90,20 +89,9 @@ beforeEach(() => {
 
 const renderScreen = () =>
   render(
-    <MemoryRouter
-      initialEntries={[
-        '/app/koval/settings/integrations/integration-1/webhook',
-      ]}
-    >
-      <ToastProvider>
-        <Routes>
-          <Route
-            element={<WebhookDiagnosticsScreen />}
-            path="/app/:slug/settings/integrations/:integrationId/webhook"
-          />
-        </Routes>
-      </ToastProvider>
-    </MemoryRouter>,
+    <ToastProvider>
+      <WebhookPanel integrationId="integration-1" />
+    </ToastProvider>,
   )
 
 it('reports the queue in minutes waited rather than a raw timestamp', async () => {

@@ -1,15 +1,26 @@
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are asserted directly. */
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { integrationsApi, type Integration } from '@/api/integrations'
 import type { Tenant } from '@/api/types'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
+import { ToastProvider } from '@/components/app'
 import { NovaPoshtaScreen } from './NovaPoshtaScreen'
 
 vi.mock('@/api/integrations', () => ({
   integrationsApi: {
+    dispatchPoints: vi.fn(() => Promise.resolve([])),
+    webhookStatus: vi.fn(() =>
+      Promise.resolve({
+        enabled: true,
+        pending: 0,
+        deadLetters: 0,
+        oldestPendingAt: null,
+        deadLetterIds: [],
+      }),
+    ),
     getById: vi.fn(),
     saveNovaPoshtaKey: vi.fn(),
     verify: vi.fn(),
@@ -93,17 +104,23 @@ beforeEach(() => {
   vi.mocked(integrationsApi.getById).mockResolvedValue(integration)
 })
 
-const renderScreen = () =>
+const renderScreen = (tab = '') =>
   render(
     <MemoryRouter
-      initialEntries={['/app/koval/settings/integrations/integration-1']}
+      initialEntries={[`/app/koval/settings/integrations/integration-1${tab}`]}
     >
-      <Routes>
-        <Route
-          element={<NovaPoshtaScreen />}
-          path="/app/:slug/settings/integrations/:integrationId"
-        />
-      </Routes>
+      <ToastProvider>
+        <Routes>
+          <Route
+            element={<NovaPoshtaScreen />}
+            path="/app/:slug/settings/integrations/:integrationId"
+          />
+          <Route
+            element={<NovaPoshtaScreen />}
+            path="/app/:slug/settings/integrations/:integrationId/:tab"
+          />
+        </Routes>
+      </ToastProvider>
     </MemoryRouter>,
   )
 
@@ -111,7 +128,7 @@ it('never shows a stored key and sends only its replacement', async () => {
   vi.mocked(integrationsApi.saveNovaPoshtaKey).mockResolvedValue(integration)
   const user = userEvent.setup()
 
-  renderScreen()
+  renderScreen('/settings')
 
   expect(await screen.findByText('••••••••••••••••')).toBeVisible()
   await user.click(screen.getByRole('button', { name: 'Замінити ключ' }))
@@ -136,7 +153,7 @@ it('cannot be switched on before a key is stored', async () => {
     verifiedAt: null,
   })
 
-  renderScreen()
+  renderScreen('/settings')
 
   const toggle = await screen.findByRole('button', {
     name: 'Увімкнути інтеграцію',
@@ -174,7 +191,7 @@ it('names the step a failed verification stopped at', async () => {
   renderScreen()
 
   await user.click(
-    await screen.findByRole('button', { name: 'Перевірити підключення' }),
+    await screen.findByRole('button', { name: 'Перевірити ще раз' }),
   )
 
   expect(await screen.findByText('Ключ приймає сервіс')).toBeVisible()
@@ -191,7 +208,7 @@ it('turns a live integration off with the consequence spelled out', async () => 
   })
   const user = userEvent.setup()
 
-  renderScreen()
+  renderScreen('/settings')
 
   await user.click(
     await screen.findByRole('button', { name: 'Вимкнути інтеграцію' }),
@@ -201,5 +218,33 @@ it('turns a live integration off with the consequence spelled out', async () => 
   expect(
     await screen.findByRole('button', { name: 'Увімкнути інтеграцію' }),
   ).toBeVisible()
-  expect(screen.getByText('Вимкнена')).toBeVisible()
+  // The header switch reports the same state as the status pill.
+  expect(
+    screen.getByRole('switch', { name: 'Інтеграція увімкнена' }),
+  ).toHaveAttribute('aria-checked', 'false')
+})
+
+it('opens the tab the link points at and counts what each one holds', async () => {
+  vi.mocked(integrationsApi.dispatchPoints).mockResolvedValue([])
+  vi.mocked(integrationsApi.webhookStatus).mockResolvedValue({
+    enabled: true,
+    pending: 3,
+    deadLetters: 2,
+    oldestPendingAt: null,
+    deadLetterIds: ['a', 'b'],
+  })
+
+  renderScreen('/webhook')
+
+  const tabs = await screen.findByRole('navigation', {
+    name: 'Розділи інтеграції',
+  })
+  expect(within(tabs).getByRole('link', { name: /Статуси/ })).toHaveAttribute(
+    'aria-current',
+    'page',
+  )
+  expect(within(tabs).getByText('2 з помилкою')).toBeVisible()
+  expect(within(tabs).getByRole('link', { name: /Огляд/ })).not.toHaveAttribute(
+    'aria-current',
+  )
 })

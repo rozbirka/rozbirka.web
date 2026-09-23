@@ -174,7 +174,9 @@ export function Sheet({
               </Button>
             </Dialog.Close>
           </header>
-          <div className="grid content-start gap-3 overflow-y-auto px-5 py-4">
+          {/* Same lighter surface as the dialog: the page hint grey would
+              land a hair under 4.5:1 here. */}
+          <div className="grid content-start gap-3 overflow-y-auto px-5 py-4 [&_[data-slot=field-hint]]:text-app-muted">
             {children}
           </div>
           {footer === undefined ? null : (

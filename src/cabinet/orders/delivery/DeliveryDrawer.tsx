@@ -21,6 +21,7 @@ import {
   type ShipmentDraft,
 } from '@/api/shipping'
 import { normalizeApiProblem } from '@/api/errors'
+import { SettlementPicker } from '../../integrations/settlement-picker'
 import {
   prepayment,
   quotePresentation,
@@ -132,11 +133,9 @@ export function DeliveryDrawer({
   const [companyTin, setCompanyTin] = useState(
     saved?.recipient.companyTin ?? '',
   )
-  const [query, setQuery] = useState('')
-  const [found, setFound] = useState<{
-    term: string
-    items: NovaPoshtaSettlement[]
-  } | null>(null)
+  const [settlement, setSettlement] = useState<NovaPoshtaSettlement | null>(
+    null,
+  )
   const [loadedDivisions, setLoadedDivisions] = useState<{
     settlementId: number
     items: NovaPoshtaDivision[]
@@ -163,36 +162,8 @@ export function DeliveryDrawer({
   const [quoteFailure, setQuoteFailure] = useState<string | null>(null)
   const [lookupError, setLookupError] = useState<string | null>(null)
 
-  const term = query.trim()
-  const settlements =
-    term.length >= 2 && found?.term === term ? found.items : []
-  const settlementId =
-    term === ''
-      ? (saved?.recipient.settlementId ?? null)
-      : (settlements.find((item) => item.name === term)?.id ?? null)
-
-  useEffect(() => {
-    if (term.length < 2) return
-    const controller = new AbortController()
-    const timer = window.setTimeout(() => {
-      void integrationsApi
-        .settlements(integrationId, term, 1, { signal: controller.signal })
-        .then(
-          (page) => {
-            if (!controller.signal.aborted)
-              setFound({ term, items: page.items })
-          },
-          () => {
-            if (!controller.signal.aborted)
-              setLookupError('Довідник міст Нової пошти зараз недоступний.')
-          },
-        )
-    }, 300)
-    return () => {
-      controller.abort()
-      window.clearTimeout(timer)
-    }
-  }, [integrationId, term])
+  // The saved draft's settlement stands until another is picked.
+  const settlementId = settlement?.id ?? saved?.recipient.settlementId ?? null
 
   useEffect(() => {
     if (settlementId === null) return
@@ -428,27 +399,18 @@ export function DeliveryDrawer({
             value={phone}
           />
         </Field>
-        <Field
-          hint={
-            saved !== null && term === ''
-              ? 'Місто зі збереженої чернетки. Введіть назву, щоб змінити.'
-              : 'Почніть вводити назву — підкажемо з довідника Нової пошти.'
+        <SettlementPicker
+          integrationId={integrationId}
+          onPick={setSettlement}
+          picked={settlement}
+          savedHint={
+            saved === null
+              ? undefined
+              : 'Збережений пункт залишається, доки не виберете інший.'
           }
-          label="Населений пункт"
-          required
-        >
-          <TextInput
-            list="delivery-settlements"
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Львів"
-            value={query}
-          />
-        </Field>
-        <datalist id="delivery-settlements">
-          {settlements.map((item) => (
-            <option key={item.id} value={item.name} />
-          ))}
-        </datalist>
+          use="receiving"
+        />
+
         <Field
           hint={
             settlementId === null

@@ -6,8 +6,6 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react'
-import { Link, useParams } from 'react-router'
-import { ArrowLeft } from 'lucide-react'
 import {
   Button,
   DateValue,
@@ -23,9 +21,7 @@ import {
 import { normalizeApiProblem } from '@/api/errors'
 import { plural } from '@/lib/utils'
 import { useCabinet } from '../CabinetContext'
-import { cabinetPath } from '../cabinet-paths'
 import { cabinetModules } from '../module-registry'
-import { RedesignShell, RedesignTitle } from '../redesign-shell'
 import { Kpi, KpiStrip } from '../redesign-kpi'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 
@@ -64,15 +60,24 @@ function waitedFor(from: string): string {
   return hours < 24 ? `${hours} год` : `${Math.floor(hours / 24)} дн`
 }
 
-export function WebhookDiagnosticsScreen() {
+/**
+ * The carrier's status feed as a tab: whether events arrive at all, and what
+ * happened to the ones that could not be processed.
+ */
+export function WebhookPanel({
+  integrationId,
+  onFailuresChange,
+}: {
+  integrationId: string
+  onFailuresChange?: ((count: number) => void) | undefined
+}) {
   const cabinet = useCabinet()
-  const params = useParams()
   const toast = useToast()
-  const integrationId = params['integrationId'] ?? ''
   const tenant = cabinet.targetTenant
   const tenantId = cabinet.snapshot?.tenantId ?? null
   const generation = cabinet.snapshot?.generation
   const scopeKey = `${generation ?? ''}:${tenant?.id ?? ''}:${integrationId}`
+  const report = onFailuresChange
   const [loaded, setLoaded] = useState<{
     key: string
     state: LoadState
@@ -107,6 +112,7 @@ export function WebhookDiagnosticsScreen() {
         (status) => {
           if (!controller.signal.aborted) {
             setLoaded({ key: scopeKey, state: { kind: 'ready', status } })
+            report?.(status.deadLetters)
           }
         },
         () => {
@@ -116,7 +122,7 @@ export function WebhookDiagnosticsScreen() {
         },
       )
     return () => controller.abort()
-  }, [integrationId, reloads, scopeKey])
+  }, [integrationId, reloads, report, scopeKey])
 
   const reload = useCallback(() => setReloads((value) => value + 1), [])
 
@@ -128,7 +134,6 @@ export function WebhookDiagnosticsScreen() {
     )
   }
 
-  const backTo = cabinetPath(tenant.slug, 'integrations', integrationId)
   const status = state.kind === 'ready' ? state.status : null
   const receiveUrl =
     tenantId === null
@@ -226,26 +231,16 @@ export function WebhookDiagnosticsScreen() {
   }
 
   return (
-    <RedesignShell
-      actions={
-        <>
-          <Button asChild>
-            <Link to={backTo}>
-              <ArrowLeft aria-hidden />
-              Нова пошта
-            </Link>
-          </Button>
-          <Button disabled={busy !== null} onClick={reload}>
-            Оновити дані
-          </Button>
-        </>
-      }
-      crumb="Інтеграція · Діагностика статусів"
-    >
-      <RedesignTitle
-        lead="Технічний екран для адміністратора. Показує, чи Rozbirka отримує події Нової пошти й що сталося з необробленими."
-        title="Оновлення статусів"
-      />
+    <div className="grid gap-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <p className="text-app-muted max-w-[62ch] text-[14px] leading-6 text-pretty">
+          Чи Rozbirka отримує події Нової пошти і що сталося з необробленими.
+          Технічний блок для адміністратора.
+        </p>
+        <Button disabled={busy !== null} onClick={reload}>
+          Оновити дані
+        </Button>
+      </div>
 
       {error !== null && <Notice tone="danger">{error}</Notice>}
 
@@ -497,6 +492,6 @@ export function WebhookDiagnosticsScreen() {
           </div>
         </>
       )}
-    </RedesignShell>
+    </div>
   )
 }

@@ -208,23 +208,22 @@ const commerceDetailRoutes: RouteObject[] = [
     },
     'settings/integrations/:integrationId',
   ),
-  cabinetScreenRoute(
-    'integrations',
-    async () => {
-      const { DispatchPointsScreen } =
-        await import('@/cabinet/integrations/DispatchPointsScreen')
-      return DispatchPointsScreen
-    },
+  // Every tab of the carrier screen is its own route, so a link into the
+  // diagnostics opens the diagnostics rather than the overview.
+  ...[
     'settings/integrations/:integrationId/dispatch-points',
-  ),
-  cabinetScreenRoute(
-    'integrations',
-    async () => {
-      const { WebhookDiagnosticsScreen } =
-        await import('@/cabinet/integrations/WebhookDiagnosticsScreen')
-      return WebhookDiagnosticsScreen
-    },
     'settings/integrations/:integrationId/webhook',
+    'settings/integrations/:integrationId/settings',
+  ].map((path) =>
+    cabinetScreenRoute(
+      'integrations',
+      async () => {
+        const { NovaPoshtaScreen } =
+          await import('@/cabinet/integrations/NovaPoshtaScreen')
+        return NovaPoshtaScreen
+      },
+      path,
+    ),
   ),
   ...[
     'customers/new',
