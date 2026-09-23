@@ -85,6 +85,12 @@ const requestConfig = (options: RequestOptions) =>
   options.signal ? { signal: options.signal } : {}
 
 export const shippingApi = {
+  async configureOrder(orderId: string, agreedTotalUah: number): Promise<void> {
+    await apiClient.put(`/orders/${encodeURIComponent(orderId)}/delivery`, {
+      agreedTotalUah,
+      waiveDeposit: false,
+    })
+  },
   /** Null when this order has no delivery yet. */
   async get(
     integrationId: string,
@@ -97,7 +103,9 @@ export const shippingApi = {
         requestConfig(options),
       )
     ).data
-    return shipment === null ? null : withCollections(shipment)
+    return shipment == null || Object.keys(shipment).length === 0
+      ? null
+      : withCollections(shipment)
   },
   async saveDraft(
     integrationId: string,
