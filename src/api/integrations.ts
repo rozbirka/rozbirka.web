@@ -107,6 +107,25 @@ export interface IntegrationDiagnostics {
   checks: IntegrationDiagnosticCheck[]
 }
 
+// Core omits null properties from JSON. Keep the UI's nullable contract stable.
+const normalizeIntegration = (value: Integration): Integration => ({
+  ...value,
+  verifiedAt: value.verifiedAt ?? null,
+  lastErrorCode: value.lastErrorCode ?? null,
+  settings: value.settings ?? null,
+})
+
+const normalizeDiagnostics = (
+  value: IntegrationDiagnostics,
+): IntegrationDiagnostics => ({
+  ...value,
+  lastErrorCode: value.lastErrorCode ?? null,
+  checks: (value.checks ?? []).map((check) => ({
+    ...check,
+    errorCode: check.errorCode ?? null,
+  })),
+})
+
 const endpoint = (id: string) => `/integrations/${encodeURIComponent(id)}`
 const requestConfig = (options: RequestOptions) =>
   options.signal ? { signal: options.signal } : {}
@@ -128,38 +147,47 @@ export const integrationsApi = {
         '/integrations',
         requestConfig(options),
       )
-    ).data
+    ).data.map(normalizeIntegration)
   },
   async getById(
     id: string,
     options: RequestOptions = {},
   ): Promise<Integration> {
-    return (
-      await apiClient.get<Integration>(endpoint(id), requestConfig(options))
-    ).data
+    return normalizeIntegration(
+      (await apiClient.get<Integration>(endpoint(id), requestConfig(options)))
+        .data,
+    )
   },
   async create(definitionId: string): Promise<Integration> {
-    return (
-      await apiClient.post<Integration>('/integrations', { definitionId })
-    ).data
+    return normalizeIntegration(
+      (await apiClient.post<Integration>('/integrations', { definitionId }))
+        .data,
+    )
   },
   /** The key itself goes one way only — Core stores it encrypted and never returns it. */
   async saveNovaPoshtaKey(id: string, apiKey: string): Promise<Integration> {
-    return (
-      await apiClient.put<Integration>(`${endpoint(id)}/settings`, {
-        settings: { apiKey },
-      })
-    ).data
+    return normalizeIntegration(
+      (
+        await apiClient.put<Integration>(`${endpoint(id)}/settings`, {
+          settings: { apiKey },
+        })
+      ).data,
+    )
   },
   async verify(id: string): Promise<Integration> {
-    return (await apiClient.post<Integration>(`${endpoint(id)}/verify`)).data
+    return normalizeIntegration(
+      (await apiClient.post<Integration>(`${endpoint(id)}/verify`)).data,
+    )
   },
   async activate(id: string): Promise<Integration> {
-    return (await apiClient.post<Integration>(`${endpoint(id)}/activate`)).data
+    return normalizeIntegration(
+      (await apiClient.post<Integration>(`${endpoint(id)}/activate`)).data,
+    )
   },
   async deactivate(id: string): Promise<Integration> {
-    return (await apiClient.post<Integration>(`${endpoint(id)}/deactivate`))
-      .data
+    return normalizeIntegration(
+      (await apiClient.post<Integration>(`${endpoint(id)}/deactivate`)).data,
+    )
   },
   async dispatchPoints(
     id: string,
@@ -261,12 +289,14 @@ export const integrationsApi = {
     id: string,
     options: RequestOptions = {},
   ): Promise<IntegrationDiagnostics> {
-    return (
-      await apiClient.post<IntegrationDiagnostics>(
-        `${endpoint(id)}/diagnostics`,
-        undefined,
-        requestConfig(options),
-      )
-    ).data
+    return normalizeDiagnostics(
+      (
+        await apiClient.post<IntegrationDiagnostics>(
+          `${endpoint(id)}/diagnostics`,
+          undefined,
+          requestConfig(options),
+        )
+      ).data,
+    )
   },
 }
