@@ -2073,6 +2073,7 @@ function OrderDetailScreen({
             )}
 
             <DeliverySection
+              key={order.id}
               customerId={order.customerId}
               customerName={order.customerName}
               mutationsAllowed={mutationsAllowed}

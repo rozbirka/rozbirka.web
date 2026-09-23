@@ -27,6 +27,9 @@ const customerMocks = vi.hoisted(() => ({
   create: vi.fn(),
   activate: vi.fn(),
 }))
+vi.mock('@/api/integrations', () => ({
+  integrationsApi: { list: vi.fn().mockResolvedValue([]) },
+}))
 vi.mock('@/api/orders', () => ({ ordersApi: orderMocks }))
 vi.mock('@/api/parts', () => ({ partsApi: partMocks }))
 vi.mock('@/api/cash', () => ({ cashApi: cashMocks }))

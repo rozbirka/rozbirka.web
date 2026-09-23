@@ -17,6 +17,7 @@ vi.mock('@/api/integrations', () => ({
 vi.mock('@/api/shipping', () => ({
   shippingApi: {
     get: vi.fn(),
+    configureOrder: vi.fn(),
     saveDraft: vi.fn(),
     estimate: vi.fn(),
     create: vi.fn(),
@@ -151,4 +152,70 @@ it('offers booking only to someone who may change the order', async () => {
 
   expect(await screen.findByText('Доставка ще не оформлена.')).toBeVisible()
   expect(screen.queryByRole('button', { name: 'Оформити доставку' })).toBeNull()
+})
+
+it('offers explicit setup when Core says delivery is not configured', async () => {
+  vi.mocked(shippingApi.get).mockRejectedValue({
+    kind: 'validation',
+    code: 'delivery_not_configured',
+    message: 'Configure delivery',
+  })
+  vi.mocked(shippingApi.configureOrder).mockResolvedValue(undefined)
+  const user = userEvent.setup()
+  renderSection()
+  const amount = await screen.findByRole('textbox', {
+    name: 'Погоджена сума замовлення, грн',
+  })
+  expect(shippingApi.configureOrder).not.toHaveBeenCalled()
+  await user.type(amount, '4280,50')
+  vi.mocked(shippingApi.get).mockResolvedValue(null)
+  await user.click(screen.getByRole('button', { name: 'Налаштувати доставку' }))
+  expect(shippingApi.configureOrder).toHaveBeenCalledWith('order-1', 4280.5)
+  expect(
+    await screen.findByRole('button', { name: 'Оформити доставку' }),
+  ).toBeVisible()
+})
+
+it('shows a loading failure instead of silently hiding delivery', async () => {
+  vi.mocked(shippingApi.get).mockRejectedValue({
+    kind: 'server',
+    message: 'Тимчасова помилка',
+  })
+  renderSection()
+  expect(await screen.findByText('Тимчасова помилка')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Повторити' })).toBeVisible()
+})
+
+it('does not offer setup without mutation permission', async () => {
+  vi.mocked(shippingApi.get).mockRejectedValue({
+    kind: 'validation',
+    code: 'delivery_not_configured',
+    message: 'Configure delivery',
+  })
+  renderSection(false)
+  expect(await screen.findByText(/ще не налаштована/)).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: 'Налаштувати доставку' }),
+  ).toBeNull()
+})
+
+it('preserves the agreed amount when delivery setup fails', async () => {
+  vi.mocked(shippingApi.get).mockRejectedValue({
+    kind: 'validation',
+    code: 'delivery_not_configured',
+    message: 'Configure delivery',
+  })
+  vi.mocked(shippingApi.configureOrder).mockRejectedValue({
+    kind: 'conflict',
+    message: 'Замовлення вже змінено',
+  })
+  const user = userEvent.setup()
+  renderSection()
+  const amount = await screen.findByRole('textbox', {
+    name: 'Погоджена сума замовлення, грн',
+  })
+  await user.type(amount, '4280')
+  await user.click(screen.getByRole('button', { name: 'Налаштувати доставку' }))
+  expect(await screen.findByText('Замовлення вже змінено')).toBeVisible()
+  expect(amount).toHaveValue('4280')
 })

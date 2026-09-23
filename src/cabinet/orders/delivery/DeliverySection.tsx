@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import {
   Button,
   Card,
+  Field,
+  TextInput,
   Notice,
   StatusPill,
   useOptionalToast,
@@ -33,6 +35,7 @@ const when = (value: string) =>
   })
 
 interface Ready {
+  needsSetup?: boolean
   integrationId: string
   points: NovaPoshtaDispatchPoint[]
   shipment: Shipment | null
@@ -60,6 +63,9 @@ export function DeliverySection({
   // Toasts are a courtesy here: the card works without a provider around it.
   const toast = useOptionalToast()
   const [ready, setReady] = useState<Ready | null>(null)
+  const [reloads, setReloads] = useState(0)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [agreedTotal, setAgreedTotal] = useState('')
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -82,8 +88,16 @@ export function DeliverySection({
         (item) => item.code === NOVA_POSHTA && item.status === 'active',
       )
       if (nova === undefined) return null
+      let needsSetup = false
       const [shipment, points, customer] = await Promise.all([
-        shippingApi.get(nova.id, orderId, { signal: controller.signal }),
+        shippingApi
+          .get(nova.id, orderId, { signal: controller.signal })
+          .catch((problem: unknown) => {
+            if (normalizeApiProblem(problem).code !== 'delivery_not_configured')
+              throw problem
+            needsSetup = true
+            return null
+          }),
         integrationsApi
           .dispatchPoints(nova.id, { signal: controller.signal })
           .catch(() => [] as NovaPoshtaDispatchPoint[]),
@@ -94,6 +108,7 @@ export function DeliverySection({
               .catch(() => null),
       ])
       return {
+        needsSetup,
         integrationId: nova.id,
         points: points.filter((point) => point.isActive),
         shipment,
@@ -104,16 +119,92 @@ export function DeliverySection({
       (result) => {
         if (!controller.signal.aborted) setReady(result)
       },
-      () => {
-        // Delivery is an addition to the order card: when the integration or
-        // the shipment cannot be read, the order itself must still open.
-        if (!controller.signal.aborted) setReady(null)
+      (problem: unknown) => {
+        if (!controller.signal.aborted)
+          setLoadError(normalizeApiProblem(problem).message)
       },
     )
     return () => controller.abort()
-  }, [customerId, orderId])
+  }, [customerId, orderId, reloads])
 
+  if (loadError !== null)
+    return (
+      <Card title="Доставка">
+        <Notice tone="danger">{loadError}</Notice>
+        <Button
+          onClick={() => {
+            setLoadError(null)
+            setReloads((value) => value + 1)
+          }}
+        >
+          Повторити
+        </Button>
+      </Card>
+    )
   if (ready === null) return null
+
+  if (ready.needsSetup)
+    return (
+      <Card title="Доставка">
+        <div className="grid gap-3.5">
+          <p className="text-app-muted text-sm">
+            Доставка для цього замовлення ще не налаштована.
+          </p>
+          {error !== null && <Notice tone="danger">{error}</Notice>}
+          {mutationsAllowed && (
+            <form
+              className="grid gap-3.5"
+              onSubmit={(event) => {
+                event.preventDefault()
+                const value = Number(agreedTotal.trim().replace(',', '.'))
+                if (
+                  !Number.isFinite(value) ||
+                  value <= 0 ||
+                  value > 9999999999 ||
+                  !/^\d+(?:[.,]\d{1,2})?$/.test(agreedTotal.trim())
+                ) {
+                  setError(
+                    'Вкажіть додатну суму в гривнях, не більше двох знаків після коми.',
+                  )
+                  return
+                }
+                if (busy) return
+                setBusy(true)
+                setError(null)
+                void shippingApi
+                  .configureOrder(orderId, value)
+                  .then(() => {
+                    if (mountedRef.current) setReloads((current) => current + 1)
+                  })
+                  .catch((problem: unknown) => {
+                    if (mountedRef.current)
+                      setError(normalizeApiProblem(problem).message)
+                  })
+                  .finally(() => {
+                    if (mountedRef.current) setBusy(false)
+                  })
+              }}
+            >
+              <Field
+                label="Погоджена сума замовлення, грн"
+                hint="Вартість товарів, погоджена з клієнтом. Вартість доставки розраховується окремо."
+                required
+              >
+                <TextInput
+                  inputMode="decimal"
+                  value={agreedTotal}
+                  onChange={(event) => setAgreedTotal(event.target.value)}
+                  disabled={busy}
+                />
+              </Field>
+              <Button type="submit" disabled={busy} aria-busy={busy}>
+                Налаштувати доставку
+              </Button>
+            </form>
+          )}
+        </div>
+      </Card>
+    )
 
   const { integrationId, points, shipment, customerPhone } = ready
   const state = shipment?.state ?? 'Draft'
