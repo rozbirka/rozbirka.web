@@ -1,4 +1,13 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
+
+async function confirmAccountDeletion(page: Page) {
+  const confirm = page.getByRole('button', { name: 'Так, видалити акаунт' })
+  await expect(confirm).toBeDisabled()
+  await page.getByLabel('Для підтвердження введіть ВИДАЛИТИ').fill('ВИДАЛИТИ')
+  await expect(confirm).toBeDisabled()
+  await expect(confirm).toBeEnabled({ timeout: 10_000 })
+  await confirm.click()
+}
 
 test('legal page has contact-only navigation for every visitor', async ({
   page,
@@ -89,7 +98,7 @@ for (const access of ['none', 'inactive', 'blocked']) {
     await page
       .getByRole('button', { name: 'Видалити акаунт', exact: true })
       .click()
-    await page.getByRole('button', { name: 'Так, видалити акаунт' }).click()
+    await confirmAccountDeletion(page)
     await expect(page.getByRole('alert')).toContainText(
       'Не вдалося видалити акаунт',
     )
@@ -98,7 +107,7 @@ for (const access of ['none', 'inactive', 'blocked']) {
     await page
       .getByRole('button', { name: 'Видалити акаунт', exact: true })
       .click()
-    await page.getByRole('button', { name: 'Так, видалити акаунт' }).click()
+    await confirmAccountDeletion(page)
     await expect(page).toHaveURL(/login$/)
     expect(deleted).toBe(true)
   })
