@@ -11,7 +11,7 @@ vi.mock('@/api/integrations', () => ({
 
 const page = (
   items: {
-    id: number
+    ref: string
     name: string
     prohibitedSending?: boolean | null
     prohibitedIssuance?: boolean | null
@@ -30,8 +30,12 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(integrationsApi.settlements).mockResolvedValue(
     page([
-      { id: 10, name: 'Житомир' },
-      { id: 11, name: 'Житомирка', prohibitedSending: true },
+      { ref: '8d5a980d-391c-11dd-90d9-001a92567626', name: 'Житомир' },
+      {
+        ref: '1ec09d2e-e1c2-11e3-8c4a-0050568002cf',
+        name: 'Житомирка',
+        prohibitedSending: true,
+      },
     ]),
   )
 })
@@ -80,7 +84,10 @@ it('counts only a pick from the list as a choice', async () => {
   await user.click(option)
 
   expect(onPick).toHaveBeenLastCalledWith(
-    expect.objectContaining({ id: 10, name: 'Житомир' }),
+    expect.objectContaining({
+      ref: '8d5a980d-391c-11dd-90d9-001a92567626',
+      name: 'Житомир',
+    }),
   )
   expect(input).toHaveValue('Житомир')
 })
@@ -107,6 +114,9 @@ it('picks the highlighted suggestion from the keyboard', async () => {
   await user.keyboard('{ArrowDown}{Enter}')
 
   expect(onPick).toHaveBeenLastCalledWith(
-    expect.objectContaining({ id: 11, name: 'Житомирка' }),
+    expect.objectContaining({
+      ref: '1ec09d2e-e1c2-11e3-8c4a-0050568002cf',
+      name: 'Житомирка',
+    }),
   )
 })

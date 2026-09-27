@@ -26,6 +26,7 @@ const tenant: Tenant = {
   isActive: true,
   createdAt: '2026-08-01T10:00:00Z',
   roleName: 'owner',
+  requireDeliveryDeposit: true,
 }
 
 const snapshot: TenantAccessSnapshot = {
@@ -143,7 +144,11 @@ it('renders the minimal tenant dashboard home', () => {
     </MemoryRouter>,
   )
 
-  expect(screen.getByRole('heading', { name: 'Зведення' })).toBeVisible()
-  expect(screen.getByText(/Koval Auto/)).toBeVisible()
+  expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+    /Добр|Доброї/,
+  )
+  expect(screen.getByLabelText('Розбірка і розділ')).toHaveTextContent(
+    'Koval Auto',
+  )
   expect(screen.getByRole('button', { name: 'Оновити дані' })).toBeVisible()
 })

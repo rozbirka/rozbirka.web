@@ -71,6 +71,11 @@ export interface Tenant {
   isActive: boolean
   createdAt: string
   roleName: string | null
+  /**
+   * Whether a delivery order must hold a deposit before it ships. Off, the
+   * yard carries the cost of an uncollected parcel itself.
+   */
+  requireDeliveryDeposit: boolean
 }
 
 export interface CreateTenantRequest {

@@ -42,6 +42,10 @@ export const createSessionApi = (
     return release
   }
   const activeRefreshes = new Set<ActiveRefresh>()
+  let pendingRefresh: {
+    generation: number
+    promise: Promise<SessionRefreshResponse>
+  } | null = null
 
   const invalidateRefreshes = async () => {
     credentials.clear()
@@ -127,44 +131,77 @@ export const createSessionApi = (
       )
     },
 
-    async refresh(): Promise<SessionRefreshResponse> {
+    refresh(): Promise<SessionRefreshResponse> {
       if (sessionMutationDepth > 0) {
-        throw problemError(normalizeApiProblem(new axios.CanceledError()))
+        return Promise.reject(
+          problemError(normalizeApiProblem(new axios.CanceledError())),
+        )
       }
 
       const generation = credentials.getSessionGeneration()
-      const controller = new AbortController()
-      let settle!: () => void
-      const activeRefresh: ActiveRefresh = {
-        controller,
-        settled: new Promise((resolve) => {
-          settle = resolve
-        }),
-        settle: () => settle(),
+      // Bootstrap and 401 recovery must share the same rotating cookie request.
+      if (pendingRefresh?.generation === generation)
+        return pendingRefresh.promise
+      const pending = {
+        generation,
+        promise: Promise.resolve({ accessToken: '', expiresIn: 0 }),
       }
-      activeRefreshes.add(activeRefresh)
+      pending.promise = (async () => {
+        const controller = new AbortController()
+        let settle!: () => void
+        const activeRefresh: ActiveRefresh = {
+          controller,
+          settled: new Promise((resolve) => {
+            settle = resolve
+          }),
+          settle: () => settle(),
+        }
+        activeRefreshes.add(activeRefresh)
 
-      try {
-        const response = await client.post<SessionRefreshResponse>(
-          '/session/refresh',
-          undefined,
-          { signal: controller.signal },
-        )
-        if (generation !== credentials.getSessionGeneration()) {
-          throw new axios.CanceledError()
+        try {
+          const sendRefresh = () => {
+            if (
+              controller.signal.aborted ||
+              generation !== credentials.getSessionGeneration()
+            ) {
+              throw new axios.CanceledError()
+            }
+            return client.post<SessionRefreshResponse>(
+              '/session/refresh',
+              undefined,
+              { signal: controller.signal },
+            )
+          }
+          // Cookies are shared across tabs (and overlapping HMR module instances).
+          // Hold the origin-wide lock until Set-Cookie has been applied.
+          const response =
+            typeof navigator !== 'undefined' && navigator.locks
+              ? await navigator.locks.request(
+                  'rozbirka-session-refresh',
+                  { signal: controller.signal },
+                  sendRefresh,
+                )
+              : await sendRefresh()
+          if (generation !== credentials.getSessionGeneration()) {
+            throw new axios.CanceledError()
+          }
+          const payload: SessionRefreshResponse = {
+            accessToken: response.data.accessToken,
+            expiresIn: response.data.expiresIn,
+          }
+          credentials.setAccess(payload.accessToken)
+          return payload
+        } catch (error) {
+          throw problemError(normalizeApiProblem(error))
+        } finally {
+          activeRefreshes.delete(activeRefresh)
+          activeRefresh.settle()
         }
-        const payload: SessionRefreshResponse = {
-          accessToken: response.data.accessToken,
-          expiresIn: response.data.expiresIn,
-        }
-        credentials.setAccess(payload.accessToken)
-        return payload
-      } catch (error) {
-        throw problemError(normalizeApiProblem(error))
-      } finally {
-        activeRefreshes.delete(activeRefresh)
-        activeRefresh.settle()
-      }
+      })().finally(() => {
+        if (pendingRefresh === pending) pendingRefresh = null
+      })
+      pendingRefresh = pending
+      return pending.promise
     },
 
     async invalidate(): Promise<void> {

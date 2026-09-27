@@ -121,12 +121,15 @@ export function FormDialog({
 }
 
 /**
- * A panel that slides in from the edge: filters and long secondary forms on a
- * phone, where a centred dialog would cover the thing being edited.
+ * A panel that slides in from the edge — the cabinet's drawer. Its chrome
+ * matches the rest of the redesign: a canvas-dark panel, a mono eyebrow over a
+ * large title, and a footer that keeps its actions in view while the body
+ * scrolls.
  */
 export function Sheet({
   open,
   onOpenChange,
+  eyebrow,
   title,
   description,
   children,
@@ -135,6 +138,8 @@ export function Sheet({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Where the reader is, in the cabinet's own words: "Склад · Деталі". */
+  eyebrow?: ReactNode
   title: string
   /** One line under the title; the sheet stays labelled without it. */
   description?: ReactNode
@@ -146,16 +151,26 @@ export function Sheet({
   return (
     <Dialog.Root onOpenChange={onOpenChange} open={open}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-[2px]" />
         <Dialog.Content
           className={cn(
-            'bg-app-overlay border-app-line-2 fixed inset-x-0 bottom-0 z-50 grid max-h-[85dvh] grid-rows-[auto_1fr_auto] overflow-hidden rounded-t-2xl border-t text-white shadow-2xl sm:inset-y-0 sm:right-0 sm:left-auto sm:w-full sm:max-h-none sm:rounded-none sm:rounded-l-2xl sm:border-t-0 sm:border-l',
-            size === 'lg' ? 'sm:max-w-[620px]' : 'sm:max-w-md',
+            'bg-app-canvas border-app-line fixed inset-x-0 bottom-0 z-50 grid max-h-[92dvh] grid-rows-[auto_1fr_auto] overflow-hidden rounded-t-[24px] border-t text-white shadow-2xl sm:inset-y-0 sm:right-0 sm:left-auto sm:h-dvh sm:max-h-none sm:w-full sm:rounded-none sm:border-t-0 sm:border-l',
+            size === 'lg' ? 'sm:max-w-[640px]' : 'sm:max-w-[600px]',
           )}
         >
-          <header className="border-app-line flex items-start justify-between gap-3 border-b px-5 py-4">
-            <div className="grid gap-1">
-              <Dialog.Title className="text-base font-semibold">
+          <header className="border-app-line flex items-start justify-between gap-4 border-b px-5 pt-5 pb-5 sm:px-7 sm:pt-6 sm:pb-5">
+            <div className="min-w-0">
+              {eyebrow === undefined ? null : (
+                <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+                  {eyebrow}
+                </p>
+              )}
+              <Dialog.Title
+                className={cn(
+                  'text-[26px] leading-[1.1] font-extrabold tracking-[-0.02em] text-balance',
+                  eyebrow === undefined ? '' : 'mt-2',
+                )}
+              >
                 {title}
               </Dialog.Title>
               {description === undefined ? (
@@ -163,24 +178,29 @@ export function Sheet({
                   {title}
                 </Dialog.Description>
               ) : (
-                <Dialog.Description className="text-app-muted text-[13px] leading-5 text-pretty">
+                <Dialog.Description className="text-app-muted mt-2 text-sm leading-5 text-pretty">
                   {description}
                 </Dialog.Description>
               )}
             </div>
             <Dialog.Close asChild>
-              <Button aria-label="Закрити" size="icon" variant="quiet">
-                <X aria-hidden />
-              </Button>
+              {/* The drawer's own close: a 34px square, as the design draws it,
+                  with the 44px hit area the cabinet keeps put back by a
+                  transparent overlay that costs the layout nothing. */}
+              <button
+                aria-label="Закрити"
+                className="border-app-line-2 text-app-muted hover:text-app-ink relative grid size-[34px] shrink-0 place-items-center rounded-[10px] border transition-colors hover:bg-white/[0.06] after:absolute after:-inset-[5px] after:content-['']"
+                type="button"
+              >
+                <X aria-hidden className="size-3.5" />
+              </button>
             </Dialog.Close>
           </header>
-          {/* Same lighter surface as the dialog: the page hint grey would
-              land a hair under 4.5:1 here. */}
-          <div className="grid content-start gap-3 overflow-y-auto px-5 py-4 [&_[data-slot=field-hint]]:text-app-muted">
+          <div className="grid min-h-0 content-start gap-5 overflow-y-auto px-5 pt-5 pb-7 sm:px-7">
             {children}
           </div>
           {footer === undefined ? null : (
-            <div className="border-app-line flex flex-wrap justify-end gap-2 border-t px-5 py-3">
+            <div className="border-app-line flex flex-wrap items-center justify-end gap-2.5 border-t bg-black/25 px-5 pt-4 pb-5 sm:px-7">
               {footer}
             </div>
           )}

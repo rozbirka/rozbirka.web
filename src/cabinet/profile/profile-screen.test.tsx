@@ -35,6 +35,7 @@ const tenant: Tenant = {
   isActive: true,
   createdAt: '2026-08-01T10:00:00Z',
   roleName: 'manager',
+  requireDeliveryDeposit: true,
 }
 
 const snapshot: TenantAccessSnapshot = {

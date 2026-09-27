@@ -1,5 +1,7 @@
 import { useRef, type ReactNode } from 'react'
+import type { LucideIcon } from 'lucide-react'
 import { Dialog } from 'radix-ui'
+import { cn } from '@/lib/utils'
 import { Button } from './button'
 import { Notice } from './notice'
 
@@ -9,6 +11,15 @@ export interface ConfirmDialogProps {
   title: ReactNode
   /** What this action does that cannot be undone. Say it plainly. */
   consequence: ReactNode
+  /**
+   * The consequences one by one, when the action moves money, stock and state
+   * at once. Drawn as a list under the sentence, in the tone of the action.
+   */
+  effects?: readonly ReactNode[]
+  /** Anything the confirmation itself needs: a reason, a date, a choice. */
+  children?: ReactNode
+  /** Names the action at a glance above the question. */
+  icon?: LucideIcon
   confirmLabel: string
   cancelLabel?: string
   onConfirm: () => void
@@ -30,6 +41,9 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   consequence,
+  effects,
+  children,
+  icon: Icon,
   confirmLabel,
   cancelLabel = 'Скасувати',
   onConfirm,
@@ -53,12 +67,54 @@ export function ConfirmDialog({
           }}
           className="bg-app-overlay border-app-line-2 rounded-sheet fixed inset-x-4 top-1/2 z-50 grid max-w-md -translate-y-1/2 gap-3 border p-5 text-white shadow-2xl sm:inset-x-auto sm:left-1/2 sm:w-full sm:-translate-x-1/2"
         >
-          <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
-          <Dialog.Description className="text-app-muted text-sm leading-6">
+          {Icon === undefined ? null : (
+            <span
+              aria-hidden
+              className={cn(
+                'grid size-10 place-items-center rounded-[12px]',
+                destructive
+                  ? 'bg-state-danger-soft text-state-danger'
+                  : 'bg-brand/15 text-brand',
+              )}
+            >
+              <Icon className="size-[18px]" />
+            </span>
+          )}
+          <Dialog.Title className="text-[22px] font-extrabold tracking-[-0.02em]">
+            {title}
+          </Dialog.Title>
+          <Dialog.Description className="text-app-muted text-sm leading-6 text-pretty">
             {consequence}
           </Dialog.Description>
+          {effects === undefined || effects.length === 0 ? null : (
+            <ul
+              className={cn(
+                'grid gap-2.5 rounded-[12px] border p-4',
+                destructive
+                  ? 'border-state-danger/20 bg-state-danger/[0.06]'
+                  : 'border-app-line bg-white/[0.03]',
+              )}
+            >
+              {effects.map((effect, index) => (
+                <li
+                  className="text-app-ink flex gap-2.5 text-[13px] leading-[1.45] text-pretty"
+                  key={index}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'mt-[7px] size-[5px] shrink-0 rounded-full',
+                      destructive ? 'bg-state-danger' : 'bg-brand',
+                    )}
+                  />
+                  {effect}
+                </li>
+              ))}
+            </ul>
+          )}
+          {children}
           {error === null ? null : <Notice tone="danger">{error}</Notice>}
-          <div className="mt-2 flex flex-wrap justify-end gap-2">
+          <div className="mt-3 flex flex-wrap justify-end gap-2.5">
             <Dialog.Close asChild>
               <Button disabled={pending} ref={cancelRef}>
                 {cancelLabel}

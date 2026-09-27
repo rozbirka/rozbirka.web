@@ -12,6 +12,11 @@ export interface FieldProps {
   required?: boolean
   /** Visually hidden addition to the label, for names like "Кількість Бампер". */
   srLabel?: string
+  /**
+   * Hides the label from sight while keeping it as the control's name — for a
+   * search box whose magnifier and placeholder already say what it is.
+   */
+  hiddenLabel?: boolean
   className?: string
 }
 
@@ -26,6 +31,7 @@ export function Field({
   error,
   required = false,
   srLabel,
+  hiddenLabel = false,
   className,
 }: FieldProps) {
   const id = useId()
@@ -40,7 +46,9 @@ export function Field({
 
   return (
     <div className={cn('grid content-start gap-1.5', className)}>
-      <div className="flex items-baseline gap-1">
+      <div
+        className={cn('flex items-baseline gap-1', hiddenLabel && 'sr-only')}
+      >
         <label className="text-app-muted text-[13.5px]" htmlFor={id}>
           {label}
         </label>

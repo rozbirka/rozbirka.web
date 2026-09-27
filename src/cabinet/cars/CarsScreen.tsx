@@ -19,7 +19,6 @@ import {
   Archive,
   ChevronLeft,
   ChevronRight,
-  Copy,
   CarFront,
   Search,
   ImagePlus,
@@ -31,12 +30,11 @@ import {
 import { cn, plural } from '@/lib/utils'
 import {
   ActionMenu,
-  Amount,
   Button,
   Card,
+  CodeChip,
   ConfirmDialog,
   DataTable,
-  DateValue,
   Gallery,
   EmptyState,
   Field,
@@ -46,7 +44,6 @@ import {
   PhotoFileField,
   PillGroup,
   SkeletonRows,
-  SpecGrid,
   StatusPill,
   TextArea,
   TextInput,
@@ -79,6 +76,9 @@ import { evaluateModuleAccess } from '../policy'
 import type { ModuleAccessDecision } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { CarExpenseDrawer } from './CarExpenseDrawer'
+import { CarPartsCard } from './CarPartsCard'
+import { CarProfitabilityCard } from './CarProfitabilityCard'
+import { money } from './car-money'
 
 /**
  * The shots that make a car card usable to someone who never saw the car. The
@@ -95,37 +95,20 @@ const CAR_SHOTS = [
 ] as const
 
 /**
- * Car economics are quoted in dollars: the dashboard contract names the same
- * figures `revenueUsd`, while only the till (`totalBalanceUah`) is hryvnia.
- * The car endpoints send bare numbers, so the currency lives here until the
- * contract carries one.
+ * How long the car has been sitting. A yard reads this as money standing
+ * still, so it goes next to the acquisition date rather than being left for
+ * the reader to work out.
  */
-const CAR_CURRENCY = 'USD'
+const daysOnStock = (acquiredAt: string): string | null => {
+  const since = new Date(acquiredAt)
+  if (Number.isNaN(since.getTime())) return null
+  const days = Math.max(
+    0,
+    Math.round((Date.now() - since.getTime()) / 86_400_000),
+  )
+  return `${String(days)} ${plural(days, ['день', 'дні', 'днів'])}`
+}
 
-const money = (value: number) =>
-  new Intl.NumberFormat('uk-UA', {
-    style: 'currency',
-    currency: 'USD',
-    currencyDisplay: 'narrowSymbol',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-    // A round headline sum reads as 10 380 $; only real cents earn decimals.
-    trailingZeroDisplay: 'stripIfInteger',
-  }).format(value)
-
-/**
- * The same money with its cents kept. Used where the figure is a running total
- * of what people typed in — an expense sum of 0,00 $ says the field is empty
- * and waiting, where a bare 0 $ reads as a rounded-off headline.
- */
-const moneyExact = (value: number) =>
-  new Intl.NumberFormat('uk-UA', {
-    style: 'currency',
-    currency: 'USD',
-    currencyDisplay: 'narrowSymbol',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)
 /** Dates arrive as ISO strings; anything unparsable is shown as it came. */
 const day = (value: string) => {
   const parsed = new Date(value)
@@ -190,6 +173,8 @@ function useAccess() {
         : carCreateDecision,
     manageDecision: decision(cabinetModules.cars, 'cars.manage', false),
     partsView: viewAllowed(cabinetModules.parts, 'parts.view'),
+    partsManage:
+      decision(cabinetModules.parts, 'parts.manage', false).kind === 'allowed',
     financeView: viewAllowed(cabinetModules.cars, 'finance.view'),
     financeManage: financeManageDecision.kind === 'allowed',
   }
@@ -582,74 +567,9 @@ const CAR_COLORS = [
   'Червоний',
 ].map((label) => ({ label, swatch: colorSwatch(label) }))
 
-/**
- * Payback against the money that went in. The track is the investment, and
- * what came back fills it; anything past it is drawn beyond the limit line in
- * green, so a car that made money never looks the same as one that broke even.
- *
- * Both figures are written on the bar — colour alone says nothing.
- */
-function PayoffBar({
-  invested,
-  recouped,
-  investedLabel,
-  excessLabel,
-  className,
-}: {
-  invested: number
-  recouped: number
-  /** Sits inside the track: what the full bar is worth. */
-  investedLabel: string
-  /** Sits in the green tail when the car is past its investment. */
-  excessLabel: string | null
-  className?: string
-}) {
-  if (invested <= 0) return null
-  const percent = Math.round((recouped / invested) * 100)
-  const scale = Math.max(percent, 100)
-  const base = (Math.min(percent, 100) / scale) * 100
-  const excess = (Math.max(0, percent - 100) / scale) * 100
-
-  return (
-    <div
-      aria-label={`Окупність ${String(percent)}%`}
-      aria-valuemax={100}
-      aria-valuemin={0}
-      aria-valuenow={percent}
-      aria-valuetext={`${String(percent)}%`}
-      className={cn(
-        'bg-app-input border-app-line flex h-11 items-stretch overflow-hidden rounded-[12px] border',
-        className,
-      )}
-      role="progressbar"
-    >
-      <span
-        className="relative flex min-w-0 items-center px-4"
-        style={{ width: `${String(base)}%` }}
-      >
-        <span aria-hidden className="bg-app-line-2/40 absolute inset-0 block" />
-        <span className="text-app-muted relative truncate font-mono text-[12px] tracking-[0.08em] uppercase">
-          {investedLabel}
-        </span>
-      </span>
-      {excess > 0 ? (
-        <span
-          className="bg-state-ok/90 flex shrink-0 items-center justify-center px-3"
-          style={{ width: `max(${String(excess)}%, 6.75rem)` }}
-        >
-          {excessLabel === null ? null : (
-            <span className="truncate font-mono text-[12px] font-semibold tracking-[0.08em] text-black">
-              {excessLabel}
-            </span>
-          )}
-        </span>
-      ) : null}
-    </div>
-  )
-}
-
 function CarDetail({ base, carId }: { base: string; carId: string }) {
-  const { manageDecision, partsView, financeView, financeManage } = useAccess()
+  const { manageDecision, partsView, partsManage, financeView, financeManage } =
+    useAccess()
   const manage = manageDecision.kind === 'allowed'
   const navigate = useNavigate()
   const [car, setCar] = useState<Car | null>(null)
@@ -721,14 +641,14 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
       </PageBody>
     )
   const profit = car.profitability
-  const paidOff =
-    profit !== null && profit !== undefined && profit.remaining <= 0
   // What "invested" is made of, so the figure is not a number to take on trust.
   const expensesTotal = (car.expenses ?? []).reduce(
     (sum, expense) => sum + expense.amount,
     0,
   )
-  const partsHref = `${base.replace(/\/cars$/, '/parts')}?car_ids=${car.id}`
+  const onStock = daysOnStock(car.acquiredAt)
+  const partsBase = base.replace(/\/cars$/, '/parts')
+  const partsHref = `${partsBase}?car_ids=${car.id}`
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
@@ -749,27 +669,27 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
             <span>Автомобілі</span>
           </p>
         </div>
-        {manage || partsView ? (
+        {manage || partsManage ? (
           <div className="flex flex-wrap items-center gap-2.5">
-            {partsView ? (
+            {manage ? (
               <Button asChild className="px-4 text-sm font-bold">
-                <Link to={partsHref}>
-                  Відкрити на складі
-                  <ChevronRight aria-hidden />
+                <Link to={`${base}/${car.id}/edit`}>Редагувати</Link>
+              </Button>
+            ) : null}
+            {partsManage ? (
+              <Button
+                asChild
+                className="px-5 text-sm font-bold"
+                variant="primary"
+              >
+                {/* The part form picks the car up from the link. */}
+                <Link to={`${partsBase}/new?car_id=${car.id}`}>
+                  Додати запчастину
                 </Link>
               </Button>
             ) : null}
             {manage ? (
               <>
-                <Button
-                  asChild
-                  className="px-5 text-sm font-bold"
-                  variant="primary"
-                >
-                  <Link to={`${base}/${car.id}/edit`}>
-                    Редагувати автомобіль
-                  </Link>
-                </Button>
                 <ActionMenu
                   actions={[
                     {
@@ -800,88 +720,48 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
         {problem ? <Notice tone="danger">{problem}</Notice> : null}
         {copyStatus ? <Notice tone="ok">{copyStatus}</Notice> : null}
 
-        <div className="flex flex-wrap items-start justify-between gap-x-10 gap-y-6">
-          <div className="min-w-0 flex-1">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
             <StatusPill tone={car.status === 'active' ? 'ok' : 'neutral'}>
               {car.status === 'active' ? 'Активний' : 'Архівний'}
             </StatusPill>
-            <h1 className="mt-4 text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
-              {car.code} · {car.brand} {car.model}
-            </h1>
-            <div className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm font-medium">
-              {car.vin ? (
-                <>
-                  <span className="border-app-line bg-app-input text-app-ink rounded-[7px] border px-2.5 py-1 font-mono text-[14px]">
-                    {car.vin}
-                  </span>
-                  <Button
-                    className="min-h-9 px-3 text-[14px] font-semibold"
-                    onClick={() => {
-                      void copyVin(car.vin ?? '')
-                    }}
-                  >
-                    <Copy aria-hidden />
-                    Копіювати VIN
-                  </Button>
-                </>
-              ) : null}
-              <span>
-                {car.year}
-                {car.color ? ` · ${car.color}` : ''}
-              </span>
-            </div>
+            <p className="text-app-muted text-[13px]">
+              на складі з {day(car.acquiredAt)}
+              {onStock === null ? '' : ` · ${onStock}`}
+            </p>
           </div>
-          {financeView && profit ? (
-            <dl className="border-app-line bg-app-raised grid shrink-0 grid-cols-3 gap-x-8 gap-y-3 rounded-[16px] border px-7 py-5">
-              {[
-                {
-                  key: 'invested',
-                  label: 'Інвестовано',
-                  value: money(profit.invested),
-                  tone: 'text-white',
-                },
-                {
-                  key: 'recouped',
-                  label: 'Повернено',
-                  value: money(profit.recouped),
-                  tone: 'text-white',
-                },
-                {
-                  key: 'result',
-                  label: paidOff ? 'Прибуток' : 'Лишилось',
-                  value: paidOff
-                    ? `+${money(-profit.remaining)}`
-                    : money(profit.remaining),
-                  tone: paidOff ? 'text-state-ok' : 'text-white',
-                },
-              ].map((stat) => (
-                <div className="grid gap-2" key={stat.key}>
-                  <dt
-                    className={cn(
-                      'font-mono text-[11px] tracking-[0.14em] whitespace-nowrap uppercase',
-                      stat.key === 'result' && paidOff
-                        ? 'text-state-ok'
-                        : 'text-app-dim',
-                    )}
-                  >
-                    {stat.label}
-                  </dt>
-                  <dd
-                    className={cn(
-                      'text-[30px] leading-none font-bold tracking-[-0.02em] whitespace-nowrap tabular-nums',
-                      stat.tone,
-                    )}
-                  >
-                    {stat.value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          ) : null}
+          <h1 className="mt-3.5 text-[38px] leading-[1.04] font-extrabold tracking-[-0.03em] text-balance text-white sm:text-[46px] lg:text-[48px]">
+            {car.brand} {car.model} <span className="text-app-dim">·</span>{' '}
+            {car.year}
+          </h1>
+          <div className="mt-3.5 flex flex-wrap items-center gap-2.5">
+            <span className="border-app-line-2 text-app-ink rounded-[7px] border bg-white/[0.05] px-2.5 py-1 font-mono text-[14px] font-medium">
+              {car.code}
+            </span>
+            {car.vin ? (
+              <CodeChip
+                code={car.vin}
+                label="Копіювати VIN"
+                onCopy={() => {
+                  void copyVin(car.vin ?? '')
+                }}
+              />
+            ) : null}
+            {car.color ? (
+              <span className="text-app-muted flex items-center gap-2 text-sm font-medium">
+                <span
+                  aria-hidden
+                  className="border-app-line-2 size-[11px] rounded-full border"
+                  style={{ background: colorSwatch(car.color) }}
+                />
+                {car.color}
+              </span>
+            ) : null}
+          </div>
         </div>
 
         <div className="mt-4 grid items-start gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
-          <section aria-label="Фото та витрати" className="grid min-w-0 gap-6">
+          <section aria-label="Фото та нотатки" className="grid min-w-0 gap-6">
             <Card
               aside={
                 <span className="text-app-dim font-mono text-[12px] tracking-[0.1em] uppercase">
@@ -917,6 +797,38 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
               />
             </Card>
 
+            <Card title="Нотатки">
+              {car.notes ? (
+                <p className="text-app-ink text-[15px] leading-[1.55] whitespace-pre-line text-pretty">
+                  {car.notes}
+                </p>
+              ) : (
+                <p className="text-app-muted text-[14px]">
+                  Нотаток немає. Їх можна додати в редагуванні автомобіля.
+                </p>
+              )}
+            </Card>
+          </section>
+
+          <aside
+            aria-label="Зведення автомобіля"
+            className="grid min-w-0 gap-6"
+          >
+            {financeView && profit ? (
+              <CarProfitabilityCard
+                expensesTotal={expensesTotal}
+                profit={profit}
+                purchasePrice={car.purchasePrice}
+              />
+            ) : null}
+
+            {profit ? (
+              <CarPartsCard
+                partsHref={partsView ? partsHref : null}
+                profit={profit}
+              />
+            ) : null}
+
             {financeView ? (
               <Expenses
                 car={car}
@@ -925,164 +837,6 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
                 onProblem={setProblem}
               />
             ) : null}
-          </section>
-
-          <aside
-            aria-label="Зведення автомобіля"
-            className="grid min-w-0 gap-6"
-          >
-            {financeView && profit ? (
-              <Card
-                aside={
-                  <span className="text-app-muted text-[14px] font-semibold">
-                    {profit.partsTotal}{' '}
-                    {plural(profit.partsTotal, [
-                      'запчастина',
-                      'запчастини',
-                      'запчастин',
-                    ])}{' '}
-                    · {profit.partsSold}{' '}
-                    {plural(profit.partsSold, [
-                      'продана',
-                      'продані',
-                      'продано',
-                    ])}
-                  </span>
-                }
-                title="Прибутковість авто"
-              >
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-0.5">
-                  <p className="flex items-baseline text-[46px] leading-none font-extrabold tracking-[-0.03em] text-white tabular-nums">
-                    {profit.recoupedPercent ?? 0}
-                    <span className="text-app-muted text-[22px] font-bold">
-                      %
-                    </span>
-                  </p>
-                  <p className="text-app-muted grid text-[14px]">
-                    <span className="font-semibold">окупності</span>
-                    <span className="text-app-dim">
-                      Повернення проти вкладеного
-                    </span>
-                  </p>
-                </div>
-
-                <PayoffBar
-                  className="mt-[18px]"
-                  excessLabel={paidOff ? `+${money(-profit.remaining)}` : null}
-                  investedLabel={`Вкладено ${money(profit.invested)}`}
-                  invested={profit.invested}
-                  recouped={profit.recouped}
-                />
-
-                <p
-                  className={cn(
-                    'mt-2.5 text-[14px] font-semibold',
-                    paidOff ? 'text-state-ok' : 'text-app-muted',
-                  )}
-                >
-                  {paidOff
-                    ? `окупилось, і ще ${moneyExact(-profit.remaining)} понад вкладене`
-                    : `лишилось повернути ${moneyExact(profit.remaining)}`}
-                </p>
-
-                <dl className="border-app-line mt-[22px] grid grid-cols-3 gap-x-6 gap-y-3 border-t pt-5">
-                  {[
-                    {
-                      key: 'sold',
-                      label: 'Продано',
-                      value: `${String(profit.partsSold)} ${plural(profit.partsSold, ['позиція', 'позиції', 'позицій'])}`,
-                      muted: profit.partsSold === 0,
-                    },
-                    {
-                      key: 'stock',
-                      label: 'На складі',
-                      value: `${String(profit.partsAvailable)} ${plural(profit.partsAvailable, ['позиція', 'позиції', 'позицій'])}`,
-                      muted: profit.partsAvailable === 0,
-                    },
-                    {
-                      key: 'expenses',
-                      label: 'Витрати',
-                      value: moneyExact(expensesTotal),
-                      muted: expensesTotal === 0,
-                    },
-                  ].map((stat) => (
-                    <div className="grid gap-1.5" key={stat.key}>
-                      <dt className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
-                        {stat.label}
-                      </dt>
-                      <dd
-                        className={cn(
-                          'text-[16px] font-semibold tabular-nums',
-                          stat.muted ? 'text-app-dim' : 'text-white',
-                        )}
-                      >
-                        {stat.value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </Card>
-            ) : null}
-
-            <Card title="Характеристики">
-              <SpecGrid
-                specs={[
-                  { label: 'Рік', value: String(car.year) },
-                  {
-                    label: 'Колір',
-                    value: car.color ? (
-                      <span className="flex items-center gap-2">
-                        <span
-                          aria-hidden
-                          className="border-app-line-2 size-2.5 rounded-full border"
-                          style={{ background: colorSwatch(car.color) }}
-                        />
-                        {car.color}
-                      </span>
-                    ) : (
-                      'не вказано'
-                    ),
-                  },
-                  {
-                    label: 'Дата придбання',
-                    value: (
-                      <DateValue value={car.acquiredAt} withTime={false} />
-                    ),
-                  },
-                  ...(financeView
-                    ? [
-                        {
-                          label: 'Ціна придбання',
-                          value: (
-                            <Amount
-                              currency={CAR_CURRENCY}
-                              value={car.purchasePrice}
-                            />
-                          ),
-                        },
-                      ]
-                    : []),
-                  {
-                    label: 'VIN',
-                    value: (
-                      <span className="font-mono font-normal break-all">
-                        {car.vin ?? 'не вказано'}
-                      </span>
-                    ),
-                    wide: true,
-                  },
-                  {
-                    label: 'Нотатки',
-                    value: (
-                      <span className="text-app-ink font-normal">
-                        {car.notes ?? 'немає'}
-                      </span>
-                    ),
-                    wide: true,
-                  },
-                ]}
-              />
-            </Card>
           </aside>
         </div>
       </div>
@@ -1212,47 +966,27 @@ function Expenses({
   return (
     <Card
       aside={
-        <span className="text-app-muted text-[14px] font-semibold">
-          Разом понад ціну придбання: {moneyExact(total)}
-        </span>
+        canManage ? (
+          <Button
+            className="min-h-9 px-3.5 text-[13px] font-semibold"
+            disabled={busy}
+            onClick={() => openForm(null)}
+          >
+            <Plus aria-hidden />
+            Додати
+          </Button>
+        ) : null
       }
-      bodyClassName="grid gap-6"
+      bodyClassName="grid gap-5"
       title="Витрати"
     >
-      <p className="text-app-dim text-[14px] leading-[1.5]">
-        Транспортування, мийка, розмитнення — усе, що ви вклали в авто понад
-        ціну придбання. Кожна витрата збільшує інвестовану суму.
+      <p className="text-app-dim text-[12.5px] leading-[1.45] text-pretty">
+        Транспортування, мийка, розмитнення — додаються до вкладеного.
       </p>
       {expenses.length === 0 ? (
-        <div className="border-app-line grid gap-5 rounded-[14px] border p-5">
-          <div className="flex min-w-0 flex-1 items-center gap-3.5">
-            <span
-              aria-hidden
-              className="bg-brand/12 text-brand grid size-11 shrink-0 place-items-center rounded-[12px]"
-            >
-              <Wallet className="size-5" />
-            </span>
-            <span className="grid gap-0.5">
-              <span className="text-[16px] font-bold text-white">
-                Витрат ще немає
-              </span>
-              <span className="text-app-dim text-[14px]">
-                Додайте першу, щоб бачити реальну окупність.
-              </span>
-            </span>
-          </div>
-          {canManage ? (
-            <Button
-              className="min-h-12 justify-self-start px-5 text-sm font-bold whitespace-nowrap"
-              disabled={busy}
-              onClick={() => openForm(null)}
-              variant="primary"
-            >
-              <Plus aria-hidden />
-              Додати витрату
-            </Button>
-          ) : null}
-        </div>
+        <p className="text-app-muted text-[13px] leading-5 text-pretty">
+          Витрат ще немає. Вкладене дорівнює ціні придбання.
+        </p>
       ) : (
         <DataTable
           caption="Витрати автомобіля"

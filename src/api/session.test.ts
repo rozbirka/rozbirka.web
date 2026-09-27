@@ -6,7 +6,7 @@ import axios, {
   type CreateAxiosDefaults,
   type InternalAxiosRequestConfig,
 } from 'axios'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { credentials } from './credentials'
 import { normalizeApiProblem } from './errors'
 import { createSessionApi } from './session'
@@ -88,6 +88,8 @@ beforeEach(() => {
   credentials.clear()
   vi.restoreAllMocks()
 })
+
+afterEach(() => vi.unstubAllGlobals())
 
 it('posts OTP send to the same-origin session route and narrows the response', async () => {
   const harness = sessionHarness((config) =>
@@ -194,6 +196,69 @@ it('uses credentials: include semantics through withCredentials', async () => {
   })
   expect(harness.requests[0]?.withCredentials).toBe(true)
   expect(credentials.getAccess()).toBe('fresh-token')
+})
+
+it('shares a rotating refresh between bootstrap and concurrent API recovery', async () => {
+  let release!: () => void
+  const pending = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const harness = sessionHarness(async (config) => {
+    await pending
+    return response(config, { accessToken: 'rotated-token', expiresIn: 900 })
+  })
+
+  const bootstrap = harness.session.refresh()
+  const recovery = harness.session.refresh()
+  release()
+  await expect(Promise.all([bootstrap, recovery])).resolves.toEqual([
+    { accessToken: 'rotated-token', expiresIn: 900 },
+    { accessToken: 'rotated-token', expiresIn: 900 },
+  ])
+  expect(harness.requests).toHaveLength(1)
+  expect(credentials.getAccess()).toBe('rotated-token')
+  await harness.session.refresh()
+  expect(harness.requests).toHaveLength(2)
+})
+
+it('serializes rotating cookies across independent browser contexts', async () => {
+  // Model the browser's origin-wide lock; each context has its own session API.
+  const tails = new Map<string, Promise<unknown>>()
+  vi.stubGlobal('navigator', {
+    locks: {
+      request(
+        name: string,
+        _options: unknown,
+        callback: () => Promise<unknown>,
+      ) {
+        const next = (tails.get(name) ?? Promise.resolve()).then(callback)
+        tails.set(
+          name,
+          next.catch(() => undefined),
+        )
+        return next
+      },
+    },
+  })
+  let cookieVersion = 0
+  const adapter: AxiosAdapter = async (config) => {
+    const presented = cookieVersion
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    if (presented !== cookieVersion) throw failure(config, 400)
+    cookieVersion += 1
+    return response(config, {
+      accessToken: `token-${cookieVersion}`,
+      expiresIn: 900,
+    })
+  }
+  const first = sessionHarness(adapter).session
+  const second = sessionHarness(adapter).session
+  await expect(
+    Promise.all([first.refresh(), second.refresh()]),
+  ).resolves.toEqual([
+    { accessToken: 'token-1', expiresIn: 900 },
+    { accessToken: 'token-2', expiresIn: 900 },
+  ])
 })
 
 it('maps an absent refresh cookie to session-expired', async () => {

@@ -6,6 +6,8 @@ export interface UpdateBusinessRequest {
   name?: string
   city?: string | null
   logoUrl?: string | null
+  /** Omitted leaves the delivery deposit policy as it is. */
+  requireDeliveryDeposit?: boolean
 }
 
 const requestConfig = (options: RequestOptions) =>

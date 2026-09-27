@@ -121,6 +121,7 @@ const cabinet = (
       isActive: true,
       createdAt: '2026-08-01T00:00:00Z',
       roleName: 'owner',
+      requireDeliveryDeposit: true,
     },
     snapshot: {
       userId: 'user-1',
@@ -262,16 +263,14 @@ it('applies car quota only to create while allowing existing-car operations', as
     </ToastProvider>,
   )
 
-  expect(
-    await screen.findByRole('link', { name: 'Редагувати автомобіль' }),
-  ).toBeVisible()
-  const primaryColumn = screen.getByRole('region', {
-    name: 'Фото та витрати',
+  expect(await screen.findByRole('link', { name: 'Редагувати' })).toBeVisible()
+  const summary = screen.getByRole('complementary', {
+    name: 'Зведення автомобіля',
   })
+  expect(within(summary).getByRole('button', { name: 'Додати' })).toBeVisible()
   expect(
-    within(primaryColumn).getByRole('button', { name: 'Додати витрату' }),
+    screen.getByText('Витрат ще немає. Вкладене дорівнює ціні придбання.'),
   ).toBeVisible()
-  expect(screen.getByText('Витрат ще немає')).toBeVisible()
 })
 
 it('does not reveal server financial values without finance.view', async () => {
@@ -284,12 +283,13 @@ it('does not reveal server financial values without finance.view', async () => {
     </MemoryRouter>,
   )
 
-  expect(await screen.findByRole('heading', { name: /CAR-001/ })).toBeVisible()
+  expect(await screen.findByRole('heading', { name: /BMW X5/ })).toBeVisible()
+  expect(screen.getByText('CAR-001')).toBeVisible()
   expect(screen.queryByText('Ціна придбання')).not.toBeInTheDocument()
   expect(screen.queryByText(/12\s000/)).not.toBeInTheDocument()
   expect(screen.queryByText('Інвестовано: 12 000')).not.toBeInTheDocument()
   expect(
-    screen.queryByRole('button', { name: 'Додати витрату' }),
+    screen.queryByRole('button', { name: 'Додати' }),
   ).not.toBeInTheDocument()
 })
 
@@ -308,11 +308,9 @@ it('keeps finance management independent from cars.manage and car quota', async 
     </MemoryRouter>,
   )
 
+  expect(await screen.findByRole('button', { name: 'Додати' })).toBeVisible()
   expect(
-    await screen.findByRole('button', { name: 'Додати витрату' }),
-  ).toBeVisible()
-  expect(
-    screen.queryByRole('link', { name: 'Редагувати автомобіль' }),
+    screen.queryByRole('link', { name: 'Редагувати' }),
   ).not.toBeInTheDocument()
 })
 
@@ -350,8 +348,8 @@ it('refetches authoritative detail after an expense mutation and disables duplic
     </ToastProvider>,
   )
 
-  await screen.findByRole('heading', { name: /CAR-001/ })
-  await user.click(screen.getByRole('button', { name: 'Додати витрату' }))
+  await screen.findByRole('heading', { name: /BMW X5/ })
+  await user.click(screen.getByRole('button', { name: 'Додати' }))
   const form = within(await screen.findByRole('dialog'))
   expect(screen.getByRole('dialog')).toHaveClass('sm:right-0')
   await user.type(form.getByLabelText('Назва витрати'), 'Транспорт')
@@ -365,7 +363,7 @@ it('refetches authoritative detail after an expense mutation and disables duplic
   await waitFor(() => expect(carsApi.get).toHaveBeenCalledTimes(2))
   // The refreshed figure is what profitability is judged by, so assert it on
   // the labelled stat rather than wherever the number happens to appear first.
-  const remaining = await screen.findByText('Лишилось')
+  const remaining = await screen.findByText('До окупності')
   expect(remaining.parentElement).toHaveTextContent(/7\s500/)
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(screen.getByRole('status')).toHaveTextContent('Витрату додано.')
@@ -389,8 +387,8 @@ it('rechecks cars.view before dispatching an expense mutation', async () => {
     </ToastProvider>,
   )
 
-  await screen.findByRole('heading', { name: /CAR-001/ })
-  await user.click(screen.getByRole('button', { name: 'Додати витрату' }))
+  await screen.findByRole('heading', { name: /BMW X5/ })
+  await user.click(screen.getByRole('button', { name: 'Додати' }))
   const form = within(await screen.findByRole('dialog'))
   await user.type(form.getByLabelText('Назва витрати'), 'Транспорт')
   await user.type(form.getByLabelText('Сума витрати'), '500')
@@ -509,9 +507,9 @@ it('renders car identity, gallery, and VIN copy', async () => {
     </MemoryRouter>,
   )
 
-  // The year reads both in the identity line and in the spec cell.
-  expect(await screen.findByText('Рік')).toBeVisible()
-  expect(screen.getAllByText('2020').length).toBeGreaterThan(0)
+  // The year is part of the car's name now, not a spec row of its own.
+  await screen.findByRole('heading', { name: /BMW X5/ })
+  expect(screen.getAllByText(/2020/).length).toBeGreaterThan(0)
   // The large frame loads the original; the thumbnail is for the strip.
   expect(
     screen.getByAltText(/Передня частина — фото автомобіля/),
@@ -541,9 +539,10 @@ it('links to the warehouse filtered by this car without duplicating its parts li
     </MemoryRouter>,
   )
 
-  expect(
-    await screen.findByRole('link', { name: 'Відкрити на складі' }),
-  ).toHaveAttribute('href', '/app/demo/parts?car_ids=car-1')
+  expect(await screen.findByRole('link', { name: 'Усі 3 →' })).toHaveAttribute(
+    'href',
+    '/app/demo/parts?car_ids=car-1',
+  )
   expect(
     screen.queryByRole('region', { name: 'Запчастини авто' }),
   ).not.toBeInTheDocument()
@@ -1060,9 +1059,7 @@ it('keeps destructive car actions out of the header row', async () => {
     </MemoryRouter>,
   )
 
-  expect(
-    await screen.findByRole('link', { name: 'Редагувати автомобіль' }),
-  ).toBeVisible()
+  expect(await screen.findByRole('link', { name: 'Редагувати' })).toBeVisible()
   expect(
     screen.queryByRole('button', { name: 'Видалити' }),
   ).not.toBeInTheDocument()

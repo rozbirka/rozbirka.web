@@ -12,6 +12,11 @@ export interface SectionPanelProps {
   footer?: ReactNode
   /** Drop to 3 when this section sits inside another one. */
   headingLevel?: 2 | 3
+  /**
+   * `plain` drops the panel's own frame and separates sections with a rule
+   * instead — for a drawer, where a card inside a card reads as noise.
+   */
+  variant?: 'panel' | 'plain'
   className?: string
 }
 
@@ -26,6 +31,7 @@ export function SectionPanel({
   children,
   footer,
   headingLevel = 2,
+  variant = 'panel',
   className,
 }: SectionPanelProps) {
   const titleId = useId()
@@ -35,11 +41,18 @@ export function SectionPanel({
     <section
       aria-labelledby={titleId}
       className={cn(
-        'border-app-line rounded-panel bg-app-raised border',
+        variant === 'plain'
+          ? 'border-app-line border-b last:border-b-0'
+          : 'border-app-line rounded-panel bg-app-raised border',
         className,
       )}
     >
-      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 pt-4">
+      <header
+        className={cn(
+          'flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1',
+          variant === 'plain' ? 'pt-5' : 'px-4 pt-4',
+        )}
+      >
         <Heading className="text-base font-semibold text-white" id={titleId}>
           {title}
         </Heading>
@@ -50,7 +63,9 @@ export function SectionPanel({
           <p className="text-app-dim w-full text-[13.5px]">{description}</p>
         )}
       </header>
-      <div className="grid gap-3 p-4">{children}</div>
+      <div className={cn('grid gap-3', variant === 'plain' ? 'py-4' : 'p-4')}>
+        {children}
+      </div>
       {footer === undefined ? null : <PanelFooter>{footer}</PanelFooter>}
     </section>
   )

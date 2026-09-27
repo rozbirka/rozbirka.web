@@ -1,5 +1,6 @@
 import type { StatusTone } from '@/components/app'
 import type { ShipmentDraft, Shipment } from '@/api/shipping'
+import { hryvnia } from './delivery-money'
 
 /** Core refuses to create a waybill on a quote older than this. */
 export const QUOTE_TTL_MS = 24 * 60 * 60 * 1000
@@ -140,8 +141,8 @@ const sameContact = (
 ): boolean =>
   a.name === b.name &&
   a.phone === b.phone &&
-  a.settlementId === b.settlementId &&
-  a.divisionId === b.divisionId &&
+  a.settlementRef === b.settlementRef &&
+  a.warehouseRef === b.warehouseRef &&
   (a.companyName ?? null) === (b.companyName ?? null) &&
   (a.companyTin ?? null) === (b.companyTin ?? null)
 
@@ -164,7 +165,6 @@ export function sameDraft(a: ShipmentDraft, b: ShipmentDraft): boolean {
       )
     }) &&
     a.declaredValueUah === b.declaredValueUah &&
-    a.returnEstimateUah === b.returnEstimateUah &&
     a.payerType === b.payerType &&
     a.description === b.description &&
     (a.dispatchPointId ?? null) === (b.dispatchPointId ?? null)
@@ -175,15 +175,12 @@ export function sameDraft(a: ShipmentDraft, b: ShipmentDraft): boolean {
 const AGREED_TOTAL_MAX = 9_999_999_999
 
 /**
- * The agreed order total as Core will take it, or null when what the manager
- * typed would be refused. A comma counts as the decimal separator: the cabinet
- * is Ukrainian and the numeric keypad offers one.
+ * The agreed order total as Core will take it: an ordinary hryvnia figure that
+ * also stays under Core's ceiling.
  */
 export function agreedTotal(input: string): number | null {
-  const text = input.trim()
-  if (!/^\d+(?:[.,]\d{1,2})?$/.test(text)) return null
-  const value = Number(text.replace(',', '.'))
-  return value > 0 && value <= AGREED_TOTAL_MAX ? value : null
+  const value = hryvnia(input)
+  return value !== null && value <= AGREED_TOTAL_MAX ? value : null
 }
 
 /** Prepayment is delivery plus the return the manager estimated — not a tariff. */

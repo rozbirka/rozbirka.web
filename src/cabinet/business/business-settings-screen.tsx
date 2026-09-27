@@ -8,6 +8,7 @@ import {
 import { Link } from 'react-router'
 import { Plus } from 'lucide-react'
 import { Button, Field, Notice, TextInput } from '@/components/app'
+import { Switch } from '../integrations/dispatch-point-form'
 import { businessApi } from '@/api/business'
 import { inventoryApi, type Warehouse } from '@/api/inventory'
 import { useCabinet } from '../CabinetContext'
@@ -118,6 +119,7 @@ export function BusinessSettingsScreen() {
   const generation = cabinet.snapshot?.generation
   const [name, setName] = useState(tenant?.name ?? '')
   const [city, setCity] = useState(tenant?.city ?? '')
+  const [deposit, setDeposit] = useState(tenant?.requireDeliveryDeposit ?? true)
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [warehouses, setWarehouses] = useState<Warehouse[] | null>(null)
   const mountedRef = useRef(true)
@@ -134,6 +136,7 @@ export function BusinessSettingsScreen() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- drafts reset only at a tenant scope boundary.
     setName(tenant?.name ?? '')
     setCity(tenant?.city ?? '')
+    setDeposit(tenant?.requireDeliveryDeposit ?? true)
     setSaveState('idle')
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the reset is intentionally keyed by the cabinet scope.
   }, [generation, tenant?.id])
@@ -173,7 +176,9 @@ export function BusinessSettingsScreen() {
   const busy = saveState === 'pending'
   const canSave = !busy && normalizedName.length >= 2
   const changed =
-    normalizedName !== tenant.name || normalizedCity !== (tenant.city ?? '')
+    normalizedName !== tenant.name ||
+    normalizedCity !== (tenant.city ?? '') ||
+    deposit !== tenant.requireDeliveryDeposit
 
   const save = async (event: FormEvent) => {
     event.preventDefault()
@@ -190,7 +195,11 @@ export function BusinessSettingsScreen() {
     try {
       const updated = await businessApi.update(
         tenant.id,
-        { name: normalizedName, city: normalizedCity || null },
+        {
+          name: normalizedName,
+          city: normalizedCity || null,
+          requireDeliveryDeposit: deposit,
+        },
         { signal: scope.signal },
       )
       const latest = latestCabinetRef.current
@@ -205,6 +214,7 @@ export function BusinessSettingsScreen() {
       }
       setName(updated.name)
       setCity(updated.city ?? '')
+      setDeposit(updated.requireDeliveryDeposit)
       setSaveState('success')
       void Promise.resolve(cabinet.switchTenant(updated.id)).catch(
         () => undefined,
@@ -218,6 +228,7 @@ export function BusinessSettingsScreen() {
   const reset = () => {
     setName(tenant.name)
     setCity(tenant.city ?? '')
+    setDeposit(tenant.requireDeliveryDeposit)
     setSaveState('idle')
   }
 
@@ -443,6 +454,27 @@ export function BusinessSettingsScreen() {
                 ))}
               </div>
               <Note>{NO_COSTING}</Note>
+            </div>
+            {/* The one rule in this step the service actually keeps. It sits
+                above the rest so a real control is not mistaken for the dead
+                ones below it. */}
+            <div className="border-app-line-2 flex items-start gap-3 rounded-[14px] border px-3.5 py-3">
+              <Switch
+                checked={deposit}
+                disabled={busy}
+                label="Вимагати депозит за доставку"
+                onChange={setDeposit}
+              />
+              <span className="min-w-0">
+                <span className="text-app-ink block text-[13.5px] font-medium">
+                  Вимагати депозит за доставку
+                </span>
+                <span className="text-app-muted mt-0.5 block text-[12.5px] leading-5 text-pretty">
+                  {deposit
+                    ? 'ТТН не створюється, поки клієнт не внесе вартість доставки в обидва боки. Вимкніть, якщо готові відправляти без передоплати.'
+                    : 'Відправляєте без передоплати. Якщо посилку не заберуть, обидві дороги оплачує розбірка.'}
+                </span>
+              </span>
             </div>
             <div className="grid gap-2">
               {RULES.map((rule) => (

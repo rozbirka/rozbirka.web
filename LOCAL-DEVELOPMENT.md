@@ -63,7 +63,26 @@ Wait for `/health/core` and `/health/identity` on localhost:8088 to return 200.
 Aspire starts dependencies and AsyncWorker; do not create duplicates. A running
 AsyncWorker process alone does not prove message handling.
 
-## Build and serve the web with BFF
+## Daily development: hot reload with BFF
+
+Run `npm run dev:local` from `rozbirka.web`. This starts Vite on loopback
+port 5173 and the local Wrangler BFF on loopback port 8787. Open
+`http://localhost:5173`; React/CSS edits update through Vite without rebuilding.
+The command pins `VITE_API_URL` and `CORE_ORIGIN` to `http://localhost:8088`.
+Start the local backend separately as described above.
+
+Vite proxies `/session/*` to the BFF while preserving Host, Origin, paths and
+cookies. Do not set `changeOrigin: true` or weaken the BFF origin checks.
+Existing `.dev.vars` secrets and `.wrangler/state` remain unchanged.
+The command refuses occupied ports; stop the old Wrangler on 5173 first.
+Ctrl+C stops both processes; if either exits, the other is stopped too.
+Plain `npm run dev` starts only Vite and requires a separately running BFF.
+
+Wrangler still requires the configured `dist` assets directory. For a fresh
+checkout, run the development build below once before `dev:local`. The UI in
+hot-reload mode is served from source, not from those built assets.
+
+## Build and serve the web with BFF (release-like verification)
 
 From `/Users/admin/code/rozbirka/rozbirka.web`, preserve existing environment
 settings and confirm `.dev.vars` has the local Identity origin without printing
@@ -81,8 +100,8 @@ npx wrangler dev --local --ip 127.0.0.1 --port 5173 --var CORE_ORIGIN:http://loc
 
 For a restart, resolve and stop only this existing web process, then relaunch.
 Do not kill unrelated Node processes or restart the database unnecessarily.
-Wrangler serves built assets: source edits require another build. This is not
-a Vite hot-reload setup. Do not claim fresh source is served without rebuilding.
+In this release-like mode Wrangler serves built assets: source edits require
+another build. For everyday development use `npm run dev:local` instead.
 
 ## Completion checks
 
@@ -104,6 +123,24 @@ any remaining login or browser-level blocker.
 
 ## Integrated Core authentication and registration
 
+### Local Nova Poshta encryption key
+
+Also export the selected Core checkout's ignored `.env.cabinet.local` before
+starting Aspire (`set -a; source .env.cabinet.local; set +a`). This enables
+the local cabinet rollout (`Mode=on`, `EmergencyOff=false`), including the
+Integrations menu; otherwise the server defaults hide these modules. This
+does not bypass tenant permissions and must not alter QA/production settings.
+
+For the selected `feat/nova-poshta-integration` Core checkout, preserve
+`/Users/admin/code/rozbirka/.worktrees/core-auth-web-billing/rozbirka.core/.env.nova-poshta.local`.
+This ignored, mode-600 file contains the local `Integrations__EncryptionKey`.
+Before launching Aspire from that checkout, load it with `set -a`,
+`source .env.nova-poshta.local`, then `set +a`, so API and AsyncWorker inherit
+the same key. Never print, commit, or regenerate it during routine restarts.
+The key was generated locally on 2026-09-25; credentials encrypted with the
+previous unavailable key need to be entered again through integration settings.
+Do not delete existing integration or shipment records to resolve this.
+
 For the auth cutover, start the coordinated Core checkout on the current feature
 branch; the earlier workstation checkout above does not implement this contract.
 `CORE_ORIGIN` now points to the local gateway (`http://localhost:8088`); its auth
@@ -112,7 +149,7 @@ migration procedure before attempting authentication against existing users.
 
 The Worker requires private secret `AUTH_REGISTRATION_KEY`, matching Core's
 `AuthRegistration__ApiKey`. For local development only, put
-`AUTH_REGISTRATION_KEY=rozbirka-local-registration-development-only` in the
+`AUTH_REGISTRATION_KEY=<local-registration-key>` in the
 ignored `.dev.vars` when Core's AppHost uses its matching Development default.
 There is no Worker runtime fallback. Never use this development value in QA or
 production, and never put the key in a `VITE_*` variable or Wrangler `vars`.

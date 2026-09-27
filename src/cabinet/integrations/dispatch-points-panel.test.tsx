@@ -19,6 +19,8 @@ vi.mock('@/api/integrations', () => ({
     deactivateDispatchPoint: vi.fn(),
     settlements: vi.fn(),
     divisions: vi.fn(),
+    senders: vi.fn(),
+    senderContacts: vi.fn(),
   },
 }))
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
@@ -34,6 +36,7 @@ const tenant: Tenant = {
   isActive: true,
   createdAt: '2026-08-01T10:00:00Z',
   roleName: 'owner',
+  requireDeliveryDeposit: true,
 }
 
 const cabinet = () =>
@@ -83,8 +86,12 @@ const mainPoint: NovaPoshtaDispatchPoint = {
   name: 'Головний склад',
   senderName: 'Олена Коваль',
   phone: '+380672147730',
-  settlementId: 10,
-  divisionId: 12,
+  settlementRef: '8d5a980d-391c-11dd-90d9-001a92567626',
+  warehouseRef: '1ec09d2e-e1c2-11e3-8c4a-0050568002cf',
+  counterpartyRef: '5ace4a2e-13ee-11e5-add9-005056887b8d',
+  contactRef: '5ace4a2e-13ee-11e5-add9-005056887b8e',
+  warehouseName: 'Відділення №12: вул. Небесної сотні, 6',
+  settlementName: 'Житомир',
   companyTin: '42918370',
   companyName: 'ТОВ «Розбірка Житомир»',
   isActive: true,
@@ -96,16 +103,17 @@ const sparePoint: NovaPoshtaDispatchPoint = {
   id: 'point-2',
   name: 'Львівський розбір',
   senderName: 'Андрій Гринь',
-  divisionId: 8,
+  warehouseRef: '1ec09d2e-e1c2-11e3-8c4a-0050568002d0',
+  warehouseName: 'Відділення №8: вул. Наукова, 45',
   companyTin: null,
   companyName: null,
   isDefault: false,
 }
 
-const division = (id: number, name: string) => ({
-  id,
+const division = (ref: string, name: string) => ({
+  ref,
   name,
-  settlementId: 10,
+  settlementRef: '8d5a980d-391c-11dd-90d9-001a92567626',
   countryCode: 'UA',
   sendingAllowed: true,
   receivingAllowed: true,
@@ -120,16 +128,37 @@ beforeEach(() => {
   ])
   vi.mocked(integrationsApi.divisions).mockResolvedValue({
     items: [
-      division(12, 'Відділення №12: вул. Небесної сотні, 6'),
-      division(8, 'Відділення №8: вул. Наукова, 45'),
+      division(
+        '1ec09d2e-e1c2-11e3-8c4a-0050568002cf',
+        'Відділення №12: вул. Небесної сотні, 6',
+      ),
+      division(
+        '1ec09d2e-e1c2-11e3-8c4a-0050568002d0',
+        'Відділення №8: вул. Наукова, 45',
+      ),
     ],
     page: 1,
     lastPage: 1,
   })
+  vi.mocked(integrationsApi.senders).mockResolvedValue([
+    {
+      ref: '5ace4a2e-13ee-11e5-add9-005056887b8d',
+      name: 'ФОП Коваль',
+      tin: '1234567890',
+      isOrganization: false,
+    },
+  ])
+  vi.mocked(integrationsApi.senderContacts).mockResolvedValue([
+    {
+      ref: '5ace4a2e-13ee-11e5-add9-005056887b8e',
+      name: 'Олена Коваль',
+      phone: '380672147730',
+    },
+  ])
   vi.mocked(integrationsApi.settlements).mockResolvedValue({
     items: [
       {
-        id: 10,
+        ref: '8d5a980d-391c-11dd-90d9-001a92567626',
         name: 'Житомир',
         prohibitedSending: null,
         prohibitedIssuance: null,
@@ -143,7 +172,7 @@ beforeEach(() => {
 const renderScreen = () =>
   render(<DispatchPointsPanel integrationId="integration-1" />)
 
-it('resolves the branch name from the carrier catalogue instead of showing its code', async () => {
+it('names the branch from the point itself rather than the carrier catalogue', async () => {
   renderScreen()
 
   const list = await screen.findByRole('region', { name: 'Точки відправлення' })
@@ -151,9 +180,9 @@ it('resolves the branch name from the carrier catalogue instead of showing its c
     await within(list).findByText('Відділення №12: вул. Небесної сотні, 6'),
   ).toBeVisible()
   expect(within(list).getByText('За замовчуванням')).toBeVisible()
-  expect(within(list).queryByText('12')).toBeNull()
-  // One settlement is shared by both points, so it is looked up once.
-  expect(integrationsApi.divisions).toHaveBeenCalledTimes(1)
+  // The name was stored when the branch was picked, so listing points costs
+  // the carrier nothing.
+  expect(integrationsApi.divisions).not.toHaveBeenCalled()
 })
 
 it('adds a point from the carrier catalogue and makes it the default', async () => {
@@ -178,7 +207,17 @@ it('adds a point from the carrier catalogue and makes it the default', async () 
   expect(division).toBeDisabled()
   await user.click(await screen.findByRole('button', { name: /^Житомир/ }))
   await vi.waitFor(() => expect(division).toBeEnabled())
-  await user.selectOptions(division, '8')
+  await user.selectOptions(division, '1ec09d2e-e1c2-11e3-8c4a-0050568002d0')
+  // Nova Poshta will not take a sender typed into a form, so the point has to
+  // name one already registered against the key.
+  await user.selectOptions(
+    await screen.findByLabelText('Відправник', { exact: true }),
+    '5ace4a2e-13ee-11e5-add9-005056887b8d',
+  )
+  await user.selectOptions(
+    await screen.findByLabelText(/Контактна особа відправника/),
+    '5ace4a2e-13ee-11e5-add9-005056887b8e',
+  )
   await user.type(screen.getByLabelText(/Ім’я відправника/), 'Андрій Гринь')
   await user.type(screen.getByLabelText(/Телефон відправника/), '+380639014418')
   await user.click(
@@ -195,8 +234,12 @@ it('adds a point from the carrier catalogue and makes it the default', async () 
       name: 'Львівський розбір',
       senderName: 'Андрій Гринь',
       phone: '+380639014418',
-      settlementId: 10,
-      divisionId: 8,
+      settlementRef: '8d5a980d-391c-11dd-90d9-001a92567626',
+      warehouseRef: '1ec09d2e-e1c2-11e3-8c4a-0050568002d0',
+      counterpartyRef: '5ace4a2e-13ee-11e5-add9-005056887b8d',
+      contactRef: '5ace4a2e-13ee-11e5-add9-005056887b8e',
+      warehouseName: 'Відділення №8: вул. Наукова, 45',
+      settlementName: 'Житомир',
       companyName: null,
       companyTin: null,
       isActive: true,

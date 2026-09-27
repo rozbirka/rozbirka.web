@@ -173,7 +173,7 @@ export function SettlementPicker({
               ) : (
                 <ul className="max-h-[200px] overflow-auto" id={listId}>
                   {options.map((settlement, index) => (
-                    <li key={settlement.id}>
+                    <li key={settlement.ref}>
                       <button
                         className={`border-app-line flex w-full items-center justify-between gap-3 border-b px-3.5 py-2.5 text-left hover:bg-white/[0.055] ${
                           index === active ? 'bg-white/[0.055]' : ''

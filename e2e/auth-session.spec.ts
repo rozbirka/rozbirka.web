@@ -366,9 +366,9 @@ async function loginFrom(
   await expect(page).toHaveURL(destination)
   if (new URL(page.url()).pathname === '/app/koval/dashboard') {
     await expect(
-      page.getByRole('heading', {
-        name: 'Зведення',
-      }),
+      page
+        .getByLabel('Розбірка і розділ')
+        .filter({ hasText: 'Розбірка Коваль' }),
     ).toBeVisible()
   }
 }
@@ -654,7 +654,9 @@ test('reload restores the cabinet session through one refresh request @auth-smok
 
   const beforeReload = await upstreamStats(request)
   await page.reload()
-  await expect(page.getByText('Зріз «зараз» · Розбірка Коваль')).toBeVisible({
+  await expect(
+    page.getByLabel('Розбірка і розділ').filter({ hasText: 'Розбірка Коваль' }),
+  ).toBeVisible({
     timeout: 10_000,
   })
   const afterReload = await upstreamStats(request)
@@ -667,7 +669,9 @@ test('parallel protected 401 responses trigger one refresh and successful replay
 }) => {
   const state = await installApiBoundary(page, { parallel401: true })
   await loginFrom(page)
-  await expect(page.getByText('Зріз «зараз» · Розбірка Коваль')).toBeVisible()
+  await expect(
+    page.getByLabel('Розбірка і розділ').filter({ hasText: 'Розбірка Коваль' }),
+  ).toBeVisible()
 
   expect(state.protectedAttempts).toMatchObject({
     '/auth/me': 2,

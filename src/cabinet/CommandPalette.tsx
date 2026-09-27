@@ -11,6 +11,7 @@ import type { LucideIcon } from 'lucide-react'
 import type { Tenant } from '@/api/types'
 import type { TenantAccessSnapshot } from './access-types'
 import { cabinetPath } from './cabinet-paths'
+import { onOpenCommandPalette } from './command-palette-open'
 import { cabinetModules, type CabinetModuleKey } from './module-registry'
 import { evaluateModuleAccess } from './policy'
 
@@ -37,8 +38,9 @@ const PER_SOURCE = 5
  *
  * The research is explicit that this is a desktop tool and useless in the
  * yard: out there it is a phone, one hand and a scanner, and the scanner
- * already has its own route. So the palette has no on-screen trigger — a
- * keyboard shortcut only exists where there is a keyboard — and it searches
+ * already has its own route. So the only on-screen trigger is the dashboard's
+ * own search field, which asks through `openCommandPalette`; everywhere else
+ * it is the shortcut, which only exists where there is a keyboard. It searches
  * only the modules this account may open, asking each list endpoint the same
  * question the list screens ask.
  */
@@ -97,7 +99,11 @@ export function CommandPalette({
       }
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    const stopListening = onOpenCommandPalette(() => setOpen(true))
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      stopListening()
+    }
   }, [])
 
   const trimmed = query.trim()

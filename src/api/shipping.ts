@@ -4,8 +4,8 @@ import type { RequestOptions } from './contracts'
 /**
  * Nova Poshta delivery for one order. Everything here hangs off an
  * integration: the carrier account decides what a valid branch is, so the
- * shipment cannot exist without one. The exception is `configureOrder`, which
- * settles the order's own money before any carrier is involved.
+ * shipment cannot exist without one. The order's own money lives next door in
+ * `delivery.ts`, which settles it before any carrier is involved.
  */
 export type ShipmentState =
   | 'Draft'
@@ -19,10 +19,22 @@ export type ShipmentState =
 export interface ShippingContact {
   name: string
   phone: string
-  divisionId: number
-  settlementId: number
+  /** The carrier's own branch reference — a GUID, not a branch number. */
+  warehouseRef: string
+  /** The carrier's own city reference. */
+  settlementRef: string
+  /**
+   * Who the waybill dispatches as. Nova Poshta creates a recipient from a name
+   * and a phone, but never a sender: that one is registered in the carrier's
+   * cabinet, so only a dispatch point carries these.
+   */
+  counterpartyRef?: string | null
+  contactRef?: string | null
   companyTin?: string | null
   companyName?: string | null
+  /** Display only: a reference is a GUID, and a counter clerk reads names. */
+  warehouseName?: string | null
+  settlementName?: string | null
 }
 
 export interface ParcelInput {
@@ -34,11 +46,14 @@ export interface ParcelInput {
 
 export type PayerType = 'Sender' | 'Recipient'
 
+/**
+ * What is being sent and to whom. Neither leg's price is in here: the carrier
+ * quotes both during the estimate, so neither is a number anyone types.
+ */
 export interface ShipmentDraft {
   recipient: ShippingContact
   parcels: ParcelInput[]
   declaredValueUah: number
-  returnEstimateUah: number
   payerType: PayerType
   description: string
   dispatchPointId?: string | null
@@ -72,10 +87,26 @@ export interface Shipment {
 }
 
 /** Core omits empty collections; a shipment without events must still render. */
+/**
+ * Core serialises with `JsonIgnoreCondition.WhenWritingNull`: a null field is
+ * absent rather than null, and `number !== null` would then be true for a
+ * shipment that has no waybill at all. Collections and every nullable field
+ * are restored here so the rest of the cabinet can compare against null.
+ */
 const withCollections = (shipment: Shipment): Shipment => ({
   ...shipment,
+  number: shipment.number ?? null,
+  quoteUah: shipment.quoteUah ?? null,
+  codUah: shipment.codUah ?? null,
+  quoteAt: shipment.quoteAt ?? null,
+  trackingCode: shipment.trackingCode ?? null,
+  trackingStatus: shipment.trackingStatus ?? null,
+  lastTrackedAt: shipment.lastTrackedAt ?? null,
   relatedNumbers: shipment.relatedNumbers ?? [],
-  events: shipment.events ?? [],
+  events: (shipment.events ?? []).map((event) => ({
+    ...event,
+    occurredAt: event.occurredAt ?? null,
+  })),
   draft: { ...shipment.draft, parcels: shipment.draft?.parcels ?? [] },
 })
 
@@ -86,17 +117,6 @@ const requestConfig = (options: RequestOptions) =>
   options.signal ? { signal: options.signal } : {}
 
 export const shippingApi = {
-  /**
-   * The first step of the lifecycle: Core refuses a shipment until it knows
-   * what the order is worth. The deposit exception for a trusted customer is
-   * not offered here — the cabinet has nowhere to mark that trust yet.
-   */
-  async configureOrder(orderId: string, agreedTotalUah: number): Promise<void> {
-    await apiClient.put(`/orders/${encodeURIComponent(orderId)}/delivery`, {
-      agreedTotalUah,
-      waiveDeposit: false,
-    })
-  },
   /** Null when this order has no delivery yet. */
   async get(
     integrationId: string,
@@ -170,6 +190,22 @@ export const shippingApi = {
         )
       ).data,
     )
+  },
+  /**
+   * The carrier's own label, as a PDF. Core proxies it so the browser never
+   * holds an API key; the caller owns the blob URL it makes from this.
+   */
+  async label(
+    integrationId: string,
+    orderId: string,
+    options: RequestOptions = {},
+  ): Promise<Blob> {
+    return (
+      await apiClient.get<Blob>(`${orders(integrationId, orderId)}/label`, {
+        responseType: 'blob',
+        ...(options.signal ? { signal: options.signal } : {}),
+      })
+    ).data
   },
   async cancel(integrationId: string, orderId: string): Promise<void> {
     await apiClient.delete(orders(integrationId, orderId))

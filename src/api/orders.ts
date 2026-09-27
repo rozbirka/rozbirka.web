@@ -27,6 +27,19 @@ export interface ConfirmPayment {
   amount: number
   currency: string
 }
+/** One line of an order, with what the card needs to show the part itself. */
+export type OrderDetailItem = OrderItemInput & {
+  id: string
+  partName: string
+  partType: string | null
+  /** The part's own photo, so a line reads as the thing on the shelf. */
+  coverPhotoUrl: string | null
+  carBrand: string | null
+  carModel: string | null
+  carCode: string | null
+  totalPrice: number
+}
+
 export interface OrderDetail {
   id: string
   number: number
@@ -34,11 +47,7 @@ export interface OrderDetail {
   customerId: string | null
   customerName: string | null
   notes: string | null
-  items: (OrderItemInput & {
-    id: string
-    partName: string
-    totalPrice: number
-  })[]
+  items: OrderDetailItem[]
   payments: (ConfirmPayment & { id: string; accountName: string })[]
   history: {
     eventType: string
@@ -52,6 +61,14 @@ export interface OrderDetail {
   itemsTotalUsd?: number | null
   createdAt: string
   createdByName: string
+  /** When and by whom the order left `pending`; null while it is still open. */
+  confirmedAt?: string | null
+  confirmedByName?: string | null
+  cancelledAt?: string | null
+  cancelledByName?: string | null
+  refundedAt?: string | null
+  refundedByName?: string | null
+  refundReason?: string | null
 }
 export interface OrderListParams {
   search?: string

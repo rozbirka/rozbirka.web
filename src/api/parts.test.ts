@@ -79,3 +79,42 @@ it('round-trips only OpenAPI-supported part changes and does not fabricate compa
     'compatCarBrand',
   )
 })
+
+it('restores relations Core omits rather than sends as null', async () => {
+  // `JsonIgnoreCondition.WhenWritingNull` drops a null property entirely, so a
+  // part with no car arrives without `car` at all. Read straight off the
+  // response, `part.car === null` is false and the next access crashes.
+  apiClient.defaults.adapter = (config) =>
+    Promise.resolve({
+      data: {
+        data: {
+          items: [
+            {
+              id: 'part-1',
+              name: 'Передній бампер',
+              photos: ['a.jpg'],
+              quantityTotal: 1,
+              quantityReserved: 0,
+              quantityAvailable: 1,
+              quantitySoldTotal: 0,
+              status: 'available',
+            },
+          ],
+          page: 1,
+          pageSize: 30,
+          total: 1,
+          totalPages: 1,
+        },
+      },
+      status: 200,
+      statusText: 'OK',
+      headers: new AxiosHeaders(),
+      config,
+    } satisfies AxiosResponse)
+
+  const page = await partsApi.list()
+
+  expect(page.items[0]?.car).toBeNull()
+  expect(page.items[0]?.order).toBeNull()
+  expect(page.items[0]?.externalCode).toBeNull()
+})

@@ -4,6 +4,21 @@ import type { StatusTone } from '@/components/app'
  * Server vocabularies said the way the yard says them. Kept in one place so a
  * part reads the same on its own screen, in the scanner and in a list.
  */
+/**
+ * The condition as a phrase, not a word with "стан" glued on: «На запчастини
+ * стан» is not Ukrainian, and neither is «Вживана стан».
+ */
+export const conditionPhrase = (value: string) =>
+  ({
+    good: 'Хороший стан',
+    fair: 'Задовільний стан',
+    scrap: 'На запчастини',
+    new: 'Нова',
+    used: 'Вживана',
+    refurbished: 'Відновлена',
+    damaged: 'Пошкоджена',
+  })[value.toLowerCase()] ?? conditionLabel(value)
+
 export const conditionLabel = (value: string) =>
   ({
     new: 'Нова',
@@ -117,4 +132,73 @@ export const historyDetails = (raw: string | null): string[] => {
       ([key, value]) =>
         `${historyFieldLabels[key] ?? key.replaceAll('_', ' ')} ${String(value)}`,
     )
+}
+
+/**
+ * Which part of a part's life an event belongs to, so the history can be
+ * filtered the way a person thinks about it. Price lives in the payload, not
+ * in the event name, so a generic edit that moved a price counts as a price
+ * event.
+ */
+export type HistoryKind = 'sale' | 'price' | 'stock'
+
+const SALE_EVENTS = new Set([
+  'reserved',
+  'reservationcancelled',
+  'reservation_cancelled',
+  'released',
+  'sold',
+  'returned',
+])
+
+const PRICE_KEYS = /price/i
+
+export const historyKind = (
+  eventType: string,
+  raw: string | null,
+): HistoryKind => {
+  if (SALE_EVENTS.has(eventType)) return 'sale'
+  const payload = raw?.trim()
+  if (payload?.startsWith('{') === true && PRICE_KEYS.test(payload))
+    return 'price'
+  return 'stock'
+}
+
+/**
+ * A before-and-after pair from the payload, when the server sent one. Only a
+ * real pair earns the arrow — a lone value stays an ordinary fact.
+ */
+export const historyChange = (
+  raw: string | null,
+): { from: string; to: string } | null => {
+  const trimmed = raw?.trim()
+  if (trimmed?.startsWith('{') !== true) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch {
+    return null
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null
+  const entries = parsed as Record<string, unknown>
+  const pairs: [string, string][] = [
+    ['from', 'to'],
+    ['old', 'new'],
+    ['old_price', 'new_price'],
+    ['previous', 'current'],
+  ]
+  for (const [fromKey, toKey] of pairs) {
+    const from = entries[fromKey]
+    const to = entries[toKey]
+    if (
+      (typeof from === 'string' ||
+        typeof from === 'number' ||
+        typeof from === 'boolean') &&
+      (typeof to === 'string' ||
+        typeof to === 'number' ||
+        typeof to === 'boolean')
+    )
+      return { from: String(from), to: String(to) }
+  }
+  return null
 }

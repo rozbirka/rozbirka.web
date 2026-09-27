@@ -331,6 +331,7 @@ it('uses the hydrated selected tenant for a cabinet plan destination', async () 
       isActive: true,
       createdAt: '2026-08-01T00:00:00Z',
       roleName: 'owner',
+      requireDeliveryDeposit: true,
     }
     auth.tenant = tenant
     auth.tenants = [tenant]

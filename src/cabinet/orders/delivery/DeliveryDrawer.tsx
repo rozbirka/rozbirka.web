@@ -13,6 +13,7 @@ import {
   type NovaPoshtaDivision,
   type NovaPoshtaSettlement,
 } from '@/api/integrations'
+import { deliveryApi, type DeliveryOrder } from '@/api/delivery'
 import {
   shippingApi,
   type ParcelInput,
@@ -65,6 +66,19 @@ const decimal = (value: string): number | null => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 
+/**
+ * The post-payment is the one figure on this form where zero is an answer
+ * rather than an empty field: it says the goods are paid for and the carrier
+ * collects nothing. `decimal` treats zero as absent, which is right for a
+ * weight or a declared value and wrong here.
+ */
+const codAmount = (value: string): number | null => {
+  const text = value.trim()
+  if (text === '') return 0
+  const parsed = Number(text.replace(',', '.'))
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null
+}
+
 function Section({
   title,
   aside,
@@ -96,20 +110,33 @@ export function DeliveryDrawer({
   customerName,
   customerPhone,
   declaredValue,
+  delivery,
   dispatchPoints,
+  paid,
   integrationId,
   onChanged,
   onClose,
+  onMoneyChanged,
   orderId,
   shipment,
 }: {
   customerName: string | null
   customerPhone: string | null
   declaredValue: number | null
+  /** The order's money, so the post-payment can be set where it is decided. */
+  delivery: DeliveryOrder
+  /**
+   * What the customer has already handed over, in whatever currency they used.
+   * A dollar payment is invisible to the hryvnia post-payment arithmetic, so
+   * the only thing standing between the customer and paying twice is seeing it
+   * here, beside the field that decides what the carrier collects.
+   */
+  paid: { amount: number; currency: string } | null
   dispatchPoints: NovaPoshtaDispatchPoint[]
   integrationId: string
   onChanged: (shipment: Shipment) => void
   onClose: () => void
+  onMoneyChanged: (delivery: DeliveryOrder) => void
   orderId: string
   shipment: Shipment | null
 }) {
@@ -137,11 +164,11 @@ export function DeliveryDrawer({
     null,
   )
   const [loadedDivisions, setLoadedDivisions] = useState<{
-    settlementId: number
+    settlementRef: string
     items: NovaPoshtaDivision[]
   } | null>(null)
-  const [divisionChoice, setDivisionChoice] = useState<number | null>(
-    saved?.recipient.divisionId ?? null,
+  const [divisionChoice, setDivisionChoice] = useState<string | null>(
+    saved?.recipient.warehouseRef ?? null,
   )
   const [parcels, setParcels] = useState<ParcelDraft[]>(
     saved?.parcels.length ? saved.parcels.map(toParcelDraft) : [emptyParcel],
@@ -152,10 +179,12 @@ export function DeliveryDrawer({
   const [declared, setDeclared] = useState(
     String(saved?.declaredValueUah ?? declaredValue ?? ''),
   )
-  const [returnEstimate, setReturnEstimate] = useState(
-    String(saved?.returnEstimateUah ?? ''),
-  )
   const [payer, setPayer] = useState<PayerType>(saved?.payerType ?? 'Recipient')
+  // What the carrier holds from the recipient. Zero is the ordinary case for
+  // goods already paid for, and it is what the field opens on.
+  const [cod, setCod] = useState(
+    delivery.outstandingUah > 0 ? String(delivery.outstandingUah) : '',
+  )
 
   const [busy, setBusy] = useState<null | 'draft' | 'estimate' | 'create'>(null)
   const [error, setError] = useState<string | null>(null)
@@ -163,40 +192,40 @@ export function DeliveryDrawer({
   const [lookupError, setLookupError] = useState<string | null>(null)
 
   // The saved draft's settlement stands until another is picked.
-  const settlementId = settlement?.id ?? saved?.recipient.settlementId ?? null
+  const settlementRef =
+    settlement?.ref ?? saved?.recipient.settlementRef ?? null
 
   useEffect(() => {
-    if (settlementId === null) return
+    if (settlementRef === null) return
     const controller = new AbortController()
     void integrationsApi
-      .divisions(integrationId, settlementId, 1, { signal: controller.signal })
+      .divisions(integrationId, settlementRef, 1, { signal: controller.signal })
       .then(
         (page) => {
           if (!controller.signal.aborted) {
             setLoadedDivisions({
-              settlementId,
+              settlementRef,
               items: page.items.filter((item) => item.receivingAllowed),
             })
           }
         },
         () => {
           if (!controller.signal.aborted) {
-            setLoadedDivisions({ settlementId, items: [] })
+            setLoadedDivisions({ settlementRef, items: [] })
             setLookupError('Довідник відділень Нової пошти зараз недоступний.')
           }
         },
       )
     return () => controller.abort()
-  }, [integrationId, settlementId])
+  }, [integrationId, settlementRef])
 
   const divisions =
-    settlementId !== null && loadedDivisions?.settlementId === settlementId
+    settlementRef !== null && loadedDivisions?.settlementRef === settlementRef
       ? loadedDivisions.items
       : null
-  const divisionId =
-    divisions?.some((item) => item.id === divisionChoice) === true
-      ? divisionChoice
-      : null
+  const division =
+    divisions?.find((item) => item.ref === divisionChoice) ?? null
+  const warehouseRef = division?.ref ?? null
 
   const trimmedPhone = phone.replace(/[\s()-]/g, '')
   const parcelValues = parcels.map((parcel) => ({
@@ -215,15 +244,14 @@ export function DeliveryDrawer({
         parcel.heightCm !== null,
     )
   const declaredValueUah = decimal(declared)
-  const returnEstimateUah = decimal(returnEstimate)
+  const codUah = codAmount(cod)
   const ready =
     name.trim() !== '' &&
     PHONE.test(trimmedPhone) &&
-    settlementId !== null &&
-    divisionId !== null &&
+    settlementRef !== null &&
+    warehouseRef !== null &&
     parcelsReady &&
     declaredValueUah !== null &&
-    returnEstimateUah !== null &&
     description.trim() !== '' &&
     pointId !== '' &&
     (!isCompany || (companyName.trim() !== '' && companyTin.trim() !== ''))
@@ -233,14 +261,16 @@ export function DeliveryDrawer({
         recipient: {
           name: name.trim(),
           phone: trimmedPhone,
-          settlementId: settlementId,
-          divisionId: divisionId,
+          settlementRef: settlementRef,
+          warehouseRef: warehouseRef,
+          // Carried for the cabinet to show; the carrier reads the references.
+          warehouseName: division?.name ?? null,
+          settlementName: settlement?.name ?? null,
           companyName: isCompany ? companyName.trim() : null,
           companyTin: isCompany ? companyTin.trim() : null,
         },
         parcels: parcelValues as ParcelInput[],
         declaredValueUah: declaredValueUah,
-        returnEstimateUah: returnEstimateUah,
         payerType: payer,
         description: description.trim(),
         dispatchPointId: pointId,
@@ -298,6 +328,19 @@ export function DeliveryDrawer({
   }
 
   const create = async () => {
+    // A figure that does not parse is not a zero: sending one would ship the
+    // parcel collecting nothing while the operator believes they typed a sum.
+    if (codUah === null) return
+    // The post-payment is what the order still owes, so it is written as the
+    // agreed total before the waybill quotes it back.
+    const wanted = codUah
+    if (wanted !== delivery.outstandingUah) {
+      const money = await run('create', () =>
+        deliveryApi.configure(orderId, delivery.appliedUah + wanted),
+      )
+      if (money === null) return
+      onMoneyChanged(money)
+    }
     const result = await run('create', () =>
       shippingApi.create(integrationId, orderId),
     )
@@ -308,7 +351,8 @@ export function DeliveryDrawer({
 
   return (
     <Sheet
-      description="Нова пошта · Україною, відділення → відділення"
+      description="Україною, відділення → відділення."
+      eyebrow="Замовлення · Нова пошта"
       footer={
         <>
           <Button
@@ -413,7 +457,7 @@ export function DeliveryDrawer({
 
         <Field
           hint={
-            settlementId === null
+            settlementRef === null
               ? 'Спершу оберіть населений пункт.'
               : 'Показані лише відділення, які видають відправлення.'
           }
@@ -421,19 +465,19 @@ export function DeliveryDrawer({
           required
         >
           <SelectInput
-            disabled={settlementId === null || divisions === null}
+            disabled={settlementRef === null || divisions === null}
             onChange={(event) =>
               setDivisionChoice(
-                event.target.value === '' ? null : Number(event.target.value),
+                event.target.value === '' ? null : event.target.value,
               )
             }
-            value={divisionId === null ? '' : String(divisionId)}
+            value={warehouseRef ?? ''}
           >
             <option value="">
               {divisions === null ? 'Завантажуємо…' : 'Оберіть відділення'}
             </option>
             {(divisions ?? []).map((item) => (
-              <option key={item.id} value={String(item.id)}>
+              <option key={item.ref} value={item.ref}>
                 {item.name}
               </option>
             ))}
@@ -568,18 +612,6 @@ export function DeliveryDrawer({
             <option value="Sender">Платить відправник</option>
           </SelectInput>
         </Field>
-        <Field
-          hint="Оціночна вартість зворотної доставки, яку ви вводите самі."
-          label="Оцінка повернення, ₴"
-          required
-        >
-          <TextInput
-            className="font-mono"
-            inputMode="decimal"
-            onChange={(event) => setReturnEstimate(event.target.value)}
-            value={returnEstimate}
-          />
-        </Field>
       </Section>
 
       <section
@@ -613,6 +645,42 @@ export function DeliveryDrawer({
           {quote.note}
         </p>
 
+        {paid === null ? null : (
+          <Notice tone="info">
+            За цим замовленням уже отримано{' '}
+            <span className="font-mono">
+              {paid.amount.toLocaleString('uk-UA', {
+                style: 'currency',
+                currency: paid.currency,
+                currencyDisplay: 'narrowSymbol',
+              })}
+            </span>
+            . Врахуйте це в післяплаті, щоб клієнт не заплатив удруге.
+          </Notice>
+        )}
+
+        <Field
+          error={
+            codUah === null
+              ? 'Вкажіть суму в гривнях або лишіть поле порожнім.'
+              : undefined
+          }
+          hint={
+            codUah === 0
+              ? 'Нуль — товар уже оплачено, Нова пошта нічого не утримує.'
+              : 'Нова пошта утримає цю суму з отримувача й перекаже вам. Комісію переказу платить отримувач.'
+          }
+          label="Післяплата, ₴"
+        >
+          <TextInput
+            className="font-mono tabular-nums"
+            inputMode="decimal"
+            onChange={(event) => setCod(event.target.value)}
+            placeholder="0"
+            value={cod}
+          />
+        </Field>
+
         {quote.showMoney && shipment?.quoteUah != null && (
           <dl
             className={`border-app-line bg-app-raised grid gap-2.5 rounded-[12px] border px-4 py-3.5 text-[13px] ${
@@ -620,13 +688,13 @@ export function DeliveryDrawer({
             }`}
           >
             <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-app-muted">Орієнтовна доставка</dt>
+              <dt className="text-app-muted">Доставка туди</dt>
               <dd className="text-app-ink font-mono">
                 {uah.format(shipment.quoteUah)}
               </dd>
             </div>
             <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-app-muted">Оцінка повернення</dt>
+              <dt className="text-app-muted">Зворотна доставка</dt>
               <dd className="text-app-ink font-mono">
                 {uah.format(shipment.returnEstimateUah)}
               </dd>
@@ -659,8 +727,8 @@ export function DeliveryDrawer({
         </div>
         {quote.showMoney && (
           <p className="text-app-dim text-[12px] leading-5 text-pretty">
-            Передоплата покриває доставку та можливе повернення. Це не тариф
-            Нової пошти за доставку в один бік.
+            Обидві суми порахувала Нова пошта. Депозит покриває ризик розбірки:
+            якщо посилку не заберуть, ви заплатите за обидві дороги.
           </p>
         )}
       </section>

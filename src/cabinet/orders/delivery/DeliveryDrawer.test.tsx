@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { integrationsApi } from '@/api/integrations'
+import type { DeliveryOrder } from '@/api/delivery'
 import { shippingApi, type Shipment } from '@/api/shipping'
 import { DeliveryDrawer } from './DeliveryDrawer'
 
@@ -22,8 +23,12 @@ const point = {
   name: 'Головний склад',
   senderName: 'Олена Коваль',
   phone: '+380672147730',
-  settlementId: 10,
-  divisionId: 12,
+  settlementRef: '8d5a980d-391c-11dd-90d9-001a92567626',
+  warehouseRef: '1ec09d2e-e1c2-11e3-8c4a-0050568002d0',
+  counterpartyRef: '5ace4a2e-13ee-11e5-add9-005056887b8d',
+  contactRef: '5ace4a2e-13ee-11e5-add9-005056887b8e',
+  warehouseName: 'Відділення №8: вул. Наукова, 45',
+  settlementName: 'Львів',
   companyTin: null,
   companyName: null,
   isActive: true,
@@ -34,8 +39,8 @@ const draft = {
   recipient: {
     name: 'Ірина Олійник',
     phone: '+380503381172',
-    divisionId: 8,
-    settlementId: 20,
+    warehouseRef: '1ec09d2e-e1c2-11e3-8c4a-0050568002d0',
+    settlementRef: '8d5a980d-391c-11dd-90d9-001a92567626',
     companyName: null,
     companyTin: null,
   },
@@ -57,8 +62,8 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   sender: {
     name: 'Олена Коваль',
     phone: '+380672147730',
-    divisionId: 12,
-    settlementId: 10,
+    warehouseRef: '1ec09d2e-e1c2-11e3-8c4a-0050568002d0',
+    settlementRef: '8d5a980d-391c-11dd-90d9-001a92567626',
   },
   draft,
   quoteUah: null,
@@ -78,7 +83,7 @@ beforeEach(() => {
   vi.mocked(integrationsApi.settlements).mockResolvedValue({
     items: [
       {
-        id: 20,
+        ref: '8d5a980d-391c-11dd-90d9-001a92567626',
         name: 'Львів',
         prohibitedSending: null,
         prohibitedIssuance: null,
@@ -90,9 +95,9 @@ beforeEach(() => {
   vi.mocked(integrationsApi.divisions).mockResolvedValue({
     items: [
       {
-        id: 8,
+        ref: '1ec09d2e-e1c2-11e3-8c4a-0050568002d0',
         name: 'Відділення №8: вул. Наукова, 45',
-        settlementId: 20,
+        settlementRef: '8d5a980d-391c-11dd-90d9-001a92567626',
         countryCode: 'UA',
         sendingAllowed: true,
         receivingAllowed: true,
@@ -103,16 +108,39 @@ beforeEach(() => {
   })
 })
 
+const money = (): DeliveryOrder => ({
+  orderId: 'order-1',
+  agreedTotalUah: 4280,
+  appliedUah: 4280,
+  outstandingUah: 0,
+  netReceivedUah: 4280,
+  feesUah: 0,
+  requiredDepositUah: 360,
+  depositShortfallUah: 0,
+  depositSatisfied: true,
+  depositWaived: false,
+  depositRequired: true,
+  customerTrusted: false,
+  dispatchedAt: null,
+  receivedAt: null,
+  returnedAt: null,
+  awaitingCodReconciliation: false,
+  payments: [],
+})
+
 const renderDrawer = (current: Shipment | null) =>
   render(
     <DeliveryDrawer
       customerName="Ірина Олійник"
       customerPhone="+380503381172"
       declaredValue={4280}
+      delivery={money()}
+      paid={null}
       dispatchPoints={[point]}
       integrationId="integration-1"
       onChanged={vi.fn()}
       onClose={vi.fn()}
+      onMoneyChanged={vi.fn()}
       orderId="order-1"
       shipment={current}
     />,
@@ -138,15 +166,15 @@ it('saves an edited form before asking the carrier for a price', async () => {
 
   renderDrawer(shipment())
 
-  const estimateField = await screen.findByLabelText(/Оцінка повернення/)
-  await user.clear(estimateField)
-  await user.type(estimateField, '240')
+  const declared = await screen.findByLabelText(/Оголошена вартість/)
+  await user.clear(declared)
+  await user.type(declared, '4400')
   await user.click(screen.getByRole('button', { name: 'Розрахувати доставку' }))
 
   expect(shippingApi.saveDraft).toHaveBeenCalledWith(
     'integration-1',
     'order-1',
-    expect.objectContaining({ returnEstimateUah: 240, payerType: 'Recipient' }),
+    expect.objectContaining({ declaredValueUah: 4400, payerType: 'Recipient' }),
   )
   expect(shippingApi.estimate).toHaveBeenCalledWith('integration-1', 'order-1')
 })
@@ -167,7 +195,7 @@ it('does not re-save a form nobody touched', async () => {
   expect(shippingApi.estimate).toHaveBeenCalledWith('integration-1', 'order-1')
 })
 
-it('shows the prepayment as delivery plus the return the manager entered', async () => {
+it('shows the prepayment as both legs the carrier priced', async () => {
   renderDrawer(shipment({ quoteUah: 180, quoteAt: new Date().toISOString() }))
 
   expect(await screen.findByText('Розрахунок отримано')).toBeVisible()

@@ -41,6 +41,7 @@ it('preserves a valid plan when redirecting an authenticated user', () => {
       isActive: true,
       createdAt: '2026-08-01T00:00:00Z',
       roleName: 'owner',
+      requireDeliveryDeposit: true,
     },
   })
 

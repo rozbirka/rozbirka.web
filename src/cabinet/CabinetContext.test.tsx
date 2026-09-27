@@ -49,6 +49,7 @@ const tenant = (id: string, isActive = true): Tenant => ({
   isActive,
   createdAt: '2026-08-01T10:00:00Z',
   roleName: 'owner',
+  requireDeliveryDeposit: true,
 })
 
 const tenantA = tenant('a')

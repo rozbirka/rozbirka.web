@@ -26,6 +26,8 @@ This repository contains the public Rozbirka website, authentication and account
 
 Read `LOCAL-DEVELOPMENT.md` before starting/restarting the local cabinet.
 Plain `npm run dev` does not provide the session BFF in this setup.
+Use `npm run dev:local` for daily development: Vite HMR on 5173 plus local
+Wrangler BFF on 8787. Reserve the build-and-serve flow for release-like checks.
 Do not report the cabinet working from a landing-page HTTP 200 or an anonymous
 `/session/refresh` 401. Verify the requested cabinet route and distinguish
 service health from an authenticated session. Never substitute QA endpoints.

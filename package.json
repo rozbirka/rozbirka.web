@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:local": "node scripts/dev-local.mjs",
     "build": "tsc -b && vite build && vite build --ssr src/entry-server.tsx --outDir dist-ssr && node scripts/prerender.mjs",
     "build:qa": "tsc -b && vite build --mode qa && vite build --ssr src/entry-server.tsx --outDir dist-ssr --mode qa && node scripts/prerender.mjs",
     "build:prod": "tsc -b && vite build --mode production && vite build --ssr src/entry-server.tsx --outDir dist-ssr --mode production && node scripts/prerender.mjs",

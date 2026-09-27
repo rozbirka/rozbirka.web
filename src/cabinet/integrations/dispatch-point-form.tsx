@@ -13,6 +13,8 @@ import {
   type NovaPoshtaDispatchPointInput,
   type NovaPoshtaDivision,
   type NovaPoshtaSettlement,
+  type NovaPoshtaCounterparty,
+  type NovaPoshtaContact,
 } from '@/api/integrations'
 import { SettlementPicker } from './settlement-picker'
 
@@ -143,37 +145,52 @@ export function DispatchPointForm({
     null,
   )
   const [loadedDivisions, setLoadedDivisions] = useState<{
-    settlementId: number
+    settlementRef: string
     items: NovaPoshtaDivision[]
   } | null>(null)
   // Derived during render: picking another settlement empties the list without
   // a second pass through the effect.
-  const [divisionChoice, setDivisionChoice] = useState<number | null>(
-    point?.divisionId ?? null,
+  const [divisionChoice, setDivisionChoice] = useState<string | null>(
+    point?.warehouseRef ?? null,
   )
   const [lookupError, setLookupError] = useState<string | null>(null)
 
+  // Nova Poshta will not take a sender typed into this form: it has to be a
+  // counterparty already registered against the tenant's own key, together
+  // with one of its contact people.
+  const [senders, setSenders] = useState<NovaPoshtaCounterparty[] | null>(null)
+  const [senderChoice, setSenderChoice] = useState<string | null>(
+    point?.counterpartyRef ?? null,
+  )
+  const [contacts, setContacts] = useState<{
+    counterpartyRef: string
+    items: NovaPoshtaContact[]
+  } | null>(null)
+  const [contactChoice, setContactChoice] = useState<string | null>(
+    point?.contactRef ?? null,
+  )
+
   // The stored settlement stands until another is picked from the catalogue.
-  const settlementId: number | null =
-    settlement?.id ?? point?.settlementId ?? null
+  const settlementRef: string | null =
+    settlement?.ref ?? point?.settlementRef ?? null
 
   useEffect(() => {
-    if (settlementId === null) return
+    if (settlementRef === null) return
     const controller = new AbortController()
     void integrationsApi
-      .divisions(integrationId, settlementId, 1, { signal: controller.signal })
+      .divisions(integrationId, settlementRef, 1, { signal: controller.signal })
       .then(
         (page) => {
           if (!controller.signal.aborted) {
             setLoadedDivisions({
-              settlementId,
+              settlementRef,
               items: page.items.filter((item) => item.sendingAllowed),
             })
           }
         },
         () => {
           if (!controller.signal.aborted) {
-            setLoadedDivisions({ settlementId, items: [] })
+            setLoadedDivisions({ settlementRef, items: [] })
             setLookupError(
               'Довідник відділень Нової пошти зараз недоступний. Спробуйте ще раз.',
             )
@@ -181,18 +198,70 @@ export function DispatchPointForm({
         },
       )
     return () => controller.abort()
-  }, [integrationId, settlementId])
+  }, [integrationId, settlementRef])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void integrationsApi
+      .senders(integrationId, { signal: controller.signal })
+      .then(
+        (items) => {
+          if (!controller.signal.aborted) setSenders(items)
+        },
+        () => {
+          if (!controller.signal.aborted) {
+            setSenders([])
+            setLookupError(
+              'Не вдалося прочитати відправників із кабінету Нової пошти.',
+            )
+          }
+        },
+      )
+    return () => controller.abort()
+  }, [integrationId])
+
+  useEffect(() => {
+    if (senderChoice === null) return
+    const controller = new AbortController()
+    void integrationsApi
+      .senderContacts(integrationId, senderChoice, {
+        signal: controller.signal,
+      })
+      .then(
+        (items) => {
+          if (!controller.signal.aborted)
+            setContacts({ counterpartyRef: senderChoice, items })
+        },
+        () => {
+          if (!controller.signal.aborted)
+            setContacts({ counterpartyRef: senderChoice, items: [] })
+        },
+      )
+    return () => controller.abort()
+  }, [integrationId, senderChoice])
 
   const divisions: NovaPoshtaDivision[] | null =
-    settlementId !== null && loadedDivisions?.settlementId === settlementId
+    settlementRef !== null && loadedDivisions?.settlementRef === settlementRef
       ? loadedDivisions.items
       : null
 
   // A branch picked for another settlement is not in this list, so it drops
   // out on its own rather than travelling to Core as a mismatch.
-  const divisionId: number | null =
-    divisions?.some((item) => item.id === divisionChoice) === true
-      ? divisionChoice
+  const division: NovaPoshtaDivision | null =
+    divisions?.find((item) => item.ref === divisionChoice) ?? null
+  const warehouseRef = division?.ref ?? null
+
+  const counterpartyRef =
+    senders?.some((item) => item.ref === senderChoice) === true
+      ? senderChoice
+      : null
+  const contactOptions =
+    counterpartyRef !== null && contacts?.counterpartyRef === counterpartyRef
+      ? contacts.items
+      : null
+  const contactRef =
+    contactOptions?.some((item) => item.ref === contactChoice) === true
+      ? contactChoice
       : null
 
   const trimmedPhone = phone.replace(/[\s()-]/g, '')
@@ -203,20 +272,34 @@ export function DispatchPointForm({
     name.trim() !== '' &&
     senderName.trim() !== '' &&
     phoneValid &&
-    settlementId !== null &&
-    divisionId !== null &&
+    settlementRef !== null &&
+    warehouseRef !== null &&
+    counterpartyRef !== null &&
+    contactRef !== null &&
     companyReady
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!ready || settlementId === null || divisionId === null) return
+    if (
+      !ready ||
+      settlementRef === null ||
+      warehouseRef === null ||
+      counterpartyRef === null ||
+      contactRef === null
+    )
+      return
     onSubmit({
       input: {
         name: name.trim(),
         senderName: senderName.trim(),
         phone: trimmedPhone,
-        settlementId,
-        divisionId,
+        settlementRef,
+        warehouseRef,
+        counterpartyRef,
+        contactRef,
+        // Kept so the cabinet can name the branch later; the carrier reads refs.
+        warehouseName: division?.name ?? null,
+        settlementName: settlement?.name ?? point?.settlementName ?? null,
         companyName: isCompany ? companyName.trim() : null,
         companyTin: isCompany ? companyTin.trim() : null,
         isActive,
@@ -263,6 +346,7 @@ export function DispatchPointForm({
           </div>
         </div>
       }
+      eyebrow="Інтеграції · Нова пошта"
       onOpenChange={(open) => {
         if (!open && !pending) onClose()
       }}
@@ -302,7 +386,7 @@ export function DispatchPointForm({
 
         <Field
           hint={
-            settlementId === null
+            settlementRef === null
               ? 'Спершу оберіть населений пункт.'
               : 'Показані лише відділення, які приймають відправлення.'
           }
@@ -310,20 +394,81 @@ export function DispatchPointForm({
           required
         >
           <SelectInput
-            disabled={settlementId === null || divisions === null}
+            disabled={settlementRef === null || divisions === null}
             onChange={(event) =>
               setDivisionChoice(
-                event.target.value === '' ? null : Number(event.target.value),
+                event.target.value === '' ? null : event.target.value,
               )
             }
-            value={divisionId === null ? '' : String(divisionId)}
+            value={warehouseRef ?? ''}
           >
             <option value="">
               {divisions === null ? 'Завантажуємо…' : 'Оберіть відділення'}
             </option>
             {(divisions ?? []).map((item) => (
-              <option key={item.id} value={String(item.id)}>
+              <option key={item.ref} value={item.ref}>
                 {item.name}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+
+        <Field
+          hint="Відправник із кабінету Нової пошти. Створити нового тут не можна — тільки в кабінеті перевізника."
+          label="Відправник"
+          required
+        >
+          <SelectInput
+            disabled={senders === null}
+            onChange={(event) => {
+              setSenderChoice(
+                event.target.value === '' ? null : event.target.value,
+              )
+              setContactChoice(null)
+            }}
+            value={counterpartyRef ?? ''}
+          >
+            <option value="">
+              {senders === null
+                ? 'Завантажуємо…'
+                : senders.length === 0
+                  ? 'Кабінет не повернув жодного відправника'
+                  : 'Оберіть відправника'}
+            </option>
+            {(senders ?? []).map((item) => (
+              <option key={item.ref} value={item.ref}>
+                {item.name}
+                {item.tin === null ? '' : ` · ${item.tin}`}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+
+        <Field
+          hint={
+            counterpartyRef === null
+              ? 'Спершу оберіть відправника.'
+              : 'Ця особа буде вказана в накладній як контакт відправника.'
+          }
+          label="Контактна особа відправника"
+          required
+        >
+          <SelectInput
+            disabled={counterpartyRef === null || contactOptions === null}
+            onChange={(event) =>
+              setContactChoice(
+                event.target.value === '' ? null : event.target.value,
+              )
+            }
+            value={contactRef ?? ''}
+          >
+            <option value="">
+              {contactOptions === null ? 'Завантажуємо…' : 'Оберіть особу'}
+            </option>
+            {(contactOptions ?? []).map((item) => (
+              <option key={item.ref} value={item.ref}>
+                {item.name}
+                {item.phone === null ? '' : ` · ${item.phone}`}
               </option>
             ))}
           </SelectInput>

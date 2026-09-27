@@ -18,3 +18,24 @@ export const orderStatusPresentation = (
   if (status === 'reserved') return { label: 'Резерв', tone: 'warn' }
   return { label: status, tone: 'neutral' }
 }
+
+/**
+ * What Core calls a change to an order, said in Ukrainian. A code the
+ * vocabulary does not know reads as a plain update rather than as raw text.
+ */
+const ORDER_EVENTS: Record<string, string> = {
+  created: 'Замовлення створено',
+  itemsupdated: 'Позиції оновлено',
+  itemupdated: 'Позицію оновлено',
+  notesupdated: 'Нотатки оновлено',
+  customerset: 'Клієнта змінено',
+  customerchanged: 'Клієнта змінено',
+  confirmed: 'Замовлення підтверджено',
+  paymentaccepted: 'Платіж прийнято',
+  cancelled: 'Замовлення скасовано',
+  refunded: 'Кошти повернено',
+}
+
+export const orderEventTitle = (eventType: string) =>
+  ORDER_EVENTS[eventType.toLowerCase().replace(/[^a-z0-9]/g, '')] ??
+  'Замовлення оновлено'

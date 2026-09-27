@@ -214,6 +214,39 @@ export interface PartListOptions {
   intakeIds?: string[]
   signal?: AbortSignal
 }
+/**
+ * One line of "this part fits that vehicle", as Core stores it: against the
+ * yard's equipment catalogue, by identifier.
+ */
+export interface PartCompatibilityInput {
+  equipmentTypeId: string
+  makeId?: string | null
+  modelId?: string | null
+  yearFrom?: number | null
+  yearTo?: number | null
+}
+
+export interface PartCompatibilityItem {
+  id: string
+  equipmentTypeId: string
+  equipmentTypeName: string
+  makeId: string | null
+  makeName: string | null
+  modelId: string | null
+  modelName: string | null
+  yearFrom: number | null
+  yearTo: number | null
+  /** `DonorObservation` is the row Core took from the part's own car. */
+  evidenceType: string
+}
+
+export interface PartCompatibilities {
+  partId: string
+  /** Guards a replace against someone else's edit; send it back unchanged. */
+  version: string
+  items: PartCompatibilityItem[]
+}
+
 export interface CreatePartRequest {
   sourceType: string
   carId?: string | null
@@ -229,6 +262,12 @@ export interface CreatePartRequest {
   carBrand?: string | null
   carModel?: string | null
   carYear?: number | null
+  /**
+   * Sending this makes Core take it as the whole truth: for a part off a car
+   * the donor row it would otherwise observe is *not* created. Leave it out
+   * there and replace afterwards instead.
+   */
+  compatibilities?: PartCompatibilityInput[]
   desiredSalePrice?: number | null
 }
 export interface UpdatePartRequest {
@@ -245,6 +284,22 @@ export interface UpdatePartRequest {
 const requestConfig = (options: RequestOptions) =>
   options.signal ? { signal: options.signal } : {}
 
+/**
+ * Core serialises with `JsonIgnoreCondition.WhenWritingNull`, so a part with
+ * no car or no order does not arrive carrying nulls — those properties are
+ * simply absent. Read straight off the response, `part.car === null` is then
+ * false for a part that has no car at all, and the next line reaches into
+ * undefined. Every optional relation is put back as an explicit null here,
+ * once, so nothing downstream has to know.
+ */
+const normalizeItem = (item: PartListItem): PartListItem => ({
+  ...item,
+  externalCode: item.externalCode ?? null,
+  photos: item.photos ?? [],
+  car: item.car ?? null,
+  order: item.order ?? null,
+})
+
 export const partsApi = {
   async list(options: PartListOptions = {}): Promise<Page<PartListItem>> {
     const { signal, pageSize = 30, carIds, intakeIds, ...params } = options
@@ -257,7 +312,7 @@ export const partsApi = {
       },
       ...(signal ? { signal } : {}),
     })
-    return response.data
+    return { ...response.data, items: response.data.items.map(normalizeItem) }
   },
   /**
    * The filtered list. Unlike `list`, this one carries every dimension the
@@ -267,13 +322,24 @@ export const partsApi = {
     request: PartSearchRequest,
     options: RequestOptions = {},
   ): Promise<Page<PartSearchItem>> {
-    return (
+    const page = (
       await apiClient.post<Page<PartSearchItem>>(
         '/parts/search',
         request,
         requestConfig(options),
       )
     ).data
+    // The same omission as the list: a part with no car arrives without the
+    // property rather than with a null one.
+    return {
+      ...page,
+      items: page.items.map((item) => ({
+        ...item,
+        oemCode: item.oemCode ?? null,
+        thumbnailUrl: item.thumbnailUrl ?? null,
+        car: item.car ?? null,
+      })),
+    }
   },
   /**
    * How many parts sit behind each filter value, counted under the *rest* of
@@ -338,6 +404,35 @@ export const partsApi = {
         requestConfig(options),
       )
     ).data
+  },
+  async compatibilities(
+    partId: string,
+    options: RequestOptions = {},
+  ): Promise<PartCompatibilities> {
+    const result = (
+      await apiClient.get<PartCompatibilities>(
+        `/parts/${encodeURIComponent(partId)}/compatibilities`,
+        requestConfig(options),
+      )
+    ).data
+    return { ...result, items: result.items ?? [] }
+  },
+  /**
+   * Replaces the manual rows only: what Core observed from the donor car
+   * stays, which is the one way to have both on a single part.
+   */
+  async replaceCompatibilities(
+    partId: string,
+    expectedVersion: string,
+    items: PartCompatibilityInput[],
+  ): Promise<PartCompatibilities> {
+    const result = (
+      await apiClient.put<PartCompatibilities>(
+        `/parts/${encodeURIComponent(partId)}/compatibilities`,
+        { expectedVersion, items },
+      )
+    ).data
+    return { ...result, items: result.items ?? [] }
   },
   async update(
     id: string,

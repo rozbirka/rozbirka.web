@@ -43,6 +43,7 @@ const hydratedTenant = {
   isActive: true,
   createdAt: '2026-08-15T00:00:00Z',
   roleName: 'owner',
+  requireDeliveryDeposit: true,
 }
 
 function deferred<T>() {

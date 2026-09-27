@@ -17,6 +17,7 @@ const activeTenant: Tenant = {
   isActive: true,
   createdAt: '2026-08-01T10:00:00Z',
   roleName: 'owner',
+  requireDeliveryDeposit: true,
 }
 
 const otherTenant: Tenant = {

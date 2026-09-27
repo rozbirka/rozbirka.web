@@ -56,8 +56,12 @@ export interface NovaPoshtaDispatchPoint {
   name: string
   senderName: string
   phone: string
-  settlementId: number
-  divisionId: number
+  settlementRef: string
+  warehouseRef: string
+  counterpartyRef: string
+  contactRef: string
+  warehouseName: string | null
+  settlementName: string | null
   companyTin: string | null
   companyName: string | null
   isActive: boolean
@@ -68,8 +72,12 @@ export interface NovaPoshtaDispatchPointInput {
   name: string
   senderName: string
   phone: string
-  settlementId: number
-  divisionId: number
+  settlementRef: string
+  warehouseRef: string
+  counterpartyRef: string
+  contactRef: string
+  warehouseName?: string | null
+  settlementName?: string | null
   companyTin?: string | null
   companyName?: string | null
   isActive: boolean
@@ -83,19 +91,34 @@ export interface NovaPoshtaPage<T> {
 }
 
 export interface NovaPoshtaSettlement {
-  id: number
+  ref: string
   name: string
   prohibitedSending: boolean | null
   prohibitedIssuance: boolean | null
 }
 
 export interface NovaPoshtaDivision {
-  id: number
+  ref: string
   name: string
-  settlementId: number | null
+  settlementRef: string | null
   countryCode: string
   sendingAllowed: boolean
   receivingAllowed: boolean
+}
+
+/** A sender the tenant's API key is allowed to dispatch as. */
+export interface NovaPoshtaCounterparty {
+  ref: string
+  name: string
+  tin: string | null
+  isOrganization: boolean
+}
+
+/** A contact person registered under a sender counterparty. */
+export interface NovaPoshtaContact {
+  ref: string
+  name: string
+  phone: string | null
 }
 
 export interface IntegrationDiagnostics {
@@ -257,16 +280,40 @@ export const integrationsApi = {
       )
     ).data
   },
+  /** The senders this tenant's key may dispatch as, from the carrier's cabinet. */
+  async senders(
+    id: string,
+    options: RequestOptions = {},
+  ): Promise<NovaPoshtaCounterparty[]> {
+    return (
+      await apiClient.get<NovaPoshtaCounterparty[]>(
+        `${endpoint(id)}/shipping/senders`,
+        requestConfig(options),
+      )
+    ).data
+  },
+  async senderContacts(
+    id: string,
+    counterpartyRef: string,
+    options: RequestOptions = {},
+  ): Promise<NovaPoshtaContact[]> {
+    return (
+      await apiClient.get<NovaPoshtaContact[]>(
+        `${endpoint(id)}/shipping/senders/${encodeURIComponent(counterpartyRef)}/contacts`,
+        requestConfig(options),
+      )
+    ).data
+  },
   async divisions(
     id: string,
-    settlementId: number,
+    settlementRef: string,
     page = 1,
     options: RequestOptions = {},
   ): Promise<NovaPoshtaPage<NovaPoshtaDivision>> {
     return (
       await apiClient.get<NovaPoshtaPage<NovaPoshtaDivision>>(
         `${endpoint(id)}/shipping/divisions`,
-        { params: { settlementId, page }, ...requestConfig(options) },
+        { params: { settlementRef, page }, ...requestConfig(options) },
       )
     ).data
   },

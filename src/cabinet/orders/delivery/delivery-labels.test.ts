@@ -18,19 +18,18 @@ const shipment = (over: Partial<Shipment> = {}): Shipment => ({
   sender: {
     name: 'Олена Коваль',
     phone: '+380672147730',
-    divisionId: 12,
-    settlementId: 10,
+    warehouseRef: '1ec09d2e-e1c2-11e3-8c4a-0050568002d0',
+    settlementRef: '8d5a980d-391c-11dd-90d9-001a92567626',
   },
   draft: {
     recipient: {
       name: 'Ірина Олійник',
       phone: '+380503381172',
-      divisionId: 8,
-      settlementId: 20,
+      warehouseRef: '1ec09d2e-e1c2-11e3-8c4a-0050568002d0',
+      settlementRef: '8d5a980d-391c-11dd-90d9-001a92567626',
     },
     parcels: [{ lengthCm: 40, widthCm: 30, heightCm: 22, weightKg: 4.2 }],
     declaredValueUah: 4280,
-    returnEstimateUah: 180,
     payerType: 'Recipient',
     description: 'Автозапчастини',
   },

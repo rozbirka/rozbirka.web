@@ -137,6 +137,7 @@ const cabinet = (
       isActive: true,
       createdAt: '2026-08-01T00:00:00Z',
       roleName: 'owner',
+      requireDeliveryDeposit: true,
     },
     snapshot: {
       userId: 'user-1',

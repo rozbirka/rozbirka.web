@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, it, vi } from 'vitest'
 import { Button } from './button'
+import { CodeChip } from './code-chip'
 import { ConfirmDialog } from './confirm-dialog'
 import { DataTable } from './data-table'
 import { Field } from './field'
@@ -234,4 +235,20 @@ it('shows a pressed and a busy state, not only hover and disabled', () => {
   const save = screen.getByRole('button', { name: 'Зберегти' })
   expect(save.className).toContain('active:')
   expect(save.className).toContain('aria-busy:cursor-wait')
+})
+
+it('keeps the copy chip small while the button stays easy to hit', async () => {
+  const onCopy = vi.fn()
+  const user = userEvent.setup()
+
+  render(<CodeChip code="RZB-26-023C" label="Копіювати код" onCopy={onCopy} />)
+
+  const button = screen.getByRole('button', { name: 'Копіювати код' })
+  expect(button).toHaveClass('size-6')
+  // The 44px target comes from an overlay, so the chip itself stays 30px tall.
+  expect(button.className).toContain('after:-inset-2.5')
+
+  await user.click(button)
+
+  expect(onCopy).toHaveBeenCalledOnce()
 })

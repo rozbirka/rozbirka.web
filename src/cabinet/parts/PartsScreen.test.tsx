@@ -11,6 +11,38 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { FEATURES } from '@/api/types'
 import { PartsScreen } from './PartsScreen'
 
+const inventoryMocks = vi.hoisted(() => ({
+  getPartZones: vi.fn().mockResolvedValue([
+    {
+      isSystemUnassigned: false,
+      warehouseId: 'wh-1',
+      warehouseName: 'Склад А',
+      zoneCode: 'A-3-2',
+      zoneId: 'zone-1',
+      zoneName: 'Стелаж 3 · полиця 2',
+      zoneQrCode: 'QR',
+    },
+  ]),
+}))
+
+const equipmentMocks = vi.hoisted(() => ({
+  types: vi.fn().mockResolvedValue([
+    // Ordered by name, as Core returns them: lorries come before cars.
+    { id: 'type-truck', code: 'commercial_truck', name: 'Вантажний транспорт' },
+    { id: 'type-car', code: 'passenger_car', name: 'Легковий автомобіль' },
+  ]),
+  makes: vi
+    .fn()
+    .mockResolvedValue([
+      { id: 'make-ford', equipmentTypeId: 'type-car', name: 'Ford' },
+    ]),
+  models: vi
+    .fn()
+    .mockResolvedValue([
+      { id: 'model-focus', makeId: 'make-ford', name: 'Focus' },
+    ]),
+}))
+
 const partMocks = vi.hoisted(() => ({
   list: vi.fn().mockResolvedValue({
     items: [],
@@ -59,6 +91,27 @@ const partMocks = vi.hoisted(() => ({
   get: vi.fn().mockResolvedValue(null),
   history: vi.fn().mockResolvedValue({ partId: 'part-1', events: [] }),
   create: vi.fn().mockResolvedValue({ id: 'part-1' }),
+  compatibilities: vi.fn().mockResolvedValue({
+    partId: 'part-1',
+    version: 'v1',
+    items: [
+      {
+        id: 'compat-1',
+        equipmentTypeId: 'type-car',
+        equipmentTypeName: 'Легковий автомобіль',
+        makeId: 'make-ford',
+        makeName: 'Ford',
+        modelId: 'model-focus',
+        modelName: 'Focus',
+        yearFrom: 2018,
+        yearTo: 2018,
+        evidenceType: 'DonorObservation',
+      },
+    ],
+  }),
+  replaceCompatibilities: vi
+    .fn()
+    .mockResolvedValue({ partId: 'part-1', version: 'v2', items: [] }),
   update: vi.fn().mockResolvedValue({ id: 'part-1' }),
   delete: vi.fn().mockResolvedValue(undefined),
 }))
@@ -110,6 +163,8 @@ const partsDefinition = {
 }
 
 vi.mock('@/api/parts', () => ({ partsApi: partMocks }))
+vi.mock('@/api/equipment', () => ({ equipmentApi: equipmentMocks }))
+vi.mock('@/api/inventory', () => ({ inventoryApi: inventoryMocks }))
 vi.mock('@/api/cars', () => ({
   carsApi: { get: selectorMocks.car, list: selectorMocks.cars },
 }))
@@ -439,9 +494,7 @@ it('loads only the source selector that becomes relevant', async () => {
 
   expect(selectorMocks.cars).not.toHaveBeenCalled()
   expect(selectorMocks.intakes).not.toHaveBeenCalled()
-  fireEvent.change(screen.getByLabelText('Тип джерела'), {
-    target: { value: 'car' },
-  })
+  fireEvent.click(screen.getByRole('button', { name: /З авто/ }))
   await screen.findByRole('option', { name: 'CAR-01 · Ford Focus (2018)' })
   expect(selectorMocks.cars).toHaveBeenCalledOnce()
   expect(selectorMocks.intakes).not.toHaveBeenCalled()
@@ -458,9 +511,9 @@ it('shows server-authoritative compatibility as read-only when mutation is absen
     quantityAvailable: 1,
     quantityReserved: 0,
     quantitySoldTotal: 0,
-    compatCarBrand: 'Ford',
-    compatCarModel: 'Focus',
-    compatCarYear: 2018,
+    compatCarBrand: null,
+    compatCarModel: null,
+    compatCarYear: null,
     oemCode: null,
     effectiveSalePrice: null,
     photos: [],
@@ -481,12 +534,13 @@ it('shows server-authoritative compatibility as read-only when mutation is absen
     </MemoryRouter>,
   )
 
-  expect(await screen.findByText('Ford Focus 2018')).toBeInTheDocument()
-  // The note belongs beside the value it explains, not adrift at the page foot.
-  expect(
-    screen.getByText('Сумісність недоступна для редагування'),
-  ).toBeInTheDocument()
-  expect(screen.queryByLabelText('Марка сумісності')).not.toBeInTheDocument()
+  const card = await screen.findByRole('region', { name: /Сумісність/ })
+  expect(within(card).getByText('Ford Focus')).toBeVisible()
+  expect(within(card).getByText('2018')).toBeVisible()
+  // The donor row is Core's own, and the screen says so rather than offering
+  // an edit that would be refused.
+  expect(within(card).getByText('авто-джерело, не редагується')).toBeVisible()
+  expect(screen.queryByLabelText('Марка')).not.toBeInTheDocument()
 })
 
 it('shows a Ukrainian photo picker with previews for selected part photos', () => {
@@ -538,9 +592,9 @@ it('uses the fixed mobile condition vocabulary when creating a part', () => {
     </MemoryRouter>,
   )
 
-  const conditionCard = screen.getByRole('region', { name: 'Стан деталі' })
+  const conditionCard = screen.getByRole('region', { name: /Стан деталі/ })
   const condition = within(conditionCard).getByRole('radiogroup', {
-    name: 'Стан деталі',
+    name: /Стан деталі/,
   })
 
   expect(within(condition).getAllByRole('radio')).toHaveLength(3)
@@ -588,9 +642,9 @@ it('shows the fixed condition choices in a separate card when editing a part', a
   const descriptionCard = await screen.findByRole('region', {
     name: 'Опис деталі',
   })
-  const conditionCard = screen.getByRole('region', { name: 'Стан деталі' })
+  const conditionCard = screen.getByRole('region', { name: /Стан деталі/ })
   const condition = within(conditionCard).getByRole('radiogroup', {
-    name: 'Стан деталі',
+    name: /Стан деталі/,
   })
 
   expect(
@@ -641,23 +695,17 @@ it('creates a part with every supported source, inventory, price, and compatibil
     ['OEM-код', 'OEM-1'],
     ['Тип деталі', 'body'],
     ['Бажана ціна', '125.5'],
-    ['Рік сумісності', '2018'],
   ] as const) {
     fireEvent.change(screen.getByLabelText(label), { target: { value } })
   }
   fireEvent.click(screen.getByRole('radio', { name: 'Хороший' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Марка сумісності' }))
-  expect(
-    await screen.findByRole('listbox', { name: 'Марка сумісності' }),
-  ).toBeVisible()
-  fireEvent.pointerDown(screen.getByRole('heading', { name: 'Нова деталь' }))
-  expect(
-    screen.queryByRole('listbox', { name: 'Марка сумісності' }),
-  ).not.toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Марка сумісності' }))
+
+  const vehicle = within(screen.getByRole('region', { name: 'Авто 1' }))
+  fireEvent.click(vehicle.getByRole('button', { name: 'Марка' }))
   fireEvent.click(await screen.findByRole('option', { name: 'Ford' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Модель сумісності' }))
+  fireEvent.click(vehicle.getByRole('button', { name: 'Модель' }))
   fireEvent.click(await screen.findByRole('option', { name: 'Focus' }))
+  fireEvent.change(vehicle.getByLabelText('Рік'), { target: { value: '2018' } })
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
   expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
@@ -672,17 +720,22 @@ it('creates a part with every supported source, inventory, price, and compatibil
       oemCode: 'OEM-1',
       partType: 'body',
       desiredSalePrice: 125.5,
-      carBrand: 'Ford',
-      carModel: 'Focus',
-      carYear: 2018,
       photoKeys: [],
+      compatibilities: [
+        {
+          equipmentTypeId: 'type-car',
+          makeId: 'make-ford',
+          modelId: 'model-focus',
+          yearFrom: 2018,
+          yearTo: 2018,
+        },
+      ],
     },
     expect.objectContaining({
       signal: expect.any(AbortSignal) as AbortSignal,
     }),
   )
 })
-
 it('retains successful media uploads while exposing retry and remove for each failed file', async () => {
   mediaMocks.upload
     .mockResolvedValueOnce({
@@ -830,9 +883,7 @@ it('persists a tenant-authorized labeled car selection without exposing its raw 
   fireEvent.change(screen.getByLabelText('Назва'), {
     target: { value: 'Bumper' },
   })
-  fireEvent.change(screen.getByLabelText('Тип джерела'), {
-    target: { value: 'car' },
-  })
+  fireEvent.click(screen.getByRole('button', { name: /З авто/ }))
   fireEvent.change(await screen.findByLabelText('Автомобіль-джерело'), {
     target: { value: 'car-1' },
   })
@@ -874,9 +925,7 @@ it('rechecks cars.view before creating a car-sourced part', async () => {
   fireEvent.change(screen.getByLabelText('Назва'), {
     target: { value: 'Bumper' },
   })
-  fireEvent.change(screen.getByLabelText('Тип джерела'), {
-    target: { value: 'car' },
-  })
+  fireEvent.click(screen.getByRole('button', { name: /З авто/ }))
   fireEvent.change(await screen.findByLabelText('Автомобіль-джерело'), {
     target: { value: 'car-1' },
   })
@@ -902,9 +951,7 @@ it('rechecks intakes.view before creating an intake-sourced part', async () => {
   fireEvent.change(screen.getByLabelText('Назва'), {
     target: { value: 'Bumper' },
   })
-  fireEvent.change(screen.getByLabelText('Тип джерела'), {
-    target: { value: 'batch' },
-  })
+  fireEvent.click(screen.getByRole('button', { name: /З партії/ }))
   fireEvent.change(await screen.findByLabelText('Приймання-джерело'), {
     target: { value: 'intake-1' },
   })
@@ -1363,33 +1410,39 @@ it('renders the immutable detail and history contract with permission-aware link
 
   expect(await screen.findByText('Small scratch')).toBeInTheDocument()
   expect(screen.getByRole('region', { name: 'Наявність' })).toHaveTextContent(
-    'Усього 4 шт',
+    'прийнято 4 шт',
   )
-  // The split reads beside the title, before anything has to be scrolled.
-  const stat = (label: string) =>
-    screen
-      .getAllByRole('term')
-      .find((term) => term.textContent?.trim() === label)?.parentElement
-  expect(stat('Доступно')).toHaveTextContent('1')
-  expect(stat('У резерві')).toHaveTextContent('1')
-  expect(stat('Продано')).toHaveTextContent('2')
-  // Who created the part, in the facts rather than in a run-on sentence.
-  const specs = screen.getByRole('region', { name: 'Характеристики' })
-  expect(specs).toHaveTextContent('Створено')
-  expect(specs).toHaveTextContent('Olena')
-  expect(screen.getByRole('link', { name: 'CAR-01' })).toHaveAttribute(
+  // The split is in the availability card, with each figure named.
+  const stock = screen.getByRole('region', { name: 'Наявність' })
+  expect(stock).toHaveTextContent('Доступно')
+  expect(stock).toHaveTextContent('У резерві')
+  expect(stock).toHaveTextContent('Продано')
+  // Who created the part sits with the note they wrote.
+  const notes = screen.getByRole('region', { name: 'Нотатки' })
+  expect(notes).toHaveTextContent('Створено')
+  expect(notes).toHaveTextContent('Olena')
+  // The source is one chip: kind, the car itself, then its plate.
+  expect(screen.getByRole('link', { name: /З авто.*CAR-01/ })).toHaveAttribute(
     'href',
     '/app/yard/cars/car-1',
   )
-  expect(
-    screen.getByRole('link', { name: 'Редагувати деталь' }),
-  ).toHaveAttribute('href', '/app/yard/parts/part-1/edit')
-  expect(
-    screen.getByRole('link', { name: 'Розміщення на складі' }),
-  ).toHaveAttribute('href', '/app/yard/parts/part-1/inventory')
-  expect(
-    screen.getAllByRole('link', { name: /Замовлення 42/ }),
-  ).not.toHaveLength(0)
+  expect(screen.getByRole('link', { name: 'Редагувати' })).toHaveAttribute(
+    'href',
+    '/app/yard/parts/part-1/edit',
+  )
+  expect(screen.getByRole('link', { name: 'Перемістити' })).toHaveAttribute(
+    'href',
+    '/app/yard/parts/part-1/inventory',
+  )
+  expect(screen.getByRole('link', { name: 'Друк стікера' })).toHaveAttribute(
+    'href',
+    '/app/yard/stickers?part=part-1',
+  )
+  // The order is named on the event, not turned into a link: the row already
+  // reads as one line.
+  const historyCard = screen.getByRole('region', { name: 'Історія' })
+  expect(historyCard).toHaveTextContent('№ 42')
+  expect(within(historyCard).queryByRole('link', { name: /42/ })).toBeNull()
   const historySection = screen.getByRole('region', { name: 'Історія' })
   const created = within(historySection).getByRole('listitem')
   expect(created).toHaveTextContent('Створено')
@@ -1479,10 +1532,8 @@ it('reads history payloads as facts and shows an order once', async () => {
   expect(edited).not.toHaveTextContent('{}')
 
   // The current order is one of the reservations, so it takes a single row.
-  const reserves = screen.getByRole('region', { name: 'Резерви' })
-  expect(
-    within(reserves).getAllByRole('link', { name: 'Замовлення 284' }),
-  ).toHaveLength(1)
+  const sales = screen.getByRole('region', { name: 'Продажі' })
+  expect(within(sales).getAllByRole('link', { name: '№ 284' })).toHaveLength(1)
 })
 
 it('counts every filter value from the server and narrows the search by it', async () => {
@@ -1497,7 +1548,9 @@ it('counts every filter value from the server and narrows the search by it', asy
     </MemoryRouter>,
   )
 
-  const conditions = await screen.findByRole('region', { name: 'Стан деталі' })
+  const conditions = await screen.findByRole('region', {
+    name: /Стан деталі/,
+  })
   // The numbers are the server's, counted under the rest of the filter.
   expect(
     within(conditions).getByRole('button', { name: /Хороший/i }),
@@ -1786,9 +1839,7 @@ it('requires a source selection before creating a car-sourced part', async () =>
   fireEvent.change(screen.getByLabelText('Назва'), {
     target: { value: 'Bumper' },
   })
-  fireEvent.change(screen.getByLabelText('Тип джерела'), {
-    target: { value: 'car' },
-  })
+  fireEvent.click(screen.getByRole('button', { name: /З авто/ }))
   const source = await screen.findByLabelText('Автомобіль-джерело')
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
@@ -2133,4 +2184,525 @@ it('blames the server, not the network, when the request came back 500', async (
   expect(
     await screen.findByRole('heading', { name: 'Склад не завантажився' }),
   ).toBeVisible()
+})
+
+it('opens the new part as a drawer and names the next thing to fix', async () => {
+  const user = userEvent.setup()
+
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/new"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const drawer = await screen.findByRole('dialog')
+  expect(drawer).toHaveClass('sm:right-0')
+  expect(within(drawer).getByText(/Введіть назву деталі/)).toBeVisible()
+
+  await user.type(within(drawer).getByLabelText('Назва'), 'Цапфа RR')
+
+  expect(within(drawer).getByText('Фото можна додати пізніше.')).toBeVisible()
+})
+
+it('spells out what each condition means, not just its name', async () => {
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/new"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const scrap = await screen.findByRole('radio', { name: 'На запчастини' })
+  expect(scrap).toHaveAccessibleDescription(/Несправна або некомплектна/)
+  expect(screen.getByRole('radio', { name: 'Хороший' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  )
+})
+
+it('starts a part from a car page with that car already chosen', async () => {
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/new?car_id=car-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/new"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByRole('button', { name: /З авто/ })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  expect(
+    screen.getByRole('combobox', { name: 'Автомобіль-джерело' }),
+  ).toHaveValue('car-1')
+})
+
+it('adds and removes vehicles in the compatibility list', async () => {
+  const user = userEvent.setup()
+
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/new"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  await screen.findByRole('region', { name: 'Авто 1' })
+  expect(screen.queryByRole('button', { name: /Прибрати/ })).toBeNull()
+
+  await user.click(screen.getByRole('button', { name: 'Додати ще авто' }))
+
+  expect(screen.getByRole('region', { name: 'Авто 2' })).toBeVisible()
+  await user.click(screen.getAllByRole('button', { name: /Прибрати/ })[1]!)
+
+  expect(screen.queryByRole('region', { name: 'Авто 2' })).toBeNull()
+})
+
+it('refuses to save a make the yard has never catalogued', async () => {
+  equipmentMocks.makes.mockResolvedValueOnce([])
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({ Results: [{ MakeId: 9, MakeName: 'Rivian' }] }),
+    }),
+  )
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/new"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  fireEvent.change(screen.getByLabelText('Назва'), {
+    target: { value: 'Цапфа' },
+  })
+  const vehicle = within(screen.getByRole('region', { name: 'Авто 1' }))
+  fireEvent.click(vehicle.getByRole('button', { name: 'Марка' }))
+  fireEvent.click(await screen.findByRole('option', { name: 'Rivian' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    /У довіднику розбірки немає марки: Rivian/,
+  )
+  expect(partMocks.create).not.toHaveBeenCalled()
+})
+
+it('keeps the donor row by replacing compatibility after creating a car part', async () => {
+  partMocks.create.mockResolvedValue({ id: 'part-new' })
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({ Results: [{ MakeId: 1, MakeName: 'Ford' }] }),
+    }),
+  )
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/new?car_id=car-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/new"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  fireEvent.change(screen.getByLabelText('Назва'), {
+    target: { value: 'Цапфа' },
+  })
+  const vehicle = within(screen.getByRole('region', { name: 'Авто 1' }))
+  fireEvent.click(vehicle.getByRole('button', { name: 'Марка' }))
+  fireEvent.click(await screen.findByRole('option', { name: 'Ford' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
+
+  expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
+  // The list never rides along with the part: that would drop the donor row.
+  expect(partMocks.create.mock.calls[0]?.[0]).not.toHaveProperty(
+    'compatibilities',
+  )
+  expect(partMocks.replaceCompatibilities).toHaveBeenCalledWith(
+    'part-new',
+    'v1',
+    [
+      {
+        equipmentTypeId: 'type-car',
+        makeId: 'make-ford',
+        modelId: null,
+        yearFrom: null,
+        yearTo: null,
+      },
+    ],
+  )
+})
+
+it('says the part cannot be ordered from its own page yet, instead of pretending', async () => {
+  partMocks.get.mockResolvedValue({
+    id: 'part-1',
+    name: 'Bumper',
+    condition: 'fair',
+    status: 'available',
+    source: 'free',
+    quantityTotal: 1,
+    quantityAvailable: 1,
+    quantityReserved: 0,
+    quantitySoldTotal: 0,
+    oemCode: null,
+    effectiveSalePrice: 180,
+    desiredSalePrice: 180,
+    photos: [],
+    reservations: null,
+    order: null,
+    soldOrders: null,
+    createdByName: 'Olena',
+    createdAt: '2026-08-28T12:00:00Z',
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/part-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/:partId"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const order = await screen.findByRole('button', {
+    name: 'Додати в замовлення',
+  })
+  expect(order).toBeDisabled()
+  expect(order).toHaveAttribute(
+    'title',
+    expect.stringContaining('ще не підключене'),
+  )
+})
+
+it('offers the price only as a warning while the part has none', async () => {
+  partMocks.get.mockResolvedValue({
+    id: 'part-1',
+    name: 'Bumper',
+    condition: 'fair',
+    status: 'available',
+    source: 'free',
+    quantityTotal: 1,
+    quantityAvailable: 1,
+    quantityReserved: 0,
+    quantitySoldTotal: 0,
+    oemCode: null,
+    effectiveSalePrice: null,
+    desiredSalePrice: null,
+    photos: [],
+    reservations: null,
+    order: null,
+    soldOrders: null,
+    createdByName: 'Olena',
+    createdAt: '2026-08-28T12:00:00Z',
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/part-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/:partId"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const price = await screen.findByRole('region', { name: 'Ціна продажу' })
+  expect(within(price).getByText('Ціни ще немає')).toBeVisible()
+  expect(
+    within(price).getByText('Без ціни деталь не можна додати в замовлення.'),
+  ).toBeVisible()
+  expect(within(price).queryByRole('link', { name: 'Змінити' })).toBeNull()
+})
+
+it('names where the part actually sits, and says when it sits nowhere', async () => {
+  const part = {
+    id: 'part-1',
+    name: 'Bumper',
+    condition: 'fair',
+    status: 'available',
+    source: 'free',
+    quantityTotal: 1,
+    quantityAvailable: 1,
+    quantityReserved: 0,
+    quantitySoldTotal: 0,
+    oemCode: null,
+    effectiveSalePrice: 180,
+    desiredSalePrice: 180,
+    photos: [],
+    reservations: null,
+    order: null,
+    soldOrders: null,
+    createdByName: 'Olena',
+    createdAt: '2026-08-28T12:00:00Z',
+  }
+  partMocks.get.mockResolvedValue(part)
+  cabinetMock.snapshot.permissions.add('inventory.view')
+  const { unmount } = render(
+    <MemoryRouter initialEntries={['/app/yard/parts/part-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/:partId"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const stock = await screen.findByRole('region', { name: 'Наявність' })
+  expect(
+    await within(stock).findByText('Склад А · Стелаж 3 · полиця 2'),
+  ).toBeVisible()
+  unmount()
+
+  // Core keeps a system zone for anything nobody has placed; it is not a place.
+  inventoryMocks.getPartZones.mockResolvedValueOnce([
+    {
+      isSystemUnassigned: true,
+      warehouseId: 'wh-1',
+      warehouseName: 'Склад А',
+      zoneCode: '—',
+      zoneId: 'zone-0',
+      zoneName: 'Без зони',
+      zoneQrCode: 'QR',
+    },
+  ])
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/part-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/:partId"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByText('Не розміщена')).toBeVisible()
+})
+
+it('keeps reserves with the sales and says what it cannot promise about them', async () => {
+  partMocks.get.mockResolvedValue({
+    id: 'part-1',
+    name: 'Bumper',
+    condition: 'fair',
+    status: 'reserved',
+    source: 'free',
+    quantityTotal: 5,
+    quantityAvailable: 2,
+    quantityReserved: 2,
+    quantitySoldTotal: 1,
+    oemCode: null,
+    effectiveSalePrice: 180,
+    desiredSalePrice: 180,
+    photos: [],
+    order: null,
+    soldOrders: null,
+    reservations: [
+      {
+        orderId: 'order-1042',
+        orderNumber: 1042,
+        quantity: 1,
+        customerName: 'Андрій Коваль',
+      },
+      {
+        orderId: 'order-1045',
+        orderNumber: 1045,
+        quantity: 1,
+        customerName: 'СТО «Мотор-Сервіс»',
+      },
+    ],
+    createdByName: 'Olena',
+    createdAt: '2026-08-28T12:00:00Z',
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/part-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/:partId"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const sales = await screen.findByRole('region', { name: 'Продажі' })
+  expect(within(sales).getByText('Андрій Коваль')).toBeVisible()
+  expect(within(sales).getByText('СТО «Мотор-Сервіс»')).toBeVisible()
+  // A reservation carries no price of its own, and the table says so.
+  expect(within(sales).getAllByText('—').length).toBeGreaterThan(0)
+
+  // The action from the design is offered, but refused with its reason.
+  const extend = within(sales).getAllByRole('button', {
+    name: /Продовжити/,
+  })[0]!
+  expect(extend).toBeDisabled()
+  expect(extend).toHaveAttribute(
+    'title',
+    expect.stringContaining('Строку резерву розбірка не веде'),
+  )
+})
+
+it('groups history by day and narrows it to what was asked for', async () => {
+  const user = userEvent.setup()
+  partMocks.get.mockResolvedValue({
+    id: 'part-1',
+    name: 'Bumper',
+    condition: 'fair',
+    status: 'available',
+    source: 'free',
+    quantityTotal: 1,
+    quantityAvailable: 1,
+    quantityReserved: 0,
+    quantitySoldTotal: 0,
+    oemCode: null,
+    effectiveSalePrice: 180,
+    desiredSalePrice: 180,
+    photos: [],
+    order: null,
+    soldOrders: null,
+    reservations: null,
+    createdByName: 'Olena',
+    createdAt: '2026-08-28T12:00:00Z',
+  })
+  partMocks.history.mockResolvedValue({
+    partId: 'part-1',
+    events: [
+      {
+        id: 'e1',
+        eventType: 'sold',
+        data: '{"quantity":2}',
+        createdAt: '2026-09-19T14:48:00Z',
+        user: { id: 'u1', name: 'Олег Ткач' },
+        order: { id: 'o-1037', number: 1037 },
+      },
+      {
+        id: 'e2',
+        eventType: 'updated',
+        data: '{"old_price":200,"new_price":180}',
+        createdAt: '2026-08-02T06:15:00Z',
+        user: { id: 'u2', name: 'Марія Бондаренко' },
+        order: null,
+      },
+      {
+        id: 'e3',
+        eventType: 'placed',
+        data: '{"zone":"A-3-2"}',
+        createdAt: '2026-08-02T05:08:00Z',
+        user: { id: 'u2', name: 'Марія Бондаренко' },
+        order: null,
+      },
+    ],
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/part-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/:partId"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const card = await screen.findByRole('region', { name: 'Історія' })
+  // Two days, and the two events of the second one share a single heading.
+  expect(within(card).getByText('19.09.2026')).toBeVisible()
+  expect(within(card).getAllByText('02.08.2026')).toHaveLength(1)
+  // A before-and-after pair earns the arrow; a lone fact does not.
+  expect(within(card).getByText('200')).toBeVisible()
+  expect(within(card).getByText('180')).toBeVisible()
+
+  await user.click(within(card).getByRole('button', { name: 'Ціна' }))
+
+  expect(within(card).queryByText('Продано')).toBeNull()
+  expect(within(card).getByText('Змінено')).toBeVisible()
+})
+
+it('narrows the sales table to reserves or to sales', async () => {
+  const user = userEvent.setup()
+  partMocks.get.mockResolvedValue({
+    id: 'part-1',
+    name: 'Bumper',
+    condition: 'fair',
+    status: 'reserved',
+    source: 'free',
+    quantityTotal: 3,
+    quantityAvailable: 0,
+    quantityReserved: 1,
+    quantitySoldTotal: 2,
+    oemCode: null,
+    effectiveSalePrice: 180,
+    desiredSalePrice: 200,
+    photos: [],
+    order: null,
+    reservations: [
+      {
+        orderId: 'order-1042',
+        orderNumber: 1042,
+        quantity: 1,
+        customerName: 'Андрій Коваль',
+      },
+    ],
+    soldOrders: [
+      {
+        orderId: 'order-1037',
+        orderNumber: 1037,
+        quantitySold: 2,
+        unitPrice: 180,
+        confirmedAt: '2026-09-19T14:48:00Z',
+        customerName: 'Олег Шевчук',
+      },
+    ],
+    createdByName: 'Olena',
+    createdAt: '2026-08-28T12:00:00Z',
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/part-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/:partId"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const sales = await screen.findByRole('region', { name: 'Продажі' })
+  // Revenue and the discount against the asking price are both real figures.
+  expect(sales).toHaveTextContent('Виручка')
+  expect(sales).toHaveTextContent('Знижки')
+  expect(within(sales).getByText('Андрій Коваль')).toBeVisible()
+  expect(within(sales).getByText('Олег Шевчук')).toBeVisible()
+
+  await user.click(within(sales).getByRole('tab', { name: /Продано/ }))
+
+  expect(within(sales).queryByText('Андрій Коваль')).toBeNull()
+  expect(within(sales).getByText('Олег Шевчук')).toBeVisible()
 })

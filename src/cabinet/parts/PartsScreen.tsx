@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import {
   Link,
   useLocation,
@@ -11,7 +18,14 @@ import {
   ChevronRight,
   ExternalLink,
   Lock,
+  Car as CarIcon,
+  CircleMinus,
+  MapPin,
+  Package,
+  ShoppingBag,
+  Tag,
   Plus,
+  X,
   Printer,
   Search,
   Trash2,
@@ -22,14 +36,14 @@ import {
   DateValue,
   PhotoFileField,
   Gallery,
-  Quantity,
   Card,
+  CodeChip,
   SectionPanel,
+  Sheet,
   PillGroup,
   QuantityStepper,
   SkeletonRows,
   SpecGrid,
-  SpecNote,
   Button,
   ConfirmDialog,
   DataTable,
@@ -38,8 +52,6 @@ import {
   Field,
   InlineEdit,
   Notice,
-  PageBody,
-  PageHeader,
   SelectInput,
   StatusPill,
   TextArea,
@@ -49,7 +61,11 @@ import {
 import { cn, plural } from '@/lib/utils'
 import {
   conditionLabel,
+  conditionPhrase,
+  historyChange,
   historyDetails,
+  historyKind,
+  type HistoryKind,
   historyLabel,
   originLabel,
   sourceLabel,
@@ -65,6 +81,7 @@ import {
   type UpdatePartRequest,
   type PartDetail,
   type PartsSummary,
+  type PartCompatibilities,
 } from '@/api/parts'
 import { carsApi, type Car, type CarListItem } from '@/api/cars'
 import { intakesApi, type IntakeListItem } from '@/api/intakes'
@@ -76,10 +93,20 @@ import {
   type CabinetModuleDefinition,
 } from '../module-registry'
 import { evaluateModuleAccess, type ModuleAccessDecision } from '../policy'
+import { inventoryApi, type PartInventoryZone } from '@/api/inventory'
 import { normalizeApiProblem } from '@/api/errors'
 import type { ApiProblem } from '@/api/contracts'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { VehicleCatalogPicker } from '../cars/CarsScreen'
+import {
+  emptyRow,
+  filledRows,
+  resolveCompatibility,
+  rowProblem,
+  rowsProblem,
+  unknownBrandsMessage,
+  type CompatibilityRow,
+} from './compatibility-rows'
 
 const partStatuses = new Set(['available', 'reserved', 'sold'])
 /** Every group the filter panel draws; the server counts each one for us. */
@@ -602,7 +629,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[1360px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
           <div className="min-w-0">
             <p className="text-app-dim font-mono text-[12px] tracking-[0.14em] uppercase">
@@ -1104,155 +1131,6 @@ const initials = (name: string) =>
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('') || '—'
 
-/** The three states a quantity can be in, with the colour each one owns. */
-const stockSegments = (available: number, reserved: number, sold: number) => [
-  {
-    key: 'available',
-    label: 'Доступно',
-    value: available,
-    fill: 'bg-state-ok',
-    ink: 'text-state-ok',
-  },
-  {
-    key: 'reserved',
-    label: 'У резерві',
-    value: reserved,
-    fill: 'bg-state-warn',
-    ink: 'text-state-warn',
-  },
-  {
-    key: 'sold',
-    label: 'Продано',
-    value: sold,
-    fill: 'bg-state-danger',
-    ink: 'text-state-danger',
-  },
-]
-
-/**
- * The stock figures beside the title, where they answer the question people
- * open a part for — how much of it can still be sold — before anything has to
- * be scrolled. Zero is greyed rather than hidden: a part with nothing reserved
- * and nothing sold should say so.
- */
-function StockStats({
-  available,
-  reserved,
-  sold,
-  unit,
-}: {
-  available: number
-  reserved: number
-  sold: number
-  unit: string | null
-}) {
-  return (
-    <dl className="border-app-line bg-app-raised grid grid-cols-3 gap-x-8 gap-y-3 rounded-[16px] border px-7 py-5">
-      {stockSegments(available, reserved, sold).map((segment) => (
-        <div className="grid gap-2" key={segment.key}>
-          <dt
-            className={cn(
-              'flex items-center gap-1.5 font-mono text-[11px] tracking-[0.14em] whitespace-nowrap uppercase',
-              segment.value > 0 ? segment.ink : 'text-app-dim',
-            )}
-          >
-            <span
-              aria-hidden
-              className={cn('size-1.5 rounded-full', segment.fill)}
-            />
-            {segment.label}
-          </dt>
-          <dd
-            className={cn(
-              'flex items-baseline gap-1.5 text-[30px] leading-none font-bold tracking-[-0.02em] tabular-nums',
-              segment.value > 0 ? 'text-white' : 'text-app-dim',
-            )}
-          >
-            {segment.value}
-            <span
-              className={cn(
-                'text-[16px] font-semibold',
-                segment.value > 0 ? 'text-app-muted' : 'text-app-dim',
-              )}
-            >
-              {unit ?? 'шт'}
-            </span>
-          </dd>
-        </div>
-      ))}
-    </dl>
-  )
-}
-
-/**
- * The same split as a bar. Decoration on purpose: the figures above carry the
- * numbers, so this only has to show the proportion at a glance.
- */
-function StockBar({
-  available,
-  reserved,
-  sold,
-}: {
-  available: number
-  reserved: number
-  sold: number
-}) {
-  const segments = stockSegments(available, reserved, sold)
-  const scale = segments.reduce((sum, segment) => sum + segment.value, 0)
-  if (scale === 0) return null
-
-  return (
-    <span aria-hidden className="flex h-2 w-full gap-[3px]">
-      {segments.map((segment) =>
-        segment.value > 0 ? (
-          <span
-            className={cn('block h-full rounded-full', segment.fill)}
-            key={segment.key}
-            style={{ width: `${String((segment.value / scale) * 100)}%` }}
-          />
-        ) : null,
-      )}
-    </span>
-  )
-}
-
-/** One order this part is promised to or was sold through. */
-function OrderRow({
-  number,
-  href,
-  detail,
-  aside,
-}: {
-  number: number
-  href: string | null
-  detail: ReactNode
-  aside?: ReactNode
-}) {
-  const label = `Замовлення ${String(number)}`
-  return (
-    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2.5">
-      <span className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
-        {href === null ? (
-          <span className="text-sm font-medium text-white">{label}</span>
-        ) : (
-          <Link
-            className="hover:text-brand text-sm font-medium text-white"
-            to={href}
-          >
-            {label}
-          </Link>
-        )}
-        <span className="text-app-dim text-[13.5px]">{detail}</span>
-      </span>
-      {aside === undefined ? null : (
-        <span className="text-app-muted text-[13.5px] tabular-nums">
-          {aside}
-        </span>
-      )}
-    </div>
-  )
-}
-
 function PartDetailScreen({
   detail,
   history,
@@ -1283,6 +1161,7 @@ function PartDetailScreen({
   const [deleting, setDeleting] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
   const remove = async () => {
     if (deleting) return
     setDeleting(true)
@@ -1315,26 +1194,124 @@ function PartDetailScreen({
   const base = `/app/${tenantSlug}/parts`
   const orderHref = (id: string) =>
     links.orders ? `/app/${tenantSlug}/orders/${id}` : null
-  const compat = detail
-    ? [detail.compatCarBrand, detail.compatCarModel, detail.compatCarYear]
-        .filter(Boolean)
-        .join(' ')
-    : ''
-  const allReservations = detail?.reservations ?? []
-  const currentOrderId = detail?.order?.id
-  const currentReservation = currentOrderId
-    ? allReservations.find(
-        (reservation) => reservation.orderId === currentOrderId,
-      )
-    : undefined
-  const reservations = allReservations.filter(
-    (reservation) => reservation.orderId !== currentOrderId,
-  )
+  const [compat, setCompat] = useState<PartCompatibilities | null>(null)
+  const [zones, setZones] = useState<PartInventoryZone[] | null>(null)
+  const [historyFilter, setHistoryFilter] =
+    useState<(typeof HISTORY_FILTERS)[number]['value']>('all')
+  const [historyAll, setHistoryAll] = useState(false)
+  const [salesTab, setSalesTab] =
+    useState<(typeof SALES_TABS)[number]['value']>('all')
+
+  useEffect(() => {
+    if (partId === undefined) return
+    const controller = new AbortController()
+    void partsApi.compatibilities(partId, { signal: controller.signal }).then(
+      (result) => {
+        if (!controller.signal.aborted) setCompat(result)
+      },
+      () => {
+        // Compatibility is a detail of the page, not the page itself.
+      },
+    )
+    return () => controller.abort()
+  }, [partId])
+
+  useEffect(() => {
+    if (partId === undefined || !links.inventory) return
+    const controller = new AbortController()
+    void inventoryApi.getPartZones(partId, { signal: controller.signal }).then(
+      (result) => {
+        if (!controller.signal.aborted) setZones(result)
+      },
+      () => {
+        if (!controller.signal.aborted) setZones([])
+      },
+    )
+    return () => controller.abort()
+  }, [links.inventory, partId])
+  // Every order this part is promised to, the current one included: the card
+  // shows one list rather than singling out the order that was opened last.
+  const reservations = detail?.reservations ?? []
   const soldOrders = detail?.soldOrders ?? []
+  const filteredHistory = (history?.events ?? []).filter(
+    (event) =>
+      historyFilter === 'all' ||
+      historyKind(event.eventType, event.data) === historyFilter,
+  )
+  const shownHistory = historyAll
+    ? filteredHistory
+    : filteredHistory.slice(0, HISTORY_LIMIT)
+  // Events arrive newest first; the day heading changes as the list walks down.
+  const historyGroups = shownHistory.reduce<
+    { date: string; items: typeof shownHistory; last: boolean }[]
+  >((groups, event) => {
+    const date = day(event.createdAt)
+    const current = groups.at(-1)
+    if (current?.date === date) current.items.push(event)
+    else groups.push({ date, items: [event], last: false })
+    return groups
+  }, [])
+  const lastGroup = historyGroups.at(-1)
+  if (lastGroup) lastGroup.last = true
+
+  /** The asking price the yard set; a sale below it is a discount. */
+  const listPrice = detail?.desiredSalePrice ?? null
+  // One table over two different things: a reservation has no price of its
+  // own, a sale does. The row keeps that difference rather than hiding it.
+  const salesRows = [
+    ...(salesTab === 'sold'
+      ? []
+      : reservations.map((reservation) => ({
+          kind: 'reserved' as const,
+          orderId: reservation.orderId,
+          orderNumber: reservation.orderNumber,
+          customerName: reservation.customerName,
+          quantity: reservation.quantity,
+          unitPrice: null as number | null,
+          date: null as string | null,
+          discount: 0,
+        }))),
+    ...(salesTab === 'reserved'
+      ? []
+      : soldOrders.map((order) => ({
+          kind: 'sold' as const,
+          orderId: order.orderId,
+          orderNumber: order.orderNumber,
+          customerName: order.customerName,
+          quantity: order.quantitySold,
+          unitPrice: order.unitPrice,
+          date: order.confirmedAt,
+          discount:
+            listPrice === null
+              ? 0
+              : Math.max(0, listPrice - order.unitPrice) * order.quantitySold,
+        }))),
+  ]
+  /** What the yard gave away against its own asking price. */
+  const soldDiscount =
+    listPrice === null
+      ? 0
+      : soldOrders.reduce(
+          (sum, order) =>
+            sum + Math.max(0, listPrice - order.unitPrice) * order.quantitySold,
+          0,
+        )
+
   const soldRevenue = soldOrders.reduce(
     (sum, order) => sum + order.quantitySold * order.unitPrice,
     0,
   )
+
+  const copyCode = async (code: string) => {
+    try {
+      if (!navigator.clipboard?.writeText)
+        throw new Error('Clipboard unavailable')
+      await navigator.clipboard.writeText(code)
+      setCopied('Код скопійовано.')
+    } catch {
+      setCopied('Не вдалося скопіювати код.')
+    }
+  }
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
@@ -1356,21 +1333,22 @@ function PartDetailScreen({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
-          {links.inventory ? (
-            <Button asChild className="px-[18px] text-sm font-semibold">
-              <Link to={`${base}/${partId}/inventory`}>
-                Розміщення на складі
-              </Link>
-            </Button>
-          ) : null}
+          <Button asChild className="px-4 text-sm font-semibold">
+            <Link to={`/app/${tenantSlug}/stickers?part=${partId ?? ''}`}>
+              Друк стікера
+            </Link>
+          </Button>
           {canManage ? (
             <>
+              <Button asChild className="px-4 text-sm font-semibold">
+                <Link to={`${base}/${partId}/edit`}>Редагувати</Link>
+              </Button>
               <Button
-                asChild
-                className="px-5 text-sm font-bold"
+                disabled
+                title="Додавання деталі в замовлення з її картки ще не підключене — відкрийте замовлення й додайте позицію там."
                 variant="primary"
               >
-                <Link to={`${base}/${partId}/edit`}>Редагувати деталь</Link>
+                Додати в замовлення
               </Button>
               <ActionMenu
                 actions={[
@@ -1390,39 +1368,85 @@ function PartDetailScreen({
         </div>
       </div>
 
-      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-11 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[1360px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-11 lg:px-12">
         {deleteError !== null && !confirmingDelete ? (
           <Notice tone="danger">{deleteError}</Notice>
         ) : null}
+        {copied === null ? null : (
+          <Notice tone={copied.startsWith('Не') ? 'danger' : 'ok'}>
+            {copied}
+          </Notice>
+        )}
 
-        <div className="flex flex-wrap items-start justify-between gap-x-10 gap-y-6">
-          <div className="min-w-0">
-            {detail === null ? null : (
+        <div className="min-w-0">
+          {detail === null ? null : (
+            <div className="flex flex-wrap items-center gap-3">
               <StatusPill tone={statusPresentation(detail.status).tone}>
                 {statusPresentation(detail.status).label}
               </StatusPill>
-            )}
-            <h1 className="mt-4 text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
-              {detail === null ? 'Деталь' : detail.name}
-            </h1>
-            {detail === null ? null : (
-              <p className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3.5 gap-y-2 text-sm font-medium">
-                {detail.qrCode ? (
-                  <span className="border-app-line bg-app-input text-app-ink rounded-[7px] border px-2.5 py-1 font-mono text-[14px]">
-                    {detail.qrCode}
-                  </span>
-                ) : null}
-                <span>Стан: {conditionLabel(detail.condition)}</span>
-              </p>
-            )}
-          </div>
+              {detail.quantityReserved > 0 && detail.quantityAvailable > 0 ? (
+                <StatusPill tone="warn">
+                  {detail.quantityReserved} у резерві
+                </StatusPill>
+              ) : null}
+              <span className="text-app-ink flex items-center gap-[7px] text-[13px] font-semibold">
+                <span
+                  aria-hidden
+                  className={cn(
+                    'size-[7px] rounded-full',
+                    CONDITION_DOT[detail.condition] ?? 'bg-app-dim',
+                  )}
+                />
+                {conditionPhrase(detail.condition)}
+              </span>
+            </div>
+          )}
+          <h1 className="mt-3.5 text-[38px] leading-[1.04] font-extrabold tracking-[-0.03em] text-balance text-white sm:text-[46px] lg:text-[48px]">
+            {detail === null ? 'Деталь' : detail.name}
+          </h1>
           {detail === null ? null : (
-            <StockStats
-              available={detail.quantityAvailable}
-              reserved={detail.quantityReserved}
-              sold={detail.quantitySoldTotal}
-              unit={detail.unit || null}
-            />
+            <div className="mt-3.5 flex flex-wrap items-center gap-2.5">
+              {detail.qrCode ? (
+                <CodeChip
+                  code={detail.qrCode}
+                  label="Копіювати код"
+                  onCopy={() => {
+                    void copyCode(detail.qrCode)
+                  }}
+                />
+              ) : null}
+              {detail.oemCode ? (
+                <span className="text-app-muted font-mono text-[13px]">
+                  OEM {detail.oemCode}
+                </span>
+              ) : null}
+              {detail.partType ? (
+                <span className="text-app-muted text-[13px]">
+                  {detail.partType}
+                </span>
+              ) : null}
+              <SourceChip
+                href={
+                  detail.carId && links.cars
+                    ? `/app/${tenantSlug}/cars/${detail.carId}`
+                    : detail.intakeId && links.intakes
+                      ? `/app/${tenantSlug}/intakes/${detail.intakeId}`
+                      : null
+                }
+                kind={detail.carId ? 'car' : detail.intakeId ? 'batch' : 'free'}
+                meta={detail.carId ? (detail.carCode ?? '') : ''}
+                name={
+                  detail.carId
+                    ? [detail.carBrand, detail.carModel, detail.carYear]
+                        .filter(Boolean)
+                        .join(' ') ||
+                      (detail.carCode ?? 'авто')
+                    : detail.intakeId
+                      ? 'приймання'
+                      : 'без прив’язки'
+                }
+              />
+            </div>
           )}
         </div>
 
@@ -1436,159 +1460,534 @@ function PartDetailScreen({
         ) : (
           <>
             <div className="mt-4 flex flex-wrap items-start gap-6">
-              <Card
-                aside={
-                  <span className="text-app-dim font-mono text-[12px] tracking-[0.1em] uppercase">
-                    {detail.photos.length}{' '}
-                    {plural(detail.photos.length, [
-                      'знімок',
-                      'знімки',
-                      'знімків',
-                    ])}
-                  </span>
-                }
-                bodyClassName="p-0"
-                className="min-w-[320px] flex-[1_1_620px]"
-                headerClassName="pb-4"
-                title="Фото"
-              >
-                <Gallery
-                  emptyLabel="Фото цієї деталі ще немає — їх додають під час редагування."
-                  label={`Фото деталі ${detail.name}`}
-                  photos={detail.photos.map((photo, index) => ({
-                    id: photo.id,
-                    url: photo.url,
-                    ...(photo.thumbnailUrl
-                      ? { thumbnailUrl: photo.thumbnailUrl }
-                      : {}),
-                    alt: `Фото деталі ${detail.name} ${String(index + 1)}`,
-                  }))}
-                  variant="framed"
-                />
-              </Card>
-
-              <div className="flex min-w-[320px] flex-[1_1_460px] flex-col gap-6">
+              <div className="flex min-w-[320px] flex-[1_1_560px] flex-col gap-6">
                 <Card
                   aside={
-                    <span className="text-app-muted text-[14px] font-semibold">
-                      Усього {detail.quantityTotal} {detail.unit || 'шт'}
+                    <span className="text-app-dim font-mono text-[12px] tracking-[0.1em] uppercase">
+                      {detail.photos.length}{' '}
+                      {plural(detail.photos.length, [
+                        'знімок',
+                        'знімки',
+                        'знімків',
+                      ])}
+                    </span>
+                  }
+                  bodyClassName="p-0"
+                  className="min-w-[320px] flex-[1_1_620px]"
+                  headerClassName="pb-4"
+                  title="Фото"
+                >
+                  <Gallery
+                    emptyLabel="Фото цієї деталі ще немає — їх додають під час редагування."
+                    label={`Фото деталі ${detail.name}`}
+                    photos={detail.photos.map((photo, index) => ({
+                      id: photo.id,
+                      url: photo.url,
+                      ...(photo.thumbnailUrl
+                        ? { thumbnailUrl: photo.thumbnailUrl }
+                        : {}),
+                      alt: `Фото деталі ${detail.name} ${String(index + 1)}`,
+                    }))}
+                    variant="framed"
+                  />
+                </Card>
+              </div>
+              <div className="flex min-w-[320px] flex-[1_1_440px] flex-col gap-6">
+                <Card
+                  aside={
+                    canManage && detail.effectiveSalePrice !== null ? (
+                      <Button
+                        asChild
+                        className="min-h-8 px-3 text-[12px] font-bold"
+                      >
+                        <Link to={`${base}/${partId}/edit`}>Змінити</Link>
+                      </Button>
+                    ) : null
+                  }
+                  title="Ціна продажу"
+                >
+                  {detail.effectiveSalePrice === null ? (
+                    <div className="border-state-warn/25 bg-state-warn/[0.07] flex flex-wrap items-center justify-between gap-4 rounded-[12px] border px-4 py-3.5">
+                      <div className="min-w-0">
+                        <p className="text-state-warn text-[14px] font-bold">
+                          Ціни ще немає
+                        </p>
+                        <p className="text-app-muted mt-1 text-[13px] leading-[1.45] text-pretty">
+                          Без ціни деталь не можна додати в замовлення.
+                        </p>
+                      </div>
+                      {canManage ? (
+                        <Button asChild variant="primary">
+                          <Link to={`${base}/${partId}/edit`}>
+                            Вказати ціну
+                          </Link>
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <>
+                      <p className="flex items-baseline gap-2.5">
+                        <Amount
+                          className="font-mono text-[30px] font-medium tracking-[-0.01em] text-white"
+                          currency={PART_CURRENCY}
+                          value={detail.effectiveSalePrice}
+                        />
+                        <span className="text-app-muted text-[13px]">
+                          за 1 {detail.unit || 'шт'}
+                        </span>
+                      </p>
+                      <p className="text-app-muted mt-1.5 text-[13px]">
+                        {detail.quantityAvailable > 0 ? (
+                          <>
+                            Вільний залишок на{' '}
+                            <Amount
+                              currency={PART_CURRENCY}
+                              value={
+                                detail.effectiveSalePrice *
+                                detail.quantityAvailable
+                              }
+                            />
+                            {detail.quantityReserved > 0
+                              ? ` · ще ${String(detail.quantityReserved)} ${detail.unit || 'шт'} у резерві`
+                              : ''}
+                          </>
+                        ) : detail.quantityReserved > 0 ? (
+                          `Вільних одиниць немає, ${String(detail.quantityReserved)} ${detail.unit || 'шт'} у резерві`
+                        ) : (
+                          'Усі одиниці продано'
+                        )}
+                      </p>
+                      {detail.desiredSalePrice !== null &&
+                      detail.desiredSalePrice !== detail.effectiveSalePrice ? (
+                        <p className="text-app-dim mt-1 text-[12.5px]">
+                          бажана{' '}
+                          <Amount
+                            currency={PART_CURRENCY}
+                            value={detail.desiredSalePrice}
+                          />
+                        </p>
+                      ) : null}
+                    </>
+                  )}
+                </Card>
+                <Card
+                  aside={
+                    <span className="text-app-muted text-[13px] font-semibold">
+                      прийнято {detail.quantityTotal} {detail.unit || 'шт'}
                     </span>
                   }
                   title="Наявність"
                 >
-                  <StockBar
-                    available={detail.quantityAvailable}
-                    reserved={detail.quantityReserved}
-                    sold={detail.quantitySoldTotal}
-                  />
-                  <div className="border-app-line mt-[22px] flex flex-wrap items-center justify-between gap-3 border-t pt-5">
-                    <span className="text-app-muted text-sm font-semibold">
-                      Ціна продажу
-                    </span>
-                    {detail.effectiveSalePrice === null ? (
-                      <span className="flex flex-wrap items-center gap-2.5">
-                        <span className="text-state-warn text-[16px] font-bold">
-                          ціни ще немає
-                        </span>
-                        {canManage ? (
-                          <Button
-                            asChild
-                            className="min-h-9 px-3 text-xs font-bold"
-                          >
-                            <Link to={`${base}/${partId}/edit`}>Додати</Link>
-                          </Button>
-                        ) : null}
-                      </span>
-                    ) : (
-                      <span className="grid justify-items-end gap-0.5">
-                        <Amount
-                          className="text-[18px] font-bold text-white"
-                          currency={PART_CURRENCY}
-                          value={detail.effectiveSalePrice}
-                        />
-                        {detail.desiredSalePrice !== null &&
-                        detail.desiredSalePrice !==
-                          detail.effectiveSalePrice ? (
-                          <span className="text-app-dim text-[12.5px]">
-                            бажана{' '}
-                            <Amount
-                              currency={PART_CURRENCY}
-                              value={detail.desiredSalePrice}
-                            />
-                          </span>
-                        ) : null}
-                      </span>
-                    )}
+                  <dl className="grid gap-2 sm:grid-cols-3">
+                    <StockTile
+                      label="Доступно"
+                      sub={
+                        detail.quantityAvailable > 0
+                          ? 'можна продати'
+                          : 'немає вільних'
+                      }
+                      tone="ok"
+                      value={detail.quantityAvailable}
+                    />
+                    <StockTile
+                      label="У резерві"
+                      sub={
+                        detail.quantityReserved > 0
+                          ? `${String(reservations.length)} ${plural(reservations.length, ['замовлення', 'замовлення', 'замовлень'])}`
+                          : 'немає'
+                      }
+                      tone="warn"
+                      value={detail.quantityReserved}
+                    />
+                    <StockTile
+                      label="Продано"
+                      sub={
+                        detail.quantitySoldTotal > 0
+                          ? `${String(soldOrders.length)} ${plural(soldOrders.length, ['замовлення', 'замовлення', 'замовлень'])}`
+                          : 'ще не продавалась'
+                      }
+                      tone="plain"
+                      value={detail.quantitySoldTotal}
+                    />
+                  </dl>
+
+                  {detail.quantityAvailable === 1 ? (
+                    <p className="text-app-muted mt-3 text-[13px]">
+                      Остання одиниця.
+                    </p>
+                  ) : detail.quantityAvailable === 0 &&
+                    detail.quantityReserved > 0 ? (
+                    <p className="text-state-warn mt-3 text-[13px] text-pretty">
+                      Усі фізично на складі, але зарезервовані.
+                    </p>
+                  ) : null}
+
+                  <div className="border-app-line mt-[18px] flex flex-wrap items-center justify-between gap-4 border-t pt-4">
+                    <div className="min-w-0">
+                      <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+                        Місце на складі
+                      </p>
+                      <p className="text-app-ink mt-1.5 text-[15px] font-semibold text-pretty">
+                        {detail.quantityAvailable + detail.quantityReserved ===
+                        0
+                          ? `На складі немає. Останнє місце: ${placementLabel(zones, links.inventory).toLowerCase()}`
+                          : placementLabel(zones, links.inventory)}
+                      </p>
+                    </div>
+                    {links.inventory ? (
+                      <Button
+                        asChild
+                        className="min-h-9 px-3 text-[12px] font-bold"
+                      >
+                        <Link to={`${base}/${partId}/inventory`}>
+                          Перемістити
+                        </Link>
+                      </Button>
+                    ) : null}
                   </div>
                 </Card>
+              </div>
+            </div>
 
-                <Card title="Характеристики">
-                  <SpecGrid
-                    specs={[
-                      { label: 'OEM', value: detail.oemCode ?? '—' },
-                      { label: 'Тип', value: detail.partType ?? '—' },
-                      {
-                        label: 'Стан',
-                        value: conditionLabel(detail.condition),
-                      },
-                      {
-                        label: 'Джерело',
-                        value:
-                          detail.carId && detail.carCode && links.cars ? (
-                            <Link
-                              className="hover:text-brand"
-                              to={`/app/${tenantSlug}/cars/${detail.carId}`}
-                            >
-                              {detail.carCode}
-                            </Link>
-                          ) : detail.intakeId && links.intakes ? (
-                            <Link
-                              className="hover:text-brand"
-                              to={`/app/${tenantSlug}/intakes/${detail.intakeId}`}
-                            >
-                              Приймання
-                            </Link>
-                          ) : (
-                            (detail.carCode ?? sourceLabel(detail.source))
-                          ),
-                      },
-                      {
-                        label: 'Сумісність',
-                        value: compat || 'не вказано',
-                        wide: true,
-                        note: (
-                          <SpecNote
-                            icon={<Lock aria-hidden className="size-3" />}
+            {reservations.length > 0 || soldOrders.length > 0 ? (
+              <Card
+                aside={
+                  <dl className="flex flex-wrap items-baseline gap-x-7 gap-y-2">
+                    <div className="flex items-baseline gap-2.5">
+                      <dt className="text-app-muted text-[13px]">Виручка</dt>
+                      <dd className="font-mono text-[17px] font-medium text-white">
+                        <Amount currency={PART_CURRENCY} value={soldRevenue} />
+                      </dd>
+                    </div>
+                    <div className="flex items-baseline gap-2.5">
+                      <dt className="text-app-muted text-[13px]">
+                        У резерві на
+                      </dt>
+                      <dd
+                        className="text-app-dim font-mono text-[17px] font-medium"
+                        title={RESERVE_HAS_NO_PRICE}
+                      >
+                        —
+                      </dd>
+                    </div>
+                    <div className="flex items-baseline gap-2.5">
+                      <dt className="text-app-muted text-[13px]">Знижки</dt>
+                      <dd
+                        className={cn(
+                          'font-mono text-[17px] font-medium',
+                          soldDiscount > 0 ? 'text-state-warn' : 'text-app-dim',
+                        )}
+                      >
+                        <Amount currency={PART_CURRENCY} value={soldDiscount} />
+                      </dd>
+                    </div>
+                  </dl>
+                }
+                bodyClassName="p-0"
+                headerClassName="pb-0"
+                title="Продажі"
+              >
+                <div
+                  aria-label="Що показати в продажах"
+                  className="border-app-line flex flex-wrap gap-6 border-b px-6"
+                  role="tablist"
+                >
+                  {SALES_TABS.map((tab) => {
+                    const count =
+                      tab.value === 'reserved'
+                        ? reservations.length
+                        : tab.value === 'sold'
+                          ? soldOrders.length
+                          : reservations.length + soldOrders.length
+                    const active = salesTab === tab.value
+                    return (
+                      <button
+                        aria-selected={active}
+                        className={cn(
+                          'flex min-h-11 items-center gap-2 border-b-2 text-[14px] font-bold transition-colors',
+                          active
+                            ? 'border-brand text-white'
+                            : 'text-app-muted hover:text-app-ink border-transparent',
+                        )}
+                        key={tab.value}
+                        onClick={() => setSalesTab(tab.value)}
+                        role="tab"
+                        type="button"
+                      >
+                        {tab.label}
+                        <span
+                          className={cn(
+                            'rounded-full px-1.5 font-mono text-[11px]',
+                            active
+                              ? 'bg-white/[0.12] text-white'
+                              : 'text-app-muted bg-white/[0.05]',
+                          )}
+                        >
+                          {count}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {salesRows.length === 0 ? (
+                  <p className="text-app-muted px-6 py-6 text-[13px]">
+                    {salesTab === 'reserved'
+                      ? 'Зараз немає резервів на цю деталь.'
+                      : 'Деталь ще не продавалась.'}
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[720px] text-left">
+                      <caption className="sr-only">
+                        Замовлення, у яких стоїть ця деталь
+                      </caption>
+                      <thead>
+                        <tr className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
+                          <th className="px-6 pt-4 pb-3 font-normal">
+                            Замовлення
+                          </th>
+                          <th className="px-3 pt-4 pb-3 font-normal">
+                            Клієнт і доставка
+                          </th>
+                          <th className="px-3 pt-4 pb-3 font-normal">Статус</th>
+                          <th className="px-3 pt-4 pb-3 text-right font-normal">
+                            К-сть
+                          </th>
+                          <th className="px-3 pt-4 pb-3 text-right font-normal">
+                            Ціна
+                          </th>
+                          <th className="px-3 pt-4 pb-3 text-right font-normal">
+                            Сума
+                          </th>
+                          <th className="px-6 pt-4 pb-3 font-normal">
+                            <span className="sr-only">Дії</span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {salesRows.map((row) => (
+                          <tr
+                            className="border-app-line border-t align-top transition-colors hover:bg-white/[0.025]"
+                            key={`${row.kind}-${row.orderId}`}
                           >
-                            Сумісність недоступна для редагування
-                          </SpecNote>
-                        ),
-                      },
-                      {
-                        label: 'QR-код',
-                        value: (
-                          <span className="font-mono font-normal break-all">
-                            {detail.qrCode || '—'}
+                            <td className="px-6 py-4">
+                              {orderHref(row.orderId) === null ? (
+                                <span className="text-app-ink font-mono text-[15px]">
+                                  № {row.orderNumber}
+                                </span>
+                              ) : (
+                                <Link
+                                  className="text-brand font-mono text-[15px] underline-offset-4 hover:underline"
+                                  to={orderHref(row.orderId) ?? '#'}
+                                >
+                                  № {row.orderNumber}
+                                </Link>
+                              )}
+                              <span className="text-app-dim mt-1 block font-mono text-[12px]">
+                                {row.date === null ? (
+                                  '—'
+                                ) : (
+                                  <DateValue
+                                    value={row.date}
+                                    withTime={false}
+                                  />
+                                )}
+                              </span>
+                            </td>
+                            <td className="px-3 py-4">
+                              <span className="text-app-ink block text-[15px] font-semibold">
+                                {row.customerName ?? 'без клієнта'}
+                              </span>
+                              <span
+                                className="text-app-dim mt-1 block text-[13px]"
+                                title={DELIVERY_NOT_ON_PART}
+                              >
+                                спосіб доставки не показуємо тут
+                              </span>
+                            </td>
+                            <td className="px-3 py-4">
+                              <StatusPill
+                                tone={row.kind === 'reserved' ? 'warn' : 'ok'}
+                              >
+                                {row.kind === 'reserved' ? 'Резерв' : 'Продано'}
+                              </StatusPill>
+                              <span
+                                className="text-app-dim mt-1.5 block text-[13px] text-pretty"
+                                title={
+                                  row.kind === 'reserved'
+                                    ? RESERVE_HAS_NO_TERM
+                                    : undefined
+                                }
+                              >
+                                {row.kind === 'reserved'
+                                  ? 'тримається, доки стоїть у замовленні'
+                                  : 'позиція закрита продажем'}
+                              </span>
+                            </td>
+                            <td className="text-app-ink px-3 py-4 text-right font-mono text-[15px]">
+                              {row.quantity}
+                            </td>
+                            <td className="px-3 py-4 text-right">
+                              <span className="text-app-ink block font-mono text-[15px]">
+                                {row.unitPrice === null ? (
+                                  <span title={RESERVE_HAS_NO_PRICE}>—</span>
+                                ) : (
+                                  <Amount
+                                    currency={PART_CURRENCY}
+                                    value={row.unitPrice}
+                                  />
+                                )}
+                              </span>
+                              {row.discount > 0 ? (
+                                <span className="text-state-warn mt-1 block font-mono text-[12px]">
+                                  −
+                                  <Amount
+                                    currency={PART_CURRENCY}
+                                    value={row.discount}
+                                  />
+                                </span>
+                              ) : null}
+                            </td>
+                            <td className="px-3 py-4 text-right font-mono text-[15px] text-white">
+                              {row.unitPrice === null ? (
+                                <span
+                                  className="text-app-dim"
+                                  title={RESERVE_HAS_NO_PRICE}
+                                >
+                                  —
+                                </span>
+                              ) : (
+                                <Amount
+                                  currency={PART_CURRENCY}
+                                  value={row.unitPrice * row.quantity}
+                                />
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              <Button
+                                className="min-h-9 px-3 text-[12px] font-bold whitespace-nowrap"
+                                disabled
+                                title={
+                                  row.kind === 'reserved'
+                                    ? RESERVE_HAS_NO_TERM
+                                    : RETURN_NOT_FROM_PART
+                                }
+                              >
+                                {row.kind === 'reserved'
+                                  ? 'Продовжити'
+                                  : 'Повернення'}
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-app-line border-t">
+                          <td
+                            className="text-app-muted px-6 py-4 text-right text-[13px]"
+                            colSpan={5}
+                          >
+                            {salesTab === 'reserved'
+                              ? 'Разом у резерві'
+                              : 'Разом продано'}
+                          </td>
+                          <td className="px-3 py-4 text-right font-mono text-[17px] font-medium text-white">
+                            {salesTab === 'reserved' ? (
+                              <span
+                                className="text-app-dim"
+                                title={RESERVE_HAS_NO_PRICE}
+                              >
+                                —
+                              </span>
+                            ) : (
+                              <Amount
+                                currency={PART_CURRENCY}
+                                value={salesRows.reduce(
+                                  (sum, row) =>
+                                    sum + (row.unitPrice ?? 0) * row.quantity,
+                                  0,
+                                )}
+                              />
+                            )}
+                          </td>
+                          <td className="px-6 py-4" />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </Card>
+            ) : null}
+
+            <div className="flex flex-wrap items-start gap-6">
+              <div className="flex min-w-[320px] flex-[1_1_440px] flex-col gap-6">
+                <Card
+                  aside={
+                    compat === null ? null : (
+                      <span className="text-app-muted text-[13px] font-semibold">
+                        {compat.items.length}{' '}
+                        {plural(compat.items.length, ['авто', 'авто', 'авто'])}
+                      </span>
+                    )
+                  }
+                  bodyClassName="p-0"
+                  headerClassName="pb-3.5"
+                  title="Сумісність"
+                >
+                  {compat === null ? (
+                    <p className="text-app-muted px-6 pb-5 text-[13px]">
+                      Завантажуємо…
+                    </p>
+                  ) : compat.items.length === 0 ? (
+                    <p className="text-app-muted px-6 pb-5 text-[13px] leading-5 text-pretty">
+                      Сумісність не вказана. Її задають під час створення
+                      деталі.
+                    </p>
+                  ) : (
+                    <ul className="grid">
+                      {compat.items.map((item) => (
+                        <li
+                          className="border-app-line grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3.5 border-t px-6 py-3"
+                          key={item.id}
+                        >
+                          <span className="min-w-0">
+                            <span className="text-app-ink block text-[14px] font-semibold">
+                              {[item.makeName, item.modelName]
+                                .filter(Boolean)
+                                .join(' ') || item.equipmentTypeName}
+                            </span>
+                            <span className="text-app-dim mt-0.5 block text-[12px]">
+                              {item.evidenceType === 'DonorObservation'
+                                ? 'авто-джерело, не редагується'
+                                : item.modelName === null
+                                  ? 'будь-яка модель'
+                                  : ''}
+                            </span>
                           </span>
-                        ),
-                        wide: true,
-                      },
-                      {
-                        label: 'Нотатки',
-                        value: (
-                          <span className="text-app-ink font-normal">
-                            {detail.notes ?? '—'}
+                          <span className="text-app-ink font-mono text-[13px] whitespace-nowrap">
+                            {yearSpan(item.yearFrom, item.yearTo)}
                           </span>
-                        ),
-                        wide: true,
-                      },
-                    ]}
-                  />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Card>
+                <Card title="Нотатки">
+                  {detail.notes ? (
+                    <p className="text-app-ink text-[15px] leading-[1.55] whitespace-pre-line text-pretty">
+                      {detail.notes}
+                    </p>
+                  ) : (
+                    <p className="text-app-muted text-[14px]">
+                      Нотаток немає. Їх можна додати в редагуванні деталі.
+                    </p>
+                  )}
                   {detail.createdByName ? (
-                    <div className="text-app-muted mt-[18px] flex flex-wrap items-center gap-3 text-[14px]">
+                    <div className="border-app-line text-app-muted mt-4 flex flex-wrap items-center gap-2.5 border-t pt-3.5 text-[13px]">
                       <span
                         aria-hidden
-                        className="text-app-ink grid size-[30px] place-items-center rounded-full bg-white/[0.07] text-[13px] font-bold"
+                        className="text-app-ink grid size-[26px] place-items-center rounded-full bg-white/[0.07] text-[11px] font-bold"
                       >
                         {initials(detail.createdByName)}
                       </span>
@@ -1602,157 +2001,164 @@ function PartDetailScreen({
                     </div>
                   ) : null}
                 </Card>
-
-                {detail.order || reservations.length > 0 ? (
-                  <Card title="Резерви">
-                    <div className="divide-app-line grid divide-y">
-                      {detail.order ? (
-                        <OrderRow
-                          aside={
-                            <span className="flex flex-wrap items-baseline gap-2">
-                              {currentReservation ? (
-                                <Quantity
-                                  unit={detail.unit || null}
-                                  value={currentReservation.quantity}
-                                />
-                              ) : null}
-                              <span className="text-app-dim">поточне</span>
-                            </span>
-                          }
-                          detail={
-                            <>
-                              {detail.order.customerName ?? 'без клієнта'} ·{' '}
-                              {detail.order.status}
-                            </>
-                          }
-                          href={orderHref(detail.order.id)}
-                          number={detail.order.number}
-                        />
-                      ) : null}
-                      {reservations.map((reservation) => (
-                        <OrderRow
-                          aside={
-                            <Quantity
-                              unit={detail.unit || null}
-                              value={reservation.quantity}
-                            />
-                          }
-                          detail={reservation.customerName ?? 'без клієнта'}
-                          href={orderHref(reservation.orderId)}
-                          key={reservation.orderId}
-                          number={reservation.orderNumber}
-                        />
+              </div>
+              <div className="flex min-w-[320px] flex-[1_1_440px] flex-col gap-6">
+                <Card
+                  aside={
+                    history === null || history.events.length === 0 ? null : (
+                      <div
+                        aria-label="Що показати в історії"
+                        className="border-app-line flex gap-0.5 rounded-[9px] border bg-white/[0.04] p-[3px]"
+                        role="group"
+                      >
+                        {HISTORY_FILTERS.map((filter) => {
+                          const active = historyFilter === filter.value
+                          return (
+                            <button
+                              aria-pressed={active}
+                              className={cn(
+                                // 26px to match the card's scale; the hit area
+                                // is grown back to 44px by the overlay.
+                                'relative h-[26px] rounded-[6px] px-2.5 text-[12px] font-bold whitespace-nowrap transition-colors',
+                                "after:absolute after:-inset-y-[9px] after:-inset-x-0 after:content-['']",
+                                active
+                                  ? 'bg-white/10 text-white'
+                                  : 'text-app-muted hover:text-app-ink',
+                              )}
+                              key={filter.value}
+                              onClick={() => {
+                                setHistoryFilter(filter.value)
+                                setHistoryAll(false)
+                              }}
+                              type="button"
+                            >
+                              {filter.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )
+                  }
+                  bodyClassName="p-0"
+                  headerClassName="pb-3"
+                  title="Історія"
+                >
+                  {history === null ? (
+                    <div className="px-6 pb-6">
+                      <SkeletonRows
+                        columns={1}
+                        label="Завантажуємо історію…"
+                        rows={3}
+                      />
+                    </div>
+                  ) : shownHistory.length === 0 ? (
+                    <p className="text-app-muted px-6 pb-5 text-[13px] text-pretty">
+                      {history.events.length === 0
+                        ? 'Подій ще немає — вони зʼявляться після першої зміни.'
+                        : 'У цій добірці подій немає.'}
+                    </p>
+                  ) : (
+                    <div className="px-6 pb-2">
+                      {historyGroups.map((group) => (
+                        <section className="pt-3" key={group.date}>
+                          <h3 className="text-app-dim pb-2 font-mono text-[10px] tracking-[0.14em] uppercase">
+                            {group.date}
+                          </h3>
+                          <ol>
+                            {group.items.map((event, index) => {
+                              const kind = historyKind(
+                                event.eventType,
+                                event.data,
+                              )
+                              const change = historyChange(event.data)
+                              const facts = historyDetails(event.data)
+                              const last =
+                                group.last && index === group.items.length - 1
+                              return (
+                                <li
+                                  className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-3"
+                                  key={event.id}
+                                >
+                                  <span className="flex flex-col items-center self-stretch">
+                                    <span
+                                      aria-hidden
+                                      className={cn(
+                                        'grid size-7 shrink-0 place-items-center rounded-full',
+                                        HISTORY_ICON[kind].tint,
+                                      )}
+                                    >
+                                      {HISTORY_ICON[kind].icon}
+                                    </span>
+                                    {last ? null : (
+                                      <span
+                                        aria-hidden
+                                        className="min-h-2.5 w-px flex-1 bg-white/[0.08]"
+                                      />
+                                    )}
+                                  </span>
+                                  <span className="min-w-0 pt-1 pb-4">
+                                    <span className="text-app-ink block text-[14px] font-semibold text-pretty">
+                                      {historyLabel(event.eventType)}
+                                      {event.order ? (
+                                        <>
+                                          {' '}
+                                          <span className="text-brand font-mono text-[13px]">
+                                            № {event.order.number}
+                                          </span>
+                                        </>
+                                      ) : null}
+                                    </span>
+                                    {change === null ? null : (
+                                      <span className="mt-1.5 inline-flex items-center gap-2 rounded-[7px] bg-white/[0.04] px-2.5 py-1 font-mono text-[12px]">
+                                        <span className="text-app-muted line-through">
+                                          {change.from}
+                                        </span>
+                                        <span className="text-app-dim">→</span>
+                                        <span className="text-app-ink">
+                                          {change.to}
+                                        </span>
+                                      </span>
+                                    )}
+                                    {change !== null ||
+                                    facts.length === 0 ? null : (
+                                      <span className="text-app-muted mt-1 block text-[13px] text-pretty">
+                                        {facts.join(' · ')}
+                                      </span>
+                                    )}
+                                    <span className="text-app-dim mt-1.5 flex items-center gap-[7px] text-[12px]">
+                                      <span
+                                        aria-hidden
+                                        className="text-app-muted grid size-[18px] place-items-center rounded-full bg-white/[0.07] text-[8px] font-extrabold"
+                                      >
+                                        {initials(event.user.name)}
+                                      </span>
+                                      {event.user.name}
+                                    </span>
+                                  </span>
+                                  <span className="text-app-muted pt-1.5 font-mono text-[12px] whitespace-nowrap">
+                                    {clock(event.createdAt)}
+                                  </span>
+                                </li>
+                              )
+                            })}
+                          </ol>
+                        </section>
                       ))}
                     </div>
-                  </Card>
-                ) : null}
-
-                {soldOrders.length > 0 ? (
-                  <Card
-                    aside={
-                      <span className="text-app-muted text-[14px] font-semibold">
-                        Виручка{' '}
-                        <Amount currency={PART_CURRENCY} value={soldRevenue} />
-                      </span>
-                    }
-                    title="Продажі"
-                  >
-                    <div className="divide-app-line grid divide-y">
-                      {soldOrders.map((order) => (
-                        <OrderRow
-                          aside={
-                            <>
-                              {order.quantitySold} ×{' '}
-                              <Amount
-                                currency={PART_CURRENCY}
-                                value={order.unitPrice}
-                              />
-                            </>
-                          }
-                          detail={
-                            <>
-                              {order.customerName ?? 'без клієнта'}
-                              {order.confirmedAt ? (
-                                <>
-                                  {' · '}
-                                  <DateValue
-                                    value={order.confirmedAt}
-                                    withTime={false}
-                                  />
-                                </>
-                              ) : null}
-                            </>
-                          }
-                          href={orderHref(order.orderId)}
-                          key={order.orderId}
-                          number={order.orderNumber}
-                        />
-                      ))}
-                    </div>
-                  </Card>
-                ) : null}
+                  )}
+                  {filteredHistory.length > HISTORY_LIMIT ? (
+                    <Button
+                      className="border-app-line w-full justify-center rounded-none border-0 border-t bg-transparent"
+                      onClick={() => setHistoryAll((value) => !value)}
+                    >
+                      {historyAll
+                        ? 'Згорнути'
+                        : `Показати всі · ${String(filteredHistory.length)}`}
+                    </Button>
+                  ) : null}
+                </Card>
               </div>
             </div>
-
-            <Card title="Історія">
-              {history === null ? (
-                <SkeletonRows
-                  columns={1}
-                  label="Завантажуємо історію…"
-                  rows={3}
-                />
-              ) : history.events.length === 0 ? (
-                <p className="text-app-dim text-[14px]">
-                  Подій ще немає — вони зʼявляться після першої зміни.
-                </p>
-              ) : (
-                <ol className="grid">
-                  {history.events.map((event, index) => (
-                    <li
-                      className={cn(
-                        'flex flex-wrap items-baseline gap-x-4 gap-y-1 py-3',
-                        index > 0 && 'border-app-line border-t',
-                      )}
-                      key={event.id}
-                    >
-                      <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2.5 gap-y-1">
-                        <span className="text-[16px] font-semibold text-white">
-                          {historyLabel(event.eventType)}
-                        </span>
-                        {historyDetails(event.data).map((fact) => (
-                          <span
-                            className="text-app-muted text-[14px] break-words"
-                            key={fact}
-                          >
-                            {fact}
-                          </span>
-                        ))}
-                        {event.order ? (
-                          <span className="text-[14px]">
-                            {links.orders ? (
-                              <Link
-                                className="hover:text-brand text-app-muted"
-                                to={`/app/${tenantSlug}/orders/${event.order.id}`}
-                              >
-                                Замовлення {event.order.number}
-                              </Link>
-                            ) : (
-                              <span className="text-app-muted">
-                                Замовлення {event.order.number}
-                              </span>
-                            )}
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="text-app-dim flex flex-wrap items-baseline gap-x-2.5 text-[13px]">
-                        {event.user.name}
-                        <DateValue value={event.createdAt} />
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </Card>
           </>
         )}
       </div>
@@ -1782,9 +2188,6 @@ interface PartFormValues {
   oemCode: string
   partType: string
   desiredSalePrice: string
-  carBrand: string
-  carModel: string
-  carYear: string
 }
 
 const emptyPartForm: PartFormValues = {
@@ -1798,9 +2201,6 @@ const emptyPartForm: PartFormValues = {
   oemCode: '',
   partType: '',
   desiredSalePrice: '',
-  carBrand: '',
-  carModel: '',
-  carYear: '',
 }
 
 type PartMediaStatus =
@@ -1856,6 +2256,8 @@ function PartMediaFields({
   items,
   requireLatestMutation,
   setItems,
+  title = 'Фото',
+  variant = 'panel',
 }: {
   deferUploads?: boolean
   items: PartMediaItem[]
@@ -1863,6 +2265,8 @@ function PartMediaFields({
     typeof useLatestMutationGuard
   >['requireLatestMutation']
   setItems: React.Dispatch<React.SetStateAction<PartMediaItem[]>>
+  title?: ReactNode
+  variant?: 'panel' | 'plain'
 }) {
   const sequenceRef = useRef(0)
   const mountedRef = useRef(true)
@@ -1958,7 +2362,8 @@ function PartMediaFields({
           ? 'Виберіть фото та перевірте перелік. Файли завантажаться разом зі створенням деталі.'
           : 'Додайте або приберіть фото деталі.'
       }
-      title="Фото"
+      title={title}
+      variant={variant}
     >
       <Field
         hint="Формати зображень, кілька файлів за раз."
@@ -2054,10 +2459,7 @@ function PartMediaFields({
 }
 
 type PartFieldErrors = Partial<
-  Record<
-    'name' | 'quantity' | 'desiredSalePrice' | 'carYear' | 'sourceId',
-    string
-  >
+  Record<'name' | 'quantity' | 'desiredSalePrice' | 'sourceId', string>
 >
 
 function partFieldErrors(
@@ -2074,10 +2476,6 @@ function partFieldErrors(
   if (price !== undefined && (!Number.isFinite(price) || price < 0))
     errors.desiredSalePrice =
       'Вкажіть число від 0, наприклад 1250.50, або залиште поле порожнім.'
-  const year = optionalNumber(values.carYear)
-  if (year !== undefined && (!Number.isInteger(year) || year <= 0))
-    errors.carYear =
-      'Вкажіть рік чотирма цифрами, наприклад 2018, або залиште поле порожнім.'
   if (requireSource && !values.sourceId.trim())
     errors.sourceId =
       values.sourceType === 'car'
@@ -2086,15 +2484,444 @@ function partFieldErrors(
   return errors
 }
 
+/** One vehicle in the compatibility list, with its own pair of pickers. */
+function CompatibilityRowCard({
+  index,
+  onChange,
+  onRemove,
+  row,
+}: {
+  index: number
+  onChange: (patch: Partial<CompatibilityRow>) => void
+  onRemove?: (() => void) | undefined
+  row: CompatibilityRow
+}) {
+  // The picker keeps the make's own id so it can list that make's models.
+  const [makeId, setMakeId] = useState<number | null>(null)
+  const problem = rowProblem(row)
+  const title = `Авто ${String(index + 1)}`
+
+  return (
+    <section
+      aria-label={title}
+      className="border-app-line bg-app-raised rounded-[14px] border px-4 pt-3.5 pb-4"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+          {title}
+        </h4>
+        {onRemove === undefined ? null : (
+          <Button
+            className="min-h-8 px-2.5 text-[12px]"
+            onClick={onRemove}
+            type="button"
+            variant="quiet"
+          >
+            <X aria-hidden className="size-3" />
+            Прибрати
+          </Button>
+        )}
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <VehicleCatalogPicker
+          disabled={false}
+          label="Марка"
+          onSelect={(option) => {
+            setMakeId(option.id)
+            onChange({ brand: option.name, model: '' })
+          }}
+          type="make"
+          value={row.brand}
+        />
+        <VehicleCatalogPicker
+          disabled={row.brand === ''}
+          label="Модель"
+          makeId={makeId}
+          makeName={row.brand}
+          onSelect={(option) => {
+            onChange({ model: option.name })
+          }}
+          type="model"
+          value={row.model}
+        />
+        <Field label="Рік">
+          <TextInput
+            inputMode="numeric"
+            onChange={(event) => {
+              onChange({ year: event.target.value })
+            }}
+            value={row.year}
+          />
+        </Field>
+      </div>
+
+      {problem === null ? null : (
+        <Notice className="mt-3" tone="danger">
+          {problem}
+        </Notice>
+      )}
+    </section>
+  )
+}
+
+/** Where the part came from, as one chip that leads to the source. */
+function SourceChip({
+  href,
+  kind,
+  meta,
+  name,
+}: {
+  href: string | null
+  kind: 'car' | 'batch' | 'free'
+  meta: string
+  name: string
+}) {
+  const Icon =
+    kind === 'car' ? CarIcon : kind === 'batch' ? Package : CircleMinus
+  const label =
+    kind === 'car' ? 'З авто' : kind === 'batch' ? 'Партія' : 'Джерело'
+  const body = (
+    <>
+      <Icon aria-hidden className="text-app-muted size-[15px] shrink-0" />
+      <span className="text-app-muted text-[13px] font-semibold whitespace-nowrap">
+        {label}
+      </span>
+      <span className="text-app-ink text-[14px] font-bold whitespace-nowrap">
+        {name}
+      </span>
+      {meta === '' ? null : (
+        <span className="border-app-line-2 text-app-ink rounded-[4px] border px-1.5 font-mono text-[11px] leading-5 tracking-[0.06em] whitespace-nowrap">
+          {meta}
+        </span>
+      )}
+      {href === null ? null : (
+        <ChevronRight aria-hidden className="text-brand size-3" />
+      )}
+    </>
+  )
+  const className =
+    'border-app-line flex items-center gap-2.5 rounded-[8px] border bg-white/[0.03] py-1 pr-2.5 pl-2'
+
+  return href === null ? (
+    <span className={className}>{body}</span>
+  ) : (
+    <Link
+      className={`${className} hover:border-app-line-2 hover:bg-white/[0.06]`}
+      to={href}
+    >
+      {body}
+    </Link>
+  )
+}
+
+/**
+ * What the sales table cannot promise. A reservation is a line in an order,
+ * not a document of its own: it carries no price until the order is confirmed,
+ * and the yard keeps no clock on it.
+ */
+const RESERVE_HAS_NO_PRICE =
+  'Ціна фіксується під час продажу — у резерві її ще немає.'
+const RESERVE_HAS_NO_TERM =
+  'Строку резерву розбірка не веде: позиція тримається, доки стоїть у замовленні. Щоб звільнити деталь, приберіть її із замовлення.'
+const DELIVERY_NOT_ON_PART =
+  'Спосіб доставки й номер накладної живуть у самому замовленні — відкрийте його за номером.'
+const RETURN_NOT_FROM_PART =
+  'Повернення оформлюється в замовленні, з картки деталі такої дії немає.'
+
+const SALES_TABS = [
+  { value: 'all', label: 'Усі' },
+  { value: 'reserved', label: 'У резерві' },
+  { value: 'sold', label: 'Продано' },
+] as const
+
+/** How many events the history shows before it has to be asked for more. */
+const HISTORY_LIMIT = 5
+
+const HISTORY_FILTERS = [
+  { value: 'all', label: 'Усе' },
+  { value: 'sale', label: 'Продажі' },
+  { value: 'price', label: 'Ціна' },
+  { value: 'stock', label: 'Склад' },
+] as const
+
+/** A colour and a glyph per kind, so a long history can be skimmed. */
+const HISTORY_ICON: Record<HistoryKind, { icon: ReactNode; tint: string }> = {
+  sale: {
+    icon: <ShoppingBag aria-hidden className="size-3.5" />,
+    tint: 'bg-state-ok/15 text-state-ok',
+  },
+  price: {
+    icon: <Tag aria-hidden className="size-3.5" />,
+    tint: 'bg-state-info/15 text-state-info',
+  },
+  stock: {
+    icon: <MapPin aria-hidden className="size-3.5" />,
+    tint: 'text-app-muted bg-white/[0.07]',
+  },
+}
+
+/** The clock reading of an event, next to the day it belongs to. */
+const clock = (value: string) => {
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime())
+    ? ''
+    : parsed.toLocaleTimeString('uk-UA', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+}
+
+const day = (value: string) => {
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime())
+    ? value
+    : parsed.toLocaleDateString('uk-UA', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      })
+}
+
+/** A compatibility's years, as one span: a single year stays a single year. */
+const yearSpan = (from: number | null, to: number | null): string => {
+  if (from === null && to === null) return 'будь-який рік'
+  if (from !== null && to !== null)
+    return from === to ? String(from) : `${String(from)} – ${String(to)}`
+  return from !== null ? `з ${String(from)}` : `до ${String(to ?? 0)}`
+}
+
+/**
+ * Where the part sits, in the words the warehouse uses. Core keeps a system
+ * zone for everything nobody has placed yet, so that one reads as "not placed"
+ * rather than as a location.
+ */
+const placementLabel = (
+  zones: PartInventoryZone[] | null,
+  allowed: boolean,
+): string => {
+  if (!allowed) return 'Розміщення доступне зі складським модулем'
+  if (zones === null) return 'Завантажуємо…'
+  const placed = zones.filter((zone) => !zone.isSystemUnassigned)
+  if (placed.length === 0) return 'Не розміщена'
+  return placed
+    .map((zone) => `${zone.warehouseName} · ${zone.zoneName}`)
+    .join(', ')
+}
+
+/** The condition, as a colour a person can scan before reading the word. */
+const CONDITION_DOT: Record<string, string> = {
+  good: 'bg-state-ok',
+  fair: 'bg-state-warn',
+  scrap: 'bg-state-danger',
+}
+
+/** One of the three counts a part is split into, as its own tile. */
+function StockTile({
+  label,
+  sub,
+  tone,
+  value,
+}: {
+  label: string
+  sub: string
+  tone: 'ok' | 'warn' | 'plain'
+  value: number
+}) {
+  return (
+    <div
+      className={cn(
+        'rounded-[14px] border px-3.5 pt-3 pb-3.5',
+        tone === 'ok' && value > 0
+          ? 'border-state-ok/20 bg-state-ok/[0.06]'
+          : 'border-app-line bg-white/[0.02]',
+      )}
+    >
+      <dt
+        className={cn(
+          'flex items-center gap-[7px] text-[12px] font-semibold',
+          tone === 'ok'
+            ? 'text-state-ok'
+            : tone === 'warn'
+              ? 'text-state-warn'
+              : 'text-app-muted',
+        )}
+      >
+        <span
+          aria-hidden
+          className={cn(
+            'size-1.5 shrink-0 rounded-full',
+            tone === 'ok'
+              ? 'bg-state-ok'
+              : tone === 'warn'
+                ? 'bg-state-warn'
+                : 'bg-app-dim',
+          )}
+        />
+        {label}
+      </dt>
+      <dd>
+        <span
+          className={cn(
+            'mt-1.5 block text-[26px] leading-none font-extrabold tracking-[-0.02em] tabular-nums',
+            value > 0 ? 'text-white' : 'text-app-dim',
+          )}
+        >
+          {value}
+        </span>
+        <span className="text-app-dim mt-1.5 block text-[12px] text-pretty">
+          {sub}
+        </span>
+      </dd>
+    </div>
+  )
+}
+
+/** The three origins a part can have, as the drawer offers them. */
+const SOURCE_KINDS = [
+  {
+    value: 'car',
+    label: 'З авто',
+    hint: 'Розібране авто зі складу',
+  },
+  {
+    value: 'batch',
+    label: 'З партії',
+    hint: 'Приймання від постачальника',
+  },
+  {
+    value: 'free',
+    label: 'Вільна',
+    hint: 'Не прив’язана ні до авто, ні до приймання',
+  },
+] as const
+
+/**
+ * What each condition means for a buyer. The label alone is a guess; the line
+ * under it is what stops "задовільний" and "на запчастини" being used
+ * interchangeably.
+ */
+const CONDITION_HINTS: Record<string, { hint: string; tone: string }> = {
+  good: {
+    hint: 'Справна, без суттєвих дефектів. Можна ставити без підготовки.',
+    tone: 'border-state-ok bg-state-ok',
+  },
+  fair: {
+    hint: 'Справна, є сліди використання або дрібні косметичні дефекти.',
+    tone: 'border-state-warn bg-state-warn',
+  },
+  scrap: {
+    hint: 'Несправна або некомплектна. Для розбору чи відновлення.',
+    tone: 'border-state-danger bg-state-danger',
+  },
+}
+
+function ConditionTile({
+  label,
+  onPick,
+  picked,
+  value,
+}: {
+  label: string
+  onPick: () => void
+  picked: boolean
+  value: string
+}) {
+  const meaning = CONDITION_HINTS[value]
+  const hintId = useId()
+  return (
+    <button
+      aria-checked={picked}
+      aria-describedby={hintId}
+      aria-label={label}
+      className={cn(
+        'rounded-control flex min-h-[92px] flex-col items-start gap-2 border px-3.5 py-3 text-left transition-colors',
+        picked
+          ? 'border-app-line-2 bg-white/[0.06]'
+          : 'border-app-line hover:border-app-line-2',
+      )}
+      onClick={onPick}
+      role="radio"
+      type="button"
+    >
+      <span className="flex w-full items-center gap-2">
+        <span
+          aria-hidden
+          className={cn(
+            'grid size-4 shrink-0 place-items-center rounded-full border-[1.5px]',
+            picked ? meaning?.tone.split(' ')[0] : 'border-white/20',
+          )}
+        >
+          <span
+            className={cn(
+              'size-[7px] rounded-full',
+              picked ? meaning?.tone.split(' ')[1] : '',
+            )}
+          />
+        </span>
+        <span
+          className={cn(
+            'text-[14px] font-bold whitespace-nowrap',
+            picked ? 'text-white' : 'text-app-ink',
+          )}
+        >
+          {label}
+        </span>
+      </span>
+      <span
+        className="text-app-dim text-[12px] leading-[1.4] text-pretty"
+        id={hintId}
+      >
+        {meaning?.hint}
+      </span>
+    </button>
+  )
+}
+
+function SourceTile({
+  kind,
+  onPick,
+  picked,
+}: {
+  kind: (typeof SOURCE_KINDS)[number]
+  onPick: () => void
+  picked: boolean
+}) {
+  return (
+    <button
+      aria-pressed={picked}
+      className={cn(
+        'rounded-control min-h-16 border px-3.5 py-3 text-left transition-colors',
+        picked
+          ? 'border-app-line-2 bg-white/[0.07] text-white'
+          : 'border-app-line text-app-muted hover:border-app-line-2',
+      )}
+      onClick={onPick}
+      type="button"
+    >
+      <span className="block text-[14px] font-bold">{kind.label}</span>
+      <span className="text-app-dim mt-1 block text-[12px] leading-[1.35] text-pretty">
+        {kind.hint}
+      </span>
+    </button>
+  )
+}
+
 function PartFields({
   values,
   setValues,
   sourceOptions,
   canViewCars,
   canViewIntakes,
+  compatibility,
   errors,
   edit,
+  variant = 'panel',
 }: {
+  /** The vehicles this part fits. Absent on the edit screen, which hides them. */
+  compatibility?:
+    | { rows: CompatibilityRow[]; setRows: (rows: CompatibilityRow[]) => void }
+    | undefined
   values: PartFormValues
   setValues: (values: PartFormValues) => void
   sourceOptions: SourceOptions
@@ -2102,8 +2929,9 @@ function PartFields({
   canViewIntakes: boolean
   errors: PartFieldErrors
   edit?: boolean
+  /** `plain` is the drawer: numbered sections divided by a rule. */
+  variant?: 'panel' | 'plain'
 }) {
-  const [compatMakeId, setCompatMakeId] = useState<number | null>(null)
   const field =
     (name: keyof PartFormValues) =>
     (
@@ -2112,43 +2940,86 @@ function PartFields({
       >,
     ) =>
       setValues({ ...values, [name]: event.target.value })
-  const showCompatibility = !edit && values.sourceType === 'free'
+  /**
+   * Core stores compatibility only for a free part; for one taken off a car
+   * the car itself is the answer. So the section shows either fields to fill
+   * or the chosen car's own make, model and year, read-only.
+   */
+  const sourceCar =
+    values.sourceType === 'car'
+      ? (sourceOptions.cars.find((car) => car.id === values.sourceId) ?? null)
+      : null
+  const showCompatibility = !edit && values.sourceType !== 'batch'
+  const step = (number: string, title: string) =>
+    variant === 'plain' ? (
+      <span className="flex items-baseline gap-2.5">
+        <span className="text-app-dim font-mono text-[11px]">{number}</span>
+        {title}
+      </span>
+    ) : (
+      title
+    )
   return (
     <>
       <SectionPanel
         description="Звідки походить деталь. Після створення джерело не змінюється."
-        title="Джерело"
+        title={step('01', 'Джерело')}
+        variant={variant}
       >
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field
-            hint={
-              edit
-                ? 'Тип джерела задається під час створення деталі.'
-                : 'Вільна деталь не прив’язана ні до авто, ні до приймання.'
-            }
-            label="Тип джерела"
-          >
-            <SelectInput
-              aria-label="Тип джерела"
-              disabled={edit}
-              onChange={(event) =>
-                setValues({
-                  ...values,
-                  sourceType: event.target.value,
-                  sourceId: '',
-                })
+          {variant === 'plain' && !edit ? (
+            <fieldset className="col-span-full grid gap-2 sm:grid-cols-3">
+              <legend className="sr-only">Тип джерела</legend>
+              {SOURCE_KINDS.filter(
+                (kind) =>
+                  (kind.value !== 'car' || canViewCars) &&
+                  (kind.value !== 'batch' || canViewIntakes),
+              ).map((kind) => (
+                <SourceTile
+                  key={kind.value}
+                  kind={kind}
+                  onPick={() =>
+                    setValues({
+                      ...values,
+                      sourceType: kind.value,
+                      sourceId: '',
+                    })
+                  }
+                  picked={values.sourceType === kind.value}
+                />
+              ))}
+            </fieldset>
+          ) : (
+            <Field
+              hint={
+                edit
+                  ? 'Тип джерела задається під час створення деталі.'
+                  : 'Вільна деталь не прив’язана ні до авто, ні до приймання.'
               }
-              value={values.sourceType}
+              label="Тип джерела"
             >
-              <option value="free">Вільне</option>
-              {canViewCars || values.sourceType === 'car' ? (
-                <option value="car">Автомобіль</option>
-              ) : null}
-              {canViewIntakes || values.sourceType === 'batch' ? (
-                <option value="batch">Приймання</option>
-              ) : null}
-            </SelectInput>
-          </Field>
+              <SelectInput
+                aria-label="Тип джерела"
+                disabled={edit}
+                onChange={(event) =>
+                  setValues({
+                    ...values,
+                    sourceType: event.target.value,
+                    sourceId: '',
+                  })
+                }
+                value={values.sourceType}
+              >
+                <option value="free">Вільне</option>
+                {canViewCars || values.sourceType === 'car' ? (
+                  <option value="car">Автомобіль</option>
+                ) : null}
+                {canViewIntakes || values.sourceType === 'batch' ? (
+                  <option value="batch">Приймання</option>
+                ) : null}
+              </SelectInput>
+            </Field>
+          )}
           {values.sourceType === 'car' && canViewCars ? (
             <Field
               error={errors.sourceId}
@@ -2250,7 +3121,8 @@ function PartFields({
       </SectionPanel>
       <SectionPanel
         description="Як деталь виглядає у списку складу та в пошуку."
-        title="Опис деталі"
+        title={step('02', 'Опис деталі')}
+        variant={variant}
       >
         <Field error={errors.name} label="Назва" required>
           <TextInput
@@ -2294,19 +3166,47 @@ function PartFields({
       </SectionPanel>
       <SectionPanel
         description="Оберіть один із трьох сталих станів деталі."
-        title="Стан деталі"
+        title={step('03', 'Стан деталі')}
+        variant={variant}
       >
-        <PillGroup
-          className="flex-wrap"
-          label="Стан деталі"
-          onChange={(condition) => setValues({ ...values, condition })}
-          options={PART_CONDITIONS}
-          value={values.condition}
-        />
+        {variant === 'plain' ? (
+          <>
+            <div
+              aria-label="Стан деталі"
+              className="grid gap-2 sm:grid-cols-3"
+              role="radiogroup"
+            >
+              {PART_CONDITIONS.map((option) => (
+                <ConditionTile
+                  key={option.value}
+                  label={option.label}
+                  onPick={() =>
+                    setValues({ ...values, condition: option.value })
+                  }
+                  picked={values.condition === option.value}
+                  value={option.value}
+                />
+              ))}
+            </div>
+            <p className="text-app-dim text-[12px] leading-5 text-pretty">
+              Стан бачать покупці у картці деталі й у пошуку. Його можна змінити
+              пізніше.
+            </p>
+          </>
+        ) : (
+          <PillGroup
+            className="flex-wrap"
+            label="Стан деталі"
+            onChange={(condition) => setValues({ ...values, condition })}
+            options={PART_CONDITIONS}
+            value={values.condition}
+          />
+        )}
       </SectionPanel>
       <SectionPanel
         description="Скільки одиниць на складі та за скільки їх продавати."
-        title="Кількість і ціна"
+        title={step('04', 'Кількість і ціна')}
+        variant={variant}
       >
         <div className="grid items-start gap-3 sm:grid-cols-3">
           <Field error={errors.quantity} label="Кількість" required>
@@ -2341,45 +3241,82 @@ function PartFields({
       </SectionPanel>
       {showCompatibility ? (
         <SectionPanel
-          description="До якого авто підходить деталь. Задається лише під час створення."
-          title="Сумісність"
+          description={
+            sourceCar === null
+              ? 'До яких авто підходить деталь. Можна вказати кілька. Необовʼязково.'
+              : 'Перший рядок підставлено з авто-джерела. Додайте інші, якщо деталь підходить і до них.'
+          }
+          title={step('05', 'Сумісність')}
+          variant={variant}
         >
-          <div className="grid gap-3 sm:grid-cols-3">
-            <VehicleCatalogPicker
-              disabled={false}
-              label="Марка сумісності"
-              onSelect={(option) => {
-                setCompatMakeId(option.id)
-                setValues({
-                  ...values,
-                  carBrand: option.name,
-                  carModel: '',
-                })
-              }}
-              type="make"
-              value={values.carBrand}
-            />
-            <VehicleCatalogPicker
-              disabled={values.carBrand === ''}
-              label="Модель сумісності"
-              makeId={compatMakeId}
-              makeName={values.carBrand}
-              onSelect={(option) =>
-                setValues({ ...values, carModel: option.name })
-              }
-              type="model"
-              value={values.carModel}
-            />
-            <Field error={errors.carYear} label="Рік сумісності">
-              <TextInput
-                aria-label="Рік сумісності"
-                inputMode="numeric"
-                onChange={field('carYear')}
-                type="number"
-                value={values.carYear}
-              />
-            </Field>
-          </div>
+          {sourceCar === null ? null : (
+            <div className="border-app-line flex items-center gap-3.5 rounded-[14px] border bg-white/[0.03] px-4 py-3.5">
+              <span
+                aria-hidden
+                className="bg-app-input text-app-muted grid size-9 shrink-0 place-items-center rounded-[10px]"
+              >
+                <Lock className="size-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[15px] font-bold tracking-[-0.01em] text-white">
+                  {sourceCar.brand} {sourceCar.model}{' '}
+                  <span className="text-app-dim">·</span>{' '}
+                  <span className="text-app-ink font-mono font-medium">
+                    {sourceCar.year}
+                  </span>
+                </span>
+                <span className="text-app-muted mt-0.5 block text-[12px] text-pretty">
+                  З вибраного авто-джерела. Змінюється разом із джерелом.
+                </span>
+              </span>
+            </div>
+          )}
+          {compatibility === undefined ? null : (
+            <div className="grid gap-2.5">
+              {compatibility.rows.map((row, index) => (
+                <CompatibilityRowCard
+                  index={index}
+                  key={row.key}
+                  onChange={(patch) => {
+                    compatibility.setRows(
+                      compatibility.rows.map((item) =>
+                        item.key === row.key ? { ...item, ...patch } : item,
+                      ),
+                    )
+                  }}
+                  onRemove={
+                    compatibility.rows.length > 1
+                      ? () => {
+                          compatibility.setRows(
+                            compatibility.rows.filter(
+                              (item) => item.key !== row.key,
+                            ),
+                          )
+                        }
+                      : undefined
+                  }
+                  row={row}
+                />
+              ))}
+              <Button
+                className="w-full justify-center border-dashed"
+                onClick={() => {
+                  compatibility.setRows([
+                    ...compatibility.rows,
+                    emptyRow(`row-${String(Date.now())}`),
+                  ])
+                }}
+                type="button"
+              >
+                <Plus aria-hidden />
+                Додати ще авто
+              </Button>
+            </div>
+          )}
+          <Notice tone="warn">
+            Сумісність задається лише під час створення. Після збереження її не
+            можна змінити.
+          </Notice>
         </SectionPanel>
       ) : null}
     </>
@@ -2389,16 +3326,13 @@ function PartFields({
 function validFormNumbers(values: PartFormValues) {
   const quantity = Number(values.quantity)
   const price = optionalNumber(values.desiredSalePrice)
-  const year = optionalNumber(values.carYear)
   return {
     quantity,
     price,
-    year,
     valid:
       Number.isInteger(quantity) &&
       quantity > 0 &&
-      (price === undefined || (Number.isFinite(price) && price >= 0)) &&
-      (year === undefined || (Number.isInteger(year) && year > 0)),
+      (price === undefined || (Number.isFinite(price) && price >= 0)),
   }
 }
 
@@ -2417,7 +3351,19 @@ function PartForm({
 }) {
   const carMutation = useLatestMutationGuard(cabinetModules.cars)
   const intakeMutation = useLatestMutationGuard(cabinetModules.intakes)
-  const [values, setValues] = useState(emptyPartForm)
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const [compatRows, setCompatRows] = useState<CompatibilityRow[]>([
+    emptyRow('row-1'),
+  ])
+  // A part started from a car's page arrives with that car already chosen,
+  // so nobody has to find it again in the source list.
+  const [values, setValues] = useState(() => {
+    const presetCar = searchParams.get('car_id')
+    return presetCar === null
+      ? emptyPartForm
+      : { ...emptyPartForm, sourceType: 'car', sourceId: presetCar }
+  })
   const [mediaItems, setMediaItems] = useState<PartMediaItem[]>([])
   const sourceOptions = useSourceOptions(
     canViewCars && values.sourceType === 'car',
@@ -2448,8 +3394,6 @@ function PartForm({
     const notes = optional(values.notes)
     const oemCode = optional(values.oemCode)
     const partType = optional(values.partType)
-    const carBrand = optional(values.carBrand)
-    const carModel = optional(values.carModel)
     const request: CreatePartRequest = {
       sourceType: values.sourceType,
       ...(values.sourceType === 'car' ? { carId: values.sourceId.trim() } : {}),
@@ -2465,9 +3409,6 @@ function PartForm({
       ...(oemCode !== undefined ? { oemCode } : {}),
       ...(partType !== undefined ? { partType } : {}),
       ...(parsed.price !== undefined ? { desiredSalePrice: parsed.price } : {}),
-      ...(carBrand !== undefined ? { carBrand } : {}),
-      ...(carModel !== undefined ? { carModel } : {}),
-      ...(parsed.year !== undefined ? { carYear: parsed.year } : {}),
     }
     pendingRef.current = true
     setPending(true)
@@ -2528,7 +3469,40 @@ function PartForm({
         }
       }
       request.photoKeys = committedPhotoKeys(readyMedia)
-      await partsApi.create(request, { signal: scope.signal })
+      /**
+       * The vehicle list and the yard's catalogue are separate, so the chosen
+       * names are looked up before anything is sent — a make the yard has
+       * never seen would otherwise be stored as nothing at all.
+       */
+      // Nothing filled in means nothing to look up — and no round trip.
+      const resolved =
+        filledRows(compatRows).length === 0
+          ? ({ kind: 'none' } as const)
+          : await resolveCompatibility(compatRows, { signal: scope.signal })
+      if (resolved.kind === 'unknown') {
+        setError(unknownBrandsMessage(resolved.brands))
+        return
+      }
+      /**
+       * Sending the list with the part makes Core take it as the whole truth
+       * and skip the row it would otherwise observe from the donor car. So a
+       * car-sourced part is created bare — keeping that donor row — and the
+       * rows are replaced afterwards, which leaves the donor alone.
+       */
+      const replaceAfterwards = values.sourceType === 'car'
+      if (resolved.kind === 'ready' && !replaceAfterwards)
+        request.compatibilities = resolved.items
+      const created = await partsApi.create(request, { signal: scope.signal })
+      if (resolved.kind === 'ready' && replaceAfterwards) {
+        const current = await partsApi.compatibilities(created.id, {
+          signal: scope.signal,
+        })
+        await partsApi.replaceCompatibilities(
+          created.id,
+          current.version,
+          resolved.items,
+        )
+      }
       setStatus('Деталь створено.')
     } catch {
       setError(
@@ -2539,52 +3513,98 @@ function PartForm({
       setPending(false)
     }
   }
+  // The footer says the single next thing to fix, in the order the form reads.
+  const blocking = partFieldErrors(values, { requireSource })
+  const footerNote = mediaPending
+    ? 'Дочекайтеся, доки завантажаться всі фото.'
+    : (blocking.name ??
+      blocking.quantity ??
+      blocking.sourceId ??
+      blocking.desiredSalePrice ??
+      rowsProblem(compatRows) ??
+      'Фото можна додати пізніше.')
+  const ready =
+    Object.keys(blocking).length === 0 && rowsProblem(compatRows) === null
+
   return (
-    <PageBody width="narrow">
-      <PageHeader eyebrow="Склад · Деталі" title={title} />
+    <Sheet
+      description={
+        <>
+          Обовʼязкові поля позначені <span className="text-brand">*</span>.
+          Решту можна заповнити пізніше.
+        </>
+      }
+      footer={
+        <div className="flex flex-wrap items-center gap-2.5">
+          <p
+            className={cn(
+              'min-w-0 text-[12px] text-pretty',
+              ready ? 'text-app-muted' : 'text-state-warn',
+            )}
+          >
+            {footerNote}
+          </p>
+          <div className="ml-auto flex items-center gap-2.5">
+            <Button asChild disabled={pending}>
+              <Link to="..">Скасувати</Link>
+            </Button>
+            <Button
+              aria-busy={pending || mediaPending}
+              disabled={pending || mediaPending}
+              form={CREATE_PART_FORM}
+              type="submit"
+              variant="primary"
+            >
+              Створити деталь
+            </Button>
+          </div>
+        </div>
+      }
+      eyebrow="Склад · Деталі"
+      onOpenChange={(next: boolean) => {
+        if (!next && !pending) void navigate('..')
+      }}
+      open
+      size="lg"
+      title={title}
+    >
       <form
-        className="grid gap-4"
+        className="grid"
+        id={CREATE_PART_FORM}
         noValidate
         onSubmit={(event) => void submit(event)}
       >
         <PartFields
           canViewCars={canViewCars}
           canViewIntakes={canViewIntakes}
+          compatibility={{ rows: compatRows, setRows: setCompatRows }}
           errors={errors}
           setValues={setValues}
           sourceOptions={sourceOptions}
           values={values}
+          variant="plain"
         />
         <PartMediaFields
           deferUploads
           items={mediaItems}
           requireLatestMutation={requireLatestMutation}
           setItems={setMediaItems}
+          title={
+            <span className="flex items-baseline gap-2.5">
+              <span className="text-app-dim font-mono text-[11px]">06</span>
+              Фото
+            </span>
+          }
+          variant="plain"
         />
         {status ? <Notice tone="ok">{status}</Notice> : null}
         {error ? <Notice tone="danger">{error}</Notice> : null}
-        <div className="border-app-line rounded-panel bg-app-raised flex flex-wrap items-center justify-end gap-2 border p-3">
-          {mediaPending ? (
-            <p className="text-app-dim mr-auto text-[13.5px]">
-              Дочекайтеся, доки завантажаться всі фото.
-            </p>
-          ) : null}
-          <Button asChild>
-            <Link to="..">Скасувати</Link>
-          </Button>
-          <Button
-            aria-busy={pending || mediaPending}
-            disabled={pending || mediaPending}
-            type="submit"
-            variant="primary"
-          >
-            Створити деталь
-          </Button>
-        </div>
       </form>
-    </PageBody>
+    </Sheet>
   )
 }
+
+const CREATE_PART_FORM = 'create-part-form'
 
 function PartEdit({
   partId,
@@ -2637,9 +3657,6 @@ function PartEdit({
           partType: part.partType ?? '',
           desiredSalePrice:
             part.desiredSalePrice == null ? '' : String(part.desiredSalePrice),
-          carBrand: '',
-          carModel: '',
-          carYear: '',
         })
         setDetail(part)
         setMediaItems(
@@ -2765,7 +3782,7 @@ function PartEdit({
         </div>
       </div>
 
-      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+      <div className="mx-auto grid w-full max-w-[1360px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="min-w-0">
           <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
             {detail?.name ?? 'Редагувати деталь'}

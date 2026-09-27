@@ -96,6 +96,7 @@ const cabinet = (permissions = ['team.view', 'team.manage']) =>
       isActive: true,
       createdAt: '2026-08-01T10:00:00Z',
       roleName: 'owner',
+      requireDeliveryDeposit: true,
     },
     snapshot: {
       userId: 'user-owner',

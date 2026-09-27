@@ -193,6 +193,7 @@ it('accepts for a named user, hydrates, then enters the accepted tenant slug', a
         isActive: true,
         createdAt: '2026-08-15T00:00:00Z',
         roleName: 'manager',
+        requireDeliveryDeposit: true,
       },
     ]
   })

@@ -13,8 +13,8 @@ import {
   type DispatchPointSubmission,
 } from './dispatch-point-form'
 
-const NO_SETTLEMENT_NAME =
-  'Сервіс зберігає відділення й населений пункт кодами Нової пошти. Назву відділення підтягуємо з довідника, назви міста в довіднику за кодом немає.'
+const NO_BRANCH_NAME =
+  'Точку створили до переходу на український API Нової пошти, тож назви відділення в ній немає. Відкрийте точку й оберіть відділення ще раз.'
 
 type LoadState =
   | { kind: 'loading' }
@@ -47,7 +47,6 @@ export function DispatchPointsPanel({
     state: LoadState
   } | null>(null)
   const [reloads, setReloads] = useState(0)
-  const [divisionNames, setDivisionNames] = useState<Record<number, string>>({})
   const [editing, setEditing] = useState<Editing>(null)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -88,37 +87,6 @@ export function DispatchPointsPanel({
   }, [integrationId, reloads, report, scopeKey])
 
   const points = state.kind === 'ready' ? state.points : []
-
-  // The point stores carrier ids; the branch name only exists in the carrier's
-  // own catalogue, so it is resolved per settlement and never invented.
-  useEffect(() => {
-    const list = loaded?.state.kind === 'ready' ? loaded.state.points : []
-    if (list.length === 0) return
-    const controller = new AbortController()
-    const settlements = [...new Set(list.map((item) => item.settlementId))]
-    void Promise.all(
-      settlements.map(async (settlementId) => {
-        try {
-          const page = await integrationsApi.divisions(
-            integrationId,
-            settlementId,
-            1,
-            { signal: controller.signal },
-          )
-          return page.items
-        } catch {
-          return []
-        }
-      }),
-    ).then((pages) => {
-      if (controller.signal.aborted) return
-      const names: Record<number, string> = {}
-      for (const page of pages)
-        for (const division of page) names[division.id] = division.name
-      setDivisionNames(names)
-    })
-    return () => controller.abort()
-  }, [integrationId, loaded])
 
   const reload = useCallback(() => setReloads((value) => value + 1), [])
 
@@ -276,16 +244,16 @@ export function DispatchPointsPanel({
                   </p>
                 </div>
                 <div className="min-w-0 flex-[1_1_180px]">
-                  {divisionNames[point.divisionId] === undefined ? (
+                  {point.warehouseName === null ? (
                     <p
                       className="text-app-dim text-[13px] text-pretty"
-                      title={NO_SETTLEMENT_NAME}
+                      title={NO_BRANCH_NAME}
                     >
                       Назва відділення недоступна
                     </p>
                   ) : (
                     <p className="text-app-ink truncate text-[14px] font-semibold">
-                      {divisionNames[point.divisionId]}
+                      {point.warehouseName}
                     </p>
                   )}
                 </div>

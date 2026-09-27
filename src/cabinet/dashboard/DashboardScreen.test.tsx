@@ -22,6 +22,7 @@ const tenant: Tenant = {
   isActive: true,
   createdAt: '2026-08-01T10:00:00Z',
   roleName: 'owner',
+  requireDeliveryDeposit: true,
 }
 
 const snapshot: TenantAccessSnapshot = {
@@ -143,9 +144,9 @@ it('keeps the ready summary mounted when analytics fails and retries analytics o
 
   renderDashboard(['/app/koval/dashboard?period=month'])
 
-  expect(screen.getByRole('region', { name: 'Зведення' })).toHaveTextContent(
-    'Продажів сьогодні',
-  )
+  expect(
+    screen.getByRole('region', { name: 'Панель зведення' }),
+  ).toHaveTextContent('Доступно на складі')
   expect(screen.getByRole('alert', { name: 'Аналітика' })).toHaveTextContent(
     'Не вдалося завантажити аналітику',
   )
@@ -306,10 +307,10 @@ it('uses week for a missing period without changing the URL', () => {
   )
 })
 
-it('ends the dashboard on analytics, with no module or action lists after it', () => {
+it('ends the dashboard on its board, with no module or action lists after it', () => {
   renderDashboard(['/app/koval/dashboard'])
 
-  expect(screen.getByRole('region', { name: 'Аналітика' })).toBeVisible()
+  expect(screen.getByRole('region', { name: 'Панель зведення' })).toBeVisible()
   expect(
     screen.queryByRole('link', { name: 'Профіль' }),
   ).not.toBeInTheDocument()

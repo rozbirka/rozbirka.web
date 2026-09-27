@@ -25,6 +25,7 @@ const tenant: Tenant = {
   isActive: true,
   createdAt: '2026-08-01T10:00:00Z',
   roleName: 'owner',
+  requireDeliveryDeposit: true,
 }
 
 const cabinet = (permissions = ['team.manage']) =>
@@ -109,7 +110,11 @@ it('round-trips trimmed business settings through the active tenant', async () =
 
   const updateCall = vi.mocked(businessApi.update).mock.calls[0]
   expect(updateCall?.[0]).toBe('tenant-1')
-  expect(updateCall?.[1]).toEqual({ name: 'Koval Parts', city: 'Київ' })
+  expect(updateCall?.[1]).toEqual({
+    name: 'Koval Parts',
+    city: 'Київ',
+    requireDeliveryDeposit: true,
+  })
   expect(updateCall?.[2]?.signal).toBeInstanceOf(AbortSignal)
   expect(await screen.findByRole('status')).toHaveTextContent(
     'Налаштування бізнесу збережено.',
@@ -182,4 +187,31 @@ it('shows the business fields the tenant record cannot hold as disabled', async 
   expect(
     screen.getByRole('button', { name: 'Видалити кабінет' }).title,
   ).toContain('Видалити розбірку з кабінету не можна')
+})
+
+it('saves the delivery deposit policy the yard actually keeps', async () => {
+  const user = userEvent.setup()
+  vi.mocked(businessApi.update).mockResolvedValue({
+    ...tenant,
+    requireDeliveryDeposit: false,
+  })
+  vi.mocked(useCabinet).mockReturnValue(cabinet())
+  render(
+    <MemoryRouter initialEntries={['/app/koval/settings/business']}>
+      <BusinessSettingsScreen />
+    </MemoryRouter>,
+  )
+
+  await user.click(
+    screen.getByRole('switch', { name: 'Вимагати депозит за доставку' }),
+  )
+  await user.click(screen.getAllByRole('button', { name: 'Зберегти' })[0]!)
+
+  expect(businessApi.update).toHaveBeenCalledWith(
+    tenant.id,
+    expect.objectContaining({ requireDeliveryDeposit: false }),
+    expect.anything(),
+  )
+  // Turning it off is a real change, so the form offers to save it.
+  expect(await screen.findByText(/Відправляєте без передоплати/)).toBeVisible()
 })

@@ -1,32 +1,60 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { RefreshCw } from 'lucide-react'
-import { Button, Panel, Skeleton } from '@/components/app'
+import { RefreshCw, Search } from 'lucide-react'
+import { Button, Skeleton } from '@/components/app'
+import { cn, plural } from '@/lib/utils'
 import { useCabinet } from '../CabinetContext'
 import { cabinetPath } from '../cabinet-paths'
-import { cabinetModules } from '../module-registry'
+import { commandPaletteHint, openCommandPalette } from '../command-palette-open'
+import { cabinetModules, type CabinetModuleKey } from '../module-registry'
 import { evaluateModuleAccess } from '../policy'
-import { DashboardActivity } from './DashboardActivity'
-import { readDashboardPeriod, writeDashboardPeriod } from './dashboard-period'
-import { useDashboardData, type DashboardLoadable } from './use-dashboard-data'
-import type { DashboardData, DashboardPeriod } from '@/api/dashboard-contract'
-import { DashboardAnalytics } from './DashboardAnalytics'
+import { ActivityCard } from './ActivityCard'
+import { CarPayoffCard } from './CarPayoffCard'
 import { DashboardBillingBanner } from './DashboardBillingBanner'
 import { DashboardErrorState } from './DashboardErrorState'
-import { DashboardSummary } from './DashboardSummary'
-import { useCashBalances } from './use-cash-balances'
+import { DashboardKpis } from './DashboardKpis'
+import { RecentOrdersCard } from './RecentOrdersCard'
+import { RevenueChart } from './RevenueChart'
+import { TillsCard } from './TillsCard'
+import { TodayTasks } from './TodayTasks'
+import { TopSalesCard } from './TopSalesCard'
+import { dashboardTasks } from './dashboard-tasks'
+import { readDashboardPeriod, writeDashboardPeriod } from './dashboard-period'
+import { useDashboardData } from './use-dashboard-data'
 import { getDashboardBillingPath } from './dashboard-billing-access'
+import {
+  useCashRegisters,
+  usePartsSummary,
+  usePayoffCars,
+  useRecentIntakes,
+  useRecentOrders,
+} from './use-dashboard-panels'
+import type { DashboardPeriod } from '@/api/dashboard-contract'
+
+/** How many rows each list card carries before it defers to its own screen. */
+const CARS_SHOWN = 5
+const ORDERS_SHOWN = 5
+const INTAKES_SCANNED = 10
+
+const PERIOD_LABELS: Readonly<Record<DashboardPeriod, string>> = {
+  day: 'День',
+  week: 'Тиждень',
+  month: 'Місяць',
+}
+
+const dayName = new Intl.DateTimeFormat('uk-UA', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  timeZone: 'Europe/Kyiv',
+})
 
 export function DashboardScreen() {
   const { targetTenant, snapshot } = useCabinet()
   const [searchParams, setSearchParams] = useSearchParams()
   const selection = readDashboardPeriod(searchParams)
   const dashboard = useDashboardData(selection.period)
-  const tenantName = targetTenant?.name ?? 'вашій розбірці'
-  const billingPath =
-    snapshot !== null && targetTenant !== null
-      ? getDashboardBillingPath(snapshot, targetTenant)
-      : null
+  const now = useMemo(() => new Date(), [])
 
   useEffect(() => {
     if (!selection.normalize) return
@@ -35,137 +63,286 @@ export function DashboardScreen() {
     })
   }, [searchParams, selection, setSearchParams])
 
-  const selectPeriod = (period: DashboardPeriod) => {
-    setSearchParams(writeDashboardPeriod(searchParams, period), {
-      replace: false,
-    })
-  }
+  const allowed = useMemo(() => {
+    const modules = new Set<CabinetModuleKey>()
+    if (snapshot === null) return modules
+    const access = { status: 'ready' as const, snapshot, error: null }
+    for (const definition of Object.values(cabinetModules))
+      if (evaluateModuleAccess(definition, access, 'view').kind === 'allowed')
+        modules.add(definition.key)
+    return modules
+  }, [snapshot])
 
-  const access =
-    snapshot === null
-      ? null
-      : { status: 'ready' as const, snapshot, error: null }
-  const canOpen = (module: 'orders' | 'parts') =>
-    access !== null &&
-    targetTenant !== null &&
-    evaluateModuleAccess(cabinetModules[module], access, 'view').kind ===
-      'allowed'
   const slug = targetTenant?.slug ?? null
+  const path = (module: CabinetModuleKey) =>
+    slug !== null && allowed.has(module) ? cabinetPath(slug, module) : null
+
+  const cars = usePayoffCars(allowed.has('cars'), CARS_SHOWN)
+  const orders = useRecentOrders(allowed.has('orders'), ORDERS_SHOWN)
+  const intakes = useRecentIntakes(allowed.has('intakes'), INTAKES_SCANNED)
+  const registers = useCashRegisters(
+    allowed.has('cash') && snapshot?.permissions.has('finance.view') === true,
+  )
+  const parts = usePartsSummary(allowed.has('parts'))
+
+  const summary =
+    dashboard.summary.status === 'ready' ? dashboard.summary.data : null
+  const analytics =
+    dashboard.analytics.status === 'ready' ? dashboard.analytics.data : null
+
+  const tasks =
+    slug === null
+      ? []
+      : dashboardTasks({
+          slug,
+          allowed,
+          cars: cars?.items ?? null,
+          intakes,
+          outOfStockPartsCount: summary?.outOfStockPartsCount ?? null,
+          now,
+        })
+
+  const billingPath =
+    snapshot !== null && targetTenant !== null
+      ? getDashboardBillingPath(snapshot, targetTenant)
+      : null
+  const ordersPath = path('orders')
+  const partsPath = path('parts')
+  const cashPath = path('cash')
+  const periodLabel = PERIOD_LABELS[selection.period]
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
       <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-        <p className="text-app-dim flex items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase">
-          <span>Склад</span>
+        <p
+          aria-label="Розбірка і розділ"
+          className="text-app-dim flex items-center gap-2.5 font-mono text-[11px] tracking-[0.14em] whitespace-nowrap uppercase"
+        >
+          <span>{targetTenant?.name ?? 'Розбірка'}</span>
           <span aria-hidden className="text-white/20">
-            /
+            ·
           </span>
           <span className="text-app-muted">Головна</span>
         </p>
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-1 flex-wrap items-center justify-end gap-2.5">
+          <button
+            className="border-app-line text-app-dim hover:text-app-muted bg-app-raised flex h-10 min-w-0 flex-1 items-center sm:max-w-[340px] gap-2.5 rounded-[10px] border px-3.5 text-left text-[14px] transition-colors hover:bg-white/[0.04]"
+            onClick={() => openCommandPalette()}
+            type="button"
+          >
+            <Search aria-hidden className="size-4 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">
+              Деталь, OEM, номер авто, клієнт
+            </span>
+            <kbd className="border-app-line-2 hidden shrink-0 rounded-[5px] border px-1.5 py-0.5 font-mono text-[11px] sm:block">
+              {commandPaletteHint()}
+            </kbd>
+          </button>
           <Button
             aria-busy={dashboard.refreshing}
-            className="min-w-11 px-0"
             aria-label={
               dashboard.refreshing ? 'Оновлюємо дані' : 'Оновити дані'
             }
+            className="min-w-11 px-0"
             disabled={dashboard.refreshing}
             onClick={() => void dashboard.refresh()}
           >
             <RefreshCw aria-hidden />
           </Button>
-          {slug !== null && canOpen('orders') ? (
+          {ordersPath === null ? null : (
             <Button
               asChild
               className="px-5 text-sm font-bold"
               variant="primary"
             >
-              <Link to={cabinetPath(slug, 'orders', 'new')}>
-                Нове замовлення
-              </Link>
+              <Link to={`${ordersPath}/new`}>Нове замовлення</Link>
             </Button>
-          ) : null}
+          )}
         </div>
       </div>
 
-      <div className="mx-auto grid w-full max-w-[1240px] gap-8 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-        <div className="min-w-0">
-          <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-            Зведення
-          </h1>
-          <p className="text-app-muted mt-2.5 text-[15px]">
-            Зріз «зараз» · {tenantName}
-            {dashboard.refreshing ? ' · оновлюємо…' : null}
-          </p>
+      <div className="mx-auto grid w-full max-w-[1320px] gap-3.5 px-4 pt-9 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+        <div className="mb-3.5 flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+          <div className="min-w-0">
+            <h1 className="text-[34px] leading-none font-extrabold tracking-[-0.03em] text-balance text-white sm:text-[46px]">
+              {greeting(now)}
+              {summary === null ? '' : `, ${summary.userName}`}
+            </h1>
+            <p className="text-app-muted mt-3 text-[15px]">
+              {capitalize(dayName.format(now))}
+              {tasks.length === 0
+                ? ''
+                : ` · ${String(tasks.length)} ${plural(tasks.length, ['справа', 'справи', 'справ'])} на сьогодні`}
+              {dashboard.refreshing ? ' · оновлюємо…' : ''}
+            </p>
+          </div>
+          <PeriodSwitch
+            onPeriodChange={(period) => {
+              setSearchParams(writeDashboardPeriod(searchParams, period), {
+                replace: false,
+              })
+            }}
+            period={selection.period}
+          />
         </div>
+
+        {snapshot !== null && targetTenant !== null ? (
+          <DashboardBillingBanner snapshot={snapshot} tenant={targetTenant} />
+        ) : null}
+
         <div
           aria-busy={dashboard.refreshing}
           aria-label="Панель зведення"
-          className="grid min-w-0 gap-8"
+          className="grid min-w-0 gap-3.5"
           role="region"
         >
-          {snapshot !== null && targetTenant !== null ? (
-            <DashboardBillingBanner snapshot={snapshot} tenant={targetTenant} />
+          {dashboard.summary.status === 'error' ? (
+            <DashboardErrorState
+              ariaLabel="Зведення"
+              billingPath={billingPath}
+              genericMessage="Не вдалося завантажити зведення."
+              problem={dashboard.summary.error}
+              retry={() => dashboard.retrySummary()}
+            />
           ) : null}
-          <DashboardSummaryState
-            billingPath={billingPath}
-            loadable={dashboard.summary}
-            retry={() => dashboard.retrySummary()}
-          />
-          <DashboardAnalytics
-            billingPath={billingPath}
-            loadable={dashboard.analytics}
-            onPeriodChange={selectPeriod}
-            partsPath={
-              slug !== null && canOpen('parts')
-                ? cabinetPath(slug, 'parts')
-                : null
-            }
-            period={selection.period}
-            retry={() => dashboard.retryAnalytics()}
-          />
-          {snapshot !== null && targetTenant !== null ? (
-            <DashboardActivity snapshot={snapshot} tenant={targetTenant} />
+          {dashboard.analytics.status === 'error' ? (
+            <DashboardErrorState
+              ariaLabel="Аналітика"
+              billingPath={billingPath}
+              genericMessage="Не вдалося завантажити аналітику."
+              problem={dashboard.analytics.error}
+              retry={() => dashboard.retryAnalytics()}
+            />
           ) : null}
+          {summary === null && dashboard.summary.status === 'loading' ? (
+            <div aria-label="Завантаження зведення" role="status">
+              <Skeleton className="h-[220px] rounded-[20px]" />
+            </div>
+          ) : null}
+
+          {/* The board flows rather than lines up in rows. Paired rows only
+              look right when both halves happen to be the same height, and
+              here they never are: a yard with one task, or without the cash
+              module, left a hole the size of the card beside it. In a column
+              flow every card follows the one above it in its own column, so
+              the board closes up whatever this account is allowed to see. */}
+          <div className="gap-x-3.5 xl:columns-2 [&>*]:mb-3.5 [&>*]:break-inside-avoid">
+            {summary === null ? null : (
+              <TodayTasks allPath={null} tasks={tasks} />
+            )}
+            {summary === null ? null : (
+              <DashboardKpis
+                analytics={analytics}
+                data={summary}
+                parts={parts}
+              />
+            )}
+            {analytics === null ? null : (
+              <RevenueChart data={analytics} periodLabel={periodLabel} />
+            )}
+            {cars === null || slug === null ? null : (
+              <CarPayoffCard
+                base={cabinetPath(slug, 'cars')}
+                cars={cars.items}
+                now={now}
+                total={cars.total}
+              />
+            )}
+            {orders === null || ordersPath === null ? null : (
+              <RecentOrdersCard base={ordersPath} orders={orders} />
+            )}
+            {registers === null || cashPath === null ? null : (
+              <TillsCard base={cashPath} registers={registers} />
+            )}
+            {analytics === null ? null : (
+              <TopSalesCard
+                partsPath={partsPath}
+                periodLabel={periodLabel}
+                topPart={analytics.topPart}
+              />
+            )}
+            {summary === null ? null : (
+              <ActivityCard
+                lastActivity={summary.lastActivity}
+                lastMyActivity={summary.lastMyActivity}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-function DashboardSummaryState({
-  billingPath,
-  loadable,
-  retry,
+/**
+ * An exclusive choice of period. Kept as toggle buttons rather than the kit
+ * `Segmented` radios because the shell and browser suites pin `aria-pressed`
+ * and Tab reachability of every option; arrow keys move focus here so the
+ * group still behaves like one control.
+ */
+function PeriodSwitch({
+  period,
+  onPeriodChange,
 }: {
-  billingPath: string | null
-  loadable: DashboardLoadable<DashboardData>
-  retry: () => Promise<void>
+  period: DashboardPeriod
+  onPeriodChange: (period: DashboardPeriod) => void
 }) {
-  const cashBalances = useCashBalances()
-
-  if (loadable.status === 'ready') {
-    return <DashboardSummary cashBalances={cashBalances} data={loadable.data} />
-  }
-
-  if (loadable.status === 'error') {
-    return (
-      <DashboardErrorState
-        ariaLabel="Зведення"
-        billingPath={billingPath}
-        genericMessage="Не вдалося завантажити зведення."
-        problem={loadable.error}
-        retry={retry}
-      />
-    )
-  }
-
   return (
-    <Panel aria-label="Зведення">
-      <div aria-label="Завантаження зведення" role="status">
-        <Skeleton className="h-5 w-32" />
-        <Skeleton className="mt-3 h-16" />
-      </div>
-    </Panel>
+    <div
+      aria-label="Період аналітики"
+      className="border-app-line bg-app-raised flex shrink-0 gap-0.5 rounded-[11px] border p-[3px]"
+      onKeyDown={(event) => {
+        const step =
+          event.key === 'ArrowRight' || event.key === 'ArrowDown'
+            ? 1
+            : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+              ? -1
+              : 0
+        if (step === 0) return
+        const options = [...event.currentTarget.querySelectorAll('button')]
+        const current = options.indexOf(
+          document.activeElement as HTMLButtonElement,
+        )
+        if (current === -1) return
+        event.preventDefault()
+        options[(current + step + options.length) % options.length]?.focus()
+      }}
+      role="group"
+    >
+      {(Object.keys(PERIOD_LABELS) as DashboardPeriod[]).map((value) => (
+        <button
+          aria-pressed={period === value}
+          className={cn(
+            'relative h-[34px] rounded-[8px] px-3.5 text-[14px] font-semibold transition-colors outline-none after:absolute after:-inset-y-1.5 after:inset-x-0 after:content-[""] focus-visible:ring-2 focus-visible:ring-white/40',
+            period === value
+              ? 'bg-white/10 text-white'
+              : 'text-app-muted hover:bg-white/[0.04]',
+          )}
+          key={value}
+          onClick={() => onPeriodChange(value)}
+          type="button"
+        >
+          {PERIOD_LABELS[value]}
+        </button>
+      ))}
+    </div>
   )
 }
+
+/** The hour the yard opens is the hour this greeting has to get right. */
+function greeting(now: Date): string {
+  const hour = Number(
+    new Intl.DateTimeFormat('uk-UA', {
+      hour: 'numeric',
+      hourCycle: 'h23',
+      timeZone: 'Europe/Kyiv',
+    }).format(now),
+  )
+  if (hour < 5) return 'Доброї ночі'
+  if (hour < 12) return 'Добрий ранок'
+  if (hour < 18) return 'Добрий день'
+  return 'Добрий вечір'
+}
+
+const capitalize = (value: string) =>
+  value.charAt(0).toUpperCase() + value.slice(1)

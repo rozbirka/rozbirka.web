@@ -992,7 +992,9 @@ async function loginFrom(page: Page) {
   await page.goto('/login', { waitUntil: 'domcontentloaded' })
   await completeOtpLogin(page)
   await expect(page).toHaveURL('/app/koval/dashboard')
-  await expect(page.getByText('Зріз «зараз» · Розбірка Коваль')).toBeVisible()
+  await expect(
+    page.getByLabel('Розбірка і розділ').filter({ hasText: 'Розбірка Коваль' }),
+  ).toBeVisible()
 }
 
 async function selectVisibleTenant(page: Page, tenantId: string) {
@@ -1022,20 +1024,20 @@ async function clickVisibleCabinetLink(page: Page, name: string) {
   await link.click()
 }
 
-const dashboardSummaryValue = (page: Page, label: string) =>
-  page
-    .getByRole('region', { name: 'Панель зведення' })
-    .getByText(label, { exact: true })
-    .locator('..')
-    .locator('dd')
+/**
+ * The board greets the person the summary names, so the greeting is what says
+ * "this tenant's summary has arrived" — and it says which tenant.
+ */
+const dashboardGreeting = (page: Page) =>
+  page.getByRole('heading', { level: 1 })
+
+/** The analytics half of the board: it names the period it just loaded. */
+const revenueChart = (page: Page) =>
+  page.getByRole('region', { name: 'Виручка за період' })
 
 async function expectPopulatedDashboard(page: Page) {
-  await expect(dashboardSummaryValue(page, 'Продажів сьогодні')).toHaveText('7')
-  await expect(
-    page
-      .getByRole('region', { name: 'Продано запчастин' })
-      .getByText('21', { exact: true }),
-  ).toBeVisible()
+  await expect(dashboardGreeting(page)).toContainText('Олена')
+  await expect(revenueChart(page)).toContainText('Виручка · Тиждень')
 }
 
 const releasedAccessPaths = [
@@ -1268,7 +1270,9 @@ test('same-slug Back aborts a pending tenant selection before it can commit @cab
   await loginFrom(page)
   await selectVisibleTenant(page, 'tenant-2')
   await expect(page).toHaveURL('/app/sobol/dashboard')
-  await expect(page.getByText('Зріз «зараз» · Розбірка Соболя')).toBeVisible()
+  await expect(
+    page.getByLabel('Розбірка і розділ').filter({ hasText: 'Розбірка Соболя' }),
+  ).toBeVisible()
   await clickVisibleCabinetLink(page, 'Профіль')
   await expect(page).toHaveURL('/app/sobol/settings/profile')
 
@@ -1282,12 +1286,15 @@ test('same-slug Back aborts a pending tenant selection before it can commit @cab
   await fixture.waitForDelayedPermissions()
   await page.goBack()
   await expect(page).toHaveURL('/app/sobol/dashboard')
-  await expect(page.getByText('Зріз «зараз» · Розбірка Соболя')).toBeVisible()
+  await expect(
+    page.getByLabel('Розбірка і розділ').filter({ hasText: 'Розбірка Соболя' }),
+  ).toBeVisible()
   const abortedRequest = await formerAccessRequestFailed
   expect(abortedRequest.failure()?.errorText).toMatch(/aborted|cancelled/i)
 
   const formerTenantHeadingAppeared = page
-    .getByText('Зріз «зараз» · Розбірка Коваль')
+    .getByLabel('Розбірка і розділ')
+    .filter({ hasText: 'Розбірка Коваль' })
     .waitFor({ state: 'visible', timeout: 1_000 })
     .then(
       () => true,
@@ -1306,7 +1313,7 @@ test('same-slug Back aborts a pending tenant selection before it can commit @cab
   expect(await formerTenantHeadingAppeared).toBe(false)
   expect(await formerTenantAccessAppeared).toBe(false)
   await expect(
-    page.getByText('Зріз «зараз» · Розбірка Коваль'),
+    page.getByLabel('Розбірка і розділ').filter({ hasText: 'Розбірка Коваль' }),
   ).not.toBeVisible()
   await expect(page.getByRole('link', { name: 'Підписка' })).not.toBeVisible()
   await page.setViewportSize({ width: 320, height: 900 })
@@ -1367,7 +1374,9 @@ test('falls back to the target dashboard when its policy denies the current modu
   await selectVisibleTenant(page, 'tenant-2')
 
   await expect(page).toHaveURL('/app/sobol/dashboard')
-  await expect(page.getByText('Зріз «зараз» · Розбірка Соболя')).toBeVisible()
+  await expect(
+    page.getByLabel('Розбірка і розділ').filter({ hasText: 'Розбірка Соболя' }),
+  ).toBeVisible()
 })
 
 test('boots an active Manager entitlement without requesting detailed billing @cabinet-smoke', async ({
@@ -1381,7 +1390,9 @@ test('boots an active Manager entitlement without requesting detailed billing @c
   await selectVisibleTenant(page, 'tenant-2')
 
   await expect(page).toHaveURL('/app/sobol/dashboard')
-  await expect(page.getByText('Зріз «зараз» · Розбірка Соболя')).toBeVisible()
+  await expect(
+    page.getByLabel('Розбірка і розділ').filter({ hasText: 'Розбірка Соболя' }),
+  ).toBeVisible()
   expect(
     fixture.requests.filter(
       ({ path, tenantId }) =>
@@ -1402,14 +1413,13 @@ test('loads a direct week dashboard once, navigates month and Back, and traverse
 }, testInfo) => {
   const fixture = await installCabinetApiBoundary(page)
   await loginFrom(page)
-  await expect(dashboardSummaryValue(page, 'Продажів сьогодні')).toHaveText('7')
+  await expect(dashboardGreeting(page)).toContainText('Олена')
   await resetDashboardUpstream(request)
 
   await page.goto('/app/koval/dashboard?period=week')
   await expect(page).toHaveURL('/app/koval/dashboard?period=week')
-  await expect(dashboardSummaryValue(page, 'Продажів сьогодні')).toHaveText('7')
-  const analytics = page.getByRole('region', { name: 'Панель зведення' })
-  await expect(analytics.getByText('21', { exact: true })).toBeVisible()
+  await expect(dashboardGreeting(page)).toContainText('Олена')
+  await expect(revenueChart(page)).toContainText('Виручка · Тиждень')
   await expect(page.getByRole('button', { name: 'Тиждень' })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -1429,14 +1439,14 @@ test('loads a direct week dashboard once, navigates month and Back, and traverse
 
   await page.getByRole('button', { name: 'Місяць' }).click()
   await expect(page).toHaveURL('/app/koval/dashboard?period=month')
-  await expect(analytics.getByText('84', { exact: true })).toBeVisible()
+  await expect(revenueChart(page)).toContainText('Виручка · Місяць')
   await expect
     .poll(async () => (await upstreamStats(request)).dashboardAnalyticsRequests)
     .toEqual({ day: 0, week: 1, month: 1 })
 
   await page.goBack()
   await expect(page).toHaveURL('/app/koval/dashboard?period=week')
-  await expect(analytics.getByText('21', { exact: true })).toBeVisible()
+  await expect(revenueChart(page)).toContainText('Виручка · Тиждень')
   await expect
     .poll(async () => (await upstreamStats(request)).dashboardAnalyticsRequests)
     .toEqual({ day: 0, week: 2, month: 1 })
@@ -1475,7 +1485,7 @@ test('retries failed dashboard summary and analytics independently', async ({
 }) => {
   await installCabinetApiBoundary(page)
   await loginFrom(page)
-  await expect(dashboardSummaryValue(page, 'Продажів сьогодні')).toHaveText('7')
+  await expect(dashboardGreeting(page)).toContainText('Олена')
   await resetDashboardUpstream(request, {
     dashboardSummaryFailures: 1,
     dashboardAnalyticsFailures: { week: 1 },
@@ -1501,15 +1511,11 @@ test('retries failed dashboard summary and analytics independently', async ({
     .toEqual({ summary: 1, week: 1 })
 
   await summaryError.getByRole('button', { name: 'Спробувати ще раз' }).click()
-  await expect(dashboardSummaryValue(page, 'Продажів сьогодні')).toHaveText('7')
+  await expect(dashboardGreeting(page)).toContainText('Олена')
   await analyticsError
     .getByRole('button', { name: 'Спробувати ще раз' })
     .click()
-  await expect(
-    page
-      .getByRole('region', { name: 'Панель зведення' })
-      .getByText('21', { exact: true }),
-  ).toBeVisible()
+  await expect(revenueChart(page)).toContainText('Виручка · Тиждень')
   await expect
     .poll(async () => {
       const stats = await upstreamStats(request)
@@ -1527,7 +1533,7 @@ test('clears stale dashboard totals while the next tenant summary is pending', a
 }) => {
   const fixture = await installCabinetApiBoundary(page)
   await loginFrom(page)
-  await expect(dashboardSummaryValue(page, 'Продажів сьогодні')).toHaveText('7')
+  await expect(dashboardGreeting(page)).toContainText('Олена')
   await armDelayedDashboard(request, 'tenant-2')
   let delayReleased = false
 
@@ -1539,17 +1545,11 @@ test('clears stale dashboard totals while the next tenant summary is pending', a
 
     await expect(page).toHaveURL('/app/sobol/dashboard')
     await expect(page.getByLabel('Завантаження зведення')).toBeVisible()
-    await expect(
-      page
-        .getByRole('region', { name: 'Панель зведення' })
-        .getByText('7', { exact: true }),
-    ).toHaveCount(0)
+    await expect(dashboardGreeting(page)).not.toContainText('Олена')
 
     await releaseDelayedDashboard(request)
     delayReleased = true
-    await expect(dashboardSummaryValue(page, 'Продажів сьогодні')).toHaveText(
-      '17',
-    )
+    await expect(dashboardGreeting(page)).toContainText('Максим')
   } finally {
     if (!delayReleased) await releaseDelayedDashboard(request)
   }
@@ -1715,7 +1715,11 @@ test('canonical tenant roots reach the private SPA and redirect to the dashboard
     expect(response?.status(), path).toBe(200)
     expect(response?.headers()['x-robots-tag'], path).toBe('noindex')
     await expect(page, path).toHaveURL('/app/koval/dashboard')
-    await expect(page.getByText('Зріз «зараз» · Розбірка Коваль')).toBeVisible()
+    await expect(
+      page
+        .getByLabel('Розбірка і розділ')
+        .filter({ hasText: 'Розбірка Коваль' }),
+    ).toBeVisible()
   }
 })
 

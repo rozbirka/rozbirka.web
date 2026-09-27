@@ -46,6 +46,7 @@ export {
   type UploadItem,
 } from './file-field'
 export { formatFileSize } from './format'
+export { CodeChip } from './code-chip'
 export { FormDialog, Sheet, type FormDialogProps } from './form-dialog'
 export { Gallery, PhotoGrid, RecordCard, Thumbnail, type Photo } from './photo'
 export { Segmented, type SegmentedOption } from './segmented'
