@@ -26,7 +26,9 @@ import { cabinetPath } from '../cabinet-paths'
 import { cabinetModules } from '../module-registry'
 import { RedesignShell } from '../redesign-shell'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import { DeliveryPreferencesPanel } from './delivery-preferences-panel'
 import { DispatchPointsPanel } from './dispatch-points-panel'
+import { TrackingSubscriptionPanel } from './tracking-panel'
 import { WebhookPanel } from './webhook-panel'
 import { Switch } from './dispatch-point-form'
 import {
@@ -563,14 +565,21 @@ export function NovaPoshtaScreen() {
       )}
 
       {tab === 'statuses' && (
-        <WebhookPanel
-          integrationId={integration.id}
-          onFailuresChange={setFailures}
-        />
+        <div className="grid gap-5">
+          {/* The managed subscription first: whether the carrier is asked to
+              send anything at all. The queue below is a separate question —
+              what happened to the events that did arrive. */}
+          <TrackingSubscriptionPanel integrationId={integration.id} />
+          <WebhookPanel
+            integrationId={integration.id}
+            onFailuresChange={setFailures}
+          />
+        </div>
       )}
 
       {tab === 'settings' && (
         <div className="grid max-w-[640px] gap-5">
+          <DeliveryPreferencesPanel integrationId={integration.id} />
           <Card title="Підключення">
             <Field hint={NO_RENAME} label="Назва підключення">
               <TextInput

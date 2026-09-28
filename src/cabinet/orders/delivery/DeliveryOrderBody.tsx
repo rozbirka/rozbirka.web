@@ -6,7 +6,6 @@ import { cashApi, type CashRegister } from '@/api/cash'
 import { deliveryApi, type DeliveryOrder } from '@/api/delivery'
 import { shippingApi, type Shipment } from '@/api/shipping'
 import { normalizeApiProblem } from '@/api/errors'
-import { uah } from './delivery-money'
 import type { OrderDetail } from '@/api/orders'
 import {
   integrationErrorMessage,
@@ -190,7 +189,6 @@ export function DeliveryOrderBody({
                 addPath={null}
                 editable={false}
                 items={order.items}
-                note={`Погоджена сума доставки — ${uah(delivery.agreedTotalUah)}; ціни позицій Core тримає окремо, у валюті замовлення.`}
                 onEdit={() => undefined}
                 partsPath={partsPath}
                 total={order.items.reduce(

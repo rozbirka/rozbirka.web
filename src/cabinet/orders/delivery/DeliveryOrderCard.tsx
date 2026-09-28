@@ -354,7 +354,7 @@ export function DeliveryDueCard({
         />
       </span>
       <dl className="mt-4 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
-        <dt className="text-app-muted text-[14px]">Сума замовлення</dt>
+        <dt className="text-app-muted text-[14px]">Погоджено за доставку</dt>
         <dd className="font-mono text-[14px] text-white tabular-nums">
           {uah(delivery.agreedTotalUah)}
         </dd>

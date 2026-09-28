@@ -1,4 +1,5 @@
 import type { StatusTone } from '@/components/app'
+import type { ApiProblem } from '@/api/contracts'
 import type { Integration, IntegrationStatus } from '@/api/integrations'
 
 export const NOVA_POSHTA = 'nova_poshta'
@@ -76,4 +77,165 @@ export function diagnosticCheckLabel(code: string): string {
 /** Nova Poshta is the only provider Core can back today. */
 export function isSupportedIntegration(integration: Integration): boolean {
   return integration.code === NOVA_POSHTA
+}
+
+/**
+ * The managed tracking subscription's lifecycle, as Core names it. The pill is
+ * short enough to sit beside a heading; the sentence says what the yard should
+ * expect next, because half of these states resolve on their own.
+ */
+const TRACKING_STATES: Record<
+  string,
+  { label: string; tone: StatusTone; detail: string }
+> = {
+  Disabled: {
+    label: 'Не підключено',
+    tone: 'neutral',
+    detail:
+      'Автоматичні оновлення вимкнені. Статуси доставки оновлюються періодичною перевіркою.',
+  },
+  Connecting: {
+    label: 'Підключаємо',
+    tone: 'warn',
+    detail: 'Підключаємо оновлення — реєструємо підписку в Новій пошті.',
+  },
+  AwaitingVerification: {
+    label: 'Очікуємо підтвердження',
+    tone: 'warn',
+    detail:
+      'Очікуємо підтвердження від Нової пошти: перше оновлення на нашу адресу ще не надійшло.',
+  },
+  Connected: {
+    label: 'Підключено',
+    tone: 'ok',
+    detail: 'Нові накладні підключатимуться автоматично.',
+  },
+  RetryPending: {
+    label: 'Спроба не вдалася',
+    tone: 'warn',
+    detail: 'Не вдалося завершити дію. Повторимо автоматично.',
+  },
+  NeedsCredentials: {
+    label: 'Перевірте API-ключ',
+    tone: 'danger',
+    detail:
+      'Нова пошта не прийняла ключ. Введіть діючий ключ, щоб продовжити підключення.',
+  },
+  NeedsReview: {
+    label: 'Потрібна перевірка',
+    tone: 'danger',
+    detail: 'Підключення потребує перевірки.',
+  },
+  Disconnecting: {
+    label: 'Відключаємо',
+    tone: 'neutral',
+    detail: 'Відключаємо оновлення — чекаємо підтвердження від Нової пошти.',
+  },
+}
+
+/** States that change on their own, so the screen keeps asking while in one. */
+const TRACKING_TRANSITIONAL = new Set([
+  'Connecting',
+  'AwaitingVerification',
+  'Disconnecting',
+  'RetryPending',
+])
+
+export function trackingStatePresentation(state: string): {
+  label: string
+  tone: StatusTone
+  detail: string
+} {
+  return (
+    TRACKING_STATES[state] ?? {
+      label: 'Стан невідомий',
+      tone: 'neutral',
+      detail:
+        'Сервіс повернув стан, якого ця версія кабінету не знає. Оновіть стан — нічого не зламано.',
+    }
+  )
+}
+
+export function isTrackingTransitional(state: string): boolean {
+  return TRACKING_TRANSITIONAL.has(state)
+}
+
+/**
+ * Why Core stopped, in `reasonCode`. Two families arrive here: what our own
+ * reconciliation found, and `provider_*` — the carrier's refusal, named after
+ * its failure kind.
+ */
+const TRACKING_REASONS: Record<string, string> = {
+  callback_not_received:
+    'Нова пошта не надіслала жодного оновлення на нашу адресу. Перевірте, чи ключ має доступ до підписок, і повторіть спробу.',
+  ambiguous_subscription:
+    'У кабінеті Нової пошти знайдено кілька підписок на ту саму адресу. Приберіть зайві в кабінеті перевізника, тоді повторіть.',
+  subscription_not_confirmed:
+    'Нова пошта не підтвердила створення підписки. Повторіть спробу — якщо повториться, перевірте підписки в кабінеті перевізника.',
+  integration_inactive:
+    'Інтеграція вимкнена. Увімкніть її, щоб отримувати оновлення.',
+  provider_unauthorized:
+    'Нова пошта не прийняла ключ — він недійсний або відкликаний.',
+  provider_rejected: 'Нова пошта відхилила запит на підписку.',
+  provider_notfound: 'Нова пошта не знайшла цієї підписки.',
+  provider_unavailable: 'Нова пошта не відповідає. Спробуємо ще раз.',
+  provider_ratelimited:
+    'Нова пошта обмежила частоту запитів. Спробуємо ще раз пізніше.',
+  provider_invalidresponse:
+    'Нова пошта відповіла у незрозумілому форматі. Спробуємо ще раз.',
+  provider_notsubmitted:
+    'Запит до Нової пошти не був надісланий. Нічого не створено.',
+  provider_outcomeunknown:
+    'Не вдалося підтвердити результат запиту до Нової пошти.',
+  provider_disabled: 'Інтеграцію Нової пошти вимкнено або не налаштовано.',
+}
+
+/** Null when there is nothing to explain, so a caller can skip the line. */
+export function trackingReasonMessage(code: string | null): string | null {
+  if (code === null) return null
+  return (
+    TRACKING_REASONS[code] ??
+    'Сервіс не завершив дію й не назвав причини, яку ми вміємо пояснити. Спробуйте повторити.'
+  )
+}
+
+/**
+ * A failed command, in Ukrainian. Core answers in its own words — sometimes
+ * English, always about its internals — so the code decides the text and the
+ * body is never shown.
+ */
+export function trackingProblemMessage(problem: ApiProblem): string {
+  const code = problem.code?.toLowerCase() ?? ''
+  const byCode: Record<string, string> = {
+    tracking_credentials_required:
+      'Потрібен API-ключ Нової пошти — збереженого ключа для підписок немає.',
+    tracking_credentials_invalid:
+      'Такий ключ не підходить. Скопіюйте ключ із кабінету Нової пошти ще раз.',
+    tracking_callback_not_configured:
+      'У цьому середовищі автоматичні оновлення ще не налаштовані.',
+    tracking_busy:
+      'Ця дія вже виконується. Стан оновлено — перевірте його за кілька секунд.',
+    tracking_manual_webhook_configured:
+      'Для цієї інтеграції вже налаштований ручний вебхук. Приберіть збережений секрет нижче — самі ми його не вимикаємо.',
+    tracking_disconnect_required:
+      'Спершу завершіть відключення попередньої підписки, тоді підключайте нову.',
+    tracking_retry_unavailable:
+      'Повторювати вже нічого: стан підписки змінився. Оновіть стан.',
+    nova_poshta_unauthorized:
+      'Нова пошта не прийняла ключ — він недійсний або відкликаний.',
+    nova_poshta_rejected: 'Нова пошта відхилила запит на підписку.',
+    nova_poshta_ratelimited:
+      'Нова пошта обмежила частоту запитів. Спробуйте за кілька хвилин.',
+    nova_poshta_unavailable:
+      'Нова пошта зараз недоступна. Спробуйте за кілька хвилин.',
+    nova_poshta_disabled: 'Інтеграція Нової пошти вимкнена або не налаштована.',
+  }
+  if (byCode[code] !== undefined) return byCode[code]
+  if (problem.kind === 'forbidden')
+    return 'Немає доступу: потрібні права на налаштування команди.'
+  if (problem.kind === 'not-found')
+    return 'Підписки для цієї інтеграції немає. Оновіть стан.'
+  if (problem.kind === 'network' || problem.kind === 'timeout')
+    return 'Немає звʼязку з сервером. Ми не повторюємо дію самі — перевірте стан і за потреби натисніть ще раз.'
+  return 'Не вдалося виконати дію. Перевірте стан і спробуйте ще раз.'
 }

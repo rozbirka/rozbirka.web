@@ -430,7 +430,7 @@ export function PaymentDrawer({
         {error !== null && <Notice tone="danger">{error}</Notice>}
 
         <dl className="border-app-line bg-app-raised grid grid-cols-[1fr_auto] items-baseline gap-y-2.5 rounded-[14px] border px-[18px] py-4 text-[14px]">
-          <dt className="text-app-muted">Сума замовлення</dt>
+          <dt className="text-app-muted">Погоджено за доставку</dt>
           <dd className="text-right font-mono tabular-nums">
             {uah(delivery.agreedTotalUah)}
           </dd>

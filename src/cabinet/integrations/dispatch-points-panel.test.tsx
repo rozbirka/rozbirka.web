@@ -218,7 +218,18 @@ it('adds a point from the carrier catalogue and makes it the default', async () 
     await screen.findByLabelText(/Контактна особа відправника/),
     '5ace4a2e-13ee-11e5-add9-005056887b8e',
   )
+  // Choosing the contact person fills the two fields below: the waybill names
+  // that same person as the sender's contact, so typing them again only
+  // creates a chance to disagree with the carrier.
+  expect(screen.getByLabelText(/Ім’я відправника/)).toHaveValue('Олена Коваль')
+  expect(screen.getByLabelText(/Телефон відправника/)).toHaveValue(
+    '380672147730',
+  )
+  // Still editable — the carrier's contact record is not always what the yard
+  // writes on the parcel.
+  await user.clear(screen.getByLabelText(/Ім’я відправника/))
   await user.type(screen.getByLabelText(/Ім’я відправника/), 'Андрій Гринь')
+  await user.clear(screen.getByLabelText(/Телефон відправника/))
   await user.type(screen.getByLabelText(/Телефон відправника/), '+380639014418')
   await user.click(
     screen.getByRole('switch', { name: 'Відправник — компанія' }),

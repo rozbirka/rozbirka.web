@@ -22,6 +22,30 @@ vi.mock('@/api/integrations', () => ({
       }),
     ),
     getById: vi.fn(),
+    trackingSubscription: vi.fn(() =>
+      Promise.resolve({
+        state: 'Disabled',
+        reasonCode: null,
+        pendingNumbers: 0,
+        unconfirmedNumbers: 0,
+        lastCallbackAt: null,
+        publicCallbackConfigured: true,
+        canRetry: false,
+      }),
+    ),
+    connectTracking: vi.fn(),
+    disconnectTracking: vi.fn(),
+    retryTracking: vi.fn(),
+    preferences: vi.fn(() =>
+      Promise.resolve({
+        codCashRegisterId: null,
+        senderCounterpartyRef: null,
+        senderContactRef: null,
+      }),
+    ),
+    savePreferences: vi.fn(),
+    senders: vi.fn(() => Promise.resolve([])),
+    senderContacts: vi.fn(() => Promise.resolve([])),
     saveNovaPoshtaKey: vi.fn(),
     verify: vi.fn(),
     activate: vi.fn(),
@@ -245,6 +269,16 @@ it('opens the tab the link points at and counts what each one holds', async () =
     'page',
   )
   expect(within(tabs).getByText('2 з помилкою')).toBeVisible()
+  // Two separate questions on one tab: whether the carrier is asked to send
+  // anything, and what happened to the events that arrived.
+  expect(
+    await screen.findByRole('region', {
+      name: 'Автоматичне оновлення доставки',
+    }),
+  ).toBeVisible()
+  expect(
+    screen.getByRole('region', { name: 'Події з вичерпаними спробами' }),
+  ).toBeVisible()
   expect(within(tabs).getByRole('link', { name: /Огляд/ })).not.toHaveAttribute(
     'aria-current',
   )

@@ -45,6 +45,28 @@ export interface NovaPoshtaWebhookStatus {
   deadLetterIds: string[]
 }
 
+/**
+ * The managed status feed: Core registers the subscription with the carrier,
+ * enrols each waybill and watches for the callback, so the yard never types a URL
+ * or a secret. Only Core's own view of that lifecycle is exposed.
+ */
+export interface NovaPoshtaTrackingSubscription {
+  /**
+   * Left as a string on purpose: a state this build has never heard of must
+   * render as an unknown state, not crash the screen.
+   */
+  state: string
+  reasonCode: string | null
+  /** Waybills still waiting to be attached to the subscription. */
+  pendingNumbers: number
+  /** Waybills the carrier never confirmed; polling still covers them. */
+  unconfirmedNumbers: number
+  lastCallbackAt: string | null
+  /** False where this environment has no public HTTPS address to be called at. */
+  publicCallbackConfigured: boolean
+  canRetry: boolean
+}
+
 export interface IntegrationDiagnosticCheck {
   code: string
   status: string
@@ -104,6 +126,16 @@ export interface NovaPoshtaDivision {
   countryCode: string
   sendingAllowed: boolean
   receivingAllowed: boolean
+}
+
+/**
+ * Delivery choices that belong to the integration rather than to one branch:
+ * the sender every waybill goes out as, and the till a post-payment lands in.
+ */
+export interface NovaPoshtaPreferences {
+  codCashRegisterId: string | null
+  senderCounterpartyRef: string | null
+  senderContactRef: string | null
 }
 
 /** A sender the tenant's API key is allowed to dispatch as. */
@@ -281,28 +313,68 @@ export const integrationsApi = {
     ).data
   },
   /** The senders this tenant's key may dispatch as, from the carrier's cabinet. */
+  /** What the yard chose for delivery, apart from the key. */
+  async preferences(
+    id: string,
+    options: RequestOptions = {},
+  ): Promise<NovaPoshtaPreferences> {
+    const data = (
+      await apiClient.get<NovaPoshtaPreferences>(
+        `${endpoint(id)}/shipping/preferences`,
+        requestConfig(options),
+      )
+    ).data
+    return {
+      codCashRegisterId: data.codCashRegisterId ?? null,
+      senderCounterpartyRef: data.senderCounterpartyRef ?? null,
+      senderContactRef: data.senderContactRef ?? null,
+    }
+  },
+  async savePreferences(
+    id: string,
+    request: NovaPoshtaPreferences,
+    options: RequestOptions = {},
+  ): Promise<NovaPoshtaPreferences> {
+    const data = (
+      await apiClient.put<NovaPoshtaPreferences>(
+        `${endpoint(id)}/shipping/preferences`,
+        request,
+        requestConfig(options),
+      )
+    ).data
+    return {
+      codCashRegisterId: data.codCashRegisterId ?? null,
+      senderCounterpartyRef: data.senderCounterpartyRef ?? null,
+      senderContactRef: data.senderContactRef ?? null,
+    }
+  },
   async senders(
     id: string,
     options: RequestOptions = {},
   ): Promise<NovaPoshtaCounterparty[]> {
-    return (
+    const data = (
       await apiClient.get<NovaPoshtaCounterparty[]>(
         `${endpoint(id)}/shipping/senders`,
         requestConfig(options),
       )
     ).data
+    // Core omits a null rather than sending it, so a sender with no tax code
+    // arrives without the property. Left as `undefined`, a `=== null` guard
+    // downstream lets it through and the screen prints the word "undefined".
+    return data.map((item) => ({ ...item, tin: item.tin ?? null }))
   },
   async senderContacts(
     id: string,
     counterpartyRef: string,
     options: RequestOptions = {},
   ): Promise<NovaPoshtaContact[]> {
-    return (
+    const data = (
       await apiClient.get<NovaPoshtaContact[]>(
         `${endpoint(id)}/shipping/senders/${encodeURIComponent(counterpartyRef)}/contacts`,
         requestConfig(options),
       )
     ).data
+    return data.map((item) => ({ ...item, phone: item.phone ?? null }))
   },
   async divisions(
     id: string,
@@ -316,6 +388,47 @@ export const integrationsApi = {
         { params: { settlementRef, page }, ...requestConfig(options) },
       )
     ).data
+  },
+  /**
+   * The managed subscription's own state. Core omits nulls, so a reason that is
+   * simply absent arrives as `undefined` — read as "not loaded", it turns an
+   * untroubled subscription into a screen waiting forever for an explanation.
+   */
+  async trackingSubscription(
+    id: string,
+    options: RequestOptions = {},
+  ): Promise<NovaPoshtaTrackingSubscription> {
+    const data = (
+      await apiClient.get<NovaPoshtaTrackingSubscription>(
+        `${endpoint(id)}/tracking-subscription`,
+        requestConfig(options),
+      )
+    ).data
+    return {
+      ...data,
+      reasonCode: data.reasonCode ?? null,
+      lastCallbackAt: data.lastCallbackAt ?? null,
+    }
+  },
+  /**
+   * Asks Core to connect. The key travels in the body and only when the yard
+   * has just typed one — Core reuses the stored key otherwise, and a key must
+   * never reach a URL, where it would be logged by every hop on the way.
+   *
+   * Answered with 202: the work has been accepted, not finished. The caller
+   * reads the outcome from `trackingSubscription`, never from this call.
+   */
+  async connectTracking(id: string, apiKey: string | null): Promise<void> {
+    await apiClient.post(
+      `${endpoint(id)}/tracking-subscription/connect`,
+      apiKey === null ? {} : { apiKey },
+    )
+  },
+  async disconnectTracking(id: string): Promise<void> {
+    await apiClient.post(`${endpoint(id)}/tracking-subscription/disconnect`)
+  },
+  async retryTracking(id: string): Promise<void> {
+    await apiClient.post(`${endpoint(id)}/tracking-subscription/retry`)
   },
   async webhookStatus(
     id: string,

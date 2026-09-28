@@ -438,7 +438,7 @@ export function DispatchPointForm({
             {(senders ?? []).map((item) => (
               <option key={item.ref} value={item.ref}>
                 {item.name}
-                {item.tin === null ? '' : ` · ${item.tin}`}
+                {item.tin == null ? '' : ` · ${item.tin}`}
               </option>
             ))}
           </SelectInput>
@@ -455,11 +455,19 @@ export function DispatchPointForm({
         >
           <SelectInput
             disabled={counterpartyRef === null || contactOptions === null}
-            onChange={(event) =>
-              setContactChoice(
-                event.target.value === '' ? null : event.target.value,
-              )
-            }
+            onChange={(event) => {
+              const next = event.target.value === '' ? null : event.target.value
+              setContactChoice(next)
+              // The waybill names this person as the sender's contact, so the
+              // two fields below are the same person by definition. Typing
+              // them again is an invitation to disagree with the carrier.
+              const chosen = contactOptions?.find((item) => item.ref === next)
+              if (chosen !== undefined) {
+                setSenderName(chosen.name)
+                if (chosen.phone != null && chosen.phone !== '')
+                  setPhone(chosen.phone)
+              }
+            }}
             value={contactRef ?? ''}
           >
             <option value="">
@@ -468,7 +476,7 @@ export function DispatchPointForm({
             {(contactOptions ?? []).map((item) => (
               <option key={item.ref} value={item.ref}>
                 {item.name}
-                {item.phone === null ? '' : ` · ${item.phone}`}
+                {item.phone == null ? '' : ` · ${item.phone}`}
               </option>
             ))}
           </SelectInput>

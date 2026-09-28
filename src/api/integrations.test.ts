@@ -50,3 +50,41 @@ it('reads a diagnostics run without checks as an empty list, not a missing one',
   post.mockResolvedValue({ data: {} })
   expect((await integrationsApi.diagnose('np-1')).checks).toEqual([])
 })
+
+it('reads a subscription with nothing to report as empty, not as unloaded', async () => {
+  vi.spyOn(apiClient, 'get').mockResolvedValue({
+    data: {
+      state: 'Connected',
+      pendingNumbers: 0,
+      unconfirmedNumbers: 0,
+      publicCallbackConfigured: true,
+      canRetry: false,
+    },
+  })
+
+  expect(await integrationsApi.trackingSubscription('np-1')).toMatchObject({
+    reasonCode: null,
+    lastCallbackAt: null,
+  })
+})
+
+it('sends a key in the body only when one was typed, and never in the path', async () => {
+  const post = vi.spyOn(apiClient, 'post').mockResolvedValue({ data: {} })
+
+  await integrationsApi.connectTracking('np-1', null)
+  await integrationsApi.connectTracking('np-1', 'secret-key')
+  await integrationsApi.disconnectTracking('np-1')
+  await integrationsApi.retryTracking('np-1')
+
+  expect(post.mock.calls.map(([url]) => url)).toEqual([
+    '/integrations/np-1/tracking-subscription/connect',
+    '/integrations/np-1/tracking-subscription/connect',
+    '/integrations/np-1/tracking-subscription/disconnect',
+    '/integrations/np-1/tracking-subscription/retry',
+  ])
+  expect(post.mock.calls[0]?.[1]).toEqual({})
+  expect(post.mock.calls[1]?.[1]).toEqual({ apiKey: 'secret-key' })
+  expect(post.mock.calls.every(([url]) => !url.includes('secret-key'))).toBe(
+    true,
+  )
+})

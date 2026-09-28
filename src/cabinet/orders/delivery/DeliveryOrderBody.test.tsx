@@ -235,13 +235,15 @@ it('names the till behind a payment once the cash module answers', async () => {
   expect(await within(payments).findByText(/ФОП Nova Pay/)).toBeVisible()
 })
 
-it('keeps item prices in the order currency and says where the hryvnia total lives', () => {
+it('sums an order from its parts and keeps the hryvnia figure out of it', () => {
   renderBody(load({}))
 
   const items = screen.getByRole('region', { name: 'Позиції' })
   // The line's own sum and the card total — both in the order's currency.
   expect(within(items).getAllByText('3 200,00 $')).toHaveLength(2)
-  expect(items).toHaveTextContent('Погоджена сума доставки')
+  // What the carrier collects is a different number about a different thing,
+  // and it does not belong beside the price of the goods.
+  expect(items).not.toHaveTextContent('₴')
 })
 
 it('offers only the step the order is waiting for', () => {

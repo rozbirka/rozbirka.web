@@ -13,6 +13,7 @@ import {
   type NovaPoshtaDivision,
   type NovaPoshtaSettlement,
 } from '@/api/integrations'
+import { cn } from '@/lib/utils'
 import { deliveryApi, type DeliveryOrder } from '@/api/delivery'
 import {
   shippingApi,
@@ -67,12 +68,11 @@ const decimal = (value: string): number | null => {
 }
 
 /**
- * The post-payment is the one figure on this form where zero is an answer
- * rather than an empty field: it says the goods are paid for and the carrier
- * collects nothing. `decimal` treats zero as absent, which is right for a
- * weight or a declared value and wrong here.
+ * The agreed goods total, where an empty field is an answer: goods already
+ * paid for owe nothing and the parcel travels without a post-payment. `decimal`
+ * treats zero as absent, which is right for a weight and wrong here.
  */
-const codAmount = (value: string): number | null => {
+const hryvnia = (value: string): number | null => {
   const text = value.trim()
   if (text === '') return 0
   const parsed = Number(text.replace(',', '.'))
@@ -180,10 +180,11 @@ export function DeliveryDrawer({
     String(saved?.declaredValueUah ?? declaredValue ?? ''),
   )
   const [payer, setPayer] = useState<PayerType>(saved?.payerType ?? 'Recipient')
-  // What the carrier holds from the recipient. Zero is the ordinary case for
-  // goods already paid for, and it is what the field opens on.
-  const [cod, setCod] = useState(
-    delivery.outstandingUah > 0 ? String(delivery.outstandingUah) : '',
+  // The price of the goods, in hryvnia. The post-payment follows from it —
+  // never the other way round, or editing what the carrier collects would
+  // quietly rewrite what the order is worth.
+  const [goods, setGoods] = useState(
+    delivery.agreedTotalUah > 0 ? String(delivery.agreedTotalUah) : '',
   )
 
   const [busy, setBusy] = useState<null | 'draft' | 'estimate' | 'create'>(null)
@@ -244,7 +245,11 @@ export function DeliveryDrawer({
         parcel.heightCm !== null,
     )
   const declaredValueUah = decimal(declared)
-  const codUah = codAmount(cod)
+  const goodsUah = hryvnia(goods)
+  // What Nova Poshta will hold at the counter: the goods less what the
+  // customer has already handed over.
+  const codUah =
+    goodsUah === null ? null : Math.max(0, goodsUah - delivery.appliedUah)
   const ready =
     name.trim() !== '' &&
     PHONE.test(trimmedPhone) &&
@@ -330,13 +335,10 @@ export function DeliveryDrawer({
   const create = async () => {
     // A figure that does not parse is not a zero: sending one would ship the
     // parcel collecting nothing while the operator believes they typed a sum.
-    if (codUah === null) return
-    // The post-payment is what the order still owes, so it is written as the
-    // agreed total before the waybill quotes it back.
-    const wanted = codUah
-    if (wanted !== delivery.outstandingUah) {
+    if (goodsUah === null) return
+    if (goodsUah !== delivery.agreedTotalUah) {
       const money = await run('create', () =>
-        deliveryApi.configure(orderId, delivery.appliedUah + wanted),
+        deliveryApi.configure(orderId, goodsUah),
       )
       if (money === null) return
       onMoneyChanged(money)
@@ -661,25 +663,45 @@ export function DeliveryDrawer({
 
         <Field
           error={
-            codUah === null
+            goodsUah === null
               ? 'Вкажіть суму в гривнях або лишіть поле порожнім.'
               : undefined
           }
-          hint={
-            codUah === 0
-              ? 'Нуль — товар уже оплачено, Нова пошта нічого не утримує.'
-              : 'Нова пошта утримає цю суму з отримувача й перекаже вам. Комісію переказу платить отримувач.'
-          }
-          label="Післяплата, ₴"
+          hint="Скільки клієнт має за це замовлення в гривні. Ціни позицій живуть окремо, у валюті замовлення."
+          label="Погоджено за доставку, ₴"
         >
           <TextInput
             className="font-mono tabular-nums"
             inputMode="decimal"
-            onChange={(event) => setCod(event.target.value)}
+            onChange={(event) => setGoods(event.target.value)}
             placeholder="0"
-            value={cod}
+            value={goods}
           />
         </Field>
+
+        {/* Derived, never typed: the carrier collects what the order still
+            owes, and showing it as a field invited editing the price of the
+            goods by accident. */}
+        <dl className="border-app-line bg-app-raised grid grid-cols-[1fr_auto] items-baseline gap-y-2 rounded-[12px] border px-4 py-3.5 text-[13px]">
+          <dt className="text-app-muted">Уже сплачено</dt>
+          <dd className="text-right font-mono tabular-nums">
+            {uah.format(delivery.appliedUah)}
+          </dd>
+          <dt className="font-semibold">Післяплата в накладній</dt>
+          <dd
+            className={cn(
+              'text-right font-mono text-[15px] tabular-nums',
+              codUah === null || codUah === 0 ? 'text-app-muted' : 'text-white',
+            )}
+          >
+            {codUah === null ? '—' : uah.format(codUah)}
+          </dd>
+          <p className="text-app-dim col-span-2 -mt-0.5 text-[12px] text-pretty">
+            {codUah === 0
+              ? 'Нічого утримувати — посилка їде як оплачена.'
+              : 'Нова пошта утримає цю суму з отримувача й перекаже вам. Комісію переказу платить отримувач.'}
+          </p>
+        </dl>
 
         {quote.showMoney && shipment?.quoteUah != null && (
           <dl
