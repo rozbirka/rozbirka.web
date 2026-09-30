@@ -129,9 +129,10 @@ it('opens the new-customer form in the standard side drawer over the directory',
   expect(screen.getByText('Клієнти', { selector: 'h1' })).toBeInTheDocument()
   const drawer = screen.getByRole('dialog', { name: 'Новий клієнт' })
   expect(drawer).toHaveClass('sm:max-w-[600px]')
-  expect(screen.getByTestId('customer-create-overlay')).toHaveClass(
-    'bg-black/80',
-  )
+  // The shared drawer: its footer keeps the save action in view.
+  expect(
+    within(drawer).getByRole('button', { name: 'Створити клієнта' }),
+  ).toHaveAttribute('form', 'customer-form')
   expect(customerMocks.getById).not.toHaveBeenCalled()
 })
 
@@ -590,4 +591,18 @@ it('contains delete-dialog focus and restores it to the trigger on close', async
       screen.getByRole('button', { name: 'Видалити клієнта' }),
     ).toHaveFocus(),
   )
+})
+
+it('edits a customer in the side drawer over the customer card', async () => {
+  vi.mocked(useCabinet).mockReturnValue(cabinet())
+  renderScreen('/app/garage/customers/customer-1/edit')
+
+  const drawer = await screen.findByRole('dialog', {
+    name: 'Редагувати клієнта',
+  })
+  expect(drawer).toHaveClass('sm:max-w-[600px]')
+  await within(drawer).findByDisplayValue('Ірина')
+  expect(
+    within(drawer).getByRole('button', { name: 'Зберегти зміни' }),
+  ).toHaveAttribute('form', 'customer-form')
 })

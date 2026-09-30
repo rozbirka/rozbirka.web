@@ -31,14 +31,11 @@ export const conditionLabel = (value: string) =>
   })[value.toLowerCase()] ?? value
 
 export const sourceLabel = (value: string) =>
-  ({ car: 'Авто', batch: 'Приймання', free: 'Без джерела' })[
-    value.toLowerCase()
-  ] ?? value
+  ({ car: 'Авто', batch: 'Партія' })[value.toLowerCase()] ??
+  'Джерело недоступне'
 
 export const originLabel = (id: string, name: string) =>
-  (({ car: 'З авто', batch: 'З партії', free: 'Вільна' })[id.toLowerCase()] ??
-    name) ||
-  id
+  (({ car: 'З авто', batch: 'З партії' })[id.toLowerCase()] ?? name) || id
 
 /**
  * A facet value said in Ukrainian. The server sends the code and its own name;

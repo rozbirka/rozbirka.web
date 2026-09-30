@@ -23,7 +23,6 @@ import {
   Button,
   DateValue,
   Field,
-  FormDialog,
   Notice,
   PageBody,
   PageHeader,
@@ -33,6 +32,7 @@ import {
   TextInput,
   useOperation,
   type StatusTone,
+  Sheet,
 } from '@/components/app'
 import { cn, plural } from '@/lib/utils'
 import { Kpi, KpiStrip } from '../redesign-kpi'
@@ -1113,64 +1113,117 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       </RedesignShell>
 
       {editingRole !== null && (
-        <FormDialog
+        <Sheet
           description="Змініть назву та права ролі. Зміни діють одразу для всіх, хто має цю роль."
-          error={roleUpdate.error}
+          eyebrow="Команда · Ролі"
+          footer={
+            <>
+              <Button
+                disabled={roleUpdate.pending}
+                onClick={() => setEditingRole(null)}
+                type="button"
+              >
+                Скасувати
+              </Button>
+              <Button
+                aria-busy={roleUpdate.pending}
+                disabled={
+                  roleUpdate.pending ||
+                  !canManageAccess ||
+                  !editingRoleName.trim() ||
+                  editingRolePermissions.length === 0
+                }
+                form={ROLE_FORM}
+                type="submit"
+                variant="primary"
+              >
+                Зберегти роль
+              </Button>
+            </>
+          }
           onOpenChange={(open) => {
-            if (!open) setEditingRole(null)
-          }}
-          onSubmit={(event) => {
-            event.preventDefault()
-            roleUpdate.run()
+            if (!open && !roleUpdate.pending) setEditingRole(null)
           }}
           open
-          pending={roleUpdate.pending}
-          size="lg"
-          submitDisabled={
-            !canManageAccess ||
-            !editingRoleName.trim() ||
-            editingRolePermissions.length === 0
-          }
-          submitLabel="Зберегти роль"
           title={`Роль: ${editingRole.name}`}
         >
-          <Field label="Назва ролі" required>
-            <TextInput
-              onChange={(event) => setEditingRoleName(event.target.value)}
-              value={editingRoleName}
+          <form
+            aria-busy={roleUpdate.pending}
+            className="grid content-start gap-5"
+            id={ROLE_FORM}
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault()
+              roleUpdate.run()
+            }}
+          >
+            {roleUpdate.error === null ? null : (
+              <Notice tone="danger">{roleUpdate.error}</Notice>
+            )}
+            <Field label="Назва ролі" required>
+              <TextInput
+                onChange={(event) => setEditingRoleName(event.target.value)}
+                value={editingRoleName}
+              />
+            </Field>
+            <PermissionChecklist
+              onToggle={toggleEditingRolePermission}
+              selected={editingRolePermissions}
             />
-          </Field>
-          <PermissionChecklist
-            onToggle={toggleEditingRolePermission}
-            selected={editingRolePermissions}
-          />
-        </FormDialog>
+          </form>
+        </Sheet>
       )}
 
       {permissionMember !== null && (
-        <FormDialog
+        <Sheet
           description={`Індивідуальні права для ${permissionMember.name}. Вони замінюють права ролі «${permissionMember.role.name}».`}
-          error={memberPermissions.error}
+          eyebrow="Команда · Права"
+          footer={
+            <>
+              <Button
+                disabled={memberPermissions.pending}
+                onClick={() => setPermissionMember(null)}
+                type="button"
+              >
+                Скасувати
+              </Button>
+              <Button
+                aria-busy={memberPermissions.pending}
+                disabled={memberPermissions.pending || !canManageAccess}
+                form={MEMBER_PERMISSIONS_FORM}
+                type="submit"
+                variant="primary"
+              >
+                Зберегти права
+              </Button>
+            </>
+          }
           onOpenChange={(open) => {
-            if (!open) setPermissionMember(null)
-          }}
-          onSubmit={(event) => {
-            event.preventDefault()
-            memberPermissions.run()
+            if (!open && !memberPermissions.pending) setPermissionMember(null)
           }}
           open
-          pending={memberPermissions.pending}
-          size="lg"
-          submitDisabled={!canManageAccess}
-          submitLabel="Зберегти права"
           title={`Права: ${permissionMember.name}`}
         >
-          <PermissionChecklist
-            legend="Права користувача"
-            onToggle={toggleUserPermission}
-            selected={selectedPermissions}
-          />
-        </FormDialog>
+          <form
+            aria-busy={memberPermissions.pending}
+            className="grid content-start gap-5"
+            id={MEMBER_PERMISSIONS_FORM}
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault()
+              memberPermissions.run()
+            }}
+          >
+            {memberPermissions.error === null ? null : (
+              <Notice tone="danger">{memberPermissions.error}</Notice>
+            )}
+            <PermissionChecklist
+              legend="Права користувача"
+              onToggle={toggleUserPermission}
+              selected={selectedPermissions}
+            />
+          </form>
+        </Sheet>
       )}
 
       <AlertDialog.Root
@@ -1266,3 +1319,6 @@ function PermissionChecklist({
     </fieldset>
   )
 }
+
+const ROLE_FORM = 'team-role-form'
+const MEMBER_PERMISSIONS_FORM = 'team-member-permissions-form'

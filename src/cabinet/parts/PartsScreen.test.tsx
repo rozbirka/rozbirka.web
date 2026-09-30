@@ -474,7 +474,7 @@ it('does not offer or request unauthorized source selectors on create', () => {
     screen.queryByRole('option', { name: 'Автомобіль' }),
   ).not.toBeInTheDocument()
   expect(
-    screen.queryByRole('option', { name: 'Приймання' }),
+    screen.queryByRole('option', { name: 'Партія' }),
   ).not.toBeInTheDocument()
   expect(selectorMocks.cars).not.toHaveBeenCalled()
   expect(selectorMocks.intakes).not.toHaveBeenCalled()
@@ -492,7 +492,7 @@ it('loads only the source selector that becomes relevant', async () => {
     </MemoryRouter>,
   )
 
-  expect(selectorMocks.cars).not.toHaveBeenCalled()
+  expect(selectorMocks.cars).toHaveBeenCalledOnce()
   expect(selectorMocks.intakes).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: /З авто/ }))
   await screen.findByRole('option', { name: 'CAR-01 · Ford Focus (2018)' })
@@ -660,6 +660,7 @@ it('shows the fixed condition choices in a separate card when editing a part', a
 })
 
 it('creates a part with every supported source, inventory, price, and compatibility field', async () => {
+  cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
   vi.stubGlobal(
     'fetch',
     vi
@@ -676,7 +677,7 @@ it('creates a part with every supported source, inventory, price, and compatibil
       }),
   )
   render(
-    <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+    <MemoryRouter initialEntries={['/app/yard/parts/new?intake_id=intake-1']}>
       <Routes>
         <Route
           path="/app/:tenant/parts/new"
@@ -711,7 +712,8 @@ it('creates a part with every supported source, inventory, price, and compatibil
   expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
   expect(partMocks.create).toHaveBeenCalledWith(
     {
-      sourceType: 'free',
+      sourceType: 'batch',
+      intakeId: 'intake-1',
       name: 'Front bumper',
       quantity: 3,
       unit: 'шт',
@@ -737,6 +739,7 @@ it('creates a part with every supported source, inventory, price, and compatibil
   )
 })
 it('retains successful media uploads while exposing retry and remove for each failed file', async () => {
+  cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
   mediaMocks.upload
     .mockResolvedValueOnce({
       storageKey: 'pending/parts/bumper.jpg',
@@ -748,7 +751,7 @@ it('retains successful media uploads while exposing retry and remove for each fa
       url: 'https://cdn.example/mirror.jpg',
     })
   render(
-    <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+    <MemoryRouter initialEntries={['/app/yard/parts/new?intake_id=intake-1']}>
       <Routes>
         <Route
           path="/app/:tenant/parts/new"
@@ -798,12 +801,13 @@ it('retains successful media uploads while exposing retry and remove for each fa
 })
 
 it('removes a selected file without uploading it before save', async () => {
+  cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
   mediaMocks.upload.mockResolvedValue({
     storageKey: 'pending/parts/bumper.jpg',
     url: 'https://cdn.example/bumper.jpg',
   })
   render(
-    <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+    <MemoryRouter initialEntries={['/app/yard/parts/new?intake_id=intake-1']}>
       <Routes>
         <Route
           path="/app/:tenant/parts/new"
@@ -952,7 +956,7 @@ it('rechecks intakes.view before creating an intake-sourced part', async () => {
     target: { value: 'Bumper' },
   })
   fireEvent.click(screen.getByRole('button', { name: /З партії/ }))
-  fireEvent.change(await screen.findByLabelText('Приймання-джерело'), {
+  fireEvent.change(await screen.findByLabelText('Партія-джерело'), {
     target: { value: 'intake-1' },
   })
   cabinetMock.snapshot.permissions.delete('intakes.view')
@@ -1050,6 +1054,7 @@ it('loads existing edit values and updates every field accepted by the immutable
 })
 
 it('guards duplicate creates with aria-busy and exposes mutation failures', async () => {
+  cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
   let rejectCreate: ((reason: unknown) => void) | undefined
   partMocks.create.mockImplementationOnce(
     () =>
@@ -1058,7 +1063,7 @@ it('guards duplicate creates with aria-busy and exposes mutation failures', asyn
       }),
   )
   render(
-    <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+    <MemoryRouter initialEntries={['/app/yard/parts/new?intake_id=intake-1']}>
       <Routes>
         <Route
           path="/app/:tenant/parts/new"
@@ -1783,8 +1788,9 @@ it('ignores an aborted stale detail failure after navigation', async () => {
 })
 
 it('blocks an invalid create and points at the offending fields', async () => {
+  cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
   render(
-    <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+    <MemoryRouter initialEntries={['/app/yard/parts/new?intake_id=intake-1']}>
       <Routes>
         <Route
           path="/app/:tenant/parts/new"
@@ -2187,10 +2193,11 @@ it('blames the server, not the network, when the request came back 500', async (
 })
 
 it('opens the new part as a drawer and names the next thing to fix', async () => {
+  cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
   const user = userEvent.setup()
 
   render(
-    <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+    <MemoryRouter initialEntries={['/app/yard/parts/new?intake_id=intake-1']}>
       <Routes>
         <Route
           path="/app/:tenant/parts/new"
@@ -2276,6 +2283,7 @@ it('adds and removes vehicles in the compatibility list', async () => {
 })
 
 it('refuses to save a make the yard has never catalogued', async () => {
+  cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
   equipmentMocks.makes.mockResolvedValueOnce([])
   vi.stubGlobal(
     'fetch',
@@ -2286,7 +2294,7 @@ it('refuses to save a make the yard has never catalogued', async () => {
     }),
   )
   render(
-    <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+    <MemoryRouter initialEntries={['/app/yard/parts/new?intake_id=intake-1']}>
       <Routes>
         <Route
           path="/app/:tenant/parts/new"
@@ -2705,4 +2713,113 @@ it('narrows the sales table to reserves or to sales', async () => {
 
   expect(within(sales).queryByText('Андрій Коваль')).toBeNull()
   expect(within(sales).getByText('Олег Шевчук')).toBeVisible()
+})
+
+it('requires a source for manual creation and does not offer free parts', async () => {
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/new"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+  expect(
+    screen.queryByRole('button', { name: /Вільна/ }),
+  ).not.toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('Назва'), {
+    target: { value: 'Фара' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Деталь не створено',
+  )
+  expect(partMocks.create).not.toHaveBeenCalled()
+})
+
+it('resets a saved free source filter visibly without sending it to search', async () => {
+  partMocks.search.mockResolvedValue({
+    items: [],
+    page: 1,
+    pageSize: 30,
+    total: 0,
+    totalPages: 0,
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts?origin=free']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+  expect(
+    await screen.findByText(/Фільтр «Вільні запчастини» скинуто/),
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: /^Вільна/ }),
+  ).not.toBeInTheDocument()
+  for (const call of partMocks.search.mock.calls)
+    expect(call[0]).not.toHaveProperty('originTypes')
+})
+
+it('does not offer archived cars for new parts', async () => {
+  selectorMocks.cars.mockResolvedValue({
+    items: [
+      {
+        id: 'old-car',
+        code: 'OLD',
+        brand: 'Ford',
+        model: 'Focus',
+        status: 'archived',
+      },
+    ],
+    page: 1,
+    pageSize: 100,
+    total: 1,
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/new"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+  await act(async () => {
+    await Promise.resolve()
+  })
+  expect(screen.queryByRole('option', { name: /OLD/ })).not.toBeInTheDocument()
+  expect(selectorMocks.cars).toHaveBeenCalledWith(
+    expect.objectContaining({ status: 'active' }),
+    expect.anything(),
+  )
+})
+
+it('blocks a stale direct create link to an archived car before any part write', async () => {
+  selectorMocks.car.mockResolvedValue({ id: 'car-1', status: 'archived' })
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/new?car_id=car-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/new"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+  fireEvent.change(screen.getByLabelText('Назва'), {
+    target: { value: 'Фара' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'До архівного автомобіля не можна додавати деталі.',
+  )
+  expect(partMocks.create).not.toHaveBeenCalled()
 })

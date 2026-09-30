@@ -1,4 +1,4 @@
-# Authentication and billing interaction contract
+# Interaction contract: authentication, billing, part source and import
 
 | Capability       | Canonical owner                                        | Source of truth                 | Allowed variants                        | Verification                      |
 | ---------------- | ------------------------------------------------------ | ------------------------------- | --------------------------------------- | --------------------------------- |
@@ -32,3 +32,40 @@ confirmation in the cabinet profile and standalone account page. Only confirmed
 successful deletion clears the matching session; failures retain retry and stale
 responses never clear a newer owner. Shared company records and subscriptions
 are explicitly distinguished from personal identity deletion.
+
+## Part source and import
+
+Inventory forms keep the existing cabinet SectionPanel, Field, SelectInput,
+Button and Notice owners. Native source selects retain platform keyboard and
+popup behavior. Import source uses the same Field and TextInput primitives;
+no new visual tokens or overlay are introduced.
+
+The launch decision to require a car or intake is reflected in the source step:
+manual creation requires a selected source, with a link to the matching
+source-create flow when authorized. The typed part (except photos) is kept in
+session storage and a same-tenant `return_to` brings the user back with the new
+source selected. A car given by link that turns out archived is reported on
+the source field before submit. Cars and intakes with parts cannot be deleted:
+known counts block the action up front and offer archiving instead. Batch compatibility remains editable. Archived cars
+retain their history but cannot receive new parts. A stale `origin=free` URL is
+reset with an inline notice; available stock and unassigned warehouse zones are
+unaffected.
+
+An import has one destination, carried through upload navigation, remembered
+per import in this browser until the mapping is saved, and persisted in mapping
+schema 2. A draft reopened without a known destination says so before offering a
+new batch. The parts list never turns its filters into an import destination. Contextual imports preserve their car/intake. An upload
+without context proposes an editable batch name derived from its display
+filename. Resuming an unmapped upload without a filename requires entering the
+name. Mapping source changes invalidate confirmation. Legacy schema mappings
+and profiles must be reviewed before proceeding; an outdated profile explains
+itself instead of raising a confirmation conflict. Source error codes
+(`PART_SOURCE_ARCHIVED`, `IMPORT_SOURCE_*`, `SOURCE_HAS_PARTS`) read in
+Ukrainian; unknown codes fall back to the server message. `ImportConfirmStep` shows the destination
+alongside server validation; row columns cannot override it. Source lookups use
+abort signals and localized unavailable/archive errors. The Core API remains
+authoritative for permissions, source validity, quotas and retry behavior.
+
+Verification owners: `PartsScreen.test.tsx`, `ImportScreen.test.tsx` and
+`import-model.test.ts` cover mandatory source, compatibility, legacy filters,
+legacy mapping review and source-wide import payloads.

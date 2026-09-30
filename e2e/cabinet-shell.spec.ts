@@ -138,6 +138,7 @@ const pendingPaymentPage = {
 }
 
 interface CabinetFixtureOptions {
+  partsManage?: boolean
   cabinetParityRolledOut?: boolean
   sobolBilling?: boolean
   sobolEntitlementState?: 'active' | 'blocked'
@@ -333,6 +334,7 @@ async function installCabinetApiBoundary(
           permissions: [
             'cars.view',
             'cars.manage',
+            ...(options.partsManage ? ['parts.view', 'parts.manage'] : []),
             'billing.view',
             'billing.manage',
             'team.view',
@@ -2116,4 +2118,47 @@ test('logs out normally from the cabinet shell @cabinet-smoke', async ({
   } finally {
     if (!delayReleased) await releaseDelayedLogout(request)
   }
+})
+
+test('requires a source before creating a part', async ({ page }) => {
+  await installCabinetApiBoundary(page, { partsManage: true })
+  await page.route('**/api/v1/cars?*', (route) =>
+    fulfillData(route, {
+      items: [
+        {
+          id: 'car-1',
+          code: 'CAR-01',
+          brand: 'Ford',
+          model: 'Focus',
+          year: 2018,
+          status: 'active',
+        },
+      ],
+      page: 1,
+      pageSize: 100,
+      total: 1,
+    }),
+  )
+  await page.route('**/api/v1/equipment-types*', (route) =>
+    fulfillData(route, []),
+  )
+  await loginFrom(page)
+  await page.goto('/app/koval/parts/new')
+  const drawer = page.getByRole('dialog')
+  await expect(drawer).toBeVisible()
+  await expect(drawer.getByRole('button', { name: /Вільна/ })).toHaveCount(0)
+  await drawer.getByLabel('Назва', { exact: true }).fill('Фара')
+  await drawer.getByRole('button', { name: 'Створити деталь' }).click()
+  await expect(drawer.getByRole('alert')).toContainText('Деталь не створено')
+  const source = drawer.getByLabel('Автомобіль-джерело', { exact: true })
+  await expect(source).toBeVisible()
+  await source.selectOption('car-1')
+  await expect(source).toHaveValue('car-1')
+  await source.focus()
+  await expect(source).toBeFocused()
+  await page.setViewportSize({ width: 375, height: 812 })
+  await expect(source).toBeVisible()
+  await expect(
+    drawer.getByRole('button', { name: 'Створити деталь' }),
+  ).toBeVisible()
 })

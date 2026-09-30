@@ -58,6 +58,7 @@ function Entity({
 export function ImportConfirmStep({
   validation,
   mapping,
+  sourceLabel,
   rows,
   selected,
   onBack,
@@ -65,6 +66,7 @@ export function ImportConfirmStep({
   busy,
 }: {
   validation: ImportValidation
+  sourceLabel?: string
   mapping: ImportMapping | null
   rows: readonly ImportRow[]
   selected: readonly string[]
@@ -104,7 +106,15 @@ export function ImportConfirmStep({
   const facts = [
     {
       label: 'Походження',
-      value: said('SourceType', 'З колонки файлу'),
+      value:
+        sourceLabel ??
+        (mapping?.source?.type === 'newBatch'
+          ? `Нова партія: ${mapping.source.batchName}`
+          : mapping?.source?.type === 'car'
+            ? `Автомобіль: ${mapping.source.carId}`
+            : mapping?.source?.type === 'batch'
+              ? `Партія: ${mapping.source.intakeId}`
+              : 'Джерело потрібно перевірити'),
     },
     {
       label: 'Складська зона',

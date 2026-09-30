@@ -107,6 +107,13 @@ import {
   unknownBrandsMessage,
   type CompatibilityRow,
 } from './compatibility-rows'
+import {
+  DRAFT_PARAM,
+  clearPartDraft,
+  readPartDraft,
+  savePartDraft,
+  sourceCreateHref,
+} from './source-return'
 
 const partStatuses = new Set(['available', 'reserved', 'sold'])
 /** Every group the filter panel draws; the server counts each one for us. */
@@ -164,13 +171,16 @@ function useSourceOptions(
     if (!loadCars) return
     const controller = new AbortController()
     void carsApi
-      .list({ page: 1, pageSize: 100 }, { signal: controller.signal })
+      .list(
+        { status: 'active', page: 1, pageSize: 100 },
+        { signal: controller.signal },
+      )
       .then(
         (page) => {
           if (!controller.signal.aborted)
             setOptions((current) => ({
               ...current,
-              cars: page.items,
+              cars: page.items.filter((car) => car.status !== 'archived'),
               carsUnavailable: false,
             }))
         },
@@ -296,6 +306,10 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const canManage = manageDecision.kind === 'allowed'
 
   const [reloadToken, setReloadToken] = useState(0)
+  const removedOrigin =
+    searchParams.get('origin')?.toLowerCase() === 'free' ||
+    (location.state as { removedOrigin?: boolean } | null)?.removedOrigin ===
+      true
   const links = {
     cars: allowedToView(cabinetModules.cars, cabinet),
     intakes: allowedToView(cabinetModules.intakes, cabinet),
@@ -309,7 +323,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       q: one('q'),
       status: partStatuses.has(status) ? status : '',
       condition: one('condition'),
-      origin: one('origin'),
+      origin: ['car', 'batch'].includes(one('origin')) ? one('origin') : '',
       makeId: one('make'),
       modelId: one('model'),
       warehouseId: one('warehouse'),
@@ -441,6 +455,10 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       if (trimmed) next.set(name, trimmed)
       else next.delete(name)
     }
+    if (searchParams.get('origin')?.toLowerCase() === 'free') {
+      next.delete('origin')
+      next.set('page', '1')
+    }
     const rawStatus = searchParams.get('status')
     if (rawStatus !== null && !partStatuses.has(rawStatus))
       next.delete('status')
@@ -464,7 +482,12 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       values.forEach((value) => next.append(name, value))
     }
     if (next.toString() !== searchParams.toString())
-      setSearchParams(next, { replace: true })
+      setSearchParams(next, {
+        replace: true,
+        ...(searchParams.get('origin')?.toLowerCase() === 'free'
+          ? { state: { removedOrigin: true } }
+          : {}),
+      })
   }, [filters, isNew, partId, searchParams, setSearchParams])
 
   useEffect(() => {
@@ -630,6 +653,12 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
       <div className="mx-auto grid w-full max-w-[1360px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+        {removedOrigin ? (
+          <Notice tone="info">
+            Фільтр «Вільні запчастини» скинуто: кожна деталь має автомобіль або
+            партію.
+          </Notice>
+        ) : null}
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
           <div className="min-w-0">
             <p className="text-app-dim font-mono text-[12px] tracking-[0.14em] uppercase">
@@ -799,16 +828,18 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                 label="Усі"
                 onSelect={() => updateFilter('origin', '')}
               />
-              {(facets?.origins ?? []).map((value) => (
-                <FilterRow
-                  active={filters.origin === value.id}
-                  count={value.count}
-                  dot="bg-transparent"
-                  key={value.id}
-                  label={originLabel(value.id, value.name)}
-                  onSelect={() => updateFilter('origin', value.id)}
-                />
-              ))}
+              {(facets?.origins ?? [])
+                .filter((value) => ['car', 'batch'].includes(value.id))
+                .map((value) => (
+                  <FilterRow
+                    active={filters.origin === value.id}
+                    count={value.count}
+                    dot="bg-transparent"
+                    key={value.id}
+                    label={originLabel(value.id, value.name)}
+                    onSelect={() => updateFilter('origin', value.id)}
+                  />
+                ))}
             </FilterGroup>
 
             <Button
@@ -1433,7 +1464,9 @@ function PartDetailScreen({
                       ? `/app/${tenantSlug}/intakes/${detail.intakeId}`
                       : null
                 }
-                kind={detail.carId ? 'car' : detail.intakeId ? 'batch' : 'free'}
+                kind={
+                  detail.carId ? 'car' : detail.intakeId ? 'batch' : 'unknown'
+                }
                 meta={detail.carId ? (detail.carCode ?? '') : ''}
                 name={
                   detail.carId
@@ -2191,7 +2224,7 @@ interface PartFormValues {
 }
 
 const emptyPartForm: PartFormValues = {
-  sourceType: 'free',
+  sourceType: 'car',
   sourceId: '',
   name: '',
   quantity: '1',
@@ -2480,7 +2513,7 @@ function partFieldErrors(
     errors.sourceId =
       values.sourceType === 'car'
         ? 'Оберіть автомобіль зі списку.'
-        : 'Оберіть приймання зі списку.'
+        : 'Оберіть партію зі списку.'
   return errors
 }
 
@@ -2573,7 +2606,7 @@ function SourceChip({
   name,
 }: {
   href: string | null
-  kind: 'car' | 'batch' | 'free'
+  kind: 'car' | 'batch' | 'unknown'
   meta: string
   name: string
 }) {
@@ -2777,7 +2810,7 @@ function StockTile({
   )
 }
 
-/** The three origins a part can have, as the drawer offers them. */
+/** A part belongs to one car or intake. */
 const SOURCE_KINDS = [
   {
     value: 'car',
@@ -2787,12 +2820,7 @@ const SOURCE_KINDS = [
   {
     value: 'batch',
     label: 'З партії',
-    hint: 'Приймання від постачальника',
-  },
-  {
-    value: 'free',
-    label: 'Вільна',
-    hint: 'Не прив’язана ні до авто, ні до приймання',
+    hint: 'Закупівля в постачальника',
   },
 ] as const
 
@@ -2932,6 +2960,25 @@ function PartFields({
   /** `plain` is the drawer: numbered sections divided by a rule. */
   variant?: 'panel' | 'plain'
 }) {
+  const cabinet = useCabinet()
+  const location = useLocation()
+  const cabinetRoot = `/app/${cabinet.targetTenant!.slug}`
+  const sourceCreateKind =
+    values.sourceType === 'car'
+      ? ('cars' as const)
+      : values.sourceType === 'batch'
+        ? ('intakes' as const)
+        : null
+  const sourceCreateLink =
+    !edit &&
+    sourceCreateKind !== null &&
+    evaluateModuleAccess(
+      cabinetModules[sourceCreateKind],
+      accessState(cabinet),
+      'mutation',
+    ).kind === 'allowed'
+      ? sourceCreateKind
+      : null
   const field =
     (name: keyof PartFormValues) =>
     (
@@ -2940,16 +2987,11 @@ function PartFields({
       >,
     ) =>
       setValues({ ...values, [name]: event.target.value })
-  /**
-   * Core stores compatibility only for a free part; for one taken off a car
-   * the car itself is the answer. So the section shows either fields to fill
-   * or the chosen car's own make, model and year, read-only.
-   */
   const sourceCar =
     values.sourceType === 'car'
       ? (sourceOptions.cars.find((car) => car.id === values.sourceId) ?? null)
       : null
-  const showCompatibility = !edit && values.sourceType !== 'batch'
+  const showCompatibility = !edit
   const step = (number: string, title: string) =>
     variant === 'plain' ? (
       <span className="flex items-baseline gap-2.5">
@@ -2968,7 +3010,7 @@ function PartFields({
       >
         <div className="grid gap-3 sm:grid-cols-2">
           {variant === 'plain' && !edit ? (
-            <fieldset className="col-span-full grid gap-2 sm:grid-cols-3">
+            <fieldset className="col-span-full grid gap-2 sm:grid-cols-2">
               <legend className="sr-only">Тип джерела</legend>
               {SOURCE_KINDS.filter(
                 (kind) =>
@@ -2994,7 +3036,7 @@ function PartFields({
               hint={
                 edit
                   ? 'Тип джерела задається під час створення деталі.'
-                  : 'Вільна деталь не прив’язана ні до авто, ні до приймання.'
+                  : 'Оберіть автомобіль або партію перед створенням деталі.'
               }
               label="Тип джерела"
             >
@@ -3010,12 +3052,11 @@ function PartFields({
                 }
                 value={values.sourceType}
               >
-                <option value="free">Вільне</option>
                 {canViewCars || values.sourceType === 'car' ? (
                   <option value="car">Автомобіль</option>
                 ) : null}
                 {canViewIntakes || values.sourceType === 'batch' ? (
-                  <option value="batch">Приймання</option>
+                  <option value="batch">Партія</option>
                 ) : null}
               </SelectInput>
             </Field>
@@ -3058,19 +3099,19 @@ function PartFields({
               error={errors.sourceId}
               hint={
                 edit
-                  ? 'Приймання-джерело змінити не можна.'
-                  : 'Деталь буде прив’язана до цього приймання.'
+                  ? 'Партію-джерело змінити не можна.'
+                  : 'Деталь буде прив’язана до цієї партії.'
               }
-              label="Приймання-джерело"
+              label="Партія-джерело"
               required={!edit}
             >
               <SelectInput
-                aria-label="Приймання-джерело"
+                aria-label="Партія-джерело"
                 disabled={(edit ?? false) || sourceOptions.intakesUnavailable}
                 onChange={field('sourceId')}
                 value={values.sourceId}
               >
-                <option value="">Оберіть приймання</option>
+                <option value="">Оберіть партію</option>
                 {sourceOptions.intakes.map((intake) => (
                   <option key={intake.id} value={intake.id}>
                     {intakeLabel(intake)}
@@ -3081,13 +3122,44 @@ function PartFields({
                   (intake) => intake.id === values.sourceId,
                 ) ? (
                   <option value={values.sourceId}>
-                    Приймання недоступне у поточній вибірці
+                    Партія недоступна у поточній вибірці
                   </option>
                 ) : null}
               </SelectInput>
             </Field>
           ) : null}
         </div>
+        {sourceCreateLink ? (
+          <div className="grid gap-1.5">
+            <div className="flex flex-wrap gap-2">
+              <Button asChild>
+                <Link
+                  onClick={() =>
+                    savePartDraft({
+                      root: cabinetRoot,
+                      values: { ...values, sourceId: '' },
+                      compatibility: compatibility?.rows ?? [],
+                    })
+                  }
+                  to={sourceCreateHref(
+                    cabinetRoot,
+                    sourceCreateLink,
+                    `${location.pathname}${location.search}`,
+                  )}
+                >
+                  <Plus aria-hidden />
+                  {sourceCreateLink === 'cars'
+                    ? 'Створити автомобіль'
+                    : 'Створити партію'}
+                </Link>
+              </Button>
+            </div>
+            <p className="text-app-dim text-[12px] leading-5 text-pretty">
+              Після створення повернетеся сюди з новим джерелом. Введені дані
+              збережуться, фото потрібно буде додати ще раз.
+            </p>
+          </div>
+        ) : null}
         {values.sourceType === 'car' && !canViewCars ? (
           <Notice role="status" tone="warn">
             Вибір автомобіля недоступний без права перегляду автомобілів.
@@ -3097,7 +3169,7 @@ function PartFields({
         ) : null}
         {values.sourceType === 'batch' && !canViewIntakes ? (
           <Notice role="status" tone="warn">
-            Вибір приймання недоступний без права перегляду приймань. Попросіть
+            Вибір партії недоступний без права перегляду приймань. Попросіть
             власника кабінету відкрити доступ до приймань або оберіть інший тип
             джерела.
           </Notice>
@@ -3114,8 +3186,8 @@ function PartFields({
         canViewIntakes &&
         sourceOptions.intakesUnavailable ? (
           <Notice role="status" tone="warn">
-            Вибір приймання недоступний: список не завантажено. Оновіть
-            сторінку, щоб повторити запит.
+            Вибір партії недоступний: список не завантажено. Оновіть сторінку,
+            щоб повторити запит.
           </Notice>
         ) : null}
       </SectionPanel>
@@ -3157,6 +3229,7 @@ function PartFields({
         </div>
         <Field hint="Дефекти, комплектність, місце зберігання" label="Нотатки">
           <TextArea
+            className="resize-none"
             aria-label="Нотатки"
             onChange={field('notes')}
             rows={3}
@@ -3353,16 +3426,29 @@ function PartForm({
   const intakeMutation = useLatestMutationGuard(cabinetModules.intakes)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [compatRows, setCompatRows] = useState<CompatibilityRow[]>([
-    emptyRow('row-1'),
-  ])
+  const cabinet = useCabinet()
+  // Coming back from creating a car or intake restores what was typed.
+  const [draft] = useState(() =>
+    searchParams.get(DRAFT_PARAM) === '1'
+      ? readPartDraft<PartFormValues>(`/app/${cabinet.targetTenant!.slug}`)
+      : null,
+  )
+  useEffect(() => {
+    if (draft) clearPartDraft()
+  }, [draft])
+  const [compatRows, setCompatRows] = useState<CompatibilityRow[]>(() =>
+    draft?.compatibility.length ? draft.compatibility : [emptyRow('row-1')],
+  )
   // A part started from a car's page arrives with that car already chosen,
   // so nobody has to find it again in the source list.
-  const [values, setValues] = useState(() => {
+  const [values, setValues] = useState<PartFormValues>(() => {
+    const base = draft?.values ?? emptyPartForm
     const presetCar = searchParams.get('car_id')
-    return presetCar === null
-      ? emptyPartForm
-      : { ...emptyPartForm, sourceType: 'car', sourceId: presetCar }
+    const presetIntake = searchParams.get('intake_id')
+    if (presetCar) return { ...base, sourceType: 'car', sourceId: presetCar }
+    if (presetIntake)
+      return { ...base, sourceType: 'batch', sourceId: presetIntake }
+    return draft ? base : { ...base, sourceType: canViewCars ? 'car' : 'batch' }
   })
   const [mediaItems, setMediaItems] = useState<PartMediaItem[]>([])
   const sourceOptions = useSourceOptions(
@@ -3374,10 +3460,35 @@ function PartForm({
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showErrors, setShowErrors] = useState(false)
+  // A car given by link but missing from the active list is most likely
+  // archived; say so now rather than after the whole form is filled.
+  const [archivedCarId, setArchivedCarId] = useState<string | null>(null)
+  const outsideCarId =
+    canViewCars &&
+    values.sourceType === 'car' &&
+    values.sourceId &&
+    !sourceOptions.carsUnavailable &&
+    !sourceOptions.cars.some((car) => car.id === values.sourceId)
+      ? values.sourceId
+      : null
+  useEffect(() => {
+    if (!outsideCarId) return
+    const controller = new AbortController()
+    void carsApi.get(outsideCarId, { signal: controller.signal }).then(
+      (car) => {
+        if (!controller.signal.aborted && car.status === 'archived')
+          setArchivedCarId(car.id)
+      },
+      () => undefined,
+    )
+    return () => controller.abort()
+  }, [outsideCarId])
+  const archivedSource =
+    values.sourceType === 'car' && archivedCarId === values.sourceId
   const mediaPending = mediaItems.some(
     (item) => item.status !== 'uploaded' && item.status !== 'selected',
   )
-  const requireSource = values.sourceType !== 'free'
+  const requireSource = true
   const errors = showErrors ? partFieldErrors(values, { requireSource }) : {}
   const submit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -3426,6 +3537,13 @@ function PartForm({
           permission: 'intakes.view',
           quota: false,
         })
+      if (request.sourceType === 'car') {
+        const car = await carsApi.get(request.carId!, { signal: scope.signal })
+        if (car.status === 'archived') {
+          setError('До архівного автомобіля не можна додавати деталі.')
+          return
+        }
+      }
       const selected = mediaItems.filter(
         (item) => item.status === 'selected' && item.file,
       )
@@ -3514,7 +3632,12 @@ function PartForm({
     }
   }
   // The footer says the single next thing to fix, in the order the form reads.
-  const blocking = partFieldErrors(values, { requireSource })
+  const archivedMessage =
+    'Автомобіль в архіві — нові деталі до нього не додаються. Оберіть інше авто.'
+  const blocking = {
+    ...partFieldErrors(values, { requireSource }),
+    ...(archivedSource ? { sourceId: archivedMessage } : {}),
+  }
   const footerNote = mediaPending
     ? 'Дочекайтеся, доки завантажаться всі фото.'
     : (blocking.name ??
@@ -3578,7 +3701,9 @@ function PartForm({
           canViewCars={canViewCars}
           canViewIntakes={canViewIntakes}
           compatibility={{ rows: compatRows, setRows: setCompatRows }}
-          errors={errors}
+          errors={
+            archivedSource ? { ...errors, sourceId: archivedMessage } : errors
+          }
           setValues={setValues}
           sourceOptions={sourceOptions}
           values={values}
@@ -3897,6 +4022,7 @@ function PartEdit({
                   </div>
                   <Field label="Нотатки">
                     <TextArea
+                      className="resize-none"
                       name="notes"
                       onChange={(event) =>
                         setValues((current) =>

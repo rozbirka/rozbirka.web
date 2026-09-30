@@ -91,7 +91,7 @@ export interface PartDetail {
 /** Sort keys the search endpoint accepts. */
 export type PartSort = 'created_desc' | 'created_asc' | 'name_asc' | 'name_desc'
 export type PartCondition = 'good' | 'fair' | 'scrap' | 'new' | 'refurbished'
-export type PartOrigin = 'car' | 'batch' | 'free'
+export type PartOrigin = 'car' | 'batch'
 
 /** Every dimension the facet endpoint can count. */
 export type PartFacetDimension =

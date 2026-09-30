@@ -51,11 +51,17 @@ export interface ImportRule {
   useDisplay?: boolean
   acceptNumericText?: boolean
 }
+export type ImportDestination =
+  | { type: 'car'; carId: string }
+  | { type: 'batch'; intakeId: string }
+  | { type: 'newBatch'; batchName: string }
+
 export interface ImportMapping {
   version: number
   schemaVersion: number
   rules: ImportRule[]
   skippedFields: string[]
+  source?: ImportDestination
   transformVersion?: number
 }
 export interface SourceRow {

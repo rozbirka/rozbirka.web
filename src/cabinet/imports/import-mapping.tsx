@@ -13,9 +13,6 @@ import { fieldLabels, valueLabels } from './import-model'
 
 /** Fields that describe the whole delivery rather than one row. */
 const SHARED_FIELDS = [
-  'SourceType',
-  'CarId',
-  'IntakeId',
   'InventoryZoneId',
   'Condition',
   'EquipmentTypeId',

@@ -6,6 +6,7 @@ import {
   useParams,
   useSearchParams,
 } from 'react-router'
+import { sourceReturnPath } from '../parts/source-return'
 import {
   Check,
   ChevronLeft,
@@ -639,8 +640,14 @@ function IntakeStat({
 }
 
 function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
-  const { cabinet, manage, partsView, partCreateDecision, financeView } =
-    useIntakeAccess()
+  const {
+    cabinet,
+    manage,
+    partsView,
+    partCreateDecision,
+    partsMediaManage,
+    financeView,
+  } = useIntakeAccess()
   const navigate = useNavigate()
   const [intake, setIntake] = useState<Intake | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
@@ -789,6 +796,16 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
             <Button asChild className="px-[18px] text-sm font-semibold">
               <Link to={`${base}/${intake.id}/edit`}>Редагувати</Link>
             </Button>
+            {/* Import is a parts mutation, the same gate as the parts list. */}
+            {partCreateDecision.kind === 'allowed' && partsMediaManage ? (
+              <Button asChild>
+                <Link
+                  to={`${base.replace(/\/intakes$/, '/parts')}/imports?intake_id=${encodeURIComponent(intake.id)}`}
+                >
+                  Імпорт запчастин
+                </Link>
+              </Button>
+            ) : null}
             {partCreateDecision.kind === 'allowed' ? (
               <Button
                 asChild
@@ -1166,13 +1183,25 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
       </div>
 
       <ConfirmDialog
-        confirmLabel="Видалити"
-        consequence="Приймання та його звʼязок із оприбуткованими деталями зникнуть назавжди."
-        onConfirm={() => void remove()}
+        confirmLabel={intake.partsCount > 0 ? 'Зрозуміло' : 'Видалити'}
+        consequence={
+          intake.partsCount > 0
+            ? `До партії прив’язано ${String(intake.partsCount)} ${plural(intake.partsCount, ['деталь', 'деталі', 'деталей'])}, тому видалити її не можна. Деталі та історія партії залишаються.`
+            : 'Приймання буде видалено назавжди.'
+        }
+        destructive={intake.partsCount === 0}
+        onConfirm={() => {
+          if (intake.partsCount > 0) setConfirmDelete(false)
+          else void remove()
+        }}
         onOpenChange={setConfirmDelete}
         open={confirmDelete}
         pending={busy}
-        title="Видалити приймання?"
+        title={
+          intake.partsCount > 0
+            ? 'Партію не можна видалити'
+            : 'Видалити приймання?'
+        }
       />
     </div>
   )
@@ -1192,7 +1221,9 @@ function IntakeForm({
   const cabinet = useCabinet()
   const params = useParams<{ tenant: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
+  const cabinetRoot = base.replace(/\/intakes$/, '')
   const [values, setValues] = useState({
     name: '',
     purchasedAt: '',
@@ -1281,7 +1312,11 @@ function IntakeForm({
           : { ...request, photoKeys: media.map((item) => item.storageKey) },
         scope.signal,
       )
-      void navigate(`${base}/${saved.id}`)
+      void navigate(
+        (intakeId === undefined
+          ? sourceReturnPath(searchParams, cabinetRoot, { intakeId: saved.id })
+          : null) ?? `${base}/${saved.id}`,
+      )
     } catch (error: unknown) {
       setProblem(normalizeApiProblem(error).message)
       setBusy(false)
@@ -1301,7 +1336,9 @@ function IntakeForm({
     }
   }
 
-  const backTo = intakeId ? `${base}/${intakeId}` : base
+  const backTo = intakeId
+    ? `${base}/${intakeId}`
+    : (sourceReturnPath(searchParams, cabinetRoot) ?? base)
   const saveLabel = intakeId ? 'Зберегти зміни' : 'Створити приймання'
   const checks = [
     { done: named, label: 'Назва партії вказана' },
@@ -1597,12 +1634,13 @@ function IntakeForm({
                 <p className="text-app-muted text-[13px] leading-[1.5]">
                   У прийманні {positions}{' '}
                   {plural(positions, ['позиція', 'позиції', 'позицій'])}.
-                  Видалення розірве їхній звʼязок із партією — його не
-                  відновити.
+                  {positions > 0
+                    ? ' Партію з деталями видалити не можна.'
+                    : ' Видалення прибирає приймання назавжди.'}
                 </p>
                 <Button
                   className="mt-3 min-h-10 w-full text-[13px] font-bold"
-                  disabled={busy}
+                  disabled={busy || positions > 0}
                   onClick={() => setConfirmDelete(true)}
                   type="button"
                   variant="danger"
@@ -1617,7 +1655,7 @@ function IntakeForm({
 
       <ConfirmDialog
         confirmLabel="Видалити"
-        consequence="Приймання та його звʼязок із оприбуткованими деталями зникнуть назавжди."
+        consequence="Приймання буде видалено назавжди. Якщо до нього прив’язані деталі, видалення буде відхилено."
         onConfirm={() => void remove()}
         onOpenChange={setConfirmDelete}
         open={confirmDelete}

@@ -1,8 +1,9 @@
 import { cva } from 'class-variance-authority'
 
 /**
- * The cabinet button. Separate from the marketing `components/ui/button`
- * because the app needs 44px targets and the brand fill as its primary action.
+ * The cabinet button. Separate from `components/ui/button`, which only serves
+ * the dev-only `/screens` prototypes, because the app needs 44px targets and
+ * the brand fill as its primary action. Landing CTAs use neither.
  */
 export const appButtonVariants = cva(
   'inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-control border border-transparent px-4 text-[14.5px] font-medium whitespace-nowrap transition-colors outline-none select-none active:translate-y-px aria-busy:cursor-wait aria-busy:opacity-70 disabled:pointer-events-none disabled:opacity-55 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',

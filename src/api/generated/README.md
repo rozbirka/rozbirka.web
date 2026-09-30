@@ -33,11 +33,27 @@ Check committed output for byte-for-byte drift with the same inputs:
 npm run contracts:check -- --core <versioned-file-or-url> --identity <versioned-file-or-url>
 ```
 
-CI requires `CORE_OPENAPI_IMMUTABLE_URL` and `IDENTITY_OPENAPI_IMMUTABLE_URL`
-repository variables. The reusable quality workflow passes those explicit inputs
-to `contracts:check`; missing values, mutable URLs, missing committed outputs, or
-byte drift fail the gate. The variables must identify the exact Core and Identity
-inputs used to generate the committed files, never a runtime or `latest` alias.
+CI pins the exact inputs in [contracts/openapi-sources.json](../../../contracts/openapi-sources.json):
+an immutable `gs://` URI plus SHA-256 for Core and for Identity. The quality
+workflow downloads them with `scripts/fetch-api-contracts.mjs` and runs
+`contracts:check` against the committed files; a missing or mismatched input,
+a digest mismatch or byte drift fails the gate.
+
+Hand-written adapters in `src/api` are not generated. Request payloads that
+matter are checked against these schemas at compile time in
+[contract-alignment.ts](../contract-alignment.ts).
+
+## A web change that needs a new Core API
+
+1. Make sure the Core change also updates its exported
+   `contracts/openapi/v1/rozbirka-core.json`. Core checks drift with
+   `scripts/check-openapi.sh` in its validation workflow and before publication. After it merges to `develop`, Core's `publish-openapi.yml`
+   publishes the file under an immutable commit path.
+2. Point `contracts/openapi-sources.json` at that path and digest, run
+   `contracts:generate` with the same inputs and commit the output.
+3. Remove the matching `Pending…` entry in `contract-alignment.ts` — typecheck
+   fails until you do.
+4. Only then merge the web change that sends the new fields.
 
 The pinned generator currently declares a TypeScript 5 peer range, while this
 project uses TypeScript 6. The repository-local `force=true` npm setting applies
