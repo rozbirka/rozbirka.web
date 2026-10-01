@@ -10,6 +10,7 @@ const clearLegacyAuthStorage = () => {
 clearLegacyAuthStorage()
 
 let accessToken: string | null = null
+let sessionGeneration = 0
 const clearListeners = new Set<Listener>()
 
 export const credentials = {
@@ -17,11 +18,21 @@ export const credentials = {
     return accessToken
   },
 
+  getSessionGeneration(): number {
+    return sessionGeneration
+  },
+
+  startSession(token: string) {
+    sessionGeneration += 1
+    accessToken = token
+  },
+
   setAccess(token: string) {
     accessToken = token
   },
 
   clear() {
+    sessionGeneration += 1
     const hadAccessToken = accessToken !== null
     accessToken = null
 

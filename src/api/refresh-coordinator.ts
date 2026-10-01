@@ -1,5 +1,6 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios'
 import type { ApiProblem } from './contracts'
+import { credentials } from './credentials'
 import { normalizeApiProblem } from './errors'
 
 export type SessionRetryConfig = InternalAxiosRequestConfig
@@ -47,7 +48,12 @@ export const createRefreshCoordinator = ({
   clearAccess,
   replay,
 }: RefreshCoordinatorDependencies) => {
-  let refreshPromise: Promise<string> | null = null
+  let activeRefresh: { generation: number; promise: Promise<string> } | null =
+    null
+  const assertOwner = (generation: number) => {
+    if (generation !== credentials.getSessionGeneration())
+      throw new axios.CanceledError()
+  }
 
   const invokeRefresh = () => {
     try {
@@ -61,13 +67,18 @@ export const createRefreshCoordinator = ({
     }
   }
 
-  const startRefresh = (sessionExpired: ApiProblem) => {
-    refreshPromise ??= invokeRefresh()
+  const startRefresh = (sessionExpired: ApiProblem, generation: number) => {
+    assertOwner(generation)
+    if (activeRefresh?.generation === generation) return activeRefresh.promise
+    const pending = { generation, promise: Promise.resolve('') }
+    pending.promise = invokeRefresh()
       .then((token) => {
+        assertOwner(generation)
         setAccess(token)
         return token
       })
       .catch((error: unknown) => {
+        assertOwner(generation)
         clearAccess()
         const refreshProblem = normalizeApiProblem(error)
         throw problemError(
@@ -77,10 +88,10 @@ export const createRefreshCoordinator = ({
         )
       })
       .finally(() => {
-        refreshPromise = null
+        if (activeRefresh === pending) activeRefresh = null
       })
-
-    return refreshPromise
+    activeRefresh = pending
+    return pending.promise
   }
 
   return {
@@ -100,8 +111,12 @@ export const createRefreshCoordinator = ({
         throw problemError(problem)
       }
 
+      const generation =
+        request._sessionGeneration ?? credentials.getSessionGeneration()
+      assertOwner(generation)
       request._sessionRetry = true
-      await startRefresh(problem)
+      await startRefresh(problem, generation)
+      assertOwner(generation)
       return replay(request)
     },
   }

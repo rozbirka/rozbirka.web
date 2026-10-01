@@ -6,6 +6,7 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios'
 import type { ApiProblem, IdempotentMutation } from './contracts'
+import { tenantRequestScope } from '../cabinet/tenant-request-scope'
 import { credentials } from './credentials'
 import { normalizeApiProblem } from './errors'
 import {
@@ -49,6 +50,14 @@ export const withIdempotency = <T extends AxiosRequestConfig>(
 ): T => (option ? { ...config, idempotency: option } : config)
 
 const attachAuth = (config: InternalAxiosRequestConfig) => {
+  const generation = credentials.getSessionGeneration()
+  if (
+    config._sessionGeneration !== undefined &&
+    config._sessionGeneration !== generation
+  ) {
+    throw new axios.CanceledError()
+  }
+  config._sessionGeneration = generation
   const access = credentials.getAccess()
   if (access) {
     config.headers.set('Authorization', `Bearer ${access}`)
@@ -81,6 +90,10 @@ apiClient.interceptors.request.use((config) => {
   if (tenant) {
     config.headers.set('X-Tenant-Id', tenant)
   }
+  config.signal = AbortSignal.any([
+    ...(config.signal ? [config.signal as AbortSignal] : []),
+    tenantRequestScope.signal,
+  ])
   return config
 })
 
@@ -148,6 +161,7 @@ declare module 'axios' {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars -- must match Axios declaration exactly
   interface InternalAxiosRequestConfig<D = any> {
     _sessionRetry?: boolean
+    _sessionGeneration?: number
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars -- must match Axios declaration exactly

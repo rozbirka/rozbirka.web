@@ -16,7 +16,7 @@ export default defineConfig({
     },
     {
       command:
-        'npm run build:qa && npx wrangler dev --env qa --local --ip 127.0.0.1 --port 4173 --var IDENTITY_ORIGIN:http://127.0.0.1:4174',
+        'npm run build:qa && npx wrangler dev --env qa --local --ip 127.0.0.1 --port 4173 --var CORE_ORIGIN:http://127.0.0.1:4174 --var AUTH_REGISTRATION_KEY:e2e-registration-fixture-only',
       port: 4173,
       reuseExistingServer: false,
     },

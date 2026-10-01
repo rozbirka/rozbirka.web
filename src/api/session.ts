@@ -29,41 +29,81 @@ export const createSessionApi = (
     timeout: 15000,
     withCredentials: true,
   })
-  let sessionGeneration = 0
   let sessionMutationDepth = 0
+  // Serialize cookie-changing responses, not only in-memory token updates.
+  let mutationTail = Promise.resolve()
+  const acquireMutation = async () => {
+    const previous = mutationTail
+    let release!: () => void
+    mutationTail = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    await previous
+    return release
+  }
   const activeRefreshes = new Set<ActiveRefresh>()
+  let pendingRefresh: {
+    generation: number
+    promise: Promise<SessionRefreshResponse>
+  } | null = null
 
   const invalidateRefreshes = async () => {
-    sessionGeneration += 1
     credentials.clear()
     const refreshes = [...activeRefreshes]
     refreshes.forEach(({ controller }) => controller.abort())
     await Promise.all(refreshes.map(({ settled }) => settled))
-    credentials.clear()
   }
 
   return {
-    async send(req: SendOtpRequest): Promise<SendOtpResponse> {
+    async send(
+      req: SendOtpRequest,
+      purpose: 'login' | 'registration' = 'login',
+      options: { signal?: AbortSignal } = {},
+    ): Promise<SendOtpResponse> {
       try {
         const response = await client.post<SendOtpResponse>(
-          '/session/otp/send',
+          purpose === 'registration'
+            ? '/session/registration/send'
+            : '/session/otp/send',
           req,
+          options,
         )
         return {
           cooldownSeconds: response.data.cooldownSeconds,
           retryAfterSeconds: response.data.retryAfterSeconds,
+          challengeId: response.data.challengeId,
+          expiresAt: response.data.expiresAt,
+          resendAt: response.data.resendAt,
         }
       } catch (error) {
         throw problemError(normalizeApiProblem(error))
       }
     },
 
-    async verify(req: VerifyOtpRequest): Promise<SessionVerifyResponse> {
+    async verify(
+      req: VerifyOtpRequest,
+      purpose: 'login' | 'registration' = 'login',
+      options: { signal?: AbortSignal } = {},
+    ): Promise<SessionVerifyResponse> {
+      sessionMutationDepth += 1
+      const release = await acquireMutation()
       try {
+        await invalidateRefreshes()
+        if (options.signal?.aborted) throw new axios.CanceledError()
+        const generation = credentials.getSessionGeneration()
         const response = await client.post<SessionVerifyResponse>(
-          '/session/otp/verify',
+          purpose === 'registration'
+            ? '/session/registration/verify'
+            : '/session/otp/verify',
           req,
+          options,
         )
+        if (
+          options.signal?.aborted ||
+          generation !== credentials.getSessionGeneration()
+        ) {
+          throw new axios.CanceledError()
+        }
         const payload: SessionVerifyResponse = {
           accessToken: response.data.accessToken,
           user: {
@@ -73,66 +113,113 @@ export const createSessionApi = (
           },
           isNewUser: response.data.isNewUser,
         }
-        credentials.setAccess(payload.accessToken)
-        return payload
-      } catch (error) {
-        throw problemError(normalizeApiProblem(error))
-      }
-    },
-
-    async refresh(): Promise<SessionRefreshResponse> {
-      if (sessionMutationDepth > 0) {
-        throw problemError(normalizeApiProblem(new axios.CanceledError()))
-      }
-
-      const generation = sessionGeneration
-      const controller = new AbortController()
-      let settle!: () => void
-      const activeRefresh: ActiveRefresh = {
-        controller,
-        settled: new Promise((resolve) => {
-          settle = resolve
-        }),
-        settle: () => settle(),
-      }
-      activeRefreshes.add(activeRefresh)
-
-      try {
-        const response = await client.post<SessionRefreshResponse>(
-          '/session/refresh',
-          undefined,
-          { signal: controller.signal },
-        )
-        if (generation !== sessionGeneration) {
-          throw new axios.CanceledError()
-        }
-        const payload: SessionRefreshResponse = {
-          accessToken: response.data.accessToken,
-          expiresIn: response.data.expiresIn,
-        }
-        credentials.setAccess(payload.accessToken)
+        credentials.startSession(payload.accessToken)
         return payload
       } catch (error) {
         throw problemError(normalizeApiProblem(error))
       } finally {
-        activeRefreshes.delete(activeRefresh)
-        activeRefresh.settle()
+        sessionMutationDepth -= 1
+        release()
       }
+    },
+
+    async cancelRegistration(): Promise<void> {
+      await client.post(
+        '/session/registration/cancel',
+        {},
+        { headers: { 'Content-Type': 'application/json' } },
+      )
+    },
+
+    refresh(): Promise<SessionRefreshResponse> {
+      if (sessionMutationDepth > 0) {
+        return Promise.reject(
+          problemError(normalizeApiProblem(new axios.CanceledError())),
+        )
+      }
+
+      const generation = credentials.getSessionGeneration()
+      // Bootstrap and 401 recovery must share the same rotating cookie request.
+      if (pendingRefresh?.generation === generation)
+        return pendingRefresh.promise
+      const pending = {
+        generation,
+        promise: Promise.resolve({ accessToken: '', expiresIn: 0 }),
+      }
+      pending.promise = (async () => {
+        const controller = new AbortController()
+        let settle!: () => void
+        const activeRefresh: ActiveRefresh = {
+          controller,
+          settled: new Promise((resolve) => {
+            settle = resolve
+          }),
+          settle: () => settle(),
+        }
+        activeRefreshes.add(activeRefresh)
+
+        try {
+          const sendRefresh = () => {
+            if (
+              controller.signal.aborted ||
+              generation !== credentials.getSessionGeneration()
+            ) {
+              throw new axios.CanceledError()
+            }
+            return client.post<SessionRefreshResponse>(
+              '/session/refresh',
+              undefined,
+              { signal: controller.signal },
+            )
+          }
+          // Cookies are shared across tabs (and overlapping HMR module instances).
+          // Hold the origin-wide lock until Set-Cookie has been applied.
+          const response =
+            typeof navigator !== 'undefined' && navigator.locks
+              ? await navigator.locks.request(
+                  'rozbirka-session-refresh',
+                  { signal: controller.signal },
+                  sendRefresh,
+                )
+              : await sendRefresh()
+          if (generation !== credentials.getSessionGeneration()) {
+            throw new axios.CanceledError()
+          }
+          const payload: SessionRefreshResponse = {
+            accessToken: response.data.accessToken,
+            expiresIn: response.data.expiresIn,
+          }
+          credentials.setAccess(payload.accessToken)
+          return payload
+        } catch (error) {
+          throw problemError(normalizeApiProblem(error))
+        } finally {
+          activeRefreshes.delete(activeRefresh)
+          activeRefresh.settle()
+        }
+      })().finally(() => {
+        if (pendingRefresh === pending) pendingRefresh = null
+      })
+      pendingRefresh = pending
+      return pending.promise
     },
 
     async invalidate(): Promise<void> {
       sessionMutationDepth += 1
+      const release = await acquireMutation()
       try {
         await invalidateRefreshes()
       } finally {
         credentials.clear()
         sessionMutationDepth -= 1
+        release()
       }
     },
 
     async logout(): Promise<void> {
       const accessToken = credentials.getAccess()
       sessionMutationDepth += 1
+      const release = await acquireMutation()
 
       try {
         await invalidateRefreshes()
@@ -148,6 +235,7 @@ export const createSessionApi = (
       } finally {
         credentials.clear()
         sessionMutationDepth -= 1
+        release()
       }
     },
   }

@@ -137,3 +137,17 @@ export const normalizeApiProblem = (error: unknown): ApiProblem => {
     cause: error,
   }
 }
+
+/**
+ * Whether a failure is the one named.
+ *
+ * Core writes error codes in two conventions: the `ErrorCodes` constants are
+ * UPPER_SNAKE (`ORDER_INVALID_STATUS`), while the shipping and integration
+ * services throw lower_snake literals (`delivery_not_configured`). A caller
+ * that guesses wrong reads an ordinary answer as a failure — which is how a
+ * delivery order that simply had no money configured yet came up as an error.
+ * The comparison ignores case so that guess is never needed.
+ */
+export const isProblemCode = (error: unknown, code: string): boolean => {
+  return normalizeApiProblem(error).code?.toLowerCase() === code.toLowerCase()
+}

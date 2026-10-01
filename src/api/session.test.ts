@@ -6,10 +6,16 @@ import axios, {
   type CreateAxiosDefaults,
   type InternalAxiosRequestConfig,
 } from 'axios'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { credentials } from './credentials'
 import { normalizeApiProblem } from './errors'
 import { createSessionApi } from './session'
+
+const challengeData = (seconds = 0) => ({
+  challengeId: 'test-challenge',
+  expiresAt: '2099-01-01T00:00:00.000Z',
+  resendAt: new Date(Date.UTC(2099, 0, 1) + seconds * 1000).toISOString(),
+})
 
 const verifyPayload = {
   accessToken: 'access-token',
@@ -83,10 +89,13 @@ beforeEach(() => {
   vi.restoreAllMocks()
 })
 
+afterEach(() => vi.unstubAllGlobals())
+
 it('posts OTP send to the same-origin session route and narrows the response', async () => {
   const harness = sessionHarness((config) =>
     Promise.resolve(
       response(config, {
+        ...challengeData(),
         cooldownSeconds: 60,
         retryAfterSeconds: 300,
         internalSecret: 'must-not-escape',
@@ -96,7 +105,11 @@ it('posts OTP send to the same-origin session route and narrows the response', a
 
   const result = await harness.session.send({ phone: '+380501234567' })
 
-  expect(result).toEqual({ cooldownSeconds: 60, retryAfterSeconds: 300 })
+  expect(result).toEqual({
+    ...challengeData(),
+    cooldownSeconds: 60,
+    retryAfterSeconds: 300,
+  })
   expect(result).not.toHaveProperty('internalSecret')
   expect(harness.requests[0]).toMatchObject({
     url: '/session/otp/send',
@@ -133,6 +146,7 @@ it('posts verify to the same-origin session route and stores only access in memo
 
   const result = await harness.session.verify({
     phone: '+380501234567',
+    challengeId: 'test-challenge',
     code: '123456',
   })
 
@@ -152,6 +166,7 @@ it('posts verify to the same-origin session route and stores only access in memo
   })
   expect(JSON.parse(harness.requests[0]?.data as string)).toEqual({
     phone: '+380501234567',
+    challengeId: 'test-challenge',
     code: '123456',
   })
   expect(credentials.getAccess()).toBe('access-token')
@@ -183,6 +198,69 @@ it('uses credentials: include semantics through withCredentials', async () => {
   expect(credentials.getAccess()).toBe('fresh-token')
 })
 
+it('shares a rotating refresh between bootstrap and concurrent API recovery', async () => {
+  let release!: () => void
+  const pending = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const harness = sessionHarness(async (config) => {
+    await pending
+    return response(config, { accessToken: 'rotated-token', expiresIn: 900 })
+  })
+
+  const bootstrap = harness.session.refresh()
+  const recovery = harness.session.refresh()
+  release()
+  await expect(Promise.all([bootstrap, recovery])).resolves.toEqual([
+    { accessToken: 'rotated-token', expiresIn: 900 },
+    { accessToken: 'rotated-token', expiresIn: 900 },
+  ])
+  expect(harness.requests).toHaveLength(1)
+  expect(credentials.getAccess()).toBe('rotated-token')
+  await harness.session.refresh()
+  expect(harness.requests).toHaveLength(2)
+})
+
+it('serializes rotating cookies across independent browser contexts', async () => {
+  // Model the browser's origin-wide lock; each context has its own session API.
+  const tails = new Map<string, Promise<unknown>>()
+  vi.stubGlobal('navigator', {
+    locks: {
+      request(
+        name: string,
+        _options: unknown,
+        callback: () => Promise<unknown>,
+      ) {
+        const next = (tails.get(name) ?? Promise.resolve()).then(callback)
+        tails.set(
+          name,
+          next.catch(() => undefined),
+        )
+        return next
+      },
+    },
+  })
+  let cookieVersion = 0
+  const adapter: AxiosAdapter = async (config) => {
+    const presented = cookieVersion
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    if (presented !== cookieVersion) throw failure(config, 400)
+    cookieVersion += 1
+    return response(config, {
+      accessToken: `token-${cookieVersion}`,
+      expiresIn: 900,
+    })
+  }
+  const first = sessionHarness(adapter).session
+  const second = sessionHarness(adapter).session
+  await expect(
+    Promise.all([first.refresh(), second.refresh()]),
+  ).resolves.toEqual([
+    { accessToken: 'token-1', expiresIn: 900 },
+    { accessToken: 'token-2', expiresIn: 900 },
+  ])
+})
+
 it('maps an absent refresh cookie to session-expired', async () => {
   const harness = sessionHarness((config) =>
     Promise.reject(failure(config, 401)),
@@ -205,7 +283,11 @@ it('keeps normalized facade problems stable across API boundaries', async () => 
   )
 
   const problem = await harness.session
-    .verify({ phone: '+380501234567', code: '000000' })
+    .verify({
+      phone: '+380501234567',
+      challengeId: 'test-challenge',
+      code: '000000',
+    })
     .then(
       () => undefined,
       (error: unknown) => normalizeApiProblem(error),
@@ -348,4 +430,73 @@ it('invalidates an active refresh without dispatching logout', async () => {
   expect(order).toEqual(['refresh-start', 'refresh-abort', 'refresh-settle'])
   expect(harness.requests).toHaveLength(1)
   expect(credentials.getAccess()).toBeNull()
+})
+
+it.each(['success', 'failure'])(
+  'settles an old refresh %s before sending verification',
+  async (outcome) => {
+    credentials.startSession('A')
+    let complete!: () => void
+    let verifySent = false
+    const { session } = sessionHarness(async (config) => {
+      if (config.url === '/session/refresh') {
+        await new Promise<void>((resolve) => {
+          complete = resolve
+        })
+        if (outcome === 'failure') throw failure(config, 401)
+        return response(config, { accessToken: 'A-refreshed', expiresIn: 300 })
+      }
+      verifySent = true
+      return response(config, { ...verifyPayload, accessToken: 'B' })
+    })
+    const refresh = session.refresh()
+    const rejected = expect(refresh).rejects.toBeDefined()
+    const verify = session.verify({
+      phone: '+380501234567',
+      code: '123456',
+      challengeId: 'challenge',
+    })
+    await Promise.resolve()
+    expect(verifySent).toBe(false)
+    complete()
+    await rejected
+    await verify
+    expect(verifySent).toBe(true)
+    expect(credentials.getAccess()).toBe('B')
+  },
+)
+
+it('waits for logout cookie mutation before sending new verification', async () => {
+  credentials.startSession('A')
+  let complete!: () => void
+  let entered!: () => void
+  const started = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  const order: string[] = []
+  const { session } = sessionHarness(async (config) => {
+    if (config.url === '/session/logout') {
+      entered()
+      await new Promise<void>((resolve) => {
+        complete = resolve
+      })
+      order.push('logout-cookie')
+      return response(config, {})
+    }
+    order.push('verify-cookie')
+    return response(config, { ...verifyPayload, accessToken: 'B' })
+  })
+  const logout = session.logout()
+  await started
+  const verify = session.verify({
+    phone: '+380501234567',
+    code: '123456',
+    challengeId: 'challenge',
+  })
+  await Promise.resolve()
+  expect(order).toEqual([])
+  complete()
+  await Promise.all([logout, verify])
+  expect(order).toEqual(['logout-cookie', 'verify-cookie'])
+  expect(credentials.getAccess()).toBe('B')
 })

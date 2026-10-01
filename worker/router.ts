@@ -1,3 +1,4 @@
+import { handleNativeAuth } from './native-auth'
 import { handleSessionRequest, type SessionEnv } from './session'
 
 export interface EdgeEnv extends SessionEnv {
@@ -10,9 +11,10 @@ const spaPaths = [
   /^\/$/,
   /^\/privacy\/?$/,
   /^\/login\/?$/,
-  /^\/account\/?$/,
+  /^\/account(?:\/security)?\/?$/,
   /^\/invite\/[A-Za-z0-9_-]{4,128}\/?$/,
   /^\/scan\/[A-Za-z0-9._~-]{1,256}\/?$/,
+  /^\/app\/[a-z0-9](?:[a-z0-9-]{0,62})(?:\/[^/]+(?:\/[^/]+)*)?\/?$/,
 ]
 
 const prototypePath = /^\/screens(?:\/|$)/
@@ -115,7 +117,7 @@ function shouldNoindex(url: URL) {
   return (
     url.hostname.startsWith('qa.') ||
     url.hostname.endsWith('.workers.dev') ||
-    /^\/(?:login|account|invite|scan)(?:\/|$)/.test(url.pathname)
+    /^\/(?:login|account|invite|scan|app)(?:\/|$)/.test(url.pathname)
   )
 }
 
@@ -128,6 +130,8 @@ async function notFound(request: Request, env: EdgeEnv) {
 }
 
 export async function handleRequest(request: Request, env: EdgeEnv) {
+  const nativeAuthResponse = await handleNativeAuth(request, env)
+  if (nativeAuthResponse) return nativeAuthResponse
   const sessionResponse = await handleSessionRequest(request, env)
   if (sessionResponse) return sessionResponse
 
@@ -145,7 +149,9 @@ export async function handleRequest(request: Request, env: EdgeEnv) {
   ) {
     url.protocol = 'https:'
     url.hostname = 'rozbirka.pro'
-    return Response.redirect(url.toString(), 308)
+    return withHeaders(Response.redirect(url.toString(), 308), {
+      ...(shouldNoindex(url) ? { 'X-Robots-Tag': 'noindex' } : {}),
+    })
   }
 
   if (prototypePath.test(url.pathname)) return notFound(request, env)

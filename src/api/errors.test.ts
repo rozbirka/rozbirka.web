@@ -1,6 +1,6 @@
 import axios, { AxiosError, AxiosHeaders } from 'axios'
 import { describe, expect, it } from 'vitest'
-import { normalizeApiProblem } from './errors'
+import { isProblemCode, normalizeApiProblem } from './errors'
 
 function axiosFailure(status: number, data: unknown, headers = {}) {
   return new AxiosError(
@@ -89,5 +89,37 @@ describe('normalizeApiProblem', () => {
     ).toMatchObject({
       kind: 'network',
     })
+  })
+})
+
+describe('isProblemCode', () => {
+  const conflict = (code: string) =>
+    axiosFailure(409, { error: { code, message: 'Conflict' } })
+
+  it('matches a code whatever convention Core wrote it in', () => {
+    // `ErrorCodes` constants are UPPER_SNAKE; the shipping and integration
+    // services throw lower_snake literals. Both have to be recognisable.
+    expect(
+      isProblemCode(conflict('ORDER_INVALID_STATUS'), 'ORDER_INVALID_STATUS'),
+    ).toBe(true)
+    expect(
+      isProblemCode(conflict('ORDER_INVALID_STATUS'), 'order_invalid_status'),
+    ).toBe(true)
+    expect(
+      isProblemCode(
+        conflict('delivery_not_configured'),
+        'DELIVERY_NOT_CONFIGURED',
+      ),
+    ).toBe(true)
+  })
+
+  it('does not match a different code or a failure without one', () => {
+    expect(
+      isProblemCode(conflict('ORDER_INVALID_STATUS'), 'PARTS_NOT_AVAILABLE'),
+    ).toBe(false)
+    expect(isProblemCode(axiosFailure(500, {}), 'ORDER_INVALID_STATUS')).toBe(
+      false,
+    )
+    expect(isProblemCode(new Error('boom'), 'ORDER_INVALID_STATUS')).toBe(false)
   })
 })

@@ -10,6 +10,98 @@ import type {
   SubscriptionDto,
 } from './types'
 
+export type BillingSource = 'mono' | 'apple_iap' | 'google_play' | null
+export type BillingManageVia = 'web' | 'apple' | 'google' | null
+export type ProviderAwareSubscriptionDto = SubscriptionDto & {
+  source: BillingSource
+  manageVia: BillingManageVia
+}
+
+export type ProviderManagement =
+  | { kind: 'mono' }
+  | { kind: 'provider'; label: string; url: string }
+  | { kind: 'unavailable' }
+
+export function resolveProviderManagement(
+  subscription: Pick<ProviderAwareSubscriptionDto, 'source' | 'manageVia'>,
+): ProviderManagement {
+  if (subscription.source === 'mono' && subscription.manageVia === 'web') {
+    return { kind: 'mono' }
+  }
+  if (
+    subscription.source === 'apple_iap' &&
+    subscription.manageVia === 'apple'
+  ) {
+    return {
+      kind: 'provider',
+      label: 'App Store',
+      url: 'https://apps.apple.com/account/subscriptions',
+    }
+  }
+  if (
+    subscription.source === 'google_play' &&
+    subscription.manageVia === 'google'
+  ) {
+    return {
+      kind: 'provider',
+      label: 'Google Play',
+      url: 'https://play.google.com/store/account/subscriptions',
+    }
+  }
+  return { kind: 'unavailable' }
+}
+
+/** Checkout eligibility is separate from management of an existing subscription. */
+export function canStartWebCheckout(
+  subscription:
+    | Pick<
+        SubscriptionDto,
+        | 'state'
+        | 'planCode'
+        | 'currentPeriodEnd'
+        | 'trialEndsAt'
+        | 'canSubscribe'
+        | 'canReactivate'
+      >
+    | null
+    | undefined,
+): boolean {
+  if (!subscription) return false
+  const provider = subscription as ProviderAwareSubscriptionDto
+  if (resolveProviderManagement(provider).kind === 'mono') return true
+  if (provider.source === 'apple_iap' || provider.source === 'google_play') {
+    // Core clears manageVia for Expired rows. Cancelled rows retain their
+    // provider destination and canSubscribe; active/past-due rows cannot.
+    // Require ended access and an elapsed period. Trial DTOs expose their
+    // window only through trialEndsAt; never use that for a paid plan.
+    const periodEnd = Date.parse(
+      subscription.currentPeriodEnd ??
+        (subscription.planCode === 'trial' ? subscription.trialEndsAt : null) ??
+        '',
+    )
+    return (
+      subscription.state === 'blocked' &&
+      periodEnd <= Date.now() &&
+      ((provider.manageVia === null && subscription.canReactivate) ||
+        (resolveProviderManagement(provider).kind === 'provider' &&
+          subscription.canSubscribe))
+    )
+  }
+  if (provider.manageVia !== null) return false
+  if (provider.source === 'mono') {
+    return (
+      subscription.state === 'blocked' &&
+      (subscription.canSubscribe || subscription.canReactivate)
+    )
+  }
+  return (
+    provider.source === null &&
+    subscription.canSubscribe &&
+    subscription.planCode === null &&
+    (subscription.state === 'none' || subscription.state === 'blocked')
+  )
+}
+
 const requestConfig = (options: RequestOptions) =>
   options.signal ? { signal: options.signal } : {}
 
@@ -20,8 +112,8 @@ export const billingApi = {
    */
   async getSubscription(
     options: RequestOptions = {},
-  ): Promise<SubscriptionDto> {
-    const resp = await apiClient.get<SubscriptionDto>(
+  ): Promise<ProviderAwareSubscriptionDto> {
+    const resp = await apiClient.get<ProviderAwareSubscriptionDto>(
       '/billing/subscription',
       requestConfig(options),
     )

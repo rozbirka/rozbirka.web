@@ -32,6 +32,7 @@ const firstTenant: Tenant = {
   isActive: true,
   createdAt: '2026-08-01T10:00:00Z',
   roleName: 'owner',
+  requireDeliveryDeposit: true,
 }
 
 const secondTenant: Tenant = {
@@ -82,6 +83,12 @@ function AuthProbe({
       >
         hydrate
       </button>
+      <button type="button" onClick={() => auth.commitTenant(secondTenant.id)}>
+        commit second tenant
+      </button>
+      <button type="button" onClick={() => void auth.updateName('Нове імʼя')}>
+        rename
+      </button>
       <button type="button" onClick={() => void auth.signOut()}>
         sign out
       </button>
@@ -109,6 +116,11 @@ beforeEach(() => {
   credentials.clear()
   tenantPreference.clear()
   vi.spyOn(authApi, 'me').mockResolvedValue(user)
+  vi.spyOn(authApi, 'updateName').mockResolvedValue({
+    id: user.id,
+    phone: user.phone!,
+    displayName: 'Нове імʼя',
+  })
   vi.spyOn(authApi, 'logout').mockResolvedValue(undefined)
   vi.spyOn(tenantsApi, 'list').mockResolvedValue([firstTenant, secondTenant])
   vi.spyOn(sessionApi, 'invalidate').mockResolvedValue(undefined)
@@ -212,6 +224,102 @@ it('clears invalid tenant preference when the user has no matching tenant', asyn
     expect(screen.getByTestId('tenant')).toHaveTextContent(firstTenant.id)
   })
   expect(tenantPreference.get()).toBe(firstTenant.id)
+})
+
+it('commits an authenticated tenant synchronously after access is ready', async () => {
+  credentials.setAccess('current-access')
+  const userEventApi = userEvent.setup()
+
+  render(
+    <AuthProvider>
+      <AuthProbe />
+    </AuthProvider>,
+  )
+
+  await expectStatus('authenticated')
+  await userEventApi.click(
+    screen.getByRole('button', { name: 'commit second tenant' }),
+  )
+
+  expect(screen.getByTestId('tenant')).toHaveTextContent(secondTenant.id)
+  expect(tenantPreference.get()).toBe(secondTenant.id)
+})
+
+it('updates the authenticated display name without reloading tenant state', async () => {
+  credentials.setAccess('current-access')
+  const pendingUpdate = deferred<{
+    id: string
+    phone: string
+    displayName: string
+  }>()
+  vi.mocked(authApi.updateName).mockReturnValue(pendingUpdate.promise)
+  const userEventApi = userEvent.setup()
+
+  render(
+    <AuthProvider>
+      <AuthProbe />
+    </AuthProvider>,
+  )
+
+  await expectStatus('authenticated')
+  await userEventApi.click(screen.getByRole('button', { name: 'rename' }))
+
+  const updateCall = vi.mocked(authApi.updateName).mock.calls[0]
+  expect(updateCall?.[0]).toBe('Нове імʼя')
+  expect(updateCall?.[1]?.signal).toBeInstanceOf(AbortSignal)
+  await act(async () => {
+    pendingUpdate.resolve({
+      id: user.id,
+      phone: user.phone!,
+      displayName: 'Нове імʼя',
+    })
+    await pendingUpdate.promise
+  })
+  await waitFor(() => {
+    expect(screen.getByTestId('user')).toHaveTextContent('Нове імʼя')
+  })
+  expect(screen.getByTestId('tenant')).toHaveTextContent(firstTenant.id)
+  expect(screen.getByTestId('tenants')).toHaveTextContent('2')
+  expect(authApi.me).toHaveBeenCalledOnce()
+  expect(tenantsApi.list).toHaveBeenCalledOnce()
+})
+
+it('aborts a pending display-name update when the session signs out', async () => {
+  credentials.setAccess('current-access')
+  const pendingUpdate = deferred<{
+    id: string
+    phone: string
+    displayName: string
+  }>()
+  vi.mocked(authApi.updateName).mockReturnValue(pendingUpdate.promise)
+  const userEventApi = userEvent.setup()
+
+  render(
+    <AuthProvider>
+      <AuthProbe />
+    </AuthProvider>,
+  )
+
+  await expectStatus('authenticated')
+  await userEventApi.click(screen.getByRole('button', { name: 'rename' }))
+  const updateCall = vi.mocked(authApi.updateName).mock.calls[0]
+  expect(updateCall?.[0]).toBe('Нове імʼя')
+  expect(updateCall?.[1]?.signal).toBeInstanceOf(AbortSignal)
+
+  await userEventApi.click(screen.getByRole('button', { name: 'sign out' }))
+  const options = vi.mocked(authApi.updateName).mock.calls[0]?.[1]
+  expect(options?.signal?.aborted).toBe(true)
+  await expectStatus('guest')
+
+  await act(async () => {
+    pendingUpdate.resolve({
+      id: user.id,
+      phone: user.phone!,
+      displayName: 'Запізніле імʼя',
+    })
+    await pendingUpdate.promise
+  })
+  expect(screen.getByTestId('user')).toHaveTextContent('none')
 })
 
 it('resets React auth state once when a mid-session refresh fails', async () => {
@@ -412,4 +520,28 @@ it('awaits session invalidation before silent sign-out can resolve', async () =>
   expect(signOutSettled).toBe(true)
   expect(screen.getByTestId('status')).toHaveTextContent('guest')
   expect(credentials.getAccess()).toBeNull()
+})
+
+it('does not reset a new login when an earlier sign-out finishes', async () => {
+  credentials.startSession('A')
+  const logout = deferred<void>()
+  vi.mocked(authApi.logout).mockReturnValue(logout.promise)
+  const userEventApi = userEvent.setup()
+  render(
+    <AuthProvider>
+      <AuthProbe />
+    </AuthProvider>,
+  )
+  await expectStatus('authenticated')
+  await userEventApi.click(screen.getByRole('button', { name: 'sign out' }))
+  await expectStatus('guest')
+  credentials.startSession('B')
+  await userEventApi.click(screen.getByRole('button', { name: 'hydrate' }))
+  await expectStatus('authenticated')
+  await act(async () => {
+    logout.resolve()
+    await logout.promise
+  })
+  expect(credentials.getAccess()).toBe('B')
+  expect(screen.getByTestId('status')).toHaveTextContent('authenticated')
 })

@@ -2,7 +2,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { handleSessionRequest } from './session'
 
-const env = { IDENTITY_ORIGIN: 'https://identity.example' }
+const challengeData = (seconds = 0) => ({
+  challengeId: 'test-challenge',
+  expiresAt: '2099-01-01T00:00:00.000Z',
+  resendAt: new Date(Date.UTC(2099, 0, 1) + seconds * 1000).toISOString(),
+})
+
+const env = { CORE_ORIGIN: 'https://identity.example' }
 
 function identityResponse(body: unknown, init?: ResponseInit) {
   vi.stubGlobal(
@@ -25,6 +31,7 @@ describe('session BFF', () => {
         return Promise.resolve(
           Response.json({
             data: {
+              ...challengeData(),
               cooldownSeconds: 60,
               retryAfterSeconds: 300,
               internalSecret: 'identity-internal-secret',
@@ -56,11 +63,14 @@ describe('session BFF', () => {
     expect(response.status).toBe(200)
     expect(response.headers.get('cache-control')).toBe('no-store')
     expect(JSON.parse(text)).toEqual({
+      ...challengeData(),
       cooldownSeconds: 60,
       retryAfterSeconds: 300,
     })
     expect(text).not.toContain('identity-internal-secret')
-    expect(upstreamRequest?.url).toBe('https://identity.example/auth/phone')
+    expect(upstreamRequest?.url).toBe(
+      'https://identity.example/auth/login/phone',
+    )
     expect(upstreamRequest?.method).toBe('POST')
     expect(await upstreamRequest?.json()).toEqual({
       phone: '+380501112233',
@@ -218,7 +228,11 @@ describe('session BFF', () => {
           origin: 'https://rozbirka.pro',
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ phone: '+380501112233', code: '123456' }),
+        body: JSON.stringify({
+          phone: '+380501112233',
+          challengeId: 'test-challenge',
+          code: '123456',
+        }),
       }),
       env,
     )
@@ -240,10 +254,12 @@ describe('session BFF', () => {
       },
       isNewUser: false,
     })
-    expect(upstreamRequest?.url).toBe('https://identity.example/auth/verify')
+    expect(upstreamRequest?.url).toBe(
+      'https://identity.example/auth/login/verify',
+    )
     expect(await upstreamRequest?.json()).toEqual({
-      allowRegistration: true,
       phone: '+380501112233',
+      challengeId: 'test-challenge',
       code: '123456',
     })
   })
@@ -321,7 +337,11 @@ describe('session BFF', () => {
     const response = await handleSessionRequest(
       new Request('https://rozbirka.pro/session/otp/verify', {
         method: 'POST',
-        body: JSON.stringify({ phone: '+380501112233', code: '123456' }),
+        body: JSON.stringify({
+          phone: '+380501112233',
+          challengeId: 'test-challenge',
+          code: '123456',
+        }),
       }),
       env,
     )
@@ -485,7 +505,11 @@ describe('session BFF', () => {
       new Request('https://rozbirka.pro/session/otp/verify', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ phone: '+380501112233', code: '000000' }),
+        body: JSON.stringify({
+          phone: '+380501112233',
+          challengeId: 'test-challenge',
+          code: '000000',
+        }),
       }),
       env,
     )
@@ -536,7 +560,11 @@ describe('session BFF', () => {
       const response = await handleSessionRequest(
         new Request('https://rozbirka.pro/session/otp/verify', {
           method: 'POST',
-          body: JSON.stringify({ phone: '+380501112233', code: '000000' }),
+          body: JSON.stringify({
+            phone: '+380501112233',
+            challengeId: 'test-challenge',
+            code: '000000',
+          }),
         }),
         env,
       )
@@ -574,7 +602,11 @@ describe('session BFF', () => {
       const response = await handleSessionRequest(
         new Request('https://rozbirka.pro/session/otp/verify', {
           method: 'POST',
-          body: JSON.stringify({ phone: '+380501112233', code: '000000' }),
+          body: JSON.stringify({
+            phone: '+380501112233',
+            challengeId: 'test-challenge',
+            code: '000000',
+          }),
         }),
         env,
       )

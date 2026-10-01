@@ -1,0 +1,277 @@
+import { act, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
+import { beforeEach, expect, it, vi } from 'vitest'
+import { inventoryApi } from '@/api/inventory'
+import { tenantsApi } from '@/api/tenants'
+import { tenantPreference } from '@/api/tenant-preference'
+import { useAuth, type AuthContextValue } from '@/auth/AuthContext'
+import { TenantOnboardingScreen } from './tenant-onboarding'
+
+/* eslint-disable @typescript-eslint/unbound-method -- Vitest resolves the API method into a typed mock. */
+
+vi.mock('@/api/tenants', () => ({ tenantsApi: { create: vi.fn() } }))
+vi.mock('@/api/inventory', () => ({
+  inventoryApi: {
+    getWarehouses: vi.fn(() => Promise.resolve([])),
+    createWarehouse: vi.fn(),
+    updateWarehouse: vi.fn(),
+    createZone: vi.fn(),
+  },
+}))
+vi.mock('@/api/team', () => ({
+  teamApi: {
+    listRoles: vi.fn(() => Promise.resolve([])),
+    createInvitation: vi.fn(),
+  },
+}))
+vi.mock('@/auth/AuthContext', () => ({ useAuth: vi.fn() }))
+
+const create = vi.mocked(tenantsApi.create)
+const hydrate = vi.fn<() => Promise<void>>()
+const signOut = vi.fn<() => Promise<void>>()
+let auth: AuthContextValue
+
+const hydratedTenant = {
+  id: 'tenant-new',
+  name: 'New Yard',
+  slug: 'new-yard',
+  plan: 'trial' as const,
+  planTier: 'pro',
+  city: 'Львів',
+  logoUrl: null,
+  isActive: true,
+  createdAt: '2026-08-15T00:00:00Z',
+  roleName: 'owner',
+  requireDeliveryDeposit: true,
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
+function LocationProbe() {
+  const location = useLocation()
+  return (
+    <output aria-label="Поточний маршрут">
+      {location.pathname + location.search}
+    </output>
+  )
+}
+
+function renderOnboarding() {
+  return render(
+    <MemoryRouter initialEntries={['/account']}>
+      <Routes>
+        <Route path="/account" element={<TenantOnboardingScreen />} />
+        <Route path="*" element={<LocationProbe />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  tenantPreference.clear()
+  hydrate.mockImplementation(() => {
+    auth.tenant = hydratedTenant
+    auth.tenants = [hydratedTenant]
+    return Promise.resolve()
+  })
+  signOut.mockResolvedValue()
+  auth = {
+    status: 'authenticated',
+    user: {
+      id: 'user-1',
+      phone: '+380501112233',
+      displayName: 'Власник',
+      role: 'owner',
+      isActive: true,
+      lastLoginAt: null,
+    },
+    tenant: null,
+    tenants: [],
+    hydrate,
+    commitTenant: vi.fn(),
+    updateName: vi.fn(),
+    signOut,
+  }
+  vi.mocked(useAuth).mockImplementation(() => auth)
+})
+
+it('creates the first tenant, hydrates, and moves on to the warehouse step', async () => {
+  create.mockResolvedValue({
+    tenantId: 'tenant-new',
+    name: 'New Yard',
+    slug: 'stale-create-response-slug',
+    plan: 'trial',
+    planTier: 'pro',
+    isActive: true,
+  })
+  const user = userEvent.setup()
+  renderOnboarding()
+
+  await user.type(screen.getByLabelText('Назва розбірки'), 'New Yard')
+  await user.type(screen.getByLabelText(/Місто/), 'Львів')
+  await user.click(screen.getByRole('button', { name: 'Створити розбірку' }))
+
+  expect(tenantPreference.get()).toBe('tenant-new')
+  expect(hydrate).toHaveBeenCalledOnce()
+  // The yard exists now, so the wizard continues inside it instead of leaving.
+  expect(
+    await screen.findByRole('heading', { name: 'Налаштуйте перший склад' }),
+  ).toBeVisible()
+
+  await user.click(screen.getByRole('button', { name: 'Пропустити' }))
+  expect(await screen.findByLabelText('Поточний маршрут')).toHaveTextContent(
+    '/app/new-yard/dashboard',
+  )
+})
+
+it('names the missing yard at its own field instead of calling the API', async () => {
+  const user = userEvent.setup()
+  renderOnboarding()
+
+  await user.click(screen.getByRole('button', { name: 'Створити розбірку' }))
+
+  const nameInput = screen.getByLabelText('Назва розбірки')
+  expect(nameInput).toHaveAccessibleDescription(
+    'Вкажіть назву розбірки — щонайменше 2 символи',
+  )
+  expect(nameInput).toBeInvalid()
+  expect(nameInput).toHaveFocus()
+  expect(create).not.toHaveBeenCalled()
+})
+
+it('keeps the failure reason on screen and creates the yard on retry', async () => {
+  create.mockRejectedValueOnce({
+    kind: 'conflict',
+    message: 'Розбірка з такою назвою вже існує.',
+  })
+  create.mockResolvedValueOnce({
+    tenantId: 'tenant-new',
+    name: 'New Yard',
+    slug: 'stale-create-response-slug',
+    plan: 'trial',
+    planTier: 'pro',
+    isActive: true,
+  })
+  const user = userEvent.setup()
+  renderOnboarding()
+
+  await user.type(screen.getByLabelText('Назва розбірки'), 'New Yard')
+  await user.click(screen.getByRole('button', { name: 'Створити розбірку' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Не вдалося створити розбірку. Розбірка з такою назвою вже існує.',
+  )
+  expect(hydrate).not.toHaveBeenCalled()
+
+  await user.click(screen.getByRole('button', { name: 'Спробувати ще раз' }))
+
+  expect(create).toHaveBeenCalledTimes(2)
+  expect(
+    await screen.findByRole('heading', { name: 'Налаштуйте перший склад' }),
+  ).toBeVisible()
+})
+
+it('invalidates a pending create before logout can resume it', async () => {
+  const pendingCreate =
+    deferred<Awaited<ReturnType<typeof tenantsApi.create>>>()
+  create.mockReturnValue(pendingCreate.promise)
+  const user = userEvent.setup()
+  renderOnboarding()
+
+  await user.type(screen.getByLabelText('Назва розбірки'), 'New Yard')
+  await user.click(screen.getByRole('button', { name: 'Створити розбірку' }))
+  const createSignal = create.mock.calls[0]?.[1]?.signal
+  await user.click(screen.getByRole('button', { name: 'Вийти' }))
+
+  expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(/^\/$/)
+  expect(createSignal?.aborted).toBe(true)
+  await act(async () => {
+    pendingCreate.resolve({
+      tenantId: 'tenant-new',
+      name: 'New Yard',
+      slug: 'stale-create-response-slug',
+      plan: 'trial',
+      planTier: 'pro',
+      isActive: true,
+    })
+    await pendingCreate.promise
+    await Promise.resolve()
+  })
+
+  expect(tenantPreference.get()).toBeNull()
+  expect(hydrate).not.toHaveBeenCalled()
+  expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(/^\/$/)
+})
+
+it('leaves the protected route before waiting for logout', async () => {
+  let finishLogout!: () => void
+  signOut.mockReturnValue(
+    new Promise<void>((resolve) => {
+      finishLogout = resolve
+    }),
+  )
+  const user = userEvent.setup()
+  renderOnboarding()
+
+  await user.click(screen.getByRole('button', { name: 'Вийти' }))
+
+  expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(/^\/$/)
+  finishLogout()
+})
+
+it('creates the missing zones and leaves the existing ones alone', async () => {
+  create.mockResolvedValue({
+    tenantId: 'tenant-new',
+    name: 'New Yard',
+    slug: 'stale-create-response-slug',
+    plan: 'trial',
+    planTier: 'pro',
+    isActive: true,
+  })
+  vi.mocked(inventoryApi.getWarehouses).mockResolvedValue([
+    {
+      id: 'warehouse-1',
+      tenantId: 'tenant-new',
+      name: 'Центральний',
+      code: 'MAIN',
+      isActive: true,
+      isSystemDefault: true,
+      zoneCount: 2,
+      createdAt: '2026-09-17T09:00:00Z',
+      updatedAt: '2026-09-17T09:00:00Z',
+    },
+  ])
+  vi.mocked(inventoryApi.createZone).mockResolvedValue(
+    {} as unknown as Awaited<ReturnType<typeof inventoryApi.createZone>>,
+  )
+  const user = userEvent.setup()
+  renderOnboarding()
+
+  await user.type(screen.getByLabelText('Назва розбірки'), 'New Yard')
+  await user.click(screen.getByRole('button', { name: 'Створити розбірку' }))
+  await screen.findByRole('heading', { name: 'Налаштуйте перший склад' })
+
+  await user.click(screen.getByRole('button', { name: 'Далі' }))
+
+  // The server already made two zones; the wizard adds only C and D.
+  expect(inventoryApi.createZone).toHaveBeenCalledTimes(2)
+  expect(inventoryApi.createZone).toHaveBeenCalledWith({
+    warehouseId: 'warehouse-1',
+    name: 'Зона C',
+    code: 'C',
+  })
+  expect(inventoryApi.createWarehouse).not.toHaveBeenCalled()
+  expect(
+    await screen.findByRole('heading', { name: 'Запросіть команду' }),
+  ).toBeVisible()
+  // An invitation is a code, not a letter: the email field stays disabled.
+  expect(screen.getByLabelText('Пошта колеги')).toBeDisabled()
+})

@@ -16,6 +16,7 @@ import {
 import { credentials } from './credentials'
 import { sessionApi } from './session'
 import { tenantPreference } from './tenant-preference'
+import { tenantRequestScope } from '../cabinet/tenant-request-scope'
 
 function response<T>(
   config: InternalAxiosRequestConfig,
@@ -58,6 +59,7 @@ const originalAdapters = {
 beforeEach(() => {
   credentials.clear()
   tenantPreference.clear()
+  tenantRequestScope.rotate()
   localStorage.clear()
 })
 
@@ -173,24 +175,56 @@ it('stamps normalized ApiProblem metadata on terminal failures', async () => {
   })
 })
 
-it('passes AbortSignal to the adapter and preserves cancellation kind', async () => {
-  const controller = new AbortController()
-  let adapterSignal: unknown
-  apiClient.defaults.adapter = (config) =>
-    new Promise((_resolve, reject) => {
-      adapterSignal = config.signal
-      config.signal?.addEventListener?.('abort', () => {
-        reject(new CanceledError(undefined, config))
+it('composes caller and tenant cancellation for Core requests', async () => {
+  const beginRequest = async () => {
+    const caller = new AbortController()
+    const tenantSignal = tenantRequestScope.signal
+    let adapterSignal: AbortSignal | undefined
+    apiClient.defaults.adapter = (config) =>
+      new Promise((_resolve, reject) => {
+        adapterSignal = config.signal as AbortSignal | undefined
+        config.signal?.addEventListener?.('abort', () => {
+          reject(new CanceledError(undefined, config))
+        })
       })
-    })
 
-  const pending = apiClient.get('/cars', { signal: controller.signal })
-  await vi.waitFor(() => expect(adapterSignal).toBe(controller.signal))
-  controller.abort()
+    const pending = apiClient.get('/cars', { signal: caller.signal })
+    await vi.waitFor(() => expect(adapterSignal).toBeDefined())
+    expect(adapterSignal).not.toBe(caller.signal)
+    expect(adapterSignal).not.toBe(tenantSignal)
+    return { adapterSignal, caller, pending, tenantSignal }
+  }
 
-  await expect(pending).rejects.toMatchObject({
+  const callerRequest = await beginRequest()
+  callerRequest.caller.abort()
+  await expect(callerRequest.pending).rejects.toMatchObject({
     problem: { kind: 'cancelled' },
   })
+  expect(callerRequest.adapterSignal?.aborted).toBe(true)
+  expect(callerRequest.tenantSignal.aborted).toBe(false)
+
+  const tenantRequest = await beginRequest()
+  tenantRequestScope.rotate()
+  await expect(tenantRequest.pending).rejects.toMatchObject({
+    problem: { kind: 'cancelled' },
+  })
+  expect(tenantRequest.adapterSignal?.aborted).toBe(true)
+  expect(tenantRequest.caller.signal.aborted).toBe(false)
+})
+
+it('leaves Identity and Public requests outside the tenant request scope', async () => {
+  const signals: unknown[] = []
+  const adapter: AxiosAdapter = (config) => {
+    signals.push(config.signal)
+    return Promise.resolve(response(config, { ok: true }))
+  }
+  identityClient.defaults.adapter = adapter
+  publicApiClient.defaults.adapter = adapter
+
+  await identityClient.get('/auth/me')
+  await publicApiClient.get('/billing/plans')
+
+  expect(signals).toEqual([undefined, undefined])
 })
 
 it('adds Idempotency-Key only when an idempotent mutation opts in', async () => {
@@ -253,4 +287,34 @@ it('strips pre-existing idempotency keys unless a mutation explicitly opts in', 
     { method: 'options', key: undefined },
     { method: 'post', key: 'injected-key' },
   ])
+})
+
+it('does not refresh or replay a delayed PATCH 401 under a new account', async () => {
+  credentials.startSession('A')
+  let rejectRequest!: () => void
+  let entered!: () => void
+  const started = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  const adapter = vi.fn(
+    (config: InternalAxiosRequestConfig) =>
+      new Promise<AxiosResponse>((_resolve, reject) => {
+        expect(config.headers.get('Authorization')).toBe('Bearer A')
+        rejectRequest = () => reject(failure(config, 401))
+        entered()
+      }),
+  )
+  identityClient.defaults.adapter = adapter
+  const refresh = vi.spyOn(sessionApi, 'refresh')
+  const pending = identityClient.patch('/auth/me/name', {
+    displayName: 'Account A name',
+  })
+  const rejected = expect(pending).rejects.toBeDefined()
+  await started
+  credentials.startSession('B')
+  rejectRequest()
+  await rejected
+  expect(refresh).not.toHaveBeenCalled()
+  expect(adapter).toHaveBeenCalledOnce()
+  expect(credentials.getAccess()).toBe('B')
 })
