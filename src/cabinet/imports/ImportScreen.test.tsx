@@ -100,6 +100,8 @@ beforeEach(() => {
         limits: { maxBytes: 10485760, maxRows: 10000 },
         maxOrderGroupSize: 500,
       }
+    else if (config.url === '/parts/imports' && config.method === 'post')
+      data = { id: 'one' }
     else if (config.url === '/cars/car-1')
       data = {
         id: 'car-1',
@@ -200,12 +202,18 @@ beforeEach(() => {
 afterEach(() => {
   apiClient.defaults.adapter = original
 })
-function mount(path = '/parts/imports/one') {
+function mount(path = '/parts/imports/one', fresh = false) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
+    <MemoryRouter
+      initialEntries={[fresh ? { pathname: path, state: { fresh } } : path]}
+    >
       <Routes>
         <Route
-          path="/parts/imports/:importId"
+          path="/app/yard/parts/imports/:importId"
+          element={<div>Upload received</div>}
+        />
+        <Route
+          path="/parts/imports/:importId?"
           element={<ImportScreen definition={cabinetModules.parts} />}
         />
       </Routes>
@@ -369,4 +377,35 @@ it('reuses the context car for every row without creating a new batch', async ()
   expect(JSON.parse(sent.data as string)).toMatchObject({
     mapping: { source: { type: 'car', carId: 'car-1' } },
   })
+})
+
+it.each(['csv', 'xlsx'])(
+  'enables a selected %s upload before source columns exist',
+  async (extension) => {
+    const user = userEvent.setup()
+    mount('/parts/imports', true)
+    const upload = await screen.findByRole('button', {
+      name: 'Завантажити файл',
+    })
+    expect(upload).toBeDisabled()
+    const file = new File(['Name\nHeadlight'], `parts.${extension}`)
+    await user.upload(screen.getByLabelText('Файл імпорту'), file)
+    expect(screen.getByText(/Обрано parts\./)).toBeVisible()
+    expect(upload).toBeEnabled()
+    await user.click(upload)
+    expect(await screen.findByText('Upload received')).toBeVisible()
+    const request = calls.find(
+      (call) => call.url === '/parts/imports' && call.method === 'post',
+    )!
+    expect((request.data as FormData).get('file')).toBe(file)
+  },
+)
+
+it('does not advance an uploaded source without parsed columns', async () => {
+  status.source!.fields = []
+  status.mapping = null
+  mount()
+  expect(
+    (await screen.findAllByRole('button', { name: 'Налаштувати імпорт' }))[0],
+  ).toBeDisabled()
 })
