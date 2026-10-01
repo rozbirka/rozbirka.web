@@ -29,6 +29,11 @@ on:
         required: true
         type: boolean
         default: true
+      skip_e2e:
+        description: Skip browser E2E and authenticated smoke tests
+        required: false
+        type: boolean
+        default: false
 
 # A new commit supersedes a pull request's checks, so those are cancelled. A
 # push or manual run may be deploying: it is never cancelled, and later runs on
@@ -57,3 +62,4 @@ jobs:
       enable_deployment: ${{ (github.event_name == 'push' && github.ref_name == 'develop') || (github.event_name == 'workflow_dispatch' && inputs.enable_deployment) }}
       auto_qa_deploy: ${{ github.event_name == 'push' && github.ref_name == 'develop' }}
       run_build: true
+      skip_e2e: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_e2e }}

@@ -27,6 +27,11 @@ on:
         description: Run npm build before deployment
         required: true
         type: boolean
+      skip_e2e:
+        description: Skip browser E2E and authenticated smoke tests
+        required: false
+        type: boolean
+        default: false
     secrets:
       CLOUDFLARE_TOKEN:
         description: Cloudflare API token with Workers deploy permissions
@@ -108,6 +113,7 @@ jobs:
         run: npm run test:integration
 
   e2e:
+    if: ${{ !inputs.skip_e2e }}
     name: Browser E2E ${{ inputs.project_name }} (${{ matrix.project }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -190,6 +196,9 @@ jobs:
 
   build:
     needs: [quality, e2e]
+    # An explicitly skipped browser gate must not skip the release build.
+    # Failed quality checks or browser tests still block it.
+    if: ${{ !cancelled() && needs.quality.result == 'success' && (needs.e2e.result == 'success' || (inputs.skip_e2e && needs.e2e.result == 'skipped')) }}
     name: Build release artifact ${{ inputs.project_name }}
     runs-on: ubuntu-latest
     permissions:
@@ -226,7 +235,7 @@ jobs:
 
   deploy:
     needs: build
-    if: inputs.enable_deployment
+    if: ${{ !cancelled() && needs.build.result == 'success' && inputs.enable_deployment }}
     name: Deploy ${{ inputs.project_name }}
     runs-on: ubuntu-latest
     environment: ${{ inputs.auto_qa_deploy && 'qa' || inputs.environment }}

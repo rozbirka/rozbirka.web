@@ -2,9 +2,14 @@
 
 ## Deployment
 
-Deploy QA only through `npm run deploy:qa`. It builds with Vite's QA mode,
-verifies that the static artifact targets `https://qaapi.rozbirka.pro`, runs a
-Wrangler dry run, and only then deploys `qa-rozbirka-pro-web`.
+Deploy through the **Deploy Rozbirka Web** GitHub Actions workflow. Pushes to
+`develop` deploy QA automatically. For a manual run, select the branch,
+`environment` (`qa` or `prod`), and `enable_deployment`.
+
+Manual runs also offer `skip_e2e` (default: `false`). Enable it to skip all five
+browser E2E projects and authenticated Chromium smoke tests. Static, unit,
+contract, integration, build, and artifact checks still run and block deployment
+on failure. Push and pull-request runs always run browser tests.
 
 The artifact environment checks also run in GitHub Actions. A QA artifact that
 contains the production API origin (or a production artifact containing the QA
