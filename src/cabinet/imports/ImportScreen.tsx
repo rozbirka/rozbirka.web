@@ -1,7 +1,13 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ArrowLeft } from 'lucide-react'
-import { Button, Notice, SkeletonRows } from '@/components/app'
+import {
+  Button,
+  Field,
+  TextInput,
+  Notice,
+  SkeletonRows,
+} from '@/components/app'
 import {
   partImportsApi as api,
   type ImportCapabilities,
@@ -11,7 +17,10 @@ import {
   type ImportValidation,
   type ImportSelection,
   type ImportProfile,
+  type ImportDestination,
 } from '@/api/part-imports'
+import { carsApi } from '@/api/cars'
+import { intakesApi } from '@/api/intakes'
 import { normalizeApiProblem } from '@/api/errors'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
@@ -26,7 +35,12 @@ import { ImportResultStep } from './import-result'
 import { ImportReviewStep } from './import-review'
 import {
   createMapping,
+  batchNameFromFile,
+  needsSourceReview,
+  recallDestination,
+  rememberDestination,
   issueText,
+  knownIssue,
   isActiveImport,
   mayConfirm,
 } from './import-model'
@@ -78,6 +92,97 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
   const { importId } = useParams<{ importId: string }>()
   // Leaving a finished import for a new one changes the route key and remounts
   // this screen, so "start over" has to travel with the navigation.
+  const routeState = location.state as {
+    fileName?: string
+    source?: ImportDestination
+  } | null
+  const params = new URLSearchParams(location.search)
+  const [recalled] = useState(() =>
+    importId && !routeState?.source ? recallDestination(importId) : null,
+  )
+  const [destination, setDestination] = useState<ImportDestination>(() => {
+    const fileName = routeState?.fileName ?? recalled?.fileName
+    return (
+      routeState?.source ??
+      recalled?.source ??
+      (params.get('car_id')
+        ? { type: 'car', carId: params.get('car_id')! }
+        : params.get('intake_id')
+          ? { type: 'batch', intakeId: params.get('intake_id')! }
+          : {
+              type: 'newBatch',
+              batchName: fileName ? batchNameFromFile(fileName) : '',
+            })
+    )
+  })
+  // An existing upload reopened without its remembered destination: the new
+  // batch is only a fallback the user has to see and accept.
+  const [destinationUnknown, setDestinationUnknown] = useState(
+    () =>
+      !!importId &&
+      !routeState?.source &&
+      !recalled &&
+      !params.get('car_id') &&
+      !params.get('intake_id'),
+  )
+  const destinationKey =
+    destination.type === 'car'
+      ? `car:${destination.carId}`
+      : destination.type === 'batch'
+        ? `batch:${destination.intakeId}`
+        : 'newBatch'
+  const [destinationAttempt, setDestinationAttempt] = useState(0)
+  const [destinationInfo, setDestinationInfo] = useState<{
+    key: string
+    label: string
+    error?: string
+    retryable?: boolean
+  } | null>(null)
+  useEffect(() => {
+    if (destination.type === 'newBatch') return
+    const controller = new AbortController()
+    const request =
+      destination.type === 'car'
+        ? carsApi
+            .get(destination.carId, { signal: controller.signal })
+            .then((car) => ({
+              label: `${car.code} · ${car.brand} ${car.model}`,
+              ...(car.status === 'archived'
+                ? {
+                    error:
+                      'До архівного автомобіля не можна імпортувати деталі.',
+                  }
+                : {}),
+            }))
+        : intakesApi
+            .get(destination.intakeId, { signal: controller.signal })
+            .then((intake) => ({
+              label: intake.name ?? intake.supplier ?? 'Партія',
+            }))
+    void request.then(
+      (info) => {
+        if (!controller.signal.aborted)
+          setDestinationInfo({ key: destinationKey, ...info })
+      },
+      () => {
+        if (!controller.signal.aborted)
+          setDestinationInfo({
+            key: destinationKey,
+            label: '',
+            error:
+              'Не вдалося завантажити джерело. Перевірте доступ і спробуйте ще раз.',
+            retryable: true,
+          })
+      },
+    )
+    return () => controller.abort()
+  }, [destination, destinationKey, destinationAttempt])
+  const destinationLabel =
+    destination.type === 'newBatch'
+      ? `Нова партія: ${destination.batchName}`
+      : destinationInfo?.key === destinationKey
+        ? destinationInfo.label
+        : 'Завантажуємо джерело…'
   const fresh = (location.state as { fresh?: boolean } | null)?.fresh === true
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const base = cabinetPath(cabinet.targetTenant!.slug, 'parts', 'imports')
@@ -180,7 +285,9 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
       (e instanceof Error && /^[A-Z][A-Z0-9_]*$/.test(e.message)
         ? e.message
         : '')
-    setError(code ? issueText(code) : p.message)
+    setError(
+      code && (knownIssue(code) || !p.message) ? issueText(code) : p.message,
+    )
     if (/STALE|SCHEMA|CONFLICT/.test(code)) {
       // Keep what the confirmation was computed against: the conflict screen
       // is only useful if it can show the difference, not just the failure.
@@ -235,6 +342,14 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
       void loadImport(importId, c.signal).then((s) => {
         if (c.signal.aborted) return
         setMapping(s.mapping)
+        if (s.mapping?.source) {
+          setDestination(s.mapping.source)
+          setDestinationUnknown(false)
+        }
+        if (needsSourceReview(s.mapping))
+          setError(
+            'Правила джерела змінилися. Перевірте одне джерело для всього імпорту та збережіть налаштування повторно.',
+          )
         setSelection(
           s.source?.selection ?? {
             delimiter: ',',
@@ -250,7 +365,9 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
             (!draftStates.includes(s.status) && !isActiveImport(s.status))
             ? 5
             : s.mapping
-              ? 3
+              ? needsSourceReview(s.mapping)
+                ? 2
+                : 3
               : 1,
         )
       }, effectFailure)
@@ -324,6 +441,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
           ...(constant ? { constant } : {}),
         })
       return {
+        source: destination,
         schemaVersion: caps!.schemaVersion,
         version: m?.version ?? 0,
         rules,
@@ -355,6 +473,27 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
       mapping?.rules ?? [],
       mapping?.skippedFields ?? [],
     )
+    if (
+      destination.type === 'newBatch' &&
+      (!destination.batchName.trim() ||
+        destination.batchName.trim().length > 200)
+    ) {
+      setError('Вкажіть назву партії від 1 до 200 символів.')
+      return
+    }
+    if (
+      destination.type !== 'newBatch' &&
+      (destinationInfo?.key !== destinationKey || destinationInfo.error)
+    ) {
+      setError(
+        destinationInfo?.error ?? 'Зачекайте, поки завантажиться джерело.',
+      )
+      return
+    }
+    next.source =
+      destination.type === 'newBatch'
+        ? { ...destination, batchName: destination.batchName.trim() }
+        : destination
     await api.map(status.id, status.revision, next, { signal })
     const s = await refresh(status.id, signal)
     if (!signal.aborted) {
@@ -397,6 +536,8 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
     }
     setError(null)
     setFile(f)
+    if (destination.type === 'newBatch')
+      setDestination({ type: 'newBatch', batchName: batchNameFromFile(f.name) })
     uploadKey.current = crypto.randomUUID()
     changed()
   }
@@ -426,7 +567,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
               ? 'Почати імпорт'
               : 'До історії'
   const startOver = () => {
-    void navigate(base, { state: { fresh: true } })
+    void navigate(base, { state: { fresh: true, source: destination } })
     setStatus(null)
     setRows([])
     setMapping(null)
@@ -454,8 +595,14 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
               },
             },
           )
+          rememberDestination(uploaded.id, {
+            source: destination,
+            fileName: file.name,
+          })
           if (!signal.aborted && !controller.signal.aborted)
-            void navigate(`${base}/${uploaded.id}`)
+            void navigate(`${base}/${uploaded.id}`, {
+              state: { fileName: file.name, source: destination },
+            })
         } finally {
           uploadAbort.current = null
           if (live()) setTransfer(null)
@@ -668,55 +815,136 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
           />
         ) : null}
         {step === 2 && status?.source ? (
-          <ImportMappingStep
-            busy={busy}
-            capabilities={caps}
-            editable={editable}
-            mapping={mapping}
-            onApplyProfile={(profile) =>
-              void action(async (signal) => {
-                const match = await api.matchProfile(status.id, profile.id, {
-                  signal,
-                })
-                if (signal.aborted) return
-                if (match.conflicts.length)
-                  throw new Error(match.conflicts.join(', '))
-                if (match.plan) {
-                  changed()
-                  setMapping(match.plan)
+          <div className="grid gap-4">
+            <section
+              aria-label="Джерело всього імпорту"
+              className="border-app-line bg-app-raised grid gap-3 rounded-[20px] border p-5"
+            >
+              <h2 className="text-app-ink text-[15px] font-bold">
+                Одне джерело для всіх деталей
+              </h2>
+              {destinationUnknown && destination.type === 'newBatch' ? (
+                <Notice tone="warn">
+                  Джерело цього імпорту не збережено. Якщо файл мав потрапити до
+                  автомобіля чи партії, почніть імпорт з їхньої картки. Інакше
+                  вкажіть назву нової партії.
+                </Notice>
+              ) : null}
+              {destination.type === 'newBatch' ? (
+                <Field
+                  label="Назва нової партії"
+                  hint="Партія буде створена разом із першою деталлю. Постачальник і закупівельна вартість залишаться незаповненими."
+                  required
+                >
+                  <TextInput
+                    aria-label="Назва нової партії"
+                    maxLength={200}
+                    disabled={busy || !editable}
+                    value={destination.batchName}
+                    onChange={(event) => {
+                      changed()
+                      setDestination({
+                        type: 'newBatch',
+                        batchName: event.target.value,
+                      })
+                    }}
+                  />
+                </Field>
+              ) : (
+                <p className="text-app-muted">
+                  {destinationLabel}. Нове джерело не створюватиметься.
+                </p>
+              )}
+            </section>
+            {destinationInfo?.key === destinationKey &&
+            destinationInfo.error ? (
+              <Notice
+                action={
+                  destinationInfo.retryable ? (
+                    <Button
+                      onClick={() => {
+                        setDestinationInfo(null)
+                        setDestinationAttempt((value) => value + 1)
+                      }}
+                      type="button"
+                    >
+                      Повторити
+                    </Button>
+                  ) : undefined
                 }
-              })
-            }
-            onClearProfile={() => {
-              changed()
-              setMapping(null)
-            }}
-            onContinue={next}
-            onProfileName={setProfileName}
-            onRule={mapRule}
-            onSaveProfile={() =>
-              void action(async (signal) => {
-                await api.saveProfile(status.id, profileName, { signal })
-              })
-            }
-            onSkip={(fileFieldId, skippedNow) => {
-              changed()
-              setMapping((current) => ({
-                schemaVersion: caps.schemaVersion,
-                version: current?.version ?? 0,
-                rules: current?.rules ?? [],
-                skippedFields: skippedNow
-                  ? [...(current?.skippedFields ?? []), fileFieldId]
-                  : (current?.skippedFields ?? []).filter(
-                      (id) => id !== fileFieldId,
-                    ),
-              }))
-            }}
-            profileName={profileName}
-            profiles={profiles}
-            rows={rows}
-            status={status}
-          />
+                tone="danger"
+              >
+                {destinationInfo.error}
+              </Notice>
+            ) : null}
+            <ImportMappingStep
+              busy={busy}
+              capabilities={{
+                ...caps,
+                fields: caps.fields.filter(
+                  (field) =>
+                    !['SourceType', 'CarId', 'IntakeId'].includes(field.id),
+                ),
+              }}
+              editable={editable}
+              mapping={mapping}
+              onApplyProfile={(profile) =>
+                void action(async (signal) => {
+                  const match = await api.matchProfile(status.id, profile.id, {
+                    signal,
+                  })
+                  if (signal.aborted) return
+                  // An old profile is a hint, not a conflict with a checked
+                  // confirmation: say what to do and keep the mapping step.
+                  if (
+                    match.conflicts.includes('SCHEMA_CHANGED') ||
+                    (match.plan && needsSourceReview(match.plan))
+                  ) {
+                    setError(issueText('PROFILE_SCHEMA_CHANGED'))
+                    return
+                  }
+                  if (match.conflicts.length)
+                    throw new Error(match.conflicts.join(', '))
+                  if (match.plan) {
+                    changed()
+                    // The profile's rules apply; the destination stays the one
+                    // chosen for this import.
+                    setMapping({ ...match.plan, source: destination })
+                  }
+                })
+              }
+              onClearProfile={() => {
+                changed()
+                setMapping(null)
+              }}
+              onContinue={next}
+              onProfileName={setProfileName}
+              onRule={mapRule}
+              onSaveProfile={() =>
+                void action(async (signal) => {
+                  await api.saveProfile(status.id, profileName, { signal })
+                })
+              }
+              onSkip={(fileFieldId, skippedNow) => {
+                changed()
+                setMapping((current) => ({
+                  source: destination,
+                  schemaVersion: caps.schemaVersion,
+                  version: current?.version ?? 0,
+                  rules: current?.rules ?? [],
+                  skippedFields: skippedNow
+                    ? [...(current?.skippedFields ?? []), fileFieldId]
+                    : (current?.skippedFields ?? []).filter(
+                        (id) => id !== fileFieldId,
+                      ),
+                }))
+              }}
+              profileName={profileName}
+              profiles={profiles}
+              rows={rows}
+              status={status}
+            />
+          </div>
         ) : null}
         {step === 3 && status ? (
           <ImportReviewStep
@@ -744,6 +972,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
           <ImportConfirmStep
             busy={busy}
             mapping={mapping}
+            sourceLabel={destinationLabel}
             onBack={() => setStep(3)}
             onCommit={next}
             rows={rows}
@@ -761,7 +990,8 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
                 if (signal.aborted) return
                 setConflict(null)
                 setMapping(fresh.mapping)
-                setStep(3)
+                if (fresh.mapping?.source) setDestination(fresh.mapping.source)
+                setStep(needsSourceReview(fresh.mapping) ? 2 : 3)
               })
             }
             onSettings={() => {

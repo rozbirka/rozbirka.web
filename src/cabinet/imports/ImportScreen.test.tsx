@@ -62,7 +62,8 @@ beforeEach(() => {
     report: null,
     mapping: {
       version: 1,
-      schemaVersion: 1,
+      schemaVersion: 2,
+      source: { type: 'newBatch', batchName: 'Залишки' },
       rules: [{ target: 'Name', sources: ['csv:1'] }],
       skippedFields: [],
     },
@@ -89,13 +90,21 @@ beforeEach(() => {
     if (config.url?.endsWith('/capabilities'))
       data = {
         enabled: true,
-        schemaVersion: 1,
+        schemaVersion: 2,
         fields: [{ id: 'Name', type: 'text', required: true }],
         formats: ['csv', 'xlsx'],
         encodings: ['utf-8'],
         transforms: [],
         limits: { maxBytes: 10485760, maxRows: 10000 },
         maxOrderGroupSize: 500,
+      }
+    else if (config.url === '/cars/car-1')
+      data = {
+        id: 'car-1',
+        code: 'CAR-01',
+        brand: 'Ford',
+        model: 'Focus',
+        status: 'active',
       }
     else if (config.url?.includes('/rows?'))
       data = {
@@ -161,6 +170,18 @@ beforeEach(() => {
         revision: 3,
         execution: data as ImportStatus['execution'],
       }
+    } else if (config.url?.endsWith('/mapping')) {
+      status.mapping = (
+        JSON.parse(config.data as string) as {
+          mapping: ImportStatus['mapping']
+        }
+      ).mapping
+      data = {
+        revision: 1,
+        previewVersion: 1,
+        rowCount: 1,
+        needsDecisionRows: 0,
+      }
     } else if (config.url?.endsWith('/one')) data = status
     else if (config.url?.includes('?page='))
       data = { items: [status], total: 1, page: 1, pageSize: 50 }
@@ -177,9 +198,9 @@ beforeEach(() => {
 afterEach(() => {
   apiClient.defaults.adapter = original
 })
-function mount() {
+function mount(path = '/parts/imports/one') {
   return render(
-    <MemoryRouter initialEntries={['/parts/imports/one']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route
           path="/parts/imports/:importId"
@@ -292,4 +313,51 @@ it('shows the server stale revision error and invalidates confirmation', async (
   expect(
     screen.getByRole('button', { name: 'Перевірити повторно' }),
   ).toBeVisible()
+})
+
+it('requires legacy drafts to recheck and saves one renamed batch for the entire import', async () => {
+  status.mapping = { ...status.mapping!, schemaVersion: 1 }
+  delete status.mapping.source
+  const user = userEvent.setup()
+  mount()
+  const name = await screen.findByLabelText('Назва нової партії')
+  expect(screen.getByText(/Правила джерела змінилися/)).toBeVisible()
+  await user.type(name, 'Вересневе надходження')
+  await user.click(
+    screen.getAllByRole('button', { name: 'Перевірити дані' })[0]!,
+  )
+  await waitFor(() =>
+    expect(calls.some((c) => c.url?.endsWith('/mapping'))).toBe(true),
+  )
+  const sent = calls.find((c) => c.url?.endsWith('/mapping'))!
+  expect(JSON.parse(sent.data as string)).toMatchObject({
+    mapping: {
+      schemaVersion: 2,
+      source: { type: 'newBatch', batchName: 'Вересневе надходження' },
+    },
+  })
+  expect(
+    status.mapping?.rules.some((rule) =>
+      ['SourceType', 'CarId', 'IntakeId'].includes(rule.target),
+    ),
+  ).toBe(false)
+})
+
+it('reuses the context car for every row without creating a new batch', async () => {
+  status.mapping = { ...status.mapping!, schemaVersion: 1 }
+  delete status.mapping.source
+  const user = userEvent.setup()
+  mount('/parts/imports/one?car_id=car-1')
+  expect(await screen.findByText(/CAR-01 · Ford Focus/)).toBeVisible()
+  expect(screen.queryByLabelText('Назва нової партії')).not.toBeInTheDocument()
+  await user.click(
+    screen.getAllByRole('button', { name: 'Перевірити дані' })[0]!,
+  )
+  await waitFor(() =>
+    expect(calls.some((c) => c.url?.endsWith('/mapping'))).toBe(true),
+  )
+  const sent = calls.find((c) => c.url?.endsWith('/mapping'))!
+  expect(JSON.parse(sent.data as string)).toMatchObject({
+    mapping: { source: { type: 'car', carId: 'car-1' } },
+  })
 })

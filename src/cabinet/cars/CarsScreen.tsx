@@ -15,6 +15,7 @@ import {
   useParams,
   useSearchParams,
 } from 'react-router'
+import { sourceReturnPath } from '../parts/source-return'
 import {
   Archive,
   ChevronLeft,
@@ -649,6 +650,11 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
   const onStock = daysOnStock(car.acquiredAt)
   const partsBase = base.replace(/\/cars$/, '/parts')
   const partsHref = `${partsBase}?car_ids=${car.id}`
+  // A car with parts cannot be deleted; say so before asking, not after.
+  const partsOnCar = car.profitability?.partsTotal ?? null
+  const deleteBlocked =
+    pendingAction === 'delete' && partsOnCar !== null && partsOnCar > 0
+  const archived = car.status === 'archived'
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
@@ -676,7 +682,16 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
                 <Link to={`${base}/${car.id}/edit`}>Редагувати</Link>
               </Button>
             ) : null}
-            {partsManage ? (
+            {partsManage && car.status !== 'archived' ? (
+              <Button asChild>
+                <Link
+                  to={`${partsBase}/imports?car_id=${encodeURIComponent(car.id)}`}
+                >
+                  Імпорт запчастин
+                </Link>
+              </Button>
+            ) : null}
+            {partsManage && car.status !== 'archived' ? (
               <Button
                 asChild
                 className="px-5 text-sm font-bold"
@@ -842,21 +857,39 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
       </div>
 
       <ConfirmDialog
-        confirmLabel={pendingAction === 'archive' ? 'Архівувати' : 'Видалити'}
-        consequence={
-          pendingAction === 'archive'
-            ? 'Автомобіль зникне з активного списку. Його деталі лишаться на складі.'
-            : 'Автомобіль, його витрати та звʼязок із деталями зникнуть назавжди.'
+        confirmLabel={
+          deleteBlocked
+            ? archived
+              ? 'Зрозуміло'
+              : 'Архівувати'
+            : pendingAction === 'archive'
+              ? 'Архівувати'
+              : 'Видалити'
         }
-        destructive={pendingAction === 'delete'}
-        onConfirm={() => void lifecycle(pendingAction ?? 'archive')}
+        consequence={
+          deleteBlocked
+            ? `До авто прив’язано ${String(partsOnCar)} ${plural(partsOnCar ?? 0, ['деталь', 'деталі', 'деталей'])}, тому видалити його не можна.${archived ? ' Авто вже в архіві, його історія збережена.' : ' Архівуйте авто, щоб прибрати його з активного списку — деталі лишаться на складі.'}`
+            : pendingAction === 'archive'
+              ? 'Автомобіль зникне з активного списку. Його деталі лишаться на складі.'
+              : 'Автомобіль і його витрати буде видалено назавжди. Якщо до авто прив’язані деталі, навіть продані, видалення буде відхилено — тоді архівуйте авто.'
+        }
+        destructive={pendingAction === 'delete' && !deleteBlocked}
+        onConfirm={() => {
+          if (deleteBlocked && archived) setPendingAction(null)
+          else
+            void lifecycle(
+              deleteBlocked ? 'archive' : (pendingAction ?? 'archive'),
+            )
+        }}
         onOpenChange={(open) => setPendingAction(open ? pendingAction : null)}
         open={pendingAction !== null}
         pending={busy}
         title={
-          pendingAction === 'archive'
-            ? 'Архівувати автомобіль?'
-            : 'Видалити автомобіль?'
+          deleteBlocked
+            ? 'Автомобіль не можна видалити'
+            : pendingAction === 'archive'
+              ? 'Архівувати автомобіль?'
+              : 'Видалити автомобіль?'
         }
       />
     </div>
@@ -1121,7 +1154,9 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
   const { tenant } = useParams<{ tenant: string }>()
   const { cabinet, financeManage } = useAccess()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const base = `/app/${tenant ?? cabinet.targetTenant?.slug ?? ''}/cars`
+  const cabinetRoot = base.replace(/\/cars$/, '')
   const [values, setValues] = useState({
     code: '',
     brand: '',
@@ -1311,7 +1346,11 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
           }
         }
       }
-      void navigate(`${base}/${savedCarId}`)
+      void navigate(
+        (carId === undefined
+          ? sourceReturnPath(searchParams, cabinetRoot, { carId: savedCarId })
+          : null) ?? `${base}/${savedCarId}`,
+      )
     } catch (error: unknown) {
       setProblem(normalizeApiProblem(error).message)
       setBusy(false)
@@ -1343,7 +1382,9 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     },
     value: values[key],
   })
-  const backTo = carId ? `${base}/${carId}` : base
+  const backTo = carId
+    ? `${base}/${carId}`
+    : (sourceReturnPath(searchParams, cabinetRoot) ?? base)
   const vinLength = values.vin.trim().length
   const priceNumber = Number(values.purchasePrice)
   const priceValid = Number.isFinite(priceNumber) && priceNumber > 0
@@ -1826,12 +1867,16 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                 <div className="border-app-line mt-5 border-t pt-4.5">
                   <p className="text-app-muted text-[13px] leading-[1.5]">
                     {loaded.profitability == null
-                      ? 'Видалення прибирає авто разом з його історією.'
-                      : `На авто закріплено ${String(loaded.profitability.partsTotal)} ${plural(loaded.profitability.partsTotal, ['запчастину', 'запчастини', 'запчастин'])}. Сервер відмовить у видаленні, поки позиції в продажу.`}
+                      ? 'Видалення прибирає авто разом з його історією. Авто з деталями видалити не можна.'
+                      : loaded.profitability.partsTotal > 0
+                        ? `На авто закріплено ${String(loaded.profitability.partsTotal)} ${plural(loaded.profitability.partsTotal, ['запчастину', 'запчастини', 'запчастин'])}, тому видалити його не можна. Щоб прибрати авто зі списку, архівуйте його на картці авто.`
+                        : 'Видалення прибирає авто разом з його історією.'}
                   </p>
                   <Button
                     className="mt-3 min-h-10 w-full text-[13px] font-bold"
-                    disabled={busy}
+                    disabled={
+                      busy || (loaded.profitability?.partsTotal ?? 0) > 0
+                    }
                     onClick={() => setDeleting(true)}
                     variant="danger"
                   >
@@ -1847,7 +1892,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
 
       <ConfirmDialog
         confirmLabel="Видалити автомобіль"
-        consequence="Автомобіль зникне разом зі своєю історією. Якщо на ньому ще висять позиції в продажу, сервер відмовить у видаленні."
+        consequence="Автомобіль і його витрати буде видалено назавжди. Якщо до авто прив’язані деталі, навіть продані, видалення буде відхилено."
         destructive
         onConfirm={() => void remove()}
         onOpenChange={(next) => {

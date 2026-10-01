@@ -219,7 +219,6 @@ export function PaymentDrawer({
         if (!open && !pending) onClose()
       }}
       open
-      size="lg"
       title={mode === 'record' ? 'Внести оплату' : 'Прив’язати транзакцію'}
     >
       <form

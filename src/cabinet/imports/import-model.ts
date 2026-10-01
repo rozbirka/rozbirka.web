@@ -1,4 +1,8 @@
-import type { ImportField, ImportMapping } from '@/api/part-imports'
+import type {
+  ImportDestination,
+  ImportField,
+  ImportMapping,
+} from '@/api/part-imports'
 export const fieldLabels: Record<string, string> = {
   Name: 'Назва',
   Quantity: 'Кількість',
@@ -32,7 +36,6 @@ export const fieldLabels: Record<string, string> = {
 export const valueLabels: Record<string, string> = {
   Available: 'Доступні',
   Reserved: 'Резерв',
-  free: 'Без автомобіля / партії',
   car: 'З автомобіля',
   batch: 'З партії',
   good: 'Добрий',
@@ -83,7 +86,24 @@ export const issueLabels: Record<string, string> = {
   FILE_LIMIT: 'Файл перевищує дозволений розмір.',
   IMPORT_SOURCE_UNAVAILABLE: 'Вихідний файл недоступний для завантаження.',
   IMPORT_EXPIRED: 'Строк зберігання файлу минув.',
+  SCHEMA_CHANGED:
+    'Правила імпорту змінилися. Перевірте налаштування й збережіть їх повторно.',
+  PROFILE_SCHEMA_CHANGED:
+    'Профіль збережено до зміни правил джерела. Зіставте колонки вручну та збережіть профіль заново.',
+  PART_SOURCE_ARCHIVED:
+    'Автомобіль в архіві — нові деталі до нього не додаються. Уже створені деталі збережено.',
+  IMPORT_SOURCE_REQUIRED:
+    'Не вибрано джерело імпорту. Оберіть автомобіль, партію або назву нової партії.',
+  IMPORT_SOURCE_OVERRIDE:
+    'Рядки файлу вказують інше джерело. Усі деталі імпорту мають належати одному джерелу — перевірте налаштування.',
+  INVALID_PART_SOURCE_TYPE:
+    'Деталь без автомобіля чи партії створити не можна. Перевірте джерело імпорту.',
+  SOURCE_HAS_PARTS:
+    'Джерело не можна видалити, доки до нього прив’язані деталі.',
 }
+
+/** Known codes read as Ukrainian; an unknown one falls back to the server text. */
+export const knownIssue = (code: string) => code in issueLabels
 export function createMapping(
   schemaVersion: number,
   version: number,
@@ -93,15 +113,17 @@ export function createMapping(
   previous: ImportMapping['rules'],
   skippedSources: string[] = [],
 ): ImportMapping {
-  const rules = fields.flatMap((f) => {
-    const source = columns[f.id]
-    const constant = constants[f.id]
-    if (source) return [{ target: f.id, sources: [source] }]
-    if (constant?.trim())
-      return [{ target: f.id, sources: [], constant: constant.trim() }]
-    const old = previous.find((r) => r.target === f.id)
-    return old ? [old] : []
-  })
+  const rules = fields
+    .filter((field) => !['SourceType', 'CarId', 'IntakeId'].includes(field.id))
+    .flatMap((f) => {
+      const source = columns[f.id]
+      const constant = constants[f.id]
+      if (source) return [{ target: f.id, sources: [source] }]
+      if (constant?.trim())
+        return [{ target: f.id, sources: [], constant: constant.trim() }]
+      const old = previous.find((r) => r.target === f.id)
+      return old ? [old] : []
+    })
   return {
     version: version + 1,
     schemaVersion,
@@ -173,4 +195,58 @@ export function looksMisdecoded(values: readonly (string | null)[]) {
     return cyrillic.length === 0 && latin1.length / letters.length > 0.5
   })
   return suspicious.length / text.length > 0.5
+}
+
+/** Use a display filename only; no upload/storage path becomes an intake name. */
+export function batchNameFromFile(name: string) {
+  const stem = name
+    .split(/[\\/]/)
+    .at(-1)
+    ?.replace(/\.(csv|xlsx)$/i, '')
+    .trim()
+  if (!stem) return 'Імпорт запчастин'
+  return stem.slice(0, 200)
+}
+
+export function needsSourceReview(mapping: ImportMapping | null) {
+  return (
+    !!mapping &&
+    (mapping.schemaVersion !== 2 ||
+      !mapping.source ||
+      mapping.rules.some((rule) =>
+        ['SourceType', 'CarId', 'IntakeId'].includes(rule.target),
+      ))
+  )
+}
+
+/**
+ * The destination is saved on the server only with the mapping. Until then it
+ * is remembered in this browser, so an upload reopened from history keeps the
+ * car or intake it was started from instead of silently becoming a new batch.
+ */
+const destinationKey = (importId: string) =>
+  `rozbirka:import-destination:${importId}`
+
+export function rememberDestination(
+  importId: string,
+  value: { source: ImportDestination; fileName?: string },
+) {
+  try {
+    localStorage.setItem(destinationKey(importId), JSON.stringify(value))
+  } catch {
+    // Unavailable storage leaves the explicit "source unknown" notice.
+  }
+}
+
+export function recallDestination(
+  importId: string,
+): { source: ImportDestination; fileName?: string } | null {
+  try {
+    const raw = localStorage.getItem(destinationKey(importId))
+    return raw
+      ? (JSON.parse(raw) as { source: ImportDestination; fileName?: string })
+      : null
+  } catch {
+    return null
+  }
 }

@@ -20,12 +20,10 @@ import {
   Field,
   Notice,
   PageBody,
-  PageHeader,
   Pagination,
-  Panel,
-  PanelFooter,
   SearchInput,
   SectionPanel,
+  Sheet,
   SkeletonRows,
   StatusPill,
   TextArea,
@@ -56,7 +54,6 @@ import {
   newCustomerPhoneDraft,
   normalizeCustomerPhoneDraft,
 } from './customer-phone'
-import { CustomerCreateDrawer } from './CustomerCreateDrawer'
 
 const loadError = 'Не вдалося завантажити дані. Спробуйте ще раз.'
 const nameExample = 'Наприклад: Ірина Коваль або СТО «Пітстоп»'
@@ -120,8 +117,13 @@ export function CustomersScreen({ definition }: CabinetModuleScreenProps) {
         <CustomerForm definition={definition} customerId={null} />
       </>
     )
-  if (location.pathname.endsWith('/edit'))
-    return <CustomerForm definition={definition} customerId={id} />
+  if (location.pathname.endsWith('/edit') && id)
+    return (
+      <>
+        <CustomerDetailScreen definition={definition} customerId={id} />
+        <CustomerForm definition={definition} customerId={id} />
+      </>
+    )
   return id ? (
     <CustomerDetailScreen definition={definition} customerId={id} />
   ) : (
@@ -1094,7 +1096,6 @@ function CustomerDetailScreen({
             orderBasePath: ordersPath,
           }}
           definition={cabinetModules.orders}
-          orderId={null}
         />
       ) : null}
     </div>
@@ -1224,50 +1225,27 @@ function CustomerForm({
     event.preventDefault()
     attemptSave()
   }
-  if (!ordersViewAllowed)
-    return (
-      <PageBody width="narrow">
-        <DeniedState
-          description="Картку клієнта не відкрити без його замовлень, тож потрібен доступ до розділу «Замовлення». Попросіть власника кабінету відкрити його."
-          role="alert"
-          title="Потрібен доступ до замовлень."
-        />
-      </PageBody>
-    )
-  if (loadProblem !== null)
-    return (
-      <PageBody width="narrow">
-        <ErrorState
-          description={loadProblem}
-          onRetry={() => {
-            setLoadProblem(null)
-            setLoading(true)
-            setReloadToken((token) => token + 1)
-          }}
-          title="Не вдалося завантажити клієнта"
-        />
-      </PageBody>
-    )
-  if (loading)
-    return (
-      <PageBody width="narrow">
-        <PageHeader eyebrow="Продажі · Клієнти" title="Редагувати клієнта" />
-        <SkeletonRows columns={2} label="Завантажуємо клієнта…" rows={3} />
-      </PageBody>
-    )
-  const content = (
+  const busy = save.pending || reactivateDuplicate.pending
+  const body = !ordersViewAllowed ? (
+    <DeniedState
+      description="Картку клієнта не відкрити без його замовлень, тож потрібен доступ до розділу «Замовлення». Попросіть власника кабінету відкрити його."
+      role="alert"
+      title="Потрібен доступ до замовлень."
+    />
+  ) : loadProblem !== null ? (
+    <ErrorState
+      description={loadProblem}
+      onRetry={() => {
+        setLoadProblem(null)
+        setLoading(true)
+        setReloadToken((token) => token + 1)
+      }}
+      title="Не вдалося завантажити клієнта"
+    />
+  ) : loading ? (
+    <SkeletonRows columns={2} label="Завантажуємо клієнта…" rows={3} />
+  ) : (
     <>
-      {editing ? (
-        <>
-          <Button asChild className="justify-self-start" variant="quiet">
-            <Link to={backPath}>
-              <ChevronLeft aria-hidden />
-              До картки клієнта
-            </Link>
-          </Button>
-          <PageHeader eyebrow="Продажі · Клієнти" title="Редагувати клієнта" />
-        </>
-      ) : null}
       {mutationsAllowed ? null : (
         <Notice tone="warn">
           Дані можна переглянути, але не змінити. Щоб редагувати клієнтів,
@@ -1277,10 +1255,12 @@ function CustomerForm({
       <form
         aria-busy={save.pending}
         className="grid gap-4"
+        id={CUSTOMER_FORM}
         noValidate
         onSubmit={submit}
       >
         <SectionPanel
+          variant="plain"
           description="Ім’я показуємо в списку клієнтів і в замовленнях, телефон — для дзвінка та пошуку."
           title="Контакт"
         >
@@ -1326,6 +1306,7 @@ function CustomerForm({
           </div>
         </SectionPanel>
         <SectionPanel
+          variant="plain"
           description="Домовленості, зручний час для дзвінка, побажання щодо доставки."
           title="Нотатки"
         >
@@ -1378,39 +1359,54 @@ function CustomerForm({
             {save.error}
           </Notice>
         )}
-        <Panel padded={false}>
-          <PanelFooter
-            className="border-t-0"
-            leading="Зірочкою позначено обов’язкове поле"
-          >
-            <Button asChild variant="quiet">
-              <Link to={backPath}>Скасувати</Link>
-            </Button>
-            <Button
-              {...save.triggerProps}
-              disabled={!mutationsAllowed || save.pending}
-              type="submit"
-              variant="primary"
-            >
-              {save.pending
-                ? 'Зберігаємо…'
-                : editing
-                  ? 'Зберегти зміни'
-                  : 'Створити клієнта'}
-            </Button>
-          </PanelFooter>
-        </Panel>
       </form>
     </>
   )
-  return editing ? (
-    <PageBody width="narrow">{content}</PageBody>
-  ) : (
-    <CustomerCreateDrawer
-      busy={save.pending || reactivateDuplicate.pending}
-      onClose={() => void navigate(backPath)}
+  const formReady = ordersViewAllowed && loadProblem === null && !loading
+  return (
+    <Sheet
+      description={
+        editing
+          ? 'Зміни побачить уся команда в картці клієнта та замовленнях.'
+          : 'Додайте контактні дані та нотатки клієнта.'
+      }
+      eyebrow="Продажі · Клієнти"
+      footer={
+        <div className="flex w-full flex-wrap items-center gap-2.5">
+          <p className="text-app-muted min-w-0 text-[12px] text-pretty">
+            Зірочкою позначено обов’язкове поле
+          </p>
+          <div className="ml-auto flex items-center gap-2.5">
+            <Button asChild disabled={busy}>
+              <Link to={backPath}>Скасувати</Link>
+            </Button>
+            {formReady ? (
+              <Button
+                {...save.triggerProps}
+                disabled={!mutationsAllowed || save.pending}
+                form={CUSTOMER_FORM}
+                type="submit"
+                variant="primary"
+              >
+                {save.pending
+                  ? 'Зберігаємо…'
+                  : editing
+                    ? 'Зберегти зміни'
+                    : 'Створити клієнта'}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      }
+      onOpenChange={(next) => {
+        if (!next && !busy) void navigate(backPath)
+      }}
+      open
+      title={editing ? 'Редагувати клієнта' : 'Новий клієнт'}
     >
-      {content}
-    </CustomerCreateDrawer>
+      {body}
+    </Sheet>
   )
 }
+
+const CUSTOMER_FORM = 'customer-form'

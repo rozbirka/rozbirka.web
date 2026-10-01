@@ -408,7 +408,8 @@ it('blocks a second mutation while the authoritative access retry is unresolved'
   await waitFor(() => expect(currentCabinet.retry).toHaveBeenCalledOnce())
 
   expect(saveRole).toBeDisabled()
-  const roleForm = saveRole.closest('form')
+  // The drawer's footer submits the form it names.
+  const roleForm = (saveRole as HTMLButtonElement).form
   expect(roleForm).not.toBeNull()
   fireEvent.submit(roleForm!)
   expect(teamApi.updateRole).toHaveBeenCalledOnce()

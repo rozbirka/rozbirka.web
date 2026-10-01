@@ -12,12 +12,12 @@ import {
   Card,
   ConfirmDialog,
   SectionPanel,
+  Sheet,
   DeniedState,
   ErrorState,
   Field,
   Notice,
   PageBody,
-  PageHeader,
   Pagination,
   Panel,
   QuantityStepper,
@@ -68,7 +68,6 @@ import {
 import { OrderCustomerDrawer } from './OrderCustomerDrawer'
 import { OrderItemDrawer } from './OrderItemDrawer'
 import { OrderPaymentDrawer } from './OrderPaymentDrawer'
-import { OrderCreateDrawer } from './OrderCreateDrawer'
 
 const idFromPath = (path: string) => /\/orders\/([^/]+)/.exec(path)?.[1] ?? null
 const errorMessage = (error: unknown) => {
@@ -137,33 +136,6 @@ const formatTimestamp = (value: string) => {
   return parts ? `${parts[1]} ${parts[2]}` : value
 }
 
-/** A titled block of a form or a record: heading, body, one row of actions. */
-/** The running figure a block is judged by: label left, digits right. */
-function TotalLine({
-  label,
-  value,
-  strong = false,
-}: {
-  label: string
-  value: string
-  strong?: boolean
-}) {
-  return (
-    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
-      <span className="text-app-dim text-[13.5px]">{label}</span>
-      <span
-        className={
-          strong
-            ? 'text-[16px] font-semibold tabular-nums text-white'
-            : 'text-app-muted text-[14px] tabular-nums'
-        }
-      >
-        {value}
-      </span>
-    </div>
-  )
-}
-
 export function OrdersScreen({ definition }: CabinetModuleScreenProps) {
   const location = useLocation()
   const id = idFromPath(location.pathname)
@@ -184,7 +156,7 @@ export function OrdersScreen({ definition }: CabinetModuleScreenProps) {
     return (
       <>
         <OrderDirectory definition={definition} />
-        <OrderForm definition={definition} orderId={null} />
+        <OrderForm definition={definition} />
       </>
     )
   return id ? (
@@ -535,9 +507,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
 export function OrderForm({
   createContext,
   definition,
-  orderId,
 }: CabinetModuleScreenProps & {
-  orderId: string | null
   createContext?: {
     customer: { id: string; name: string }
     onClose: () => void
@@ -554,11 +524,13 @@ export function OrderForm({
   const partSearchAllowed =
     cabinet.snapshot?.permissions.has('parts.view') === true
   const customerSearchAllowed =
-    !orderId && cabinet.snapshot?.permissions.has('customers.view') === true
-  const customerMutationAllowed =
-    !orderId && canMutate(definition, cabinet, 'customers.manage')
-  const dependenciesAllowed =
-    partSearchAllowed && (orderId !== null || customerSearchAllowed)
+    cabinet.snapshot?.permissions.has('customers.view') === true
+  const customerMutationAllowed = canMutate(
+    definition,
+    cabinet,
+    'customers.manage',
+  )
+  const dependenciesAllowed = partSearchAllowed && customerSearchAllowed
   const [partId, setPartId] = useState('')
   const [partQuery, setPartQuery] = useState('')
   const [customerId, setCustomerId] = useState(
@@ -586,9 +558,6 @@ export function OrderForm({
   const [quantity, setQuantity] = useState('')
   const [unitPrice, setUnitPrice] = useState('')
   const [notes, setNotes] = useState('')
-  const [existingItems, setExistingItems] = useState<
-    { partId: string; quantity: number; unitPrice: number }[]
-  >([])
   const [draftItems, setDraftItems] = useState<
     {
       part: PartPickerItem
@@ -598,22 +567,10 @@ export function OrderForm({
   >([])
   const [selectedPartDraft, setSelectedPartDraft] =
     useState<PartPickerItem | null>(null)
-  const [existingItemsLoad, setExistingItemsLoad] = useState<{
-    orderId: string | null
-    status: 'not-needed' | 'loaded' | 'failed'
-  }>({ orderId: null, status: 'not-needed' })
-  const existingItemsLoadStatus =
-    orderId === null
-      ? 'not-needed'
-      : existingItemsLoad.orderId === orderId
-        ? existingItemsLoad.status
-        : 'loading'
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const linkedCustomerId =
-    orderId === null
-      ? (createContext?.customer.id ?? params.get('customerId'))
-      : null
+    createContext?.customer.id ?? params.get('customerId')
   useEffect(() => {
     if (!linkedCustomerId || !customerSearchAllowed || createContext) return
     const controller = new AbortController()
@@ -662,31 +619,6 @@ export function OrderForm({
       })
     return () => controller.abort()
   }, [customerId, customerQuery, customerSearchAllowed])
-  useEffect(() => {
-    if (!orderId) return
-    const controller = new AbortController()
-    void ordersApi
-      .getById(orderId, { signal: controller.signal })
-      .then((order) => {
-        if (!controller.signal.aborted) {
-          setExistingItems(
-            order.items.map(({ partId, quantity, unitPrice }) => ({
-              partId,
-              quantity,
-              unitPrice,
-            })),
-          )
-          setExistingItemsLoad({ orderId, status: 'loaded' })
-        }
-      })
-      .catch((requestError) => {
-        if (!controller.signal.aborted) {
-          setExistingItemsLoad({ orderId, status: 'failed' })
-          setError(errorMessage(requestError))
-        }
-      })
-    return () => controller.abort()
-  }, [orderId])
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const directItem =
@@ -707,56 +639,21 @@ export function OrderForm({
         : directItem
           ? [directItem]
           : []
-    if (
-      busy ||
-      !dependenciesAllowed ||
-      (orderId !== null && existingItemsLoadStatus !== 'loaded') ||
-      (orderId !== null && !directItem) ||
-      (orderId === null && creationItems.length === 0)
-    )
-      return
+    if (busy || !dependenciesAllowed || creationItems.length === 0) return
     setBusy(true)
     setError(null)
     try {
-      const scope = requireLatestMutation({ quota: orderId === null })
+      const scope = requireLatestMutation({ quota: true })
       requireLatestMutation({ permission: 'parts.view', quota: false })
-      if (orderId === null) {
-        requireLatestMutation({ permission: 'customers.view', quota: false })
-      }
-      const detail = orderId
-        ? await ordersApi.updateItems(
-            orderId,
-            existingItems.some((item) => item.partId === partId)
-              ? existingItems.map((item) =>
-                  item.partId === partId
-                    ? {
-                        ...item,
-                        quantity: item.quantity + Number(quantity),
-                        unitPrice: Number(unitPrice),
-                      }
-                    : item,
-                )
-              : [
-                  ...existingItems,
-                  {
-                    partId,
-                    quantity: Number(quantity),
-                    unitPrice: Number(unitPrice),
-                  },
-                ],
-          )
-        : await ordersApi.create({
-            customerId: customerId || null,
-            notes: notes || null,
-            items: creationItems,
-          })
+      requireLatestMutation({ permission: 'customers.view', quota: false })
+      const detail = await ordersApi.create({
+        customerId: customerId || null,
+        notes: notes || null,
+        items: creationItems,
+      })
       if (scope.signal.aborted) return
-      const detailPath = orderId
-        ? location.pathname.replace(/\/items\/new$/, '')
-        : `${createContext?.orderBasePath ?? location.pathname.replace(/\/new$/, '')}/${detail.id}`
-      if (orderId === null) {
-        toast?.show({ message: 'Замовлення створено.', tone: 'ok' })
-      }
+      const detailPath = `${createContext?.orderBasePath ?? location.pathname.replace(/\/new$/, '')}/${detail.id}`
+      toast?.show({ message: 'Замовлення створено.', tone: 'ok' })
       await navigate(detailPath, { replace: true })
     } catch (error) {
       setError(errorMessage(error))
@@ -855,8 +752,7 @@ export function OrderForm({
     }
   }
   const addDraftItem = () => {
-    if (orderId !== null || !selectedPartDraft || !quantity || !unitPrice)
-      return
+    if (!selectedPartDraft || !quantity || !unitPrice) return
     const parsedQuantity = Number(quantity)
     const parsedUnitPrice = Number(unitPrice)
     if (
@@ -906,44 +802,32 @@ export function OrderForm({
       </PageBody>
     )
   }
-  const draftLineTotal =
-    quantity && unitPrice
-      ? lineTotal(Number(quantity), Number(unitPrice))
-      : null
-  const existingTotal = existingItems.reduce(
-    (sum, item) => sum + item.quantity * item.unitPrice,
-    0,
-  )
   const draftItemsTotal = draftItems.reduce(
     (sum, item) => sum + item.quantity * item.unitPrice,
     0,
   )
-  const backPath = orderId
-    ? location.pathname.replace(/\/items\/new$/, '')
-    : createContext?.onClose
-      ? location.pathname
-      : location.pathname.replace(/\/new$/, '')
+  const backPath = createContext?.onClose
+    ? location.pathname
+    : location.pathname.replace(/\/new$/, '')
+  const closeCreate = () => {
+    if (createContext) createContext.onClose()
+    else void navigate(backPath, { replace: true })
+  }
   const submitBlocked =
     !mutationsAllowed ||
     busy ||
-    (orderId !== null && existingItemsLoadStatus !== 'loaded') ||
-    (orderId !== null && (!partId || !quantity || !unitPrice)) ||
-    (orderId === null &&
-      draftItems.length === 0 &&
-      (!partId || !quantity || !unitPrice))
+    (draftItems.length === 0 && (!partId || !quantity || !unitPrice))
   const form = (
-    <form className="grid gap-3" onSubmit={(event) => void submit(event)}>
+    <form
+      className="grid"
+      id={ORDER_FORM}
+      onSubmit={(event) => void submit(event)}
+    >
       {error && <Notice tone="danger">{error}</Notice>}
       <SectionPanel
-        className={cn(
-          orderId === null && 'rounded-[16px] [&>header]:pt-3.5 [&>div]:p-3.5',
-        )}
-        description={
-          orderId
-            ? 'Знайдіть запчастину, вкажіть кількість і ціну — позиція долучиться до наявних у замовленні.'
-            : 'Оберіть запчастину, вкажіть кількість і ціну, а потім додайте її до замовлення.'
-        }
+        description="Оберіть запчастину, вкажіть кількість і ціну, а потім додайте її до замовлення."
         title="Позиція"
+        variant="plain"
       >
         <div className="grid gap-3">
           {partSearchAllowed && (
@@ -980,23 +864,22 @@ export function OrderForm({
               />
             </Field>
           </div>
-          {orderId === null && (
-            <Button
-              className="w-full justify-center border-dashed"
-              disabled={
-                !selectedPartDraft ||
-                !quantity ||
-                !unitPrice ||
-                Number(quantity) < 1 ||
-                Number(unitPrice) < 0
-              }
-              onClick={addDraftItem}
-            >
-              <Plus aria-hidden />
-              Додати деталь
-            </Button>
-          )}
-          {orderId === null && draftItems.length > 0 && (
+          <Button
+            className="w-full justify-center border-dashed"
+            disabled={
+              !selectedPartDraft ||
+              !quantity ||
+              !unitPrice ||
+              Number(quantity) < 1 ||
+              Number(unitPrice) < 0
+            }
+            onClick={addDraftItem}
+          >
+            <Plus aria-hidden />
+            Додати деталь
+          </Button>
+
+          {draftItems.length > 0 && (
             <div
               aria-label="Позиції замовлення"
               className="border-app-line grid gap-2 border-t pt-4"
@@ -1042,7 +925,7 @@ export function OrderForm({
       </SectionPanel>
       {customerSearchAllowed && (
         <SectionPanel
-          className="rounded-[16px] [&>header]:pt-3.5 [&>div]:p-3.5"
+          variant="plain"
           description="Замовлення можна створити й без клієнта — тоді поле лишається порожнім."
           title="Клієнт"
         >
@@ -1181,25 +1064,21 @@ export function OrderForm({
           </div>
         </SectionPanel>
       )}
-      {orderId === null && (
-        <SectionPanel
-          className="rounded-[16px] [&>header]:pt-3.5 [&>div]:p-3.5"
-          title="Нотатки"
-        >
-          <div>
-            <Field
-              hint="Видно команді розбірки на сторінці замовлення."
-              label="Нотатки"
-            >
-              <TextArea
-                onChange={(event) => setNotes(event.target.value)}
-                value={notes}
-              />
-            </Field>
-          </div>
-        </SectionPanel>
-      )}
-      {orderId === null && draftItems.length > 0 && (
+      <SectionPanel variant="plain" title="Нотатки">
+        <div>
+          <Field
+            hint="Видно команді розбірки на сторінці замовлення."
+            label="Нотатки"
+          >
+            <TextArea
+              onChange={(event) => setNotes(event.target.value)}
+              value={notes}
+            />
+          </Field>
+        </div>
+      </SectionPanel>
+
+      {draftItems.length > 0 && (
         <Panel
           aria-label="Підсумок замовлення"
           className="border-brand/25 bg-brand/[0.055]"
@@ -1220,85 +1099,38 @@ export function OrderForm({
           </div>
         </Panel>
       )}
-      <Panel>
-        <div
-          className={cn(
-            'grid gap-3 sm:items-end',
-            orderId !== null
-              ? 'sm:grid-cols-[minmax(0,1fr)_auto]'
-              : 'sm:justify-items-end',
-          )}
-        >
-          {orderId !== null && (
-            <div className="grid min-w-0 gap-1">
-              <TotalLine
-                label="Уже в замовленні"
-                value={
-                  existingItemsLoadStatus === 'loaded'
-                    ? money(existingTotal, 'USD')
-                    : '—'
-                }
-              />
-              <TotalLine
-                label="Разом за позицію"
-                strong
-                value={money(draftLineTotal, 'USD')}
-              />
-            </div>
-          )}
-          <div className="flex flex-wrap gap-2">
-            {createContext ? (
-              <Button
-                onClick={createContext.onClose}
-                type="button"
-                variant="quiet"
-              >
-                Скасувати
-              </Button>
-            ) : (
-              <Button asChild variant="quiet">
-                <Link to={backPath}>
-                  {orderId ? 'До замовлення' : 'До списку замовлень'}
-                </Link>
-              </Button>
-            )}
+    </form>
+  )
+  return (
+    <Sheet
+      description="Додайте позиції, виберіть клієнта та перевірте суму."
+      eyebrow="Продажі · Замовлення"
+      footer={
+        <div className="flex w-full flex-wrap items-center gap-2.5">
+          <div className="ml-auto flex items-center gap-2.5">
+            <Button disabled={busy} onClick={closeCreate} type="button">
+              Скасувати
+            </Button>
             <Button
-              aria-busy={busy || existingItemsLoadStatus === 'loading'}
+              aria-busy={busy}
               disabled={submitBlocked}
+              form={ORDER_FORM}
               type="submit"
               variant="primary"
             >
-              {busy
-                ? orderId
-                  ? 'Додаємо…'
-                  : 'Створюємо…'
-                : orderId
-                  ? 'Додати позицію'
-                  : 'Створити замовлення'}
+              {busy ? 'Створюємо…' : 'Створити замовлення'}
             </Button>
           </div>
         </div>
-      </Panel>
-    </form>
-  )
-  if (orderId === null) {
-    return (
-      <OrderCreateDrawer
-        busy={busy}
-        onClose={() => {
-          if (createContext) createContext.onClose()
-          else void navigate(backPath, { replace: true })
-        }}
-      >
-        {form}
-      </OrderCreateDrawer>
-    )
-  }
-  return (
-    <PageBody width="narrow">
-      <PageHeader eyebrow="Продажі · Замовлення" title="Додати позицію" />
+      }
+      onOpenChange={(next) => {
+        if (!next && !busy) closeCreate()
+      }}
+      open
+      title="Нове замовлення"
+    >
       {form}
-    </PageBody>
+    </Sheet>
   )
 }
 
@@ -2076,3 +1908,5 @@ function OrderDetailScreen({
     </div>
   )
 }
+
+const ORDER_FORM = 'order-create-form'

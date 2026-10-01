@@ -1,0 +1,80 @@
+name: Update Visual Baselines
+
+# CI compares landing screenshots against the committed `*-linux-chromium.png`
+# baselines but never rewrites them. Run this after an intended visual change:
+# it captures fresh Linux baselines on the same runner image and Playwright
+# version the E2E gate uses and uploads them as an artifact to review and
+# commit. It does not push anything. macOS baselines (without `-linux`) serve
+# local runs on a Mac and are refreshed there.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Which screenshots to rewrite
+        required: true
+        type: choice
+        default: changed
+        options:
+          - changed
+          - all
+
+concurrency:
+  group: rozbirka-web-visual-baselines-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  landing:
+    name: Landing baselines (Linux Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm install --global npm@11.16.0
+
+      - run: npm ci
+
+      - id: playwright-version
+        name: Resolve Playwright version
+        run: |
+          echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}-chromium
+
+      - name: Install Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if timeout 300 npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "playwright install attempt ${attempt} failed or timed out; retrying"
+            sleep 10
+          done
+          exit 1
+
+      - name: Capture landing baselines
+        run: npx playwright test e2e/landing.spec.ts --project=chromium --update-snapshots=${{ inputs.mode }}
+
+      # Uploaded even when another landing test fails: the job stays red, but
+      # the captured baselines are still there to inspect.
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: landing-linux-baselines
+          path: e2e/**/*-snapshots/*-linux-*.png
+          if-no-files-found: error

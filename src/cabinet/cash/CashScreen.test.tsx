@@ -1269,7 +1269,7 @@ it('describes register form controls and offers a way out of the form', () => {
     'aria-pressed',
     'true',
   )
-  expect(screen.getByRole('link', { name: 'Скасувати' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Скасувати' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Зберегти' })).toBeVisible()
 })
 

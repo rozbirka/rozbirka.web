@@ -329,6 +329,8 @@ it('keeps intake detail visible and reports a normalized delete failure after pe
   vi.mocked(useCabinet).mockReturnValue(
     cabinet(['intakes.view', 'intakes.manage']),
   )
+  // Without known parts the dialog asks; the server still has the last word.
+  vi.mocked(intakesApi.get).mockResolvedValue({ ...detail, partsCount: 0 })
   let rejectRemove!: (reason: unknown) => void
   vi.mocked(intakesApi.remove).mockReturnValue(
     new Promise((_, reject) => {
@@ -949,4 +951,32 @@ it('keeps the unbooked rows in the sheet when a batch row fails', async () => {
     'Прийнято 1 з 2 позицій',
   )
   expect(screen.getByLabelText('Назва позиції 1')).toHaveValue('Бампер')
+})
+
+it('explains that an intake with parts cannot be deleted before asking the server', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage']),
+  )
+  vi.mocked(intakesApi.get).mockResolvedValue({ ...detail, partsCount: 2 })
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  await screen.findByRole('heading', { name: 'Липнева партія' })
+  await user.click(
+    screen.getByRole('button', { name: 'Інші дії з прийманням' }),
+  )
+  await user.click(screen.getByRole('button', { name: 'Видалити приймання' }))
+  const dialog = screen.getByRole('dialog')
+  expect(dialog).toHaveTextContent('Партію не можна видалити')
+  await user.click(within(dialog).getByRole('button', { name: 'Зрозуміло' }))
+  expect(intakesApi.remove).not.toHaveBeenCalled()
 })

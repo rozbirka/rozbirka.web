@@ -5,24 +5,12 @@ on:
     branches:
       - develop
       - main
-    paths:
-      - 'src/**'
-      - 'public/**'
-      - 'worker/**'
-      - 'e2e/**'
-      - 'scripts/**'
-      - 'contracts/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'lighthouserc.cjs'
-      - 'playwright.config.ts'
-      - 'vite.config.*'
-      - 'wrangler.jsonc'
-      - '.env.qa'
-      - '.env.production'
-      - 'tsconfig*.json'
-      - '.github/workflows/deploy-rozbirka-web.yml'
-      - '.github/workflows/deploy-node-static-template.yml'
+    # Everything except prose can change the build, lint or tests (index.html,
+    # eslint/prettier/npm config, types), so list what may be skipped instead
+    # of what must run.
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   push:
     branches:
       - develop
@@ -42,9 +30,12 @@ on:
         type: boolean
         default: true
 
+# A new commit supersedes a pull request's checks, so those are cancelled. A
+# push or manual run may be deploying: it is never cancelled, and later runs on
+# the same branch queue behind it (GitHub keeps only the newest one waiting).
 concurrency:
-  group: ${{ github.ref }}-rozbirka-web
-  cancel-in-progress: true
+  group: rozbirka-web-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-and-deploy:

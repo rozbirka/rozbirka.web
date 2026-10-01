@@ -75,6 +75,7 @@ export function DeliveryStepDrawer({
   return (
     <Sheet
       description={copy.description}
+      eyebrow="Замовлення · Нова пошта"
       footer={
         <div className="flex justify-end gap-2.5">
           <Button disabled={pending} onClick={onClose}>

@@ -3,6 +3,7 @@ import {
   Button,
   Field,
   Notice,
+  SectionPanel,
   SelectInput,
   Sheet,
   TextInput,
@@ -88,16 +89,11 @@ function Section({
   aside?: React.ReactNode
   children: React.ReactNode
 }) {
+  // The same divided sections as every other form drawer, not cards in a card.
   return (
-    <section className="border-app-line bg-app-raised grid gap-3.5 rounded-[16px] border px-4 py-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h3 className="text-[15px] font-bold tracking-[-0.01em] text-white">
-          {title}
-        </h3>
-        {aside}
-      </div>
+    <SectionPanel aside={aside} headingLevel={3} title={title} variant="plain">
       {children}
-    </section>
+    </SectionPanel>
   )
 }
 
@@ -389,232 +385,234 @@ export function DeliveryDrawer({
       {error !== null && <Notice tone="danger">{error}</Notice>}
       {lookupError !== null && <Notice tone="warn">{lookupError}</Notice>}
 
-      <Section title="Відправлення">
-        {dispatchPoints.length === 0 ? (
-          <Notice tone="warn">
-            Немає жодної точки відправлення. Додайте її в налаштуваннях
-            інтеграції — без неї накладну не створити.
-          </Notice>
-        ) : (
-          <>
-            <Field label="Точка відправлення" required>
-              <SelectInput
-                onChange={(event) => setPointId(event.target.value)}
-                value={pointId}
-              >
-                {dispatchPoints.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                    {item.isDefault ? ' · за замовчуванням' : ''}
-                  </option>
-                ))}
-              </SelectInput>
-            </Field>
-            {point !== null && (
-              <p className="text-app-dim text-[12.5px] leading-5 text-pretty">
-                Відправник: {point.senderName} · {point.phone}
-                {point.companyName === null ? '' : ` · ${point.companyName}`}
-              </p>
-            )}
-          </>
-        )}
-      </Section>
-
-      <Section title="Отримувач">
-        <Field label="Ім’я отримувача" required>
-          <TextInput
-            onChange={(event) => setName(event.target.value)}
-            placeholder="ПІБ"
-            value={name}
-          />
-        </Field>
-        <Field
-          error={
-            phone !== '' && !PHONE.test(trimmedPhone)
-              ? 'Телефон у міжнародному форматі, напр. +380503381172'
-              : undefined
-          }
-          label="Телефон"
-          required
-        >
-          <TextInput
-            className="font-mono"
-            inputMode="tel"
-            onChange={(event) => setPhone(event.target.value)}
-            placeholder="+380"
-            value={phone}
-          />
-        </Field>
-        <SettlementPicker
-          integrationId={integrationId}
-          onPick={setSettlement}
-          picked={settlement}
-          savedHint={
-            saved === null
-              ? undefined
-              : 'Збережений пункт залишається, доки не виберете інший.'
-          }
-          use="receiving"
-        />
-
-        <Field
-          hint={
-            settlementRef === null
-              ? 'Спершу оберіть населений пункт.'
-              : 'Показані лише відділення, які видають відправлення.'
-          }
-          label="Відділення"
-          required
-        >
-          <SelectInput
-            disabled={settlementRef === null || divisions === null}
-            onChange={(event) =>
-              setDivisionChoice(
-                event.target.value === '' ? null : event.target.value,
-              )
-            }
-            value={warehouseRef ?? ''}
-          >
-            <option value="">
-              {divisions === null ? 'Завантажуємо…' : 'Оберіть відділення'}
-            </option>
-            {(divisions ?? []).map((item) => (
-              <option key={item.ref} value={item.ref}>
-                {item.name}
-              </option>
-            ))}
-          </SelectInput>
-        </Field>
-        <label className="flex items-center gap-2.5 text-[13.5px]">
-          <input
-            checked={isCompany}
-            className="accent-brand size-4"
-            onChange={(event) => setIsCompany(event.target.checked)}
-            type="checkbox"
-          />
-          <span className="text-app-muted">
-            Отримувач — компанія (назва та код у накладній)
-          </span>
-        </label>
-        {isCompany && (
-          <>
-            <Field label="Назва компанії" required>
-              <TextInput
-                onChange={(event) => setCompanyName(event.target.value)}
-                value={companyName}
-              />
-            </Field>
-            <Field label="Ідентифікаційний код" required>
-              <TextInput
-                className="font-mono"
-                onChange={(event) => setCompanyTin(event.target.value)}
-                placeholder="ЄДРПОУ або ІПН"
-                value={companyTin}
-              />
-            </Field>
-          </>
-        )}
-      </Section>
-
-      <Section
-        aside={
-          <span className="text-app-dim font-mono text-[11px] tracking-[0.1em] uppercase">
-            {parcels.length} місць
-          </span>
-        }
-        title="Посилки"
-      >
-        {parcels.map((parcel, index) => (
-          <div
-            className="border-app-line bg-app-input grid gap-3 rounded-[12px] border px-3.5 py-3"
-            key={index}
-          >
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
-                Місце {index + 1}
-              </span>
-              {parcels.length > 1 && (
-                <Button
-                  aria-label={`Видалити місце ${index + 1}`}
-                  className="min-h-9 px-2.5 text-xs"
-                  onClick={() =>
-                    setParcels((list) =>
-                      list.filter((_, position) => position !== index),
-                    )
-                  }
+      <div className="grid">
+        <Section title="Відправлення">
+          {dispatchPoints.length === 0 ? (
+            <Notice tone="warn">
+              Немає жодної точки відправлення. Додайте її в налаштуваннях
+              інтеграції — без неї накладну не створити.
+            </Notice>
+          ) : (
+            <>
+              <Field label="Точка відправлення" required>
+                <SelectInput
+                  onChange={(event) => setPointId(event.target.value)}
+                  value={pointId}
                 >
-                  Видалити
-                </Button>
+                  {dispatchPoints.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                      {item.isDefault ? ' · за замовчуванням' : ''}
+                    </option>
+                  ))}
+                </SelectInput>
+              </Field>
+              {point !== null && (
+                <p className="text-app-dim text-[12.5px] leading-5 text-pretty">
+                  Відправник: {point.senderName} · {point.phone}
+                  {point.companyName === null ? '' : ` · ${point.companyName}`}
+                </p>
               )}
-            </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {(
-                [
-                  ['weightKg', 'Вага, кг'],
-                  ['lengthCm', 'Довжина, см'],
-                  ['widthCm', 'Ширина, см'],
-                  ['heightCm', 'Висота, см'],
-                ] as const
-              ).map(([key, label]) => (
-                <Field
-                  key={key}
-                  label={label}
-                  srLabel={`місце ${index + 1}`}
-                  required
-                >
-                  <TextInput
-                    className="font-mono"
-                    inputMode="decimal"
-                    onChange={(event) =>
+            </>
+          )}
+        </Section>
+
+        <Section title="Отримувач">
+          <Field label="Ім’я отримувача" required>
+            <TextInput
+              onChange={(event) => setName(event.target.value)}
+              placeholder="ПІБ"
+              value={name}
+            />
+          </Field>
+          <Field
+            error={
+              phone !== '' && !PHONE.test(trimmedPhone)
+                ? 'Телефон у міжнародному форматі, напр. +380503381172'
+                : undefined
+            }
+            label="Телефон"
+            required
+          >
+            <TextInput
+              className="font-mono"
+              inputMode="tel"
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="+380"
+              value={phone}
+            />
+          </Field>
+          <SettlementPicker
+            integrationId={integrationId}
+            onPick={setSettlement}
+            picked={settlement}
+            savedHint={
+              saved === null
+                ? undefined
+                : 'Збережений пункт залишається, доки не виберете інший.'
+            }
+            use="receiving"
+          />
+
+          <Field
+            hint={
+              settlementRef === null
+                ? 'Спершу оберіть населений пункт.'
+                : 'Показані лише відділення, які видають відправлення.'
+            }
+            label="Відділення"
+            required
+          >
+            <SelectInput
+              disabled={settlementRef === null || divisions === null}
+              onChange={(event) =>
+                setDivisionChoice(
+                  event.target.value === '' ? null : event.target.value,
+                )
+              }
+              value={warehouseRef ?? ''}
+            >
+              <option value="">
+                {divisions === null ? 'Завантажуємо…' : 'Оберіть відділення'}
+              </option>
+              {(divisions ?? []).map((item) => (
+                <option key={item.ref} value={item.ref}>
+                  {item.name}
+                </option>
+              ))}
+            </SelectInput>
+          </Field>
+          <label className="flex items-center gap-2.5 text-[13.5px]">
+            <input
+              checked={isCompany}
+              className="accent-brand size-4"
+              onChange={(event) => setIsCompany(event.target.checked)}
+              type="checkbox"
+            />
+            <span className="text-app-muted">
+              Отримувач — компанія (назва та код у накладній)
+            </span>
+          </label>
+          {isCompany && (
+            <>
+              <Field label="Назва компанії" required>
+                <TextInput
+                  onChange={(event) => setCompanyName(event.target.value)}
+                  value={companyName}
+                />
+              </Field>
+              <Field label="Ідентифікаційний код" required>
+                <TextInput
+                  className="font-mono"
+                  onChange={(event) => setCompanyTin(event.target.value)}
+                  placeholder="ЄДРПОУ або ІПН"
+                  value={companyTin}
+                />
+              </Field>
+            </>
+          )}
+        </Section>
+
+        <Section
+          aside={
+            <span className="text-app-dim font-mono text-[11px] tracking-[0.1em] uppercase">
+              {parcels.length} місць
+            </span>
+          }
+          title="Посилки"
+        >
+          {parcels.map((parcel, index) => (
+            <div
+              className="border-app-line bg-app-input grid gap-3 rounded-[12px] border px-3.5 py-3"
+              key={index}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
+                  Місце {index + 1}
+                </span>
+                {parcels.length > 1 && (
+                  <Button
+                    aria-label={`Видалити місце ${index + 1}`}
+                    className="min-h-9 px-2.5 text-xs"
+                    onClick={() =>
                       setParcels((list) =>
-                        list.map((item, position) =>
-                          position === index
-                            ? { ...item, [key]: event.target.value }
-                            : item,
-                        ),
+                        list.filter((_, position) => position !== index),
                       )
                     }
-                    value={parcel[key]}
-                  />
-                </Field>
-              ))}
+                  >
+                    Видалити
+                  </Button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {(
+                  [
+                    ['weightKg', 'Вага, кг'],
+                    ['lengthCm', 'Довжина, см'],
+                    ['widthCm', 'Ширина, см'],
+                    ['heightCm', 'Висота, см'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <Field
+                    key={key}
+                    label={label}
+                    srLabel={`місце ${index + 1}`}
+                    required
+                  >
+                    <TextInput
+                      className="font-mono"
+                      inputMode="decimal"
+                      onChange={(event) =>
+                        setParcels((list) =>
+                          list.map((item, position) =>
+                            position === index
+                              ? { ...item, [key]: event.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                      value={parcel[key]}
+                    />
+                  </Field>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-        <Button onClick={() => setParcels((list) => [...list, emptyParcel])}>
-          Додати посилку
-        </Button>
-      </Section>
+          ))}
+          <Button onClick={() => setParcels((list) => [...list, emptyParcel])}>
+            Додати посилку
+          </Button>
+        </Section>
 
-      <Section title="Вантаж">
-        <Field label="Опис вантажу" required>
-          <TextInput
-            onChange={(event) => setDescription(event.target.value)}
-            value={description}
-          />
-        </Field>
-        <Field
-          hint="Скільки Нова пошта відшкодує в разі втрати."
-          label="Оголошена вартість, ₴"
-          required
-        >
-          <TextInput
-            className="font-mono"
-            inputMode="decimal"
-            onChange={(event) => setDeclared(event.target.value)}
-            value={declared}
-          />
-        </Field>
-        <Field label="Оплата доставки" required>
-          <SelectInput
-            onChange={(event) => setPayer(event.target.value as PayerType)}
-            value={payer}
+        <Section title="Вантаж">
+          <Field label="Опис вантажу" required>
+            <TextInput
+              onChange={(event) => setDescription(event.target.value)}
+              value={description}
+            />
+          </Field>
+          <Field
+            hint="Скільки Нова пошта відшкодує в разі втрати."
+            label="Оголошена вартість, ₴"
+            required
           >
-            <option value="Recipient">Платить отримувач</option>
-            <option value="Sender">Платить відправник</option>
-          </SelectInput>
-        </Field>
-      </Section>
+            <TextInput
+              className="font-mono"
+              inputMode="decimal"
+              onChange={(event) => setDeclared(event.target.value)}
+              value={declared}
+            />
+          </Field>
+          <Field label="Оплата доставки" required>
+            <SelectInput
+              onChange={(event) => setPayer(event.target.value as PayerType)}
+              value={payer}
+            >
+              <option value="Recipient">Платить отримувач</option>
+              <option value="Sender">Платить відправник</option>
+            </SelectInput>
+          </Field>
+        </Section>
+      </div>
 
       <section
         className={`grid gap-3.5 rounded-[16px] border px-4 py-4 ${

@@ -288,7 +288,9 @@ it('opens canonical creation in a side drawer and preselects the linked customer
   expect(screen.getByText('Замовлення', { selector: 'h1' })).toBeVisible()
   expect(drawer).toHaveClass('sm:right-0')
   expect(drawer).toHaveClass('sm:max-w-[600px]')
-  expect(screen.getByTestId('order-create-overlay')).toHaveClass('bg-black/80')
+  expect(
+    within(drawer).getByRole('button', { name: 'Створити замовлення' }),
+  ).toHaveAttribute('form', 'order-create-form')
   expect(await screen.findByLabelText('Пошук клієнта')).toHaveValue(
     'Ірина Коваль',
   )

@@ -459,7 +459,7 @@ it('edits an expense with PUT, retains the form while pending, and refetches det
   await user.click(save)
 
   expect(save).toBeDisabled()
-  expect(save.closest('form')).toHaveAttribute('aria-busy', 'true')
+  expect((save as HTMLButtonElement).form).toHaveAttribute('aria-busy', 'true')
   expect(carsApi.updateExpense).toHaveBeenCalledWith(
     'car-1',
     'expense-1',

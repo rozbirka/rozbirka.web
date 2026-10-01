@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
+import { useLocation, useNavigate, useSearchParams } from 'react-router'
 import {
   Button,
   ErrorState,
   Field,
   Notice,
   PageBody,
-  PageHeader,
   Pagination,
-  Panel,
+  Sheet,
   SkeletonRows,
   TextInput,
   Toolbar,
@@ -25,7 +24,6 @@ import {
 } from '@/api/cash'
 import { useCabinet } from '../CabinetContext'
 import { CashCard } from './cash-card'
-import { CashEditView } from './cash-edit'
 import { CashList } from './cash-list'
 import { readCashFeed, type CashFeedEntry } from './cash-feed'
 import { CashMovementDrawer } from './CashMovementDrawer'
@@ -115,10 +113,22 @@ const canTransfer = (
 export function CashScreen({ definition }: CabinetModuleScreenProps) {
   const location = useLocation()
   const id = idFromPath(location.pathname)
+  // Creating and renaming a register are drawers over the screen they return
+  // to, like every other cash form.
   if (location.pathname.endsWith('/edit') && id)
-    return <CashRegisterEdit definition={definition} registerId={id} />
+    return (
+      <>
+        <CashRegisterDetail definition={definition} registerId={id} />
+        <CashRegisterEdit definition={definition} registerId={id} />
+      </>
+    )
   if (location.pathname.endsWith('/new'))
-    return <CashRegisterForm definition={definition} registerId={null} />
+    return (
+      <>
+        <CashOverview definition={definition} />
+        <CashRegisterForm definition={definition} registerId={null} />
+      </>
+    )
   return id ? (
     <CashRegisterDetail definition={definition} registerId={id} />
   ) : (
@@ -468,26 +478,57 @@ function CashRegisterEdit({
       setBusy(false)
     }
   }
-  if (error && !register)
-    return (
-      <PageBody width="narrow">
-        <ErrorState description={error} title="Не вдалося завантажити касу" />
-      </PageBody>
-    )
-  if (!register)
-    return (
-      <PageBody width="narrow">
-        <SkeletonRows label="Завантажуємо касу…" rows={3} />
-      </PageBody>
-    )
+  const named = name.trim().length > 1
+  const ready = register !== null && named && name.trim() !== register.name
+  const close = () => {
+    if (!busy) void navigate(detailPath)
+  }
   return (
-    <CashEditView
-      backTo={detailPath}
-      busy={busy}
-      canManage={mutationsAllowed}
-      name={name}
-      notice={
+    <Sheet
+      eyebrow={register ? `Гроші · ${register.name}` : 'Гроші · Каси'}
+      footer={
         <>
+          <Button disabled={busy} onClick={close} type="button">
+            Скасувати
+          </Button>
+          {mutationsAllowed && register ? (
+            <Button
+              aria-busy={busy}
+              disabled={busy || !ready}
+              form={CASH_EDIT_FORM}
+              type="submit"
+              variant="primary"
+            >
+              {busy ? 'Зберігаємо…' : 'Зберегти зміни'}
+            </Button>
+          ) : null}
+        </>
+      }
+      onOpenChange={(next) => {
+        if (!next) close()
+      }}
+      open
+      title="Редагування каси"
+    >
+      {error && !register ? (
+        <ErrorState
+          description={error}
+          onRetry={() => void load()}
+          title="Не вдалося завантажити касу"
+        />
+      ) : !register ? (
+        <SkeletonRows label="Завантажуємо касу…" rows={3} />
+      ) : (
+        <form
+          aria-busy={busy}
+          className="grid content-start gap-5"
+          id={CASH_EDIT_FORM}
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (ready) void save()
+          }}
+        >
           {!mutationsAllowed && (
             <Notice tone="warn">
               Зберегти не вдасться: бракує права finance.manage. Попросіть
@@ -495,14 +536,25 @@ function CashRegisterEdit({
             </Notice>
           )}
           {error && <Notice tone="danger">{error}</Notice>}
-        </>
-      }
-      onName={setName}
-      onSave={() => void save()}
-      register={register}
-    />
+          <Field
+            error={named ? null : 'Назва не може бути порожньою.'}
+            hint="Так каса підписана у звітах, переказах і журналі"
+            label="Назва каси"
+          >
+            <TextInput
+              disabled={!mutationsAllowed}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Основна каса"
+              value={name}
+            />
+          </Field>
+        </form>
+      )}
+    </Sheet>
   )
 }
+
+const CASH_EDIT_FORM = 'cash-register-edit-form'
 
 function CashRegisterForm({
   definition,
@@ -562,156 +614,170 @@ function CashRegisterForm({
       setBusy(false)
     }
   }
+  const close = () => {
+    if (!busy) void navigate(registerId ? `../${registerId}` : '..')
+  }
   return (
-    <PageBody width="narrow">
-      <PageHeader
-        eyebrow="Гроші · Каси"
-        title={registerId ? 'Редагувати касу' : 'Нова каса'}
-      />
-      <Panel padded={false}>
-        <form className="grid gap-4 p-4" onSubmit={(event) => void save(event)}>
-          <Field hint="Так каса підписана у звітах і переказах" label="Назва">
-            <TextInput
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Основна каса"
-            />
-          </Field>
-          {registerId ? (
-            <div className="border-app-line bg-app-canvas rounded-control grid gap-1 border px-3.5 py-3">
-              <p className="text-app-muted text-[14.5px]">Тип каси: {type}</p>
-              <p className="text-app-dim text-[12.5px]">
-                Тип задають при створенні й далі не змінюють. Потрібен інший тип
-                — створіть окрему касу.
-              </p>
+    <Sheet
+      eyebrow="Гроші · Каси"
+      footer={
+        <>
+          <Button disabled={busy} onClick={close} type="button">
+            Скасувати
+          </Button>
+          <Button
+            aria-busy={busy}
+            disabled={!mutationsAllowed || busy || !name.trim()}
+            form={CASH_REGISTER_FORM}
+            type="submit"
+            variant="primary"
+          >
+            {busy ? 'Зберігаємо…' : 'Зберегти'}
+          </Button>
+        </>
+      }
+      onOpenChange={(next) => {
+        if (!next) close()
+      }}
+      open
+      title={registerId ? 'Редагувати касу' : 'Нова каса'}
+    >
+      <form
+        aria-busy={busy}
+        className="grid content-start gap-5"
+        id={CASH_REGISTER_FORM}
+        onSubmit={(event) => void save(event)}
+      >
+        <Field hint="Так каса підписана у звітах і переказах" label="Назва">
+          <TextInput
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Основна каса"
+          />
+        </Field>
+        {registerId ? (
+          <div className="border-app-line bg-app-canvas rounded-control grid gap-1 border px-3.5 py-3">
+            <p className="text-app-muted text-[14.5px]">Тип каси: {type}</p>
+            <p className="text-app-dim text-[12.5px]">
+              Тип задають при створенні й далі не змінюють. Потрібен інший тип —
+              створіть окрему касу.
+            </p>
+          </div>
+        ) : (
+          <fieldset className="grid gap-2">
+            <legend className="text-app-muted text-sm font-semibold">
+              Тип
+            </legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {[
+                { value: 'cash', label: 'Готівкова', hint: 'Готівка в касі' },
+                {
+                  value: 'bank',
+                  label: 'Безготівкова',
+                  hint: 'Банківський рахунок',
+                },
+              ].map((option) => (
+                <button
+                  aria-pressed={type === option.value}
+                  className={cn(
+                    'border-app-line rounded-control grid min-h-20 gap-1 border p-3 text-left',
+                    type === option.value
+                      ? 'border-brand bg-brand/10'
+                      : 'bg-app-input',
+                  )}
+                  key={option.value}
+                  onClick={() => setType(option.value)}
+                  type="button"
+                >
+                  <span className="font-semibold text-white">
+                    {option.label}
+                  </span>
+                  <span className="text-app-dim text-xs">{option.hint}</span>
+                </button>
+              ))}
             </div>
-          ) : (
+          </fieldset>
+        )}
+        {!registerId && (
+          <>
             <fieldset className="grid gap-2">
               <legend className="text-app-muted text-sm font-semibold">
-                Тип
+                Валюти
               </legend>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-3">
                 {[
-                  { value: 'cash', label: 'Готівкова', hint: 'Готівка в касі' },
-                  {
-                    value: 'bank',
-                    label: 'Безготівкова',
-                    hint: 'Банківський рахунок',
-                  },
-                ].map((option) => (
-                  <button
-                    aria-pressed={type === option.value}
-                    className={cn(
-                      'border-app-line rounded-control grid min-h-20 gap-1 border p-3 text-left',
-                      type === option.value
-                        ? 'border-brand bg-brand/10'
-                        : 'bg-app-input',
-                    )}
-                    key={option.value}
-                    onClick={() => setType(option.value)}
-                    type="button"
-                  >
-                    <span className="font-semibold text-white">
-                      {option.label}
-                    </span>
-                    <span className="text-app-dim text-xs">{option.hint}</span>
-                  </button>
+                  { code: 'UAH', symbol: '₴' },
+                  { code: 'USD', symbol: '$' },
+                  { code: 'EUR', symbol: '€' },
+                ].map(({ code, symbol }) => {
+                  const selected = currencies.includes(code)
+                  return (
+                    <button
+                      aria-pressed={selected}
+                      className={cn(
+                        'border-app-line rounded-control flex min-h-16 items-center justify-between border p-3',
+                        selected
+                          ? 'border-brand bg-brand/10 text-white'
+                          : 'bg-app-input text-app-muted',
+                      )}
+                      key={code}
+                      onClick={() =>
+                        setCurrencies((current) =>
+                          selected
+                            ? current.length === 1
+                              ? current
+                              : current.filter((item) => item !== code)
+                            : [...current, code],
+                        )
+                      }
+                      type="button"
+                    >
+                      <span className="text-xl font-bold">{symbol}</span>
+                      <span className="font-mono text-sm">{code}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </fieldset>
+            <fieldset className="grid gap-3">
+              <legend className="text-app-muted text-sm font-semibold">
+                Початкові баланси
+              </legend>
+              <p className="text-app-dim text-xs">
+                Необов’язково. Порожнє поле означає нульовий баланс.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {currencies.map((code) => (
+                  <Field key={code} label={`Баланс ${code}`}>
+                    <TextInput
+                      inputMode="decimal"
+                      numeric
+                      onChange={(event) =>
+                        setInitialBalances((current) => ({
+                          ...current,
+                          [code]: event.target.value,
+                        }))
+                      }
+                      placeholder="0"
+                      value={initialBalances[code] ?? ''}
+                    />
+                  </Field>
                 ))}
               </div>
             </fieldset>
-          )}
-          {!registerId && (
-            <>
-              <fieldset className="grid gap-2">
-                <legend className="text-app-muted text-sm font-semibold">
-                  Валюти
-                </legend>
-                <div className="grid gap-2 sm:grid-cols-3">
-                  {[
-                    { code: 'UAH', symbol: '₴' },
-                    { code: 'USD', symbol: '$' },
-                    { code: 'EUR', symbol: '€' },
-                  ].map(({ code, symbol }) => {
-                    const selected = currencies.includes(code)
-                    return (
-                      <button
-                        aria-pressed={selected}
-                        className={cn(
-                          'border-app-line rounded-control flex min-h-16 items-center justify-between border p-3',
-                          selected
-                            ? 'border-brand bg-brand/10 text-white'
-                            : 'bg-app-input text-app-muted',
-                        )}
-                        key={code}
-                        onClick={() =>
-                          setCurrencies((current) =>
-                            selected
-                              ? current.length === 1
-                                ? current
-                                : current.filter((item) => item !== code)
-                              : [...current, code],
-                          )
-                        }
-                        type="button"
-                      >
-                        <span className="text-xl font-bold">{symbol}</span>
-                        <span className="font-mono text-sm">{code}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </fieldset>
-              <fieldset className="grid gap-3">
-                <legend className="text-app-muted text-sm font-semibold">
-                  Початкові баланси
-                </legend>
-                <p className="text-app-dim text-xs">
-                  Необов’язково. Порожнє поле означає нульовий баланс.
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {currencies.map((code) => (
-                    <Field key={code} label={`Баланс ${code}`}>
-                      <TextInput
-                        inputMode="decimal"
-                        numeric
-                        onChange={(event) =>
-                          setInitialBalances((current) => ({
-                            ...current,
-                            [code]: event.target.value,
-                          }))
-                        }
-                        placeholder="0"
-                        value={initialBalances[code] ?? ''}
-                      />
-                    </Field>
-                  ))}
-                </div>
-              </fieldset>
-            </>
-          )}
-          {!mutationsAllowed && (
-            <Notice tone="warn">
-              Зберегти не вдасться: бракує права finance.manage або вичерпано
-              ліміт кас у тарифі. Попросіть власника кабінету відкрити доступ чи
-              змінити тариф.
-            </Notice>
-          )}
-          {error && <Notice tone="danger">{error}</Notice>}
-          <div className="border-app-line -mx-4 -mb-4 flex flex-wrap justify-end gap-3 border-t px-4 py-4">
-            <Button asChild>
-              <Link to={registerId ? `../${registerId}` : '..'}>Скасувати</Link>
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              aria-busy={busy}
-              disabled={!mutationsAllowed || busy || !name.trim()}
-            >
-              {busy ? 'Зберігаємо…' : 'Зберегти'}
-            </Button>
-          </div>
-        </form>
-      </Panel>
-    </PageBody>
+          </>
+        )}
+        {!mutationsAllowed && (
+          <Notice tone="warn">
+            Зберегти не вдасться: бракує права finance.manage або вичерпано
+            ліміт кас у тарифі. Попросіть власника кабінету відкрити доступ чи
+            змінити тариф.
+          </Notice>
+        )}
+        {error && <Notice tone="danger">{error}</Notice>}
+      </form>
+    </Sheet>
   )
 }
+
+const CASH_REGISTER_FORM = 'cash-register-form'
