@@ -24,20 +24,8 @@ type Unknown<Sent, Contract> = Exclude<keyof Sent, keyof Contract>
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
 type Check<T extends true> = T
 
-/**
- * Core `feat/remove-free-parts`: one source for the whole import
- * (`ImportSourceSelection` on `ImportMappingPlan`). Remove after re-pinning a
- * Core contract that has it.
- */
-type PendingImportMappingFields = 'source'
-
 export type ContractAlignment = [
-  Check<
-    Same<
-      Unknown<ImportMapping, Schemas['ImportMappingPlan']>,
-      PendingImportMappingFields
-    >
-  >,
+  Check<Same<Unknown<ImportMapping, Schemas['ImportMappingPlan']>, never>>,
   Check<Same<Unknown<ImportRule, Schemas['ImportFieldRule']>, never>>,
   Check<Same<Unknown<CreatePartRequest, Schemas['CreatePartRequest']>, never>>,
 ]
