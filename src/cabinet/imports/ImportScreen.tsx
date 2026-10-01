@@ -678,7 +678,9 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
             disabled={
               busy ||
               (step === 1 && !status?.source && !file) ||
-              (step === 1 && !status?.source?.fields?.length) ||
+              (step === 1 &&
+                !!status?.source &&
+                !status.source.fields?.length) ||
               (step === 2 && !editable)
             }
             onClick={next}
