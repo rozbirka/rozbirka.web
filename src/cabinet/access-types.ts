@@ -1,6 +1,5 @@
 import type { components as CoreComponents } from '../api/generated/core'
 import type { SubscriptionDto } from '../api/types'
-import type { CabinetParityRolloutEnvelopeV1 } from '../config/cabinet-feature-flags'
 
 export const ALL_PERMISSIONS = [
   'cars.view',
@@ -35,8 +34,7 @@ export type Permission = (typeof ALL_PERMISSIONS)[number]
 export type CoreMePermissionsDto = CoreComponents['schemas']['MePermissionsDto']
 
 /**
- * The generated Core response, with the one temporary relaxation required while
- * older Core deployments can still omit the rollout envelope.
+ * Legacy rollout data is accepted for wire compatibility but does not control access.
  */
 export type MePermissionsDto = Omit<
   CoreMePermissionsDto,
@@ -66,7 +64,9 @@ export interface TenantAccessSnapshot {
   readonly features: ReadonlySet<string>
   readonly entitlement: TenantEntitlementSnapshot | null
   readonly subscription: TenantSubscriptionSnapshot | null
-  readonly cabinetParityRollout?: DeepReadonly<CabinetParityRolloutEnvelopeV1> | null
+  readonly cabinetParityRollout?: DeepReadonly<
+    CoreMePermissionsDto['cabinetParityRollout']
+  > | null
 }
 
 export type TenantAccessState =

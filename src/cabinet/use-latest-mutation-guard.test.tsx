@@ -188,20 +188,6 @@ describe('useLatestMutationGuard', () => {
     )
   })
 
-  it('rechecks rollout access immediately before dispatch', () => {
-    const definition = {
-      ...cabinetModules.parts,
-      rollout: 'cabinet-parity-v1' as const,
-    }
-    const { result } = renderHook(() => useLatestMutationGuard(definition))
-
-    expect(() => result.current.requireLatestMutation()).toThrow(
-      expect.objectContaining<Partial<ModuleAccessDeniedError>>({
-        decision: { kind: 'unreleased' },
-      }),
-    )
-  })
-
   it('rechecks blocked subscription access immediately before dispatch', () => {
     const { result } = renderHook(() =>
       useLatestMutationGuard(cabinetModules.parts),

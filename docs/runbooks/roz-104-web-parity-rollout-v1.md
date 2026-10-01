@@ -1,3 +1,5 @@
+> Historical runbook: product rollout switches were removed on 2026-10-01. Cabinet access now follows tenant permissions and subscription entitlements; do not apply the rollout configuration below.
+
 # ROZ-104 Web Parity Rollout Runbook v1
 
 Status: readiness artifact only. No QA deployment, canary, rollback rehearsal, Product sign-off, or QA sign-off is recorded by this document.

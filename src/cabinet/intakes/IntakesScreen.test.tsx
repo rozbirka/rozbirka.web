@@ -38,7 +38,6 @@ vi.mock('../module-registry', () => ({
   cabinetModules: {
     intakes: {
       key: 'intakes',
-      released: true,
       routeSegment: '/intakes',
       viewPermission: 'intakes.view',
       mutationPermission: 'intakes.manage',
@@ -47,7 +46,6 @@ vi.mock('../module-registry', () => ({
     },
     parts: {
       key: 'parts',
-      released: true,
       routeSegment: '/parts',
       viewPermission: 'parts.view',
       mutationPermission: 'parts.manage',

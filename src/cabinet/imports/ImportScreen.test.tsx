@@ -38,6 +38,7 @@ const original = apiClient.defaults.adapter!
 let status: ImportStatus
 let rows: ImportRow[]
 let calls: InternalAxiosRequestConfig[]
+let importEnabled = true
 let invalid = false
 let commitFails = false
 let commitFailureCode = ''
@@ -45,6 +46,7 @@ beforeEach(() => {
   context.permissions = new Set(['parts.view', 'parts.manage'])
   context.tenantId = 't'
   calls = []
+  importEnabled = true
   invalid = false
   commitFails = false
   commitFailureCode = ''
@@ -89,7 +91,7 @@ beforeEach(() => {
     let data: unknown
     if (config.url?.endsWith('/capabilities'))
       data = {
-        enabled: true,
+        enabled: importEnabled,
         schemaVersion: 2,
         fields: [{ id: 'Name', type: 'text', required: true }],
         formats: ['csv', 'xlsx'],
@@ -216,6 +218,13 @@ it('denies private history without parts.manage', () => {
   expect(screen.getByText('Недостатньо прав для імпорту')).toBeVisible()
   expect(calls).toHaveLength(0)
 })
+it('loads existing imports even when an older server returns a disabled rollout flag', async () => {
+  importEnabled = false
+  mount()
+  expect(await screen.findByText('Фара')).toBeVisible()
+  expect(calls.some((call) => call.url?.includes('/rows?'))).toBe(true)
+})
+
 it('resumes a draft and requires a fresh server validation before commit', async () => {
   const user = userEvent.setup()
   mount()

@@ -117,7 +117,6 @@ function useIntakeAccess() {
     return evaluateModuleAccess(
       {
         ...definitionWithoutQuota,
-        released: true,
         mutationPermission: permission,
         ...(quota && quotaResource !== undefined ? { quotaResource } : {}),
       },
@@ -130,7 +129,7 @@ function useIntakeAccess() {
     permission: Permission,
   ): ModuleAccessDecision =>
     evaluateModuleAccess(
-      { ...definition, released: true, viewPermission: permission },
+      { ...definition, viewPermission: permission },
       access,
       'view',
     )
@@ -179,7 +178,7 @@ const allowedToView = (
   cabinet: ReturnType<typeof useCabinet>,
 ) =>
   evaluateModuleAccess(
-    { ...definition, released: true },
+    { ...definition },
     cabinet.status === 'ready' && cabinet.snapshot
       ? { status: 'ready', snapshot: cabinet.snapshot, error: null }
       : { status: 'loading', snapshot: null, error: null },

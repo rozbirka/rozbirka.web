@@ -15,7 +15,7 @@ describe('integrated cabinet module release registry', () => {
     'reports',
     'business',
   ])('releases %s through the existing access boundary', (module) => {
-    expect(cabinetModules[module].released).toBe(true)
+    expect(cabinetModules[module].viewPermission).toBeDefined()
   })
 
   it('gates inventory navigation and management with inventory permissions', () => {

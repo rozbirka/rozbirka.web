@@ -1,3 +1,6 @@
+# Archived: product rollout switches were removed on 2026-10-01.
+# This historical manifest is not an active deployment configuration.
+
 schemaVersion: 1
 release: qa-YYYY-MM-DD-sequence
 environment: qa

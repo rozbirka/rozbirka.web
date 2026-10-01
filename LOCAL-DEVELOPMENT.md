@@ -125,11 +125,7 @@ any remaining login or browser-level blocker.
 
 ### Local Nova Poshta encryption key
 
-Also export the selected Core checkout's ignored `.env.cabinet.local` before
-starting Aspire (`set -a; source .env.cabinet.local; set +a`). This enables
-the local cabinet rollout (`Mode=on`, `EmergencyOff=false`), including the
-Integrations menu; otherwise the server defaults hide these modules. This
-does not bypass tenant permissions and must not alter QA/production settings.
+Cabinet modules are available through tenant permissions and subscription entitlements; no local rollout environment is required.
 
 For the selected `feat/nova-poshta-integration` Core checkout, preserve
 `/Users/admin/code/rozbirka/.worktrees/core-auth-web-billing/rozbirka.core/.env.nova-poshta.local`.

@@ -75,7 +75,6 @@ const ready = ({
 const carsModule: CabinetModuleDefinition = {
   key: 'cars',
   routeSegment: '/cars',
-  released: true,
   viewPermission: 'cars.view',
   mutationPermission: 'cars.manage',
   allowedSubscriptionStates: ['trial', 'active', 'pastDue', 'cancelled'],
@@ -85,23 +84,14 @@ const carsModule: CabinetModuleDefinition = {
 const reportsModule: CabinetModuleDefinition = {
   key: 'reports',
   routeSegment: '/reports',
-  released: true,
   viewPermission: 'reports.view',
   requiredFeature: FEATURES.AdvancedReports,
   allowedSubscriptionStates: ['trial', 'active', 'pastDue', 'cancelled'],
 }
 
-const unreleasedModule: CabinetModuleDefinition = {
-  ...carsModule,
-  key: 'parts',
-  routeSegment: '/parts',
-  released: false,
-}
-
 const intakesModule: CabinetModuleDefinition = {
   key: 'intakes',
   routeSegment: '/intakes',
-  released: true,
   viewPermission: 'intakes.view',
   mutationPermission: 'intakes.manage',
   allowedSubscriptionStates: ['trial', 'active', 'pastDue', 'cancelled'],
@@ -166,156 +156,27 @@ const failedAccess: TenantAccessState = {
   error: new Error('offline'),
 }
 
-const rolloutAccess = (
-  configuration: string | undefined,
-  {
-    grants = ['cabinet-parity'],
-    audiences = [],
-    subjectId = 'tenant-42',
-  }: {
-    grants?: string[]
-    audiences?: string[]
-    subjectId?: string
-  } = {},
-): TenantAccessState => {
-  const access = ready({
-    permissions: ['team.view', 'billing.view', 'reports.view'],
-    features: [FEATURES.TeamCollaboration, FEATURES.AdvancedReports],
-  })
-  if (configuration === undefined) return access
-  if (access.status !== 'ready') throw new Error('expected ready access')
-
-  return {
-    status: 'ready',
-    snapshot: {
-      ...access.snapshot,
-      cabinetParityRollout: {
-        configuration,
-        claim: { version: 1, subjectId, grants, audiences },
-      },
-    },
-    error: null,
-  }
-}
-
-const rolloutConfiguration = (
-  mode: 'off' | 'internal' | 'canary' | 'on',
-  canaryPercent = 0,
-  emergencyOff = false,
-) => JSON.stringify({ version: 1, mode, canaryPercent, emergencyOff })
-
 describe('evaluateModuleAccess', () => {
-  it('allows a missing envelope only when explicit v1 compatibility is enabled', () => {
-    expect(
-      evaluateModuleAccess(
-        cabinetModules.team,
-        rolloutAccess(undefined),
-        'view',
-        { version: 1, allowMissingEnvelope: true },
-      ),
-    ).toEqual({ kind: 'allowed' })
-
-    expect(
-      evaluateModuleAccess(
-        cabinetModules.team,
-        rolloutAccess(undefined),
-        'view',
-        { version: 1, allowMissingEnvelope: false },
-      ),
-    ).toEqual({ kind: 'unreleased' })
-  })
-
-  it.each([
-    ['off', rolloutConfiguration('off'), [], { kind: 'unreleased' }],
-    [
-      'internal without server audience',
-      rolloutConfiguration('internal'),
-      [],
-      { kind: 'unreleased' },
-    ],
-    [
-      'internal with server audience',
-      rolloutConfiguration('internal'),
-      ['internal'],
-      { kind: 'allowed' },
-    ],
-    [
-      'canary outside fixed cohort',
-      rolloutConfiguration('canary', 82),
-      [],
-      { kind: 'unreleased' },
-    ],
-    [
-      'canary inside fixed cohort',
-      rolloutConfiguration('canary', 83),
-      [],
-      { kind: 'allowed' },
-    ],
-    ['on', rolloutConfiguration('on'), [], { kind: 'allowed' }],
-    [
-      'emergency off',
-      rolloutConfiguration('on', 100, true),
-      [],
-      { kind: 'unreleased' },
-    ],
-  ] as const)(
-    '%s gates a parity route at shared policy boundary',
-    (_name, configuration, audiences, expected) => {
-      expect(
-        evaluateModuleAccess(
-          cabinetModules.team,
-          rolloutAccess(configuration, { audiences: [...audiences] }),
-          'view',
-        ),
-      ).toEqual(expected)
-    },
-  )
-
-  it('fails closed when the configured server envelope omits its grant', () => {
-    expect(
-      evaluateModuleAccess(
-        cabinetModules.team,
-        rolloutAccess(rolloutConfiguration('on'), { grants: [] }),
-        'view',
-      ),
-    ).toEqual({ kind: 'unreleased' })
-  })
-
-  it.each([
-    ['off', rolloutConfiguration('off')],
-    ['emergency off', rolloutConfiguration('on', 100, true)],
-  ] as const)(
-    '%s preserves pre-initiative account routes while gating new parity routes',
-    (_name, configuration) => {
-      const access = rolloutAccess(configuration)
-
-      for (const key of ['billing', 'plans', 'payments', 'profile'] as const) {
+  it.each(['team', 'reports', 'business', 'integrations'] as const)(
+    'makes %s available without a rollout envelope while enforcing permissions',
+    (key) => {
+      const definition = cabinetModules[key]
+      const access = ready({
+        permissions: definition.viewPermission
+          ? [definition.viewPermission]
+          : [],
+        features: [FEATURES.TeamCollaboration, FEATURES.AdvancedReports],
+      })
+      expect(evaluateModuleAccess(definition, access, 'view')).toEqual({
+        kind: 'allowed',
+      })
+      if (definition.viewPermission) {
         expect(
-          evaluateModuleAccess(cabinetModules[key], access, 'view'),
-        ).toEqual({ kind: 'allowed' })
-      }
-
-      for (const key of ['team', 'reports', 'business'] as const) {
-        expect(
-          evaluateModuleAccess(cabinetModules[key], access, 'view'),
-        ).toEqual({ kind: 'unreleased' })
+          evaluateModuleAccess(definition, ready({ permissions: [] }), 'view'),
+        ).toEqual({ kind: 'permission-denied' })
       }
     },
   )
-
-  it('gates every newly released parity surface with the same configured policy', () => {
-    const disabled = rolloutAccess(rolloutConfiguration('off'))
-    const enabled = rolloutAccess(rolloutConfiguration('on'))
-
-    for (const key of ['team', 'reports', 'business'] as const) {
-      expect(
-        evaluateModuleAccess(cabinetModules[key], disabled, 'view'),
-      ).toEqual({ kind: 'unreleased' })
-      expect(
-        evaluateModuleAccess(cabinetModules[key], enabled, 'view'),
-      ).toEqual({ kind: 'allowed' })
-    }
-  })
 
   it('allows an active built-in Manager to view cars without billing.view', () => {
     expect(MANAGER_PERMISSIONS).not.toContain('billing.view')
@@ -370,29 +231,18 @@ describe('evaluateModuleAccess', () => {
 
   it.each([
     [
-      'loading access before checking release',
-      unreleasedModule,
+      'loading access before checking permissions',
+      carsModule,
       loadingAccess,
       'view' as const,
       { kind: 'access-loading' },
     ],
     [
-      'access errors before checking release',
-      unreleasedModule,
+      'access errors before checking permissions',
+      carsModule,
       failedAccess,
       'view' as const,
       { kind: 'access-error' },
-    ],
-    [
-      'unreleased',
-      unreleasedModule,
-      ready({
-        permissions: [],
-        features: [],
-        subscription: subscription({ state: 'blocked' }),
-      }),
-      'view' as const,
-      { kind: 'unreleased' },
     ],
     [
       'missing permission',
@@ -613,8 +463,7 @@ describe('cabinetModules', () => {
 
   it('gives every released navigation item presentation metadata', () => {
     const releasedNavigationItems = Object.values(cabinetModules).filter(
-      (definition) =>
-        definition.released && definition.navigation !== undefined,
+      (definition) => definition.navigation !== undefined,
     )
 
     expect(releasedNavigationItems.length).toBeGreaterThan(0)
@@ -627,28 +476,6 @@ describe('cabinetModules', () => {
             definition.navigation?.placement === 'account'),
       ),
     ).toBe(true)
-  })
-
-  it('publishes every implemented parity module', () => {
-    expect(
-      Object.fromEntries(
-        Object.entries(cabinetModules).map(([key, definition]) => [
-          key,
-          definition.released,
-        ]),
-      ),
-    ).toMatchObject({
-      cars: true,
-      intakes: true,
-      parts: true,
-      stickers: true,
-      orders: true,
-      customers: true,
-      cash: true,
-      reports: true,
-      team: true,
-      business: true,
-    })
   })
 
   it.each([

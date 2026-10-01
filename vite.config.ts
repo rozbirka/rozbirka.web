@@ -1,18 +1,11 @@
 /// <reference types="vitest/config" />
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig } from 'vite'
 import { fileURLToPath, URL } from 'node:url'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { assertCabinetParityBuildCompatibility } from './src/config/cabinet-feature-flags'
 
 // https://vite.dev/config/
-export default defineConfig(({ mode }) => {
-  const environment = loadEnv(mode, process.cwd(), 'VITE_')
-  assertCabinetParityBuildCompatibility(
-    mode,
-    environment.VITE_CABINET_PARITY_COMPATIBILITY,
-  )
-
+export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
     server: {

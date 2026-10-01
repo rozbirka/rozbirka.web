@@ -6,29 +6,11 @@ import type { SubscriptionDto } from '../api/types'
 import type { CabinetContextValue } from './CabinetContext'
 import { useCabinet } from './CabinetContext'
 import { ModuleBoundary, type CabinetModuleScreenProps } from './ModuleBoundary'
-import type {
-  CabinetModuleDefinition,
-  CabinetModuleKey,
-} from './module-registry'
-
-interface ModuleRegistryExports {
-  cabinetModules: Readonly<Record<CabinetModuleKey, CabinetModuleDefinition>>
-}
+import type { CabinetModuleKey } from './module-registry'
 
 vi.mock('./CabinetContext', () => ({
   useCabinet: vi.fn(),
 }))
-
-vi.mock('./module-registry', async (importOriginal) => {
-  const actual = await importOriginal<ModuleRegistryExports>()
-  return {
-    ...actual,
-    cabinetModules: {
-      ...actual.cabinetModules,
-      cars: { ...actual.cabinetModules.cars, released: false },
-    },
-  }
-})
 
 const mockedUseCabinet = vi.mocked(useCabinet)
 
@@ -105,27 +87,6 @@ beforeEach(() => {
 })
 
 describe('ModuleBoundary', () => {
-  it('never loads code for an unreleased registry module', () => {
-    const load = vi.fn(() =>
-      Promise.resolve({
-        default: (_props: CabinetModuleScreenProps) => <p>Cars module code</p>,
-      }),
-    )
-    const Screen = lazy(load)
-
-    renderBoundary('cars', Screen)
-
-    expect(
-      screen.getByRole('heading', { name: 'Розділ поки недоступний' }),
-    ).toBeVisible()
-    expect(screen.getByRole('link', { name: 'До головної' })).toHaveAttribute(
-      'href',
-      '/app/koval/dashboard',
-    )
-    expect(screen.queryByText('Cars module code')).not.toBeInTheDocument()
-    expect(load).not.toHaveBeenCalled()
-  })
-
   it('loads an allowed released module screen lazily', async () => {
     const load = vi.fn(() =>
       Promise.resolve({

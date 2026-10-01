@@ -70,14 +70,12 @@ export interface CabinetNavigationItem {
 export interface CabinetModuleDefinition {
   key: CabinetModuleKey
   routeSegment: string
-  released: boolean
   viewPermission?: Permission
   mutationPermission?: Permission
   requiredFeature?: FeatureCode
   allowedSubscriptionStates?: readonly BillingState[]
   quotaResource?: QuotaResource
   navigation?: CabinetNavigationItem
-  rollout?: 'cabinet-parity-v1'
 }
 
 const BUSINESS_SUBSCRIPTION_STATES = [
@@ -93,7 +91,6 @@ export const cabinetModules: Readonly<
   dashboard: {
     key: 'dashboard',
     routeSegment: '/dashboard',
-    released: true,
     navigation: {
       label: 'Головна',
       icon: LayoutDashboard,
@@ -105,7 +102,6 @@ export const cabinetModules: Readonly<
   cars: {
     key: 'cars',
     routeSegment: '/cars',
-    released: true,
     viewPermission: 'cars.view',
     mutationPermission: 'cars.manage',
     allowedSubscriptionStates: BUSINESS_SUBSCRIPTION_STATES,
@@ -121,7 +117,6 @@ export const cabinetModules: Readonly<
   parts: {
     key: 'parts',
     routeSegment: '/parts',
-    released: true,
     viewPermission: 'parts.view',
     mutationPermission: 'parts.manage',
     allowedSubscriptionStates: BUSINESS_SUBSCRIPTION_STATES,
@@ -137,7 +132,6 @@ export const cabinetModules: Readonly<
   inventory: {
     key: 'inventory',
     routeSegment: '/inventory',
-    released: true,
     viewPermission: 'inventory.view',
     mutationPermission: 'inventory.manage',
     allowedSubscriptionStates: BUSINESS_SUBSCRIPTION_STATES,
@@ -152,7 +146,6 @@ export const cabinetModules: Readonly<
   orders: {
     key: 'orders',
     routeSegment: '/orders',
-    released: true,
     viewPermission: 'orders.view',
     mutationPermission: 'orders.manage',
     allowedSubscriptionStates: BUSINESS_SUBSCRIPTION_STATES,
@@ -167,7 +160,6 @@ export const cabinetModules: Readonly<
   customers: {
     key: 'customers',
     routeSegment: '/customers',
-    released: true,
     viewPermission: 'customers.view',
     mutationPermission: 'customers.manage',
     allowedSubscriptionStates: BUSINESS_SUBSCRIPTION_STATES,
@@ -182,7 +174,6 @@ export const cabinetModules: Readonly<
   cash: {
     key: 'cash',
     routeSegment: '/cash',
-    released: true,
     viewPermission: 'finance.view',
     mutationPermission: 'finance.manage',
     allowedSubscriptionStates: BUSINESS_SUBSCRIPTION_STATES,
@@ -198,8 +189,6 @@ export const cabinetModules: Readonly<
   team: {
     key: 'team',
     routeSegment: '/team',
-    released: true,
-    rollout: 'cabinet-parity-v1',
     viewPermission: 'team.view',
     mutationPermission: 'team.manage',
     requiredFeature: FEATURES.TeamCollaboration,
@@ -215,7 +204,6 @@ export const cabinetModules: Readonly<
   intakes: {
     key: 'intakes',
     routeSegment: '/intakes',
-    released: true,
     viewPermission: 'intakes.view',
     mutationPermission: 'intakes.manage',
     requiredFeature: FEATURES.IntakeManagement,
@@ -232,7 +220,6 @@ export const cabinetModules: Readonly<
   stickers: {
     key: 'stickers',
     routeSegment: '/stickers',
-    released: true,
     viewPermission: 'parts.view',
     mutationPermission: 'stickers.manage',
     allowedSubscriptionStates: BUSINESS_SUBSCRIPTION_STATES,
@@ -247,8 +234,6 @@ export const cabinetModules: Readonly<
   reports: {
     key: 'reports',
     routeSegment: '/reports',
-    released: true,
-    rollout: 'cabinet-parity-v1',
     viewPermission: 'reports.view',
     mutationPermission: 'reports.manage',
     requiredFeature: FEATURES.AdvancedReports,
@@ -264,7 +249,6 @@ export const cabinetModules: Readonly<
   billing: {
     key: 'billing',
     routeSegment: '/settings/billing/overview',
-    released: true,
     viewPermission: 'billing.view',
     mutationPermission: 'billing.manage',
     navigation: {
@@ -277,7 +261,6 @@ export const cabinetModules: Readonly<
   plans: {
     key: 'plans',
     routeSegment: '/settings/billing/plans',
-    released: true,
     viewPermission: 'billing.view',
     mutationPermission: 'billing.manage',
     navigation: {
@@ -290,7 +273,6 @@ export const cabinetModules: Readonly<
   payments: {
     key: 'payments',
     routeSegment: '/settings/billing/payments',
-    released: true,
     viewPermission: 'billing.view',
     mutationPermission: 'billing.manage',
     navigation: {
@@ -303,7 +285,6 @@ export const cabinetModules: Readonly<
   profile: {
     key: 'profile',
     routeSegment: '/settings/profile',
-    released: true,
     navigation: {
       label: 'Профіль',
       group: 'settings',
@@ -314,8 +295,6 @@ export const cabinetModules: Readonly<
   integrations: {
     key: 'integrations',
     routeSegment: '/settings/integrations',
-    released: true,
-    rollout: 'cabinet-parity-v1',
     // Core demands team.manage even to list integrations: a stored API key is
     // a key to someone else's account, not a read-only setting.
     viewPermission: 'team.manage',
@@ -331,8 +310,6 @@ export const cabinetModules: Readonly<
   business: {
     key: 'business',
     routeSegment: '/settings/business',
-    released: true,
-    rollout: 'cabinet-parity-v1',
     viewPermission: 'team.view',
     mutationPermission: 'team.manage',
     allowedSubscriptionStates: BUSINESS_SUBSCRIPTION_STATES,
