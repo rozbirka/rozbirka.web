@@ -46,7 +46,6 @@ vi.mock('../CabinetContext', () => ({
 const stickersDefinition = {
   key: 'stickers',
   routeSegment: '/stickers',
-  released: true,
   viewPermission: 'parts.view',
   mutationPermission: 'stickers.manage',
   allowedSubscriptionStates: ['trial', 'active', 'pastDue', 'cancelled'],

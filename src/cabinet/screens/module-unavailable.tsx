@@ -258,7 +258,6 @@ export function SubscriptionStateScreen({
     .map((key) => cabinetModules[key])
     .filter(
       (one) =>
-        one.released &&
         one.navigation !== undefined &&
         (one.viewPermission === undefined ||
           snapshot?.permissions.has(one.viewPermission) === true),

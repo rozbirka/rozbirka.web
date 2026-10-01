@@ -1725,14 +1725,14 @@ test('canonical tenant roots reach the private SPA and redirect to the dashboard
   }
 })
 
-test('shows a truthful unavailable state for an unreleased module', async ({
+test('opens permitted modules despite legacy rollout switches', async ({
   page,
 }) => {
   await installCabinetApiBoundary(page, { cabinetParityRolledOut: false })
   await loginFrom(page)
   await page.goto('/app/koval/team')
   await expect(
-    page.getByRole('heading', { name: 'Розділ поки недоступний' }),
+    page.getByRole('heading', { name: 'Команда', exact: true }),
   ).toBeVisible()
 })
 

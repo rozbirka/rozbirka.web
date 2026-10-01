@@ -29,8 +29,7 @@ export function CabinetNotFoundScreen() {
 
   const permitted = SHORTCUTS.filter((key) => {
     const definition = cabinetModules[key]
-    if (!definition.released || definition.navigation === undefined)
-      return false
+    if (definition.navigation === undefined) return false
     const permission = definition.viewPermission
     return permission === undefined || snapshot?.permissions.has(permission)
   })

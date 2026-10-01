@@ -40,7 +40,6 @@ const screenProps = {
   definition: {
     key: 'reports',
     routeSegment: '/reports',
-    released: true,
     viewPermission: 'reports.view',
     mutationPermission: 'reports.manage',
   },

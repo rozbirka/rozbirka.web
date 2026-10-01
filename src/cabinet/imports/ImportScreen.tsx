@@ -325,7 +325,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
     return () => c.abort()
   }, [])
   useEffect(() => {
-    if (!caps?.enabled) return
+    if (!caps) return
     const c = new AbortController()
     void api.list(historyPage, { signal: c.signal }).then((p) => {
       if (!c.signal.aborted) {
@@ -334,9 +334,9 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
       }
     }, effectFailure)
     return () => c.abort()
-  }, [caps?.enabled, historyPage, importId])
+  }, [caps, historyPage, importId])
   useEffect(() => {
-    if (!importId || !caps?.enabled) return
+    if (!importId || !caps) return
     const c = new AbortController()
     const timer = setTimeout(() => {
       void loadImport(importId, c.signal).then((s) => {
@@ -376,7 +376,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
       clearTimeout(timer)
       c.abort()
     }
-  }, [importId, caps?.enabled])
+  }, [importId, caps])
   useEffect(() => {
     if (
       !status ||
@@ -649,11 +649,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
     return error ? (
       <Notice tone="danger">{error}</Notice>
     ) : (
-      <SkeletonRows label="Перевіряємо доступність імпорту…" />
-    )
-  if (!caps.enabled)
-    return (
-      <Notice tone="info">Імпорт поки недоступний для цього середовища.</Notice>
+      <SkeletonRows label="Завантажуємо налаштування імпорту…" />
     )
   return (
     <div className="type-redesign import-workspace">

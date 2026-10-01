@@ -57,7 +57,6 @@ vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
 const definition = {
   key: 'orders',
   routeSegment: '/orders',
-  released: true,
   viewPermission: 'orders.view',
   mutationPermission: 'orders.manage',
   allowedSubscriptionStates: ['active'],

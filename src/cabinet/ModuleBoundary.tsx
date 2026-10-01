@@ -17,7 +17,6 @@ import {
 import { evaluateModuleAccess, type ModuleAccessDecision } from './policy'
 import {
   FeatureUnavailableScreen,
-  ModuleUnavailableScreen,
   SubscriptionStateScreen,
 } from './screens/module-unavailable'
 import type { TenantAccessState } from './access-types'
@@ -77,8 +76,6 @@ function decisionScreen(
   decision: Exclude<ModuleAccessDecision, { kind: 'allowed' }>,
 ) {
   switch (decision.kind) {
-    case 'unreleased':
-      return <ModuleUnavailableScreen definition={definition} />
     case 'feature-unavailable':
       return <FeatureUnavailableScreen definition={definition} />
     case 'permission-denied':

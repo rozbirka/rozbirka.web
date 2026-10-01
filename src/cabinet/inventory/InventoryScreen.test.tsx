@@ -85,7 +85,6 @@ vi.mock('../CabinetContext', () => ({
 const definition = {
   key: 'inventory',
   routeSegment: '/inventory',
-  released: true,
   viewPermission: 'inventory.view',
   mutationPermission: 'inventory.manage',
 }

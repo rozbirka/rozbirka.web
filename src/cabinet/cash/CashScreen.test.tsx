@@ -30,7 +30,6 @@ vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
 const definition = {
   key: 'cash',
   routeSegment: '/cash',
-  released: true,
   viewPermission: 'finance.view',
   mutationPermission: 'finance.manage',
   allowedSubscriptionStates: ['active'],

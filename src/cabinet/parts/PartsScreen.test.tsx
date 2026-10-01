@@ -155,7 +155,6 @@ const cabinetMock = vi.hoisted(() => ({
 const partsDefinition = {
   key: 'parts',
   routeSegment: '/parts',
-  released: true,
   viewPermission: 'parts.view',
   mutationPermission: 'parts.manage',
   allowedSubscriptionStates: ['trial', 'active', 'pastDue', 'cancelled'],

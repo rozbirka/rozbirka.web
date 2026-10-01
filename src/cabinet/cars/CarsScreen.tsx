@@ -143,7 +143,6 @@ function useAccess() {
     return evaluateModuleAccess(
       {
         ...definitionWithoutQuota,
-        released: true,
         mutationPermission: permission,
         ...(quota && quotaResource !== undefined ? { quotaResource } : {}),
       },
@@ -156,7 +155,7 @@ function useAccess() {
     permission: Permission,
   ) =>
     evaluateModuleAccess(
-      { ...definition, released: true, viewPermission: permission },
+      { ...definition, viewPermission: permission },
       access,
       'view',
     ).kind === 'allowed'

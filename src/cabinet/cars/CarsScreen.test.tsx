@@ -38,7 +38,6 @@ vi.mock('../module-registry', () => ({
   cabinetModules: {
     cars: {
       key: 'cars',
-      released: true,
       routeSegment: '/cars',
       viewPermission: 'cars.view',
       mutationPermission: 'cars.manage',
@@ -47,7 +46,6 @@ vi.mock('../module-registry', () => ({
     },
     parts: {
       key: 'parts',
-      released: true,
       routeSegment: '/parts',
       viewPermission: 'parts.view',
       mutationPermission: 'parts.manage',

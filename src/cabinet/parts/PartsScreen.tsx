@@ -260,11 +260,8 @@ const allowedToView = (
   definition: CabinetModuleDefinition,
   cabinet: ReturnType<typeof useCabinet>,
 ) =>
-  evaluateModuleAccess(
-    { ...definition, released: true },
-    accessState(cabinet),
-    'view',
-  ).kind === 'allowed'
+  evaluateModuleAccess(definition, accessState(cabinet), 'view').kind ===
+  'allowed'
 
 export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
