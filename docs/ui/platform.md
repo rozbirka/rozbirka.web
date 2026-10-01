@@ -8,6 +8,8 @@
 
 App Button має мінімальні touch targets і окремий touch size. Під час зміни щільності таблиці або toolbar перевіряти реальний tap target, довгі українські назви й overflow; не зменшувати controls лише для красивого скриншота.
 
+Хрестик Sheet має видиму рамку 34px та розширену псевдоелементом область натискання 44px. Її перевіряємо browser hit-testing і кліком поза видимою рамкою: `boundingBox()` не включає псевдоелемент.
+
 ## Keyboard і focus
 
 Field/input context зв’язує label, hint та error. Radix у FormDialog/Sheet/ConfirmDialog відповідає за dialog primitives; перевіряти focus entry/return і keyboard actions у конкретній композиції. Закриття під час pending залежить від компонента і caller.

@@ -186,10 +186,11 @@ export function Sheet({
             <Dialog.Close asChild>
               {/* The drawer's own close: a 34px square, as the design draws it,
                   with the 44px hit area the cabinet keeps put back by a
-                  transparent overlay that costs the layout nothing. */}
+                  transparent overlay that costs the layout nothing. The
+                  inset starts inside the 1px border: 32 + 2 × 6 = 44px. */}
               <button
                 aria-label="Закрити"
-                className="border-app-line-2 text-app-muted hover:text-app-ink relative grid size-[34px] shrink-0 place-items-center rounded-[10px] border transition-colors hover:bg-white/[0.06] after:absolute after:-inset-[5px] after:content-['']"
+                className="border-app-line-2 text-app-muted hover:text-app-ink relative grid size-[34px] shrink-0 place-items-center rounded-[10px] border transition-colors hover:bg-white/[0.06] after:absolute after:-inset-[6px] after:content-['']"
                 type="button"
               >
                 <X aria-hidden className="size-3.5" />

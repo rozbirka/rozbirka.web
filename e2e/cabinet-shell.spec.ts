@@ -1894,12 +1894,31 @@ test('released Team dialogs and Reports actions keep 44px targets', async ({
   const roleActions = roleDialog.getByRole('button')
   for (let index = 0; index < (await roleActions.count()); index += 1) {
     const action = roleActions.nth(index)
-    const box = await action.boundingBox()
-    expect(box).not.toBeNull()
-    expect(Math.round(box!.width)).toBeGreaterThanOrEqual(44)
-    expect(Math.round(box!.height)).toBeGreaterThanOrEqual(44)
+    // Sheet's close icon is visually 34px, with a pseudo-element extending
+    // its pointer target to 44px. Bounding boxes omit that interactive area.
+    const has44pxTarget = await action.evaluate((button) => {
+      const rect = button.getBoundingClientRect()
+      const centerX = rect.x + rect.width / 2
+      const centerY = rect.y + rect.height / 2
+      return [-21.5, 0, 21.5].every((dx) =>
+        [-21.5, 0, 21.5].every((dy) => {
+          const hit = document.elementFromPoint(centerX + dx, centerY + dy)
+          return hit !== null && button.contains(hit)
+        }),
+      )
+    })
+    expect(
+      has44pxTarget,
+      (await action.getAttribute('aria-label')) ?? (await action.innerText()),
+    ).toBe(true)
   }
-  await roleDialog.getByRole('button', { name: 'Скасувати' }).click()
+  const closeBox = await roleDialog
+    .getByRole('button', { name: 'Закрити', exact: true })
+    .boundingBox()
+  expect(closeBox).not.toBeNull()
+  // Click inside the extended target, outside the visible 34px square.
+  await page.mouse.click(closeBox!.x - 4, closeBox!.y + closeBox!.height / 2)
+  await expect(roleDialog).not.toBeVisible()
 
   await expectReleasedScreenSettled(page, '/app/koval/reports')
   const reportActions = page
