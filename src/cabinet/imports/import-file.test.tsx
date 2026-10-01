@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, it, vi } from 'vitest'
 import type {
@@ -71,7 +71,7 @@ const renderStep = (
     onChooseFile: vi.fn(),
     onContinue: vi.fn(),
     onReanalyze: vi.fn(),
-    onSelection: vi.fn(),
+    onSelection: vi.fn<Parameters<typeof ImportFileStep>[0]['onSelection']>(),
     onToggleSettings: vi.fn(),
     rows,
     selection: {
@@ -273,4 +273,43 @@ it('states the limits beside the dropzone', () => {
   const limits = screen.getByText('Обмеження').closest('section')!
   expect(within(limits).getByText('CSV, XLSX')).toBeVisible()
   expect(within(limits).getByText('до 10 MiB')).toBeVisible()
+})
+
+it.each([4, 12, 104])(
+  'accepts header row %i and starts data on the following row',
+  (row) => {
+    const props = renderStep({ settingsOpen: true })
+    fireEvent.change(
+      screen.getByRole('spinbutton', { name: 'Рядок заголовків' }),
+      { target: { value: String(row) } },
+    )
+    const update = vi.mocked(props.onSelection).mock.calls[0]![0]
+    expect(update(props.selection)).toMatchObject({
+      headerRow: row,
+      startRow: row + 1,
+    })
+  },
+)
+
+it('allows files without headers by clearing the row input', () => {
+  const props = renderStep({ settingsOpen: true })
+  fireEvent.change(
+    screen.getByRole('spinbutton', { name: 'Рядок заголовків' }),
+    { target: { value: '' } },
+  )
+  expect(
+    vi.mocked(props.onSelection).mock.calls[0]![0](props.selection),
+  ).toMatchObject({
+    headerRow: null,
+    startRow: 1,
+  })
+})
+
+it.each(['0', '-1', '1.5'])('rejects invalid header row %s', (value) => {
+  const props = renderStep({ settingsOpen: true })
+  fireEvent.change(
+    screen.getByRole('spinbutton', { name: 'Рядок заголовків' }),
+    { target: { value } },
+  )
+  expect(props.onSelection).not.toHaveBeenCalled()
 })

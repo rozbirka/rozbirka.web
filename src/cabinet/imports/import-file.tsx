@@ -1,5 +1,5 @@
 import { Upload } from 'lucide-react'
-import { Button, Field, Notice, SelectInput } from '@/components/app'
+import { Button, Field, Notice, SelectInput, TextInput } from '@/components/app'
 import { cn, plural } from '@/lib/utils'
 import type { ReactNode } from 'react'
 import type {
@@ -541,7 +541,7 @@ export function ImportFileStep({
             <p className="text-app-muted mt-1.5 text-[13px] leading-5 text-pretty">
               {settingsOpen
                 ? 'Після зміни налаштувань файл читається заново — зіставлення колонок доведеться перевірити.'
-                : `Роздільник ${DELIMITERS.find((one) => one.value === selection.delimiter)?.label.toLowerCase() ?? selection.delimiter}, кодування ${selection.encoding}, заголовки в рядку ${String(selection.headerRow ?? 1)}. Змініть, якщо дані виглядають не так.`}
+                : `Роздільник ${DELIMITERS.find((one) => one.value === selection.delimiter)?.label.toLowerCase() ?? selection.delimiter}, кодування ${selection.encoding}, ${selection.headerRow == null ? 'без заголовків' : `заголовки в рядку ${String(selection.headerRow)}`}. Змініть, якщо дані виглядають не так.`}
             </p>
 
             {warnings.map((warning) => (
@@ -617,34 +617,30 @@ export function ImportFileStep({
                 </div>
 
                 <Field
-                  hint="Дані читаються з наступного рядка."
+                  hint="Вкажіть номер рядка. Дані читаються з наступного. Залиште порожнім, якщо заголовків немає."
                   label="Рядок заголовків"
                 >
-                  <SelectInput
-                    onChange={(event) =>
+                  <TextInput
+                    type="number"
+                    min={1}
+                    step={1}
+                    placeholder="Немає заголовків"
+                    onChange={(event) => {
+                      const value = event.target.value
+                      const headerRow = value === '' ? null : Number(value)
+                      if (
+                        headerRow !== null &&
+                        (!Number.isSafeInteger(headerRow) || headerRow < 1)
+                      )
+                        return
                       onSelection((current) => ({
                         ...current,
-                        headerRow:
-                          event.target.value === ''
-                            ? null
-                            : Number(event.target.value),
-                        startRow:
-                          event.target.value === ''
-                            ? 1
-                            : Number(event.target.value) + 1,
+                        headerRow,
+                        startRow: headerRow === null ? 1 : headerRow + 1,
                       }))
-                    }
-                    value={
-                      selection.headerRow == null
-                        ? ''
-                        : String(selection.headerRow)
-                    }
-                  >
-                    <option value="1">1</option>
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="">Немає</option>
-                  </SelectInput>
+                    }}
+                    value={selection.headerRow ?? ''}
+                  />
                 </Field>
 
                 {warnings.includes('HIDDEN_ROWS') ? (
