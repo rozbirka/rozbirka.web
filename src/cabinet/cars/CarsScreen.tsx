@@ -16,7 +16,6 @@ import {
   useSearchParams,
 } from 'react-router'
 import { sourceReturnPath } from '../parts/source-return'
-import { ImportEntryButton } from '../imports/ImportEntryButton'
 import {
   Archive,
   ChevronLeft,
@@ -681,11 +680,6 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
               <Button asChild className="px-4 text-sm font-bold">
                 <Link to={`${base}/${car.id}/edit`}>Редагувати</Link>
               </Button>
-            ) : null}
-            {partsManage && car.status !== 'archived' ? (
-              <ImportEntryButton
-                to={`${partsBase}/imports?car_id=${encodeURIComponent(car.id)}`}
-              />
             ) : null}
             {partsManage && car.status !== 'archived' ? (
               <Button

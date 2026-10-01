@@ -51,10 +51,14 @@ retain their history but cannot receive new parts. A stale `origin=free` URL is
 reset with an inline notice; available stock and unassigned warehouse zones are
 unaffected.
 
+The cabinet does not show part import: the parts list, car and intake cards
+offer no import action. The import route and its behaviour below stay in the
+code and are reachable only by direct URL.
+
 An import has one destination, carried through upload navigation, remembered
 per import in this browser until the mapping is saved, and persisted in mapping
 schema 2. A draft reopened without a known destination says so before offering a
-new batch. The parts list never turns its filters into an import destination. Contextual imports preserve their car/intake. An upload
+new batch. A `car_id`/`intake_id` in the import URL preserves that car/intake. An upload
 without context proposes an editable batch name derived from its display
 filename. Resuming an unmapped upload without a filename requires entering the
 name. Mapping source changes invalidate confirmation. Legacy schema mappings

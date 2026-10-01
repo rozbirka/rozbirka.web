@@ -2822,3 +2822,21 @@ it('blocks a stale direct create link to an archived car before any part write',
   )
   expect(partMocks.create).not.toHaveBeenCalled()
 })
+
+it('does not offer part import from the parts list', async () => {
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  await vi.waitFor(() => expect(partMocks.search).toHaveBeenCalled())
+  expect(
+    screen.queryByRole('link', { name: 'Імпорт запчастин' }),
+  ).not.toBeInTheDocument()
+})
