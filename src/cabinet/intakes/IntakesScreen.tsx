@@ -7,7 +7,6 @@ import {
   useSearchParams,
 } from 'react-router'
 import { sourceReturnPath } from '../parts/source-return'
-import { ImportEntryButton } from '../imports/ImportEntryButton'
 import {
   Check,
   ChevronLeft,
@@ -640,14 +639,8 @@ function IntakeStat({
 }
 
 function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
-  const {
-    cabinet,
-    manage,
-    partsView,
-    partCreateDecision,
-    partsMediaManage,
-    financeView,
-  } = useIntakeAccess()
+  const { cabinet, manage, partsView, partCreateDecision, financeView } =
+    useIntakeAccess()
   const navigate = useNavigate()
   const [intake, setIntake] = useState<Intake | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
@@ -796,12 +789,6 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
             <Button asChild className="px-[18px] text-sm font-semibold">
               <Link to={`${base}/${intake.id}/edit`}>Редагувати</Link>
             </Button>
-            {/* Import is a parts mutation, the same gate as the parts list. */}
-            {partCreateDecision.kind === 'allowed' && partsMediaManage ? (
-              <ImportEntryButton
-                to={`${base.replace(/\/intakes$/, '/parts')}/imports?intake_id=${encodeURIComponent(intake.id)}`}
-              />
-            ) : null}
             {partCreateDecision.kind === 'allowed' ? (
               <Button
                 asChild

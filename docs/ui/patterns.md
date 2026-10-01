@@ -43,7 +43,7 @@ Sheet — для форм і складного контенту кабінет�
 
 ## Upload і багатокрокові процеси
 
-FileField/PhotoFileField та UploadList представляють вибір і статуси файлів; вони не замінюють транспорт чи backend job. [ImportScreen](../../src/cabinet/imports/ImportScreen.tsx), [mapping](../../src/cabinet/imports/import-mapping.tsx), [confirmation](../../src/cabinet/imports/import-confirm.tsx) — поточна композиція імпорту. Ці файли та контракт джерела запчастин мають локальні зміни. Ліміти, retry і partial success перевіряти через UX-CONTRACT, API та вимоги; не виводити їх зі Stepper.
+FileField/PhotoFileField та UploadList представляють вибір і статуси файлів; вони не замінюють транспорт чи backend job. [ImportScreen](../../src/cabinet/imports/ImportScreen.tsx), [mapping](../../src/cabinet/imports/import-mapping.tsx), [confirmation](../../src/cabinet/imports/import-confirm.tsx) — поточна композиція імпорту. У кабінеті імпорт зараз не показується (немає кнопок входу), екран доступний лише за прямим URL. Ці файли та контракт джерела запчастин мають локальні зміни. Ліміти, retry і partial success перевіряти через UX-CONTRACT, API та вимоги; не виводити їх зі Stepper.
 
 ## Стани та відображення даних
 

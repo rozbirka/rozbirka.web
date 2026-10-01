@@ -87,7 +87,6 @@ import { carsApi, type Car, type CarListItem } from '@/api/cars'
 import { intakesApi, type IntakeListItem } from '@/api/intakes'
 import { mediaApi } from '@/api/media'
 import { useCabinet } from '../CabinetContext'
-import { ImportEntryButton } from '../imports/ImportEntryButton'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import {
   cabinetModules,
@@ -667,9 +666,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
             </h1>
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2.5">
-            {manageDecision.kind === 'allowed' ? (
-              <ImportEntryButton to="imports" />
-            ) : null}
             {createDecision.kind === 'allowed' ? (
               <Button
                 asChild
