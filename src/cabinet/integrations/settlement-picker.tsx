@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Field, TextInput } from '@/components/app'
 import { integrationsApi, type NovaPoshtaSettlement } from '@/api/integrations'
+import { normalizeApiProblem } from '@/api/errors'
 
 export type SettlementUse = 'sending' | 'receiving'
 
@@ -46,14 +47,14 @@ export function SettlementPicker({
     term: string
     items: NovaPoshtaSettlement[]
   } | null>(null)
-  const [failed, setFailed] = useState(false)
+  const [failure, setFailure] = useState<string | null>(null)
   const boxRef = useRef<HTMLDivElement | null>(null)
 
   const term = query.trim()
   const options = term.length >= 2 && found?.term === term ? found.items : []
   const matched = picked !== null && picked.name === term
   const loading =
-    term.length >= 2 && !matched && found?.term !== term && !failed
+    term.length >= 2 && !matched && found?.term !== term && failure === null
 
   useEffect(() => {
     if (term.length < 2 || matched) return
@@ -65,10 +66,11 @@ export function SettlementPicker({
           (page) => {
             if (controller.signal.aborted) return
             setFound({ term, items: page.items })
-            setFailed(false)
+            setFailure(null)
           },
-          () => {
-            if (!controller.signal.aborted) setFailed(true)
+          (problem) => {
+            if (!controller.signal.aborted)
+              setFailure(normalizeApiProblem(problem).message)
           },
         )
     }, 300)
@@ -98,16 +100,15 @@ export function SettlementPicker({
   return (
     <div ref={boxRef}>
       <Field
+        error={failure ?? undefined}
         hint={
-          failed
-            ? 'Довідник Нової пошти зараз недоступний. Спробуйте ще раз.'
-            : term === '' && savedHint !== undefined
-              ? savedHint
-              : matched
-                ? prohibited(picked, use)
-                  ? `Обрано з довідника. Цей пункт ${PROHIBITED[use]}.`
-                  : 'Обрано з довідника Нової пошти.'
-                : 'Почніть вводити назву — підкажемо з довідника Нової пошти.'
+          term === '' && savedHint !== undefined
+            ? savedHint
+            : matched
+              ? prohibited(picked, use)
+                ? `Обрано з довідника. Цей пункт ${PROHIBITED[use]}.`
+                : 'Обрано з довідника Нової пошти.'
+              : 'Почніть вводити назву — підкажемо з довідника Нової пошти.'
         }
         label={label}
         required
@@ -124,7 +125,7 @@ export function SettlementPicker({
             onChange={(event) => {
               setQuery(event.target.value)
               setFound(null)
-              setFailed(false)
+              setFailure(null)
               setActive(0)
               setOpen(true)
               onPick(null)
@@ -164,14 +165,20 @@ export function SettlementPicker({
               <p className="border-app-line text-app-muted flex items-center justify-between gap-2.5 border-b px-3.5 py-2.5 font-mono text-[10px] tracking-[0.12em] uppercase">
                 <span>Довідник Нової пошти</span>
                 <span>
-                  {loading
-                    ? 'Шукаємо…'
-                    : options.length > 0
-                      ? `${options.length} збіг.`
-                      : 'без збігів'}
+                  {failure !== null
+                    ? 'помилка'
+                    : loading
+                      ? 'Шукаємо…'
+                      : options.length > 0
+                        ? `${options.length} збіг.`
+                        : 'без збігів'}
                 </span>
               </p>
-              {loading ? (
+              {failure !== null ? (
+                <p className="text-state-danger px-3.5 py-4 text-[13px] leading-5 text-pretty">
+                  Не вдалося завантажити довідник. Причину показано під полем.
+                </p>
+              ) : loading ? (
                 <p className="text-app-muted px-3.5 py-4 text-[13px] leading-5">
                   Завантажуємо довідник…
                 </p>
