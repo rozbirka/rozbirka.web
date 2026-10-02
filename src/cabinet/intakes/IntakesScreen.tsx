@@ -7,6 +7,8 @@ import {
   useSearchParams,
 } from 'react-router'
 import { sourceReturnPath } from '../parts/source-return'
+import { FeatureGate } from '../FeatureFlags'
+import { FEATURE_FLAGS } from '@/api/feature-flags'
 import {
   Check,
   ChevronLeft,
@@ -639,8 +641,14 @@ function IntakeStat({
 }
 
 function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
-  const { cabinet, manage, partsView, partCreateDecision, financeView } =
-    useIntakeAccess()
+  const {
+    cabinet,
+    manage,
+    partsView,
+    partCreateDecision,
+    partsMediaManage,
+    financeView,
+  } = useIntakeAccess()
   const navigate = useNavigate()
   const [intake, setIntake] = useState<Intake | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
@@ -789,6 +797,18 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
             <Button asChild className="px-[18px] text-sm font-semibold">
               <Link to={`${base}/${intake.id}/edit`}>Редагувати</Link>
             </Button>
+            {/* Import is a parts mutation, the same gate as the parts list. */}
+            {partCreateDecision.kind === 'allowed' && partsMediaManage ? (
+              <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
+                <Button asChild>
+                  <Link
+                    to={`${base.replace(/\/intakes$/, '/parts')}/imports?intake_id=${encodeURIComponent(intake.id)}`}
+                  >
+                    Імпорт запчастин
+                  </Link>
+                </Button>
+              </FeatureGate>
+            ) : null}
             {partCreateDecision.kind === 'allowed' ? (
               <Button
                 asChild

@@ -87,6 +87,8 @@ import { carsApi, type Car, type CarListItem } from '@/api/cars'
 import { intakesApi, type IntakeListItem } from '@/api/intakes'
 import { mediaApi } from '@/api/media'
 import { useCabinet } from '../CabinetContext'
+import { FeatureGate } from '../FeatureFlags'
+import { FEATURE_FLAGS } from '@/api/feature-flags'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import {
   cabinetModules,
@@ -666,6 +668,13 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
             </h1>
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2.5">
+            {manageDecision.kind === 'allowed' ? (
+              <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
+                <Button asChild>
+                  <Link to="imports">Імпорт запчастин</Link>
+                </Button>
+              </FeatureGate>
+            ) : null}
             {createDecision.kind === 'allowed' ? (
               <Button
                 asChild
