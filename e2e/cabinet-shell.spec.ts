@@ -148,6 +148,7 @@ interface CabinetFixtureOptions {
   cancelSubscriptionFailureStatus?: 403 | 409
   cancelPaymentFailureStatus?: 403 | 409
   inventoryManage?: boolean
+  businessOperations?: boolean
 }
 
 interface CabinetRequest {
@@ -334,6 +335,16 @@ async function installCabinetApiBoundary(
           permissions: [
             'cars.view',
             'cars.manage',
+            ...(options.businessOperations
+              ? [
+                  'orders.view',
+                  'orders.manage',
+                  'customers.view',
+                  'customers.manage',
+                  'finance.view',
+                  'finance.manage',
+                ]
+              : []),
             ...(options.partsManage ? ['parts.view', 'parts.manage'] : []),
             'billing.view',
             'billing.manage',
@@ -2180,4 +2191,231 @@ test('requires a source before creating a part', async ({ page }) => {
   await expect(
     drawer.getByRole('button', { name: 'Створити деталь' }),
   ).toBeVisible()
+})
+
+test('clears a stale command result while the next browser search is pending @hardening', async ({
+  page,
+}) => {
+  await installCabinetApiBoundary(page, { partsManage: true })
+  await page.route('**/api/v1/parts/search', async (route) => {
+    const body = route.request().postDataJSON() as { query?: string }
+    const query = body.query ?? ''
+    if (query.includes('нова')) return
+    await fulfillData(route, {
+      items: [
+        {
+          id: 'part-7',
+          name: 'Фара ліва',
+          oemCode: 'OEM-1',
+          car: null,
+        },
+      ],
+      page: 1,
+      pageSize: 5,
+      total: 1,
+      totalPages: 1,
+    })
+  })
+  await loginFrom(page)
+
+  await page.keyboard.press('Control+K')
+  const search = page.getByRole('combobox', { name: 'Пошук по кабінету' })
+  await search.fill('фара')
+  await expect(page.getByRole('option', { name: /Фара ліва/ })).toBeVisible()
+
+  await search.fill('фара нова')
+  await expect(page.getByRole('option', { name: /Фара ліва/ })).toHaveCount(0)
+  await expect(page.getByText('Шукаємо…')).toBeVisible()
+})
+
+test('shows settlement loading before a delayed catalogue response @hardening', async ({
+  page,
+}) => {
+  await installCabinetApiBoundary(page)
+  await page.route('**/api/v1/integrations/integration-1**', async (route) => {
+    const path = new URL(route.request().url()).pathname
+    if (path.endsWith('/dispatch-points')) return fulfillData(route, [])
+    if (path.endsWith('/shipping/senders')) return fulfillData(route, [])
+    if (path.endsWith('/shipping/settlements')) return
+    if (path === '/api/v1/integrations/integration-1')
+      return fulfillData(route, {
+        id: 'integration-1',
+        definitionId: 'definition-np',
+        code: 'nova_poshta',
+        displayName: 'Нова пошта',
+        status: 'active',
+        configured: true,
+        verifiedAt: '2026-09-21T09:31:00Z',
+        lastErrorCode: null,
+        settings: { configured: true, activeDispatchPoints: 0 },
+      })
+    await route.fallback()
+  })
+  await loginFrom(page)
+  await page.goto(
+    '/app/koval/settings/integrations/integration-1/dispatch-points',
+  )
+  await page.getByRole('button', { name: 'Додати точку' }).first().click()
+  const settlement = page.getByLabel(/Населений пункт/)
+  await settlement.fill('Жито')
+
+  await expect(page.getByText('Шукаємо…')).toBeVisible()
+  await expect(page.getByText('без збігів')).toHaveCount(0)
+  await expect(
+    page.getByText(/немає населеного пункту з такою назвою/),
+  ).toHaveCount(0)
+})
+
+test('reuses the browser payment key after a network failure and reports one error @hardening', async ({
+  page,
+}) => {
+  const delivery = {
+    orderId: 'order-1',
+    agreedTotalUah: 4600,
+    appliedUah: 3400,
+    outstandingUah: 1200,
+    netReceivedUah: 3400,
+    feesUah: 0,
+    requiredDepositUah: 360,
+    depositShortfallUah: 0,
+    depositSatisfied: true,
+    depositWaived: false,
+    depositRequired: true,
+    customerTrusted: false,
+    dispatchedAt: null,
+    receivedAt: null,
+    returnedAt: null,
+    awaitingCodReconciliation: false,
+    payments: [],
+  }
+  const paymentKeys: string[] = []
+  let paymentAttempts = 0
+  await installCabinetApiBoundary(page, { businessOperations: true })
+  await page.route('**/api/v1/**', async (route) => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname
+    if (path === '/api/v1/orders/order-1' && request.method() === 'GET')
+      return fulfillData(route, {
+        id: 'order-1',
+        number: 1,
+        status: 'pending',
+        customerId: null,
+        customerName: null,
+        notes: null,
+        items: [],
+        payments: [],
+        history: [],
+        totalAmount: 4600,
+        totalPaid: 3400,
+        paymentCurrency: 'UAH',
+        createdAt: '2026-09-21T10:00:00Z',
+        createdByName: 'Олена',
+      })
+    if (
+      path === '/api/v1/orders/order-1/delivery' &&
+      request.method() === 'GET'
+    )
+      return fulfillData(route, delivery)
+    if (path === '/api/v1/integrations' && request.method() === 'GET')
+      return fulfillData(route, [])
+    if (path === '/api/v1/cash' && request.method() === 'GET')
+      return fulfillData(route, [
+        {
+          id: 'cash-1',
+          name: 'Сейф',
+          type: 'safe',
+          isActive: true,
+          balances: { UAH: 5000 },
+        },
+      ])
+    if (
+      path === '/api/v1/orders/order-1/delivery/payments' &&
+      request.method() === 'POST'
+    ) {
+      paymentAttempts += 1
+      paymentKeys.push(request.headers()['idempotency-key'] ?? '')
+      if (paymentAttempts === 1) return route.abort('failed')
+      return fulfillData(route, delivery)
+    }
+    await route.fallback()
+  })
+  await loginFrom(page)
+  await page.goto('/app/koval/orders/order-1')
+  const pay = page.getByRole('button', { name: 'Внести оплату' }).first()
+  await pay.click()
+  const drawer = page.getByRole('dialog', { name: 'Внести оплату' })
+  await drawer.getByRole('button', { name: 'Зберегти платіж' }).click()
+  await expect(drawer.getByRole('alert')).toHaveCount(1)
+
+  await drawer.getByRole('button', { name: 'Зберегти платіж' }).click()
+  await expect(drawer).toHaveCount(0)
+  await pay.click()
+  await page
+    .getByRole('dialog', { name: 'Внести оплату' })
+    .getByRole('button', { name: 'Зберегти платіж' })
+    .click()
+
+  await expect.poll(() => paymentKeys.length).toBe(3)
+  expect(paymentKeys[0]).toBe(paymentKeys[1])
+  expect(paymentKeys[2]).not.toBe(paymentKeys[1])
+})
+
+test('keeps a pending confirmation open after Escape in the browser @hardening', async ({
+  page,
+}) => {
+  await installCabinetApiBoundary(page)
+  let release: () => void = () => undefined
+  const pending = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route('**/api/v1/billing/cancel', async (route) => {
+    await pending
+    await fulfillData(route, { code: 'CONFLICT' }, 409)
+  })
+  await loginFrom(page)
+  await page.goto('/app/koval/settings/billing/overview')
+  await page
+    .getByRole('button', { name: 'Скасувати підписку', exact: true })
+    .click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByRole('button', { name: 'Так, скасувати підписку' }).click()
+  await expect(
+    dialog.getByRole('button', { name: 'Так, скасувати підписку' }),
+  ).toBeDisabled()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeVisible()
+  release()
+})
+
+test('contains a long inventory QR at mobile width in the browser @hardening', async ({
+  page,
+}) => {
+  const qrCode =
+    '3870f3f5ecb1dbab378027dd9299c57988085d4d7b80054a7a8156cf523e87db'
+  await page.setViewportSize({ width: 320, height: 900 })
+  await installCabinetApiBoundary(page, { partsManage: true })
+  await page.route('**/api/v1/**', async (route) => {
+    const path = new URL(route.request().url()).pathname
+    if (path === '/api/v1/parts/part-long')
+      return fulfillData(route, {
+        id: 'part-long',
+        name: 'Крило',
+        qrCode,
+        unit: 'шт',
+        quantityTotal: 2,
+      })
+    if (path === '/api/v1/parts/part-long/inventory-zones')
+      return fulfillData(route, [])
+    if (path === '/api/v1/inventory/zones') return fulfillData(route, [])
+    await route.fallback()
+  })
+  await loginFrom(page)
+  await page.goto('/app/koval/parts/part-long/inventory')
+  await expect(page.getByText('Розміщення на складі')).toBeVisible()
+
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true)
 })
