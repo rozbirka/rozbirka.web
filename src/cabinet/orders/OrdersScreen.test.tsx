@@ -464,6 +464,25 @@ it('creates a customer inline before canonical order creation', async () => {
   )
 })
 
+it('clears the inline customer draft when creation is cancelled', async () => {
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/new']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await openInlineCustomerForm(user)
+  await user.type(screen.getByLabelText('Ім’я нового клієнта'), 'Чернетка')
+  await user.type(screen.getByLabelText('Телефон нового клієнта'), '501112233')
+  const form = screen.getByRole('group', { name: 'Новий клієнт' })
+  await user.click(within(form).getByRole('button', { name: 'Скасувати' }))
+
+  await openInlineCustomerForm(user)
+  expect(screen.getByLabelText('Ім’я нового клієнта')).toHaveValue('')
+  expect(screen.getByLabelText('Телефон нового клієнта')).toHaveValue('+380')
+})
+
 it.each([
   [
     'customers.manage',
@@ -484,6 +503,33 @@ it.each([
     screen.queryByRole('group', { name: 'Новий клієнт' }),
   ).not.toBeInTheDocument()
   expect(customerMocks.create).not.toHaveBeenCalled()
+})
+
+it('hides stale customer results as soon as the order search changes', async () => {
+  customerMocks.search
+    .mockResolvedValueOnce([
+      {
+        id: 'customer-old',
+        name: 'Старий результат',
+        phone: null,
+        ordersCount: 1,
+      },
+    ])
+    .mockReturnValueOnce(new Promise(() => undefined))
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/new']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  const search = screen.getByLabelText('Пошук клієнта')
+  await user.type(search, 'а')
+  expect(await screen.findByText('Старий результат')).toBeVisible()
+
+  await user.type(search, 'б')
+  expect(screen.queryByText('Старий результат')).not.toBeInTheDocument()
+  await waitFor(() => expect(customerMocks.search).toHaveBeenCalledTimes(2))
 })
 
 it.each(['orders.manage', 'customers.view', 'customers.manage'])(
@@ -1321,7 +1367,13 @@ it('preserves a refund key only for ambiguous retries and rotates after definiti
     user.click(screen.getByRole('button', { name: /^Повернути 250,00/ }))
 
   await openRefund()
+  expect(
+    screen.getByRole('button', { name: /^Повернути 250,00/ }),
+  ).toBeDisabled()
   await user.type(screen.getByLabelText('Причина'), 'Помилка каси')
+  expect(
+    screen.getByRole('button', { name: /^Повернути 250,00/ }),
+  ).toBeEnabled()
   await submit()
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Немає з’єднання з мережею.',
@@ -1336,6 +1388,8 @@ it('preserves a refund key only for ambiguous retries and rotates after definiti
   )
   // A definitive outcome closes the question; asking again rotates the key.
   await openRefund()
+  expect(screen.getByLabelText('Причина')).toHaveValue('')
+  await user.type(screen.getByLabelText('Причина'), 'Інша причина')
   await submit()
 
   for (const [call, uuid] of [
@@ -1347,7 +1401,9 @@ it('preserves a refund key only for ambiguous retries and rotates after definiti
     expect(orderMocks.refund).toHaveBeenNthCalledWith(
       call,
       'order-1',
-      { refundReason: 'Помилка каси' },
+      {
+        refundReason: call === 4 ? 'Інша причина' : 'Помилка каси',
+      },
       { idempotencyKey: `order-refund-${uuid}` },
     )
   }
@@ -1701,6 +1757,41 @@ it('records a payment in a till currency the order total cannot be compared with
   expect(orderMocks.updatePayments).toHaveBeenCalledWith('order-1', [
     { accountId: 'cash-1', amount: 4100, currency: 'UAH' },
   ])
+})
+
+it('does not show a stale till while reloading the payment drawer', async () => {
+  cashMocks.list
+    .mockResolvedValueOnce([
+      {
+        id: 'cash-old',
+        name: 'Стара каса',
+        type: 'safe',
+        isActive: true,
+        balances: { USD: 0 },
+      },
+    ])
+    .mockReturnValueOnce(new Promise(() => undefined))
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await screen.findByRole('heading', { name: 'Замовлення #1' })
+  await user.click(screen.getByRole('button', { name: 'Додати платіж' }))
+  let dialog = await screen.findByRole('dialog', { name: 'Додати платіж' })
+  expect(
+    await within(dialog).findByRole('radio', { name: /Стара каса.*USD/ }),
+  ).toBeVisible()
+  await user.click(within(dialog).getByRole('button', { name: 'Скасувати' }))
+
+  await user.click(screen.getByRole('button', { name: 'Додати платіж' }))
+  dialog = await screen.findByRole('dialog', { name: 'Додати платіж' })
+
+  expect(within(dialog).getByText('Завантажуємо каси…')).toBeVisible()
+  expect(within(dialog).queryByText('Стара каса')).not.toBeInTheDocument()
+  expect(cashMocks.list).toHaveBeenCalledTimes(2)
 })
 
 it('replaces the full pending item set when quantity, price, or removal changes', async () => {

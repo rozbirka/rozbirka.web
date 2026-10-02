@@ -3660,8 +3660,12 @@ function PartForm({
             {footerNote}
           </p>
           <div className="ml-auto flex items-center gap-2.5">
-            <Button asChild disabled={pending}>
-              <Link to="..">Скасувати</Link>
+            <Button
+              disabled={pending}
+              onClick={() => void navigate('..')}
+              type="button"
+            >
+              Скасувати
             </Button>
             <Button
               aria-busy={pending || mediaPending}

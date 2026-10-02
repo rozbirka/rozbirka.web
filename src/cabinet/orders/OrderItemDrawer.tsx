@@ -56,16 +56,7 @@ const placeOf = (zones: PartInventoryZone[]): string | null => {
  * remains readable while a part is chosen. That list is also what greys out a
  * part already on the order instead of letting it be added twice.
  */
-export function OrderItemDrawer({
-  busy,
-  error,
-  onOpenChange,
-  onSubmit,
-  open,
-  orderNumber,
-  orderTotal,
-  takenPartIds,
-}: {
+interface OrderItemDrawerProps {
   busy: boolean
   error: string | null
   onOpenChange: (open: boolean) => void
@@ -79,7 +70,23 @@ export function OrderItemDrawer({
   /** What the order is worth now, so the footer can say what it will become. */
   orderTotal: number | null
   takenPartIds: readonly string[]
-}) {
+}
+
+export function OrderItemDrawer(props: OrderItemDrawerProps) {
+  if (!props.open) return null
+  return <OpenOrderItemDrawer {...props} />
+}
+
+function OpenOrderItemDrawer({
+  busy,
+  error,
+  onOpenChange,
+  onSubmit,
+  open,
+  orderNumber,
+  orderTotal,
+  takenPartIds,
+}: OrderItemDrawerProps) {
   const listId = useId()
   const [query, setQuery] = useState('')
   const [items, setItems] = useState<Candidate[] | null>(null)

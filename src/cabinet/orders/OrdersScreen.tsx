@@ -569,6 +569,12 @@ export function OrderForm({
     useState<PartPickerItem | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const closeNewCustomerForm = () => {
+    setNewCustomerFormOpen(false)
+    setNewCustomerName('')
+    setNewCustomerPhone(newCustomerPhoneDraft())
+    setCustomerConflict(null)
+  }
   const linkedCustomerId =
     createContext?.customer.id ?? params.get('customerId')
   useEffect(() => {
@@ -691,9 +697,8 @@ export function OrderForm({
       setCustomerId(result.customer.id)
       setSelectedCustomerName(result.customer.name)
       setCustomerQuery(result.customer.name)
-      setNewCustomerName('')
-      setNewCustomerPhone(newCustomerPhoneDraft())
-      setNewCustomerFormOpen(false)
+      setCustomerResults([])
+      closeNewCustomerForm()
       setCustomerPickerOpen(false)
     } catch (requestError) {
       const conflict = readCustomerPhoneConflict(requestError)
@@ -708,9 +713,8 @@ export function OrderForm({
     setCustomerId(customerConflict.customerId)
     setSelectedCustomerName(customerConflict.customerName)
     setCustomerQuery(customerConflict.customerName)
-    setCustomerConflict(null)
-    setNewCustomerName('')
-    setNewCustomerPhone('')
+    setCustomerResults([])
+    closeNewCustomerForm()
   }
   const reactivateDuplicateCustomer = async () => {
     if (
@@ -742,9 +746,8 @@ export function OrderForm({
       setCustomerId(customer.id)
       setSelectedCustomerName(customer.name)
       setCustomerQuery(customer.name)
-      setCustomerConflict(null)
-      setNewCustomerName('')
-      setNewCustomerPhone('')
+      setCustomerResults([])
+      closeNewCustomerForm()
     } catch (requestError) {
       setError(errorMessage(requestError))
     } finally {
@@ -944,6 +947,7 @@ export function OrderForm({
                     setCustomerId('')
                     setSelectedCustomerName('')
                   }
+                  setCustomerResults([])
                   setCustomerQuery(value)
                   setCustomerPickerOpen(true)
                 }}
@@ -968,6 +972,7 @@ export function OrderForm({
                           setCustomerId(customer.id)
                           setSelectedCustomerName(customer.name)
                           setCustomerQuery(customer.name)
+                          setCustomerResults([])
                           setCustomerPickerOpen(false)
                         }}
                       >
@@ -1028,7 +1033,7 @@ export function OrderForm({
                   </Button>
                   <Button
                     disabled={customerBusy}
-                    onClick={() => setNewCustomerFormOpen(false)}
+                    onClick={closeNewCustomerForm}
                     type="button"
                     variant="quiet"
                   >
@@ -1172,6 +1177,11 @@ function OrderDetailScreen({
   const [historyExpanded, setHistoryExpanded] = useState(false)
   const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null)
   const [customerOpen, setCustomerOpen] = useState(false)
+  const changeRefundOpen = (next: boolean) => {
+    setRefundOpen(next)
+    setError(null)
+    if (!next) setRefundReason('')
+  }
   const acceptOrder = useCallback((detail: OrderDetail) => {
     setOrder(detail)
     setLoadedCustomerId(detail.customerId)
@@ -1697,7 +1707,7 @@ function OrderDetailScreen({
                     ) : ordinaryFinance && order.status === 'confirmed' ? (
                       <Button
                         className="w-full justify-center"
-                        onClick={() => setRefundOpen((open) => !open)}
+                        onClick={() => changeRefundOpen(!refundOpen)}
                         variant="danger"
                       >
                         Оформити повернення
@@ -1790,13 +1800,16 @@ function OrderDetailScreen({
         )}
         <ConfirmDialog
           confirmLabel={`Повернути ${money(summary.paid ?? summary.totalUsd, summary.paidCurrency ?? 'USD')}`}
+          confirmDisabled={!refundReason.trim()}
           consequence="Дію не можна скасувати. Причина потрапить в історію замовлення."
           destructive
           effects={refundEffects(order, summary)}
           error={refundOpen ? error : null}
           icon={RotateCcw}
           onConfirm={() => {
-            const input = { refundReason }
+            const normalizedReason = refundReason.trim()
+            if (!normalizedReason) return
+            const input = { refundReason: normalizedReason }
             void transition(
               (idempotencyKey) =>
                 ordersApi.refund(order.id, input, {
@@ -1808,10 +1821,10 @@ function OrderDetailScreen({
               },
               'finance.manage',
             ).then((done) => {
-              if (done) setRefundOpen(false)
+              if (done) changeRefundOpen(false)
             })
           }}
-          onOpenChange={setRefundOpen}
+          onOpenChange={changeRefundOpen}
           open={refundOpen && ordinaryFinance && order.status === 'confirmed'}
           pending={busy}
           title="Оформити повернення?"
@@ -1879,31 +1892,31 @@ function OrderDetailScreen({
           orderNumber={order.number}
         />
 
-        <OrderPaymentDrawer
-          busy={busy}
-          error={paymentOrderId === order.id ? error : null}
-          existing={order.payments}
-          onOpenChange={(next) => setPaymentOrderId(next ? order.id : null)}
-          onSave={(payments) => {
-            void transition(
-              () => ordersApi.updatePayments(order.id, payments),
-              undefined,
-              'finance.manage',
-            ).then((saved) => {
-              if (saved) {
-                setPaymentOrderId(null)
-                toast?.show({ message: 'Платіж збережено.', tone: 'ok' })
-              }
-            })
-          }}
-          open={
-            ordinaryFinance &&
-            order.status === 'pending' &&
-            paymentOrderId === order.id
-          }
-          orderNumber={order.number}
-          outstanding={summary.remaining}
-        />
+        {ordinaryFinance &&
+        order.status === 'pending' &&
+        paymentOrderId === order.id ? (
+          <OrderPaymentDrawer
+            busy={busy}
+            error={error}
+            existing={order.payments}
+            onOpenChange={(next) => setPaymentOrderId(next ? order.id : null)}
+            onSave={(payments) => {
+              void transition(
+                () => ordersApi.updatePayments(order.id, payments),
+                undefined,
+                'finance.manage',
+              ).then((saved) => {
+                if (saved) {
+                  setPaymentOrderId(null)
+                  toast?.show({ message: 'Платіж збережено.', tone: 'ok' })
+                }
+              })
+            }}
+            open
+            orderNumber={order.number}
+            outstanding={summary.remaining}
+          />
+        ) : null}
       </div>
     </div>
   )

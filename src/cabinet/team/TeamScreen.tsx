@@ -842,7 +842,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                   Системні ролі змінити не можна — створіть власну й дайте їй
                   рівно ті права, що потрібні.
                 </p>
-                <ul className="mt-4 grid gap-2.5">
+                <ul className="mt-4 grid min-w-0 max-w-full gap-2.5">
                   {teamData.roles.map((role) => (
                     <li
                       className="border-app-line rounded-[16px] border px-4 py-3.5"
@@ -1007,11 +1007,14 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                     const status = invitationStatus(item)
                     return (
                       <li
-                        className="border-app-line flex flex-wrap items-center gap-x-4 gap-y-2.5 rounded-[16px] border px-4 py-3.5"
+                        className="border-app-line flex min-w-0 max-w-full flex-wrap items-center gap-x-4 gap-y-2.5 rounded-[16px] border px-4 py-3.5"
                         key={item.id}
                       >
-                        <div className="min-w-0 flex-[1_1_160px]">
-                          <p className="text-app-ink font-mono text-[14px] font-bold">
+                        <div className="min-w-0 flex-[1_1_160px] overflow-hidden">
+                          <p
+                            className="text-app-ink truncate font-mono text-[14px] font-bold"
+                            title={item.code}
+                          >
                             {item.code}
                           </p>
                           <p className="text-app-dim mt-0.5 text-[12.5px]">

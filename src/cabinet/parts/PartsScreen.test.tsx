@@ -1079,6 +1079,10 @@ it('guards duplicate creates with aria-busy and exposes mutation failures', asyn
   fireEvent.click(submit)
   expect(submit).toHaveAttribute('aria-busy', 'true')
   expect(submit).toBeDisabled()
+  const cancel = screen.getByRole('button', { name: 'Скасувати' })
+  expect(cancel).toBeDisabled()
+  fireEvent.click(cancel)
+  expect(screen.getByRole('dialog', { name: 'Нова деталь' })).toBeVisible()
   expect(partMocks.create).toHaveBeenCalledTimes(1)
   rejectCreate?.(new Error('failed'))
   expect(await screen.findByRole('alert')).toHaveTextContent(

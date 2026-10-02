@@ -24,6 +24,7 @@ export interface ConfirmDialogProps {
   cancelLabel?: string
   onConfirm: () => void
   pending?: boolean
+  confirmDisabled?: boolean
   destructive?: boolean
   /** Failure from the last attempt: shown here, where the retry button is. */
   error?: string | null
@@ -48,6 +49,7 @@ export function ConfirmDialog({
   cancelLabel = 'Скасувати',
   onConfirm,
   pending = false,
+  confirmDisabled = false,
   destructive = true,
   error = null,
   onCloseAutoFocus,
@@ -122,7 +124,7 @@ export function ConfirmDialog({
             </Dialog.Close>
             <Button
               aria-busy={pending}
-              disabled={pending}
+              disabled={pending || confirmDisabled}
               onClick={onConfirm}
               variant={destructive ? 'danger' : 'primary'}
             >

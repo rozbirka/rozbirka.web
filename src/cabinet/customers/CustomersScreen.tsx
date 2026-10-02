@@ -1377,8 +1377,12 @@ function CustomerForm({
             Зірочкою позначено обов’язкове поле
           </p>
           <div className="ml-auto flex items-center gap-2.5">
-            <Button asChild disabled={busy}>
-              <Link to={backPath}>Скасувати</Link>
+            <Button
+              disabled={busy}
+              onClick={() => void navigate(backPath)}
+              type="button"
+            >
+              Скасувати
             </Button>
             {formReady ? (
               <Button

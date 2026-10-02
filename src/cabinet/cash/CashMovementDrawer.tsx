@@ -12,21 +12,28 @@ import { cn } from '@/lib/utils'
 
 type MovementType = CashTransactionInput['type']
 
-export function CashMovementDrawer({
-  busy,
-  error,
-  onOpenChange,
-  onSubmit,
-  open,
-  register,
-}: {
+interface CashMovementDrawerProps {
   busy: boolean
   error: string | null
   onOpenChange: (open: boolean) => void
   onSubmit: (input: CashTransactionInput) => void
   open: boolean
   register: CashRegister
-}) {
+}
+
+export function CashMovementDrawer(props: CashMovementDrawerProps) {
+  if (!props.open) return null
+  return <OpenCashMovementDrawer {...props} />
+}
+
+function OpenCashMovementDrawer({
+  busy,
+  error,
+  onOpenChange,
+  onSubmit,
+  open,
+  register,
+}: CashMovementDrawerProps) {
   const currencies = Object.keys(register.balances).sort((left, right) => {
     const priority = (currency: string) =>
       currency === 'UAH' ? 0 : currency === 'USD' ? 1 : 2
