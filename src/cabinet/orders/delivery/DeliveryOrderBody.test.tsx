@@ -48,11 +48,13 @@ vi.mock('@/api/shipping', () => ({
     label: vi.fn(),
   },
 }))
+const recordPayment = vi.hoisted(() => vi.fn())
+
 vi.mock('@/api/delivery', () => ({
   deliveryApi: {
     get: vi.fn(),
     configure: vi.fn(),
-    recordPayment: vi.fn(),
+    recordPayment,
     linkPayment: vi.fn(),
     dispatch: vi.fn(),
     receive: vi.fn(),
@@ -266,6 +268,70 @@ it('offers payment without pretending it is required before a waybill', () => {
     within(due).getByRole('button', { name: 'Внести оплату' }),
   ).toBeVisible()
   expect(due).toHaveTextContent(/післяплат/i)
+})
+
+it('reuses a delivery payment key after an ambiguous failure and rotates it after success', async () => {
+  const randomUUID = vi
+    .spyOn(globalThis.crypto, 'randomUUID')
+    .mockReturnValueOnce('00000000-0000-4000-8000-000000000001')
+    .mockReturnValueOnce('00000000-0000-4000-8000-000000000002')
+  recordPayment
+    .mockRejectedValueOnce({ kind: 'network', message: 'Мережа зникла.' })
+    .mockResolvedValue(delivery({ outstandingUah: 0, appliedUah: 4600 }))
+  const user = userEvent.setup()
+  renderBody(
+    load({ money: delivery({ outstandingUah: 1200, appliedUah: 3400 }) }),
+  )
+
+  await user.click(
+    within(screen.getByRole('region', { name: 'До сплати' })).getByRole(
+      'button',
+      { name: 'Внести оплату' },
+    ),
+  )
+  await user.click(
+    await screen.findByRole('button', { name: 'Зберегти платіж' }),
+  )
+  expect(await screen.findAllByText('Мережа зникла.')).toHaveLength(1)
+
+  await user.click(screen.getByRole('button', { name: 'Зберегти платіж' }))
+  expect(recordPayment).toHaveBeenNthCalledWith(
+    1,
+    'order-1',
+    expect.any(Object),
+    {
+      idempotencyKey: 'delivery-payment-00000000-0000-4000-8000-000000000001',
+    },
+  )
+  expect(recordPayment).toHaveBeenNthCalledWith(
+    2,
+    'order-1',
+    expect.any(Object),
+    {
+      idempotencyKey: 'delivery-payment-00000000-0000-4000-8000-000000000001',
+    },
+  )
+  expect(randomUUID).toHaveBeenCalledOnce()
+
+  await user.click(
+    within(screen.getByRole('region', { name: 'До сплати' })).getByRole(
+      'button',
+      { name: 'Внести оплату' },
+    ),
+  )
+  await user.click(
+    await screen.findByRole('button', { name: 'Зберегти платіж' }),
+  )
+  expect(recordPayment).toHaveBeenNthCalledWith(
+    3,
+    'order-1',
+    expect.any(Object),
+    {
+      idempotencyKey: 'delivery-payment-00000000-0000-4000-8000-000000000002',
+    },
+  )
+  expect(randomUUID).toHaveBeenCalledTimes(2)
+  randomUUID.mockRestore()
 })
 
 it('keeps the money half working while the carrier is out of reach', async () => {

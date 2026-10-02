@@ -201,3 +201,32 @@ it('still shows the sources that answered when one of them fails', async () => {
     await screen.findByRole('option', { name: /Замовлення №12/ }),
   ).toBeVisible()
 })
+
+it('hides results from the previous query as soon as the text changes', async () => {
+  const user = userEvent.setup()
+  partsMock.search
+    .mockResolvedValueOnce({
+      items: [
+        {
+          id: 'part-7',
+          name: 'Фара ліва',
+          oemCode: 'OEM-1',
+          car: null,
+        },
+      ],
+      page: 1,
+      pageSize: 5,
+      total: 1,
+      totalPages: 1,
+    })
+    .mockReturnValueOnce(new Promise(() => undefined))
+  renderPalette(['parts.view'])
+  await user.keyboard('{Control>}k{/Control}')
+  const search = screen.getByRole('combobox', { name: 'Пошук по кабінету' })
+  await user.type(search, 'фара')
+  expect(await screen.findByRole('option', { name: /Фара ліва/ })).toBeVisible()
+
+  await user.type(search, ' нова')
+
+  expect(screen.queryByRole('option', { name: /Фара ліва/ })).toBeNull()
+})

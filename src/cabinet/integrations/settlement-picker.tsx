@@ -52,6 +52,8 @@ export function SettlementPicker({
   const term = query.trim()
   const options = term.length >= 2 && found?.term === term ? found.items : []
   const matched = picked !== null && picked.name === term
+  const loading =
+    term.length >= 2 && !matched && found?.term !== term && !failed
 
   useEffect(() => {
     if (term.length < 2 || matched) return
@@ -121,6 +123,8 @@ export function SettlementPicker({
             className={matched ? 'border-state-ok/30' : undefined}
             onChange={(event) => {
               setQuery(event.target.value)
+              setFound(null)
+              setFailed(false)
               setActive(0)
               setOpen(true)
               onPick(null)
@@ -160,12 +164,18 @@ export function SettlementPicker({
               <p className="border-app-line text-app-muted flex items-center justify-between gap-2.5 border-b px-3.5 py-2.5 font-mono text-[10px] tracking-[0.12em] uppercase">
                 <span>Довідник Нової пошти</span>
                 <span>
-                  {options.length > 0
-                    ? `${options.length} збіг.`
-                    : 'без збігів'}
+                  {loading
+                    ? 'Шукаємо…'
+                    : options.length > 0
+                      ? `${options.length} збіг.`
+                      : 'без збігів'}
                 </span>
               </p>
-              {options.length === 0 ? (
+              {loading ? (
+                <p className="text-app-muted px-3.5 py-4 text-[13px] leading-5">
+                  Завантажуємо довідник…
+                </p>
+              ) : options.length === 0 ? (
                 <p className="text-app-muted px-3.5 py-4 text-[13px] leading-5 text-pretty">
                   У довіднику немає населеного пункту з такою назвою. Перевірте
                   написання або введіть коротший запит.

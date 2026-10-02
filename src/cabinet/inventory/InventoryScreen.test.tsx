@@ -539,6 +539,25 @@ it('manages part placement without exposing counting actions', async () => {
   expect(screen.queryByText(/камера/i)).not.toBeInTheDocument()
 })
 
+it('allows a long part QR code to wrap on a narrow placement screen', async () => {
+  const qrCode =
+    '3870f3f5ecb1dbab378027dd9299c57988085d4d7b80054a7a8156cf523e87db'
+  parts.get.mockResolvedValue({
+    id: 'part-1',
+    name: 'Крило',
+    qrCode,
+    unit: 'шт',
+    quantityTotal: 2,
+  })
+
+  renderAt('/app/yard/parts/part-1/inventory')
+
+  const qrLabels = await screen.findAllByText(qrCode)
+  expect(
+    qrLabels.find((label) => label.classList.contains('font-mono')),
+  ).toHaveClass('break-all', 'max-w-full')
+})
+
 it('shows progress while part placement is being saved', async () => {
   let finishSaving: (() => void) | undefined
   api.getPartZones.mockResolvedValue([

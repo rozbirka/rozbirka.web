@@ -57,7 +57,13 @@ export function ConfirmDialog({
   const cancelRef = useRef<HTMLButtonElement>(null)
 
   return (
-    <Dialog.Root onOpenChange={onOpenChange} open={open}>
+    <Dialog.Root
+      onOpenChange={(next) => {
+        if (!next && pending) return
+        onOpenChange(next)
+      }}
+      open={open}
+    >
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
         <Dialog.Content

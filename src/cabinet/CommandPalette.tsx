@@ -201,7 +201,10 @@ export function CommandPalette({
               autoComplete="off"
               className="text-app-ink placeholder:text-app-dim min-w-0 flex-1 bg-transparent py-4 text-[15px] outline-none"
               onChange={(event) => {
-                setQuery(event.target.value)
+                const next = event.target.value
+                setQuery(next)
+                setFound([])
+                setSearching(next.trim().length >= 2)
                 setActive(0)
               }}
               aria-expanded={flat.length > 0}

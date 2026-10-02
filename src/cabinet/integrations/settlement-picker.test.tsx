@@ -120,3 +120,19 @@ it('picks the highlighted suggestion from the keyboard', async () => {
     }),
   )
 })
+
+it('shows loading instead of an empty result before the catalogue answers', async () => {
+  vi.mocked(integrationsApi.settlements).mockReturnValue(
+    new Promise(() => undefined),
+  )
+  const user = userEvent.setup()
+  renderPicker()
+
+  await user.type(screen.getByLabelText(/Населений пункт/), 'Жито')
+
+  expect(await screen.findByText('Шукаємо…')).toBeVisible()
+  expect(screen.queryByText('без збігів')).toBeNull()
+  expect(
+    screen.queryByText(/немає населеного пункту з такою назвою/),
+  ).toBeNull()
+})
