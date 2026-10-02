@@ -15,6 +15,20 @@ The artifact environment checks also run in GitHub Actions. A QA artifact that
 contains the production API origin (or a production artifact containing the QA
 origin) is rejected before deployment.
 
+## Tenant feature flags
+
+The cabinet reads `/me/feature-flags` from Core once a minute. Use the shared
+`FeatureGate` / `useFeatureFlag` with keys from `FEATURE_FLAGS`; do not fetch
+feature-specific capability endpoints in entry buttons. `parts.bulk-import`
+controls the import entry points. Flags start off, retain the current tenant's
+last snapshot on transient errors, and reset on an authenticated tenant change.
+Permissions and subscription entitlements remain separate checks.
+
+Core evaluates Unleash and rejects disabled operations. No Unleash credentials or
+strategies belong in the browser. Release the Core endpoint before enabling a
+flag; a missing endpoint keeps entry points hidden. Accepted imports and their
+history remain available through the import route when new admission is off.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

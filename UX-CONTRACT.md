@@ -51,9 +51,11 @@ retain their history but cannot receive new parts. A stale `origin=free` URL is
 reset with an inline notice; available stock and unassigned warehouse zones are
 unaffected.
 
-The cabinet does not show part import: the parts list, car and intake cards
-offer no import action. The import route and its behaviour below stay in the
-code and are reachable only by direct URL.
+The tenant-scoped `parts.bulk-import` flag controls import entry points through
+the shared FeatureGate. Permissions and entitlements remain separate. Flags are
+refreshed every minute; switching tenant clears the previous snapshot. Direct
+API mutations are gated on the server; history, accepted work and results remain
+available when the flag is off.
 
 An import has one destination, carried through upload navigation, remembered
 per import in this browser until the mapping is saved, and persisted in mapping

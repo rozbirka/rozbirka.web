@@ -1,3 +1,4 @@
+import { FeatureFlagsProvider } from './FeatureFlags'
 import {
   createContext,
   useCallback,
@@ -408,9 +409,14 @@ export function CabinetProvider({ children }: { children: ReactNode }) {
   switch (viewState.status) {
     case 'ready':
       content =
+        viewState.snapshot !== null &&
         auth.tenant?.id === viewState.snapshot?.tenantId &&
         auth.user?.id === viewState.snapshot?.userId ? (
-          children
+          <FeatureFlagsProvider
+            key={`${viewState.snapshot.userId}:${viewState.snapshot.tenantId}:${viewState.snapshot.generation}`}
+          >
+            {children}
+          </FeatureFlagsProvider>
         ) : (
           <ShellLoading />
         )
