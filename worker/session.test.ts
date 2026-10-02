@@ -384,6 +384,57 @@ describe('session BFF', () => {
     })
   })
 
+  it.each(['INVALID_TOKEN', 'TOKEN_EXPIRED', 'TOKEN_REUSE', 'USER_INACTIVE'])(
+    'clears rejected refresh credentials for %s without exposing backend details',
+    async (code) => {
+      identityResponse(
+        { error: { code, message: 'private upstream detail' } },
+        { status: 400 },
+      )
+      const response = await handleSessionRequest(
+        new Request('https://rozbirka.pro/session/refresh', {
+          method: 'POST',
+          headers: { cookie: 'rozbirka_refresh=expired-refresh' },
+        }),
+        env,
+      )
+      expect(response!.status).toBe(401)
+      expect(response!.headers.get('set-cookie')).toMatch(
+        /^rozbirka_refresh=;.*Max-Age=0.*HttpOnly.*Secure.*SameSite=Strict.*Path=\/session/i,
+      )
+      expect(response!.headers.get('cache-control')).toBe('no-store')
+      expect(await response!.json()).toEqual({
+        error: {
+          code: 'SESSION_EXPIRED',
+          message: 'Session expired. Please sign in again.',
+        },
+      })
+    },
+  )
+
+  it.each([
+    [503, { error: { code: 'TOKEN_EXPIRED' } }],
+    [400, { error: { code: 'UNKNOWN_FAILURE' } }],
+    [401, { error: { code: 'INVALID_SERVICE_KEY' } }],
+  ])(
+    'preserves refresh cookie for unconfirmed session failure %s',
+    async (status, body) => {
+      identityResponse(body, { status })
+      const response = await handleSessionRequest(
+        new Request('https://rozbirka.pro/session/refresh', {
+          method: 'POST',
+          headers: { cookie: 'rozbirka_refresh=existing-refresh' },
+        }),
+        env,
+      )
+      expect(response!.status).toBe(status)
+      expect(response!.headers.get('set-cookie')).toBeNull()
+      expect(await response!.json()).toMatchObject({
+        error: { code: 'IDENTITY_REQUEST_FAILED' },
+      })
+    },
+  )
+
   it('expires the cookie even when upstream logout fails', async () => {
     identityResponse(
       { error: { code: 'UPSTREAM_SECRET', message: 'refresh-secret' } },
