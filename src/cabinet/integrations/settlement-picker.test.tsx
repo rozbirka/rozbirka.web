@@ -105,6 +105,25 @@ it('says so plainly when the catalogue has nothing by that name', async () => {
   ).toBeVisible()
 })
 
+it('shows the actual provider error instead of calling it an empty result', async () => {
+  vi.mocked(integrationsApi.settlements).mockRejectedValue({
+    kind: 'validation',
+    message: 'Нова пошта не прийняла ключ API.',
+    code: 'nova_poshta_unauthorized',
+  })
+  const user = userEvent.setup()
+  renderPicker()
+
+  await user.type(screen.getByLabelText(/Населений пункт/), 'Львів')
+
+  expect(await screen.findByText('помилка')).toBeVisible()
+  expect(screen.getByText('Нова пошта не прийняла ключ API.')).toBeVisible()
+  expect(screen.queryByText('без збігів')).toBeNull()
+  expect(
+    screen.queryByText(/немає населеного пункту з такою назвою/),
+  ).toBeNull()
+})
+
 it('picks the highlighted suggestion from the keyboard', async () => {
   const user = userEvent.setup()
   const onPick = renderPicker()

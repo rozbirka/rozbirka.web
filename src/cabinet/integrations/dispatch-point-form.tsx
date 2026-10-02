@@ -16,6 +16,7 @@ import {
   type NovaPoshtaCounterparty,
   type NovaPoshtaContact,
 } from '@/api/integrations'
+import { normalizeApiProblem } from '@/api/errors'
 import { SettlementPicker } from './settlement-picker'
 
 /** Core's own contact rule, so a bad phone is caught before the round trip. */
@@ -188,12 +189,10 @@ export function DispatchPointForm({
             })
           }
         },
-        () => {
+        (problem) => {
           if (!controller.signal.aborted) {
             setLoadedDivisions({ settlementRef, items: [] })
-            setLookupError(
-              'Довідник відділень Нової пошти зараз недоступний. Спробуйте ще раз.',
-            )
+            setLookupError(normalizeApiProblem(problem).message)
           }
         },
       )
@@ -208,12 +207,10 @@ export function DispatchPointForm({
         (items) => {
           if (!controller.signal.aborted) setSenders(items)
         },
-        () => {
+        (problem) => {
           if (!controller.signal.aborted) {
             setSenders([])
-            setLookupError(
-              'Не вдалося прочитати відправників із кабінету Нової пошти.',
-            )
+            setLookupError(normalizeApiProblem(problem).message)
           }
         },
       )
@@ -232,9 +229,11 @@ export function DispatchPointForm({
           if (!controller.signal.aborted)
             setContacts({ counterpartyRef: senderChoice, items })
         },
-        () => {
-          if (!controller.signal.aborted)
+        (problem) => {
+          if (!controller.signal.aborted) {
             setContacts({ counterpartyRef: senderChoice, items: [] })
+            setLookupError(normalizeApiProblem(problem).message)
+          }
         },
       )
     return () => controller.abort()
