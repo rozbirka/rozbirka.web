@@ -24,8 +24,9 @@ controls the import entry points. Flags start off, retain the current tenant's
 last snapshot on transient errors, and reset on an authenticated tenant change.
 Permissions and subscription entitlements remain separate checks.
 
-Core evaluates Unleash and rejects disabled operations. No Unleash credentials or
-strategies belong in the browser. Release the Core endpoint before enabling a
+Core evaluates rules stored in its own database and rejects disabled operations.
+Administrators manage these rules in Management; the customer browser receives
+only evaluated booleans. Release the Core endpoint before enabling a
 flag; a missing endpoint keeps entry points hidden. Accepted imports and their
 history remain available through the import route when new admission is off.
 
