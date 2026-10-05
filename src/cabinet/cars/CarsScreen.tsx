@@ -16,6 +16,8 @@ import {
   useSearchParams,
 } from 'react-router'
 import { sourceReturnPath } from '../parts/source-return'
+import { FeatureGate } from '../FeatureFlags'
+import { FEATURE_FLAGS } from '@/api/feature-flags'
 import {
   Archive,
   ChevronLeft,
@@ -680,6 +682,17 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
               <Button asChild className="px-4 text-sm font-bold">
                 <Link to={`${base}/${car.id}/edit`}>Редагувати</Link>
               </Button>
+            ) : null}
+            {partsManage && car.status !== 'archived' ? (
+              <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
+                <Button asChild>
+                  <Link
+                    to={`${partsBase}/imports?car_id=${encodeURIComponent(car.id)}`}
+                  >
+                    Імпорт запчастин
+                  </Link>
+                </Button>
+              </FeatureGate>
             ) : null}
             {partsManage && car.status !== 'archived' ? (
               <Button
