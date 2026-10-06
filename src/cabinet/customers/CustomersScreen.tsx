@@ -6,12 +6,15 @@ import {
   MessageSquare,
   Phone,
   Plus,
+  Power,
+  PowerOff,
   ShoppingCart,
   Trash2,
 } from 'lucide-react'
 import { cn, plural } from '@/lib/utils'
 import {
   Amount,
+  ActionMenu,
   Button,
   Card,
   ConfirmDialog,
@@ -553,7 +556,6 @@ function CustomerDetailScreen({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
   const [orderDrawerOpen, setOrderDrawerOpen] = useState(false)
   const [ordersPage, setOrdersPage] = useState(1)
   /** Where focus goes when the delete question is answered or dismissed. */
@@ -723,14 +725,36 @@ function CustomerDetailScreen({
             </Button>
           ) : null}
           {mutationsAllowed ? (
-            <Button
-              aria-expanded={menuOpen}
-              aria-label="Інші дії з клієнтом"
-              className="min-w-11 px-0 text-base font-bold tracking-[0.1em]"
-              onClick={() => setMenuOpen((open) => !open)}
-            >
-              <span aria-hidden>···</span>
-            </Button>
+            <ActionMenu
+              actions={[
+                {
+                  key: 'lifecycle',
+                  label: customer.isActive ? 'Деактивувати' : 'Активувати',
+                  icon: customer.isActive ? (
+                    <PowerOff aria-hidden />
+                  ) : (
+                    <Power aria-hidden />
+                  ),
+                  disabled: busy,
+                  onSelect: () => void updateLifecycle(),
+                },
+                {
+                  key: 'delete',
+                  label: 'Видалити клієнта',
+                  icon: <Trash2 aria-hidden />,
+                  destructive: true,
+                  disabled: busy || customer.ordersCount !== 0,
+                  ...(customer.ordersCount === 0
+                    ? {}
+                    : {
+                        title: 'Клієнта із замовленнями видалити не можна',
+                      }),
+                  onSelect: () => setConfirmDelete(true),
+                },
+              ]}
+              label="Інші дії з клієнтом"
+              triggerRef={deleteTriggerRef}
+            />
           ) : null}
         </div>
       </div>
@@ -847,33 +871,6 @@ function CustomerDetailScreen({
             ) : null}
           </dl>
         </div>
-
-        {menuOpen && mutationsAllowed ? (
-          <div className="border-app-line bg-app-raised flex flex-wrap items-center gap-3 rounded-[14px] border px-4 py-3">
-            <Button disabled={busy} onClick={() => void updateLifecycle()}>
-              {customer.isActive ? 'Деактивувати' : 'Активувати'}
-            </Button>
-            <Button
-              disabled={busy || customer.ordersCount !== 0}
-              onClick={() => setConfirmDelete(true)}
-              ref={deleteTriggerRef}
-              title={
-                customer.ordersCount === 0
-                  ? undefined
-                  : 'Клієнта із замовленнями видалити не можна'
-              }
-              variant="danger"
-            >
-              <Trash2 aria-hidden />
-              Видалити клієнта
-            </Button>
-            <p className="text-app-muted text-[13px]">
-              {customer.ordersCount === 0
-                ? 'Видалення не можна скасувати.'
-                : 'Клієнта із замовленнями можна лише деактивувати.'}
-            </p>
-          </div>
-        ) : null}
 
         <div className="flex flex-wrap items-start gap-6">
           <Card

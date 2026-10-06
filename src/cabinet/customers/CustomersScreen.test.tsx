@@ -530,11 +530,11 @@ it('uses access decisions and customer eligibility for order, lifecycle, and del
 
   // Lifecycle and deletion sit behind the overflow control.
   await user.click(screen.getByRole('button', { name: 'Інші дії з клієнтом' }))
-  expect(screen.getByRole('button', { name: 'Активувати' })).toBeVisible()
+  expect(screen.getByRole('menuitem', { name: 'Активувати' })).toBeVisible()
   // The customer has orders, so deletion is offered but refused with a reason.
   expect(
-    screen.getByRole('button', { name: 'Видалити клієнта' }),
-  ).toBeDisabled()
+    screen.getByRole('menuitem', { name: 'Видалити клієнта' }),
+  ).toHaveAttribute('aria-disabled', 'true')
 })
 
 it('hides finance metrics without finance.view and preserves a nullable order count', async () => {
@@ -585,7 +585,7 @@ it('contains delete-dialog focus and restores it to the trigger on close', async
 
   await screen.findByRole('heading', { name: 'Ірина' })
   await user.click(screen.getByRole('button', { name: 'Інші дії з клієнтом' }))
-  const trigger = screen.getByRole('button', { name: 'Видалити клієнта' })
+  const trigger = screen.getByRole('menuitem', { name: 'Видалити клієнта' })
   await user.click(trigger)
 
   const dialog = await screen.findByRole('dialog')
@@ -602,7 +602,7 @@ it('contains delete-dialog focus and restores it to the trigger on close', async
   // Closing hands focus back to the control that opened the question.
   await waitFor(() =>
     expect(
-      screen.getByRole('button', { name: 'Видалити клієнта' }),
+      screen.getByRole('button', { name: 'Інші дії з клієнтом' }),
     ).toHaveFocus(),
   )
 })

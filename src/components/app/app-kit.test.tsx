@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, it, vi } from 'vitest'
 import { Button } from './button'
+import { ActionMenu } from './action-menu'
 import { CodeChip } from './code-chip'
 import { ConfirmDialog } from './confirm-dialog'
 import { DataTable } from './data-table'
@@ -12,6 +13,36 @@ import { Pagination } from './pagination'
 import { EmptyState } from './state-screen'
 import { ToastProvider } from './toast'
 import { useToast } from './toast-context'
+
+it('opens secondary record actions as one vertical menu', async () => {
+  const archive = vi.fn()
+  const remove = vi.fn()
+  const user = userEvent.setup()
+
+  render(
+    <ActionMenu
+      actions={[
+        { key: 'archive', label: 'Архівувати', onSelect: archive },
+        {
+          key: 'remove',
+          label: 'Видалити',
+          destructive: true,
+          onSelect: remove,
+        },
+      ]}
+      label="Інші дії з записом"
+    />,
+  )
+
+  await user.click(screen.getByRole('button', { name: 'Інші дії з записом' }))
+
+  const menu = screen.getByRole('menu')
+  expect(menu).toHaveClass('grid')
+  expect(screen.getByRole('menuitem', { name: 'Архівувати' })).toBeVisible()
+  expect(screen.getByRole('menuitem', { name: 'Видалити' })).toHaveClass(
+    'text-state-danger',
+  )
+})
 
 it('names a field control by its label and describes it with the hint', () => {
   render(

@@ -1628,7 +1628,9 @@ it('shows authoritative detail and lets orders.manage edit pending fields and ca
   await user.click(
     screen.getByRole('button', { name: 'Інші дії із замовленням' }),
   )
-  await user.click(screen.getByRole('button', { name: 'Скасувати замовлення' }))
+  await user.click(
+    screen.getByRole('menuitem', { name: 'Скасувати замовлення' }),
+  )
   expect(orderMocks.cancel).toHaveBeenCalledWith('order-1')
 })
 

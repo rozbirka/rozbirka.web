@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import {
   ChevronLeft,
-  MoreHorizontal,
+  Copy,
   Plus,
   RotateCcw,
   Trash2,
+  XCircle,
 } from 'lucide-react'
 import {
+  ActionMenu,
   Button,
   Card,
   ConfirmDialog,
@@ -1170,7 +1172,6 @@ function OrderDetailScreen({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [refundReason, setRefundReason] = useState('')
-  const [menuOpen, setMenuOpen] = useState(false)
   const [refundOpen, setRefundOpen] = useState(false)
   const [itemsPage, setItemsPage] = useState(1)
   const [editingItems, setEditingItems] = useState(false)
@@ -1353,14 +1354,32 @@ function OrderDetailScreen({
           </Button>
           {orderEditable ||
           (ordinaryFinance && order.status === 'confirmed') ? (
-            <Button
-              aria-expanded={menuOpen}
-              aria-label="Інші дії із замовленням"
-              className="min-w-11 px-0"
-              onClick={() => setMenuOpen((open) => !open)}
-            >
-              <MoreHorizontal aria-hidden />
-            </Button>
+            <ActionMenu
+              actions={[
+                {
+                  key: 'duplicate',
+                  label: 'Дублювати',
+                  icon: <Copy aria-hidden />,
+                  disabled: true,
+                  title: 'Дублювання замовлення сервіс не підтримує.',
+                  onSelect: () => undefined,
+                },
+                ...(orderEditable
+                  ? [
+                      {
+                        key: 'cancel',
+                        label: 'Скасувати замовлення',
+                        icon: <XCircle aria-hidden />,
+                        destructive: true as const,
+                        disabled: busy,
+                        onSelect: () =>
+                          void transition(() => ordersApi.cancel(order.id)),
+                      },
+                    ]
+                  : []),
+              ]}
+              label="Інші дії із замовленням"
+            />
           ) : null}
         </div>
       </div>
@@ -1406,29 +1425,6 @@ function OrderDetailScreen({
             partsPath={partsPath}
           />
         )}
-
-        {menuOpen ? (
-          <div
-            aria-label="Інші дії із замовленням"
-            className="border-app-line bg-app-raised flex flex-wrap items-center gap-2.5 rounded-[14px] border px-4 py-3"
-            role="group"
-          >
-            <Button disabled title="Дублювання замовлення сервіс не підтримує.">
-              Дублювати
-            </Button>
-            {orderEditable ? (
-              <Button
-                disabled={busy}
-                onClick={() =>
-                  void transition(() => ordersApi.cancel(order.id))
-                }
-                variant="danger"
-              >
-                Скасувати замовлення
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
 
         {error && paymentOrderId !== order.id && !refundOpen ? (
           <Notice tone="danger">{error}</Notice>
