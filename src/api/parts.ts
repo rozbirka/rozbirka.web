@@ -350,13 +350,22 @@ export const partsApi = {
     requested: readonly PartFacetDimension[],
     options: RequestOptions = {},
   ): Promise<PartFacets> {
-    return (
+    const facets = (
       await apiClient.post<PartFacets>(
         '/parts/search/facets',
         { filter, requested },
         requestConfig(options),
       )
     ).data
+    return {
+      ...facets,
+      // Facet ids are plain strings in Core's response, so enum values arrive
+      // as `Car` and `Batch` even though search requests use `car` and `batch`.
+      origins: facets.origins.map((value) => ({
+        ...value,
+        id: value.id.toLowerCase(),
+      })),
+    }
   },
   async summary(options: RequestOptions = {}): Promise<PartsSummary> {
     return (
