@@ -16,7 +16,8 @@ import {
   useSearchParams,
 } from 'react-router'
 import { sourceReturnPath } from '../parts/source-return'
-import { ImportEntryButton } from '../imports/ImportEntryButton'
+import { FeatureGate } from '../FeatureFlags'
+import { FEATURE_FLAGS } from '@/api/feature-flags'
 import {
   Archive,
   ChevronLeft,
@@ -683,9 +684,15 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
               </Button>
             ) : null}
             {partsManage && car.status !== 'archived' ? (
-              <ImportEntryButton
-                to={`${partsBase}/imports?car_id=${encodeURIComponent(car.id)}`}
-              />
+              <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
+                <Button asChild>
+                  <Link
+                    to={`${partsBase}/imports?car_id=${encodeURIComponent(car.id)}`}
+                  >
+                    Імпорт запчастин
+                  </Link>
+                </Button>
+              </FeatureGate>
             ) : null}
             {partsManage && car.status !== 'archived' ? (
               <Button
@@ -993,22 +1000,7 @@ function Expenses({
     setFormOpen(true)
   }
   return (
-    <Card
-      aside={
-        canManage ? (
-          <Button
-            className="min-h-9 px-3.5 text-[13px] font-semibold"
-            disabled={busy}
-            onClick={() => openForm(null)}
-          >
-            <Plus aria-hidden />
-            Додати
-          </Button>
-        ) : null
-      }
-      bodyClassName="grid gap-5"
-      title="Витрати"
-    >
+    <Card bodyClassName="grid gap-5" title="Витрати">
       <p className="text-app-dim text-[12.5px] leading-[1.45] text-pretty">
         Транспортування, мийка, розмитнення — додаються до вкладеного.
       </p>
@@ -1094,7 +1086,7 @@ function Expenses({
           rows={expenses}
         />
       )}
-      {canManage && expenses.length > 0 ? (
+      {canManage ? (
         <div className="flex flex-wrap justify-start pt-1">
           <Button
             className="px-4 text-sm font-bold"

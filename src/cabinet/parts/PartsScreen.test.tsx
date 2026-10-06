@@ -1,3 +1,4 @@
+import { FeatureFlagsProvider } from '../FeatureFlags'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
@@ -41,6 +42,12 @@ const equipmentMocks = vi.hoisted(() => ({
     .mockResolvedValue([
       { id: 'model-focus', makeId: 'make-ford', name: 'Focus' },
     ]),
+}))
+
+const flagMocks = vi.hoisted(() => ({ get: vi.fn() }))
+vi.mock('@/api/feature-flags', () => ({
+  FEATURE_FLAGS: { partsBulkImport: 'parts.bulk-import' },
+  featureFlagsApi: flagMocks,
 }))
 
 const partMocks = vi.hoisted(() => ({
@@ -1079,6 +1086,10 @@ it('guards duplicate creates with aria-busy and exposes mutation failures', asyn
   fireEvent.click(submit)
   expect(submit).toHaveAttribute('aria-busy', 'true')
   expect(submit).toBeDisabled()
+  const cancel = screen.getByRole('button', { name: 'Скасувати' })
+  expect(cancel).toBeDisabled()
+  fireEvent.click(cancel)
+  expect(screen.getByRole('dialog', { name: 'Нова деталь' })).toBeVisible()
   expect(partMocks.create).toHaveBeenCalledTimes(1)
   rejectCreate?.(new Error('failed'))
   expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -2821,4 +2832,41 @@ it('blocks a stale direct create link to an archived car before any part write',
     'До архівного автомобіля не можна додавати деталі.',
   )
   expect(partMocks.create).not.toHaveBeenCalled()
+})
+
+it('does not offer part import without an enabled tenant flag', async () => {
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  await vi.waitFor(() => expect(partMocks.search).toHaveBeenCalled())
+  expect(
+    screen.queryByRole('link', { name: 'Імпорт запчастин' }),
+  ).not.toBeInTheDocument()
+})
+
+it('offers the existing import link when the tenant flag is enabled', async () => {
+  flagMocks.get.mockResolvedValue({ 'parts.bulk-import': true })
+  render(
+    <FeatureFlagsProvider>
+      <MemoryRouter initialEntries={['/app/yard/parts']}>
+        <Routes>
+          <Route
+            path="/app/:tenant/parts"
+            element={<PartsScreen definition={partsDefinition as never} />}
+          />
+        </Routes>
+      </MemoryRouter>
+    </FeatureFlagsProvider>,
+  )
+  expect(
+    await screen.findByRole('link', { name: 'Імпорт запчастин' }),
+  ).toHaveAttribute('href', '/app/yard/parts/imports')
 })

@@ -17,21 +17,28 @@ const transferCurrencies = [
   { label: 'USD', value: 'USD' },
 ] as const
 
-export function CashTransferDrawer({
-  busy,
-  error,
-  onOpenChange,
-  onSubmit,
-  open,
-  registers,
-}: {
+interface CashTransferDrawerProps {
   busy: boolean
   error: string | null
   onOpenChange: (open: boolean) => void
   onSubmit: (input: CashTransferInput) => void
   open: boolean
   registers: CashRegister[]
-}) {
+}
+
+export function CashTransferDrawer(props: CashTransferDrawerProps) {
+  if (!props.open) return null
+  return <OpenCashTransferDrawer {...props} />
+}
+
+function OpenCashTransferDrawer({
+  busy,
+  error,
+  onOpenChange,
+  onSubmit,
+  open,
+  registers,
+}: CashTransferDrawerProps) {
   const activeRegisters = useMemo(
     () => registers.filter((register) => register.isActive),
     [registers],

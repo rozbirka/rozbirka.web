@@ -52,6 +52,18 @@ const ERRORS: Record<string, string> = {
   integration_operation_in_progress:
     'Попередня дія ще виконується. Дочекайтеся її завершення.',
   integration_already_exists: 'Таку інтеграцію вже підключено.',
+  nova_poshta_unauthorized:
+    'Нова пошта не прийняла ключ — він недійсний або відкликаний.',
+  nova_poshta_rejected: 'Нова пошта відхилила запит.',
+  nova_poshta_ratelimited:
+    'Нова пошта обмежила частоту запитів. Спробуйте за кілька хвилин.',
+  nova_poshta_unavailable:
+    'Нова пошта зараз недоступна. Спробуйте за кілька хвилин.',
+  nova_poshta_invalidresponse:
+    'Нова пошта відповіла у незрозумілому форматі. Спробуйте ще раз.',
+  nova_poshta_notsubmitted:
+    'Запит до Нової пошти не був надісланий. Спробуйте ще раз.',
+  nova_poshta_disabled: 'Інтеграція Нової пошти вимкнена або не налаштована.',
   dispatch_point_required:
     'Немає точки відправлення за замовчуванням — оформити доставку буде неможливо.',
   dispatch_point_unavailable:

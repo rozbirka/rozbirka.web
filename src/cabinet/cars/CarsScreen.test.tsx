@@ -265,7 +265,9 @@ it('applies car quota only to create while allowing existing-car operations', as
   const summary = screen.getByRole('complementary', {
     name: 'Зведення автомобіля',
   })
-  expect(within(summary).getByRole('button', { name: 'Додати' })).toBeVisible()
+  expect(
+    within(summary).getByRole('button', { name: 'Додати витрату' }),
+  ).toBeVisible()
   expect(
     screen.getByText('Витрат ще немає. Вкладене дорівнює ціні придбання.'),
   ).toBeVisible()
@@ -287,7 +289,7 @@ it('does not reveal server financial values without finance.view', async () => {
   expect(screen.queryByText(/12\s000/)).not.toBeInTheDocument()
   expect(screen.queryByText('Інвестовано: 12 000')).not.toBeInTheDocument()
   expect(
-    screen.queryByRole('button', { name: 'Додати' }),
+    screen.queryByRole('button', { name: 'Додати витрату' }),
   ).not.toBeInTheDocument()
 })
 
@@ -306,7 +308,9 @@ it('keeps finance management independent from cars.manage and car quota', async 
     </MemoryRouter>,
   )
 
-  expect(await screen.findByRole('button', { name: 'Додати' })).toBeVisible()
+  expect(
+    await screen.findByRole('button', { name: 'Додати витрату' }),
+  ).toBeVisible()
   expect(
     screen.queryByRole('link', { name: 'Редагувати' }),
   ).not.toBeInTheDocument()
@@ -347,7 +351,7 @@ it('refetches authoritative detail after an expense mutation and disables duplic
   )
 
   await screen.findByRole('heading', { name: /BMW X5/ })
-  await user.click(screen.getByRole('button', { name: 'Додати' }))
+  await user.click(screen.getByRole('button', { name: 'Додати витрату' }))
   const form = within(await screen.findByRole('dialog'))
   expect(screen.getByRole('dialog')).toHaveClass('sm:right-0')
   await user.type(form.getByLabelText('Назва витрати'), 'Транспорт')
@@ -386,7 +390,7 @@ it('rechecks cars.view before dispatching an expense mutation', async () => {
   )
 
   await screen.findByRole('heading', { name: /BMW X5/ })
-  await user.click(screen.getByRole('button', { name: 'Додати' }))
+  await user.click(screen.getByRole('button', { name: 'Додати витрату' }))
   const form = within(await screen.findByRole('dialog'))
   await user.type(form.getByLabelText('Назва витрати'), 'Транспорт')
   await user.type(form.getByLabelText('Сума витрати'), '500')

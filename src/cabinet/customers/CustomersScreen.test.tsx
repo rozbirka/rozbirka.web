@@ -135,6 +135,21 @@ it('opens the new-customer form in the standard side drawer over the directory',
   expect(customerMocks.getById).not.toHaveBeenCalled()
 })
 
+it('keeps the customer drawer open while creation is pending', async () => {
+  customerMocks.create.mockReturnValue(new Promise(() => undefined))
+  const user = userEvent.setup()
+  renderScreen('/app/garage/customers/new')
+
+  await user.type(screen.getByLabelText('Ім’я'), 'Ірина')
+  await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
+  await waitFor(() => expect(customerMocks.create).toHaveBeenCalledOnce())
+
+  const cancel = screen.getByRole('button', { name: 'Скасувати' })
+  expect(cancel).toBeDisabled()
+  fireEvent.click(cancel)
+  expect(screen.getByRole('dialog', { name: 'Новий клієнт' })).toBeVisible()
+})
+
 it('uses browser-native contact links and opens a new order over the customer card', async () => {
   const user = userEvent.setup()
   const writeText = vi.spyOn(navigator.clipboard, 'writeText')

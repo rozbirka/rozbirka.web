@@ -43,16 +43,7 @@ const initials = (name: string) =>
  * `PUT /orders/{id}/customer` existed and nothing in the cabinet called it, so
  * an order saved without a customer stayed without one forever.
  */
-export function OrderCustomerDrawer({
-  busy,
-  currentId,
-  currentName,
-  error,
-  onAssign,
-  onOpenChange,
-  open,
-  orderNumber,
-}: {
+interface OrderCustomerDrawerProps {
   busy: boolean
   currentId: string | null
   currentName: string | null
@@ -61,7 +52,23 @@ export function OrderCustomerDrawer({
   onOpenChange: (open: boolean) => void
   open: boolean
   orderNumber: number
-}) {
+}
+
+export function OrderCustomerDrawer(props: OrderCustomerDrawerProps) {
+  if (!props.open) return null
+  return <OpenOrderCustomerDrawer {...props} />
+}
+
+function OpenOrderCustomerDrawer({
+  busy,
+  currentId,
+  currentName,
+  error,
+  onAssign,
+  onOpenChange,
+  open,
+  orderNumber,
+}: OrderCustomerDrawerProps) {
   const listId = useId()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<CustomerSearchItem[] | null>(null)
@@ -104,6 +111,13 @@ export function OrderCustomerDrawer({
   const canAssign = creating
     ? nameValid && phoneValid
     : picked !== null && picked !== currentId
+
+  const changeQuery = (value: string) => {
+    setQuery(value)
+    setResults(null)
+    setSearchError(null)
+    setPicked(null)
+  }
 
   const submit = () => {
     if (!canAssign || busy || saving) return
@@ -172,7 +186,7 @@ export function OrderCustomerDrawer({
             aria-controls={listId}
             autoComplete="off"
             className="h-[46px] rounded-[11px] pl-10"
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => changeQuery(event.target.value)}
             placeholder="Ім’я або телефон"
             value={query}
           />

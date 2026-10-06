@@ -226,6 +226,47 @@ it('names the step a failed verification stopped at', async () => {
   ).toBeGreaterThan(0)
 })
 
+it('keeps a failed verification visible and does not start diagnostics', async () => {
+  vi.mocked(integrationsApi.verify).mockRejectedValue({
+    kind: 'validation',
+    message: 'Нова пошта не прийняла цей ключ API.',
+    code: 'nova_poshta_unauthorized',
+  })
+  const user = userEvent.setup()
+
+  renderScreen('/settings')
+
+  await user.click(
+    await screen.findByRole('button', { name: 'Перевірити підключення' }),
+  )
+
+  expect(
+    await screen.findByText('Нова пошта не прийняла цей ключ API.'),
+  ).toBeVisible()
+  expect(integrationsApi.diagnose).not.toHaveBeenCalled()
+})
+
+it('confirms a successful verification', async () => {
+  vi.mocked(integrationsApi.verify).mockResolvedValue(integration)
+  vi.mocked(integrationsApi.diagnose).mockResolvedValue({
+    integrationId: 'integration-1',
+    status: 'active',
+    healthy: true,
+    checkedAt: '2026-09-21T09:31:00Z',
+    lastErrorCode: null,
+    checks: [],
+  })
+  const user = userEvent.setup()
+
+  renderScreen('/settings')
+
+  await user.click(
+    await screen.findByRole('button', { name: 'Перевірити підключення' }),
+  )
+
+  expect(await screen.findByText('Підключення перевірено.')).toBeVisible()
+})
+
 it('turns a live integration off with the consequence spelled out', async () => {
   vi.mocked(integrationsApi.deactivate).mockResolvedValue({
     ...integration,

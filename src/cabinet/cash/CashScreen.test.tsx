@@ -451,6 +451,15 @@ it('submits one idempotent transfer from a side drawer and reloads the cash over
   expect(cashMocks.list).toHaveBeenCalledTimes(2)
   expect(cashMocks.transactions).toHaveBeenCalledTimes(4)
   expect(screen.getByRole('status')).toHaveTextContent('Переказ виконано.')
+
+  await user.click(screen.getByRole('button', { name: 'Переказ між касами' }))
+  await screen.findByRole('dialog', { name: 'Переказ між касами' })
+  expect(screen.getByLabelText('Сума списання')).toHaveValue(null)
+  expect(screen.getByLabelText('Сума зарахування')).toHaveValue(null)
+  expect(screen.getByLabelText('Нотатка переказу')).toHaveValue('')
+  expect(
+    screen.getByRole('button', { name: 'Переказати кошти' }),
+  ).toBeDisabled()
 })
 
 it('reuses a transfer key after an ambiguous failure and rotates it when the payload changes', async () => {
@@ -628,6 +637,12 @@ it('reuses a movement key after an ambiguous failure and rotates it after succes
   )
   await user.click(screen.getByRole('button', { name: 'Нова операція' }))
   await screen.findByRole('dialog', { name: 'Нова операція' })
+  expect(screen.getByLabelText('Сума')).toHaveValue(null)
+  expect(screen.getByLabelText('Нотатка')).toHaveValue('')
+  expect(
+    screen.getByRole('button', { name: 'Записати операцію' }),
+  ).toBeDisabled()
+  await user.type(screen.getByLabelText('Сума'), '25')
   await user.click(screen.getByRole('button', { name: 'Записати операцію' }))
 
   expect(cashMocks.createTransaction).toHaveBeenNthCalledWith(

@@ -191,7 +191,13 @@ it('announces a toast and dismisses it on request', async () => {
   expect(screen.queryByText('Деталь збережено')).not.toBeInTheDocument()
 })
 
-function ConfirmProbe({ onConfirm }: { onConfirm: () => void }) {
+function ConfirmProbe({
+  onConfirm,
+  pending = false,
+}: {
+  onConfirm: () => void
+  pending?: boolean
+}) {
   const [open, setOpen] = useState(false)
   return (
     <>
@@ -202,11 +208,22 @@ function ConfirmProbe({ onConfirm }: { onConfirm: () => void }) {
         onConfirm={onConfirm}
         onOpenChange={setOpen}
         open={open}
+        pending={pending}
         title="Видалити деталь?"
       />
     </>
   )
 }
+
+it('keeps a pending confirmation open when Escape requests dismissal', async () => {
+  const user = userEvent.setup()
+  render(<ConfirmProbe onConfirm={vi.fn()} pending />)
+
+  await user.click(screen.getByRole('button', { name: 'Видалити' }))
+  await user.keyboard('{Escape}')
+
+  expect(screen.getByRole('dialog', { name: 'Видалити деталь?' })).toBeVisible()
+})
 
 it('confirms a destructive action through its consequence', async () => {
   const onConfirm = vi.fn()

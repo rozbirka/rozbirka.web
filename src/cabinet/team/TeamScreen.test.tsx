@@ -200,9 +200,11 @@ it('loads the member, role, and invitation lifecycle with tenant cancellation', 
 })
 
 it('marks invitation lifecycle states and only allows revoking active invitations', async () => {
+  const longCode =
+    '3870f3f5ecb1dbab378027dd9299c57988085d4d7b80054a7a8156cf523e87db'
   vi.mocked(teamApi.listInvitations).mockResolvedValue([
     invitation({ id: 'active' }),
-    invitation({ id: 'used', isUsed: true }),
+    invitation({ id: 'used', code: longCode, isUsed: true }),
     invitation({ id: 'revoked', isRevoked: true }),
     invitation({ id: 'expired', isExpired: true }),
   ])
@@ -213,6 +215,10 @@ it('marks invitation lifecycle states and only allows revoking active invitation
   expect(screen.getByText('Відкликано')).toBeInTheDocument()
   expect(screen.getByText('Прострочено')).toBeInTheDocument()
   expect(screen.getAllByRole('button', { name: /^Відкликати/ })).toHaveLength(1)
+  const longCodeLabel = screen.getByText(longCode)
+  expect(longCodeLabel).toHaveClass('truncate')
+  expect(longCodeLabel).toHaveAttribute('title', longCode)
+  expect(longCodeLabel.closest('li')).toHaveClass('max-w-full', 'min-w-0')
 })
 
 it('protects system roles while allowing custom roles to be managed', async () => {

@@ -7,7 +7,8 @@ import {
   useSearchParams,
 } from 'react-router'
 import { sourceReturnPath } from '../parts/source-return'
-import { ImportEntryButton } from '../imports/ImportEntryButton'
+import { FeatureGate } from '../FeatureFlags'
+import { FEATURE_FLAGS } from '@/api/feature-flags'
 import {
   Check,
   ChevronLeft,
@@ -798,9 +799,15 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
             </Button>
             {/* Import is a parts mutation, the same gate as the parts list. */}
             {partCreateDecision.kind === 'allowed' && partsMediaManage ? (
-              <ImportEntryButton
-                to={`${base.replace(/\/intakes$/, '/parts')}/imports?intake_id=${encodeURIComponent(intake.id)}`}
-              />
+              <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
+                <Button asChild>
+                  <Link
+                    to={`${base.replace(/\/intakes$/, '/parts')}/imports?intake_id=${encodeURIComponent(intake.id)}`}
+                  >
+                    Імпорт запчастин
+                  </Link>
+                </Button>
+              </FeatureGate>
             ) : null}
             {partCreateDecision.kind === 'allowed' ? (
               <Button

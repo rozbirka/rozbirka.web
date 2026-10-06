@@ -4687,7 +4687,9 @@ function PartPlacementView({ partId }: { partId: string }) {
                       <span aria-hidden className="text-white/20">
                         ·
                       </span>
-                      <span className="font-mono">{part.qrCode}</span>
+                      <span className="max-w-full break-all font-mono">
+                        {part.qrCode}
+                      </span>
                       <span aria-hidden className="text-white/20">
                         ·
                       </span>

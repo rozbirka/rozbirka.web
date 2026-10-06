@@ -51,10 +51,16 @@ retain their history but cannot receive new parts. A stale `origin=free` URL is
 reset with an inline notice; available stock and unassigned warehouse zones are
 unaffected.
 
+The tenant-scoped `parts.bulk-import` flag controls import entry points through
+the shared FeatureGate. Permissions and entitlements remain separate. Flags are
+refreshed every minute; switching tenant clears the previous snapshot. Direct
+API mutations are gated on the server; history, accepted work and results remain
+available when the flag is off.
+
 An import has one destination, carried through upload navigation, remembered
 per import in this browser until the mapping is saved, and persisted in mapping
 schema 2. A draft reopened without a known destination says so before offering a
-new batch. The parts list never turns its filters into an import destination. Contextual imports preserve their car/intake. An upload
+new batch. A `car_id`/`intake_id` in the import URL preserves that car/intake. An upload
 without context proposes an editable batch name derived from its display
 filename. Resuming an unmapped upload without a filename requires entering the
 name. Mapping source changes invalidate confirmation. Legacy schema mappings

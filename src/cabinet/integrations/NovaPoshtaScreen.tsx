@@ -14,6 +14,7 @@ import {
   Notice,
   StatusPill,
   TextInput,
+  useOptionalToast,
 } from '@/components/app'
 import {
   integrationsApi,
@@ -157,6 +158,7 @@ export function NovaPoshtaScreen() {
   const [key, setKey] = useState('')
   const [busy, setBusy] = useState<null | 'save' | 'verify' | 'toggle'>(null)
   const [error, setError] = useState<string | null>(null)
+  const toast = useOptionalToast()
   const mountedRef = useRef(true)
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.integrations,
@@ -270,13 +272,14 @@ export function NovaPoshtaScreen() {
   const run = async (
     kind: 'save' | 'verify' | 'toggle',
     action: () => Promise<Integration>,
-  ) => {
-    if (busy !== null) return
+    successMessage: string,
+  ): Promise<boolean> => {
+    if (busy !== null) return false
     try {
       requireLatestMutation()
     } catch {
       setError('Дія недоступна: немає прав на налаштування команди.')
-      return
+      return false
     }
     setBusy(kind)
     setError(null)
@@ -286,16 +289,23 @@ export function NovaPoshtaScreen() {
         setEditingKey(false)
         setKey('')
       }
+      toast?.show({ tone: 'ok', message: successMessage })
+      return true
     } catch (problem) {
       if (mountedRef.current) setError(normalizeApiProblem(problem).message)
+      return false
     } finally {
       if (mountedRef.current) setBusy(null)
     }
   }
 
   const verify = async () => {
-    await run('verify', () => integrationsApi.verify(integration.id))
-    if (!mountedRef.current) return
+    const verified = await run(
+      'verify',
+      () => integrationsApi.verify(integration.id),
+      'Підключення перевірено.',
+    )
+    if (!verified || !mountedRef.current) return
     try {
       setDiagnostics(await integrationsApi.diagnose(integration.id))
     } catch {
@@ -309,16 +319,21 @@ export function NovaPoshtaScreen() {
     event.preventDefault()
     const value = key.trim()
     if (value === '') return
-    await run('save', () =>
-      integrationsApi.saveNovaPoshtaKey(integration.id, value),
+    await run(
+      'save',
+      () => integrationsApi.saveNovaPoshtaKey(integration.id, value),
+      'Ключ збережено й перевірено.',
     )
   }
 
   const toggle = () =>
-    void run('toggle', () =>
-      active
-        ? integrationsApi.deactivate(integration.id)
-        : integrationsApi.activate(integration.id),
+    void run(
+      'toggle',
+      () =>
+        active
+          ? integrationsApi.deactivate(integration.id)
+          : integrationsApi.activate(integration.id),
+      active ? 'Інтеграцію вимкнено.' : 'Інтеграцію увімкнено.',
     )
 
   const tabs: {
@@ -663,7 +678,9 @@ export function NovaPoshtaScreen() {
                         : 'Спершу збережіть ключ доступу — перевіряти поки нічого.'
                     }
                   >
-                    Перевірити підключення
+                    {busy === 'verify'
+                      ? 'Перевіряємо…'
+                      : 'Перевірити підключення'}
                   </Button>
                 </div>
               </>

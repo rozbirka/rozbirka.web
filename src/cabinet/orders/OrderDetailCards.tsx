@@ -516,14 +516,21 @@ export function OrderCustomerCard({
   onChange?: (() => void) | undefined
   to: string
 }) {
-  const [customer, setCustomer] = useState<CustomerDetail | null>(null)
+  const [loadedCustomer, setLoadedCustomer] = useState<{
+    id: string
+    detail: CustomerDetail
+  } | null>(null)
+  const customer =
+    loadedCustomer?.id === customerId ? loadedCustomer.detail : null
 
   useEffect(() => {
     if (customerId === null) return
     const controller = new AbortController()
     void customersApi.getById(customerId, { signal: controller.signal }).then(
       (detail) => {
-        if (!controller.signal.aborted) setCustomer(detail)
+        if (!controller.signal.aborted) {
+          setLoadedCustomer({ id: customerId, detail })
+        }
       },
       () => {
         // The name on the order still stands; the extra facts are a bonus.

@@ -239,3 +239,28 @@ it('names the car by its plate and says where the part lies', async () => {
     ),
   ).toBeVisible()
 })
+
+it('starts with an empty search after it is closed and opened again', async () => {
+  partsApi.list.mockResolvedValue({ items: [] })
+  const user = userEvent.setup()
+  const props = {
+    busy: false,
+    error: null,
+    orderNumber: 1,
+    orderTotal: 0,
+    takenPartIds: [] as string[],
+    onOpenChange: vi.fn(),
+    onSubmit: vi.fn(),
+  }
+  const { rerender } = render(<OrderItemDrawer {...props} open />)
+
+  await user.type(screen.getByLabelText('Пошук запчастини'), 'двері')
+  await screen.findByText('Нічого не знайдено. Спробуйте OEM-код.')
+
+  rerender(<OrderItemDrawer {...props} open={false} />)
+  rerender(<OrderItemDrawer {...props} open />)
+
+  expect(screen.getByLabelText('Пошук запчастини')).toHaveValue('')
+  expect(screen.getByText('Введіть назву або OEM-код')).toBeVisible()
+  expect(partsApi.list).toHaveBeenCalledTimes(1)
+})

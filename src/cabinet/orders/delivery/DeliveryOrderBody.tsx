@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link as RouterLink } from 'react-router'
 import { Plus, Printer } from 'lucide-react'
 import { Button, Notice, useOptionalToast } from '@/components/app'
@@ -49,6 +49,32 @@ type Drawer =
   | { kind: 'label' }
   | { kind: 'step'; step: DeliveryStep }
 
+type PaymentOperation = 'delivery-payment' | 'delivery-link'
+
+const ambiguousMutationFailure = (problem: unknown) => {
+  const kind = normalizeApiProblem(problem).kind
+  return kind === 'network' || kind === 'timeout'
+}
+
+const usePaymentIdempotencyKeys = () => {
+  const keys = useRef(
+    new Map<PaymentOperation, { signature: string; key: string }>(),
+  )
+  return {
+    forPayload(operation: PaymentOperation, payload: unknown) {
+      const signature = JSON.stringify(payload)
+      const current = keys.current.get(operation)
+      if (current?.signature === signature) return current.key
+      const key = `${operation}-${crypto.randomUUID()}`
+      keys.current.set(operation, { signature, key })
+      return key
+    },
+    clear(operation: PaymentOperation) {
+      keys.current.delete(operation)
+    },
+  }
+}
+
 const when = (value: string) => {
   const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})/.exec(value)
   return parts ? `${parts[1]}-${parts[2]}-${parts[3]} ${parts[4]}` : value
@@ -93,6 +119,7 @@ export function DeliveryOrderBody({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [tills, setTills] = useState<CashRegister[]>([])
+  const paymentKeys = usePaymentIdempotencyKeys()
 
   useEffect(() => {
     if (!financeAllowed) return
@@ -116,11 +143,26 @@ export function DeliveryOrderBody({
     setError(null)
     try {
       load.setMoney(await action())
-    } catch (problem) {
-      setError(normalizeApiProblem(problem).message)
-      throw problem
     } finally {
       setBusy(false)
+    }
+  }
+
+  const runPayment = async (
+    operation: PaymentOperation,
+    payload: unknown,
+    action: (idempotencyKey: string) => Promise<DeliveryOrder>,
+  ) => {
+    const idempotencyKey = paymentKeys.forPayload(operation, [
+      order.id,
+      payload,
+    ])
+    try {
+      await runMoney(() => action(idempotencyKey))
+      paymentKeys.clear(operation)
+    } catch (problem) {
+      if (!ambiguousMutationFailure(problem)) paymentKeys.clear(operation)
+      throw problem
     }
   }
 
@@ -348,17 +390,13 @@ export function DeliveryOrderBody({
           mode={drawer.mode}
           onClose={() => setDrawer(null)}
           onLink={(input) =>
-            runMoney(() =>
-              deliveryApi.linkPayment(order.id, input, {
-                idempotencyKey: `delivery-link-${crypto.randomUUID()}`,
-              }),
+            runPayment('delivery-link', input, (idempotencyKey) =>
+              deliveryApi.linkPayment(order.id, input, { idempotencyKey }),
             )
           }
           onRecord={(input) =>
-            runMoney(() =>
-              deliveryApi.recordPayment(order.id, input, {
-                idempotencyKey: `delivery-payment-${crypto.randomUUID()}`,
-              }),
+            runPayment('delivery-payment', input, (idempotencyKey) =>
+              deliveryApi.recordPayment(order.id, input, { idempotencyKey }),
             )
           }
           orderNumber={order.number}
