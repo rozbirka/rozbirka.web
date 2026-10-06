@@ -37,8 +37,11 @@ it('opens secondary record actions as one vertical menu', async () => {
   await user.click(screen.getByRole('button', { name: 'Інші дії з записом' }))
 
   const menu = screen.getByRole('menu')
-  expect(menu).toHaveClass('grid')
-  expect(screen.getByRole('menuitem', { name: 'Архівувати' })).toBeVisible()
+  expect(menu).toHaveClass('grid', 'min-w-52', 'p-1.5')
+  expect(screen.getByRole('menuitem', { name: 'Архівувати' })).toHaveClass(
+    'min-h-11',
+    'text-[14.5px]',
+  )
   expect(screen.getByRole('menuitem', { name: 'Видалити' })).toHaveClass(
     'text-state-danger',
   )

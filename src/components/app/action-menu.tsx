@@ -43,14 +43,14 @@ export function ActionMenu({
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           align="end"
-          className="bg-app-overlay border-app-line-2 rounded-sheet z-50 grid w-[min(22rem,calc(100vw-2rem))] gap-1.5 border p-3 shadow-2xl"
+          className="bg-app-overlay border-app-line-2 rounded-sheet z-50 grid min-w-52 gap-1 border p-1.5 shadow-2xl"
           collisionPadding={16}
           sideOffset={6}
         >
           {actions.map((action) => (
             <DropdownMenu.Item
               className={cn(
-                'rounded-control flex min-h-14 cursor-pointer items-center gap-3 px-4 text-base font-semibold outline-none select-none',
+                'rounded-control flex min-h-11 cursor-pointer items-center gap-2.5 px-3 text-[14.5px] outline-none select-none',
                 'data-[highlighted]:bg-white/[0.06]',
                 'data-[disabled]:pointer-events-none data-[disabled]:opacity-55',
                 action.destructive
