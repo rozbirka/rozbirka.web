@@ -145,6 +145,7 @@ export interface PartSearchItem {
   id: string
   name: string
   oemCode: string | null
+  externalCode?: string | null
   quantity: number
   quantityAvailable: number
   quantityReserved: number

@@ -19,8 +19,15 @@ const orderMocks = vi.hoisted(() => ({
   updatePayments: vi.fn(),
   setCustomer: vi.fn(),
 }))
-const partMocks = vi.hoisted(() => ({ get: vi.fn(), list: vi.fn() }))
+const partMocks = vi.hoisted(() => ({
+  facets: vi.fn(),
+  get: vi.fn(),
+  list: vi.fn(),
+  search: vi.fn(),
+}))
 const cashMocks = vi.hoisted(() => ({ list: vi.fn() }))
+const integrationMocks = vi.hoisted(() => ({ list: vi.fn() }))
+const deliveryMocks = vi.hoisted(() => ({ get: vi.fn() }))
 const customerMocks = vi.hoisted(() => ({
   search: vi.fn(),
   getById: vi.fn(),
@@ -28,7 +35,7 @@ const customerMocks = vi.hoisted(() => ({
   activate: vi.fn(),
 }))
 vi.mock('@/api/integrations', () => ({
-  integrationsApi: { list: vi.fn().mockResolvedValue([]) },
+  integrationsApi: { list: integrationMocks.list },
 }))
 /**
  * Whether an order ships is Core's answer, asked for every order now. An
@@ -37,12 +44,7 @@ vi.mock('@/api/integrations', () => ({
  */
 vi.mock('@/api/delivery', () => ({
   deliveryApi: {
-    get: vi.fn().mockRejectedValue({
-      kind: 'conflict',
-      // Core's own casing: the constant in `ErrorCodes` is UPPER_SNAKE.
-      code: 'ORDER_INVALID_STATUS',
-      message: 'Order is not a delivery order.',
-    }),
+    get: deliveryMocks.get,
   },
 }))
 vi.mock('@/api/orders', () => ({ ordersApi: orderMocks }))
@@ -92,12 +94,21 @@ const pickerPart = (id: string) => ({
   externalCode: null,
   photos: [],
   quantityTotal: 3,
+  quantity: 3,
   quantityReserved: 0,
   quantityAvailable: 3,
   quantitySoldTotal: 0,
   status: 'available',
   car: null,
   order: null,
+  oemCode: null,
+  unit: 'pcs',
+  condition: 'used',
+  sourceType: 'car',
+  createdAt: '2026-10-06T10:00:00Z',
+  isInventoryLocked: false,
+  hasDiscrepancy: false,
+  thumbnailUrl: null,
 })
 
 async function selectPickerPart(
@@ -105,7 +116,7 @@ async function selectPickerPart(
   id: string,
 ) {
   const part = pickerPart(id)
-  partMocks.list.mockResolvedValue({
+  partMocks.search.mockResolvedValue({
     items: [part],
     page: 1,
     pageSize: 6,
@@ -162,6 +173,27 @@ afterEach(() => {
 })
 beforeEach(() => {
   vi.mocked(useCabinet).mockReturnValue(cabinet())
+  integrationMocks.list.mockResolvedValue([])
+  deliveryMocks.get.mockRejectedValue({
+    kind: 'conflict',
+    // Core's own casing: the constant in `ErrorCodes` is UPPER_SNAKE.
+    code: 'ORDER_INVALID_STATUS',
+    message: 'Order is not a delivery order.',
+  })
+  partMocks.facets.mockResolvedValue({
+    statuses: [],
+    warehouses: [],
+    zones: [],
+    conditions: [],
+    equipmentTypes: [],
+    makes: [],
+    models: [],
+    generations: [],
+    origins: [],
+    qualityFlags: [],
+    inventoryLocks: [],
+    discrepancies: [],
+  })
   partMocks.get.mockResolvedValue({ effectiveSalePrice: null })
   customerMocks.getById.mockResolvedValue({
     id: 'customer-1',
@@ -235,6 +267,45 @@ beforeEach(() => {
     total: 0,
     totalPages: 0,
   })
+})
+
+it('does not offer delivery after an ordinary order is confirmed', async () => {
+  orderMocks.getById.mockResolvedValue({
+    id: 'order-1',
+    number: 1,
+    status: 'confirmed',
+    customerId: null,
+    customerName: null,
+    notes: null,
+    items: [],
+    payments: [],
+    history: [],
+    totalAmount: 250,
+    totalPaid: 250,
+    paymentCurrency: 'UAH',
+    createdAt: '2026-08-28T00:00:00Z',
+    createdByName: 'Олена',
+  })
+
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await screen.findByRole('heading', { name: 'Замовлення #1' })
+  await waitFor(() => expect(deliveryMocks.get).toHaveBeenCalled())
+  await waitFor(() => expect(integrationMocks.list).toHaveBeenCalled())
+  await act(async () => {
+    await Promise.resolve()
+  })
+
+  expect(
+    screen.queryByRole('button', { name: 'Оформити доставку' }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('heading', { name: 'Доставка' }),
+  ).not.toBeInTheDocument()
 })
 
 it('prevents a duplicate canonical create while the first request is pending', async () => {
@@ -708,19 +779,26 @@ it.each([
 })
 
 it('uses the reusable customer and part searches to populate a canonical order', async () => {
-  partMocks.list.mockResolvedValue({
+  partMocks.search.mockResolvedValue({
     items: [
       {
         id: 'part-1',
         name: 'Ліхтар',
         photos: [],
-        quantityTotal: 3,
+        quantity: 3,
         quantityReserved: 0,
         quantityAvailable: 3,
         quantitySoldTotal: 0,
         status: 'available',
         car: null,
-        order: null,
+        oemCode: null,
+        unit: 'pcs',
+        condition: 'used',
+        sourceType: 'car',
+        createdAt: '2026-10-06T10:00:00Z',
+        isInventoryLocked: false,
+        hasDiscrepancy: false,
+        thumbnailUrl: null,
       },
     ],
     page: 1,
@@ -767,8 +845,9 @@ it('uses the reusable customer and part searches to populate a canonical order',
   await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
 
-  expect(partMocks.list).toHaveBeenCalledWith(
-    expect.objectContaining({ q: 'Ліхтар', page: 1, pageSize: 6 }),
+  expect(partMocks.search).toHaveBeenCalledWith(
+    expect.objectContaining({ query: 'Ліхтар', page: 1, pageSize: 6 }),
+    expect.objectContaining({}),
   )
   expect(customerMocks.search).toHaveBeenCalledWith('Ірина', expect.any(Object))
   expect(orderMocks.create).toHaveBeenCalledWith({
@@ -779,31 +858,18 @@ it('uses the reusable customer and part searches to populate a canonical order',
 })
 
 it('builds a multi-part order and shows its total in dollars', async () => {
-  partMocks.list.mockResolvedValue({
+  partMocks.search.mockResolvedValue({
     items: [
       {
-        id: 'part-1',
+        ...pickerPart('part-1'),
         name: 'Ліхтар',
-        photos: [],
-        quantityTotal: 3,
-        quantityReserved: 0,
-        quantityAvailable: 3,
-        quantitySoldTotal: 0,
-        status: 'available',
-        car: null,
-        order: null,
       },
       {
-        id: 'part-2',
+        ...pickerPart('part-2'),
         name: 'Двері',
-        photos: [],
+        quantity: 2,
         quantityTotal: 2,
-        quantityReserved: 0,
         quantityAvailable: 2,
-        quantitySoldTotal: 0,
-        status: 'available',
-        car: null,
-        order: null,
       },
     ],
     page: 1,
@@ -1628,6 +1694,9 @@ it('shows authoritative detail and lets orders.manage edit pending fields and ca
   await user.click(
     screen.getByRole('button', { name: 'Інші дії із замовленням' }),
   )
+  expect(
+    screen.queryByRole('menuitem', { name: 'Дублювати' }),
+  ).not.toBeInTheDocument()
   await user.click(
     screen.getByRole('menuitem', { name: 'Скасувати замовлення' }),
   )

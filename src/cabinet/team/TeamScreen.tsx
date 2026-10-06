@@ -10,7 +10,6 @@ import { Link } from 'react-router'
 import {
   Ban,
   KeyRound,
-  Pencil,
   Plus,
   Power,
   PowerOff,
@@ -29,7 +28,6 @@ import {
   SelectInput,
   SkeletonRows,
   StatusPill,
-  TextInput,
   useOperation,
   type StatusTone,
   Sheet,
@@ -111,8 +109,6 @@ const NO_LAST_SEEN =
   'Останній вхід учасника не зберігається — відома лише дата приєднання.'
 const NO_EMAIL =
   'Пошти в учасника немає — кабінет знає імʼя й телефон, а телефон тут не вказано.'
-const NO_RESEND =
-  'Надіслати запрошення повторно нема куди: кабінет не шле листів, він лише видає код. Потрібен новий — створіть запрошення нижче.'
 const NO_EMAIL_INVITE =
   'Листів кабінет не надсилає й пошти не питає: запрошення — це код, який ви передаєте людині самі. Місце в тарифі рахується за учасниками, а не за виданими кодами.'
 
@@ -151,22 +147,15 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
   const [permissionMember, setPermissionMember] =
     useState<TeamMemberDto | null>(null)
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
-  const [newRoleName, setNewRoleName] = useState('Нова роль')
-  const [newRolePermissions, setNewRolePermissions] = useState<string[]>([
-    'orders.view',
-  ])
-  const [editingRole, setEditingRole] = useState<RoleDto | null>(null)
-  const [editingRoleName, setEditingRoleName] = useState('')
-  const [editingRolePermissions, setEditingRolePermissions] = useState<
-    string[]
-  >([])
+  const [invitationDrawerOpen, setInvitationDrawerOpen] = useState(false)
+  const [invitationRoleId, setInvitationRoleId] = useState('')
+  const [invitationHistoryOpen, setInvitationHistoryOpen] = useState(false)
   const accessRefreshRequiredRef = useRef(false)
   const restoreFocusRef = useRef<HTMLElement | null>(null)
   const roleAssignmentRef = useRef<{
     memberId: string
     roleId: string
   } | null>(null)
-  const invitationRoleRef = useRef<string | null>(null)
   const tenantId = cabinet.snapshot?.tenantId ?? null
   const generation = cabinet.snapshot?.generation ?? null
   const canView = cabinet.snapshot?.permissions.has('team.view') === true
@@ -293,59 +282,33 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
     },
   )
 
-  const roleUpdate = useOperation(
-    async () => {
-      if (editingRole === null) return false
-      return mutate('Роль оновлено.', (signal) =>
-        teamApi.updateRole(
-          editingRole.id,
-          {
-            name: editingRoleName.trim(),
-            permissions: editingRolePermissions,
-          },
-          { signal },
-        ),
-      )
-    },
-    {
-      errorMessage: () =>
-        'Не вдалося зберегти роль. Перевірте зв’язок і спробуйте ще раз.',
-      onSuccess: () => setEditingRole(null),
-    },
-  )
-
-  const roleCreation = useOperation(
-    async () =>
-      mutate('Роль створено.', (signal) =>
-        teamApi.createRole(
-          { name: newRoleName.trim(), permissions: newRolePermissions },
-          { signal },
-        ),
-      ),
-    {
-      errorMessage: () =>
-        'Не вдалося створити роль. Перевірте зв’язок і спробуйте ще раз.',
-      onSuccess: (created) => {
-        if (!created) return
-        setNewRoleName('Нова роль')
-        setNewRolePermissions(['orders.view'])
-      },
-    },
-  )
-
   const invitationCreation = useOperation(
     async () => {
-      const roleId = invitationRoleRef.current
-      if (roleId === null) return false
+      if (!invitationRoleId) return false
       return mutate('Запрошення створено.', (signal) =>
-        teamApi.createInvitation(roleId, { signal }),
+        teamApi.createInvitation(invitationRoleId, { signal }),
       )
     },
     {
       errorMessage: () =>
         'Не вдалося створити запрошення. Перевірте зв’язок і спробуйте ще раз.',
+      onSuccess: (created) => {
+        if (created) setInvitationDrawerOpen(false)
+      },
     },
   )
+
+  const openInvitationDrawer = () => {
+    if (!canManage()) {
+      setError(accessLostMessage)
+      return
+    }
+    invitationCreation.reset()
+    setInvitationRoleId((current) =>
+      current === '' ? (availableRoles[0]?.id ?? '') : current,
+    )
+    setInvitationDrawerOpen(true)
+  }
 
   const confirmedAction = useOperation(
     async () => {
@@ -383,31 +346,8 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
     }
   }
 
-  const openRoleEditor = (role: RoleDto) => {
-    roleUpdate.reset()
-    setEditingRole(role)
-    setEditingRoleName(role.name)
-    setEditingRolePermissions(role.permissions ?? [])
-  }
-
-  const toggleNewRolePermission = (permission: string) => {
-    setNewRolePermissions((current) =>
-      current.includes(permission)
-        ? current.filter((item) => item !== permission)
-        : [...current, permission],
-    )
-  }
-
   const toggleUserPermission = (permission: string) => {
     setSelectedPermissions((current) =>
-      current.includes(permission)
-        ? current.filter((item) => item !== permission)
-        : [...current, permission],
-    )
-  }
-
-  const toggleEditingRolePermission = (permission: string) => {
-    setEditingRolePermissions((current) =>
       current.includes(permission)
         ? current.filter((item) => item !== permission)
         : [...current, permission],
@@ -466,6 +406,12 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
   const openInvitations = (teamData?.invitations ?? []).filter(
     (one) => invitationStatus(one).label === 'Активне',
   )
+  const invitationHistory = (teamData?.invitations ?? []).filter(
+    (one) => invitationStatus(one).label !== 'Активне',
+  )
+  const visibleInvitations = invitationHistoryOpen
+    ? [...openInvitations, ...invitationHistory]
+    : openInvitations
   const seats = cabinet.snapshot?.entitlement?.usage.users ?? null
   const planName = cabinet.snapshot?.subscription?.planName ?? null
   const myUserId = cabinet.snapshot?.userId ?? null
@@ -487,14 +433,13 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
             </span>
             {canManageAccess && (
               <Button
-                asChild
                 className="px-5 text-sm font-bold"
+                onClick={openInvitationDrawer}
+                type="button"
                 variant="primary"
               >
-                <a href="#team-invite">
-                  <Plus aria-hidden />
-                  Запросити
-                </a>
+                <Plus aria-hidden />
+                Запросити
               </Button>
             )}
           </>
@@ -820,225 +765,67 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                 </p>
                 <Link
                   className="text-brand text-[13px] font-bold underline-offset-4 hover:underline"
-                  to="../billing"
+                  to={`/app/${cabinet.targetTenant?.slug ?? ''}/settings/billing/overview`}
                 >
                   Збільшити ліміт
                 </Link>
               </div>
             </section>
 
-            <div className="grid min-w-0 items-start gap-5 lg:grid-cols-2">
-              <section
-                aria-labelledby="team-roles-heading"
-                className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5.5 py-5"
-              >
-                <h2
-                  className="text-app-ink text-[15px] font-bold"
-                  id="team-roles-heading"
-                >
-                  Ролі й доступи
-                </h2>
-                <p className="text-app-dim mt-1.5 text-[13px] leading-5 text-pretty">
-                  Системні ролі змінити не можна — створіть власну й дайте їй
-                  рівно ті права, що потрібні.
-                </p>
-                <ul className="mt-4 grid min-w-0 max-w-full gap-2.5">
-                  {teamData.roles.map((role) => (
-                    <li
-                      className="border-app-line rounded-[16px] border px-4 py-3.5"
-                      key={role.id}
-                    >
-                      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                        <span className="flex flex-wrap items-center gap-2.5">
-                          <span className="text-app-ink text-[14px] font-bold">
-                            {role.name}
-                          </span>
-                          <StatusPill tone={role.isSystem ? 'info' : 'neutral'}>
-                            {role.isSystem ? 'Системна роль' : 'Власна роль'}
-                          </StatusPill>
-                        </span>
-                        <span className="text-app-dim font-mono text-[12px]">
-                          {role.membersCount === null
-                            ? '—'
-                            : `${String(role.membersCount)} ${plural(role.membersCount, ['учасник', 'учасники', 'учасників'])}`}
-                        </span>
-                      </div>
-                      <div className="mt-2.5 flex flex-wrap gap-1.5">
-                        {(role.permissions ?? [])
-                          .slice(0, 6)
-                          .map((permission) => (
-                            <span
-                              className="border-app-line text-app-muted rounded-full border px-2.5 py-0.5 font-mono text-[11.5px]"
-                              key={permission}
-                            >
-                              {permission}
-                            </span>
-                          ))}
-                        {(role.permissions?.length ?? 0) > 6 && (
-                          <span className="text-app-dim px-1 py-0.5 text-[11.5px]">
-                            ще {String((role.permissions?.length ?? 0) - 6)} з{' '}
-                            {String(ALL_PERMISSIONS.length)}
-                          </span>
-                        )}
-                        {(role.permissions?.length ?? 0) === 0 && (
-                          <span className="text-app-dim text-[12.5px]">
-                            Прав ще немає
-                          </span>
-                        )}
-                      </div>
-                      {canManageAccess && (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {role.isSystem ? (
-                            <span className="text-app-dim text-[12.5px]">
-                              Змінам не підлягає
-                            </span>
-                          ) : (
-                            <>
-                              <Button
-                                aria-label={`Редагувати ${role.name}`}
-                                onClick={() => openRoleEditor(role)}
-                              >
-                                <Pencil aria-hidden />
-                                Редагувати
-                              </Button>
-                              <Button
-                                aria-label={`Видалити ${role.name}`}
-                                onClick={() =>
-                                  askConfirmation({
-                                    title: 'Видалити роль',
-                                    description: `Роль «${role.name}» зникне зі списку. Учасникам із цією роллю доведеться призначити іншу.`,
-                                    failure:
-                                      'Не вдалося видалити роль. Перевірте зв’язок і спробуйте ще раз.',
-                                    confirm: () =>
-                                      mutate('Роль видалено.', (signal) =>
-                                        teamApi.deleteRole(role.id, {
-                                          signal,
-                                        }),
-                                      ),
-                                  })
-                                }
-                                variant="danger"
-                              >
-                                <Trash2 aria-hidden />
-                                Видалити
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                  {teamData.roles.length === 0 && (
-                    <li className="text-app-muted text-[13.5px]">
-                      Ролей поки немає.
-                    </li>
-                  )}
-                </ul>
-                {canManageAccess && (
-                  <form
-                    className="border-app-line mt-5 grid min-w-0 gap-4 border-t pt-5"
-                    onSubmit={(event) => {
-                      event.preventDefault()
-                      roleCreation.run()
-                    }}
-                  >
-                    <h3 className="text-app-ink text-[14px] font-bold">
-                      Нова роль
-                    </h3>
-                    {roleCreation.error !== null && (
-                      <Notice tone="danger">{roleCreation.error}</Notice>
-                    )}
-                    <Field
-                      hint="Наприклад: Диспетчер, Комірник, Продавець."
-                      label="Назва нової ролі"
-                      required
-                    >
-                      <TextInput
-                        onChange={(event) => setNewRoleName(event.target.value)}
-                        value={newRoleName}
-                      />
-                    </Field>
-                    <PermissionChecklist
-                      onToggle={toggleNewRolePermission}
-                      selected={newRolePermissions}
-                    />
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <Button
-                        {...roleCreation.triggerProps}
-                        disabled={
-                          roleCreation.pending ||
-                          !newRoleName.trim() ||
-                          newRolePermissions.length === 0
-                        }
-                        type="submit"
-                        variant="primary"
-                      >
-                        <Plus aria-hidden />
-                        Створити роль
-                      </Button>
-                    </div>
-                  </form>
-                )}
-              </section>
-
-              <section
-                aria-labelledby="team-invitations-heading"
-                className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5.5 py-5"
-                id="team-invite"
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <section
+              aria-labelledby="team-invitations-heading"
+              className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
+              id="team-invite"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3 px-5.5 py-4.5">
+                <div>
                   <h2
                     className="text-app-ink text-[15px] font-bold"
                     id="team-invitations-heading"
                   >
                     Запрошення
                   </h2>
-                  <span className="text-app-dim font-mono text-[12px]">
-                    {openInvitations.length === 0
-                      ? 'жодного активного'
-                      : `${String(openInvitations.length)} ${plural(openInvitations.length, ['діє', 'діють', 'діють'])}`}
-                  </span>
+                  <p className="text-app-dim mt-1 text-[13px]">
+                    Передайте активний код людині для реєстрації.
+                  </p>
                 </div>
-                <p className="text-app-dim mt-1.5 text-[13px] leading-5 text-pretty">
-                  Запрошення — це код, який людина вводить під час реєстрації.
-                </p>
-                <ul className="mt-4 grid gap-2.5">
-                  {teamData.invitations.map((item) => {
-                    const status = invitationStatus(item)
-                    return (
-                      <li
-                        className="border-app-line flex min-w-0 max-w-full flex-wrap items-center gap-x-4 gap-y-2.5 rounded-[16px] border px-4 py-3.5"
-                        key={item.id}
-                      >
-                        <div className="min-w-0 flex-[1_1_160px] overflow-hidden">
-                          <p
-                            className="text-app-ink truncate font-mono text-[14px] font-bold"
-                            title={item.code}
-                          >
-                            {item.code}
-                          </p>
-                          <p className="text-app-dim mt-0.5 text-[12.5px]">
-                            {item.role.name} · діє до{' '}
-                            <DateValue value={item.expiresAt} />
-                          </p>
-                        </div>
-                        <StatusPill tone={status.tone}>
-                          {status.label}
-                        </StatusPill>
-                        {canManageAccess && (
-                          <div className="ml-auto flex flex-wrap gap-2">
-                            <button
-                              className="border-app-line text-app-dim inline-flex min-h-11 cursor-not-allowed items-center rounded-[10px] border px-3.5 text-[13px] font-medium"
-                              disabled
-                              title={NO_RESEND}
-                              type="button"
-                            >
-                              Надіслати ще
-                            </button>
-                            {status.label === 'Активне' && (
-                              <Button
-                                aria-label={`Відкликати ${item.code}`}
-                                onClick={() =>
+                <span className="text-app-dim font-mono text-[12px]">
+                  {openInvitations.length === 0
+                    ? 'жодного активного'
+                    : `${String(openInvitations.length)} ${plural(openInvitations.length, ['діє', 'діють', 'діють'])}`}
+                </span>
+              </div>
+              <ul className="border-app-line divide-app-line divide-y border-t">
+                {visibleInvitations.map((item) => {
+                  const status = invitationStatus(item)
+                  return (
+                    <li
+                      className="flex min-w-0 max-w-full items-center gap-3 px-5.5 py-3"
+                      key={item.id}
+                    >
+                      <div className="min-w-0 flex-1 overflow-hidden">
+                        <p
+                          className="text-app-ink truncate font-mono text-[14px] font-bold"
+                          title={item.code}
+                        >
+                          {item.code}
+                        </p>
+                        <p className="text-app-dim mt-0.5 text-[12.5px]">
+                          {item.role.name} · діє до{' '}
+                          <DateValue value={item.expiresAt} />
+                        </p>
+                      </div>
+                      <StatusPill tone={status.tone}>{status.label}</StatusPill>
+                      {canManageAccess && status.label === 'Активне' && (
+                        <span className="shrink-0">
+                          <ActionMenu
+                            actions={[
+                              {
+                                key: 'revoke',
+                                label: 'Відкликати',
+                                icon: <Ban aria-hidden />,
+                                destructive: true,
+                                onSelect: () =>
                                   askConfirmation({
                                     title: 'Відкликати запрошення',
                                     description: `Код ${item.code} перестане працювати. Створіть нове запрошення, якщо доступ ще потрібен.`,
@@ -1052,127 +839,108 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                                             signal,
                                           }),
                                       ),
-                                  })
-                                }
-                                variant="danger"
-                              >
-                                <Ban aria-hidden />
-                                Відкликати
-                              </Button>
-                            )}
-                          </div>
-                        )}
-                      </li>
-                    )
-                  })}
-                  {teamData.invitations.length === 0 && (
-                    <li className="text-app-muted text-[13.5px]">
-                      Запрошень поки немає.
+                                  }),
+                              },
+                            ]}
+                            label={`Дії із запрошенням ${item.code}`}
+                          />
+                        </span>
+                      )}
                     </li>
-                  )}
-                </ul>
-                {canManageAccess && (
-                  <form
-                    className="border-app-line mt-5 grid min-w-0 gap-3 border-t pt-5 sm:grid-cols-[minmax(0,16rem)_auto] sm:items-end"
-                    onSubmit={(event) => {
-                      event.preventDefault()
-                      const form = new FormData(event.currentTarget)
-                      const roleId = form.get('invitation-role')
-                      if (typeof roleId === 'string' && roleId) {
-                        invitationRoleRef.current = roleId
-                        invitationCreation.run()
-                      }
-                    }}
-                  >
-                    <Field label="Роль для запрошення">
-                      <SelectInput name="invitation-role">
-                        {availableRoles.map((role) => (
-                          <option key={role.id} value={role.id}>
-                            {role.name}
-                          </option>
-                        ))}
-                      </SelectInput>
-                    </Field>
-                    <Button
-                      {...invitationCreation.triggerProps}
-                      type="submit"
-                      variant="primary"
-                    >
-                      <Plus aria-hidden />
-                      Створити запрошення
-                    </Button>
-                  </form>
+                  )
+                })}
+                {visibleInvitations.length === 0 && (
+                  <li className="text-app-muted px-5.5 py-5 text-[13.5px]">
+                    Активних запрошень немає.
+                  </li>
                 )}
-                {invitationCreation.error !== null && (
-                  <Notice tone="danger">{invitationCreation.error}</Notice>
-                )}
-                <p className="text-app-dim mt-4 text-[12.5px] leading-5 text-pretty">
+              </ul>
+              <div className="border-app-line flex flex-wrap items-center justify-between gap-3 border-t px-5.5 py-3.5">
+                <p className="text-app-dim text-[12.5px] leading-5">
                   {NO_EMAIL_INVITE}
                 </p>
-              </section>
-            </div>
+                {invitationHistory.length > 0 && (
+                  <Button
+                    aria-expanded={invitationHistoryOpen}
+                    onClick={() =>
+                      setInvitationHistoryOpen((current) => !current)
+                    }
+                    type="button"
+                  >
+                    {invitationHistoryOpen
+                      ? 'Сховати історію'
+                      : `Історія запрошень (${String(invitationHistory.length)})`}
+                  </Button>
+                )}
+              </div>
+            </section>
           </>
         )}
       </RedesignShell>
 
-      {editingRole !== null && (
+      {invitationDrawerOpen && (
         <Sheet
-          description="Змініть назву та права ролі. Зміни діють одразу для всіх, хто має цю роль."
-          eyebrow="Команда · Ролі"
+          description="Оберіть роль. Після створення передайте код людині — він знадобиться їй під час реєстрації."
+          eyebrow="Налаштування · Команда"
           footer={
             <>
               <Button
-                disabled={roleUpdate.pending}
-                onClick={() => setEditingRole(null)}
+                disabled={invitationCreation.pending}
+                onClick={() => setInvitationDrawerOpen(false)}
                 type="button"
               >
                 Скасувати
               </Button>
               <Button
-                aria-busy={roleUpdate.pending}
+                aria-busy={invitationCreation.pending}
                 disabled={
-                  roleUpdate.pending ||
+                  invitationCreation.pending ||
                   !canManageAccess ||
-                  !editingRoleName.trim() ||
-                  editingRolePermissions.length === 0
+                  !invitationRoleId
                 }
-                form={ROLE_FORM}
+                form={INVITATION_FORM}
                 type="submit"
                 variant="primary"
               >
-                Зберегти роль
+                Створити запрошення
               </Button>
             </>
           }
           onOpenChange={(open) => {
-            if (!open && !roleUpdate.pending) setEditingRole(null)
+            if (!open && !invitationCreation.pending)
+              setInvitationDrawerOpen(false)
           }}
           open
-          title={`Роль: ${editingRole.name}`}
+          title="Нове запрошення"
         >
           <form
-            aria-busy={roleUpdate.pending}
+            aria-busy={invitationCreation.pending}
             className="grid content-start gap-5"
-            id={ROLE_FORM}
-            noValidate
+            id={INVITATION_FORM}
             onSubmit={(event) => {
               event.preventDefault()
-              roleUpdate.run()
+              invitationCreation.run()
             }}
           >
-            {roleUpdate.error === null ? null : (
-              <Notice tone="danger">{roleUpdate.error}</Notice>
+            {invitationCreation.error !== null && (
+              <Notice tone="danger">{invitationCreation.error}</Notice>
             )}
-            <Field label="Назва ролі" required>
-              <TextInput
-                onChange={(event) => setEditingRoleName(event.target.value)}
-                value={editingRoleName}
-              />
+            <Field
+              hint="Новий учасник отримає права цієї ролі."
+              label="Роль для запрошення"
+              required
+            >
+              <SelectInput
+                onChange={(event) => setInvitationRoleId(event.target.value)}
+                value={invitationRoleId}
+              >
+                {availableRoles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {role.name}
+                  </option>
+                ))}
+              </SelectInput>
             </Field>
-            <PermissionChecklist
-              onToggle={toggleEditingRolePermission}
-              selected={editingRolePermissions}
-            />
           </form>
         </Sheet>
       )}
@@ -1323,5 +1091,5 @@ function PermissionChecklist({
   )
 }
 
-const ROLE_FORM = 'team-role-form'
 const MEMBER_PERMISSIONS_FORM = 'team-member-permissions-form'
+const INVITATION_FORM = 'team-invitation-form'

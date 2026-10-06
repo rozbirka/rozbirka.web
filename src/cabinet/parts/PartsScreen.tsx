@@ -80,7 +80,6 @@ import {
   type CreatePartRequest,
   type UpdatePartRequest,
   type PartDetail,
-  type PartsSummary,
   type PartCompatibilities,
 } from '@/api/parts'
 import { carsApi, type Car, type CarListItem } from '@/api/cars'
@@ -273,7 +272,6 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [items, setItems] = useState<PartSearchItem[]>([])
   const [facets, setFacets] = useState<PartFacets | null>(null)
-  const [summary, setSummary] = useState<PartsSummary | null>(null)
   const [pageMeta, setPageMeta] = useState<{
     page: number
     totalPages: number
@@ -513,14 +511,12 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         partsApi.facets(searchRequest, FACET_DIMENSIONS, {
           signal: controller.signal,
         }),
-        partsApi.summary({ signal: controller.signal }),
       ])
-        .then(([page, nextFacets, nextSummary]) => {
+        .then(([page, nextFacets]) => {
           if (controller.signal.aborted) return
           setItems(page.items)
           setPageMeta({ page: page.page, totalPages: page.totalPages })
           setFacets(nextFacets)
-          setSummary(nextSummary)
           setError(null)
         })
         .catch((failure: unknown) => {
@@ -697,7 +693,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
             className="text-app-ink placeholder:text-app-dim min-w-0 flex-1 bg-transparent text-sm outline-none"
             name="q"
             onChange={(event) => updateFilter('q', event.target.value)}
-            placeholder="Пошук: назва, OEM або QR"
+            placeholder="Пошук: назва, OEM, QR або VIN"
             value={filters.q ?? ''}
           />
         </span>
@@ -857,25 +853,25 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
               <p className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
                 <span className="text-app-muted flex items-baseline gap-2 text-sm">
                   <span className="text-[22px] font-bold text-white tabular-nums">
-                    {summary?.total ?? 0}
+                    {statusTotal ?? 0}
                   </span>
                   усього
                 </span>
                 <span className="text-app-muted flex items-baseline gap-2 text-sm">
                   <span className="text-state-ok text-[22px] font-bold tabular-nums">
-                    {summary?.available ?? 0}
+                    {facetCount('statuses', 'available') ?? 0}
                   </span>
                   доступно
                 </span>
                 <span className="text-app-muted flex items-baseline gap-2 text-sm">
                   <span className="text-state-warn text-[22px] font-bold tabular-nums">
-                    {summary?.reserved ?? 0}
+                    {facetCount('statuses', 'reserved') ?? 0}
                   </span>
                   у резерві
                 </span>
                 <span className="text-app-muted flex items-baseline gap-2 text-sm">
                   <span className="text-state-danger text-[22px] font-bold tabular-nums">
-                    {summary?.sold ?? 0}
+                    {facetCount('statuses', 'sold') ?? 0}
                   </span>
                   продано
                 </span>
@@ -1202,7 +1198,7 @@ function PartDetailScreen({
       const scope = requireLatestMutation({ quota: false })
       await partsApi.delete(partId, { signal: scope.signal })
       setConfirmingDelete(false)
-      void navigate('..', { replace: true })
+      void navigate(base, { replace: true })
     } catch (failure) {
       const status =
         typeof failure === 'object' &&
@@ -3428,6 +3424,7 @@ function PartForm({
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const cabinet = useCabinet()
+  const base = `/app/${cabinet.targetTenant?.slug ?? ''}/parts`
   // Coming back from creating a car or intake restores what was typed.
   const [draft] = useState(() =>
     searchParams.get(DRAFT_PARAM) === '1'
@@ -3671,7 +3668,7 @@ function PartForm({
           <div className="ml-auto flex items-center gap-2.5">
             <Button
               disabled={pending}
-              onClick={() => void navigate('..')}
+              onClick={() => void navigate(base)}
               type="button"
             >
               Скасувати
@@ -3690,7 +3687,7 @@ function PartForm({
       }
       eyebrow="Склад · Деталі"
       onOpenChange={(next: boolean) => {
-        if (!next && !pending) void navigate('..')
+        if (!next && !pending) void navigate(base)
       }}
       open
       size="lg"

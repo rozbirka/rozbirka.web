@@ -1,13 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
-import {
-  ChevronLeft,
-  Copy,
-  Plus,
-  RotateCcw,
-  Trash2,
-  XCircle,
-} from 'lucide-react'
+import { ChevronLeft, Plus, RotateCcw, Trash2, XCircle } from 'lucide-react'
 import {
   ActionMenu,
   Button,
@@ -1352,31 +1345,18 @@ function OrderDetailScreen({
           >
             Друк
           </Button>
-          {orderEditable ||
-          (ordinaryFinance && order.status === 'confirmed') ? (
+          {orderEditable ? (
             <ActionMenu
               actions={[
                 {
-                  key: 'duplicate',
-                  label: 'Дублювати',
-                  icon: <Copy aria-hidden />,
-                  disabled: true,
-                  title: 'Дублювання замовлення сервіс не підтримує.',
-                  onSelect: () => undefined,
+                  key: 'cancel',
+                  label: 'Скасувати замовлення',
+                  icon: <XCircle aria-hidden />,
+                  destructive: true,
+                  disabled: busy,
+                  onSelect: () =>
+                    void transition(() => ordersApi.cancel(order.id)),
                 },
-                ...(orderEditable
-                  ? [
-                      {
-                        key: 'cancel',
-                        label: 'Скасувати замовлення',
-                        icon: <XCircle aria-hidden />,
-                        destructive: true as const,
-                        disabled: busy,
-                        onSelect: () =>
-                          void transition(() => ordersApi.cancel(order.id)),
-                      },
-                    ]
-                  : []),
               ]}
               label="Інші дії із замовленням"
             />
@@ -1734,13 +1714,13 @@ function OrderDetailScreen({
               {/* Whether an order ships is Core's decision, not the carrier's:
                   offering it only while Nova Poshta answers made the order's
                   kind depend on an integration that has nothing to do with it. */}
-              {deliveryLoad.state === null ? null : (
+              {deliveryLoad.state !== null && order.status === 'pending' ? (
                 <DeliveryConfigureCard
                   mutationsAllowed={mutationsAllowed}
                   onConfigured={deliveryLoad.setMoney}
                   orderId={order.id}
                 />
-              )}
+              ) : null}
 
               <Card title="Історія">
                 {historyRows.length === 0 ? (

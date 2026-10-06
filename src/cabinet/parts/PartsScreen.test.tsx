@@ -2,8 +2,10 @@ import { FeatureFlagsProvider } from '../FeatureFlags'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
+  createMemoryRouter,
   MemoryRouter,
   Route,
+  RouterProvider,
   Routes,
   useLocation,
   useNavigate,
@@ -265,6 +267,31 @@ beforeEach(() => {
       cashRegisters: { used: 1, max: 10 },
     },
   }
+})
+
+it('returns from the new-part drawer to the parts directory', async () => {
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant',
+        children: [
+          { path: 'parts', element: <p>Екран деталей</p> },
+          {
+            path: 'parts/new',
+            element: <PartsScreen definition={partsDefinition as never} />,
+          },
+        ],
+      },
+    ],
+    { initialEntries: ['/app/yard/parts/new'] },
+  )
+  const user = userEvent.setup()
+  render(<RouterProvider router={router} />)
+
+  await user.click(screen.getByRole('button', { name: 'Скасувати' }))
+
+  expect(router.state.location.pathname).toBe('/app/yard/parts')
+  expect(screen.getByText('Екран деталей')).toBeVisible()
 })
 
 afterEach(() => {
@@ -1950,6 +1977,16 @@ function renderDirectory() {
   )
 }
 
+it('tells the operator that the parts search accepts a VIN', async () => {
+  renderDirectory()
+
+  await screen.findByRole('link', { name: 'Фара ліва' })
+  expect(screen.getByLabelText('Пошук деталей')).toHaveAttribute(
+    'placeholder',
+    'Пошук: назва, OEM, QR або VIN',
+  )
+})
+
 it('does not show selection checkboxes or bulk actions in the parts directory', async () => {
   renderDirectory()
 
@@ -1996,18 +2033,39 @@ it('uses standard row spacing without exposing density controls', async () => {
   expect(screen.queryByText('Рядки')).toBeNull()
 })
 
-it('shows sold stock and keeps page size controls on the right', async () => {
+it('keeps the top stock totals in sync with the filtered status counts', async () => {
   partMocks.summary.mockResolvedValue({
     total: 1323,
     available: 925,
     reserved: 15,
     sold: 383,
   })
+  partMocks.facets.mockResolvedValueOnce({
+    statuses: [
+      { id: 'available', name: 'available', count: 104 },
+      { id: 'reserved', name: 'reserved', count: 4 },
+      { id: 'sold', name: 'sold', count: 85 },
+    ],
+    warehouses: [],
+    zones: [],
+    conditions: [],
+    equipmentTypes: [],
+    makes: [],
+    models: [],
+    generations: [],
+    origins: [],
+    qualityFlags: [],
+    inventoryLocks: [],
+    discrepancies: [],
+  })
 
   renderDirectory()
 
   const soldLabel = await screen.findByText('продано')
-  expect(soldLabel).toHaveTextContent(/383\s*продано/)
+  expect(soldLabel).toHaveTextContent(/85\s*продано/)
+  expect(screen.getByText('усього')).toHaveTextContent(/193\s*усього/)
+  expect(screen.getByText('доступно')).toHaveTextContent(/104\s*доступно/)
+  expect(screen.getByText('у резерві')).toHaveTextContent(/4\s*у резерві/)
   expect(screen.getByText('Розмір сторінки').parentElement).toHaveClass(
     'ml-auto',
   )

@@ -6,7 +6,7 @@ import {
   within,
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router'
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { ToastProvider } from '@/components/app'
 import { useCabinet } from '../CabinetContext'
@@ -82,6 +82,51 @@ beforeEach(() => {
     total: 0,
     totalPages: 0,
   })
+})
+
+it('returns from a customer card to the customer directory', async () => {
+  customerMocks.getById.mockResolvedValue({
+    id: 'customer-1',
+    name: 'Ірина',
+    phone: null,
+    notes: null,
+    isActive: true,
+    createdAt: '2026-08-28T00:00:00Z',
+    orders: [],
+    ordersCount: 0,
+    totalAmount: null,
+    averageAmount: null,
+    firstOrderAt: null,
+    lastOrderAt: null,
+  })
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant',
+        children: [
+          { path: 'customers', element: <p>Екран клієнтів</p> },
+          {
+            path: 'customers/:customerId',
+            element: <CustomersScreen definition={definition} />,
+          },
+        ],
+      },
+    ],
+    { initialEntries: ['/app/garage/customers/customer-1'] },
+  )
+  const user = userEvent.setup()
+  render(
+    <ToastProvider>
+      <RouterProvider router={router} />
+    </ToastProvider>,
+  )
+
+  await user.click(await screen.findByRole('link', { name: 'До клієнтів' }))
+
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe('/app/garage/customers'),
+  )
+  expect(screen.getByText('Екран клієнтів')).toBeVisible()
 })
 
 it('renders the server-returned directory result instead of deriving customer statistics locally', async () => {

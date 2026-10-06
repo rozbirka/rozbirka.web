@@ -70,6 +70,47 @@ beforeEach(() => {
   })
 })
 
+it('returns from a cash register card to the cash directory', async () => {
+  cashMocks.getById.mockResolvedValue({
+    id: 'cash-1',
+    name: 'Основна каса',
+    type: 'cash',
+    isActive: true,
+    balances: { UAH: 100 },
+  })
+  cashMocks.transactions.mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 20,
+    totalPages: 0,
+  })
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant',
+        children: [
+          { path: 'cash', element: <p>Екран кас</p> },
+          {
+            path: 'cash/:registerId',
+            element: <CashScreen definition={definition} />,
+          },
+        ],
+      },
+    ],
+    { initialEntries: ['/app/garage/cash/cash-1'] },
+  )
+  const user = userEvent.setup()
+  render(<RouterProvider router={router} />)
+
+  await user.click(await screen.findByRole('link', { name: 'Гроші · Каси' }))
+
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe('/app/garage/cash'),
+  )
+  expect(screen.getByText('Екран кас')).toBeVisible()
+})
+
 it('renders Core daily figures without calculating them in the browser', async () => {
   cashMocks.list.mockResolvedValue([
     {
@@ -1285,6 +1326,33 @@ it('describes register form controls and offers a way out of the form', () => {
   )
   expect(screen.getByRole('button', { name: 'Скасувати' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Зберегти' })).toBeVisible()
+})
+
+it('returns from the new-register drawer to the cash screen', async () => {
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant',
+        children: [
+          { path: 'cash', element: <p>Екран кас</p> },
+          {
+            path: 'cash/new',
+            element: <CashScreen definition={definition} />,
+          },
+        ],
+      },
+    ],
+    { initialEntries: ['/app/garage/cash/new'] },
+  )
+  const user = userEvent.setup()
+  render(<RouterProvider router={router} />)
+
+  await user.click(screen.getByRole('button', { name: 'Скасувати' }))
+
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe('/app/garage/cash'),
+  )
+  expect(screen.getByText('Екран кас')).toBeVisible()
 })
 
 it('hides cash mutations without finance.manage and renders quota failures', async () => {

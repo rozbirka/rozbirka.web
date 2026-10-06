@@ -563,6 +563,7 @@ function CustomerDetailScreen({
   const [copied, setCopied] = useState(false)
   const [notes, setNotes] = useState('')
   const navigate = useNavigate()
+  const directoryPath = `/app/${cabinet.targetTenant?.slug ?? ''}/customers`
   useEffect(() => {
     if (!ordersViewAllowed) return
     const controller = new AbortController()
@@ -639,7 +640,7 @@ function CustomerDetailScreen({
       const scope = requireLatestMutation({ quota: false })
       requireLatestMutation({ permission: 'orders.view', quota: false })
       await customersApi.remove(customer.id, { signal: scope.signal })
-      await navigate('..', { replace: true })
+      await navigate(directoryPath, { replace: true })
     } catch {
       setError(loadError)
       setBusy(false)
@@ -696,7 +697,7 @@ function CustomerDetailScreen({
         <div className="flex min-w-0 items-center gap-5">
           <Link
             className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-            to=".."
+            to={directoryPath}
           >
             <ChevronLeft aria-hidden className="size-3.5" />
             До клієнтів
