@@ -13,6 +13,8 @@ import {
 } from './session'
 
 const methods: Record<string, readonly string[]> = {
+  '/auth/v2/phone': ['POST'],
+  '/auth/v2/verify': ['POST'],
   '/auth/login/phone': ['POST'],
   '/auth/login/verify': ['POST'],
   '/auth/refresh': ['POST'],
