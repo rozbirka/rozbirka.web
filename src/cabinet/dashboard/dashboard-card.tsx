@@ -10,14 +10,11 @@ import { cn } from '@/lib/utils'
  */
 export function DashboardCard({
   title,
-  badge,
   aside,
   children,
   className,
 }: {
   title: string
-  /** A count beside the title — the amber chip on «Зробити сьогодні». */
-  badge?: ReactNode
   /** Opposite the title: a link to the full list, or the period it covers. */
   aside?: ReactNode
   children: ReactNode
@@ -41,34 +38,11 @@ export function DashboardCard({
           >
             {title}
           </h2>
-          {badge}
         </div>
         {aside}
       </div>
       {children}
     </section>
-  )
-}
-
-/** The count chip that sits next to a card title. */
-export function CardBadge({
-  children,
-  tone = 'warn',
-}: {
-  children: ReactNode
-  tone?: 'warn' | 'neutral'
-}) {
-  return (
-    <span
-      className={cn(
-        'inline-flex h-[22px] items-center rounded-full border px-[9px] text-[12px] font-bold',
-        tone === 'warn'
-          ? 'bg-state-warn-soft border-state-warn/30 text-state-warn'
-          : 'border-app-line-2 text-app-muted bg-white/[0.04]',
-      )}
-    >
-      {children}
-    </span>
   )
 }
 

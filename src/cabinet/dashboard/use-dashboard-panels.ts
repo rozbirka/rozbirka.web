@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { carsApi, type CarListItem } from '@/api/cars'
 import { cashApi, type CashRegister } from '@/api/cash'
-import { intakesApi, type IntakeListItem } from '@/api/intakes'
 import { ordersApi, type OrderListItem } from '@/api/orders'
 import { partsApi, type PartsSummary } from '@/api/parts'
 import { useCabinet } from '../CabinetContext'
@@ -86,20 +85,6 @@ export function useCashRegisters(enabled: boolean): CashRegister[] | null {
     enabled,
     (signal) => cashApi.list(true, { signal }),
     'cash',
-  )
-}
-
-export function useRecentIntakes(
-  enabled: boolean,
-  limit: number,
-): IntakeListItem[] | null {
-  return useResource(
-    enabled,
-    (signal) =>
-      intakesApi
-        .list({ pageSize: limit }, { signal })
-        .then((page) => page.items),
-    `intakes:${String(limit)}`,
   )
 }
 
