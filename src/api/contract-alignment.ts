@@ -16,6 +16,7 @@
 import type { components } from './generated/core'
 import type { components as identityComponents } from './generated/identity'
 import type { UpdateBusinessRequest } from './business'
+import type { CustomerInput } from './customers'
 import type { ImportMapping, ImportRule } from './part-imports'
 import type { CreatePartRequest } from './parts'
 
@@ -39,6 +40,18 @@ type PendingUpdateTenantFields =
   | 'accountingCurrency'
 
 /**
+ * Core `feat/backend-localization-currency-onboarding`: optional customer
+ * address on `CreateCustomerRequest` / `UpdateCustomerRequest` (POST and PATCH
+ * /api/v1/customers). Remove after re-pinning a Core contract that has them.
+ */
+type PendingCustomerAddressFields =
+  | 'countryCode'
+  | 'city'
+  | 'street'
+  | 'building'
+  | 'postcode'
+
+/**
  * Identity `feat/backend-localization-currency-onboarding`: whole requests the
  * pinned Identity contract does not have yet (`PATCH /auth/me/language`).
  * Typecheck fails once the pin adds the schema, so the adapter can switch to
@@ -56,6 +69,18 @@ export type ContractAlignment = [
     Same<
       Unknown<UpdateBusinessRequest, Schemas['UpdateTenantRequest']>,
       PendingUpdateTenantFields
+    >
+  >,
+  Check<
+    Same<
+      Unknown<CustomerInput, Schemas['CreateCustomerRequest']>,
+      PendingCustomerAddressFields
+    >
+  >,
+  Check<
+    Same<
+      Unknown<CustomerInput, Schemas['UpdateCustomerRequest']>,
+      PendingCustomerAddressFields
     >
   >,
 ]
