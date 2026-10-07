@@ -3,7 +3,9 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
+import { AxiosError } from 'axios'
 import { businessApi } from '@/api/business'
+import { tenantsApi } from '@/api/tenants'
 import type { BillingState, Tenant } from '@/api/types'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { LocaleProvider } from '@/i18n'
@@ -285,4 +287,36 @@ it('numbers the sections and anchors region and accounting currency', async () =
   expect(screen.getByRole('heading', { name: 'Accounting' })).toBeVisible()
   expect(screen.getByText('Require a delivery deposit')).toBeVisible()
   expect(screen.queryByText('Валюти й облік')).toBeNull()
+})
+
+it('reads the business back after a lost answer before saying it was not saved', async () => {
+  vi.mocked(businessApi.update).mockRejectedValue(
+    new AxiosError('timeout', 'ECONNABORTED'),
+  )
+  vi.mocked(tenantsApi.list).mockResolvedValue([
+    {
+      ...tenant,
+      name: 'Koval Parts',
+      accountingCurrency: 'USD',
+      currencyLocked: true,
+    },
+  ])
+  const currentCabinet = cabinet()
+  vi.mocked(useCabinet).mockReturnValue(currentCabinet)
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/koval/settings/business']}>
+      <BusinessSettingsScreen />
+    </MemoryRouter>,
+  )
+
+  await user.clear(screen.getByLabelText('Назва бізнесу'))
+  await user.type(screen.getByLabelText('Назва бізнесу'), 'Koval Parts')
+  await user.click(screen.getAllByRole('button', { name: 'Зберегти' })[0]!)
+
+  expect(
+    await screen.findByText('Налаштування бізнесу збережено.'),
+  ).toBeVisible()
+  expect(businessApi.update).toHaveBeenCalledTimes(1)
+  expect(currentCabinet.switchTenant).toHaveBeenCalledWith('tenant-1')
 })

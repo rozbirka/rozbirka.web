@@ -23,6 +23,8 @@ import {
   SUPPORTED_LOCALES,
   type Locale,
 } from '@/i18n/locales'
+import { tenantsApi } from '@/api/tenants'
+import { isLostResponse, lostResponseMessages } from '../lost-response'
 import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { BUSINESS_SECTION_IDS } from './business-anchors'
@@ -155,8 +157,12 @@ function LockStatus({ locked, t }: { locked: boolean; t: Translate }) {
 type SaveState =
   | { kind: 'idle' }
   | { kind: 'pending' }
+  /** The answer was lost: the saved settings are being read back. */
+  | { kind: 'checking' }
   | { kind: 'success' }
   | { kind: 'error'; message: 'regionErr' | 'invalid' | 'forbidden' }
+  /** Read back after a lost answer: not saved, or unknown. */
+  | { kind: 'lost'; saved: false | null }
   | { kind: 'race' }
 
 /**
@@ -177,6 +183,7 @@ export function RegionSettings({
   onSaved: (tenant: Tenant) => void
 }) {
   const t = useT(regionMessages)
+  const tl = useT(lostResponseMessages)
   const { locale } = useLocale()
   const titleId = useId()
   const alertRef = useRef<HTMLDivElement>(null)
@@ -213,12 +220,16 @@ export function RegionSettings({
   }, [tenant.id])
 
   useEffect(() => {
-    if (state.kind === 'error' || state.kind === 'race') {
+    if (
+      state.kind === 'error' ||
+      state.kind === 'race' ||
+      state.kind === 'lost'
+    ) {
       alertRef.current?.focus()
     }
   }, [state.kind])
 
-  const pending = state.kind === 'pending'
+  const pending = state.kind === 'pending' || state.kind === 'checking'
   const regionChanged = country !== savedCountry || timeZone !== savedZone
   const changed = regionChanged || docLanguage !== savedLanguage
   const zoneOptions = [
@@ -235,16 +246,14 @@ export function RegionSettings({
       return
     }
     setState({ kind: 'pending' })
+    const sendRegion = regionChanged && !locked
+    const sendLanguage = docLanguage !== savedLanguage
     try {
       const updated = await businessApi.update(
         tenant.id,
         {
-          ...(regionChanged && !locked
-            ? { countryCode: country, timeZoneId: timeZone }
-            : {}),
-          ...(docLanguage !== savedLanguage
-            ? { documentLanguage: docLanguage }
-            : {}),
+          ...(sendRegion ? { countryCode: country, timeZoneId: timeZone } : {}),
+          ...(sendLanguage ? { documentLanguage: docLanguage } : {}),
         },
         { signal: scope.signal },
       )
@@ -255,6 +264,31 @@ export function RegionSettings({
       if (scope.signal.aborted) return
       const problem = normalizeApiProblem(error)
       if (problem.kind === 'cancelled') return
+      if (isLostResponse(error)) {
+        // The PATCH may have landed: read the settings back before saying
+        // anything. Repeating it is safe (same body, same state).
+        setState({ kind: 'checking' })
+        try {
+          const fresh = (await tenantsApi.list({ signal: scope.signal })).find(
+            (item) => item.id === tenant.id,
+          )
+          if (scope.signal.aborted) return
+          const read = fresh === undefined ? null : tenantSettings(fresh)
+          const landed =
+            fresh !== undefined &&
+            read !== null &&
+            (!sendRegion ||
+              (read.countryCode === country && read.timeZone === timeZone)) &&
+            (!sendLanguage || read.documentLanguage === docLanguage)
+          if (landed) {
+            setState({ kind: 'success' })
+            onSaved(fresh)
+          } else setState({ kind: 'lost', saved: false })
+        } catch {
+          if (!scope.signal.aborted) setState({ kind: 'lost', saved: null })
+        }
+        return
+      }
       if (
         problem.code === 'BUSINESS_SETTINGS_LOCKED' ||
         problem.status === 409
@@ -465,6 +499,19 @@ export function RegionSettings({
       </div>
       <div className="mt-4 grid gap-3.5">
         {state.kind === 'success' && <Notice tone="ok">{t('saved')}</Notice>}
+        {state.kind === 'checking' && (
+          <Notice tone="info">{tl('checking')}</Notice>
+        )}
+        {state.kind === 'lost' && (
+          <div ref={alertRef} tabIndex={-1}>
+            <Notice
+              action={<Button onClick={requestSave}>{t('retry')}</Button>}
+              tone="danger"
+            >
+              {state.saved === false ? tl('notSaved') : tl('checkFailed')}
+            </Notice>
+          </div>
+        )}
         {(state.kind === 'error' || state.kind === 'race') && (
           <div ref={alertRef} tabIndex={-1}>
             <Notice

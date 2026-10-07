@@ -10,6 +10,8 @@ import { Plus } from 'lucide-react'
 import { Button, Field, Notice, TextInput } from '@/components/app'
 import { Switch } from '../integrations/dispatch-point-form'
 import { businessApi } from '@/api/business'
+import { tenantsApi } from '@/api/tenants'
+import { isLostResponse, lostResponseMessages } from '../lost-response'
 import { inventoryApi, type Warehouse } from '@/api/inventory'
 import { useCabinet } from '../CabinetContext'
 import { RedesignShell, RedesignTitle } from '../redesign-shell'
@@ -23,7 +25,15 @@ import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { AccountingCurrencySection } from './accounting-currency-section'
 import { AccountingCurrencySummary } from './accounting-currency-summary'
 
-type SaveState = 'idle' | 'pending' | 'success' | 'error' | 'denied'
+type SaveState =
+  | 'idle'
+  | 'pending'
+  | 'checking'
+  | 'success'
+  | 'error'
+  | 'not-saved'
+  | 'unknown'
+  | 'denied'
 
 const FORM_ID = 'business-form'
 
@@ -93,6 +103,7 @@ export function BusinessSettingsScreen() {
   const cabinet = useCabinet()
   const auth = useOptionalAuth()
   const t = useT(businessMessages)
+  const tl = useT(lostResponseMessages)
   // The auth list holds the tenant as last saved; the cabinet keeps the
   // object it committed at the switch.
   const tenant =
@@ -153,7 +164,7 @@ export function BusinessSettingsScreen() {
 
   const normalizedName = name.trim()
   const normalizedCity = city.trim()
-  const busy = saveState === 'pending'
+  const busy = saveState === 'pending' || saveState === 'checking'
   const canSave = !busy && normalizedName.length >= 2
   const changed =
     normalizedName !== tenant.name ||
@@ -200,9 +211,34 @@ export function BusinessSettingsScreen() {
       void Promise.resolve(cabinet.switchTenant(updated.id)).catch(
         () => undefined,
       )
-    } catch {
+    } catch (error) {
       if (!mountedRef.current || scope.signal.aborted) return
-      setSaveState('error')
+      if (!isLostResponse(error)) {
+        setSaveState('error')
+        return
+      }
+      // The PATCH may have landed: read the business back first; saving the
+      // same details again is safe.
+      setSaveState('checking')
+      try {
+        const fresh = (await tenantsApi.list({ signal: scope.signal })).find(
+          (item) => item.id === tenant.id,
+        )
+        if (!mountedRef.current || scope.signal.aborted) return
+        if (
+          fresh?.name === normalizedName &&
+          (fresh.city ?? '') === normalizedCity &&
+          fresh.requireDeliveryDeposit === deposit
+        ) {
+          setSaveState('success')
+          auth?.mergeTenantSettings?.([fresh])
+          void Promise.resolve(cabinet.switchTenant(fresh.id)).catch(
+            () => undefined,
+          )
+        } else setSaveState('not-saved')
+      } catch {
+        if (mountedRef.current && !scope.signal.aborted) setSaveState('unknown')
+      }
     }
   }
 
@@ -238,6 +274,15 @@ export function BusinessSettingsScreen() {
       {saveState === 'success' && <Notice tone="ok">{t('saved')}</Notice>}
       {saveState === 'denied' && <Notice tone="danger">{t('denied')}</Notice>}
       {saveState === 'error' && <Notice tone="danger">{t('error')}</Notice>}
+      {saveState === 'checking' && (
+        <Notice tone="info">{tl('checking')}</Notice>
+      )}
+      {saveState === 'not-saved' && (
+        <Notice tone="danger">{tl('notSaved')}</Notice>
+      )}
+      {saveState === 'unknown' && (
+        <Notice tone="danger">{tl('checkFailed')}</Notice>
+      )}
 
       <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="grid min-w-0 content-start gap-5">

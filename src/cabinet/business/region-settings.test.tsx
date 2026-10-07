@@ -4,12 +4,14 @@ import userEvent from '@testing-library/user-event'
 import { AxiosError, AxiosHeaders } from 'axios'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { businessApi } from '@/api/business'
+import { tenantsApi } from '@/api/tenants'
 import type { Tenant } from '@/api/types'
 import { LocaleProvider } from '@/i18n/LocaleProvider'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { RegionSettings } from './region-settings'
 
 vi.mock('@/api/business', () => ({ businessApi: { update: vi.fn() } }))
+vi.mock('@/api/tenants', () => ({ tenantsApi: { list: vi.fn() } }))
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
 
 const tenant: Tenant = {
@@ -236,4 +238,47 @@ it('tells a non-owner the region is not locked yet', () => {
       /Not locked yet: the owner can change the country and time zone/,
     ),
   ).toBeVisible()
+})
+
+const lost = () =>
+  new AxiosError('timeout', 'ECONNABORTED', undefined, undefined, undefined)
+
+it('reads the region back after a lost answer and accepts what was saved', async () => {
+  vi.mocked(businessApi.update).mockRejectedValue(lost())
+  const saved = { ...tenant, documentLanguage: 'pl' as const }
+  vi.mocked(tenantsApi.list).mockResolvedValue([saved])
+  const user = userEvent.setup()
+  renderRegion({ regionLocked: true })
+
+  await user.click(screen.getByRole('button', { name: 'Polski' }))
+  await user.click(screen.getByRole('button', { name: 'Save region' }))
+
+  await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved))
+  expect(screen.getByText('Region and document language saved.')).toBeVisible()
+  expect(businessApi.update).toHaveBeenCalledTimes(1)
+})
+
+it('keeps the choice and offers a safe retry when the read-back shows nothing saved', async () => {
+  vi.mocked(businessApi.update).mockRejectedValueOnce(lost())
+  vi.mocked(tenantsApi.list).mockResolvedValue([tenant])
+  const user = userEvent.setup()
+  renderRegion({ regionLocked: true })
+
+  await user.click(screen.getByRole('button', { name: 'Polski' }))
+  await user.click(screen.getByRole('button', { name: 'Save region' }))
+
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'the changes weren’t saved',
+  )
+  expect(onSaved).not.toHaveBeenCalled()
+  expect(screen.getByRole('button', { name: 'Polski' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  vi.mocked(businessApi.update).mockResolvedValueOnce({
+    ...tenant,
+    documentLanguage: 'pl',
+  })
+  await user.click(screen.getByRole('button', { name: 'Try again' }))
+  await waitFor(() => expect(onSaved).toHaveBeenCalled())
 })

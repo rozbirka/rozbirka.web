@@ -1153,9 +1153,13 @@ it('persists a payment before confirming a pending order separately', async () =
     within(dialog).getByRole('button', { name: 'Записати оплату' }),
   )
 
-  expect(orderMocks.updatePayments).toHaveBeenCalledWith('order-1', [
-    { accountId: 'cash-1', amount: 250, currency: 'USD' },
-  ])
+  expect(orderMocks.updatePayments).toHaveBeenCalledWith(
+    'order-1',
+    [{ accountId: 'cash-1', amount: 250, currency: 'USD' }],
+    {
+      idempotencyKey: expect.stringMatching(/^order-payments-/) as string,
+    },
+  )
   expect(orderMocks.confirm).not.toHaveBeenCalled()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(screen.getByText('Оплату записано.')).toBeVisible()
@@ -1217,8 +1221,11 @@ it('reuses a confirmation key after an ambiguous failure and rotates it when the
     .mockResolvedValue(order)
   const randomUUID = vi
     .spyOn(globalThis.crypto, 'randomUUID')
+    // A payment set takes a key too: payment, confirm, payment, confirm.
     .mockReturnValueOnce('00000000-0000-4000-8000-000000000001')
     .mockReturnValueOnce('00000000-0000-4000-8000-000000000002')
+    .mockReturnValueOnce('00000000-0000-4000-8000-000000000003')
+    .mockReturnValueOnce('00000000-0000-4000-8000-000000000004')
   const user = userEvent.setup()
   render(
     <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
@@ -1227,6 +1234,13 @@ it('reuses a confirmation key after an ambiguous failure and rotates it when the
   )
 
   await screen.findByRole('heading', { name: 'Замовлення #1' })
+  // Reading the order back returns what Core last stored: its payments.
+  orderMocks.getById.mockImplementation(
+    () =>
+      (orderMocks.updatePayments.mock.results.at(-1)?.value as
+        | Promise<unknown>
+        | undefined) ?? Promise.resolve(order),
+  )
   await user.click(screen.getByRole('button', { name: 'Додати платіж' }))
   let dialog = await screen.findByRole('dialog', {
     name: 'Додати платіж',
@@ -1245,12 +1259,13 @@ it('reuses a confirmation key after an ambiguous failure and rotates it when the
   })
 
   await user.click(submit)
+  // A lost answer is read back first: the order is still pending.
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Немає з’єднання з мережею.',
+    'зміни не збереглися',
   )
   await user.click(submit)
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Час очікування запиту минув.',
+    'зміни не збереглися',
   )
 
   expect(orderMocks.confirm).toHaveBeenNthCalledWith(
@@ -1258,7 +1273,7 @@ it('reuses a confirmation key after an ambiguous failure and rotates it when the
     'order-1',
     expect.any(Object),
     {
-      idempotencyKey: 'order-confirm-00000000-0000-4000-8000-000000000001',
+      idempotencyKey: 'order-confirm-00000000-0000-4000-8000-000000000002',
     },
   )
   expect(orderMocks.confirm).toHaveBeenNthCalledWith(
@@ -1266,10 +1281,10 @@ it('reuses a confirmation key after an ambiguous failure and rotates it when the
     'order-1',
     expect.any(Object),
     {
-      idempotencyKey: 'order-confirm-00000000-0000-4000-8000-000000000001',
+      idempotencyKey: 'order-confirm-00000000-0000-4000-8000-000000000002',
     },
   )
-  expect(randomUUID).toHaveBeenCalledOnce()
+  expect(randomUUID).toHaveBeenCalledTimes(2)
 
   await user.click(screen.getByRole('button', { name: 'Додати платіж' }))
   dialog = await screen.findByRole('dialog', { name: 'Додати платіж' })
@@ -1289,10 +1304,10 @@ it('reuses a confirmation key after an ambiguous failure and rotates it when the
     'order-1',
     expect.any(Object),
     {
-      idempotencyKey: 'order-confirm-00000000-0000-4000-8000-000000000002',
+      idempotencyKey: 'order-confirm-00000000-0000-4000-8000-000000000004',
     },
   )
-  expect(randomUUID).toHaveBeenCalledTimes(2)
+  expect(randomUUID).toHaveBeenCalledTimes(4)
 })
 
 it('rotates a confirmation key when client-side navigation changes the order resource', async () => {
@@ -1321,8 +1336,11 @@ it('rotates a confirmation key when client-side navigation changes the order res
   })
   const randomUUID = vi
     .spyOn(globalThis.crypto, 'randomUUID')
+    // Payment, confirm on order 1; payment, confirm on order 2.
     .mockReturnValueOnce('00000000-0000-4000-8000-000000000001')
     .mockReturnValueOnce('00000000-0000-4000-8000-000000000002')
+    .mockReturnValueOnce('00000000-0000-4000-8000-000000000003')
+    .mockReturnValueOnce('00000000-0000-4000-8000-000000000004')
   const router = createMemoryRouter(
     [
       {
@@ -1380,7 +1398,7 @@ it('rotates a confirmation key when client-side navigation changes the order res
     'order-1',
     expect.any(Object),
     {
-      idempotencyKey: 'order-confirm-00000000-0000-4000-8000-000000000001',
+      idempotencyKey: 'order-confirm-00000000-0000-4000-8000-000000000002',
     },
   )
   expect(orderMocks.confirm).toHaveBeenNthCalledWith(
@@ -1388,10 +1406,10 @@ it('rotates a confirmation key when client-side navigation changes the order res
     'order-2',
     expect.any(Object),
     {
-      idempotencyKey: 'order-confirm-00000000-0000-4000-8000-000000000002',
+      idempotencyKey: 'order-confirm-00000000-0000-4000-8000-000000000004',
     },
   )
-  expect(randomUUID).toHaveBeenCalledTimes(2)
+  expect(randomUUID).toHaveBeenCalledTimes(4)
 })
 
 it('preserves a refund key only for ambiguous retries and rotates after definitive outcomes', async () => {
@@ -1462,8 +1480,9 @@ it('preserves a refund key only for ambiguous retries and rotates after definiti
     screen.getByRole('button', { name: /^Повернути 250,00/ }),
   ).toBeEnabled()
   await submit()
+  // A lost answer is read back first: not refunded, so the key is kept.
   expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Немає з’єднання з мережею.',
+    'зміни не збереглися',
   )
   await submit()
   expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -1787,10 +1806,16 @@ it('adds one payment at a time and keeps the ones the order already holds', asyn
 
   // What the order already holds is sent back with the new line: the endpoint
   // takes the whole set, so an omitted payment would be a payment withdrawn.
-  expect(orderMocks.updatePayments).toHaveBeenCalledWith('order-1', [
-    { accountId: 'cash-1', amount: 200, currency: 'USD' },
-    { accountId: 'cash-1', amount: 50, currency: 'USD' },
-  ])
+  expect(orderMocks.updatePayments).toHaveBeenCalledWith(
+    'order-1',
+    [
+      { accountId: 'cash-1', amount: 200, currency: 'USD' },
+      { accountId: 'cash-1', amount: 50, currency: 'USD' },
+    ],
+    {
+      idempotencyKey: expect.stringMatching(/^order-payments-/) as string,
+    },
+  )
 })
 
 it('records a payment in a till currency the order total cannot be compared with', async () => {
@@ -1850,9 +1875,13 @@ it('records a payment in a till currency the order total cannot be compared with
   await user.click(
     within(dialog).getByRole('button', { name: 'Записати оплату' }),
   )
-  expect(orderMocks.updatePayments).toHaveBeenCalledWith('order-1', [
-    { accountId: 'cash-1', amount: 4100, currency: 'UAH' },
-  ])
+  expect(orderMocks.updatePayments).toHaveBeenCalledWith(
+    'order-1',
+    [{ accountId: 'cash-1', amount: 4100, currency: 'UAH' }],
+    {
+      idempotencyKey: expect.stringMatching(/^order-payments-/) as string,
+    },
+  )
 })
 
 it('does not show a stale till while reloading the payment drawer', async () => {
@@ -2412,4 +2441,62 @@ it('re-reads the order after an unknown payment result instead of writing twice'
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
   )
   expect(orderMocks.updatePayments).toHaveBeenCalledTimes(2)
+})
+
+it('reads a confirmation back after a lost answer and does not confirm twice', async () => {
+  const order = {
+    id: 'order-1',
+    number: 1,
+    status: 'pending',
+    customerId: null,
+    customerName: null,
+    notes: null,
+    items: [],
+    payments: [],
+    history: [],
+    totalAmount: 250,
+    totalPaid: 0,
+    paymentCurrency: 'UAH',
+    createdAt: '2026-08-28T00:00:00Z',
+    createdByName: 'Олена',
+  }
+  orderMocks.getById.mockResolvedValue(order)
+  orderMocks.confirm.mockRejectedValue({
+    kind: 'timeout',
+    message: 'Час очікування запиту минув.',
+  })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await screen.findByRole('heading', { name: 'Замовлення #1' })
+  await user.click(screen.getByRole('button', { name: 'Додати платіж' }))
+  const dialog = await screen.findByRole('dialog', { name: 'Додати платіж' })
+  await user.click(within(dialog).getByRole('radio', { name: /Сейф/ }))
+  await user.click(
+    within(dialog).getByRole('button', { name: 'UAH (Українська гривня)' }),
+  )
+  await user.clear(within(dialog).getByLabelText('Сума'))
+  await user.type(within(dialog).getByLabelText('Сума'), '250')
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Записати оплату' }),
+  )
+  // The confirmation landed although its answer was lost.
+  orderMocks.getById.mockResolvedValue({
+    ...order,
+    status: 'confirmed',
+  })
+  await user.click(
+    screen.getByRole('button', { name: 'Підтвердити замовлення' }),
+  )
+
+  await waitFor(() => expect(orderMocks.getById).toHaveBeenCalledTimes(2))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(orderMocks.confirm).toHaveBeenCalledOnce()
+  expect(
+    screen.queryByRole('button', { name: 'Підтвердити замовлення' }),
+  ).not.toBeInTheDocument()
 })

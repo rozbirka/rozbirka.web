@@ -139,6 +139,7 @@ import {
 } from '../currency/use-accounting-currency'
 import { usePriceSlots, type PriceSlots } from '../currency/use-price-slots'
 import { amountPrecisionError } from '../currency/amount-precision'
+import { isLostResponse, lostResponseMessages } from '../lost-response'
 import { OnboardingCompletedNotice } from '../onboarding/first-part-completion'
 import { useFirstPartCompletion } from '../onboarding/use-first-part-completion'
 
@@ -3869,6 +3870,7 @@ function PartEdit({
   >['requireLatestMutation']
 }) {
   const t = useT(partFormMessages)
+  const tl = useT(lostResponseMessages)
   const tc = useT(commonMessages)
   const { locale } = useLocale()
   const [values, setValues] = useState<PartFormValues | null>(null)
@@ -3995,8 +3997,26 @@ function PartEdit({
       )
       guard.afterSave(pricing)
       setStatus(t('saved'))
-    } catch {
-      setError(t('saveFailed'))
+    } catch (failure) {
+      if (!isLostResponse(failure)) {
+        setError(t('saveFailed'))
+        return
+      }
+      // The PATCH may have landed: read the part back first. Saving the same
+      // values again is safe, and the form keeps them meanwhile.
+      setStatus(tl('checking'))
+      try {
+        const fresh = await partsApi.get(partId)
+        const landed =
+          fresh.name === values.name.trim() &&
+          (price.disabled || fresh.desiredSalePrice === (parsed.price ?? null))
+        setStatus(landed ? t('saved') : null)
+        if (landed) guard.afterSave(pricing)
+        else setError(tl('notSaved'))
+      } catch {
+        setStatus(null)
+        setError(tl('checkFailed'))
+      }
     } finally {
       pendingRef.current = false
       setPending(false)

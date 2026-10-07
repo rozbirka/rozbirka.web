@@ -3306,3 +3306,44 @@ describe('the owner’s first part', () => {
     expect(screen.queryByRole('link', { name: 'До дашборду' })).toBeNull()
   })
 })
+
+it('reads the part back after a lost save before reporting it', async () => {
+  const stored = {
+    id: 'part-1',
+    source: 'free',
+    carId: null,
+    intakeId: null,
+    name: 'Дзеркало дверей L',
+    quantityTotal: 1,
+    unit: 'pcs',
+    condition: 'fair',
+    notes: null,
+    oemCode: null,
+    partType: null,
+    desiredSalePrice: null,
+    photos: [],
+  }
+  partMocks.get.mockResolvedValue(stored)
+  partMocks.update.mockRejectedValueOnce({
+    kind: 'network',
+    message: 'offline',
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/part-1/edit']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/:partId/edit"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const name = await screen.findByLabelText('Назва')
+  fireEvent.change(name, { target: { value: 'Дзеркало праве' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Зберегти зміни' }))
+
+  // Read back: still the old name, so nothing was saved; the typing stays.
+  expect(await screen.findByText(/зміни не збереглися/)).toBeInTheDocument()
+  expect(screen.getByLabelText('Назва')).toHaveValue('Дзеркало праве')
+  expect(partMocks.update).toHaveBeenCalledOnce()
+})

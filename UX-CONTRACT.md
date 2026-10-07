@@ -158,6 +158,20 @@ movements and transfers — says so in the interface language before saving.
 Currency choices list the catalog order (`catalog-order.ts`), never a
 «popular» shortlist, and transfers show no computed rate.
 
+## Lost answers and safe retries
+
+A write whose answer is lost (no connection, timeout) may still have landed.
+The cabinet then reads the actual state back first, keeps what was typed,
+and only afterwards reports success or failure (`src/cabinet/lost-response.ts`).
+A retry is offered only where Core makes repeating safe: requests with an
+`Idempotency-Key` (order confirm, payments and refund, till transactions and
+transfers, checkout, reports, delivery payments; the same key is reused until
+a definitive outcome) and naturally idempotent writes (business, region and
+currency settings, onboarding PATCH, a part's price, order items). Creates are
+never repeated blindly. Applied to order payments and confirmation/refund,
+part price saves, business and region settings, the accounting currency and
+onboarding.
+
 ## Owner onboarding
 
 Creating the first yard asks only for name and city, then opens the dashboard.

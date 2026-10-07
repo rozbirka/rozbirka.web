@@ -134,15 +134,22 @@ export const ordersApi = {
         .data,
     )
   },
+  /**
+   * Replace the order's payments. Core honours `Idempotency-Key` here, so a
+   * retry with the same key after a lost answer cannot record twice.
+   */
   async updatePayments(
     id: string,
     payments: ConfirmPayment[],
+    replay?: IdempotentMutation,
   ): Promise<OrderDetail> {
     return normalizeOrder(
       (
-        await apiClient.put<OrderDetail>(`${endpoint(id)}/payments`, {
-          payments,
-        })
+        await apiClient.put<OrderDetail>(
+          `${endpoint(id)}/payments`,
+          { payments },
+          withIdempotency({}, replay),
+        )
       ).data,
     )
   },

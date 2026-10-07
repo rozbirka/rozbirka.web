@@ -47,6 +47,7 @@ import {
 } from '../currency/use-accounting-currency'
 import { usePriceSlots } from '../currency/use-price-slots'
 import { useCurrencyDraft } from '../currency/form-draft'
+import { lostResponseMessages } from '../lost-response'
 import { amountPrecisionError } from '../currency/amount-precision'
 import { orderSteps } from './order-steps'
 import {
@@ -123,7 +124,14 @@ const useErrorMessage = () => {
   const { locale } = useLocale()
   return (error: unknown) => orderErrorMessage(error, locale)
 }
-type OrderReplayOperation = 'order-confirm' | 'order-refund'
+type OrderReplayOperation = 'order-confirm' | 'order-refund' | 'order-payments'
+/** The status an order reaches once a replayable transition landed. */
+const REPLAY_SETTLED_STATUS: Record<OrderReplayOperation, string | null> = {
+  'order-confirm': 'confirmed',
+  'order-refund': 'refunded',
+  // Payments are settled by comparing the payments themselves.
+  'order-payments': null,
+}
 const isAmbiguousMutationFailure = (error: unknown) => {
   const kind = normalizeApiProblem(error).kind
   return kind === 'network' || kind === 'timeout'
@@ -1318,6 +1326,7 @@ function OrderDetailScreen({
   const guard = useFirstPriceGuard()
   const currency = guard.currency
   const tp = useT(paymentMessages)
+  const tl = useT(lostResponseMessages)
   // An item typed in the add-item drawer survives the currency setting.
   const itemDraft = useCurrencyDraft<OrderItemDraft>(`order-item:${orderId}`)
   const itemPrices = usePriceSlots(guard, {
@@ -1381,9 +1390,29 @@ function OrderDetailScreen({
       setError(null)
       return true
     } catch (error) {
-      if (replay && !isAmbiguousMutationFailure(error))
-        replayKeys.clear(replay.operation)
-      setError(errorMessage(error))
+      if (!isAmbiguousMutationFailure(error)) {
+        if (replay) replayKeys.clear(replay.operation)
+        setError(errorMessage(error))
+        return false
+      }
+      // The answer was lost, not necessarily the write: read the order back
+      // before anything else. Confirm and refund carry an Idempotency-Key, so
+      // their retry (same key) is safe; other edits say to check first.
+      try {
+        const fresh = await ordersApi.getById(orderId)
+        acceptOrder(fresh)
+        const landed =
+          replay !== undefined &&
+          fresh.status === REPLAY_SETTLED_STATUS[replay.operation]
+        if (landed) {
+          replayKeys.clear(replay.operation)
+          setError(null)
+          return true
+        }
+        setError(replay ? tl('notSaved') : tl('reread'))
+      } catch {
+        setError(tl('checkFailed'))
+      }
       return false
     } finally {
       setBusy(false)
@@ -1521,13 +1550,24 @@ function OrderDetailScreen({
     try {
       const scope = requireLatestMutation({ quota: false })
       requireLatestMutation({ permission: 'finance.manage', quota: false })
-      const updated = await ordersApi.updatePayments(order.id, payments)
+      // One key per payment set: a retry after a lost answer replays the
+      // first result instead of recording the money twice.
+      const idempotencyKey = replayKeys.forPayload(
+        scope.tenantId,
+        'order-payments',
+        [order.id, payments],
+      )
+      const updated = await ordersApi.updatePayments(order.id, payments, {
+        idempotencyKey,
+      })
+      replayKeys.clear('order-payments')
       if (scope.signal.aborted) return
       acceptOrder(updated)
       setPaymentOrderId(null)
       toast?.show({ message: tp('saved'), tone: 'ok' })
     } catch (failure) {
       if (!isUnknownOutcome(failure)) {
+        replayKeys.clear('order-payments')
         setPaymentOutcome({ kind: 'refused', message: errorMessage(failure) })
         return
       }
@@ -1536,6 +1576,7 @@ function OrderDetailScreen({
         const fresh = await ordersApi.getById(order.id)
         acceptOrder(fresh)
         if (paymentRecorded(before, fresh.payments, added)) {
+          replayKeys.clear('order-payments')
           setPaymentOutcome(null)
           setPaymentOrderId(null)
           toast?.show({ message: tp('saved'), tone: 'ok' })
