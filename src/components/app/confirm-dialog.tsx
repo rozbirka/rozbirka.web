@@ -4,6 +4,8 @@ import { Dialog } from 'radix-ui'
 import { cn } from '@/lib/utils'
 import { Button } from './button'
 import { Notice } from './notice'
+import { useT } from '@/i18n/hooks'
+import { commonMessages } from '@/i18n/common-messages'
 
 export interface ConfirmDialogProps {
   open: boolean
@@ -46,7 +48,7 @@ export function ConfirmDialog({
   children,
   icon: Icon,
   confirmLabel,
-  cancelLabel = 'Скасувати',
+  cancelLabel,
   onConfirm,
   pending = false,
   confirmDisabled = false,
@@ -55,6 +57,7 @@ export function ConfirmDialog({
   onCloseAutoFocus,
 }: ConfirmDialogProps) {
   const cancelRef = useRef<HTMLButtonElement>(null)
+  const tc = useT(commonMessages)
 
   return (
     <Dialog.Root
@@ -125,7 +128,7 @@ export function ConfirmDialog({
           <div className="mt-3 flex flex-wrap justify-end gap-2.5">
             <Dialog.Close asChild>
               <Button disabled={pending} ref={cancelRef}>
-                {cancelLabel}
+                {cancelLabel ?? tc('cancel')}
               </Button>
             </Dialog.Close>
             <Button

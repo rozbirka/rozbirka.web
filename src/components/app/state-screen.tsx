@@ -2,6 +2,9 @@ import type { ReactNode } from 'react'
 import { AlertTriangle, Inbox, Lock, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from './button'
+import { useT } from '@/i18n/hooks'
+import { appMessages } from './app-messages'
+import { commonMessages } from '@/i18n/common-messages'
 
 export type StateTone = 'neutral' | 'brand' | 'warn' | 'danger'
 
@@ -98,10 +101,10 @@ export function EmptyState({
 }
 
 export function ErrorState({
-  title = 'Не вдалося завантажити дані',
-  description = 'Зв’язок із сервером перервався. Спробуйте ще раз.',
+  title,
+  description,
   onRetry,
-  retryLabel = 'Спробувати ще раз',
+  retryLabel,
   correlationId,
   actions,
   label,
@@ -114,6 +117,8 @@ export function ErrorState({
   actions?: ReactNode
   label?: string
 }) {
+  const t = useT(appMessages)
+  const tc = useT(commonMessages)
   return (
     <StateScreen
       actions={
@@ -121,18 +126,20 @@ export function ErrorState({
         (onRetry === undefined ? undefined : (
           <Button onClick={onRetry}>
             <RefreshCw aria-hidden />
-            {retryLabel}
+            {retryLabel ?? tc('retry')}
           </Button>
         ))
       }
-      description={description}
+      description={description ?? t('errorBody')}
       icon={<AlertTriangle aria-hidden />}
       {...(label === undefined ? {} : { label })}
       meta={
-        correlationId === undefined ? undefined : `звернення ${correlationId}`
+        correlationId === undefined
+          ? undefined
+          : t('correlation', { id: correlationId })
       }
       role="alert"
-      title={title}
+      title={title ?? t('errorTitle')}
       tone="danger"
     />
   )

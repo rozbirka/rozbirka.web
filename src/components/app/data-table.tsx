@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { useT } from '@/i18n/hooks'
+import { appMessages } from './app-messages'
 
 export interface DataColumn<Row> {
   key: string
@@ -59,6 +61,7 @@ export function DataTable<Row>({
   density = 'comfortable',
   embedded = false,
 }: DataTableProps<Row>) {
+  const t = useT(appMessages)
   const compact = density === 'compact'
   const cellPadding = compact ? 'px-3 py-1.5 md:px-4' : 'px-4 py-3.5'
   const pickable =
@@ -128,7 +131,7 @@ export function DataTable<Row>({
                 scope="col"
               >
                 <input
-                  aria-label="Обрати всі на сторінці"
+                  aria-label={t('selectPage')}
                   checked={
                     pickable.length > 0 && pickedOnPage === pickable.length
                   }
@@ -186,7 +189,7 @@ export function DataTable<Row>({
                 {selection === undefined ? null : (
                   <td
                     className={cn(cellPadding, 'text-left font-normal')}
-                    data-label="Обрати"
+                    data-label={t('selectRow')}
                     // The checkbox is the point of the cell; a row that navigates
                     // must not swallow the click that picks it.
                     onClick={(event) => {

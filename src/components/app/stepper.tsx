@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useT } from '@/i18n/hooks'
+import { appMessages } from './app-messages'
 
 export interface Step {
   key: string
@@ -28,6 +30,7 @@ export function Stepper({
   onSelect?: (index: number) => void
   className?: string
 }) {
+  const t = useT(appMessages)
   return (
     <ol
       className={cn(
@@ -40,7 +43,11 @@ export function Stepper({
         const active = index === current
         const failed = Boolean(step.error)
         const reachable = onSelect !== undefined && (done || active)
-        const label = `Крок ${String(index + 1)} з ${String(steps.length)}: ${step.title}`
+        const label = t('stepOf', {
+          step: String(index + 1),
+          total: String(steps.length),
+          title: step.title,
+        })
 
         const content = (
           <>

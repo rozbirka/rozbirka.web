@@ -1,4 +1,6 @@
 import { cn } from '@/lib/utils'
+import { useT } from '@/i18n/hooks'
+import { appMessages } from './app-messages'
 
 export function Skeleton({ className }: { className?: string }) {
   return (
@@ -21,16 +23,17 @@ const widths = ['w-3/5', 'w-2/5', 'w-1/3', 'w-1/2']
 export function SkeletonRows({
   rows = 5,
   columns = 4,
-  label = 'Завантажуємо дані…',
+  label,
 }: {
   rows?: number
   columns?: number
   label?: string
 }) {
+  const t = useT(appMessages)
   return (
     <div className="border-app-line rounded-panel bg-app-raised grid gap-px overflow-hidden border">
       <p className="sr-only" role="status">
-        {label}
+        {label ?? t('loadingData')}
       </p>
       {Array.from({ length: rows }, (_, row) => (
         <div

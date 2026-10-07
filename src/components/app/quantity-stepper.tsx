@@ -1,6 +1,8 @@
 import { Minus, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useFieldControl } from './field-context'
+import { useT } from '@/i18n/hooks'
+import { appMessages } from './app-messages'
 
 /**
  * A small whole number set by thumb: how many of this part, how many days.
@@ -24,6 +26,7 @@ export function QuantityStepper({
   className?: string
 }) {
   const field = useFieldControl()
+  const t = useT(appMessages)
   const clamp = (next: number) => Math.min(max, Math.max(min, next))
 
   return (
@@ -34,7 +37,7 @@ export function QuantityStepper({
       )}
     >
       <button
-        aria-label="Менше"
+        aria-label={t('less')}
         className="text-app-muted hover:text-app-ink focus-visible:outline-brand grid size-10 cursor-pointer place-items-center rounded-lg hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45"
         disabled={value <= min}
         onClick={() => onChange(clamp(value - 1))}
@@ -56,7 +59,7 @@ export function QuantityStepper({
         value={value}
       />
       <button
-        aria-label="Більше"
+        aria-label={t('more')}
         className="text-app-muted hover:text-app-ink focus-visible:outline-brand grid size-10 cursor-pointer place-items-center rounded-lg hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45"
         disabled={value >= max}
         onClick={() => onChange(clamp(value + 1))}

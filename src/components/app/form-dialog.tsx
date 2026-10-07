@@ -4,6 +4,9 @@ import { Dialog } from 'radix-ui'
 import { cn } from '@/lib/utils'
 import { Button } from './button'
 import { Notice } from './notice'
+import { useT } from '@/i18n/hooks'
+import { appMessages } from './app-messages'
+import { commonMessages } from '@/i18n/common-messages'
 
 export interface FormDialogProps {
   open: boolean
@@ -37,7 +40,7 @@ export function FormDialog({
   description,
   children,
   submitLabel,
-  cancelLabel = 'Скасувати',
+  cancelLabel,
   onSubmit,
   pending = false,
   submitDisabled = false,
@@ -45,6 +48,8 @@ export function FormDialog({
   size = 'md',
   onCloseAutoFocus,
 }: FormDialogProps) {
+  const t = useT(appMessages)
+  const tc = useT(commonMessages)
   return (
     <Dialog.Root
       onOpenChange={(next) => {
@@ -69,7 +74,7 @@ export function FormDialog({
               </Dialog.Title>
               {description === undefined ? (
                 <Dialog.Description className="sr-only">
-                  {typeof title === 'string' ? title : 'Форма'}
+                  {typeof title === 'string' ? title : t('form')}
                 </Dialog.Description>
               ) : (
                 <Dialog.Description className="text-app-muted text-sm">
@@ -79,7 +84,7 @@ export function FormDialog({
             </div>
             <Dialog.Close asChild>
               <Button
-                aria-label="Закрити"
+                aria-label={tc('close')}
                 disabled={pending}
                 size="icon"
                 variant="quiet"
@@ -102,7 +107,9 @@ export function FormDialog({
             </div>
             <div className="border-app-line flex flex-wrap justify-end gap-2 border-t px-5 py-3">
               <Dialog.Close asChild>
-                <Button disabled={pending}>{cancelLabel}</Button>
+                <Button disabled={pending}>
+                  {cancelLabel ?? tc('cancel')}
+                </Button>
               </Dialog.Close>
               <Button
                 aria-busy={pending}
@@ -148,6 +155,7 @@ export function Sheet({
   /** Wider panel for a form that carries its own sections. */
   size?: 'md' | 'lg'
 }) {
+  const tc = useT(commonMessages)
   return (
     <Dialog.Root onOpenChange={onOpenChange} open={open}>
       <Dialog.Portal>
@@ -189,7 +197,7 @@ export function Sheet({
                   transparent overlay that costs the layout nothing. The
                   inset starts inside the 1px border: 32 + 2 × 6 = 44px. */}
               <button
-                aria-label="Закрити"
+                aria-label={tc('close')}
                 className="border-app-line-2 text-app-muted hover:text-app-ink relative grid size-[34px] shrink-0 place-items-center rounded-[10px] border transition-colors hover:bg-white/[0.06] after:absolute after:-inset-[6px] after:content-['']"
                 type="button"
               >
