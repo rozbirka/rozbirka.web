@@ -2,7 +2,6 @@ import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
-import { inventoryApi } from '@/api/inventory'
 import { tenantsApi } from '@/api/tenants'
 import { tenantPreference } from '@/api/tenant-preference'
 import { useAuth, type AuthContextValue } from '@/auth/AuthContext'
@@ -11,20 +10,6 @@ import { TenantOnboardingScreen } from './tenant-onboarding'
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest resolves the API method into a typed mock. */
 
 vi.mock('@/api/tenants', () => ({ tenantsApi: { create: vi.fn() } }))
-vi.mock('@/api/inventory', () => ({
-  inventoryApi: {
-    getWarehouses: vi.fn(() => Promise.resolve([])),
-    createWarehouse: vi.fn(),
-    updateWarehouse: vi.fn(),
-    createZone: vi.fn(),
-  },
-}))
-vi.mock('@/api/team', () => ({
-  teamApi: {
-    listRoles: vi.fn(() => Promise.resolve([])),
-    createInvitation: vi.fn(),
-  },
-}))
 vi.mock('@/auth/AuthContext', () => ({ useAuth: vi.fn() }))
 
 const create = vi.mocked(tenantsApi.create)
@@ -103,7 +88,7 @@ beforeEach(() => {
   vi.mocked(useAuth).mockImplementation(() => auth)
 })
 
-it('creates the first tenant, hydrates, and moves on to the warehouse step', async () => {
+it('creates the first tenant, hydrates, and hands over to the dashboard checklist', async () => {
   create.mockResolvedValue({
     tenantId: 'tenant-new',
     name: 'New Yard',
@@ -121,15 +106,23 @@ it('creates the first tenant, hydrates, and moves on to the warehouse step', asy
 
   expect(tenantPreference.get()).toBe('tenant-new')
   expect(hydrate).toHaveBeenCalledOnce()
-  // The yard exists now, so the wizard continues inside it instead of leaving.
-  expect(
-    await screen.findByRole('heading', { name: 'Налаштуйте перший склад' }),
-  ).toBeVisible()
-
-  await user.click(screen.getByRole('button', { name: 'Пропустити' }))
+  // No warehouse/team/done steps: the owner continues on the dashboard, and
+  // the slug comes from the hydrated tenant, not the create response.
   expect(await screen.findByLabelText('Поточний маршрут')).toHaveTextContent(
-    '/app/new-yard/dashboard',
+    /^\/app\/new-yard\/dashboard$/,
   )
+})
+
+it('asks only for what creating the yard stores', () => {
+  renderOnboarding()
+
+  expect(screen.getByLabelText('Назва розбірки')).toBeVisible()
+  expect(screen.getByLabelText(/Місто/)).toBeVisible()
+  // Accounting currency is an onboarding step on the dashboard now, chosen
+  // explicitly in business settings — never a dead control here.
+  expect(screen.queryByText(/валюта обліку/i)).toBeNull()
+  expect(screen.queryByText('Чим займаєтесь')).toBeNull()
+  expect(screen.queryByText(/Крок 1/)).toBeNull()
 })
 
 it('names the missing yard at its own field instead of calling the API', async () => {
@@ -174,9 +167,9 @@ it('keeps the failure reason on screen and creates the yard on retry', async () 
   await user.click(screen.getByRole('button', { name: 'Спробувати ще раз' }))
 
   expect(create).toHaveBeenCalledTimes(2)
-  expect(
-    await screen.findByRole('heading', { name: 'Налаштуйте перший склад' }),
-  ).toBeVisible()
+  expect(await screen.findByLabelText('Поточний маршрут')).toHaveTextContent(
+    '/app/new-yard/dashboard',
+  )
 })
 
 it('invalidates a pending create before logout can resume it', async () => {
@@ -225,53 +218,4 @@ it('leaves the protected route before waiting for logout', async () => {
 
   expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(/^\/$/)
   finishLogout()
-})
-
-it('creates the missing zones and leaves the existing ones alone', async () => {
-  create.mockResolvedValue({
-    tenantId: 'tenant-new',
-    name: 'New Yard',
-    slug: 'stale-create-response-slug',
-    plan: 'trial',
-    planTier: 'pro',
-    isActive: true,
-  })
-  vi.mocked(inventoryApi.getWarehouses).mockResolvedValue([
-    {
-      id: 'warehouse-1',
-      tenantId: 'tenant-new',
-      name: 'Центральний',
-      code: 'MAIN',
-      isActive: true,
-      isSystemDefault: true,
-      zoneCount: 2,
-      createdAt: '2026-09-17T09:00:00Z',
-      updatedAt: '2026-09-17T09:00:00Z',
-    },
-  ])
-  vi.mocked(inventoryApi.createZone).mockResolvedValue(
-    {} as unknown as Awaited<ReturnType<typeof inventoryApi.createZone>>,
-  )
-  const user = userEvent.setup()
-  renderOnboarding()
-
-  await user.type(screen.getByLabelText('Назва розбірки'), 'New Yard')
-  await user.click(screen.getByRole('button', { name: 'Створити розбірку' }))
-  await screen.findByRole('heading', { name: 'Налаштуйте перший склад' })
-
-  await user.click(screen.getByRole('button', { name: 'Далі' }))
-
-  // The server already made two zones; the wizard adds only C and D.
-  expect(inventoryApi.createZone).toHaveBeenCalledTimes(2)
-  expect(inventoryApi.createZone).toHaveBeenCalledWith({
-    warehouseId: 'warehouse-1',
-    name: 'Зона C',
-    code: 'C',
-  })
-  expect(inventoryApi.createWarehouse).not.toHaveBeenCalled()
-  expect(
-    await screen.findByRole('heading', { name: 'Запросіть команду' }),
-  ).toBeVisible()
-  // An invitation is a code, not a letter: the email field stays disabled.
-  expect(screen.getByLabelText('Пошта колеги')).toBeDisabled()
 })
