@@ -14,11 +14,13 @@
  * failure. Add a line here when another adapter starts sending new fields.
  */
 import type { components } from './generated/core'
+import type { components as identityComponents } from './generated/identity'
 import type { UpdateBusinessRequest } from './business'
 import type { ImportMapping, ImportRule } from './part-imports'
 import type { CreatePartRequest } from './parts'
 
 type Schemas = components['schemas']
+type IdentitySchemas = identityComponents['schemas']
 
 /** Keys the web sends that the pinned contract does not define. */
 type Unknown<Sent, Contract> = Exclude<keyof Sent, keyof Contract>
@@ -36,7 +38,17 @@ type PendingUpdateTenantFields =
   | 'documentLanguage'
   | 'accountingCurrency'
 
+/**
+ * Identity `feat/backend-localization-currency-onboarding`: whole requests the
+ * pinned Identity contract does not have yet (`PATCH /auth/me/language`).
+ * Typecheck fails once the pin adds the schema, so the adapter can switch to
+ * the generated type and the entry can be removed.
+ */
+type PendingIdentitySchemas =
+  'Rozbirka.Identity.Application.Auth.DTOs.UpdateLanguageRequest'
+
 export type ContractAlignment = [
+  Check<Same<Extract<PendingIdentitySchemas, keyof IdentitySchemas>, never>>,
   Check<Same<Unknown<ImportMapping, Schemas['ImportMappingPlan']>, never>>,
   Check<Same<Unknown<ImportRule, Schemas['ImportFieldRule']>, never>>,
   Check<Same<Unknown<CreatePartRequest, Schemas['CreatePartRequest']>, never>>,

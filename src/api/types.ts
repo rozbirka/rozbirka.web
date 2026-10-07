@@ -25,6 +25,8 @@ export interface VerifyUser {
   id: string
   phone: string
   displayName: string
+  /** Saved interface language (pending Identity contract); `null` = automatic. */
+  language?: string | null
 }
 
 export interface SessionVerifyResponse {
@@ -40,6 +42,11 @@ export interface SessionRefreshResponse {
 
 export interface UpdateNameRequest {
   name: string
+}
+
+/** PATCH /auth/me/language — `null` returns to automatic selection. */
+export interface UpdateLanguageRequest {
+  language: Locale | null
 }
 
 export interface UpdateNameResponse {

@@ -2,10 +2,12 @@ import axios from 'axios'
 import { identityClient } from './client'
 import { credentials } from './credentials'
 import { sessionApi } from './session'
+import type { Locale } from '../i18n/locales'
 import type {
   SendOtpRequest,
   SendOtpResponse,
   SessionVerifyResponse,
+  UpdateLanguageRequest,
   UpdateNameResponse,
   User,
   VerifyUser,
@@ -52,6 +54,34 @@ export const authApi = {
   async me(): Promise<User> {
     const resp = await identityClient.get<User>('/auth/me')
     return resp.data
+  },
+
+  /**
+   * Save the personal interface language (pending Identity endpoint
+   * `PATCH /auth/me/language`; same response shape as the name update).
+   */
+  async updateLanguage(
+    language: Locale | null,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<VerifyUser> {
+    const config = options.signal ? { signal: options.signal } : undefined
+    const sessionGeneration = credentials.getSessionGeneration()
+    const body: UpdateLanguageRequest = { language }
+    const response = await identityClient.patch<UpdateNameResponse>(
+      '/auth/me/language',
+      body,
+      config,
+    )
+    if (
+      options.signal?.aborted ||
+      sessionGeneration !== credentials.getSessionGeneration()
+    ) {
+      throw new axios.CanceledError(
+        'Profile request belongs to an ended session',
+      )
+    }
+    credentials.setAccess(response.data.accessToken)
+    return response.data.user
   },
 
   async updateName(

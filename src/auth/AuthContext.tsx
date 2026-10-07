@@ -14,6 +14,7 @@ import { sessionApi } from '@/api/session'
 import { tenantPreference } from '@/api/tenant-preference'
 import { tenantsApi } from '@/api/tenants'
 import type { Tenant, User } from '@/api/types'
+import type { Locale } from '@/i18n/locales'
 
 export type AuthStatus = 'loading' | 'authenticated' | 'guest'
 
@@ -21,7 +22,7 @@ export interface AuthContextValue {
   status: AuthStatus
   user: User | null
   tenant: Tenant | null
-  /** All tenants (розбірки) the user belongs to — drives the tenant switcher. */
+  /** All tenants (businesses) the user belongs to — drives the tenant switcher. */
   tenants: Tenant[]
   /** Called after a successful OTP verify; bootstraps user + tenants from the server. */
   hydrate: (accessToken?: string) => Promise<void>
@@ -29,6 +30,13 @@ export interface AuthContextValue {
   commitTenant: (tenantId: string) => void
   /** Update the authenticated user's display name without reloading tenant state. */
   updateName: (name: string) => Promise<void>
+  /**
+   * Save the personal interface language (`null` = automatic) in Identity.
+   * Rejects when the save fails; the current language is kept then.
+   * Optional only so hand-built test doubles stay valid; the provider always
+   * supplies it.
+   */
+  updateLanguage?: (language: Locale | null) => Promise<void>
   /** POST /session/logout and reset state. Pass `silent` to skip the network call. */
   signOut: (opts?: { silent?: boolean }) => Promise<void>
 }
@@ -51,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const authGenerationRef = useRef(0)
   const activeOperationRef = useRef<AuthOperation | null>(null)
   const profileUpdateRef = useRef<AbortController | null>(null)
+  const languageUpdateRef = useRef<AbortController | null>(null)
 
   const reset = useCallback(() => {
     setUser((current) => (current === null ? current : null))
@@ -223,6 +232,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [status, user?.id],
   )
 
+  const updateLanguage = useCallback<
+    NonNullable<AuthContextValue['updateLanguage']>
+  >(
+    async (language) => {
+      const generation = authGenerationRef.current
+      const currentUserId = user?.id
+      if (status !== 'authenticated' || !currentUserId) {
+        throw new Error('Cannot update a guest profile')
+      }
+
+      languageUpdateRef.current?.abort('language-update-superseded')
+      const controller = new AbortController()
+      languageUpdateRef.current = controller
+      try {
+        const updated = await authApi.updateLanguage(language, {
+          signal: controller.signal,
+        })
+        setUser((current) => {
+          if (
+            controller.signal.aborted ||
+            authGenerationRef.current !== generation ||
+            current?.id !== currentUserId ||
+            updated.id !== currentUserId
+          ) {
+            return current
+          }
+          // An older Identity may echo the user without the field: the
+          // saved value is then the one we sent.
+          return {
+            ...current,
+            ...updated,
+            language:
+              updated.language === undefined ? language : updated.language,
+          }
+        })
+      } finally {
+        if (languageUpdateRef.current === controller) {
+          languageUpdateRef.current = null
+        }
+      }
+    },
+    [status, user?.id],
+  )
+
   const signOut = useCallback<AuthContextValue['signOut']>(
     async ({ silent } = {}) => {
       invalidateAuth()
@@ -252,6 +305,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     hydrate,
     commitTenant,
     updateName,
+    updateLanguage,
     signOut,
   }
 

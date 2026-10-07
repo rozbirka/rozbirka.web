@@ -9,15 +9,17 @@ import { LogOut } from 'lucide-react'
 import { Button, Field, Notice, TextInput } from '@/components/app'
 import { useAuth } from '@/auth/AuthContext'
 import { AccountDeletion } from '@/components/account/account-deletion'
+import { useTenantSettings } from '@/auth/useTenantSettings'
+import { LOCALE_NATIVE_NAMES } from '@/i18n/locales'
+import { useT } from '@/i18n/hooks'
 import { useCabinet } from '../CabinetContext'
 import { RedesignShell, RedesignTitle } from '../redesign-shell'
+import { LanguageCard } from './language-card'
+import { profileMessages } from './profile-messages'
 
 type SaveState = 'idle' | 'pending' | 'success' | 'error'
 
 const FORM_ID = 'profile-form'
-
-const NO_PHONE_EDIT =
-  'Телефон змінити не можна: це логін. Редагується тільки імʼя.'
 
 /** Two letters standing in for the photo the API does not keep. */
 const initials = (name: string) =>
@@ -28,15 +30,17 @@ const initials = (name: string) =>
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('') || '—'
 
-const roleLabels: Record<string, string> = {
-  owner: 'Власник',
-  manager: 'Менеджер',
-  master: 'Майстер',
-}
+const roleKeys = {
+  owner: 'roleOwner',
+  manager: 'roleManager',
+  master: 'roleMaster',
+} as const
 
 export function ProfileScreen() {
   const auth = useAuth()
   const cabinet = useCabinet()
+  const t = useT(profileMessages)
+  const { documentLanguage } = useTenantSettings()
   const currentName = auth.user?.displayName ?? ''
   const [name, setName] = useState(currentName)
   const [savedName, setSavedName] = useState(currentName.trim())
@@ -106,25 +110,20 @@ export function ProfileScreen() {
   }
 
   const role = cabinet.snapshot?.role
-  const roleLabel = role
-    ? (roleLabels[role.toLowerCase()] ?? role)
-    : 'Не вказано'
+  const roleKey = role
+    ? roleKeys[role.toLowerCase() as keyof typeof roleKeys]
+    : undefined
+  const roleLabel = role ? (roleKey ? t(roleKey) : role) : t('roleUnknown')
   const phone = auth.user?.phone ?? null
   return (
-    <RedesignShell crumb="Налаштування · Профіль">
-      <RedesignTitle lead="Особисті дані та доступ." title="Профіль" />
+    <RedesignShell crumb={t('crumb')}>
+      <RedesignTitle lead={t('lead')} title={t('title')} />
 
-      {saveState === 'success' && (
-        <Notice tone="ok">Ім’я успішно оновлено.</Notice>
-      )}
-      {saveState === 'error' && (
-        <Notice tone="danger">
-          Не вдалося зберегти ім’я. Спробуйте ще раз.
-        </Notice>
-      )}
+      {saveState === 'success' && <Notice tone="ok">{t('nameSaved')}</Notice>}
+      {saveState === 'error' && <Notice tone="danger">{t('nameError')}</Notice>}
 
       <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <Card title="Особисті дані">
+        <Card title={t('personal')}>
           <div className="flex items-center gap-4">
             <span
               aria-hidden
@@ -134,10 +133,10 @@ export function ProfileScreen() {
             </span>
             <div className="min-w-0">
               <p className="text-app-ink truncate text-[17px] font-bold">
-                {normalizedName || 'Без імені'}
+                {normalizedName || t('noName')}
               </p>
               <p className="text-app-dim mt-1 text-[13px]">
-                {phone ?? 'Телефон не вказано'}
+                {phone ?? t('noPhone')}
               </p>
             </div>
           </div>
@@ -148,21 +147,21 @@ export function ProfileScreen() {
             onSubmit={(event) => void handleSubmit(event)}
           >
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Ім’я та прізвище" required>
+              <Field label={t('nameLabel')} required>
                 <TextInput
                   autoComplete="name"
                   disabled={busy}
                   onChange={(event) => handleNameChange(event.target.value)}
-                  placeholder="Дмитро Кравець"
+                  placeholder={t('namePlaceholder')}
                   value={name}
                 />
               </Field>
-              <Field label="Телефон">
+              <Field label={t('phoneLabel')}>
                 <TextInput
                   disabled
                   readOnly
-                  title={NO_PHONE_EDIT}
-                  value={phone ?? 'не вказано'}
+                  title={t('phoneReadOnly')}
+                  value={phone ?? t('phoneMissing')}
                 />
               </Field>
             </div>
@@ -172,7 +171,7 @@ export function ProfileScreen() {
                 onClick={() => handleNameChange(savedName)}
                 type="button"
               >
-                Скасувати зміни
+                {t('cancelChanges')}
               </Button>
               <Button
                 className="px-5 text-sm font-bold"
@@ -180,25 +179,42 @@ export function ProfileScreen() {
                 type="submit"
                 variant="primary"
               >
-                {busy ? 'Зберігаємо…' : 'Зберегти'}
+                {busy ? t('saving') : t('save')}
               </Button>
             </div>
           </form>
         </Card>
 
         <div className="grid min-w-0 content-start gap-5">
-          <Card title="Доступ">
+          <LanguageCard />
+
+          <Card title={t('docCardTitle')}>
+            <p className="text-app-muted text-[13.5px]">{t('docCardBody')}</p>
+            <dl className="mt-3 flex items-baseline justify-between gap-4 text-[13.5px]">
+              <dt className="text-app-muted">{t('docLang')}</dt>
+              <dd
+                className="text-app-ink text-right font-medium"
+                lang={documentLanguage ?? undefined}
+              >
+                {documentLanguage
+                  ? LOCALE_NATIVE_NAMES[documentLanguage]
+                  : t('docLangUnknown')}
+              </dd>
+            </dl>
+          </Card>
+
+          <Card title={t('access')}>
             <dl className="grid gap-3 text-[13.5px]">
               <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">Роль</dt>
+                <dt className="text-app-muted">{t('role')}</dt>
                 <dd className="text-app-ink text-right font-medium">
                   {roleLabel}
                 </dd>
               </div>
               <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">Кабінет</dt>
+                <dt className="text-app-muted">{t('cabinet')}</dt>
                 <dd className="text-app-ink text-right font-medium">
-                  {cabinet.targetTenant?.name ?? 'Не вибрано'}
+                  {cabinet.targetTenant?.name ?? t('cabinetNone')}
                 </dd>
               </div>
             </dl>
@@ -208,7 +224,7 @@ export function ProfileScreen() {
                 onClick={() => void auth.signOut()}
               >
                 <LogOut aria-hidden />
-                Вийти з системи
+                {t('signOut')}
               </Button>
             </div>
           </Card>
