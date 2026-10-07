@@ -81,7 +81,7 @@ legacy mapping review and source-wide import payloads.
 Interface languages are `uk` (source), `en-GB` and `pl`. The personal language
 resolves profile language → language remembered in this browser → first
 supported browser language → `en-GB`; it is chosen in Profile («Мова
-інтерфейсу», automatic or one language) and saved through Identity
+інтерфейсу», automatic or one language) and saved through Core
 `PATCH /auth/me/language`. A failed save keeps the old language and offers a
 retry; without that endpoint the choice is kept on the device and the card says
 so. Requests carry the interface language as `Accept-Language`, so OTP SMS and

@@ -96,7 +96,7 @@ jobs:
         run: npm run test:contracts
 
       - if: inputs.run_build
-        name: Immutable Core and Identity contract drift gate
+        name: Immutable Core contract drift gate
         shell: bash
         run: |
           set -euo pipefail
@@ -105,8 +105,7 @@ jobs:
             --manifest contracts/openapi-sources.json \
             --out "$contract_dir")"
           core_path="$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.core)' "$paths_json")"
-          identity_path="$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.identity)' "$paths_json")"
-          npm run contracts:check -- --core "$core_path" --identity "$identity_path"
+          npm run contracts:check -- --core "$core_path"
 
       - if: inputs.run_build
         name: Auth and tenant integration gate

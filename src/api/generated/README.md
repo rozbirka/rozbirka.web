@@ -1,13 +1,18 @@
 # Generated API contracts
 
-This directory is owned by `openapi-typescript`. Do not edit `core.ts` or
-`identity.ts` by hand.
+This directory is owned by `openapi-typescript`. Do not edit `core.ts` by
+hand.
 
-Generate both contracts only from explicit, immutable Core and Identity
-OpenAPI inputs:
+Core is the only source: its contract includes every endpoint the web calls,
+`/auth/*` (login, registration, verify, `me`, `me/name`, `me/language`,
+refresh, logout) among them. The separate Identity contract is obsolete and is
+no longer generated, pinned or checked; `identityClient` in `src/api/client.ts`
+is only the transport for the un-prefixed `/auth/*` paths.
+
+Generate the contract only from an explicit, immutable Core OpenAPI input:
 
 ```sh
-npm run contracts:generate -- --core <versioned-file-or-url> --identity <versioned-file-or-url>
+npm run contracts:generate -- --core <versioned-file-or-url>
 ```
 
 Remote inputs must use an unencoded HTTP(S) path and exactly one immutable form:
@@ -30,11 +35,11 @@ snapshot rule.
 Check committed output for byte-for-byte drift with the same inputs:
 
 ```sh
-npm run contracts:check -- --core <versioned-file-or-url> --identity <versioned-file-or-url>
+npm run contracts:check -- --core <versioned-file-or-url>
 ```
 
 CI pins the exact inputs in [contracts/openapi-sources.json](../../../contracts/openapi-sources.json):
-an immutable `gs://` URI plus SHA-256 for Core and for Identity. The quality
+an immutable `gs://` URI plus SHA-256 for Core. The quality
 workflow downloads them with `scripts/fetch-api-contracts.mjs` and runs
 `contracts:check` against the committed files; a missing or mismatched input,
 a digest mismatch or byte drift fails the gate.
@@ -49,8 +54,10 @@ matter are checked against these schemas at compile time in
    `contracts/openapi/v1/rozbirka-core.json`. Core checks drift with
    `scripts/check-openapi.sh` in its validation workflow and before publication. After it merges to `develop`, Core's `publish-openapi.yml`
    publishes the file under an immutable commit path.
-2. Point `contracts/openapi-sources.json` at that path and digest, run
-   `contracts:generate` with the same inputs and commit the output.
+2. Point `contracts/openapi-sources.json` at that path and digest, download it
+with `node scripts/fetch-api-contracts.mjs --manifest
+contracts/openapi-sources.json --out <dir>`, run `contracts:generate --core
+   <dir>/core.json` and commit the output.
 3. Remove the matching `Pending…` entry in `contract-alignment.ts` — typecheck
    fails until you do.
 4. Only then merge the web change that sends the new fields.

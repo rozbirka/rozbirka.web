@@ -31,7 +31,8 @@ export interface AuthContextValue {
   /** Update the authenticated user's display name without reloading tenant state. */
   updateName: (name: string) => Promise<void>
   /**
-   * Save the personal interface language (`null` = automatic) in Identity.
+   * Save the personal interface language (`null` = automatic) in the Core
+   * profile (`PATCH /auth/me/language`).
    * Rejects when the save fails; the current language is kept then.
    * Optional only so hand-built test doubles stay valid; the provider always
    * supplies it.
@@ -279,8 +280,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ) {
             return current
           }
-          // An older Identity may echo the user without the field: the
-          // saved value is then the one we sent.
+          // An older Core may echo the user without the field: the saved
+          // value is then the one we sent.
           return {
             ...current,
             ...updated,

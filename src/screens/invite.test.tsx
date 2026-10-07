@@ -104,9 +104,7 @@ const authValue = (
           id: 'user-1',
           phone: '+380501112233',
           displayName,
-          role: 'owner',
-          isActive: true,
-          lastLoginAt: null,
+          effectiveLanguage: 'uk',
         }
       : null,
   tenant: null,

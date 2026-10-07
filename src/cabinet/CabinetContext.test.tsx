@@ -33,9 +33,7 @@ const user: User = {
   id: 'user-1',
   phone: '+380501112233',
   displayName: 'Власник',
-  role: 'owner',
-  isActive: true,
-  lastLoginAt: '2026-08-13T10:00:00Z',
+  effectiveLanguage: 'uk',
 }
 
 const tenant = (id: string, isActive = true): Tenant => ({

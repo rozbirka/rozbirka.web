@@ -45,11 +45,6 @@ async function fixtures() {
   return {
     directory,
     core: await writeSpecification(directory, 'core-2026-08-13.json', 'Core'),
-    identity: await writeSpecification(
-      directory,
-      'identity-2026-08-13.json',
-      'Identity',
-    ),
   }
 }
 
@@ -107,15 +102,21 @@ afterEach(async () => {
 })
 
 describe('OpenAPI contract CLIs', () => {
-  it('requires both explicit Core and Identity inputs', async () => {
+  it('requires an explicit Core input and rejects the obsolete Identity one', async () => {
     const { core } = await fixtures()
 
-    expect(await runScriptFailure(generateScript, ['--core', core])).toContain(
-      '--identity',
-    )
-    expect(await runScriptFailure(checkScript, ['--identity', core])).toContain(
+    expect(await runScriptFailure(generateScript, [])).toContain('--core')
+    expect(await runScriptFailure(checkScript, ['--out', core])).toContain(
       '--core',
     )
+    expect(
+      await runScriptFailure(generateScript, [
+        '--core',
+        core,
+        '--identity',
+        core,
+      ]),
+    ).toContain('Usage')
   })
 
   it.each([
@@ -134,19 +135,15 @@ describe('OpenAPI contract CLIs', () => {
     '/sw%61gger/swagger.json?sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     '/swagger%2Fswagger.json?sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   ])('rejects non-immutable or encoded HTTP input %s', async (path) => {
-    const { identity } = await fixtures()
     expect(
       await runScriptFailure(generateScript, [
         '--core',
         `https://api.example.test${path}`,
-        '--identity',
-        identity,
       ]),
     ).toContain('immutable')
   })
 
   it('rejects redirects instead of following a versioned URL to mutable content', async () => {
-    const { identity } = await fixtures()
     const origin = await serve((_request, response) => {
       response.writeHead(302, { location: '/openapi.json' })
       response.end()
@@ -156,87 +153,49 @@ describe('OpenAPI contract CLIs', () => {
       await runScriptFailure(generateScript, [
         '--core',
         `${origin}/v1.2.3/core.json`,
-        '--identity',
-        identity,
       ]),
     ).toContain('redirects are not allowed')
   })
 
-  it('generates deterministic Core and Identity contracts into an exact output directory', async () => {
-    const { directory, core, identity } = await fixtures()
+  it('generates a deterministic Core contract into an exact output directory', async () => {
+    const { directory, core } = await fixtures()
     const output = join(directory, 'generated output')
 
-    await runScript(generateScript, [
-      '--core',
-      core,
-      '--identity',
-      identity,
-      '--out',
-      output,
-    ])
+    await runScript(generateScript, ['--core', core, '--out', output])
 
     const coreOutput = await readFile(join(output, 'core.ts'), 'utf8')
-    const identityOutput = await readFile(join(output, 'identity.ts'), 'utf8')
     expect(coreOutput).toMatch(
       /^\/\/ Generated from Core OpenAPI input \(sha256:[a-f0-9]{64}\)\. Do not edit\.\n/,
     )
-    expect(identityOutput).toMatch(
-      /^\/\/ Generated from Identity OpenAPI input \(sha256:[a-f0-9]{64}\)\. Do not edit\.\n/,
-    )
     expect(coreOutput).not.toContain('Generated at')
-    expect(identityOutput).not.toContain('Generated at')
+    await expect(readFile(join(output, 'identity.ts'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    })
   })
 
-  it('fails the drift check and reports every differing contract', async () => {
-    const { directory, core, identity } = await fixtures()
+  it('fails the drift check and reports the differing contract', async () => {
+    const { directory, core } = await fixtures()
     const committed = join(directory, 'committed')
-    await runScript(generateScript, [
-      '--core',
-      core,
-      '--identity',
-      identity,
-      '--out',
-      committed,
-    ])
+    await runScript(generateScript, ['--core', core, '--out', committed])
     await writeFile(join(committed, 'core.ts'), '// stale core\n')
-    await writeFile(join(committed, 'identity.ts'), '// stale identity\n')
 
     expect(
-      await runScriptFailure(checkScript, [
-        '--core',
-        core,
-        '--identity',
-        identity,
-        '--out',
-        committed,
-      ]),
-    ).toContain('core.ts, identity.ts')
+      await runScriptFailure(checkScript, ['--core', core, '--out', committed]),
+    ).toContain('drift: core.ts')
     expect(await readFile(join(committed, 'core.ts'), 'utf8')).toBe(
       '// stale core\n',
     )
-    expect(await readFile(join(committed, 'identity.ts'), 'utf8')).toBe(
-      '// stale identity\n',
-    )
   })
 
-  it('passes the drift check when both committed outputs are byte-identical', async () => {
-    const { directory, core, identity } = await fixtures()
+  it('passes the drift check when the committed output is byte-identical', async () => {
+    const { directory, core } = await fixtures()
     const committed = join(directory, 'committed')
     await mkdir(committed)
-    await runScript(generateScript, [
-      '--core',
-      core,
-      '--identity',
-      identity,
-      '--out',
-      committed,
-    ])
+    await runScript(generateScript, ['--core', core, '--out', committed])
 
     const { stdout } = await runScript(checkScript, [
       '--core',
       core,
-      '--identity',
-      identity,
       '--out',
       committed,
     ])

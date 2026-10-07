@@ -427,9 +427,7 @@ it('starts an authenticated unnamed user at the name step and resumes the invite
     id: 'user-1',
     phone: '+380501112233',
     displayName: ' ',
-    role: 'owner',
-    isActive: true,
-    lastLoginAt: null,
+    effectiveLanguage: 'uk',
   }
   updateName.mockResolvedValue({ ...existingUser, displayName: 'Олена' })
   const user = userEvent.setup()
@@ -451,9 +449,7 @@ it('does not navigate after an unmounted name flow finishes hydrating', async ()
     id: 'user-1',
     phone: '+380501112233',
     displayName: ' ',
-    role: 'owner',
-    isActive: true,
-    lastLoginAt: null,
+    effectiveLanguage: 'uk',
   }
   const hydration = deferred<void>()
   vi.mocked(auth.hydrate).mockReturnValue(hydration.promise)
