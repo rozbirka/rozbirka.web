@@ -9,6 +9,7 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { ToastProvider } from '@/components/app'
+import { LocaleProvider } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import { CustomersScreen } from './CustomersScreen'
 
@@ -463,12 +464,15 @@ it('stops an empty name and an unusable phone at their own fields', async () => 
   await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
 
   expect(phoneField).toHaveAttribute('aria-invalid', 'true')
-  expect(phoneField).toHaveAccessibleDescription(/замало цифр/)
+  // The message names the international format, not a Ukrainian template.
+  expect(phoneField).toHaveAccessibleDescription(
+    /Перевірте номер: потрібен міжнародний формат, наприклад \+380 67 123 45 67/,
+  )
   expect(phoneField).toHaveFocus()
   expect(customerMocks.create).not.toHaveBeenCalled()
 })
 
-it('does not allow more than ten Ukrainian phone digits including the leading zero', () => {
+it('never trims a typed number to a Ukrainian length', () => {
   customerMocks.list.mockReturnValue(new Promise(() => undefined))
   renderScreen('/app/garage/customers/new')
 
@@ -477,8 +481,56 @@ it('does not allow more than ten Ukrainian phone digits including the leading ze
     target: { value: '+380777123444444' },
   })
 
-  expect(phoneField).toHaveValue('+380777123444')
+  expect(phoneField).toHaveValue('+380777123444444')
 })
+
+it('still saves a Ukrainian number typed without the code as +380…', async () => {
+  customerMocks.create.mockReturnValue(new Promise(() => undefined))
+  const user = userEvent.setup()
+  renderScreen('/app/garage/customers/new')
+
+  await user.type(screen.getByLabelText('Ім’я'), 'Ірина')
+  const phoneField = screen.getByRole('textbox', { name: 'Телефон' })
+  await user.clear(phoneField)
+  await user.type(phoneField, '050 111 22 33')
+  await user.tab()
+  expect(phoneField).toHaveValue('+380501112233')
+  await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
+
+  await waitFor(() =>
+    expect(customerMocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({ phone: '+380501112233' }),
+      expect.any(Object),
+    ),
+  )
+})
+
+it.each([
+  ['British', '+44 7700 900123', '+447700900123'],
+  ['Polish', '+48 512 345 678', '+48512345678'],
+  ['German', '+49 30 1234567', '+49301234567'],
+])(
+  'keeps a %s customer number as typed instead of rewriting it with +380',
+  async (_, typed, saved) => {
+    customerMocks.create.mockReturnValue(new Promise(() => undefined))
+    const user = userEvent.setup()
+    renderScreen('/app/garage/customers/new')
+
+    await user.type(screen.getByLabelText('Ім’я'), 'Client')
+    const phoneField = screen.getByRole('textbox', { name: 'Телефон' })
+    await user.clear(phoneField)
+    await user.type(phoneField, typed)
+    await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
+
+    expect(phoneField).not.toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() =>
+      expect(customerMocks.create).toHaveBeenCalledWith(
+        expect.objectContaining({ phone: saved }),
+        expect.any(Object),
+      ),
+    )
+  },
+)
 
 it('keeps a failed save on screen with its reason and lets it be retried', async () => {
   customerMocks.create
@@ -664,4 +716,205 @@ it('edits a customer in the side drawer over the customer card', async () => {
   expect(
     within(drawer).getByRole('button', { name: 'Зберегти зміни' }),
   ).toHaveAttribute('form', 'customer-form')
+})
+
+const addressedCustomer = {
+  id: 'customer-1',
+  name: 'Anna Kowalska',
+  phone: '+48512345678',
+  notes: null,
+  isActive: true,
+  createdAt: '2026-08-28T00:00:00Z',
+  orders: [],
+  ordersCount: 0,
+  totalAmount: null,
+  averageAmount: null,
+  firstOrderAt: null,
+  lastOrderAt: null,
+  countryCode: 'PL',
+  city: 'Kraków',
+  street: 'Floriańska',
+  building: '15',
+  postcode: '31-019',
+}
+
+it('creates a customer without an address, defaulting the country to the business country', async () => {
+  customerMocks.create.mockReturnValue(new Promise(() => undefined))
+  const user = userEvent.setup()
+  renderScreen('/app/garage/customers/new')
+
+  expect(screen.getByRole('combobox', { name: 'Країна' })).toHaveValue('UA')
+  await user.type(screen.getByLabelText('Ім’я'), 'Ірина')
+  await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
+
+  await waitFor(() =>
+    expect(customerMocks.create).toHaveBeenCalledWith(
+      { name: 'Ірина', phone: null, notes: null, countryCode: 'UA' },
+      expect.any(Object),
+    ),
+  )
+})
+
+it('creates a customer with a foreign address and postcode', async () => {
+  customerMocks.create.mockReturnValue(new Promise(() => undefined))
+  const user = userEvent.setup()
+  renderScreen('/app/garage/customers/new')
+
+  await user.type(screen.getByLabelText('Ім’я'), 'John Smith')
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Країна' }),
+    'GB',
+  )
+  await user.type(screen.getByLabelText('Місто'), ' London ')
+  await user.type(screen.getByLabelText('Вулиця'), 'Baker Street')
+  await user.type(screen.getByLabelText('Будинок'), '221B')
+  await user.type(screen.getByLabelText('Поштовий індекс'), 'NW1 6XE')
+  expect(screen.getByLabelText('Поштовий індекс')).toHaveAttribute(
+    'maxLength',
+    '32',
+  )
+  await user.click(screen.getByRole('button', { name: 'Створити клієнта' }))
+
+  await waitFor(() =>
+    expect(customerMocks.create).toHaveBeenCalledWith(
+      {
+        name: 'John Smith',
+        phone: null,
+        notes: null,
+        countryCode: 'GB',
+        city: 'London',
+        street: 'Baker Street',
+        building: '221B',
+        postcode: 'NW1 6XE',
+      },
+      expect.any(Object),
+    ),
+  )
+})
+
+it('sends only the changed address fields on edit and clears one with an empty string', async () => {
+  customerMocks.getById.mockResolvedValue(addressedCustomer)
+  customerMocks.update.mockReturnValue(new Promise(() => undefined))
+  const user = userEvent.setup()
+  renderScreen('/app/garage/customers/customer-1/edit')
+
+  const drawer = await screen.findByRole('dialog', {
+    name: 'Редагувати клієнта',
+  })
+  await within(drawer).findByDisplayValue('Anna Kowalska')
+  expect(within(drawer).getByRole('combobox', { name: 'Країна' })).toHaveValue(
+    'PL',
+  )
+  await user.clear(within(drawer).getByLabelText('Місто'))
+  const postcode = within(drawer).getByLabelText('Поштовий індекс')
+  await user.clear(postcode)
+  await user.type(postcode, '31-020')
+  await user.click(
+    within(drawer).getByRole('button', { name: 'Зберегти зміни' }),
+  )
+
+  await waitFor(() =>
+    expect(customerMocks.update).toHaveBeenCalledWith(
+      'customer-1',
+      {
+        name: 'Anna Kowalska',
+        phone: '+48512345678',
+        notes: null,
+        city: '',
+        postcode: '31-020',
+      },
+      expect.any(Object),
+    ),
+  )
+})
+
+it('shows the customer address on the card, with the country named', async () => {
+  customerMocks.getById.mockResolvedValue(addressedCustomer)
+  renderScreen('/app/garage/customers/customer-1')
+
+  await screen.findByRole('heading', { name: 'Anna Kowalska' })
+  const address = screen.getByText('Адреса').nextElementSibling as HTMLElement
+  expect(address).toHaveTextContent('Floriańska, 15')
+  expect(address).toHaveTextContent('31-019 Kraków')
+  expect(address).toHaveTextContent('Польща')
+  // Phones are shown grouped; links keep the plain number.
+  expect(screen.getAllByText('+48 512 345 678')[0]).toBeVisible()
+})
+
+it('says the address is not set when the customer has none', async () => {
+  customerMocks.getById.mockResolvedValue({
+    ...addressedCustomer,
+    countryCode: null,
+    city: null,
+    street: null,
+    building: null,
+    postcode: null,
+  })
+  renderScreen('/app/garage/customers/customer-1')
+
+  await screen.findByRole('heading', { name: 'Anna Kowalska' })
+  expect(screen.getByText('Адреса').nextElementSibling).toHaveTextContent(
+    'Не вказано',
+  )
+})
+
+it('renders the customer directory in British English', async () => {
+  customerMocks.list.mockResolvedValue({
+    items: [
+      {
+        id: 'customer-1',
+        name: 'John Smith',
+        phone: '+447700900123',
+        notes: null,
+        ordersCount: 3,
+        totalAmount: null,
+        lastOrderAt: '2026-08-28T10:00:00Z',
+      },
+    ],
+    page: 1,
+    pageSize: 20,
+    total: 21,
+    totalPages: 2,
+  })
+  render(
+    <LocaleProvider locale="en-GB" timeZone="Europe/London">
+      <ToastProvider>
+        <MemoryRouter initialEntries={['/app/garage/customers']}>
+          <CustomersScreen definition={definition} />
+        </MemoryRouter>
+      </ToastProvider>
+    </LocaleProvider>,
+  )
+
+  expect(await screen.findByText('John Smith')).toBeVisible()
+  expect(screen.getByRole('heading', { name: 'Customers' })).toBeVisible()
+  expect(screen.getByRole('link', { name: /New customer/ })).toBeVisible()
+  expect(screen.getByLabelText('Search customers')).toBeVisible()
+  expect(screen.getByRole('radio', { name: /Regular/ })).toBeVisible()
+  expect(screen.getByText(/21 customers found/)).toBeVisible()
+  expect(screen.getByText('regular')).toBeVisible()
+  expect(screen.getByText('+44 7700 900123')).toBeVisible()
+  expect(screen.getByText('28/08/2026')).toBeVisible()
+})
+
+it('renders the customer form in Polish', () => {
+  customerMocks.list.mockReturnValue(new Promise(() => undefined))
+  render(
+    <LocaleProvider locale="pl">
+      <ToastProvider>
+        <MemoryRouter initialEntries={['/app/garage/customers/new']}>
+          <CustomersScreen definition={definition} />
+        </MemoryRouter>
+      </ToastProvider>
+    </LocaleProvider>,
+  )
+
+  const drawer = screen.getByRole('dialog', { name: 'Nowy klient' })
+  expect(within(drawer).getByLabelText('Kod pocztowy')).toBeVisible()
+  expect(
+    within(drawer).getByRole('combobox', { name: 'Kraj' }),
+  ).toHaveDisplayValue('Ukraina')
+  expect(
+    within(drawer).getByRole('button', { name: 'Utwórz klienta' }),
+  ).toBeVisible()
 })

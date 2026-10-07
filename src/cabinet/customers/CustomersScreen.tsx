@@ -11,7 +11,7 @@ import {
   ShoppingCart,
   Trash2,
 } from 'lucide-react'
-import { cn, plural } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import {
   Amount,
   ActionMenu,
@@ -26,6 +26,7 @@ import {
   Pagination,
   SearchInput,
   SectionPanel,
+  SelectInput,
   Sheet,
   SkeletonRows,
   StatusPill,
@@ -34,13 +35,29 @@ import {
   useOperation,
 } from '@/components/app'
 import {
+  CUSTOMER_ADDRESS_MAX_LENGTH,
+  customerAddressChanges,
+  customerAddressForCreate,
   customersApi,
+  readCustomerAddress,
   readCustomerPhoneConflict,
+  type CustomerAddress,
+  type CustomerAddressField,
   type CustomerDetail,
   type CustomerListItem,
   type CustomerPhoneConflict,
 } from '@/api/customers'
 import { normalizeApiProblem } from '@/api/errors'
+import { useTenantSettings } from '@/auth/useTenantSettings'
+import {
+  commonMessages,
+  intlLocale,
+  useFormat,
+  useLocale,
+  useT,
+  type Translate,
+} from '@/i18n'
+import { phoneExample } from '@/lib/phone'
 import { orderStatusPresentation } from '../orders/order-labels'
 import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
@@ -54,33 +71,28 @@ import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { cabinetModules } from '../module-registry'
 import { OrderForm } from '../orders/OrdersScreen'
 import {
+  customerPhoneForSave,
+  displayCustomerPhone,
+  isCustomerPhoneAcceptable,
   newCustomerPhoneDraft,
   normalizeCustomerPhoneDraft,
 } from './customer-phone'
+import {
+  customerAddressDraft,
+  customerAddressLines,
+  customerCountryOptions,
+  type CustomerAddressDraft,
+} from './customer-address'
+import { customerFormMessages } from './customer-form-messages'
+import { customerMessages } from './messages'
 
-const loadError = 'Не вдалося завантажити дані. Спробуйте ще раз.'
-const nameExample = 'Наприклад: Ірина Коваль або СТО «Пітстоп»'
-const phoneExample = 'Наприклад: +380 50 111 22 33'
-const nameMissing = `Введіть ім’я клієнта — за ним ви знайдете його в списку й у замовленнях. ${nameExample}`
-/** Digits, spaces, brackets, dashes and a leading plus — nothing else. */
-const phoneShape = /^\+?[\d\s()-]+$/
-const phoneProblem = (value: string): string | null => {
-  if (value === '' || value === newCustomerPhoneDraft()) return null
-  if (!phoneShape.test(value))
-    return `Приберіть із номера зайві символи — залиште цифри, пробіли, дужки та «+». ${phoneExample}`
-  const digits = value.replace(/\D/g, '')
-  if (digits.length < 12)
-    return `У номері замало цифр. Український номер має містити 10 цифр разом із початковим нулем. ${phoneExample}`
-  if (digits.length > 12)
-    return `У номері забагато цифр. Український номер має містити 10 цифр разом із початковим нулем. ${phoneExample}`
-  return null
-}
+type FormText = Translate<(typeof customerFormMessages)['uk']>
+
 /** Turns a failed save into a reason the user can act on. */
-const saveProblem = (failure: unknown): string => {
+const saveProblem = (failure: unknown, t: FormText): string => {
   const conflict = readCustomerPhoneConflict(failure)
   if (conflict) return conflict.message
-  if (failure instanceof ModuleAccessDeniedError)
-    return 'Права на зміну клієнтів більше немає. Оновіть сторінку або попросіть власника кабінету відкрити доступ.'
+  if (failure instanceof ModuleAccessDeniedError) return t('accessLost')
   return normalizeApiProblem(failure).message
 }
 const idFromPath = (path: string) =>
@@ -134,12 +146,13 @@ export function CustomersScreen({ definition }: CabinetModuleScreenProps) {
   )
 }
 
-/** Dates arrive as ISO strings; anything unparsable is shown as it came. */
-const day = (value: string) => {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime())
-    ? value
-    : new Intl.DateTimeFormat('uk-UA', { dateStyle: 'short' }).format(parsed)
+/**
+ * Dates arrive as ISO strings and read as a day in the business time zone;
+ * anything unparsable is shown as it came.
+ */
+function useDay() {
+  const format = useFormat()
+  return (value: string) => format.date(value) ?? value
 }
 
 /**
@@ -173,10 +186,10 @@ const customerInitials = (name: string) =>
 
 /** How a customer is grouped by how often they buy. */
 const CUSTOMER_SEGMENTS = [
-  { value: 'all' as const, label: 'Усі' },
-  { value: 'regular' as const, label: 'Постійні' },
-  { value: 'once' as const, label: 'Разові' },
-  { value: 'none' as const, label: 'Без покупок' },
+  { value: 'all' as const, label: 'segmentAll' as const },
+  { value: 'regular' as const, label: 'segmentRegular' as const },
+  { value: 'once' as const, label: 'segmentOnce' as const },
+  { value: 'none' as const, label: 'segmentNone' as const },
 ]
 
 type CustomerSegment = (typeof CUSTOMER_SEGMENTS)[number]['value']
@@ -187,22 +200,26 @@ const REGULAR_FROM = 3
 const segmentOf = (ordersCount: number): CustomerSegment =>
   ordersCount >= REGULAR_FROM ? 'regular' : ordersCount > 0 ? 'once' : 'none'
 
-const segmentTag = (ordersCount: number) =>
-  ({
-    all: 'клієнт',
-    regular: 'постійний',
-    once: 'разовий',
-    none: 'без покупок',
-  })[segmentOf(ordersCount)]
+const SEGMENT_TAGS = {
+  all: 'tagAll',
+  regular: 'tagRegular',
+  once: 'tagOnce',
+  none: 'tagNone',
+} as const
+
+const segmentTag = (ordersCount: number) => SEGMENT_TAGS[segmentOf(ordersCount)]
 
 const CUSTOMER_SORTS = [
-  { value: 'sum' as const, label: 'Сумою' },
-  { value: 'name' as const, label: 'Іменем' },
+  { value: 'sum' as const, label: 'sortSum' as const },
+  { value: 'name' as const, label: 'sortName' as const },
 ]
 
 type CustomerSort = (typeof CUSTOMER_SORTS)[number]['value']
 
 function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
+  const t = useT(customerMessages)
+  const { locale } = useLocale()
+  const day = useDay()
   const cabinet = useCabinet()
   const mutationsAllowed = canAccess(definition, cabinet, 'mutation')
   const financeViewAllowed = canAccess(
@@ -217,7 +234,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
   const [customers, setCustomers] = useState<CustomerListItem[]>([])
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState(false)
   const [segment, setSegment] = useState<CustomerSegment>('all')
   const [sort, setSort] = useState<CustomerSort>('sum')
 
@@ -229,10 +246,10 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
         setCustomers(result.items)
         setTotal(result.total)
         setTotalPages(result.totalPages)
-        setError(null)
+        setError(false)
       })
       .catch(() => {
-        if (!controller.signal.aborted) setError(loadError)
+        if (!controller.signal.aborted) setError(true)
       })
     return () => controller.abort()
   }, [page, q])
@@ -251,7 +268,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
     )
     .sort((left, right) =>
       sort === 'name'
-        ? left.name.localeCompare(right.name, 'uk')
+        ? left.name.localeCompare(right.name, intlLocale(locale))
         : (right.totalAmount ?? 0) - (left.totalAmount ?? 0),
     )
   const filtered = q !== '' || segment !== 'all'
@@ -262,10 +279,10 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
           <div className="min-w-0">
             <p className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
-              Продажі
+              {t('section')}
             </p>
             <h1 className="mt-2.5 text-[38px] leading-none font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-              Клієнти
+              {t('title')}
             </h1>
           </div>
           {mutationsAllowed ? (
@@ -276,7 +293,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
             >
               <Link to="new">
                 <Plus aria-hidden />
-                Новий клієнт
+                {t('newCustomer')}
               </Link>
             </Button>
           ) : null}
@@ -284,21 +301,21 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
 
         <div className="mt-2.5">
           <SearchInput
-            aria-label="Пошук клієнта"
+            aria-label={t('searchLabel')}
             className="min-h-12.5 text-[15px]"
             onChange={(event) =>
               setParams(
                 event.target.value ? { q: event.target.value, page: '1' } : {},
               )
             }
-            placeholder="Імʼя або телефон"
+            placeholder={t('searchPlaceholder')}
             value={q}
           />
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
           <div
-            aria-label="Сегмент клієнтів"
+            aria-label={t('segmentsLabel')}
             className="border-app-line bg-app-raised flex flex-wrap gap-[3px] rounded-xl border p-[3px]"
             role="radiogroup"
           >
@@ -318,7 +335,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
                   role="radio"
                   type="button"
                 >
-                  {option.label}
+                  {t(option.label)}
                   <span className="text-app-muted font-mono text-[12px] font-medium">
                     {counts[option.value]}
                   </span>
@@ -331,7 +348,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
               className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase"
               id="customer-sort-label"
             >
-              Сортувати
+              {t('sortLabel')}
             </span>
             <div
               aria-labelledby="customer-sort-label"
@@ -354,7 +371,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
                     role="radio"
                     type="button"
                   >
-                    {option.label}
+                    {t(option.label)}
                   </button>
                 )
               })}
@@ -364,16 +381,14 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
 
         {totalPages > 1 ? (
           <p className="text-app-dim text-[13px]">
-            Сегмент і сортування застосовуються до завантаженої сторінки —
-            фільтр і сортування працюють по ній. Знайдено {total}{' '}
-            {plural(total, ['клієнта', 'клієнти', 'клієнтів'])}.
+            {t('pageScope', { count: total })}
           </p>
         ) : null}
 
-        {error === null ? null : <Notice tone="danger">{error}</Notice>}
+        {error ? <Notice tone="danger">{t('loadError')}</Notice> : null}
 
         <section
-          aria-label="Список клієнтів"
+          aria-label={t('listLabel')}
           className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
         >
           <div
@@ -385,24 +400,22 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
                 : 'md:grid-cols-[1.5fr_1fr_1fr_7rem]',
             )}
           >
-            <span>Клієнт</span>
-            <span>Телефон</span>
-            <span>Остання покупка</span>
-            <span className="text-right">Замовлень</span>
+            <span>{t('columnCustomer')}</span>
+            <span>{t('columnPhone')}</span>
+            <span>{t('columnLastPurchase')}</span>
+            <span className="text-right">{t('columnOrders')}</span>
             {financeViewAllowed ? (
-              <span className="text-right">Сума</span>
+              <span className="text-right">{t('columnAmount')}</span>
             ) : null}
           </div>
 
           {rows.length === 0 ? (
             <div className="flex flex-col items-center gap-3.5 px-6 py-14 text-center">
               <p className="text-[16px] font-bold text-white">
-                {filtered ? 'Нічого не знайдено' : 'Клієнтів поки немає'}
+                {filtered ? t('emptyFilteredTitle') : t('emptyTitle')}
               </p>
               <p className="text-app-muted text-[14px]">
-                {filtered
-                  ? 'Спробуйте змінити пошук або сегмент.'
-                  : 'Клієнти зʼявляються після першого замовлення або коли ви додасте їх самі.'}
+                {filtered ? t('emptyFilteredHint') : t('emptyHint')}
               </p>
               {filtered ? (
                 <Button
@@ -412,7 +425,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
                     setParams({})
                   }}
                 >
-                  Скинути фільтри
+                  {t('resetFilters')}
                 </Button>
               ) : null}
             </div>
@@ -447,7 +460,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
                           {customer.name}
                         </span>
                         <span className="text-app-muted mt-0.5 block text-[12px]">
-                          {segmentTag(customer.ordersCount)}
+                          {t(segmentTag(customer.ordersCount))}
                         </span>
                       </span>
                     </span>
@@ -459,7 +472,9 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
                           : 'text-app-ink',
                       )}
                     >
-                      {customer.phone ?? '—'}
+                      {customer.phone === null
+                        ? '—'
+                        : displayCustomerPhone(customer.phone)}
                     </span>
                     <span
                       className={cn(
@@ -470,7 +485,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
                       )}
                     >
                       <span className="text-app-dim mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
-                        Остання покупка
+                        {t('columnLastPurchase')}
                       </span>
                       {customer.lastOrderAt === null
                         ? '—'
@@ -485,7 +500,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
                       )}
                     >
                       <span className="text-app-dim mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
-                        Замовлень
+                        {t('columnOrders')}
                       </span>
                       {customer.ordersCount}
                     </span>
@@ -514,7 +529,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
 
           <div className="border-app-line border-t px-6 py-3.5">
             <Pagination
-              label="Сторінки клієнтів"
+              label={t('pagesLabel')}
               onPage={(nextPage) => {
                 const next = new URLSearchParams(params)
                 next.set('page', String(nextPage))
@@ -534,6 +549,10 @@ function CustomerDetailScreen({
   definition,
   customerId,
 }: CabinetModuleScreenProps & { customerId: string }) {
+  const t = useT(customerMessages)
+  const tc = useT(commonMessages)
+  const { locale } = useLocale()
+  const day = useDay()
   const cabinet = useCabinet()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const mutationsAllowed = canAccess(definition, cabinet, 'mutation')
@@ -553,7 +572,7 @@ function CustomerDetailScreen({
     canAccess(definition, cabinet, 'mutation', 'orders.manage') &&
     cabinet.snapshot?.permissions.has('parts.view') === true
   const [customer, setCustomer] = useState<CustomerDetail | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<'loadError' | 'copyFailed' | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [orderDrawerOpen, setOrderDrawerOpen] = useState(false)
@@ -578,7 +597,7 @@ function CustomerDetailScreen({
         }
       })
       .catch(() => {
-        if (!controller.signal.aborted) setError(loadError)
+        if (!controller.signal.aborted) setError('loadError')
       })
     return () => controller.abort()
   }, [customerId, ordersViewAllowed])
@@ -599,7 +618,7 @@ function CustomerDetailScreen({
       )
       setError(null)
     } catch {
-      setError(loadError)
+      setError('loadError')
     } finally {
       setBusy(false)
     }
@@ -609,7 +628,7 @@ function CustomerDetailScreen({
       await navigator.clipboard.writeText(phone)
       setCopied(true)
     } catch {
-      setError('Не вдалося скопіювати телефон.')
+      setError('copyFailed')
     }
   }
   const saveNotes = async () => {
@@ -627,7 +646,7 @@ function CustomerDetailScreen({
       setNotes(saved.customer.notes ?? '')
       setError(null)
     } catch {
-      setError(loadError)
+      setError('loadError')
     } finally {
       setBusy(false)
     }
@@ -642,7 +661,7 @@ function CustomerDetailScreen({
       await customersApi.remove(customer.id, { signal: scope.signal })
       await navigate(directoryPath, { replace: true })
     } catch {
-      setError(loadError)
+      setError('loadError')
       setBusy(false)
     }
   }
@@ -650,25 +669,22 @@ function CustomerDetailScreen({
     return (
       <PageBody width="narrow">
         <DeniedState
-          description="Картка клієнта показує його замовлення, тож потрібен доступ до розділу «Замовлення»."
+          description={t('deniedDescription')}
           role="alert"
-          title="Потрібен доступ до замовлень."
+          title={t('deniedTitle')}
         />
       </PageBody>
     )
   if (error)
     return (
       <PageBody width="narrow">
-        <ErrorState
-          description={error}
-          title="Не вдалося завантажити клієнта"
-        />
+        <ErrorState description={t(error)} title={t('loadFailedTitle')} />
       </PageBody>
     )
   if (!customer)
     return (
       <PageBody width="narrow">
-        <SkeletonRows label="Завантажуємо клієнта…" rows={3} />
+        <SkeletonRows label={t('loading')} rows={3} />
       </PageBody>
     )
   const ordersPath = `/app/${cabinet.targetTenant?.slug ?? ''}/orders`
@@ -684,6 +700,7 @@ function CustomerDetailScreen({
     (currentOrdersPage - 1) * ordersPageSize,
     currentOrdersPage * ordersPageSize,
   )
+  const addressLines = customerAddressLines(customer, locale)
   const money = (value: number | null | undefined) =>
     typeof value === 'number' && Number.isFinite(value) ? (
       <Amount currency="USD" value={value} />
@@ -700,20 +717,20 @@ function CustomerDetailScreen({
             to={directoryPath}
           >
             <ChevronLeft aria-hidden className="size-3.5" />
-            До клієнтів
+            {t('backToCustomers')}
           </Link>
           <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>Продажі</span>
+            <span>{t('section')}</span>
             <span aria-hidden className="text-white/20">
               /
             </span>
-            <span className="text-app-muted">Клієнти</span>
+            <span className="text-app-muted">{t('title')}</span>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           {mutationsAllowed ? (
             <Button asChild className="px-[18px] text-sm font-semibold">
-              <Link to="edit">Редагувати</Link>
+              <Link to="edit">{tc('edit')}</Link>
             </Button>
           ) : null}
           {orderCreateAllowed && customer.isActive ? (
@@ -722,7 +739,7 @@ function CustomerDetailScreen({
               onClick={() => setOrderDrawerOpen(true)}
               variant="primary"
             >
-              Створити замовлення
+              {t('createOrder')}
             </Button>
           ) : null}
           {mutationsAllowed ? (
@@ -730,7 +747,7 @@ function CustomerDetailScreen({
               actions={[
                 {
                   key: 'lifecycle',
-                  label: customer.isActive ? 'Деактивувати' : 'Активувати',
+                  label: customer.isActive ? t('deactivate') : t('activate'),
                   icon: customer.isActive ? (
                     <PowerOff aria-hidden />
                   ) : (
@@ -741,19 +758,19 @@ function CustomerDetailScreen({
                 },
                 {
                   key: 'delete',
-                  label: 'Видалити клієнта',
+                  label: t('deleteCustomer'),
                   icon: <Trash2 aria-hidden />,
                   destructive: true,
                   disabled: busy || customer.ordersCount !== 0,
                   ...(customer.ordersCount === 0
                     ? {}
                     : {
-                        title: 'Клієнта із замовленнями видалити не можна',
+                        title: t('deleteBlocked'),
                       }),
                   onSelect: () => setConfirmDelete(true),
                 },
               ]}
-              label="Інші дії з клієнтом"
+              label={t('moreActions')}
               triggerRef={deleteTriggerRef}
             />
           ) : null}
@@ -761,8 +778,8 @@ function CustomerDetailScreen({
       </div>
 
       <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-        {error ? <Notice tone="danger">{error}</Notice> : null}
-        {copied ? <Notice tone="ok">Телефон скопійовано.</Notice> : null}
+        {error ? <Notice tone="danger">{t(error)}</Notice> : null}
+        {copied ? <Notice tone="ok">{t('phoneCopied')}</Notice> : null}
 
         <div className="flex flex-wrap items-start gap-x-6 gap-y-5">
           <span
@@ -780,35 +797,35 @@ function CustomerDetailScreen({
                 {customer.name}
               </h1>
               <StatusPill tone={customer.isActive ? 'ok' : 'neutral'}>
-                {customer.isActive ? 'Активний' : 'Неактивний'}
+                {customer.isActive ? t('active') : t('inactive')}
               </StatusPill>
             </div>
             {customer.phone === null ? (
               <p className="text-app-muted mt-3 text-[15px]">
-                Телефон не записаний.
+                {t('phoneMissing')}
               </p>
             ) : (
               <div className="mt-3 flex flex-wrap items-center gap-2.5">
                 <span className="text-app-ink font-mono text-[15px]">
-                  {customer.phone}
+                  {displayCustomerPhone(customer.phone)}
                 </span>
                 <Button
                   className="min-h-9 px-3 text-[12px] font-bold"
                   onClick={() => void copyPhone(customer.phone ?? '')}
                 >
                   <Copy aria-hidden />
-                  Копіювати телефон
+                  {t('copyPhone')}
                 </Button>
                 <Button asChild className="min-h-9 px-3 text-[12px] font-bold">
                   <a href={`tel:${customer.phone}`}>
                     <Phone aria-hidden />
-                    Зателефонувати
+                    {t('call')}
                   </a>
                 </Button>
                 <Button asChild className="min-h-9 px-3 text-[12px] font-bold">
                   <a href={`sms:${customer.phone}`}>
                     <MessageSquare aria-hidden />
-                    SMS
+                    {t('sms')}
                   </a>
                 </Button>
               </div>
@@ -817,7 +834,7 @@ function CustomerDetailScreen({
           <dl className="border-app-line bg-app-raised ml-auto grid grid-cols-2 gap-x-7 gap-y-4 rounded-[16px] border px-6 py-4.5 sm:grid-cols-3">
             <div>
               <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                Замовлень
+                {t('statOrders')}
               </dt>
               <dd
                 className={cn(
@@ -836,7 +853,7 @@ function CustomerDetailScreen({
               <>
                 <div>
                   <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                    Витрачено
+                    {t('statSpent')}
                   </dt>
                   <dd
                     className={cn(
@@ -851,7 +868,7 @@ function CustomerDetailScreen({
                 </div>
                 <div>
                   <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                    Середній чек
+                    {t('statAverage')}
                   </dt>
                   <dd
                     className={cn(
@@ -877,17 +894,12 @@ function CustomerDetailScreen({
           <Card
             aside={
               <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
-                {customer.orders.length}{' '}
-                {plural(customer.orders.length, [
-                  'замовлення',
-                  'замовлення',
-                  'замовлень',
-                ])}
+                {t('ordersCount', { count: customer.orders.length })}
               </span>
             }
             bodyClassName="p-0"
             className="min-w-0 flex-[2_1_34rem]"
-            title="Історія замовлень"
+            title={t('orderHistory')}
           >
             {customer.orders.length === 0 ? (
               <div className="border-app-line flex flex-col items-center gap-3 border-t px-6 pt-14 pb-15 text-center">
@@ -898,10 +910,10 @@ function CustomerDetailScreen({
                   <ShoppingCart className="size-6" />
                 </span>
                 <p className="text-[17px] font-bold text-white">
-                  Замовлень ще не було
+                  {t('noOrdersTitle')}
                 </p>
                 <p className="text-app-muted max-w-[21rem] text-[14px] leading-[1.5] text-pretty">
-                  Щойно клієнт зробить перше замовлення, воно зʼявиться тут.
+                  {t('noOrdersHint')}
                 </p>
                 {orderCreateAllowed && customer.isActive ? (
                   <Button
@@ -909,7 +921,7 @@ function CustomerDetailScreen({
                     onClick={() => setOrderDrawerOpen(true)}
                     variant="primary"
                   >
-                    Створити замовлення
+                    {t('createOrder')}
                   </Button>
                 ) : null}
               </div>
@@ -932,7 +944,8 @@ function CustomerDetailScreen({
                           <span className="text-app-muted mt-0.5 block truncate text-[13px]">
                             {[
                               day(order.createdAt),
-                              orderStatusPresentation(order.status).label,
+                              orderStatusPresentation(order.status, locale)
+                                .label,
                               order.partNames.join(', ') || null,
                             ]
                               .filter(Boolean)
@@ -954,7 +967,7 @@ function CustomerDetailScreen({
                 {ordersTotalPages > 1 ? (
                   <div className="border-app-line border-t px-6 py-3.5">
                     <Pagination
-                      label="Сторінки замовлень клієнта"
+                      label={t('ordersPagesLabel')}
                       onPage={setOrdersPage}
                       page={currentOrdersPage}
                       totalPages={ordersTotalPages}
@@ -966,10 +979,10 @@ function CustomerDetailScreen({
           </Card>
 
           <div className="flex min-w-0 flex-[1_1_18rem] flex-col gap-5">
-            <Card title="Деталі">
+            <Card title={t('details')}>
               <dl className="grid grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-3.5">
                 <dt className="text-app-muted text-[14px] font-semibold">
-                  Телефон
+                  {t('phone')}
                 </dt>
                 <dd
                   className={cn(
@@ -977,23 +990,42 @@ function CustomerDetailScreen({
                     customer.phone === null ? 'text-app-dim' : 'text-app-ink',
                   )}
                 >
-                  {customer.phone ?? '—'}
+                  {customer.phone === null
+                    ? '—'
+                    : displayCustomerPhone(customer.phone)}
+                </dd>
+                <dt className="text-app-muted text-[14px] font-semibold">
+                  {t('address')}
+                </dt>
+                <dd
+                  className={cn(
+                    'text-right text-[14px] font-semibold',
+                    addressLines.length === 0 ? 'text-app-dim' : 'text-app-ink',
+                  )}
+                >
+                  {addressLines.length === 0
+                    ? tc('notSet')
+                    : addressLines.map((line) => (
+                        <span className="block" key={line}>
+                          {line}
+                        </span>
+                      ))}
                 </dd>
                 <dt
                   className="text-app-muted text-[14px] font-semibold"
-                  title="Звідки прийшов клієнт, кабінет не зберігає"
+                  title={t('channelHint')}
                 >
-                  Канал
+                  {t('channel')}
                 </dt>
                 <dd className="text-app-dim text-[14px] font-semibold">—</dd>
                 <dt className="text-app-muted text-[14px] font-semibold">
-                  Клієнт з
+                  {t('customerSince')}
                 </dt>
                 <dd className="text-app-ink text-[14px] font-semibold">
                   {day(customer.createdAt)}
                 </dd>
                 <dt className="text-app-muted text-[14px] font-semibold">
-                  Перша покупка
+                  {t('firstPurchase')}
                 </dt>
                 <dd
                   className={cn(
@@ -1008,7 +1040,7 @@ function CustomerDetailScreen({
                     : day(customer.firstOrderAt)}
                 </dd>
                 <dt className="text-app-muted text-[14px] font-semibold">
-                  Остання покупка
+                  {t('lastPurchase')}
                 </dt>
                 <dd
                   className={cn(
@@ -1025,14 +1057,14 @@ function CustomerDetailScreen({
               </dl>
             </Card>
 
-            <Card title="Нотатки">
+            <Card title={t('notes')}>
               {mutationsAllowed ? (
                 <>
-                  <Field label="Нотатки про клієнта" srLabel={customer.name}>
+                  <Field label={t('notesLabel')} srLabel={customer.name}>
                     <TextArea
                       disabled={busy}
                       onChange={(event) => setNotes(event.target.value)}
-                      placeholder="Домовленості, побажання, що шукає клієнт"
+                      placeholder={t('notesPlaceholder')}
                       rows={4}
                       value={notes}
                     />
@@ -1043,7 +1075,7 @@ function CustomerDetailScreen({
                         disabled={busy}
                         onClick={() => setNotes(customer.notes ?? '')}
                       >
-                        Скасувати
+                        {tc('cancel')}
                       </Button>
                       <Button
                         aria-busy={busy}
@@ -1051,7 +1083,7 @@ function CustomerDetailScreen({
                         onClick={() => void saveNotes()}
                         variant="primary"
                       >
-                        Зберегти нотатки
+                        {t('saveNotes')}
                       </Button>
                     </div>
                   )}
@@ -1063,7 +1095,7 @@ function CustomerDetailScreen({
                     customer.notes === null ? 'text-app-dim' : 'text-app-muted',
                   )}
                 >
-                  {customer.notes ?? 'Нотаток ще немає.'}
+                  {customer.notes ?? t('noNotes')}
                 </p>
               )}
             </Card>
@@ -1072,8 +1104,8 @@ function CustomerDetailScreen({
       </div>
 
       <ConfirmDialog
-        confirmLabel="Підтвердити"
-        consequence="Картка клієнта та його контакти зникнуть назавжди. Замовлень у нього немає, тож історія продажів не постраждає."
+        confirmLabel={t('confirm')}
+        consequence={t('deleteConsequence')}
         destructive
         onCloseAutoFocus={(event) => {
           // The overflow row may have re-rendered; put focus back by hand.
@@ -1084,7 +1116,7 @@ function CustomerDetailScreen({
         onOpenChange={setConfirmDelete}
         open={confirmDelete}
         pending={busy}
-        title="Підтвердити видалення"
+        title={t('deleteTitle')}
       />
       {orderDrawerOpen ? (
         <OrderForm
@@ -1104,6 +1136,10 @@ function CustomerForm({
   definition,
   customerId,
 }: CabinetModuleScreenProps & { customerId: string | null }) {
+  const t = useT(customerFormMessages)
+  const tc = useT(commonMessages)
+  const { locale } = useLocale()
+  const country = useTenantSettings().countryCode ?? 'UA'
   const cabinet = useCabinet()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const mutationsAllowed = canAccess(definition, cabinet, 'mutation')
@@ -1115,12 +1151,20 @@ function CustomerForm({
   const editing = customerId !== null
   const backPath = editing ? `${directoryPath}/${customerId}` : directoryPath
   const [name, setName] = useState('')
-  const [phone, setPhone] = useState(newCustomerPhoneDraft)
+  const [phone, setPhone] = useState(() => newCustomerPhoneDraft(country))
   const [notes, setNotes] = useState('')
+  /** A new customer starts in the business country; it can be changed. */
+  const [address, setAddress] = useState<CustomerAddressDraft>(() =>
+    customerAddressDraft({ countryCode: editing ? null : country }),
+  )
+  /** What the server holds, so an edit sends only the changed fields. */
+  const [loadedAddress, setLoadedAddress] = useState<CustomerAddress>(() =>
+    readCustomerAddress({}),
+  )
   const [touched, setTouched] = useState({ name: false, phone: false })
   const [duplicate, setDuplicate] = useState<CustomerPhoneConflict | null>(null)
   const [retryable, setRetryable] = useState(true)
-  const [loadProblem, setLoadProblem] = useState<string | null>(null)
+  const [loadProblem, setLoadProblem] = useState(false)
   const [reloadToken, setReloadToken] = useState(0)
   const [loading, setLoading] = useState(editing && ordersViewAllowed)
   const nameRef = useRef<HTMLInputElement>(null)
@@ -1133,23 +1177,30 @@ function CustomerForm({
         .then((customer) => {
           if (!controller.signal.aborted) {
             setName(customer.name)
-            setPhone(customer.phone ?? newCustomerPhoneDraft())
+            setPhone(customer.phone ?? newCustomerPhoneDraft(country))
             setNotes(customer.notes ?? '')
-            setLoadProblem(null)
+            const stored = readCustomerAddress(customer)
+            setLoadedAddress(stored)
+            setAddress(customerAddressDraft(stored))
+            setLoadProblem(false)
             setLoading(false)
           }
         })
         .catch(() => {
           if (!controller.signal.aborted) {
-            setLoadProblem(loadError)
+            setLoadProblem(true)
             setLoading(false)
           }
         })
       return () => controller.abort()
     }
-  }, [customerId, ordersViewAllowed, reloadToken])
-  const nameIssue = name.trim() === '' ? nameMissing : null
-  const phoneIssue = phoneProblem(phone.trim())
+  }, [country, customerId, ordersViewAllowed, reloadToken])
+  const nameIssue = name.trim() === '' ? t('nameMissing') : null
+  const phoneIssue = isCustomerPhoneAcceptable(phone, country)
+    ? null
+    : t('phoneInvalid', { example: phoneExample(country) })
+  const setAddressField = (field: CustomerAddressField, value: string) =>
+    setAddress((current) => ({ ...current, [field]: value }))
   const save = useOperation(
     async () => {
       const scope = requireLatestMutation({ quota: false })
@@ -1157,21 +1208,23 @@ function CustomerForm({
         requireLatestMutation({ permission: 'orders.view', quota: false })
       const input = {
         name: name.trim(),
-        phone:
-          phone.trim() === newCustomerPhoneDraft()
-            ? null
-            : phone.trim() || null,
+        phone: customerPhoneForSave(phone, country),
         notes: notes.trim() || null,
       }
       return customerId
-        ? await customersApi.update(customerId, input, {
-            signal: scope.signal,
-          })
-        : await customersApi.create(input, { signal: scope.signal })
+        ? await customersApi.update(
+            customerId,
+            { ...input, ...customerAddressChanges(loadedAddress, address) },
+            { signal: scope.signal },
+          )
+        : await customersApi.create(
+            { ...input, ...customerAddressForCreate(address) },
+            { signal: scope.signal },
+          )
     },
     {
-      successMessage: editing ? 'Зміни збережено' : 'Клієнта створено',
-      errorMessage: saveProblem,
+      successMessage: editing ? t('saved') : t('created'),
+      errorMessage: (failure) => saveProblem(failure, t),
       onError: (failure) => {
         setDuplicate(readCustomerPhoneConflict(failure))
         setRetryable(!(failure instanceof ModuleAccessDeniedError))
@@ -1195,8 +1248,8 @@ function CustomerForm({
       return duplicate.customerId
     },
     {
-      successMessage: 'Клієнта активовано',
-      errorMessage: saveProblem,
+      successMessage: t('activated'),
+      errorMessage: (failure) => saveProblem(failure, t),
       onSuccess: (activatedId) => {
         if (activatedId !== null)
           void navigate(`${directoryPath}/${activatedId}`, { replace: true })
@@ -1223,33 +1276,49 @@ function CustomerForm({
     event.preventDefault()
     attemptSave()
   }
+  /** Leaving the field shows a usable number in E.164; a bad one stays as typed. */
+  const finishPhone = () => {
+    setTouched((current) => ({ ...current, phone: true }))
+    const e164 = customerPhoneForSave(phone, country)
+    if (e164 !== null && isCustomerPhoneAcceptable(e164, country))
+      setPhone(e164)
+  }
   const busy = save.pending || reactivateDuplicate.pending
+  const addressText = (
+    field: Exclude<CustomerAddressField, 'countryCode'>,
+    autoComplete: string,
+  ) => (
+    <Field label={t(field)}>
+      <TextInput
+        autoComplete={autoComplete}
+        disabled={!mutationsAllowed}
+        maxLength={CUSTOMER_ADDRESS_MAX_LENGTH[field]}
+        onChange={(event) => setAddressField(field, event.target.value)}
+        value={address[field]}
+      />
+    </Field>
+  )
   const body = !ordersViewAllowed ? (
     <DeniedState
-      description="Картку клієнта не відкрити без його замовлень, тож потрібен доступ до розділу «Замовлення». Попросіть власника кабінету відкрити його."
+      description={t('deniedDescription')}
       role="alert"
-      title="Потрібен доступ до замовлень."
+      title={t('deniedTitle')}
     />
-  ) : loadProblem !== null ? (
+  ) : loadProblem ? (
     <ErrorState
-      description={loadProblem}
+      description={t('loadError')}
       onRetry={() => {
-        setLoadProblem(null)
+        setLoadProblem(false)
         setLoading(true)
         setReloadToken((token) => token + 1)
       }}
-      title="Не вдалося завантажити клієнта"
+      title={t('loadFailedTitle')}
     />
   ) : loading ? (
-    <SkeletonRows columns={2} label="Завантажуємо клієнта…" rows={3} />
+    <SkeletonRows columns={2} label={t('loading')} rows={3} />
   ) : (
     <>
-      {mutationsAllowed ? null : (
-        <Notice tone="warn">
-          Дані можна переглянути, але не змінити. Щоб редагувати клієнтів,
-          попросіть власника кабінету відкрити доступ.
-        </Notice>
-      )}
+      {mutationsAllowed ? null : <Notice tone="warn">{t('readOnly')}</Notice>}
       <form
         aria-busy={save.pending}
         className="grid gap-4"
@@ -1259,14 +1328,14 @@ function CustomerForm({
       >
         <SectionPanel
           variant="plain"
-          description="Ім’я показуємо в списку клієнтів і в замовленнях, телефон — для дзвінка та пошуку."
-          title="Контакт"
+          description={t('contactDescription')}
+          title={t('contactTitle')}
         >
           <div className="grid gap-3 sm:grid-cols-2">
             <Field
               error={touched.name ? nameIssue : null}
-              hint={nameExample}
-              label="Ім’я"
+              hint={t('nameExample')}
+              label={t('name')}
               required
             >
               <TextInput
@@ -1283,16 +1352,14 @@ function CustomerForm({
             </Field>
             <Field
               error={touched.phone ? phoneIssue : null}
-              hint={`Один номер для дзвінка та SMS. ${phoneExample}`}
-              label="Телефон"
+              hint={t('phoneHint', { example: phoneExample(country) })}
+              label={t('phone')}
             >
               <TextInput
                 autoComplete="tel"
                 disabled={!mutationsAllowed}
                 inputMode="tel"
-                onBlur={() =>
-                  setTouched((current) => ({ ...current, phone: true }))
-                }
+                onBlur={finishPhone}
                 onChange={(event) =>
                   setPhone(normalizeCustomerPhoneDraft(event.target.value))
                 }
@@ -1305,10 +1372,42 @@ function CustomerForm({
         </SectionPanel>
         <SectionPanel
           variant="plain"
-          description="Домовленості, зручний час для дзвінка, побажання щодо доставки."
-          title="Нотатки"
+          description={t('addressDescription')}
+          title={t('addressTitle')}
         >
-          <Field hint="Видно лише вашій команді" label="Нотатки">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t('country')}>
+              <SelectInput
+                autoComplete="country"
+                disabled={!mutationsAllowed}
+                onChange={(event) =>
+                  setAddressField('countryCode', event.target.value)
+                }
+                value={address.countryCode}
+              >
+                <option value="">{t('countryNotSet')}</option>
+                {customerCountryOptions(
+                  locale,
+                  address.countryCode || null,
+                ).map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.name}
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+            {addressText('city', 'address-level2')}
+            {addressText('street', 'address-line1')}
+            {addressText('building', 'address-line2')}
+            {addressText('postcode', 'postal-code')}
+          </div>
+        </SectionPanel>
+        <SectionPanel
+          variant="plain"
+          description={t('notesDescription')}
+          title={t('notesTitle')}
+        >
+          <Field hint={t('notesHint')} label={t('notes')}>
             <TextArea
               disabled={!mutationsAllowed}
               onChange={(event) => setNotes(event.target.value)}
@@ -1320,13 +1419,12 @@ function CustomerForm({
         {duplicate === null ? null : (
           <Notice block role="alert" tone="warn">
             <p>
-              {duplicate.message} Відкрийте наявну картку, щоб не заводити
-              другу.
+              {duplicate.message} {t('duplicateHint')}
             </p>
             <div className="mt-2.5 flex flex-wrap gap-2">
               <Button asChild>
                 <Link to={`${directoryPath}/${duplicate.customerId}`}>
-                  Використати клієнта {duplicate.customerName}
+                  {t('useExisting', { name: duplicate.customerName })}
                 </Link>
               </Button>
               {!duplicate.isActive && mutationsAllowed && (
@@ -1336,7 +1434,7 @@ function CustomerForm({
                     reactivateDuplicate.run()
                   }}
                 >
-                  Активувати {duplicate.customerName}
+                  {t('activateNamed', { name: duplicate.customerName })}
                 </Button>
               )}
             </div>
@@ -1349,7 +1447,7 @@ function CustomerForm({
           <Notice
             action={
               retryable ? (
-                <Button onClick={attemptSave}>Спробувати ще раз</Button>
+                <Button onClick={attemptSave}>{tc('retry')}</Button>
               ) : undefined
             }
             tone="danger"
@@ -1360,19 +1458,15 @@ function CustomerForm({
       </form>
     </>
   )
-  const formReady = ordersViewAllowed && loadProblem === null && !loading
+  const formReady = ordersViewAllowed && !loadProblem && !loading
   return (
     <Sheet
-      description={
-        editing
-          ? 'Зміни побачить уся команда в картці клієнта та замовленнях.'
-          : 'Додайте контактні дані та нотатки клієнта.'
-      }
-      eyebrow="Продажі · Клієнти"
+      description={editing ? t('descriptionEdit') : t('descriptionNew')}
+      eyebrow={t('eyebrow')}
       footer={
         <div className="flex w-full flex-wrap items-center gap-2.5">
           <p className="text-app-muted min-w-0 text-[12px] text-pretty">
-            Зірочкою позначено обов’язкове поле
+            {t('requiredNote')}
           </p>
           <div className="ml-auto flex items-center gap-2.5">
             <Button
@@ -1380,7 +1474,7 @@ function CustomerForm({
               onClick={() => void navigate(backPath)}
               type="button"
             >
-              Скасувати
+              {tc('cancel')}
             </Button>
             {formReady ? (
               <Button
@@ -1391,10 +1485,10 @@ function CustomerForm({
                 variant="primary"
               >
                 {save.pending
-                  ? 'Зберігаємо…'
+                  ? tc('saving')
                   : editing
-                    ? 'Зберегти зміни'
-                    : 'Створити клієнта'}
+                    ? t('saveChanges')
+                    : t('createCustomer')}
               </Button>
             ) : null}
           </div>
@@ -1404,7 +1498,7 @@ function CustomerForm({
         if (!next && !busy) void navigate(backPath)
       }}
       open
-      title={editing ? 'Редагувати клієнта' : 'Новий клієнт'}
+      title={editing ? t('titleEdit') : t('titleNew')}
     >
       {body}
     </Sheet>
