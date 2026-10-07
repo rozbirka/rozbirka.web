@@ -1,6 +1,8 @@
 import { act, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
+import { apiClient } from '@/api/client'
+import { ordersApi } from '@/api/orders'
 import { OrderCustomerCard } from './OrderDetailCards'
 
 const customerMocks = vi.hoisted(() => ({ getById: vi.fn() }))
@@ -122,4 +124,28 @@ it('ignores a previous customer response that arrives after reassignment', async
   })
   expect(await screen.findByText('+380502222222')).toBeVisible()
   expect(screen.getByText('Актуальний клієнт')).toBeVisible()
+})
+
+it('renders an order whose API response omits the unassigned customer', async () => {
+  const get = vi.spyOn(apiClient, 'get').mockResolvedValue({
+    data: { id: 'order-without-customer', number: 286, status: 'new' },
+  })
+  try {
+    const order = await ordersApi.getById('order-without-customer')
+    render(
+      <MemoryRouter>
+        <OrderCustomerCard
+          customerId={order.customerId}
+          customerName={order.customerName}
+          initials=""
+          to={`/customers/${order.customerId}`}
+        />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('Клієнта не вказано')).toBeVisible()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    expect(customerMocks.getById).not.toHaveBeenCalled()
+  } finally {
+    get.mockRestore()
+  }
 })

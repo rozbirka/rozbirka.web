@@ -2313,8 +2313,7 @@ test('reuses the browser payment key after a network failure and reports one err
         id: 'order-1',
         number: 1,
         status: 'pending',
-        customerId: null,
-        customerName: null,
+        // Core omits these fields for an order without a customer.
         notes: null,
         items: [],
         payments: [],
@@ -2355,6 +2354,7 @@ test('reuses the browser payment key after a network failure and reports one err
   })
   await loginFrom(page)
   await page.goto('/app/koval/orders/order-1')
+  await expect(page.getByText('Клієнта не вказано')).toBeVisible()
   const pay = page.getByRole('button', { name: 'Внести оплату' }).first()
   await pay.click()
   const drawer = page.getByRole('dialog', { name: 'Внести оплату' })
