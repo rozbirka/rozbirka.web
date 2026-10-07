@@ -1668,7 +1668,8 @@ it('shows authoritative detail and lets orders.manage edit pending fields and ca
   const audit = screen.getByRole('list', { name: 'Історія замовлення' })
   expect(within(audit).getByText('Замовлення створено')).toBeVisible()
   expect(within(audit).getByText(/Олена/)).toBeVisible()
-  const timestamp = within(audit).getByText('2026-08-28 00:00')
+  // Shown in the business time zone (Kyiv); the machine value stays UTC.
+  const timestamp = within(audit).getByText('28.08.2026, 03:00')
   expect(timestamp.tagName).toBe('TIME')
   expect(timestamp).toHaveAttribute('datetime', '2026-08-28T00:00:00Z')
   expect(screen.getByRole('link', { name: 'Додати позицію' })).toHaveAttribute(
@@ -2101,7 +2102,7 @@ it('renders audit timestamps without exposing technical event data', async () =>
         ['Нотатки', 'Платежі', 'Позиції'].includes(title ?? ''),
       ),
   ).toEqual(['Позиції', 'Платежі', 'Нотатки'])
-  const stamps = screen.getAllByText(/2026.*10:15/)
+  const stamps = screen.getAllByText(/28\.08\.2026, 13:15/)
   expect(stamps).toHaveLength(2)
   for (const stamp of stamps) {
     expect(stamp.tagName).toBe('TIME')

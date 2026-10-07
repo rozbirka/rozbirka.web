@@ -10,8 +10,8 @@ import {
 } from '@/components/app'
 import { cn } from '@/lib/utils'
 import { shippingApi, type Shipment } from '@/api/shipping'
-import { normalizeApiProblem } from '@/api/errors'
 import type { DeliveryOrder } from '@/api/delivery'
+import { commonMessages, useFormat, useLocale, useT } from '@/i18n'
 import { uah } from './delivery-money'
 import {
   readiness,
@@ -19,14 +19,14 @@ import {
   readinessNextStep,
   type ReadinessCheck,
 } from './delivery-view'
+import { deliveryDrawerMessages } from './drawer-messages'
+import { deliveryProblemMessage } from './nova-poshta-availability'
 
-const eyebrow = (orderNumber: number, part: string) =>
-  `Замовлення #${String(orderNumber)} · ${part}`
-
-const when = (value: string | null) => {
-  if (value === null) return '—'
-  const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})/.exec(value)
-  return parts ? `${parts[3]}.${parts[2]}.${parts[1]}, ${parts[4]}` : value
+/** `Замовлення #12 · накладна`, in the drawer's own words. */
+function useEyebrow() {
+  const t = useT(deliveryDrawerMessages)
+  return (orderNumber: number, part: string) =>
+    t('eyebrowOrder', { number: String(orderNumber), part })
 }
 
 /** One line of a checklist: what was checked, what was found, and whether it passed. */
@@ -96,16 +96,20 @@ export function WaybillReadinessDrawer({
   orderNumber: number
   shipment: Shipment | null
 }) {
-  const checks = readiness(delivery, shipment, dispatchPointActive)
+  const { locale } = useLocale()
+  const t = useT(deliveryDrawerMessages)
+  const tc = useT(commonMessages)
+  const eyebrow = useEyebrow()
+  const checks = readiness(delivery, shipment, dispatchPointActive, locale)
   // The quote and the deposit are done on the next screen, so they cannot be
   // what keeps the order off it.
   const blocking = readinessBlocks(checks)
   const passed = blocking.length === 0
-  const next = readinessNextStep(checks)
+  const next = readinessNextStep(checks, locale)
 
   return (
     <Sheet
-      eyebrow={eyebrow(orderNumber, 'перевірка перед ТТН')}
+      eyebrow={eyebrow(orderNumber, t('partCheck'))}
       footer={
         <>
           <p
@@ -115,23 +119,19 @@ export function WaybillReadinessDrawer({
             )}
           >
             {passed
-              ? 'Далі — отримувач, посилка й розрахунок'
-              : `Перешкод: ${String(blocking.length)}`}
+              ? t('readinessContinue')
+              : t('readinessBlocked', { count: blocking.length })}
           </p>
           <Button disabled={busy} onClick={onClose}>
-            Скасувати
+            {tc('cancel')}
           </Button>
           <Button
             disabled={busy || !passed}
             onClick={onContinue}
-            title={
-              passed
-                ? undefined
-                : 'Це не виправляється на наступному кроці — відкрийте налаштування інтеграції.'
-            }
+            title={passed ? undefined : t('readinessFixElsewhere')}
             variant="primary"
           >
-            Продовжити оформлення
+            {t('continueBooking')}
           </Button>
         </>
       }
@@ -139,7 +139,7 @@ export function WaybillReadinessDrawer({
         if (!open && !busy) onClose()
       }}
       open
-      title="Перевірка перед створенням ТТН"
+      title={t('readinessTitle')}
     >
       <Notice tone={passed ? 'ok' : 'warn'}>
         <p className="font-semibold">{next.title}</p>
@@ -148,7 +148,7 @@ export function WaybillReadinessDrawer({
 
       <section className="grid gap-2">
         <h3 className="text-app-ink text-[13px] font-bold">
-          Що сервіс перевіряє сам
+          {t('readinessChecks')}
         </h3>
         <ul className="border-app-line bg-app-input grid gap-px overflow-hidden rounded-[14px] border">
           {checks.map((check) => (
@@ -156,9 +156,7 @@ export function WaybillReadinessDrawer({
           ))}
         </ul>
         <p className="text-app-muted text-[12px] leading-5 text-pretty">
-          Останній рядок — не перевірка: маршрут і габарити Нова пошта оцінює
-          сама під час створення, тож відмова можлива навіть після зеленого
-          списку.
+          {t('readinessLastRow')}
         </p>
       </section>
     </Sheet>
@@ -177,73 +175,73 @@ export function WaybillDataDrawer({
   orderNumber: number
   shipment: Shipment
 }) {
+  const t = useT(deliveryDrawerMessages)
+  const tc = useT(commonMessages)
+  const format = useFormat()
+  const eyebrow = useEyebrow()
+  const when = (value: string | null) =>
+    value === null ? '—' : (format.dateTime(value) ?? value)
   const codMatches =
     shipment.codUah != null && shipment.codUah === delivery.outstandingUah
   const parcels = shipment.draft.parcels
   const weight = parcels.reduce((sum, parcel) => sum + parcel.weightKg, 0)
 
   const rows: { label: string; value: string; tone?: 'ok' | 'danger' }[] = [
-    { label: 'Номер', value: shipment.number ?? '—' },
+    { label: t('rowNumber'), value: shipment.number ?? '—' },
     {
-      label: 'Створена',
+      label: t('rowCreated'),
       value: when(
         shipment.events.find((event) => event.code === 'Created')?.recordedAt ??
           null,
       ),
     },
     {
-      label: 'Відділення відправника',
+      label: t('rowSenderBranch'),
       value: shipment.sender.warehouseName ?? '—',
     },
     {
-      label: 'Отримувач',
-      value: `${shipment.draft.recipient.name} · ${shipment.draft.recipient.warehouseName ?? 'відділення обрано'}`,
+      label: t('rowRecipient'),
+      value: `${shipment.draft.recipient.name} · ${shipment.draft.recipient.warehouseName ?? t('rowBranchChosen')}`,
     },
     {
-      label: 'Післяплата в накладній',
+      label: t('rowCod'),
       value: shipment.codUah == null ? '—' : uah(shipment.codUah),
       ...(codMatches ? { tone: 'ok' as const } : { tone: 'danger' as const }),
     },
     {
-      label: 'Залишок за замовленням',
+      label: t('rowBalance'),
       value: uah(delivery.outstandingUah),
       ...(codMatches ? { tone: 'ok' as const } : { tone: 'danger' as const }),
     },
     {
-      label: 'Оголошена вартість',
+      label: t('rowDeclared'),
       value: uah(shipment.draft.declaredValueUah),
     },
     {
-      label: 'Посилка',
-      value: `${String(parcels.length)} місць · ${String(weight)} кг`,
+      label: t('rowParcel'),
+      value: t('rowParcelValue', { count: parcels.length, weight }),
     },
     {
-      label: 'Статус перевізника',
-      value: shipment.trackingStatus ?? 'ще не надходив',
+      label: t('rowCarrierStatus'),
+      value: shipment.trackingStatus ?? t('rowNoStatus'),
     },
   ]
 
   return (
     <Sheet
-      eyebrow={eyebrow(orderNumber, 'накладна')}
+      eyebrow={eyebrow(orderNumber, t('partWaybill'))}
       footer={
         <Button onClick={onClose} variant="primary">
-          Закрити
+          {tc('close')}
         </Button>
       }
       onOpenChange={(open) => {
         if (!open) onClose()
       }}
       open
-      title="Дані накладної"
+      title={t('waybillTitle')}
     >
-      {codMatches ? null : (
-        <Notice tone="danger">
-          Післяплата в накладній розійшлася із залишком за замовленням. Нова
-          пошта видасть посилку за сумою в накладній — розбіжність доведеться
-          вирішувати вручну.
-        </Notice>
-      )}
+      {codMatches ? null : <Notice tone="danger">{t('codMismatch')}</Notice>}
       <dl className="border-app-line bg-app-input grid gap-px overflow-hidden rounded-[14px] border">
         {rows.map((row) => (
           <div
@@ -267,7 +265,7 @@ export function WaybillDataDrawer({
         ))}
       </dl>
       {shipment.events.length === 0 ? null : (
-        <ol aria-label="Статуси відправлення" className="grid gap-2">
+        <ol aria-label={t('shipmentStatuses')} className="grid gap-2">
           {shipment.events.map((event) => (
             <li
               className="flex items-baseline justify-between gap-3 text-[13px]"
@@ -307,6 +305,10 @@ export function WaybillAttachDrawer({
   orderId: string
   orderNumber: number
 }) {
+  const { locale } = useLocale()
+  const t = useT(deliveryDrawerMessages)
+  const tc = useT(commonMessages)
+  const eyebrow = useEyebrow()
   const [number, setNumber] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -324,19 +326,19 @@ export function WaybillAttachDrawer({
         onClose()
       })
       .catch((problem: unknown) => {
-        setError(normalizeApiProblem(problem).message)
+        setError(deliveryProblemMessage(problem, locale))
       })
       .finally(() => setBusy(false))
   }
 
   return (
     <Sheet
-      description="Накладна, створена в кабінеті Нової пошти, стає накладною цього замовлення."
-      eyebrow={eyebrow(orderNumber, 'накладна')}
+      description={t('attachDescription')}
+      eyebrow={eyebrow(orderNumber, t('partWaybill'))}
       footer={
         <>
           <Button disabled={busy} onClick={onClose}>
-            Скасувати
+            {tc('cancel')}
           </Button>
           <Button
             aria-busy={busy}
@@ -344,7 +346,7 @@ export function WaybillAttachDrawer({
             onClick={attach}
             variant="primary"
           >
-            Прив’язати до замовлення
+            {t('attachSubmit')}
           </Button>
         </>
       }
@@ -352,15 +354,11 @@ export function WaybillAttachDrawer({
         if (!open && !busy) onClose()
       }}
       open
-      title="Прив’язати наявну ТТН"
+      title={t('attachTitle')}
     >
       {error === null ? null : <Notice tone="danger">{error}</Notice>}
 
-      <Field
-        hint="14 цифр із кабінету Нової пошти. Пробіли можна лишити."
-        label="Номер накладної"
-        required
-      >
+      <Field hint={t('attachHint')} label={t('attachNumber')} required>
         <TextInput
           className="font-mono text-[18px] tabular-nums"
           inputMode="numeric"
@@ -371,14 +369,14 @@ export function WaybillAttachDrawer({
       </Field>
 
       <Notice tone={delivery.outstandingUah > 0 ? 'warn' : 'ok'}>
-        <p className="font-semibold">Прив’язка пройде, якщо</p>
+        <p className="font-semibold">{t('attachConditions')}</p>
         <ul className="mt-1.5 grid gap-1">
           <li>
-            післяплата в накладній дорівнює{' '}
+            {t('attachCodEquals')}{' '}
             <span className="font-mono">{uah(delivery.outstandingUah)}</span>
           </li>
-          <li>накладна належить тій самій точці відправлення</li>
-          <li>її ще не прив’язано до іншого замовлення</li>
+          <li>{t('attachSamePoint')}</li>
+          <li>{t('attachNotLinked')}</li>
         </ul>
       </Notice>
     </Sheet>
@@ -402,6 +400,10 @@ export function WaybillLabelDrawer({
   orderNumber: number
   waybillNumber: string
 }) {
+  const { locale } = useLocale()
+  const t = useT(deliveryDrawerMessages)
+  const tc = useT(commonMessages)
+  const eyebrow = useEyebrow()
   const [url, setUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -417,27 +419,27 @@ export function WaybillLabelDrawer({
       })
       .catch((problem: unknown) => {
         if (!controller.signal.aborted)
-          setError(normalizeApiProblem(problem).message)
+          setError(deliveryProblemMessage(problem, locale))
       })
     return () => {
       controller.abort()
       if (created !== null) URL.revokeObjectURL(created)
     }
-  }, [integrationId, orderId])
+  }, [integrationId, locale, orderId])
 
   return (
     <Sheet
-      eyebrow={eyebrow(orderNumber, 'етикетка')}
+      eyebrow={eyebrow(orderNumber, t('partLabel'))}
       footer={
         <>
           <p className="text-app-muted min-w-0 flex-1 font-mono text-[13px]">
             {waybillNumber}
           </p>
-          <Button onClick={onClose}>Закрити</Button>
+          <Button onClick={onClose}>{tc('close')}</Button>
           {url === null ? null : (
             <Button asChild variant="primary">
               <a href={url} rel="noopener noreferrer" target="_blank">
-                Відкрити PDF
+                {t('openPdf')}
               </a>
             </Button>
           )}
@@ -447,22 +449,20 @@ export function WaybillLabelDrawer({
         if (!open) onClose()
       }}
       open
-      title="Друк етикетки"
+      title={t('labelTitle')}
     >
       {error === null ? null : <Notice tone="danger">{error}</Notice>}
       {url === null && error === null ? (
-        <SkeletonRows label="Готуємо етикетку…" rows={3} />
+        <SkeletonRows label={t('labelLoading')} rows={3} />
       ) : null}
       {url === null ? null : (
         <object
-          aria-label="Етикетка Нової пошти"
+          aria-label={t('labelAria')}
           className="border-app-line h-[60vh] w-full rounded-[14px] border"
           data={url}
           type="application/pdf"
         >
-          <p className="text-app-muted p-4 text-[14px]">
-            Браузер не показує PDF на місці — відкрийте його в новій вкладці.
-          </p>
+          <p className="text-app-muted p-4 text-[14px]">{t('labelFallback')}</p>
         </object>
       )}
     </Sheet>

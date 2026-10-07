@@ -49,7 +49,7 @@ const payment = (amount: number, currency: string) => ({
 it('does not mark an unpaid order paid', () => {
   // `current` is drawn like a step that happened, so an open order has to sit
   // on «Створено» and leave «Оплачено» ahead of it.
-  expect(orderSteps(order(), stamp)).toEqual([
+  expect(orderSteps(order(), stamp, 'uk')).toEqual([
     {
       key: 'created',
       label: 'Створено',
@@ -68,6 +68,7 @@ it('dates the confirmation once it has happened', () => {
       confirmedByName: 'Олексій',
     }),
     stamp,
+    'uk',
   )
 
   expect(steps).toHaveLength(2)
@@ -87,6 +88,7 @@ it('ends a refunded order on its own third step', () => {
       refundedByName: 'Дмитро',
     }),
     stamp,
+    'uk',
   )
 
   expect(steps.map((step) => step.label)).toEqual([
@@ -102,6 +104,7 @@ it('ends a cancelled order without ever claiming it was paid', () => {
   const steps = orderSteps(
     order({ status: 'cancelled', cancelledAt: '2026-08-26T09:00:00Z' }),
     stamp,
+    'uk',
   )
 
   expect(steps.map((step) => step.label)).toEqual(['Створено', 'Скасовано'])

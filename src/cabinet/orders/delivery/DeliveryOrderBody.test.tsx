@@ -5,6 +5,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import type { DeliveryOrder } from '@/api/delivery'
 import type { OrderDetail } from '@/api/orders'
 import type { Shipment } from '@/api/shipping'
+import { LocaleProvider } from '@/i18n'
 import { DeliveryOrderBody } from './DeliveryOrderBody'
 import type {
   DeliveryOrderLoad,
@@ -394,4 +395,97 @@ it('stops only at what the booking drawer cannot fix', async () => {
   expect(
     within(drawer).getByRole('button', { name: 'Продовжити оформлення' }),
   ).toBeDisabled()
+})
+
+it('speaks British English on both halves of the card', async () => {
+  const user = userEvent.setup()
+  render(
+    <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+      <MemoryRouter>
+        <DeliveryOrderBody
+          customerPath="/app/koval/customers/cust-1"
+          delivery={delivery()}
+          financeAllowed
+          integrationsPath="/app/koval/settings/integrations"
+          load={load({ shipment: shipment() })}
+          mutationsAllowed
+          order={order}
+          partsPath="/app/koval/parts"
+        />
+      </MemoryRouter>
+    </LocaleProvider>,
+  )
+
+  expect(screen.getByRole('list', { name: 'Delivery stages' })).toBeVisible()
+  expect(screen.getByRole('region', { name: 'Items' })).toBeVisible()
+  const due = screen.getByRole('region', { name: 'To pay' })
+  expect(within(due).getByText('Paid in full')).toBeVisible()
+  expect(
+    within(due).getByRole('button', { name: 'Hand to carrier' }),
+  ).toBeVisible()
+
+  await user.click(screen.getByRole('tab', { name: /Delivery/ }))
+  const carrier = screen.getByRole('region', { name: 'Nova Poshta' })
+  expect(within(carrier).getByText('Waybill created')).toBeVisible()
+  expect(within(carrier).getByText('1 piece · 42 kg')).toBeVisible()
+  expect(
+    within(carrier).getByRole('button', { name: 'Waybill details' }),
+  ).toBeVisible()
+  expect(
+    screen.queryByText(/[А-Яа-яІіЇїЄєҐґ]{4,}/u, { selector: 'button' }),
+  ).toBeNull()
+})
+
+it('keeps a delivery order readable but offers no Nova Poshta outside Ukraine', async () => {
+  const user = userEvent.setup()
+  render(
+    <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+      <MemoryRouter>
+        <DeliveryOrderBody
+          countryCode="GB"
+          customerPath="/app/koval/customers/cust-1"
+          delivery={delivery({ outstandingUah: 1200, appliedUah: 3400 })}
+          financeAllowed
+          integrationsPath="/app/koval/settings/integrations"
+          load={load({
+            money: delivery({ outstandingUah: 1200, appliedUah: 3400 }),
+            integrationId: null,
+            carrier: null,
+          })}
+          mutationsAllowed
+          novaPoshtaAvailable={false}
+          order={order}
+          partsPath="/app/koval/parts"
+        />
+      </MemoryRouter>
+    </LocaleProvider>,
+  )
+
+  const due = screen.getByRole('region', { name: 'To pay' })
+  // Money stays Core's: the balance can still be paid.
+  expect(
+    within(due).getByRole('button', { name: 'Record payment' }),
+  ).toBeVisible()
+  expect(
+    within(due).queryByRole('button', { name: 'Create waybill' }),
+  ).toBeNull()
+  expect(
+    within(due).getByText(
+      'Nova Poshta delivery is only available for businesses in Ukraine.',
+    ),
+  ).toBeVisible()
+
+  await user.click(screen.getByRole('tab', { name: /Delivery/ }))
+  expect(
+    screen.getAllByText(
+      'Nova Poshta delivery is only available for businesses in Ukraine.',
+    ).length,
+  ).toBeGreaterThan(0)
+  expect(screen.queryByRole('button', { name: 'Arrange delivery' })).toBeNull()
+  expect(
+    screen.queryByRole('button', { name: 'Link a waybill from Nova Poshta' }),
+  ).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Refresh status' })).toBeNull()
+  // Not the “not connected” warning a Ukrainian business would get.
+  expect(screen.queryByText('Nova Poshta is not connected.')).toBeNull()
 })

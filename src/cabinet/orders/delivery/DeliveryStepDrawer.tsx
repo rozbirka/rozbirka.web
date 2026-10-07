@@ -1,41 +1,42 @@
 import { useState } from 'react'
 import { Button, Notice, Sheet } from '@/components/app'
 import type { DeliveryOrder } from '@/api/delivery'
-import { normalizeApiProblem } from '@/api/errors'
+import { commonMessages, useLocale, useT, type MessageKey } from '@/i18n'
 import { uah } from './delivery-money'
+import { deliveryDrawerMessages } from './drawer-messages'
+import { deliveryProblemMessage } from './nova-poshta-availability'
 
 export type DeliveryStep = 'dispatch' | 'receive' | 'return'
 
+type DrawerKey = MessageKey<typeof deliveryDrawerMessages>
+
 interface StepCopy {
-  title: string
-  description: string
-  confirm: string
+  title: DrawerKey
+  description: DrawerKey
+  confirm: DrawerKey
   danger?: boolean
-  note?: string
+  note: DrawerKey
 }
 
 const COPY: Record<DeliveryStep, StepCopy> = {
   dispatch: {
-    title: 'Передати перевізнику',
-    description:
-      'Позиції списуються зі складу. Дія проганяє повну перевірку готовності, включно з живими запитами в Нову пошту на маршрут і габарити.',
-    confirm: 'Зафіксувати передачу',
-    note: 'Фіксується дата передачі. Статус замовлення лишається «Очікує» до підтвердження отримання клієнтом.',
+    title: 'dispatchTitle',
+    description: 'dispatchDescription',
+    confirm: 'dispatchConfirm',
+    note: 'dispatchNote',
   },
   receive: {
-    title: 'Підтвердити отримання клієнтом',
-    description:
-      'Обовʼязковий крок між передачею перевізнику й будь-якими подальшими діями. Замовлення переходить у «Підтверджене».',
-    confirm: 'Зафіксувати отримання',
-    note: 'Післяплату в касу інтеграція не зараховує — це окрема дія в касі.',
+    title: 'receiveTitle',
+    description: 'receiveDescription',
+    confirm: 'receiveConfirm',
+    note: 'receiveNote',
   },
   return: {
-    title: 'Оформити повернення',
-    description:
-      'Позиції повертаються на склад, замовлення отримує статус «Повернено». Кошти при цьому не повертаються — повернення грошей оформлюється окремо по кожному платежу в касі.',
-    confirm: 'Підтвердити повернення',
+    title: 'returnTitle',
+    description: 'returnDescription',
+    confirm: 'returnConfirm',
     danger: true,
-    note: 'Сервіс приймає лише повне повернення без пошкоджень. Часткове або пошкоджене він відхиляє й нічого на склад не повертає — такий випадок розбирається вручну.',
+    note: 'returnNote',
   },
 }
 
@@ -56,6 +57,9 @@ export function DeliveryStepDrawer({
   step: DeliveryStep
 }) {
   const copy = COPY[step]
+  const { locale } = useLocale()
+  const t = useT(deliveryDrawerMessages)
+  const tc = useT(commonMessages)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -67,19 +71,19 @@ export function DeliveryStepDrawer({
       await onConfirm()
       onClose()
     } catch (problem) {
-      setError(normalizeApiProblem(problem).message)
+      setError(deliveryProblemMessage(problem, locale))
       setPending(false)
     }
   }
 
   return (
     <Sheet
-      description={copy.description}
-      eyebrow="Замовлення · Нова пошта"
+      description={t(copy.description)}
+      eyebrow={t('eyebrowNp')}
       footer={
         <div className="flex justify-end gap-2.5">
           <Button disabled={pending} onClick={onClose}>
-            Скасувати
+            {tc('cancel')}
           </Button>
           <Button
             aria-busy={pending}
@@ -87,7 +91,7 @@ export function DeliveryStepDrawer({
             onClick={() => void confirm()}
             variant={copy.danger === true ? 'danger' : 'primary'}
           >
-            {copy.confirm}
+            {t(copy.confirm)}
           </Button>
         </div>
       }
@@ -95,19 +99,19 @@ export function DeliveryStepDrawer({
         if (!open && !pending) onClose()
       }}
       open
-      title={copy.title}
+      title={t(copy.title)}
     >
       <div className="grid gap-3.5">
         {error !== null && <Notice tone="danger">{error}</Notice>}
         <dl className="border-app-line bg-app-inset grid gap-2.5 rounded-[14px] border px-4 py-3.5">
           <div className="flex items-baseline justify-between gap-4">
-            <dt className="text-app-muted text-[13px]">Сума замовлення</dt>
+            <dt className="text-app-muted text-[13px]">{t('orderTotal')}</dt>
             <dd className="text-app-ink font-mono text-[13.5px]">
               {uah(delivery.agreedTotalUah)}
             </dd>
           </div>
           <div className="flex items-baseline justify-between gap-4">
-            <dt className="text-app-muted text-[13px]">Залишок</dt>
+            <dt className="text-app-muted text-[13px]">{t('balance')}</dt>
             <dd
               className={`font-mono text-[13.5px] ${
                 delivery.outstandingUah === 0
@@ -119,11 +123,9 @@ export function DeliveryStepDrawer({
             </dd>
           </div>
         </dl>
-        {copy.note !== undefined && (
-          <p className="text-app-muted text-[12.5px] leading-5 text-pretty">
-            {copy.note}
-          </p>
-        )}
+        <p className="text-app-muted text-[12.5px] leading-5 text-pretty">
+          {t(copy.note)}
+        </p>
       </div>
     </Sheet>
   )

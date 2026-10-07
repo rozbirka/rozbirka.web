@@ -9,10 +9,12 @@ import {
   SkeletonRows,
   TextInput,
 } from '@/components/app'
-import { cn, plural } from '@/lib/utils'
+import { commonMessages, useT } from '@/i18n'
+import { cn } from '@/lib/utils'
 import { partsApi, type PartListItem } from '@/api/parts'
 import { inventoryApi, type PartInventoryZone } from '@/api/inventory'
 import { normalizeApiProblem } from '@/api/errors'
+import { orderCardMessages } from './order-cards-messages'
 import { money } from './order-money'
 
 const SEARCH_DEBOUNCE_MS = 250
@@ -28,9 +30,9 @@ interface Candidate extends PartListItem {
   place: string | null
 }
 
-const origin = (part: Candidate) =>
+const origin = (part: Candidate, noCar: string) =>
   part.car === null
-    ? 'без авто'
+    ? noCar
     : [
         `${part.car.make} ${part.car.model} ${String(part.car.year)}`,
         part.carCode,
@@ -87,6 +89,8 @@ function OpenOrderItemDrawer({
   orderTotal,
   takenPartIds,
 }: OrderItemDrawerProps) {
+  const t = useT(orderCardMessages)
+  const tc = useT(commonMessages)
   const listId = useId()
   const [query, setQuery] = useState('')
   const [items, setItems] = useState<Candidate[] | null>(null)
@@ -204,13 +208,15 @@ function OpenOrderItemDrawer({
 
   return (
     <Sheet
-      eyebrow={`Замовлення #${String(orderNumber)} · позиції`}
+      eyebrow={t('drawerEyebrow', { number: String(orderNumber) })}
       footer={
         <>
           <p className="text-app-muted min-w-0 flex-1 text-[13px]">
             {valid
-              ? `Разом стане ${money((orderTotal ?? 0) + lineTotal, 'USD')}`
-              : `Разом зараз ${money(orderTotal, 'USD')}`}
+              ? t('totalWillBe', {
+                  amount: money((orderTotal ?? 0) + lineTotal, 'USD'),
+                })
+              : t('totalNow', { amount: money(orderTotal, 'USD') })}
           </p>
           <Button
             disabled={busy}
@@ -219,7 +225,7 @@ function OpenOrderItemDrawer({
               onOpenChange(false)
             }}
           >
-            Скасувати
+            {tc('cancel')}
           </Button>
           <Button
             aria-busy={busy}
@@ -234,7 +240,7 @@ function OpenOrderItemDrawer({
             }}
             variant="primary"
           >
-            Додати в замовлення
+            {t('addToOrder')}
           </Button>
         </>
       }
@@ -244,11 +250,11 @@ function OpenOrderItemDrawer({
         onOpenChange(next)
       }}
       open={open}
-      title="Додати позицію"
+      title={t('addItem')}
     >
       {error === null ? null : <Notice tone="danger">{error}</Notice>}
 
-      <Field hiddenLabel label="Пошук запчастини">
+      <Field hiddenLabel label={t('searchPart')}>
         <span className="relative block">
           <Search
             aria-hidden
@@ -260,13 +266,13 @@ function OpenOrderItemDrawer({
             className="h-[46px] rounded-[11px] pr-12 pl-10"
             ref={inputRef}
             onChange={(event) => changeQuery(event.target.value)}
-            placeholder="Назва або OEM-код"
+            placeholder={t('searchPlaceholder')}
             value={query}
           />
           {query ? (
             <button
               type="button"
-              aria-label="Очистити пошук"
+              aria-label={t('clearSearch')}
               className="text-app-muted hover:text-app-ink focus-visible:outline-brand absolute top-0 right-0 flex size-[46px] cursor-pointer items-center justify-center rounded-[11px] focus-visible:outline-2"
               onClick={() => {
                 changeQuery('')
@@ -288,10 +294,8 @@ function OpenOrderItemDrawer({
             className="text-app-muted px-4 py-8 text-center text-[13px]"
             role="status"
           >
-            <p className="text-app-ink font-semibold">
-              Введіть назву або OEM-код
-            </p>
-            <p className="mt-1">Шукаємо лише запчастини з вільним залишком.</p>
+            <p className="text-app-ink font-semibold">{t('searchPrompt')}</p>
+            <p className="mt-1">{t('searchScope')}</p>
           </div>
         ) : loadError !== null ? (
           <div className="space-y-3 p-4">
@@ -303,22 +307,22 @@ function OpenOrderItemDrawer({
                 setAttempt((value) => value + 1)
               }}
             >
-              Повторити пошук
+              {t('retrySearch')}
             </Button>
           </div>
         ) : items === null ? (
           <div className="p-4">
-            <SkeletonRows label="Шукаємо запчастини…" rows={4} />
+            <SkeletonRows label={t('searching')} rows={4} />
           </div>
         ) : items.length === 0 ? (
           <p
             className="text-app-muted px-4 py-6 text-center text-[13px]"
             role="status"
           >
-            Нічого не знайдено. Спробуйте OEM-код.
+            {t('nothingFound')}
           </p>
         ) : (
-          <ul aria-label="Знайдені запчастини">
+          <ul aria-label={t('foundParts')}>
             {items.map((item) => {
               const already = taken.has(item.id)
               const out = item.quantityAvailable <= 0
@@ -353,7 +357,7 @@ function OpenOrderItemDrawer({
                         {item.name}
                       </span>
                       <span className="text-app-muted mt-1 block font-mono text-[11px] leading-[1.5]">
-                        {[item.oemCode, origin(item), item.place]
+                        {[item.oemCode, origin(item, t('noCar')), item.place]
                           .filter(Boolean)
                           .join(' · ')}
                       </span>
@@ -378,10 +382,10 @@ function OpenOrderItemDrawer({
                         )}
                       >
                         {already
-                          ? 'у замовленні'
+                          ? t('inOrder')
                           : out
-                            ? 'немає'
-                            : `${String(item.quantityAvailable)} шт`}
+                            ? t('outOfStock')
+                            : t('inStock', { count: item.quantityAvailable })}
                       </span>
                     </span>
                   </button>
@@ -396,23 +400,23 @@ function OpenOrderItemDrawer({
         <div className="border-app-line bg-app-raised grid gap-3.5 rounded-[14px] border px-[18px] py-4">
           <div>
             <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-              Вибрано
+              {t('selected')}
             </p>
             <p className="mt-2 text-[16px] font-bold tracking-[-0.01em] text-pretty text-white">
               {picked.name}
             </p>
           </div>
           <div className="flex flex-wrap items-end gap-3.5">
-            <Field label="Кількість">
+            <Field label={t('quantity')}>
               <QuantityStepper
-                label="Кількість позиції"
+                label={t('itemQuantity')}
                 max={picked.quantityAvailable}
                 min={1}
                 onChange={setQuantity}
                 value={quantity}
               />
             </Field>
-            <Field className="flex-[1_1_140px]" label="Ціна за шт, $">
+            <Field className="flex-[1_1_140px]" label={t('unitPrice')}>
               <TextInput
                 className="font-mono"
                 inputMode="decimal"
@@ -422,7 +426,7 @@ function OpenOrderItemDrawer({
             </Field>
             <p className="text-right">
               <span className="text-app-muted block text-[12px] font-semibold">
-                Сума
+                {t('lineSum')}
               </span>
               <span className="mt-2.5 block font-mono text-[17px] whitespace-nowrap text-white tabular-nums">
                 {money(lineTotal, 'USD')}
@@ -430,9 +434,10 @@ function OpenOrderItemDrawer({
             </p>
           </div>
           <p className="text-app-dim text-[12px]">
-            На складі {String(picked.quantityAvailable)}{' '}
-            {plural(picked.quantityAvailable, ['шт', 'шт', 'шт'])} ·
-            зарезервується за #{String(orderNumber)}
+            {t('stockNote', {
+              count: picked.quantityAvailable,
+              number: String(orderNumber),
+            })}
           </p>
         </div>
       )}

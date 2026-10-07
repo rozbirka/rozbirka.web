@@ -23,7 +23,16 @@ import {
   TextInput,
   useOptionalToast,
 } from '@/components/app'
-import { normalizeApiProblem } from '@/api/errors'
+import { isProblemCode, normalizeApiProblem } from '@/api/errors'
+import {
+  commonMessages,
+  translate,
+  useFormat,
+  useLocale,
+  useT,
+  type Locale,
+  type MessageKey,
+} from '@/i18n'
 import { orderEventTitle, orderStatusPresentation } from './order-labels'
 import { money, orderMoney, refundEffects } from './order-money'
 import { orderSteps } from './order-steps'
@@ -38,8 +47,15 @@ import {
 import { DeliveryConfigureCard } from './delivery/DeliveryConfigureCard'
 import { DeliveryOrderBody } from './delivery/DeliveryOrderBody'
 import { orderChip } from './delivery/delivery-view'
+import {
+  INTEGRATION_COUNTRY_UNAVAILABLE,
+  useNovaPoshtaAvailability,
+} from './delivery/nova-poshta-availability'
+import { deliveryMessages } from './delivery/messages'
 import { useDeliveryOrder } from './delivery/use-delivery-order'
-import { cn, plural } from '@/lib/utils'
+import { orderMessages } from './messages'
+import { orderFormMessages } from './order-form-messages'
+import { cn } from '@/lib/utils'
 import {
   customersApi,
   readCustomerPhoneConflict,
@@ -65,19 +81,26 @@ import { OrderItemDrawer } from './OrderItemDrawer'
 import { OrderPaymentDrawer } from './OrderPaymentDrawer'
 
 const idFromPath = (path: string) => /\/orders\/([^/]+)/.exec(path)?.[1] ?? null
-const errorMessage = (error: unknown) => {
+const orderErrorMessage = (error: unknown, locale: Locale) => {
   const problem = normalizeApiProblem(error)
-  if (problem.status === 402)
-    return 'Функція потребує активної підписки. Поновіть підписку в розділі «Підписка» та спробуйте ще раз.'
-  if (problem.kind === 'forbidden')
-    return 'У вас немає прав для цієї дії. Попросіть адміністратора розбірки розширити вашу роль.'
+  const say = (key: MessageKey<typeof orderMessages>) =>
+    translate(orderMessages, locale, key)
+  if (problem.status === 402) return say('errorSubscription')
+  if (problem.kind === 'forbidden') return say('errorForbidden')
   if (problem.code === 'PARTS_NOT_AVAILABLE')
-    return 'Недостатньо доступних запчастин для вказаної кількості.'
+    return say('errorPartsNotAvailable')
   if (problem.code === 'PART_IN_ACTIVE_INVENTORY')
-    return 'Запчастина зараз бере участь в інвентаризації. Завершіть інвентаризацію та спробуйте ще раз.'
-  if (problem.kind === 'conflict')
-    return 'Замовлення змінилося. Оновіть сторінку та спробуйте ще раз.'
+    return say('errorPartInInventory')
+  if (isProblemCode(error, INTEGRATION_COUNTRY_UNAVAILABLE))
+    return translate(deliveryMessages, locale, 'countryUnavailable')
+  if (problem.kind === 'conflict') return say('errorConflict')
   return problem.message
+}
+
+/** The order error mapper bound to the current locale. */
+const useErrorMessage = () => {
+  const { locale } = useLocale()
+  return (error: unknown) => orderErrorMessage(error, locale)
 }
 type OrderReplayOperation = 'order-confirm' | 'order-refund'
 const isAmbiguousMutationFailure = (error: unknown) => {
@@ -111,12 +134,6 @@ const lineTotal = (quantity: number, unitPrice: number) => {
   const total = quantity * unitPrice
   return Number.isFinite(total) ? total : null
 }
-/** `2026-08-28T10:15:00Z` reads as `2026-08-28 10:15`; the machine value stays in `dateTime`. */
-/**
- * What the server calls each order event, said in Ukrainian. An event the
- * vocabulary does not know is shown as it came rather than guessed at.
- */
-
 /** Two initials for the avatar chip; a single word gives one. */
 const initials = (name: string) =>
   name
@@ -126,9 +143,13 @@ const initials = (name: string) =>
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('') || '?'
 
-const formatTimestamp = (value: string) => {
-  const parts = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(value)
-  return parts ? `${parts[1]} ${parts[2]}` : value
+/**
+ * Date and time in the business time zone; the machine value stays in
+ * `dateTime`. Anything unparsable is shown as it came.
+ */
+const useTimestamp = () => {
+  const format = useFormat()
+  return (value: string) => format.dateTime(value) ?? value
 }
 
 export function OrdersScreen({ definition }: CabinetModuleScreenProps) {
@@ -190,21 +211,13 @@ const canCreateOrder = (
   cabinet.snapshot?.permissions.has('parts.view') === true &&
   cabinet.snapshot.permissions.has('customers.view')
 
-/** Dates arrive as ISO strings; anything unparsable is shown as it came. */
-const day = (value: string) => {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime())
-    ? value
-    : new Intl.DateTimeFormat('uk-UA', { dateStyle: 'short' }).format(parsed)
-}
-
 /** The statuses the list filters by, in the order a sale moves through them. */
 const ORDER_STATUS_FILTERS = [
-  { value: '', label: 'Усі', dot: 'bg-app-line-2' },
-  { value: 'pending', label: 'Очікує', dot: 'bg-state-warn' },
-  { value: 'confirmed', label: 'Підтверджено', dot: 'bg-state-ok' },
-  { value: 'refunded', label: 'Повернено', dot: 'bg-state-info' },
-  { value: 'cancelled', label: 'Скасовано', dot: 'bg-app-muted' },
+  { value: '', dot: 'bg-app-line-2' },
+  { value: 'pending', dot: 'bg-state-warn' },
+  { value: 'confirmed', dot: 'bg-state-ok' },
+  { value: 'refunded', dot: 'bg-state-info' },
+  { value: 'cancelled', dot: 'bg-app-muted' },
 ]
 
 /** Statuses whose money never reached the till. */
@@ -214,6 +227,12 @@ const listMoney = (value: number | null) =>
   value === null ? '—' : `${new Intl.NumberFormat('uk-UA').format(value)} $`
 
 function OrderDirectory({ definition }: CabinetModuleScreenProps) {
+  const { locale } = useLocale()
+  const t = useT(orderMessages)
+  const format = useFormat()
+  const errorMessage = useErrorMessage()
+  /** Dates arrive as ISO strings; anything unparsable is shown as it came. */
+  const day = (value: string) => format.date(value) ?? value
   const cabinet = useCabinet()
   const createAllowed = canCreateOrder(definition, cabinet)
   const [params, setParams] = useSearchParams()
@@ -249,6 +268,8 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
         if (!controller.signal.aborted) setError(errorMessage(error))
       })
     return () => controller.abort()
+    // The message is chosen when the request fails, not re-run per locale.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId, page, search, status])
 
   /* The endpoint reports a total per filter, not a breakdown, so each chip's
@@ -300,10 +321,10 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
           <div className="min-w-0">
             <p className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
-              Продажі
+              {t('eyebrow')}
             </p>
             <h1 className="mt-2.5 text-[38px] leading-none font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-              Замовлення
+              {t('title')}
             </h1>
           </div>
           {createAllowed ? (
@@ -314,7 +335,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
             >
               <Link to="new">
                 <Plus aria-hidden />
-                Нове замовлення
+                {t('newOrder')}
               </Link>
             </Button>
           ) : null}
@@ -322,17 +343,17 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
 
         <div className="mt-2.5">
           <SearchInput
-            aria-label="Пошук замовлень"
+            aria-label={t('searchLabel')}
             className="min-h-12.5 text-[15px]"
             onChange={(event) => setParam('q', event.target.value)}
-            placeholder="Номер замовлення або покупець"
+            placeholder={t('searchPlaceholder')}
             value={params.get('q') ?? ''}
           />
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
           <div
-            aria-label="Статус замовлення"
+            aria-label={t('statusFilter')}
             className="border-app-line bg-app-raised flex flex-wrap gap-[3px] rounded-xl border p-[3px]"
             role="radiogroup"
           >
@@ -356,7 +377,9 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
                     aria-hidden
                     className={cn('size-1.5 rounded-full', option.dot)}
                   />
-                  {option.label}
+                  {option.value === ''
+                    ? t('filterAll')
+                    : orderStatusPresentation(option.value, locale).label}
                   {counts === null ? null : (
                     <span className="text-app-muted font-mono text-[12px] font-medium">
                       {counts[option.value] ?? 0}
@@ -368,7 +391,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
           </div>
           <p className="flex items-baseline gap-2.5">
             <span className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
-              Сума на сторінці
+              {t('pageSum')}
             </span>
             <span className="text-[20px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
               {listMoney(pageSum)}
@@ -379,29 +402,27 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
         {error === null ? null : <Notice tone="danger">{error}</Notice>}
 
         <section
-          aria-label="Список замовлень"
+          aria-label={t('listLabel')}
           className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
         >
           <div
             aria-hidden
             className="border-app-line text-app-dim hidden gap-4 border-b px-6 py-3.5 font-mono text-[10px] tracking-[0.14em] uppercase md:grid md:grid-cols-[7rem_1.4fr_1fr_9.5rem_7.5rem]"
           >
-            <span>Замовлення</span>
-            <span>Покупець</span>
-            <span>Позиції</span>
-            <span>Статус</span>
-            <span className="text-right">Сума</span>
+            <span>{t('columnOrder')}</span>
+            <span>{t('columnBuyer')}</span>
+            <span>{t('columnItems')}</span>
+            <span>{t('columnStatus')}</span>
+            <span className="text-right">{t('columnTotal')}</span>
           </div>
 
           {orders.length === 0 ? (
             <div className="flex flex-col items-center gap-3.5 px-6 py-14 text-center">
               <p className="text-[16px] font-bold text-white">
-                {filtered ? 'Нічого не знайдено' : 'Замовлень поки немає'}
+                {filtered ? t('nothingFound') : t('noOrders')}
               </p>
               <p className="text-app-muted text-[14px]">
-                {filtered
-                  ? 'Спробуйте змінити пошук або статус.'
-                  : 'Замовлення зʼявляться тут, щойно ви створите перше.'}
+                {filtered ? t('nothingFoundHint') : t('noOrdersHint')}
               </p>
               {filtered ? (
                 <Button
@@ -414,14 +435,17 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
                     setParams(next)
                   }}
                 >
-                  Скинути фільтри
+                  {t('resetFilters')}
                 </Button>
               ) : null}
             </div>
           ) : (
             <ul className="grid">
               {orders.map((order) => {
-                const presentation = orderStatusPresentation(order.status)
+                const presentation = orderStatusPresentation(
+                  order.status,
+                  locale,
+                )
                 const unpaid = UNPAID_STATUSES.has(order.status)
                 return (
                   <li
@@ -449,17 +473,17 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
                               : 'text-white',
                           )}
                         >
-                          {order.customerName ?? 'Без покупця'}
+                          {order.customerName ?? t('noBuyer')}
                         </span>
                         <span className="text-app-muted mt-0.5 block truncate text-[13px]">
                           {order.paymentAccountNames.length === 0
-                            ? 'платежів ще немає'
+                            ? t('noPayments')
                             : order.paymentAccountNames.join(', ')}
                         </span>
                       </span>
                       <span className="text-app-muted min-w-0 truncate text-[14px] font-medium">
                         {order.partNames.length === 0
-                          ? `${String(order.itemCount)} ${plural(order.itemCount, ['позиція', 'позиції', 'позицій'])}`
+                          ? t('itemCount', { count: order.itemCount })
                           : order.partNames.join(', ')}
                       </span>
                       <span>
@@ -484,10 +508,10 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
 
           <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-t px-6 py-3.5">
             <p className="text-app-muted text-[13px] font-semibold">
-              {total} {plural(total, ['замовлення', 'замовлення', 'замовлень'])}
+              {t('orderCount', { count: total })}
             </p>
             <Pagination
-              label="Сторінки замовлень"
+              label={t('pagesLabel')}
               onPage={goToPage}
               page={page}
               totalPages={Math.max(totalPages, 1)}
@@ -509,6 +533,9 @@ export function OrderForm({
     orderBasePath: string
   }
 }) {
+  const t = useT(orderFormMessages)
+  const tc = useT(commonMessages)
+  const errorMessage = useErrorMessage()
   const cabinet = useCabinet()
   const toast = useOptionalToast()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
@@ -587,6 +614,7 @@ export function OrderForm({
         if (!controller.signal.aborted) setError(errorMessage(requestError))
       })
     return () => controller.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- message picked at failure time
   }, [createContext, customerSearchAllowed, linkedCustomerId])
   useEffect(() => {
     const closePickers = (event: PointerEvent) => {
@@ -619,6 +647,7 @@ export function OrderForm({
         if (!controller.signal.aborted) setError(errorMessage(requestError))
       })
     return () => controller.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- message picked at failure time
   }, [customerId, customerQuery, customerSearchAllowed])
   const submit = async (event: FormEvent) => {
     event.preventDefault()
@@ -654,7 +683,7 @@ export function OrderForm({
       })
       if (scope.signal.aborted) return
       const detailPath = `${createContext?.orderBasePath ?? location.pathname.replace(/\/new$/, '')}/${detail.id}`
-      toast?.show({ message: 'Замовлення створено.', tone: 'ok' })
+      toast?.show({ message: t('created'), tone: 'ok' })
       await navigate(detailPath, { replace: true })
     } catch (error) {
       setError(errorMessage(error))
@@ -793,9 +822,9 @@ export function OrderForm({
     return (
       <PageBody width="narrow">
         <DeniedState
-          description="Потрібен доступ до запчастин і клієнтів. Попросіть адміністратора розбірки відкрити ці розділи для вашої ролі."
+          description={t('deniedDescription')}
           role="alert"
-          title="Замовлення недоступні для створення"
+          title={t('deniedTitle')}
         />
       </PageBody>
     )
@@ -823,8 +852,8 @@ export function OrderForm({
     >
       {error && <Notice tone="danger">{error}</Notice>}
       <SectionPanel
-        description="Оберіть запчастину, вкажіть кількість і ціну, а потім додайте її до замовлення."
-        title="Позиція"
+        description={t('itemDescription')}
+        title={t('itemTitle')}
         variant="plain"
       >
         <div className="grid gap-3">
@@ -845,15 +874,15 @@ export function OrderForm({
             />
           )}
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Кількість">
+            <Field label={t('quantity')}>
               <QuantityStepper
-                label="Кількість"
+                label={t('quantity')}
                 min={0}
                 onChange={(value) => setQuantity(String(value))}
                 value={Number(quantity || '0')}
               />
             </Field>
-            <Field label="Ціна за одиницю">
+            <Field label={t('unitPrice')}>
               <TextInput
                 className="text-left"
                 inputMode="decimal"
@@ -874,12 +903,12 @@ export function OrderForm({
             onClick={addDraftItem}
           >
             <Plus aria-hidden />
-            Додати деталь
+            {t('addPart')}
           </Button>
 
           {draftItems.length > 0 && (
             <div
-              aria-label="Позиції замовлення"
+              aria-label={t('orderItems')}
               className="border-app-line grid gap-2 border-t pt-4"
             >
               {draftItems.map((item) => (
@@ -902,7 +931,7 @@ export function OrderForm({
                     )}
                   </p>
                   <Button
-                    aria-label={`Прибрати ${item.part.name}`}
+                    aria-label={t('removeItem', { name: item.part.name })}
                     className="size-10 justify-center px-0"
                     onClick={() =>
                       setDraftItems((current) =>
@@ -924,13 +953,13 @@ export function OrderForm({
       {customerSearchAllowed && (
         <SectionPanel
           variant="plain"
-          description="Замовлення можна створити й без клієнта — тоді поле лишається порожнім."
-          title="Клієнт"
+          description={t('customerDescription')}
+          title={t('customerTitle')}
         >
           <div className="grid gap-3" ref={customerPickerRef}>
             <Field
-              hint={customerId ? undefined : 'Клієнта не обрано'}
-              label="Пошук клієнта"
+              hint={customerId ? undefined : t('noCustomerChosen')}
+              label={t('searchCustomer')}
             >
               <SearchInput
                 className={
@@ -957,7 +986,7 @@ export function OrderForm({
                   {customerResults.map((customer) => (
                     <li key={customer.id}>
                       <Button
-                        aria-label={`Обрати клієнта ${customer.name}`}
+                        aria-label={t('pickCustomer', { name: customer.name })}
                         className={
                           customer.id === customerId
                             ? 'border-brand/40 bg-brand/[0.1] w-full justify-between'
@@ -975,7 +1004,7 @@ export function OrderForm({
                           {customer.name}
                         </span>
                         <span className="text-app-dim text-[13px]">
-                          {customer.phone ?? 'без телефону'}
+                          {customer.phone ?? t('noPhone')}
                         </span>
                       </Button>
                     </li>
@@ -989,16 +1018,16 @@ export function OrderForm({
                 type="button"
               >
                 <Plus aria-hidden />
-                Створити нового клієнта
+                {t('createCustomer')}
               </Button>
             )}
             {customerMutationAllowed && !customerId && newCustomerFormOpen && (
               <fieldset className="border-app-line-2 rounded-control grid gap-3 border border-dashed p-3">
                 <legend className="text-app-muted px-1 text-[13.5px]">
-                  Новий клієнт
+                  {t('newCustomer')}
                 </legend>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Ім’я нового клієнта">
+                  <Field label={t('newCustomerName')}>
                     <TextInput
                       onChange={(event) =>
                         setNewCustomerName(event.target.value)
@@ -1006,7 +1035,7 @@ export function OrderForm({
                       value={newCustomerName}
                     />
                   </Field>
-                  <Field label="Телефон нового клієнта">
+                  <Field label={t('newCustomerPhone')}>
                     <TextInput
                       inputMode="tel"
                       onChange={(event) =>
@@ -1024,7 +1053,9 @@ export function OrderForm({
                     disabled={customerBusy || !newCustomerName.trim()}
                     onClick={() => void createCustomerInline()}
                   >
-                    {customerBusy ? 'Створюємо клієнта…' : 'Створити клієнта'}
+                    {customerBusy
+                      ? t('creatingCustomer')
+                      : t('createCustomerSubmit')}
                   </Button>
                   <Button
                     disabled={customerBusy}
@@ -1032,7 +1063,7 @@ export function OrderForm({
                     type="button"
                     variant="quiet"
                   >
-                    Скасувати
+                    {tc('cancel')}
                   </Button>
                 </div>
               </fieldset>
@@ -1042,7 +1073,9 @@ export function OrderForm({
                 action={
                   customerConflict.isActive ? (
                     <Button onClick={selectDuplicateCustomer} variant="primary">
-                      Використати клієнта {customerConflict.customerName}
+                      {t('useCustomer', {
+                        name: customerConflict.customerName,
+                      })}
                     </Button>
                   ) : (
                     <Button
@@ -1050,7 +1083,9 @@ export function OrderForm({
                       onClick={() => void reactivateDuplicateCustomer()}
                       variant="primary"
                     >
-                      Активувати {customerConflict.customerName}
+                      {t('activateCustomer', {
+                        name: customerConflict.customerName,
+                      })}
                     </Button>
                   )
                 }
@@ -1064,12 +1099,9 @@ export function OrderForm({
           </div>
         </SectionPanel>
       )}
-      <SectionPanel variant="plain" title="Нотатки">
+      <SectionPanel variant="plain" title={t('notes')}>
         <div>
-          <Field
-            hint="Видно команді розбірки на сторінці замовлення."
-            label="Нотатки"
-          >
+          <Field hint={t('notesHint')} label={t('notes')}>
             <TextArea
               onChange={(event) => setNotes(event.target.value)}
               value={notes}
@@ -1080,17 +1112,14 @@ export function OrderForm({
 
       {draftItems.length > 0 && (
         <Panel
-          aria-label="Підсумок замовлення"
+          aria-label={t('summary')}
           className="border-brand/25 bg-brand/[0.055]"
         >
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <p className="text-app-muted text-[13.5px]">
-                Разом за замовлення
-              </p>
+              <p className="text-app-muted text-[13.5px]">{t('orderTotal')}</p>
               <p className="text-app-dim mt-1 text-[12.5px]">
-                {draftItems.length}{' '}
-                {plural(draftItems.length, ['позиція', 'позиції', 'позицій'])}
+                {t('itemCount', { count: draftItems.length })}
               </p>
             </div>
             <p className="text-brand text-[28px] leading-none font-extrabold tracking-[-0.02em] tabular-nums">
@@ -1103,13 +1132,13 @@ export function OrderForm({
   )
   return (
     <Sheet
-      description="Додайте позиції, виберіть клієнта та перевірте суму."
-      eyebrow="Продажі · Замовлення"
+      description={t('sheetDescription')}
+      eyebrow={t('sheetEyebrow')}
       footer={
         <div className="flex w-full flex-wrap items-center gap-2.5">
           <div className="ml-auto flex items-center gap-2.5">
             <Button disabled={busy} onClick={closeCreate} type="button">
-              Скасувати
+              {tc('cancel')}
             </Button>
             <Button
               aria-busy={busy}
@@ -1118,7 +1147,7 @@ export function OrderForm({
               type="submit"
               variant="primary"
             >
-              {busy ? 'Створюємо…' : 'Створити замовлення'}
+              {busy ? t('creating') : t('createOrder')}
             </Button>
           </div>
         </div>
@@ -1127,7 +1156,7 @@ export function OrderForm({
         if (!next && !busy) closeCreate()
       }}
       open
-      title="Нове замовлення"
+      title={t('sheetTitle')}
     >
       {form}
     </Sheet>
@@ -1139,6 +1168,12 @@ function OrderDetailScreen({
   definition,
   orderId,
 }: CabinetModuleScreenProps & { addingItem?: boolean; orderId: string }) {
+  const { locale } = useLocale()
+  const t = useT(orderMessages)
+  const tc = useT(commonMessages)
+  const errorMessage = useErrorMessage()
+  const formatTimestamp = useTimestamp()
+  const novaPoshta = useNovaPoshtaAvailability()
   const cabinet = useCabinet()
   const toast = useOptionalToast()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
@@ -1156,7 +1191,11 @@ function OrderDetailScreen({
    * order DTO carries no flag.
    */
   const [loadedCustomerId, setLoadedCustomerId] = useState<string | null>(null)
-  const deliveryLoad = useDeliveryOrder(orderId, loadedCustomerId)
+  const deliveryLoad = useDeliveryOrder(
+    orderId,
+    loadedCustomerId,
+    novaPoshta.available,
+  )
   const deliveryMoney = deliveryLoad.state?.money ?? null
   const deliveryOrder = deliveryMoney !== null
   const ordinaryFinance = financeAllowed && !deliveryOrder
@@ -1194,6 +1233,7 @@ function OrderDetailScreen({
         .catch((error) => {
           if (!signal?.aborted) setError(errorMessage(error))
         }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- message picked at failure time
     [acceptOrder, orderId],
   )
   useEffect(() => {
@@ -1241,17 +1281,17 @@ function OrderDetailScreen({
         <ErrorState
           description={error}
           onRetry={() => void reload()}
-          title="Не вдалося завантажити замовлення"
+          title={t('loadFailed')}
         />
       </PageBody>
     )
   if (!order)
     return (
       <PageBody width="narrow">
-        <SkeletonRows label="Завантажуємо замовлення…" rows={4} />
+        <SkeletonRows label={t('loading')} rows={4} />
       </PageBody>
     )
-  const status = orderStatusPresentation(order.status)
+  const status = orderStatusPresentation(order.status, locale)
   const orderEditable =
     mutationsAllowed && order.status === 'pending' && !deliveryOrder
   const itemsEditable = orderEditable && editingItems
@@ -1328,29 +1368,26 @@ function OrderDetailScreen({
             to={ordersPath}
           >
             <ChevronLeft aria-hidden className="size-3.5" />
-            До замовлень
+            {t('backToOrders')}
           </Link>
           <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>Продажі</span>
+            <span>{t('eyebrow')}</span>
             <span aria-hidden className="text-white/20">
               /
             </span>
-            <span className="text-app-muted">Замовлення</span>
+            <span className="text-app-muted">{t('title')}</span>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
-          <Button
-            disabled
-            title="Друку замовлення поки немає: сервіс не формує документ."
-          >
-            Друк
+          <Button disabled title={t('printUnavailable')}>
+            {t('print')}
           </Button>
           {orderEditable ? (
             <ActionMenu
               actions={[
                 {
                   key: 'cancel',
-                  label: 'Скасувати замовлення',
+                  label: t('cancelOrder'),
                   icon: <XCircle aria-hidden />,
                   destructive: true,
                   disabled: busy,
@@ -1358,7 +1395,7 @@ function OrderDetailScreen({
                     void transition(() => ordersApi.cancel(order.id)),
                 },
               ]}
-              label="Інші дії із замовленням"
+              label={t('moreActions')}
             />
           ) : null}
         </div>
@@ -1368,39 +1405,43 @@ function OrderDetailScreen({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-4">
             <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-              Замовлення #{order.number}
+              {t('orderTitle', { number: String(order.number) })}
             </h1>
             <StatusPill
               tone={
                 deliveryMoney === null
                   ? status.tone
-                  : orderChip(deliveryMoney).tone
+                  : orderChip(deliveryMoney, locale).tone
               }
             >
               {deliveryMoney === null
                 ? status.label
-                : orderChip(deliveryMoney).label}
+                : orderChip(deliveryMoney, locale).label}
             </StatusPill>
             <p className="text-app-muted text-sm">
-              Створено {formatTimestamp(order.createdAt)} ·{' '}
-              {order.createdByName}
+              {t('createdBy', {
+                when: formatTimestamp(order.createdAt),
+                who: order.createdByName,
+              })}
             </p>
           </div>
           {deliveryMoney === null ? (
             <div className="mt-6">
-              <OrderSteps steps={orderSteps(order, formatTimestamp)} />
+              <OrderSteps steps={orderSteps(order, formatTimestamp, locale)} />
             </div>
           ) : null}
         </div>
 
         {deliveryMoney === null ? null : (
           <DeliveryOrderBody
+            countryCode={novaPoshta.countryCode}
             customerPath={customerPath}
             delivery={deliveryMoney}
             financeAllowed={financeAllowed}
             integrationsPath={integrationsPath}
             load={deliveryLoad}
             mutationsAllowed={mutationsAllowed}
+            novaPoshtaAvailable={novaPoshta.available}
             order={order}
             partsPath={partsPath}
           />
@@ -1417,13 +1458,13 @@ function OrderDetailScreen({
                 <SectionPanel
                   aside={
                     <span className="text-app-muted text-[13.5px] tabular-nums">
-                      Разом за позиціями {money(draftsTotal, 'USD')}
+                      {t('itemsTotal', { amount: money(draftsTotal, 'USD') })}
                     </span>
                   }
                   description={
                     itemDrafts.length === 1
-                      ? 'Видалення останньої позиції скасує замовлення.'
-                      : 'Змініть кількість або ціну й збережіть позиції — набір замінюється цілком.'
+                      ? t('lastItemHint')
+                      : t('editItemsHint')
                   }
                   footer={
                     <>
@@ -1447,7 +1488,7 @@ function OrderDetailScreen({
                         }}
                         variant="primary"
                       >
-                        Зберегти позиції
+                        {t('saveItems')}
                       </Button>
                       <Button
                         disabled={busy}
@@ -1458,16 +1499,15 @@ function OrderDetailScreen({
                         }}
                         variant="ghost"
                       >
-                        Скасувати
+                        {tc('cancel')}
                       </Button>
                     </>
                   }
-                  title="Позиції"
+                  title={t('items')}
                 >
                   {itemDrafts.length === 0 && (
                     <p className="text-app-muted px-4 py-3 text-sm">
-                      Позицій немає. Додайте запчастину, щоб замовлення можна
-                      було підтвердити.
+                      {t('noItems')}
                     </p>
                   )}
                   <ul>
@@ -1484,11 +1524,12 @@ function OrderDetailScreen({
                               {item.partName}
                             </p>
                             <p className="text-app-dim mt-0.5 text-[12.5px] tabular-nums">
-                              Сума позиції{' '}
-                              {money(
-                                lineTotal(item.quantity, item.unitPrice),
-                                'USD',
-                              )}
+                              {t('lineTotal', {
+                                amount: money(
+                                  lineTotal(item.quantity, item.unitPrice),
+                                  'USD',
+                                ),
+                              })}
                             </p>
                           </div>
                           <div className="flex flex-wrap items-end gap-2">
@@ -1497,10 +1538,12 @@ function OrderDetailScreen({
                                 aria-hidden
                                 className="text-app-dim text-[12.5px]"
                               >
-                                Кількість
+                                {t('quantity')}
                               </span>
                               <TextInput
-                                aria-label={`Кількість ${item.partName}`}
+                                aria-label={t('quantityOf', {
+                                  name: item.partName,
+                                })}
                                 className="text-right"
                                 inputMode="numeric"
                                 onChange={(event) =>
@@ -1525,10 +1568,12 @@ function OrderDetailScreen({
                                 aria-hidden
                                 className="text-app-dim text-[12.5px]"
                               >
-                                Ціна
+                                {t('price')}
                               </span>
                               <TextInput
-                                aria-label={`Ціна ${item.partName}`}
+                                aria-label={t('priceOf', {
+                                  name: item.partName,
+                                })}
                                 className="text-right"
                                 inputMode="decimal"
                                 onChange={(event) =>
@@ -1549,7 +1594,9 @@ function OrderDetailScreen({
                               />
                             </div>
                             <Button
-                              aria-label={`Видалити ${item.partName}`}
+                              aria-label={t('deleteItem', {
+                                name: item.partName,
+                              })}
                               disabled={busy}
                               onClick={() =>
                                 void transition(() =>
@@ -1588,7 +1635,7 @@ function OrderDetailScreen({
                   </ul>
                   {itemDrafts.length > itemsPageSize ? (
                     <Pagination
-                      label="Пагінація позицій замовлення"
+                      label={t('itemsPages')}
                       onPage={setItemsPage}
                       page={itemsPage}
                       totalPages={itemsTotalPages}
@@ -1617,7 +1664,12 @@ function OrderDetailScreen({
                   paidLine={
                     order.totalPaid === null || order.totalPaid <= 0
                       ? null
-                      : `сплачено ${money(order.totalPaid, order.paymentCurrency ?? 'USD')}`
+                      : t('paidLine', {
+                          amount: money(
+                            order.totalPaid,
+                            order.paymentCurrency ?? 'USD',
+                          ),
+                        })
                   }
                   payments={order.payments}
                 />
@@ -1645,7 +1697,7 @@ function OrderDetailScreen({
                           onClick={() => setPaymentOrderId(order.id)}
                           variant="primary"
                         >
-                          Додати платіж
+                          {t('addPayment')}
                         </Button>
                         <Button
                           className="w-full justify-center"
@@ -1677,7 +1729,7 @@ function OrderDetailScreen({
                             )
                           }}
                         >
-                          Підтвердити замовлення
+                          {t('confirmOrder')}
                         </Button>
                       </>
                     ) : ordinaryFinance && order.status === 'confirmed' ? (
@@ -1686,15 +1738,15 @@ function OrderDetailScreen({
                         onClick={() => changeRefundOpen(!refundOpen)}
                         variant="danger"
                       >
-                        Оформити повернення
+                        {t('startRefund')}
                       </Button>
                     ) : null
                   }
                   hint={
                     ordinaryFinance && order.status === 'pending'
-                      ? 'Підтвердження спише позиції зі складу та зафіксує платежі.'
+                      ? t('confirmHint')
                       : ordinaryFinance && order.status === 'confirmed'
-                        ? 'Повернення поверне позиції на склад і виведе кошти з каси.'
+                        ? t('refundHint')
                         : null
                   }
                   summary={summary}
@@ -1717,19 +1769,18 @@ function OrderDetailScreen({
               {deliveryLoad.state !== null && order.status === 'pending' ? (
                 <DeliveryConfigureCard
                   mutationsAllowed={mutationsAllowed}
+                  novaPoshtaAvailable={novaPoshta.available}
                   onConfigured={deliveryLoad.setMoney}
                   orderId={order.id}
                 />
               ) : null}
 
-              <Card title="Історія">
+              <Card title={t('history')}>
                 {historyRows.length === 0 ? (
-                  <p className="text-app-muted text-sm">
-                    Дії із замовленням зʼявляться тут одразу після збереження.
-                  </p>
+                  <p className="text-app-muted text-sm">{t('historyEmpty')}</p>
                 ) : (
                   <>
-                    <ol aria-label="Історія замовлення" className="grid">
+                    <ol aria-label={t('historyLabel')} className="grid">
                       {visibleHistoryRows.map((entry, index) => (
                         <li className="flex gap-3.5" key={entry.key}>
                           <span
@@ -1743,7 +1794,7 @@ function OrderDetailScreen({
                           </span>
                           <span className="min-w-0 flex-1 pb-5">
                             <span className="block text-[15px] font-bold text-white">
-                              {orderEventTitle(entry.eventType)}
+                              {orderEventTitle(entry.eventType, locale)}
                             </span>
                             <span className="text-app-muted mt-1 block text-[13px]">
                               {entry.userName} ·{' '}
@@ -1764,8 +1815,8 @@ function OrderDetailScreen({
                         type="button"
                       >
                         {historyExpanded
-                          ? 'Згорнути історію'
-                          : 'Показати всю історію'}
+                          ? t('historyCollapse')
+                          : t('historyExpand')}
                       </button>
                     ) : null}
                   </>
@@ -1775,9 +1826,14 @@ function OrderDetailScreen({
           </div>
         )}
         <ConfirmDialog
-          confirmLabel={`Повернути ${money(summary.paid ?? summary.totalUsd, summary.paidCurrency ?? 'USD')}`}
+          confirmLabel={t('refundConfirm', {
+            amount: money(
+              summary.paid ?? summary.totalUsd,
+              summary.paidCurrency ?? 'USD',
+            ),
+          })}
           confirmDisabled={!refundReason.trim()}
-          consequence="Дію не можна скасувати. Причина потрапить в історію замовлення."
+          consequence={t('refundConsequence')}
           destructive
           effects={refundEffects(order, summary)}
           error={refundOpen ? error : null}
@@ -1803,12 +1859,12 @@ function OrderDetailScreen({
           onOpenChange={changeRefundOpen}
           open={refundOpen && ordinaryFinance && order.status === 'confirmed'}
           pending={busy}
-          title="Оформити повернення?"
+          title={t('refundTitle')}
         >
-          <Field label="Причина">
+          <Field label={t('refundReason')}>
             <TextInput
               onChange={(event) => setRefundReason(event.target.value)}
-              placeholder="Наприклад: не підійшла за кріпленням"
+              placeholder={t('refundReasonPlaceholder')}
               value={refundReason}
             />
           </Field>
@@ -1837,7 +1893,7 @@ function OrderDetailScreen({
               'parts.view',
             ).then((saved) => {
               if (saved) {
-                toast?.show({ message: 'Позицію додано.', tone: 'ok' })
+                toast?.show({ message: t('itemAdded'), tone: 'ok' })
                 void navigate(`${ordersPath}/${order.id}`)
               }
             })
@@ -1859,7 +1915,7 @@ function OrderDetailScreen({
             ).then((saved) => {
               if (saved) {
                 setCustomerOpen(false)
-                toast?.show({ message: 'Клієнта призначено.', tone: 'ok' })
+                toast?.show({ message: t('customerAssigned'), tone: 'ok' })
               }
             })
           }}
@@ -1884,7 +1940,7 @@ function OrderDetailScreen({
               ).then((saved) => {
                 if (saved) {
                   setPaymentOrderId(null)
-                  toast?.show({ message: 'Платіж збережено.', tone: 'ok' })
+                  toast?.show({ message: t('paymentSaved'), tone: 'ok' })
                 }
               })
             }}
