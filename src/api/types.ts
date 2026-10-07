@@ -1,3 +1,6 @@
+import type { SupportedCurrency } from '../i18n/currencies'
+import type { Locale } from '../i18n/locales'
+
 // === Core authentication ===
 
 export interface SendOtpRequest {
@@ -54,6 +57,12 @@ export interface User {
   role: UserRole
   isActive: boolean
   lastLoginAt: string | null
+  /**
+   * Personal interface language saved in Identity (`uk`, `en-GB`, `pl`;
+   * `null` = automatic). Pending Identity contract: absent on the pinned one,
+   * and validated by the locale resolver before use.
+   */
+  language?: string | null
 }
 
 // === Tenants (rozbirka.core) ===
@@ -76,6 +85,24 @@ export interface Tenant {
    * yard carries the cost of an uncollected parcel itself.
    */
   requireDeliveryDeposit: boolean
+  /*
+   * Business settings (Core feat/backend-localization-currency-onboarding,
+   * not pinned yet). Optional because the pinned contract and older fixtures
+   * lack them; `normalizeTenant` turns unknown values into `null`. Missing
+   * means unknown — read them through `tenantSettings()`, never guess.
+   */
+  /** `UA`, `GB` or `PL`. */
+  countryCode?: 'UA' | 'GB' | 'PL' | null
+  /** IANA zone of the business, e.g. `Europe/Kyiv`. */
+  timeZoneId?: string | null
+  /** Language of documents and customer messages (not the user's UI). */
+  documentLanguage?: Locale | null
+  /** `null` until the owner chooses it; there is no default currency. */
+  accountingCurrency?: SupportedCurrency | null
+  /** Region and document language are fixed after the first operation. */
+  regionLocked?: boolean | null
+  /** Accounting currency is fixed after the first priced record. */
+  currencyLocked?: boolean | null
 }
 
 export interface CreateTenantRequest {

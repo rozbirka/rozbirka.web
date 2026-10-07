@@ -14,6 +14,7 @@
  * failure. Add a line here when another adapter starts sending new fields.
  */
 import type { components } from './generated/core'
+import type { UpdateBusinessRequest } from './business'
 import type { ImportMapping, ImportRule } from './part-imports'
 import type { CreatePartRequest } from './parts'
 
@@ -24,8 +25,25 @@ type Unknown<Sent, Contract> = Exclude<keyof Sent, keyof Contract>
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
 type Check<T extends true> = T
 
+/**
+ * Core `feat/backend-localization-currency-onboarding`: tenant business
+ * settings on `UpdateTenantRequest` (PATCH /api/v1/tenants/{id}). Remove after
+ * re-pinning a Core contract that has them.
+ */
+type PendingUpdateTenantFields =
+  | 'countryCode'
+  | 'timeZoneId'
+  | 'documentLanguage'
+  | 'accountingCurrency'
+
 export type ContractAlignment = [
   Check<Same<Unknown<ImportMapping, Schemas['ImportMappingPlan']>, never>>,
   Check<Same<Unknown<ImportRule, Schemas['ImportFieldRule']>, never>>,
   Check<Same<Unknown<CreatePartRequest, Schemas['CreatePartRequest']>, never>>,
+  Check<
+    Same<
+      Unknown<UpdateBusinessRequest, Schemas['UpdateTenantRequest']>,
+      PendingUpdateTenantFields
+    >
+  >,
 ]

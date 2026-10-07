@@ -1,6 +1,9 @@
 import { apiClient } from './client'
 import type { RequestOptions } from './contracts'
+import { normalizeTenant } from './tenant-settings'
 import type { Tenant } from './types'
+import type { SupportedCurrency } from '../i18n/currencies'
+import type { Locale } from '../i18n/locales'
 
 export interface UpdateBusinessRequest {
   name?: string
@@ -8,6 +11,16 @@ export interface UpdateBusinessRequest {
   logoUrl?: string | null
   /** Omitted leaves the delivery deposit policy as it is. */
   requireDeliveryDeposit?: boolean
+  /*
+   * Business settings (pending Core contract, see contract-alignment.ts).
+   * Omitted leaves the value as it is. Core rejects region/document-language
+   * changes after `regionLocked` and currency changes after `currencyLocked`
+   * with `BUSINESS_SETTINGS_LOCKED`; region needs owner rights.
+   */
+  countryCode?: 'UA' | 'GB' | 'PL'
+  timeZoneId?: string
+  documentLanguage?: Locale
+  accountingCurrency?: SupportedCurrency
 }
 
 const requestConfig = (options: RequestOptions) =>
@@ -24,6 +37,6 @@ export const businessApi = {
       request,
       requestConfig(options),
     )
-    return response.data
+    return normalizeTenant(response.data)
   },
 }
