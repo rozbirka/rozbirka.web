@@ -32,8 +32,10 @@ function nativeLanguageName(tag: string): string {
 
 /**
  * Personal interface language (ROZ-161 1a–1d): automatic or one of the
- * supported languages, saved in the Identity profile. When Identity does not
- * accept the language yet the choice is kept on this device and said so.
+ * supported languages, saved in the Core profile (`PATCH /auth/me/language`).
+ * A deployment whose Core predates that endpoint answers 404/405: the choice
+ * is then kept on this device and said so. It never changes the public-site
+ * language (`siteLocalePreference`).
  */
 export function LanguageCard() {
   const auth = useAuth()
@@ -87,7 +89,7 @@ export function LanguageCard() {
     } catch (error) {
       const problem = normalizeApiProblem(error)
       if (problem.kind === 'cancelled') return
-      // The endpoint is not deployed yet: Identity answers 404/405.
+      // An older Core without the endpoint answers 404/405.
       if (
         problem.kind === 'not-found' ||
         problem.status === 404 ||

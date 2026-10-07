@@ -55,9 +55,9 @@ export const currencyMessages = defineMessages({
     title: 'Accounting currency',
     hint: 'Prices for cars, parts, batches and expenses use this currency. Once the first price is saved, it can’t be changed.',
     lockedHint:
-      'The accounting currency can’t be changed after the first price is saved. Cash desks can still accept payments in other currencies.',
+      'The accounting currency can’t be changed after the first price is saved. Tills can still accept payments in other currencies.',
     badge: 'Locked',
-    noRights: 'The yard owner sets the accounting currency',
+    noRights: 'The business owner sets the accounting currency',
     notSet: 'No accounting currency chosen yet',
     placeholder: 'Choose an accounting currency',
     field: 'Currency',
@@ -73,7 +73,7 @@ export const currencyMessages = defineMessages({
     refused: 'The currency wasn’t saved. Your choice is kept — try again.',
     lockedMeanwhile:
       'The currency wasn’t changed: a first price was saved in the meantime, so the currency is now locked.',
-    denied: 'Only the yard owner can change the accounting currency.',
+    denied: 'Only the business owner can change the accounting currency.',
     checking:
       'The connection dropped. Checking whether the currency was saved…',
     checkFailed:
@@ -84,7 +84,7 @@ export const currencyMessages = defineMessages({
     needCurrency: 'Choose an accounting currency before saving a price',
     chooseLink: 'Choose the accounting currency',
     draftKept: 'We’ll keep your draft and bring you back here afterwards.',
-    askOwner: 'Ask the yard owner to choose the currency.',
+    askOwner: 'Ask the business owner to choose the currency.',
     willLock: 'Saving this price will lock the accounting currency to {code}.',
     priceHint: 'In the accounting currency: {code}, {name}',
     conflictTitle: 'Price not saved: the accounting currency changed',

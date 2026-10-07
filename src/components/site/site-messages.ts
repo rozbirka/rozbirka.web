@@ -96,7 +96,7 @@ export const siteMessages = defineMessages({
     faqTitleLine1: 'Frequently asked',
     faqTitleLine2: 'questions',
     ctaLine1: 'Start',
-    ctaLine2: 'running your yard',
+    ctaLine2: 'running your business',
     ctaLine3: 'today.',
     ctaBody: 'Download the app and keep your whole business in your pocket.',
     ctaImageAlt: 'rozbirka on phones',

@@ -43,7 +43,7 @@ export const partPickerMessages = defineMessages({
     all: 'Wszystkie',
     available: 'Dostępne',
     reserved: 'Rezerwacja',
-    inStock: '{count} dostępne',
+    inStock: 'dostępne: {count}',
     none: 'Brak',
     loadFailed: 'Nie udało się wczytać części.',
     label: 'Wyszukiwanie części',

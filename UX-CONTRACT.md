@@ -108,6 +108,23 @@ Business settings read top to bottom as 01 «Реквізити», 02 «Регі
 документи», 03 «Валюта обліку», 04 «Склади», 05 «Облік»; `#region` and
 `#accounting-currency` (`BUSINESS_SECTION_IDS`) open the two settings blocks.
 
+Terminology follows one glossary in every catalog (`defineMessages` in
+`src/**/*messages*.ts`); translators and reviewers check new copy against it:
+
+| uk                 | en-GB                          | pl                   | Notes                                        |
+| ------------------ | ------------------------------ | -------------------- | -------------------------------------------- |
+| розбірка           | business                       | firma                | the tenant; never «yard», «breaker», «szrot» |
+| власник            | owner (account/business owner) | właściciel (konta)   | role                                         |
+| менеджер           | Manager                        | Menedżer             | role                                         |
+| майстер            | Mechanic                       | Mechanik             | role (`master` in Core)                      |
+| каса               | till                           | kasa                 | never «cash desk», «cash register»           |
+| валюта обліку      | accounting currency            | waluta rozliczeniowa |                                              |
+| партія / приймання | batch / intake                 | partia / przyjęcie   |                                              |
+
+en-GB uses British spelling (colour, catalogue, licence, -ise is not forced
+but -ize is avoided in copy) and pl uses the CLDR one/few/many/other plural
+forms for every count.
+
 SMS sign-in accepts Ukrainian, British and Polish numbers in E.164 with a
 number-country choice; customer phones may be from any country and are never
 rewritten with +380. Customer address fields (country, city, street, house,

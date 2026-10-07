@@ -166,7 +166,10 @@ export const importFileMessages = defineMessages({
     firstRowsCaption: 'First rows of the file',
     rowNumber: 'No.',
     numbersFine: 'Number columns were read correctly — only text is affected.',
-    shownAll: 'Showing all {count} rows of the file',
+    shownAll: {
+      one: 'Showing the only row of the file',
+      other: 'Showing all {count} rows of the file',
+    },
     shownFirst: 'Showing the first {shown} of {count} rows',
     howToRead: 'How to read the file',
     collapse: 'Collapse',

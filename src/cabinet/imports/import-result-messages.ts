@@ -182,7 +182,7 @@ export const importResultMessages = defineMessages({
     },
     headlineExpired: 'This import’s details are no longer available',
     headlineRunning: 'Creating parts',
-    headlineStopped: 'Import stopped at {count} items',
+    headlineStopped: 'Import stopped at item {count}',
     partsCreated: {
       one: '{count} part created',
       other: '{count} parts created',
@@ -342,7 +342,7 @@ export const importResultMessages = defineMessages({
     ledeStopped: {
       one: 'Utworzona {count} pozycja zostaje w katalogu. Pozostałe wiersze nie zostały przetworzone.',
       few: 'Utworzone {count} pozycje zostają w katalogu. Pozostałe wiersze nie zostały przetworzone.',
-      many: 'Utworzone {count} pozycji zostaje w katalogu. Pozostałe wiersze nie zostały przetworzone.',
+      many: 'Utworzonych {count} pozycji zostaje w katalogu. Pozostałe wiersze nie zostały przetworzone.',
       other:
         'Utworzone pozycje ({count}) zostają w katalogu. Pozostałe wiersze nie zostały przetworzone.',
     },

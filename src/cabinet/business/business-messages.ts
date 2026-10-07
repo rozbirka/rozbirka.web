@@ -167,7 +167,7 @@ export const businessMessages = defineMessages({
     depositOn:
       'No waybill is created until the customer pays for delivery both ways. Turn this off if you’re ready to ship without prepayment.',
     depositOff:
-      'You ship without prepayment. If the parcel isn’t collected, the yard pays for both ways.',
+      'You ship without prepayment. If the parcel isn’t collected, your business pays for delivery both ways.',
     ruleMinStock: 'Track minimum stock',
     ruleMinStockHint: 'Flag parts that fall below the minimum',
     ruleVin: 'Require a VIN when adding a car',

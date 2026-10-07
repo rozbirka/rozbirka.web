@@ -266,7 +266,7 @@ export const cashMessages = defineMessages({
     saveChanges: 'Save changes',
     editTitle: 'Edit till',
     editNoRight:
-      'You can’t save: the finance.manage permission is missing. Ask the cabinet owner for access.',
+      'You can’t save: the finance.manage permission is missing. Ask the account owner for access.',
     nameEmpty: 'The name can’t be empty.',
     nameHintEdit:
       'How the till is labelled in reports, transfers and the ledger',
@@ -284,7 +284,7 @@ export const cashMessages = defineMessages({
     initialBalancesHint: 'Optional. An empty field means a zero balance.',
     balanceOf: '{code} balance',
     createNoRight:
-      'You can’t save: the finance.manage permission is missing or the plan’s till limit is reached. Ask the cabinet owner for access or a plan change.',
+      'You can’t save: the finance.manage permission is missing or the plan’s till limit is reached. Ask the account owner for access or a plan change.',
     movementDescription:
       'An entry in this till’s ledger, without a transfer or a document.',
     recordMovement: 'Record transaction',
@@ -439,7 +439,7 @@ export const cashMessages = defineMessages({
     saveChanges: 'Zapisz zmiany',
     editTitle: 'Edycja kasy',
     editNoRight:
-      'Nie można zapisać: brak uprawnienia finance.manage. Poproś właściciela kabinetu o dostęp.',
+      'Nie można zapisać: brak uprawnienia finance.manage. Poproś właściciela konta o dostęp.',
     nameEmpty: 'Nazwa nie może być pusta.',
     nameHintEdit: 'Tak kasa jest podpisana w raportach, przelewach i dzienniku',
     namePlaceholder: 'Kasa główna',
@@ -456,7 +456,7 @@ export const cashMessages = defineMessages({
     initialBalancesHint: 'Opcjonalnie. Puste pole oznacza saldo zerowe.',
     balanceOf: 'Saldo {code}',
     createNoRight:
-      'Nie można zapisać: brak uprawnienia finance.manage lub osiągnięto limit kas w planie. Poproś właściciela kabinetu o dostęp lub zmianę planu.',
+      'Nie można zapisać: brak uprawnienia finance.manage lub osiągnięto limit kas w planie. Poproś właściciela konta o dostęp lub zmianę planu.',
     movementDescription: 'Wpis w dzienniku tej kasy bez przelewu i dokumentu.',
     recordMovement: 'Zapisz operację',
     movementType: 'Typ operacji',

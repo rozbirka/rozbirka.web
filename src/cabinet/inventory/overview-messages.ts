@@ -69,7 +69,7 @@ export const overviewMessages = defineMessages({
     checkedOn: 'Counted {date}',
     noCompletedYet:
       'No completed counts yet — counting happens in the mobile app.',
-    lastCompleted: 'Last completed count — {date} · {count} discrepancies',
+    lastCompleted: 'Last completed count — {date} · discrepancies: {count}',
     statActive: 'Active sessions',
     nobodyCounting: 'nobody is counting right now',
     statZones: 'Zones counted',
@@ -105,7 +105,7 @@ export const overviewMessages = defineMessages({
     defaultTag: 'default',
     archivedTag: 'archived',
     shareOfYard: '{share}% of the business’s stock',
-    positionsShort: '{count} items',
+    positionsShort: { one: '{count} item', other: '{count} items' },
     newWarehouseHint:
       'A warehouse is a building or room; zones are added inside it.',
     newWarehouseTitle: 'New warehouse',

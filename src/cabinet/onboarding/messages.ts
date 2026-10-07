@@ -69,7 +69,7 @@ export const onboardingMessages = defineMessages({
     next: 'Next',
     doneTitle: 'Setup complete',
     doneSubtitle: 'You’re ready to sell. These steps help but aren’t required.',
-    recommendCash: 'Set up a cash desk',
+    recommendCash: 'Set up a till',
     recommendTeam: 'Invite your team',
     hide: 'Hide',
     retry: 'Try again',

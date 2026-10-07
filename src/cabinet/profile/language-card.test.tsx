@@ -93,7 +93,7 @@ it('saves the chosen language to the profile and mirrors it on the device', asyn
   expect(screen.getByTestId('locale')).toHaveTextContent('pl')
 })
 
-it('keeps the choice on this device when Identity has no language endpoint yet', async () => {
+it('keeps the choice on this device when an older Core has no language endpoint', async () => {
   mockAuth(undefined)
   updateLanguage.mockRejectedValue(httpError(404))
   const user = userEvent.setup()

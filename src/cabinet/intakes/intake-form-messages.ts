@@ -389,7 +389,7 @@ export const intakeFormMessages = defineMessages({
     intakeDate: 'Data przyjęcia',
     ownerLabel: 'Odpowiedzialny',
     ownerHint: 'Kto przyjął partię',
-    ownerOnCreate: 'Odpowiedzialnym zostaje osoba, która tworzy przyjęcie.',
+    ownerOnCreate: 'Odpowiedzialna za przyjęcie jest osoba, która je tworzy.',
     costTitle: 'Koszt partii',
     costSplitNow:
       'Kwota zakupu dzieli się między pozycje partii — teraz jest ich {count}.',
