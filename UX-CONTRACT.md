@@ -106,6 +106,18 @@ rewritten with +380. Customer address fields (country, city, street, house,
 postcode) are optional. Nova Poshta is offered to Ukrainian businesses only;
 GB/PL businesses see an unavailable state (Core enforces the same rule).
 
+The public landing has one URL per language and each URL always shows that
+language: `/` Ukrainian (unchanged URL, canonical and content; also
+`x-default`), `/en` English (UK), `/pl` Polish. All three are prerendered with
+their own title, description, canonical, `og:locale`, `<html lang>` and
+hreflang alternates for all three. The language is never detected or
+redirected and there is no "switch language" banner. The header switcher (code
+button with a menu of native names on desktop, three segments in the mobile
+menu) uses plain links that work without JavaScript; choosing remembers the
+language in this browser (the cabinet uses it until the profile has a
+language) and moves focus to the new page's h1. `/privacy` stays
+Ukrainian-only.
+
 Verification owners: `src/i18n/i18n.test.tsx`, `language-card.test.tsx`,
 `region-settings.test.tsx`, `login-international.test.tsx`, `src/lib/phone.test.ts`
 and the en-GB render tests next to each migrated screen.
