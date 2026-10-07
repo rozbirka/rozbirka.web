@@ -1,6 +1,7 @@
 import { Navigate, type RouteObject } from 'react-router'
 import type { ComponentType } from 'react'
 import App from '@/App'
+import { LocaleOverride } from '@/i18n/LocaleProvider'
 import { RedirectIfAuth, RequireAuth } from '@/auth/guards'
 import type { CabinetModuleScreenProps } from '@/cabinet/ModuleBoundary'
 import {
@@ -285,13 +286,28 @@ export function createAppRoutes(
   includePrototypeRoutes: boolean,
 ): RouteObject[] {
   const routes: RouteObject[] = [
-    { path: '/', element: <App /> },
+    // The landing and legal pages exist in Ukrainian only: pin their locale so
+    // hydration matches the prerendered HTML and <html lang> stays truthful.
+    {
+      path: '/',
+      element: (
+        <LocaleOverride locale="uk">
+          <App />
+        </LocaleOverride>
+      ),
+    },
     {
       path: '/privacy',
       hydrateFallbackElement,
       lazy: async () => {
         const { PrivacyScreen } = await import('@/screens/privacy')
-        return { element: <PrivacyScreen /> }
+        return {
+          element: (
+            <LocaleOverride locale="uk">
+              <PrivacyScreen />
+            </LocaleOverride>
+          ),
+        }
       },
     },
     {

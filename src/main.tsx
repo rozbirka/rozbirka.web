@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot, hydrateRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router/dom'
 import { AuthProvider } from '@/auth/AuthContext'
+import { AppLocaleProvider } from '@/i18n/AppLocaleProvider'
 import { router } from '@/routes/router'
 import './index.css'
 
@@ -30,7 +31,9 @@ if (document.readyState === 'complete') {
 const app = (
   <StrictMode>
     <AuthProvider>
-      <RouterProvider router={router} />
+      <AppLocaleProvider>
+        <RouterProvider router={router} />
+      </AppLocaleProvider>
     </AuthProvider>
   </StrictMode>
 )

@@ -1,6 +1,8 @@
 import { renderToString } from 'react-dom/server'
 import { MemoryRouter, useRoutes } from 'react-router'
 import { AuthProvider } from '@/auth/AuthContext'
+import { AppLocaleProvider } from '@/i18n/AppLocaleProvider'
+import { SOURCE_LOCALE } from '@/i18n/locales'
 import { homepageFaqEntries } from '@/components/site/faq'
 import { getProductSeo, productSeoEntries } from '@/seo/product-seo'
 import { buildStructuredData } from '@/seo/structured-data'
@@ -15,9 +17,12 @@ function ServerRoutes() {
 export function renderRoute(pathname: string): string {
   return renderToString(
     <AuthProvider>
-      <MemoryRouter initialEntries={[pathname]}>
-        <ServerRoutes />
-      </MemoryRouter>
+      {/* Prerendered public pages are Ukrainian; index.html carries lang="uk". */}
+      <AppLocaleProvider locale={SOURCE_LOCALE}>
+        <MemoryRouter initialEntries={[pathname]}>
+          <ServerRoutes />
+        </MemoryRouter>
+      </AppLocaleProvider>
     </AuthProvider>,
   )
 }
