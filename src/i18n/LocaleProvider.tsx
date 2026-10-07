@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { DEFAULT_TIME_ZONE } from './format'
 import { localePreference } from './locale-preference'
+import { requestLocale } from './request-locale'
 import {
   browserLanguages,
   resolveLocale,
@@ -112,6 +113,11 @@ export function LocaleProvider({
     setOverrides((list) => [...list, { id, locale }])
     return () => setOverrides((list) => list.filter((item) => item.id !== id))
   }, [])
+
+  useEffect(() => {
+    if (!syncDocumentLang) return
+    requestLocale.set(resolution.locale)
+  }, [resolution.locale, syncDocumentLang])
 
   const documentLocale = overrides.at(-1)?.locale ?? resolution.locale
   useEffect(() => {
