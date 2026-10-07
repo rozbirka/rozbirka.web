@@ -9,6 +9,7 @@ import { cabinetPath } from '../cabinet-paths'
 import { commandPaletteHint, openCommandPalette } from '../command-palette-open'
 import { moduleLabel } from '../module-messages'
 import { cabinetModules, type CabinetModuleKey } from '../module-registry'
+import { OnboardingChecklist } from '../onboarding/OnboardingChecklist'
 import { evaluateModuleAccess } from '../policy'
 import { ActivityCard } from './ActivityCard'
 import { CarPayoffCard } from './CarPayoffCard'
@@ -177,6 +178,11 @@ export function DashboardScreen() {
 
         {snapshot !== null && targetTenant !== null ? (
           <DashboardBillingBanner snapshot={snapshot} tenant={targetTenant} />
+        ) : null}
+
+        {/* Owner onboarding of a new yard; renders nothing for anyone else. */}
+        {snapshot !== null && targetTenant !== null ? (
+          <OnboardingChecklist snapshot={snapshot} tenant={targetTenant} />
         ) : null}
 
         <div

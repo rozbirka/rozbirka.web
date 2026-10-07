@@ -10,6 +10,10 @@ import { useDashboardData, type DashboardDataState } from './use-dashboard-data'
 
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
 vi.mock('./use-dashboard-data', () => ({ useDashboardData: vi.fn() }))
+// The checklist has its own suite; here it must not reach the network.
+vi.mock('../onboarding/OnboardingChecklist', () => ({
+  OnboardingChecklist: () => null,
+}))
 
 const tenant: Tenant = {
   id: 'tenant-1',

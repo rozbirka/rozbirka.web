@@ -60,8 +60,18 @@ type PendingCustomerAddressFields =
 type PendingIdentitySchemas =
   'Rozbirka.Identity.Application.Auth.DTOs.UpdateLanguageRequest'
 
+/**
+ * Core `feat/backend-localization-currency-onboarding`: owner onboarding
+ * (GET/PATCH /api/v1/tenants/{id}/onboarding → `OnboardingDto`, PATCH body
+ * `UpdateOnboardingRequest`), adapter in `onboarding.ts`. Typecheck fails once
+ * a pinned contract defines these schemas: then drop this list and align
+ * `UpdateOnboardingRequest` field by field like the entries below.
+ */
+type PendingSchemas = 'OnboardingDto' | 'UpdateOnboardingRequest'
+
 export type ContractAlignment = [
   Check<Same<Extract<PendingIdentitySchemas, keyof IdentitySchemas>, never>>,
+  Check<Same<Extract<keyof Schemas, PendingSchemas>, never>>,
   Check<Same<Unknown<ImportMapping, Schemas['ImportMappingPlan']>, never>>,
   Check<Same<Unknown<ImportRule, Schemas['ImportFieldRule']>, never>>,
   Check<Same<Unknown<CreatePartRequest, Schemas['CreatePartRequest']>, never>>,

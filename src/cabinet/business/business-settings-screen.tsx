@@ -18,6 +18,7 @@ import { useT } from '@/i18n/hooks'
 import { businessMessages } from './business-messages'
 import { RegionSettings } from './region-settings'
 import { cabinetModules } from '../module-registry'
+import { useHashTarget } from '../use-hash-target'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 
 type SaveState = 'idle' | 'pending' | 'success' | 'error' | 'denied'
@@ -106,6 +107,8 @@ function Note({ children }: { children: ReactNode }) {
 }
 
 export function BusinessSettingsScreen() {
+  // `#region` / `#accounting-currency` open that section (business-anchors).
+  useHashTarget()
   const cabinet = useCabinet()
   const auth = useAuthOrNull()
   const t = useT(businessMessages)
