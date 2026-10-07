@@ -175,10 +175,10 @@ export function FeatureUnavailableScreen({
                   />
                   {code === required ? (
                     <span className="text-app-ink font-medium">
-                      {featureLabel(code)}
+                      {featureLabel(code, locale)}
                     </span>
                   ) : (
-                    featureLabel(code)
+                    featureLabel(code, locale)
                   )}
                 </li>
               ))}

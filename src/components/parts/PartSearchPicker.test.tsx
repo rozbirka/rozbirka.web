@@ -9,6 +9,7 @@ import {
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { LocaleProvider } from '@/i18n'
 import { PartSearchPicker, type PartPickerItem } from './PartSearchPicker'
 
 const partMocks = vi.hoisted(() => ({
@@ -143,6 +144,27 @@ describe('PartSearchPicker', () => {
     await waitFor(() => expect(partMocks.facets).toHaveBeenCalledOnce())
     expect(partMocks.search).toHaveBeenCalledTimes(1)
     expect(partMocks.list).not.toHaveBeenCalled()
+  })
+
+  it('speaks English (UK) inside an en-GB locale', async () => {
+    const user = userEvent.setup()
+    render(
+      <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+        <Harness />
+      </LocaleProvider>,
+    )
+
+    await user.type(
+      screen.getByRole('searchbox', { name: 'Search for a part' }),
+      'inverter',
+    )
+
+    const option = await screen.findByRole('option', {
+      name: 'Choose part Інвертор 1',
+    })
+    expect(option).toHaveTextContent('3 in stock')
+    expect(screen.getByRole('button', { name: /^All/ })).toBeVisible()
+    expect(screen.getByRole('listbox', { name: 'Parts found' })).toBeVisible()
   })
 
   it('reuses loaded prices when repeated searches return the same parts', async () => {
