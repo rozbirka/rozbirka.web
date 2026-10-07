@@ -5,8 +5,6 @@ export const dashboardMoneyMessages = defineMessages({
   uk: {
     confirmedValue: 'Вартість підтверджених замовлень',
     accountingValue: 'Облікова вартість · {code}',
-    valuePending:
-      'Сервер ще не рахує облікову вартість підтверджених замовлень, тому її тут немає.',
     notSet: 'Валюту обліку ще не обрано',
     chooseCurrency: 'Обрати валюту',
     receipts: 'Фактичні надходження',
@@ -55,8 +53,6 @@ export const dashboardMoneyMessages = defineMessages({
   'en-GB': {
     confirmedValue: 'Value of confirmed orders',
     accountingValue: 'Accounting value · {code}',
-    valuePending:
-      'The server doesn’t calculate the accounting value of confirmed orders yet, so it isn’t shown here.',
     notSet: 'No accounting currency chosen yet',
     chooseCurrency: 'Choose a currency',
     receipts: 'Actual receipts',
@@ -98,8 +94,6 @@ export const dashboardMoneyMessages = defineMessages({
   pl: {
     confirmedValue: 'Wartość potwierdzonych zamówień',
     accountingValue: 'Wartość rozliczeniowa · {code}',
-    valuePending:
-      'Serwer nie liczy jeszcze wartości rozliczeniowej potwierdzonych zamówień, dlatego jej tu nie ma.',
     notSet: 'Nie wybrano jeszcze waluty rozliczeniowej',
     chooseCurrency: 'Wybierz walutę',
     receipts: 'Faktyczne wpływy',

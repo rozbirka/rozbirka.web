@@ -235,8 +235,12 @@ export function DashboardScreen() {
             )}
             {summary === null ? null : (
               <OrderValueCard
+                analyticsValue={analytics?.confirmedOrdersValue}
+                period={selection.period}
+                periodLabel={periodLabel}
                 settingsPath={accounting.owner ? accounting.settingsPath : null}
                 status={accounting.status}
+                summaryValue={summary.confirmedOrdersValue}
               />
             )}
             {analytics === null ? null : (

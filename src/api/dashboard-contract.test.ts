@@ -254,7 +254,7 @@ describe('parseDashboardAnalytics', () => {
   })
 })
 
-describe('pending accounting currency fields', () => {
+describe('accounting currency fields', () => {
   it('reads the accounting currency and per-currency series when Core sends them', () => {
     const parsed = parseDashboardAnalytics({
       ...analytics,
@@ -293,5 +293,93 @@ describe('pending accounting currency fields', () => {
     expect(parseDashboardData(ownerDashboard)).not.toHaveProperty(
       'accountingCurrency',
     )
+  })
+})
+
+describe('confirmedOrdersValue', () => {
+  it('reads the summary value per calendar period in the accounting currency', () => {
+    const parsed = parseDashboardData({
+      ...ownerDashboard,
+      accountingCurrency: 'USD',
+      confirmedOrdersValue: {
+        today: 120,
+        week: 980.5,
+        month: 12480,
+        accountingCurrency: 'USD',
+      },
+    })
+    expect(parsed.confirmedOrdersValue).toEqual({
+      today: 120,
+      week: 980.5,
+      month: 12480,
+      accountingCurrency: 'USD',
+    })
+  })
+
+  it('keeps absent as unknown and null as withheld', () => {
+    expect(parseDashboardData(ownerDashboard)).not.toHaveProperty(
+      'confirmedOrdersValue',
+    )
+    expect(
+      parseDashboardData({ ...masterDashboard, confirmedOrdersValue: null })
+        .confirmedOrdersValue,
+    ).toBeNull()
+    expect(parseDashboardAnalytics(analytics)).not.toHaveProperty(
+      'confirmedOrdersValue',
+    )
+  })
+
+  it('reads the analytics period total and its series aligned with labels', () => {
+    const parsed = parseDashboardAnalytics({
+      ...analytics,
+      confirmedOrdersValue: {
+        total: 310,
+        series: [10, 0, 300],
+        accountingCurrency: 'pln',
+      },
+    })
+    expect(parsed.confirmedOrdersValue).toEqual({
+      total: 310,
+      series: [10, 0, 300],
+      accountingCurrency: 'PLN',
+    })
+    expect(() =>
+      parseDashboardAnalytics({
+        ...analytics,
+        confirmedOrdersValue: {
+          total: 310,
+          series: [310],
+          accountingCurrency: 'PLN',
+        },
+      }),
+    ).toThrow(DashboardContractError)
+  })
+
+  it('makes an unsupported currency unavailable without breaking the dashboard', () => {
+    const parsed = parseDashboardData({
+      ...ownerDashboard,
+      confirmedOrdersValue: {
+        today: 1,
+        week: 2,
+        month: 3,
+        accountingCurrency: 'XYZ',
+      },
+    })
+    expect(parsed.confirmedOrdersValue).toBeNull()
+    expect(parsed.userName).toBe('Olena Owner')
+  })
+
+  it('rejects a malformed amount', () => {
+    expect(() =>
+      parseDashboardData({
+        ...ownerDashboard,
+        confirmedOrdersValue: {
+          today: 'many',
+          week: 2,
+          month: 3,
+          accountingCurrency: 'USD',
+        },
+      }),
+    ).toThrow(DashboardContractError)
   })
 })
