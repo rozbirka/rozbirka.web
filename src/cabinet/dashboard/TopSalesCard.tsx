@@ -1,8 +1,9 @@
 import { Link } from 'react-router'
-import { plural } from '@/lib/utils'
 import type { DashboardTopPart } from '@/api/dashboard-contract'
+import { useT } from '@/i18n'
 import { useWholeMoney } from '../currency/money'
 import { CardEmpty, CardNote, CardRow, DashboardCard } from './dashboard-card'
+import { dashboardMoneyMessages } from './money-messages'
 
 /**
  * The part's revenue and the currency it is in. The pending contract sends
@@ -40,13 +41,14 @@ export function TopSalesCard({
   periodLabel: string
   topPart: DashboardTopPart | null
 }) {
+  const t = useT(dashboardMoneyMessages)
   return (
     <DashboardCard
       aside={<CardNote>{periodLabel}</CardNote>}
-      title="Топ продажів"
+      title={t('topSales')}
     >
       {topPart === null ? (
-        <CardEmpty>За обраний період продажів не було.</CardEmpty>
+        <CardEmpty>{t('noSales')}</CardEmpty>
       ) : (
         <CardRow hover={partsPath !== null}>
           <Row
@@ -69,6 +71,7 @@ function Row({
   revenue: { amount: number; currency: string | null } | null
   topPart: DashboardTopPart
 }) {
+  const t = useT(dashboardMoneyMessages)
   const money = useWholeMoney(revenue?.currency ?? null)
   const body = (
     <>
@@ -77,9 +80,7 @@ function Row({
           {topPart.name}
         </span>
         <span className="text-app-dim mt-[3px] block font-mono text-[12px]">
-          {String(topPart.salesCount)}{' '}
-          {plural(topPart.salesCount, ['продаж', 'продажі', 'продажів'])} за
-          період
+          {t('salesInPeriod', { count: topPart.salesCount })}
         </span>
       </span>
       <span className="font-mono text-[15px] font-medium whitespace-nowrap tabular-nums text-white">

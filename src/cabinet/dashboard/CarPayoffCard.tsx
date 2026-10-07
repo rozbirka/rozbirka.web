@@ -1,9 +1,9 @@
 import { Link } from 'react-router'
 import { cn } from '@/lib/utils'
 import type { CarListItem } from '@/api/cars'
+import { useFormat, useT } from '@/i18n'
 import { CardEmpty, CardLink, CardRow, DashboardCard } from './dashboard-card'
-
-const sum = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 0 })
+import { dashboardMoneyMessages } from './money-messages'
 const MS_PER_DAY = 86_400_000
 
 const daysSince = (iso: string, now: Date): number | null => {
@@ -26,19 +26,20 @@ export function CarPayoffCard({
 }: {
   /** What invested/recouped are counted in; `null` when unknown. */
   accountingCurrency?: string | null
-  /** The cars module's own path, for the row links and the «Усі N» link. */
+  /** The cars module's own path, for the row links and the "all N" link. */
   base: string
   cars: readonly CarListItem[]
   now: Date
   total: number
 }) {
+  const t = useT(dashboardMoneyMessages)
   return (
     <DashboardCard
-      aside={<CardLink to={base}>Усі {sum.format(total)}</CardLink>}
-      title="Окупність авто"
+      aside={<CardLink to={base}>{t('allCount', { count: total })}</CardLink>}
+      title={t('carPayoff')}
     >
       {cars.length === 0 ? (
-        <CardEmpty>Жодного активного авто на складі.</CardEmpty>
+        <CardEmpty>{t('noActiveCars')}</CardEmpty>
       ) : (
         cars.map((car) => (
           <PayoffRow
@@ -65,6 +66,10 @@ function PayoffRow({
   car: CarListItem
   now: Date
 }) {
+  const t = useT(dashboardMoneyMessages)
+  const format = useFormat()
+  const sum = (value: number) =>
+    format.number(value, { maximumFractionDigits: 0 }) ?? String(value)
   const invested = car.profitability?.invested ?? null
   const recouped = car.profitability?.recouped ?? null
   const percent =
@@ -118,13 +123,13 @@ function PayoffRow({
         </span>
         <span className="text-app-dim mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1 font-mono text-[12px]">
           <span className="min-w-0 truncate">
-            {car.code} · {String(car.soldPartsCount)}/{String(car.partsCount)}{' '}
-            продано
-            {days === null ? '' : ` · ${String(days)} дн`}
+            {car.code} ·{' '}
+            {t('soldOf', { sold: car.soldPartsCount, total: car.partsCount })}
+            {days === null ? '' : ` · ${t('daysShort', { count: days })}`}
           </span>
           {invested === null || recouped === null ? null : (
             <span className="whitespace-nowrap tabular-nums">
-              {sum.format(recouped)} / {sum.format(invested)}
+              {sum(recouped)} / {sum(invested)}
               {accountingCurrency === null ? '' : ` ${accountingCurrency}`}
             </span>
           )}

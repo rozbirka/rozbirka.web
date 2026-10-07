@@ -1,18 +1,17 @@
 import { Link } from 'react-router'
 import { StatusPill } from '@/components/app'
 import type { OrderListItem } from '@/api/orders'
+import { useFormat, useLocale, useT } from '@/i18n'
 import { orderStatusPresentation } from '../orders/order-labels'
 import { CardEmpty, CardLink, CardRow, DashboardCard } from './dashboard-card'
+import { dashboardMoneyMessages } from './money-messages'
 
-const sum = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 0 })
-
-const when = new Intl.DateTimeFormat('uk-UA', {
+const WHEN: Intl.DateTimeFormatOptions = {
   day: '2-digit',
   month: '2-digit',
   hour: '2-digit',
   minute: '2-digit',
-  timeZone: 'Europe/Kyiv',
-})
+}
 
 /** The last orders through the yard, newest first, as the list screen sorts them. */
 export function RecentOrdersCard({
@@ -25,16 +24,24 @@ export function RecentOrdersCard({
   base: string
   orders: readonly OrderListItem[]
 }) {
+  const t = useT(dashboardMoneyMessages)
+  const { locale } = useLocale()
+  const format = useFormat()
+  // The business time zone; «20.09, 14:05» reads as «20.09 · 14:05».
+  const date = (iso: string) =>
+    format.dateWith(iso, WHEN)?.replace(', ', ' · ') ?? iso
+  const sum = (value: number) =>
+    format.number(value, { maximumFractionDigits: 0 }) ?? String(value)
   return (
     <DashboardCard
-      aside={<CardLink to={base}>Усі</CardLink>}
-      title="Замовлення"
+      aside={<CardLink to={base}>{t('all')}</CardLink>}
+      title={t('orders')}
     >
       {orders.length === 0 ? (
-        <CardEmpty>Замовлень ще немає.</CardEmpty>
+        <CardEmpty>{t('noOrders')}</CardEmpty>
       ) : (
         orders.map((order) => {
-          const status = orderStatusPresentation(order.status)
+          const status = orderStatusPresentation(order.status, locale)
           return (
             <CardRow hover key={order.id}>
               <Link
@@ -46,7 +53,7 @@ export function RecentOrdersCard({
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-[15px] font-bold tracking-[-0.01em] text-white">
-                    {order.customerName ?? 'Без клієнта'}
+                    {order.customerName ?? t('noCustomer')}
                   </span>
                   <span className="text-app-dim mt-[3px] block font-mono text-[12px]">
                     {date(order.createdAt)}
@@ -56,7 +63,7 @@ export function RecentOrdersCard({
                 <span className="col-start-2 font-mono text-[15px] font-medium whitespace-nowrap tabular-nums text-white sm:col-start-auto sm:text-right">
                   {order.totalAmount === null
                     ? '—'
-                    : `${sum.format(order.totalAmount)}${accountingCurrency === null ? '' : ` ${accountingCurrency}`}`}
+                    : `${sum(order.totalAmount)}${accountingCurrency === null ? '' : ` ${accountingCurrency}`}`}
                 </span>
               </Link>
             </CardRow>
@@ -65,11 +72,4 @@ export function RecentOrdersCard({
       )}
     </DashboardCard>
   )
-}
-
-const date = (iso: string) => {
-  const parsed = new Date(iso)
-  return Number.isNaN(parsed.getTime())
-    ? iso
-    : when.format(parsed).replace(', ', ' · ')
 }

@@ -4,6 +4,7 @@ import type {
   DashboardAnalytics,
   DashboardData,
 } from '@/api/dashboard-contract'
+import { LocaleProvider } from '@/i18n'
 import { DashboardKpis } from './DashboardKpis'
 
 const data = (overrides: Partial<DashboardData> = {}): DashboardData => ({
@@ -151,4 +152,31 @@ it('leaves out a figure the account may not see rather than showing a dash', () 
   expect(screen.queryByText('Окупність складу')).not.toBeInTheDocument()
   expect(screen.queryByText('Активні замовлення')).not.toBeInTheDocument()
   expect(screen.getByText('Доступно на складі')).toBeVisible()
+})
+
+it('reads the figures in English (UK)', () => {
+  render(
+    <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+      <DashboardKpis
+        accountingCurrency="GBP"
+        analytics={analytics()}
+        data={data({ todaySalesCount: 2 })}
+        parts={null}
+      />
+    </LocaleProvider>,
+  )
+
+  expect(screen.getByText('Receipts today').closest('div')).toHaveTextContent(
+    '2 sales',
+  )
+  expect(screen.getByText('Stock payback').closest('div')).toHaveTextContent(
+    '76,874 of 87,770 GBP',
+  )
+  expect(screen.getByText('Active orders').closest('div')).toHaveTextContent(
+    '−2 over the period',
+  )
+  expect(
+    screen.getByText('Available in stock').closest('div'),
+  ).toHaveTextContent('978items')
+  expect(screen.queryByText(/[А-Яа-яЇїІіЄєҐґ]/)).toBeNull()
 })

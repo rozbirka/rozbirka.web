@@ -33,11 +33,11 @@ export function TillsCard({
 
   return (
     <DashboardCard
-      aside={<CardLink to={base}>Операції</CardLink>}
+      aside={<CardLink to={base}>{t('operations')}</CardLink>}
       title={t('balances')}
     >
       {lines.length === 0 ? (
-        <CardEmpty>Жодної активної каси.</CardEmpty>
+        <CardEmpty>{t('noActiveTills')}</CardEmpty>
       ) : (
         lines.map((line) => (
           <CardRow key={line.key}>
