@@ -351,7 +351,10 @@ export function AccountingCurrencySection() {
   return (
     <section
       aria-labelledby={titleId}
-      className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-5"
+      className="border-app-line bg-app-raised min-w-0 scroll-mt-24 rounded-[20px] border px-5 py-5 outline-none"
+      // Deep-link target (onboarding: /settings/business#accounting-currency).
+      id="accounting-currency"
+      tabIndex={-1}
     >
       <h2 className="text-app-ink text-[15px] font-bold" id={titleId}>
         {t('title')}

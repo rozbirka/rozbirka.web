@@ -232,6 +232,10 @@ describe('accounting currency block', () => {
 
     expect(await screen.findByText('Зафіксовано')).toBeVisible()
     expect(screen.getByText('Долар США')).toBeVisible()
+    // Onboarding deep-links here: /settings/business#accounting-currency.
+    expect(
+      screen.getByRole('region', { name: 'Валюта обліку' }),
+    ).toHaveAttribute('id', 'accounting-currency')
     expect(
       screen.getByText(/Каси можуть приймати оплату в інших валютах/),
     ).toBeVisible()
