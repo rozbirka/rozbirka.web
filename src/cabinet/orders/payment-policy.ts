@@ -1,5 +1,4 @@
-import type { CashRegister } from '@/api/cash'
-import { SUPPORTED_CURRENCIES } from '@/i18n'
+import { byCatalog, tillCurrencies } from '../currency/catalog-order'
 
 /**
  * Multi-currency order payments (REQ-SINGLE-BUSINESS-CURRENCY r9, R-8–R-10):
@@ -7,18 +6,7 @@ import { SUPPORTED_CURRENCIES } from '@/i18n'
  * no converted amount and no comparison with the order value.
  */
 
-const catalogRank = (code: string) => {
-  const index = (SUPPORTED_CURRENCIES as readonly string[]).indexOf(code)
-  return index === -1 ? SUPPORTED_CURRENCIES.length : index
-}
-
-/** Currencies a till keeps, in catalog order (never «preferred» guesses). */
-export function tillCurrencies(register: Pick<CashRegister, 'balances'>) {
-  return Object.keys(register.balances).sort(
-    (left, right) =>
-      catalogRank(left) - catalogRank(right) || left.localeCompare(right),
-  )
-}
+export { tillCurrencies }
 
 export interface PaymentCurrencyChoice {
   currency: string | null
@@ -63,11 +51,7 @@ export function sumByCurrency(
   }
   return [...totals.entries()]
     .map(([currency, amount]) => ({ currency, amount }))
-    .sort(
-      (left, right) =>
-        catalogRank(left.currency) - catalogRank(right.currency) ||
-        left.currency.localeCompare(right.currency),
-    )
+    .sort((left, right) => byCatalog(left.currency, right.currency))
 }
 
 interface PaymentKey {

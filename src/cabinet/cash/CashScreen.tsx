@@ -14,6 +14,7 @@ import {
   useOptionalToast,
 } from '@/components/app'
 import { cn } from '@/lib/utils'
+import { currencyName, SUPPORTED_CURRENCIES, useLocale } from '@/i18n'
 import { normalizeApiProblem } from '@/api/errors'
 import {
   cashApi,
@@ -569,6 +570,7 @@ function CashRegisterForm({
   const cashPath = location.pathname.replace(/\/(?:new|[^/]+\/edit)$/, '')
   const [name, setName] = useState('')
   const [type, setType] = useState('cash')
+  const { locale } = useLocale()
   const [currencies, setCurrencies] = useState<string[]>(['UAH'])
   const [initialBalances, setInitialBalances] = useState<
     Record<string, string>
@@ -712,18 +714,18 @@ function CashRegisterForm({
               <legend className="text-app-muted text-sm font-semibold">
                 Валюти
               </legend>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {[
-                  { code: 'UAH', symbol: '₴' },
-                  { code: 'USD', symbol: '$' },
-                  { code: 'EUR', symbol: '€' },
-                ].map(({ code, symbol }) => {
+              {/* The supported catalog with ISO codes: symbols cannot tell
+                  CAD from USD. A till may keep any of them; this is not the
+                  accounting currency. */}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                {SUPPORTED_CURRENCIES.map((code) => {
                   const selected = currencies.includes(code)
                   return (
                     <button
+                      aria-label={`${code} (${currencyName(code, locale)})`}
                       aria-pressed={selected}
                       className={cn(
-                        'border-app-line rounded-control flex min-h-16 items-center justify-between border p-3',
+                        'border-app-line rounded-control grid min-h-14 content-center gap-0.5 border px-3 py-2 text-left',
                         selected
                           ? 'border-brand bg-brand/10 text-white'
                           : 'bg-app-input text-app-muted',
@@ -740,8 +742,12 @@ function CashRegisterForm({
                       }
                       type="button"
                     >
-                      <span className="text-xl font-bold">{symbol}</span>
-                      <span className="font-mono text-sm">{code}</span>
+                      <span className="font-mono text-sm font-bold">
+                        {code}
+                      </span>
+                      <span className="text-app-dim text-[11px] leading-tight text-pretty">
+                        {currencyName(code, locale)}
+                      </span>
                     </button>
                   )
                 })}
