@@ -1,5 +1,6 @@
 import { useId, type ReactNode } from 'react'
 import { EmptyState, Notice } from '@/components/app'
+import { SOURCE_LOCALE, translate, useT, type Locale } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import { AccessGate } from '../AccessGate'
 import { cabinetModules, type CabinetModuleKey } from '../module-registry'
@@ -10,25 +11,22 @@ import {
 } from '../policy'
 import { tenantRequestScope } from '../tenant-request-scope'
 import type { TenantAccessState } from '../access-types'
-
-/** Eyebrow every billing screen wears, so the three read as one section. */
-export const BILLING_EYEBROW = 'Налаштування · Білінг'
+import { billingMessages } from './messages'
 
 /**
  * One sentence for "we cannot tell which store owns this subscription", used
  * both as a standing notice and as the failure of an action that discovered it
- * mid-flight. It says what to do next, because "недоступне" alone is a dead end.
+ * mid-flight. It says what to do next, because "unavailable" alone is a dead end.
  */
-export const BILLING_MANAGEMENT_UNAVAILABLE =
-  'Керування підпискою недоступне. Оновіть сторінку — можливо, підписку перенесли в App Store або Google Play.'
-export const CONTRACT_MANAGEMENT_INFO =
-  'Корпоративний тариф підключено за договором. Зміни узгоджуються з менеджером Rozbirka.'
+// eslint-disable-next-line react-refresh/only-export-components -- message shared by the three billing screens.
+export const billingManagementUnavailable = (locale: Locale) =>
+  translate(billingMessages, locale, 'managementUnavailable')
 
 /** Thrown when a mutation is dispatched against a non-Mono subscription. */
 // eslint-disable-next-line react-refresh/only-export-components -- failure type shared by the three billing screens.
 export class BillingManagementUnavailableError extends Error {
   constructor() {
-    super(BILLING_MANAGEMENT_UNAVAILABLE)
+    super(translate(billingMessages, SOURCE_LOCALE, 'managementUnavailable'))
     this.name = 'BillingManagementUnavailableError'
   }
 }
@@ -64,19 +62,19 @@ export function BillingSection({
 }
 
 export function BillingUnavailableNotice() {
-  return <Notice tone="warn">{BILLING_MANAGEMENT_UNAVAILABLE}</Notice>
+  const t = useT(billingMessages)
+  return <Notice tone="warn">{t('managementUnavailable')}</Notice>
 }
 
 export function BillingContractNotice() {
-  return <Notice tone="info">{CONTRACT_MANAGEMENT_INFO}</Notice>
+  const t = useT(billingMessages)
+  return <Notice tone="info">{t('contractManaged')}</Notice>
 }
 
 export function EmptyBillingPanel() {
+  const t = useT(billingMessages)
   return (
-    <EmptyState
-      description="Дані недоступні. Спробуйте оновити сторінку."
-      title="Немає даних білінгу"
-    />
+    <EmptyState description={t('emptyDescription')} title={t('emptyTitle')} />
   )
 }
 

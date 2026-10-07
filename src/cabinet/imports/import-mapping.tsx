@@ -1,5 +1,6 @@
 import { Button, Field, Notice, SelectInput, TextInput } from '@/components/app'
-import { cn, plural } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { useLocale } from '@/i18n'
 import type {
   ImportCapabilities,
   ImportField,
@@ -9,7 +10,9 @@ import type {
   ImportStatus,
 } from '@/api/part-imports'
 import { ImportReferencePicker } from './ImportReferencePicker'
-import { fieldLabels, valueLabels } from './import-model'
+import { fieldLabel, valueLabel } from './import-model'
+import { importMappingMessages } from './import-mapping-messages'
+import { useCount, useImportT } from './use-import-text'
 
 /** Fields that describe the whole delivery rather than one row. */
 const SHARED_FIELDS = [
@@ -21,20 +24,15 @@ const SHARED_FIELDS = [
 const SCENARIOS = [
   {
     value: 'Available',
-    label: 'Доступні запчастини',
-    hint: 'Позиції одразу в каталозі. Замовлення не створюються.',
+    label: 'scenarioAvailable',
+    hint: 'scenarioAvailableHint',
   },
   {
     value: 'Reserved',
-    label: 'Резерв із замовленням',
-    hint: 'Кожен рядок резервується під замовлення клієнта.',
+    label: 'scenarioReserved',
+    hint: 'scenarioReservedHint',
   },
 ] as const
-
-const count = (value: number) =>
-  value.toLocaleString('uk-UA').replace(/\u00a0/g, ' ')
-
-const label = (id: string) => fieldLabels[id] ?? id
 
 /**
  * Крок 2 — the screen reads column-first, the way the file does: here is your
@@ -75,6 +73,10 @@ export function ImportMappingStep({
   busy: boolean
   editable: boolean
 }) {
+  const { locale } = useLocale()
+  const t = useImportT(importMappingMessages)
+  const count = useCount()
+  const label = (id: string) => fieldLabel(id, locale)
   const columns = status.source?.fields ?? []
   const sample = rows[0] ?? null
   const rules = mapping?.rules ?? []
@@ -115,27 +117,28 @@ export function ImportMappingStep({
   const resultFor = (target: string) => {
     if (target === '' || sample?.draft == null) return null
     const value = sample.draft.values[target]
-    return value == null || value === '' ? null : (valueLabels[value] ?? value)
+    return value == null || value === ''
+      ? null
+      : (valueLabel(value, locale) ?? value)
   }
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <p className="text-app-muted text-[15px]">
-          {count(status.rowCount)}{' '}
-          {plural(status.rowCount, ['рядок', 'рядки', 'рядків'])} ·{' '}
-          {count(columns.length)}{' '}
-          {plural(columns.length, ['колонка', 'колонки', 'колонок'])} у файлі.
-          Поясніть, що означає кожна колонка.
+          {t('fileSummary', {
+            rows: t('fileRows', { count: status.rowCount }),
+            columns: t('fileColumns', { count: columns.length }),
+          })}
         </p>
         {profiles.length === 0 ? null : (
           <div
-            aria-label="Профіль зіставлення"
+            aria-label={t('profileGroup')}
             className="flex flex-wrap items-center gap-2"
             role="group"
           >
             <span className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-              Профіль
+              {t('profile')}
             </span>
             {profiles.map((profile) => (
               <Button
@@ -147,7 +150,7 @@ export function ImportMappingStep({
               </Button>
             ))}
             <Button disabled={busy || !editable} onClick={onClearProfile}>
-              Без профілю
+              {t('noProfile')}
             </Button>
           </div>
         )}
@@ -155,25 +158,21 @@ export function ImportMappingStep({
 
       {missing.length === 0 ? null : (
         <Notice tone="warn">
-          Не зіставлено{' '}
-          {plural(missing.length, [
-            'обовʼязкове поле',
-            'обовʼязкові поля',
-            'обовʼязкових полів',
-          ])}
-          : {missing.map((field) => label(field.id)).join(', ')}. Перевірка
-          даних стане доступною, щойно вони отримають значення.
+          {t('missingRequired', {
+            count: missing.length,
+            fields: missing.map((field) => label(field.id)).join(', '),
+          })}
         </Notice>
       )}
 
       <div className="flex flex-wrap items-start gap-4">
         <section
-          aria-label="Зіставлення колонок"
+          aria-label={t('columnMapping')}
           className="border-app-line bg-app-raised min-w-0 flex-[1_1_480px] overflow-hidden rounded-[20px] border"
         >
           <div className="border-app-line flex flex-wrap items-baseline justify-between gap-3 border-b px-5.5 py-4">
             <h2 className="text-app-ink text-[15px] font-bold">
-              Зіставлення колонок
+              {t('columnMapping')}
             </h2>
             <p
               className={cn(
@@ -181,9 +180,12 @@ export function ImportMappingStep({
                 missing.length > 0 ? 'text-state-warn' : 'text-app-dim',
               )}
             >
-              {count(mapped.length)} із {count(columns.length)} зіставлено
+              {t('mappedOf', {
+                mapped: count(mapped.length),
+                total: count(columns.length),
+              })}
               {missing.length > 0
-                ? ` · ${count(missing.length)} потребує уваги`
+                ? t('needsAttention', { count: count(missing.length) })
                 : ''}
             </p>
           </div>
@@ -200,10 +202,13 @@ export function ImportMappingStep({
                 >
                   <div className="min-w-0">
                     <p className="text-app-ink truncate text-[14.5px] font-bold">
-                      {column.header || `Колонка ${String(column.column + 1)}`}
+                      {column.header ||
+                        t('columnNumber', {
+                          number: String(column.column + 1),
+                        })}
                     </p>
                     <p className="text-app-dim mt-0.5 truncate font-mono text-[12.5px]">
-                      {raw === null ? '—' : `«${raw}»`}
+                      {raw === null ? '—' : t('sample', { value: raw })}
                     </p>
                   </div>
                   <span
@@ -214,7 +219,9 @@ export function ImportMappingStep({
                   </span>
                   <div className="min-w-0">
                     <SelectInput
-                      aria-label={`Поле для колонки «${column.header || String(column.column + 1)}»`}
+                      aria-label={t('fieldForColumn', {
+                        column: column.header || String(column.column + 1),
+                      })}
                       disabled={busy || !editable}
                       onChange={(event) => {
                         const next = event.target.value
@@ -228,7 +235,7 @@ export function ImportMappingStep({
                       }}
                       value={target}
                     >
-                      <option value="">Не імпортувати</option>
+                      <option value="">{t('doNotImport')}</option>
                       {rowFields.map((field) => (
                         <option key={field.id} value={field.id}>
                           {label(field.id)}
@@ -254,8 +261,8 @@ export function ImportMappingStep({
 
           <p className="text-app-dim border-app-line border-t px-5.5 py-3.5 text-[13px]">
             {unused.length === 0
-              ? 'Усі колонки файлу кудись ідуть.'
-              : `${count(unused.length)} ${plural(unused.length, ['колонка файлу не використовується', 'колонки файлу не використовуються', 'колонок файлу не використовуються'])} — це нормально.`}
+              ? t('allColumnsUsed')
+              : t('unusedColumns', { count: unused.length })}
           </p>
         </section>
 
@@ -270,11 +277,11 @@ export function ImportMappingStep({
           />
 
           <section
-            aria-label="Сценарій імпорту"
+            aria-label={t('scenario')}
             className="border-app-line bg-app-raised rounded-[18px] border px-5 py-4.5"
           >
             <h2 className="text-app-ink text-[15px] font-bold">
-              Сценарій імпорту
+              {t('scenario')}
             </h2>
             <div className="mt-3 grid gap-2">
               {SCENARIOS.map((scenario) => {
@@ -299,10 +306,10 @@ export function ImportMappingStep({
                         on ? 'text-app-ink' : 'text-app-muted',
                       )}
                     >
-                      {scenario.label}
+                      {t(scenario.label)}
                     </span>
                     <span className="text-app-muted mt-1 block text-[13px] leading-5 text-pretty">
-                      {scenario.hint}
+                      {t(scenario.hint)}
                     </span>
                   </button>
                 )
@@ -310,36 +317,38 @@ export function ImportMappingStep({
             </div>
             {strategy === 'Reserved' ? (
               <p className="border-app-line text-app-muted mt-3.5 border-t pt-3.5 text-[13px] leading-5 text-pretty">
-                Рядки з однаковим значенням у полі «Група замовлення» створять
-                одне замовлення, до {count(capabilities.maxOrderGroupSize)}{' '}
-                позицій у кожному. Клієнта буде взято з поля «Клієнт».
+                {t('reservedNote', {
+                  size: count(capabilities.maxOrderGroupSize),
+                })}
               </p>
             ) : null}
           </section>
 
           <section
-            aria-label="Обовʼязкові поля"
+            aria-label={t('requiredFields')}
             className="border-app-line bg-app-raised rounded-[18px] border px-5 py-4.5"
           >
             <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-              Обовʼязкові поля
+              {t('requiredFields')}
             </h2>
             <ul className="mt-3 grid gap-2">
               {capabilities.fields
                 .filter((field) => field.required)
                 .map((field) => {
                   const rule = rules.find((one) => one.target === field.id)
-                  const from =
-                    rule === undefined
-                      ? null
-                      : rule.sources.length > 0
-                        ? (columns.find((one) => one.id === rule.sources[0])
-                            ?.header ??
-                          rule.sources[0] ??
-                          null)
-                        : (rule.constant ?? '') === ''
-                          ? null
-                          : 'спільне значення'
+                  const header =
+                    rule === undefined || rule.sources.length === 0
+                      ? undefined
+                      : (columns.find((one) => one.id === rule.sources[0])
+                          ?.header ?? rule.sources[0])
+                  const from: { column: string } | 'shared' | null =
+                    header !== undefined
+                      ? { column: header }
+                      : rule === undefined ||
+                          rule.sources.length > 0 ||
+                          (rule.constant ?? '') === ''
+                        ? null
+                        : 'shared'
                   return (
                     <li
                       className={cn(
@@ -360,10 +369,14 @@ export function ImportMappingStep({
                         {from === null ? '!' : '✓'}
                       </span>
                       <span>
-                        {label(field.id)}
                         {from === null
-                          ? ' — не зіставлено'
-                          : ` — ${from === 'спільне значення' ? from : `колонка «${from}»`}`}
+                          ? t('notMapped', { field: label(field.id) })
+                          : from === 'shared'
+                            ? t('fromSharedValue', { field: label(field.id) })
+                            : t('fromColumn', {
+                                field: label(field.id),
+                                column: from.column,
+                              })}
                       </span>
                     </li>
                   )
@@ -372,17 +385,17 @@ export function ImportMappingStep({
           </section>
 
           <section
-            aria-label="Зберегти як профіль"
+            aria-label={t('saveAsProfile')}
             className="border-app-line bg-app-raised rounded-[18px] border px-5 py-4.5"
           >
             <h2 className="text-app-ink text-[15px] font-bold">
-              Зберегти як профіль
+              {t('saveAsProfile')}
             </h2>
             <p className="text-app-dim mt-1 text-[13px] leading-5 text-pretty">
-              Щоб наступний такий файл зіставився сам.
+              {t('saveAsProfileHint')}
             </p>
             <div className="mt-3 grid gap-2.5">
-              <Field label="Назва профілю">
+              <Field label={t('profileName')}>
                 <TextInput
                   disabled={busy || !editable}
                   maxLength={200}
@@ -394,7 +407,7 @@ export function ImportMappingStep({
                 disabled={busy || !editable || profileName.trim() === ''}
                 onClick={onSaveProfile}
               >
-                Зберегти профіль
+                {t('saveProfile')}
               </Button>
             </div>
           </section>
@@ -405,11 +418,10 @@ export function ImportMappingStep({
               onClick={onContinue}
               variant="primary"
             >
-              Перевірити дані
+              {t('checkData')}
             </Button>
             <p className="text-app-dim text-[13px] leading-5 text-pretty">
-              Далі ви побачите перелік усіх {count(status.rowCount)} майбутніх
-              позицій. Створення почнеться тільки після підтвердження.
+              {t('checkDataHint', { count: count(status.rowCount) })}
             </p>
           </div>
         </div>
@@ -434,6 +446,9 @@ function SharedValues({
   busy: boolean
   editable: boolean
 }) {
+  const { locale } = useLocale()
+  const t = useImportT(importMappingMessages)
+  const count = useCount()
   const rules = mapping?.rules ?? []
   const shared = capabilities.fields.filter((field) =>
     SHARED_FIELDS.includes(field.id as (typeof SHARED_FIELDS)[number]),
@@ -447,38 +462,35 @@ function SharedValues({
 
   return (
     <section
-      aria-label="Спільні значення"
+      aria-label={t('sharedValues')}
       className="border-app-line bg-app-raised rounded-[18px] border px-5 py-4.5"
     >
-      <h2 className="text-app-ink text-[15px] font-bold">Спільні значення</h2>
+      <h2 className="text-app-ink text-[15px] font-bold">
+        {t('sharedValues')}
+      </h2>
       <p className="text-app-dim mt-1 text-[13px] leading-5 text-pretty">
-        Застосуються до всіх {count(rowCount)} рядків. Якщо значення є в колонці
-        файлу — воно має пріоритет.
+        {t('sharedValuesHint', { count: count(rowCount) })}
       </p>
       <div className="mt-3.5 grid gap-3.5">
         {shared.map((field) => (
           <Field
-            hint={
-              fromColumn(field)
-                ? 'Береться з колонки файлу — спільне значення не застосовується.'
-                : undefined
-            }
+            hint={fromColumn(field) ? t('fromFileColumnHint') : undefined}
             key={field.id}
-            label={label(field.id)}
+            label={fieldLabel(field.id, locale)}
             required={field.required}
           >
             {fromColumn(field) ? (
-              <TextInput disabled readOnly value="З колонки файлу" />
+              <TextInput disabled readOnly value={t('fromFileColumn')} />
             ) : field.allowed ? (
               <SelectInput
                 disabled={busy || !editable}
                 onChange={(event) => onRule(field.id, '', event.target.value)}
                 value={constantOf(field)}
               >
-                <option value="">Не вказувати</option>
+                <option value="">{t('notSpecified')}</option>
                 {field.allowed.map((value) => (
                   <option key={value} value={value}>
-                    {valueLabels[value] ?? value}
+                    {valueLabel(value, locale) ?? value}
                   </option>
                 ))}
               </SelectInput>

@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import type { OrderDetail } from '@/api/orders'
-import { orderMoney } from './order-money'
+import { money, orderMoney, refundEffects } from './order-money'
 import { orderSteps } from './order-steps'
 
 const stamp = (value: string) => value.slice(0, 10)
@@ -49,7 +49,7 @@ const payment = (amount: number, currency: string) => ({
 it('does not mark an unpaid order paid', () => {
   // `current` is drawn like a step that happened, so an open order has to sit
   // on «Створено» and leave «Оплачено» ahead of it.
-  expect(orderSteps(order(), stamp)).toEqual([
+  expect(orderSteps(order(), stamp, 'uk')).toEqual([
     {
       key: 'created',
       label: 'Створено',
@@ -68,6 +68,7 @@ it('dates the confirmation once it has happened', () => {
       confirmedByName: 'Олексій',
     }),
     stamp,
+    'uk',
   )
 
   expect(steps).toHaveLength(2)
@@ -87,6 +88,7 @@ it('ends a refunded order on its own third step', () => {
       refundedByName: 'Дмитро',
     }),
     stamp,
+    'uk',
   )
 
   expect(steps.map((step) => step.label)).toEqual([
@@ -102,69 +104,93 @@ it('ends a cancelled order without ever claiming it was paid', () => {
   const steps = orderSteps(
     order({ status: 'cancelled', cancelledAt: '2026-08-26T09:00:00Z' }),
     stamp,
+    'uk',
   )
 
   expect(steps.map((step) => step.label)).toEqual(['Створено', 'Скасовано'])
 })
 
-it('counts the whole order as outstanding while nothing has been paid', () => {
+it('keeps the order value apart from what has not been paid yet', () => {
   const summary = orderMoney(order())
 
-  expect(summary.totalUsd).toBe(360)
-  expect(summary.paid).toBe(0)
-  expect(summary.remaining).toBe(360)
-  expect(summary.paidPercent).toBe(0)
-  expect(summary.label).toBe('Очікує оплати')
+  expect(summary.value).toBe(360)
+  expect(summary.paid).toEqual([])
+  expect(summary.status).toBe('pending')
+  // Nothing about a remaining sum or a share paid: there is no rate (AC-12).
+  expect(summary).not.toHaveProperty('remaining')
+  expect(summary).not.toHaveProperty('paidPercent')
 })
 
-it('takes dollars paid off a dollar order', () => {
+it('lists actual payments per currency and never adds currencies up', () => {
   const summary = orderMoney(
     order({
-      payments: [payment(100, 'USD')],
-      totalPaid: 100,
-      paymentCurrency: 'USD',
-    }),
-  )
-
-  expect(summary.remaining).toBe(260)
-  expect(summary.paidPercent).toBe(28)
-  expect(summary.label).toBe('Очікує оплати')
-})
-
-it('refuses to compare two currencies rather than dropping one', () => {
-  const summary = orderMoney(
-    order({
-      status: 'confirmed',
-      payments: [payment(1500, 'UAH'), payment(120, 'USD')],
+      payments: [
+        payment(1500, 'UAH'),
+        payment(120, 'USD'),
+        payment(2700, 'uah'),
+      ],
       totalPaid: null,
       paymentCurrency: null,
     }),
   )
 
-  expect(summary.paid).toBeNull()
-  expect(summary.remaining).toBeNull()
-  expect(summary.label).toBe('Оплачено повністю')
+  expect(summary.paid).toEqual([
+    { currency: 'UAH', amount: 4200 },
+    { currency: 'USD', amount: 120 },
+  ])
 })
 
-it('never draws a bar past full or a negative balance', () => {
+it('does not judge a USD order paid in UAH as underpaid or overpaid (AC-11)', () => {
   const summary = orderMoney(
     order({
-      payments: [payment(500, 'USD')],
-      totalPaid: 500,
-      paymentCurrency: 'USD',
+      itemsTotalUsd: 100,
+      payments: [payment(4200, 'UAH')],
+      totalPaid: 4200,
+      paymentCurrency: 'UAH',
     }),
   )
 
-  expect(summary.remaining).toBe(0)
-  expect(summary.paidPercent).toBe(100)
-  expect(summary.label).toBe('Внесено повністю')
+  expect(summary.value).toBe(100)
+  expect(summary.paid).toEqual([{ currency: 'UAH', amount: 4200 }])
+  expect(summary.status).toBe('pending')
+  expect(summary.tone).toBe('warn')
 })
 
-it('says what happened to an order that ended badly', () => {
-  expect(orderMoney(order({ status: 'refunded' })).label).toBe(
-    'Кошти повернено',
+it('says what happened to an order that ended', () => {
+  expect(orderMoney(order({ status: 'confirmed' })).tone).toBe('ok')
+  expect(orderMoney(order({ status: 'refunded' })).status).toBe('refunded')
+  expect(orderMoney(order({ status: 'cancelled' })).tone).toBe('dim')
+})
+
+it('writes money with the ISO code and the currency precision', () => {
+  expect(money(12480, 'USD').replace(/\s/g, ' ')).toBe('12 480,00 USD')
+  expect(money(1500, 'JPY').replace(/\s/g, ' ')).toBe('1 500 JPY')
+  expect(money(100, null)).toBe('100')
+  expect(money(null, 'USD')).toBe('—')
+})
+
+it('names every refunded sum in its own currency', () => {
+  const current = order({
+    status: 'confirmed',
+    payments: [payment(4200, 'UAH'), payment(30, 'EUR')],
+  })
+  const [line] = refundEffects(current, orderMoney(current))
+  expect(line?.replace(/\s/g, ' ')).toBe(
+    '4 200,00 UAH і 30,00 EUR повернеться клієнту з каси: Основна каса',
   )
-  expect(orderMoney(order({ status: 'cancelled' })).label).toBe(
-    'Замовлення скасовано',
+})
+
+it('says what a refund does in English (UK)', () => {
+  const current = order({
+    status: 'confirmed',
+    payments: [payment(4200, 'UAH'), payment(30, 'EUR')],
+  })
+  const lines = refundEffects(current, orderMoney(current), 'en-GB').map(
+    (line) => line.replace(/\s/g, ' '),
   )
+  expect(lines).toEqual([
+    '4,200.00 UAH and 30.00 EUR goes back to the customer from the till: Основна каса',
+    expect.stringMatching(/items? go(es)? back to stock$/),
+    'The order status will change to “Refunded”',
+  ])
 })

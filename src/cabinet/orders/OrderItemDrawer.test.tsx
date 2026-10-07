@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
+import { guardFixture } from '../currency/guard-fixture'
 import { OrderItemDrawer } from './OrderItemDrawer'
 
 const partsApi = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn() }))
@@ -21,6 +22,7 @@ beforeEach(() => {
 function renderDrawer() {
   return render(
     <OrderItemDrawer
+      guard={guardFixture()}
       open
       busy={false}
       error={null}
@@ -138,6 +140,7 @@ it('only offers available stock, including the free remainder of a reserved part
   const user = userEvent.setup()
   render(
     <OrderItemDrawer
+      guard={guardFixture()}
       open
       busy={false}
       error={null}
@@ -249,6 +252,7 @@ it('starts with an empty search after it is closed and opened again', async () =
     orderNumber: 1,
     orderTotal: 0,
     takenPartIds: [] as string[],
+    guard: guardFixture(),
     onOpenChange: vi.fn(),
     onSubmit: vi.fn(),
   }
@@ -263,4 +267,47 @@ it('starts with an empty search after it is closed and opened again', async () =
   expect(screen.getByLabelText('Пошук запчастини')).toHaveValue('')
   expect(screen.getByText('Введіть назву або OEM-код')).toBeVisible()
   expect(partsApi.list).toHaveBeenCalledTimes(1)
+})
+
+it('comes back with the item typed before choosing the currency', async () => {
+  partsApi.list.mockResolvedValue({
+    items: [
+      {
+        id: 'part-1',
+        name: 'Фара ліва',
+        photos: [],
+        quantityTotal: 2,
+        quantityReserved: 0,
+        quantityAvailable: 2,
+        quantitySoldTotal: 0,
+        status: 'available',
+        car: null,
+        order: null,
+        externalCode: null,
+      },
+    ],
+    page: 1,
+    pageSize: 8,
+    total: 1,
+    totalPages: 1,
+  })
+  partsApi.get.mockResolvedValue({ effectiveSalePrice: 40 })
+  render(
+    <OrderItemDrawer
+      busy={false}
+      draft={{ query: 'Фара', pickedId: 'part-1', quantity: 2, price: '55' }}
+      error={null}
+      guard={guardFixture()}
+      onOpenChange={vi.fn()}
+      onSubmit={vi.fn()}
+      open
+      orderNumber={1}
+      orderTotal={0}
+      takenPartIds={[]}
+    />,
+  )
+  expect(screen.getByRole('textbox', { name: 'Пошук запчастини' })).toHaveValue(
+    'Фара',
+  )
+  expect(await screen.findByDisplayValue('55')).toBeVisible()
 })

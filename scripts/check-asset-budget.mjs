@@ -125,8 +125,25 @@ for (const route of releasedRouteChunks) {
   }
 }
 
+// `/en/` and `/pl/` are prerendered alternates of the landing `index.html`:
+// a visitor loads one of them, so only the largest of the three counts.
+const landingAlternate = /^(?:en|pl)\/index\.html$/
+const landingDocuments = files.filter((file) => {
+  const name = relative(file)
+  return name === 'index.html' || landingAlternate.test(name)
+})
+const landingDocument = (
+  await Promise.all(
+    landingDocuments.map(async (file) => ({
+      file,
+      bytes: (await stat(file)).size,
+    })),
+  )
+).sort((a, b) => b.bytes - a.bytes)[0]?.file
+
 const critical = files.filter((file) => {
   const name = relative(file)
+  if (landingDocuments.includes(file)) return file === landingDocument
   return (
     /\.(?:html|css|js|woff2)$/i.test(name) ||
     /(?:hero|cta)-720[^/]*\.(?:avif|webp)$/i.test(name)

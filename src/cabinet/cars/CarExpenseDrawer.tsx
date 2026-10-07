@@ -1,6 +1,10 @@
 import type { FormEvent } from 'react'
 import { Button, Field, Notice, Sheet, TextInput } from '@/components/app'
 import type { CarExpense } from '@/api/cars'
+import { commonMessages, useT } from '@/i18n'
+import { carCardMessages } from './car-card-messages'
+import { MoneyInput } from '../currency/price-currency'
+import type { PriceSlots } from '../currency/use-price-slots'
 
 export function CarExpenseDrawer({
   amount,
@@ -13,6 +17,7 @@ export function CarExpenseDrawer({
   onOpenChange,
   onSubmit,
   open,
+  price,
 }: {
   amount: string
   busy: boolean
@@ -24,40 +29,43 @@ export function CarExpenseDrawer({
   onOpenChange: (open: boolean) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   open: boolean
+  /** Accounting currency of the amount: suffix, notes and lock warning. */
+  price: PriceSlots
 }) {
-  const title = editing ? 'Редагувати витрату' : 'Додати витрату'
+  const t = useT(carCardMessages)
+  const tc = useT(commonMessages)
+  const title = editing ? t('expenseEditTitle') : t('expenseAddTitle')
 
   return (
     <Sheet
       description={
-        editing
-          ? 'Оновіть назву або суму. Прибутковість авто перерахується після збереження.'
-          : 'Додайте витрату понад ціну придбання автомобіля.'
+        editing ? t('expenseEditDescription') : t('expenseAddDescription')
       }
-      eyebrow="Автомобілі · Витрати"
+      eyebrow={t('expenseEyebrow')}
       footer={
         <>
+          <div className="basis-full empty:hidden">{price.saveNotes}</div>
           <Button
             disabled={busy}
             onClick={() => onOpenChange(false)}
             type="button"
           >
-            Скасувати
+            {tc('cancel')}
           </Button>
           <Button
             aria-busy={busy}
-            disabled={busy}
+            disabled={busy || price.disabled}
             form={CAR_EXPENSE_FORM}
             type="submit"
             variant="primary"
           >
             {busy
               ? editing
-                ? 'Зберігаємо…'
-                : 'Додаємо…'
+                ? tc('saving')
+                : t('expenseAdding')
               : editing
-                ? 'Зберегти витрату'
-                : 'Додати витрату'}
+                ? t('expenseSave')
+                : t('expenseAddTitle')}
           </Button>
         </>
       }
@@ -75,16 +83,18 @@ export function CarExpenseDrawer({
         onSubmit={onSubmit}
       >
         {error ? <Notice tone="danger">{error}</Notice> : null}
-        <Field label="Назва витрати">
+        <Field label={t('expenseName')}>
           <TextInput
             autoFocus
             onChange={(event) => onNameChange(event.target.value)}
-            placeholder="Наприклад, транспортування"
+            placeholder={t('expenseNamePlaceholder')}
             value={name}
           />
         </Field>
-        <Field hint="У доларах" label="Сума витрати">
-          <TextInput
+        <Field hint={price.hint} label={t('expenseAmount')}>
+          <MoneyInput
+            currency={price.currency}
+            disabled={price.disabled}
             inputMode="decimal"
             min="0"
             numeric
@@ -95,6 +105,7 @@ export function CarExpenseDrawer({
             value={amount}
           />
         </Field>
+        {price.note}
       </form>
     </Sheet>
   )

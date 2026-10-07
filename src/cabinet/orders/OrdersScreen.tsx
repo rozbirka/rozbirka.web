@@ -23,9 +23,32 @@ import {
   TextInput,
   useOptionalToast,
 } from '@/components/app'
-import { normalizeApiProblem } from '@/api/errors'
+import { isProblemCode, normalizeApiProblem } from '@/api/errors'
+import {
+  commonMessages,
+  formatNumber,
+  translate,
+  useFormat,
+  useLocale,
+  useT,
+  type Locale,
+  type MessageKey,
+  type SupportedCurrency,
+} from '@/i18n'
 import { orderEventTitle, orderStatusPresentation } from './order-labels'
-import { money, orderMoney, refundEffects } from './order-money'
+import { money, moneyList, orderMoney, refundEffects } from './order-money'
+import { paymentMessages } from './payment-messages'
+import { paymentRecorded } from './payment-policy'
+import { isUnknownOutcome } from '../currency/accounting-currency'
+import { MoneyInput } from '../currency/price-currency'
+import {
+  useAccountingCurrency,
+  useFirstPriceGuard,
+} from '../currency/use-accounting-currency'
+import { usePriceSlots } from '../currency/use-price-slots'
+import { useCurrencyDraft } from '../currency/form-draft'
+import { lostResponseMessages } from '../lost-response'
+import { amountPrecisionError } from '../currency/amount-precision'
 import { orderSteps } from './order-steps'
 import {
   OrderCustomerCard,
@@ -38,15 +61,27 @@ import {
 import { DeliveryConfigureCard } from './delivery/DeliveryConfigureCard'
 import { DeliveryOrderBody } from './delivery/DeliveryOrderBody'
 import { orderChip } from './delivery/delivery-view'
+import {
+  INTEGRATION_COUNTRY_UNAVAILABLE,
+  useNovaPoshtaAvailability,
+} from './delivery/nova-poshta-availability'
+import { deliveryMessages } from './delivery/messages'
 import { useDeliveryOrder } from './delivery/use-delivery-order'
-import { cn, plural } from '@/lib/utils'
+import { orderMessages } from './messages'
+import { orderFormMessages } from './order-form-messages'
+import { cn } from '@/lib/utils'
 import {
   customersApi,
   readCustomerPhoneConflict,
   type CustomerPhoneConflict,
   type CustomerSearchItem,
 } from '@/api/customers'
-import { ordersApi, type OrderDetail, type OrderListItem } from '@/api/orders'
+import {
+  ordersApi,
+  type ConfirmPayment,
+  type OrderDetail,
+  type OrderListItem,
+} from '@/api/orders'
 import {
   PartSearchPicker,
   type PartPickerItem,
@@ -57,29 +92,46 @@ import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import {
+  customerPhoneForSave,
   newCustomerPhoneDraft,
   normalizeCustomerPhoneDraft,
 } from '../customers/customer-phone'
+import { useTenantSettings } from '@/auth/useTenantSettings'
+import { isPhoneCountry } from '@/lib/phone'
 import { OrderCustomerDrawer } from './OrderCustomerDrawer'
-import { OrderItemDrawer } from './OrderItemDrawer'
-import { OrderPaymentDrawer } from './OrderPaymentDrawer'
+import { OrderItemDrawer, type OrderItemDraft } from './OrderItemDrawer'
+import { OrderPaymentDrawer, type PaymentOutcome } from './OrderPaymentDrawer'
 
 const idFromPath = (path: string) => /\/orders\/([^/]+)/.exec(path)?.[1] ?? null
-const errorMessage = (error: unknown) => {
+const orderErrorMessage = (error: unknown, locale: Locale) => {
   const problem = normalizeApiProblem(error)
-  if (problem.status === 402)
-    return 'Функція потребує активної підписки. Поновіть підписку в розділі «Підписка» та спробуйте ще раз.'
-  if (problem.kind === 'forbidden')
-    return 'У вас немає прав для цієї дії. Попросіть адміністратора розбірки розширити вашу роль.'
+  const say = (key: MessageKey<typeof orderMessages>) =>
+    translate(orderMessages, locale, key)
+  if (problem.status === 402) return say('errorSubscription')
+  if (problem.kind === 'forbidden') return say('errorForbidden')
   if (problem.code === 'PARTS_NOT_AVAILABLE')
-    return 'Недостатньо доступних запчастин для вказаної кількості.'
+    return say('errorPartsNotAvailable')
   if (problem.code === 'PART_IN_ACTIVE_INVENTORY')
-    return 'Запчастина зараз бере участь в інвентаризації. Завершіть інвентаризацію та спробуйте ще раз.'
-  if (problem.kind === 'conflict')
-    return 'Замовлення змінилося. Оновіть сторінку та спробуйте ще раз.'
+    return say('errorPartInInventory')
+  if (isProblemCode(error, INTEGRATION_COUNTRY_UNAVAILABLE))
+    return translate(deliveryMessages, locale, 'countryUnavailable')
+  if (problem.kind === 'conflict') return say('errorConflict')
   return problem.message
 }
-type OrderReplayOperation = 'order-confirm' | 'order-refund'
+
+/** The order error mapper bound to the current locale. */
+const useErrorMessage = () => {
+  const { locale } = useLocale()
+  return (error: unknown) => orderErrorMessage(error, locale)
+}
+type OrderReplayOperation = 'order-confirm' | 'order-refund' | 'order-payments'
+/** The status an order reaches once a replayable transition landed. */
+const REPLAY_SETTLED_STATUS: Record<OrderReplayOperation, string | null> = {
+  'order-confirm': 'confirmed',
+  'order-refund': 'refunded',
+  // Payments are settled by comparing the payments themselves.
+  'order-payments': null,
+}
 const isAmbiguousMutationFailure = (error: unknown) => {
   const kind = normalizeApiProblem(error).kind
   return kind === 'network' || kind === 'timeout'
@@ -111,12 +163,6 @@ const lineTotal = (quantity: number, unitPrice: number) => {
   const total = quantity * unitPrice
   return Number.isFinite(total) ? total : null
 }
-/** `2026-08-28T10:15:00Z` reads as `2026-08-28 10:15`; the machine value stays in `dateTime`. */
-/**
- * What the server calls each order event, said in Ukrainian. An event the
- * vocabulary does not know is shown as it came rather than guessed at.
- */
-
 /** Two initials for the avatar chip; a single word gives one. */
 const initials = (name: string) =>
   name
@@ -126,9 +172,13 @@ const initials = (name: string) =>
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('') || '?'
 
-const formatTimestamp = (value: string) => {
-  const parts = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(value)
-  return parts ? `${parts[1]} ${parts[2]}` : value
+/**
+ * Date and time in the business time zone; the machine value stays in
+ * `dateTime`. Anything unparsable is shown as it came.
+ */
+const useTimestamp = () => {
+  const format = useFormat()
+  return (value: string) => format.dateTime(value) ?? value
 }
 
 export function OrdersScreen({ definition }: CabinetModuleScreenProps) {
@@ -190,31 +240,37 @@ const canCreateOrder = (
   cabinet.snapshot?.permissions.has('parts.view') === true &&
   cabinet.snapshot.permissions.has('customers.view')
 
-/** Dates arrive as ISO strings; anything unparsable is shown as it came. */
-const day = (value: string) => {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime())
-    ? value
-    : new Intl.DateTimeFormat('uk-UA', { dateStyle: 'short' }).format(parsed)
-}
-
 /** The statuses the list filters by, in the order a sale moves through them. */
 const ORDER_STATUS_FILTERS = [
-  { value: '', label: 'Усі', dot: 'bg-app-line-2' },
-  { value: 'pending', label: 'Очікує', dot: 'bg-state-warn' },
-  { value: 'confirmed', label: 'Підтверджено', dot: 'bg-state-ok' },
-  { value: 'refunded', label: 'Повернено', dot: 'bg-state-info' },
-  { value: 'cancelled', label: 'Скасовано', dot: 'bg-app-muted' },
+  { value: '', dot: 'bg-app-line-2' },
+  { value: 'pending', dot: 'bg-state-warn' },
+  { value: 'confirmed', dot: 'bg-state-ok' },
+  { value: 'refunded', dot: 'bg-state-info' },
+  { value: 'cancelled', dot: 'bg-app-muted' },
 ]
 
 /** Statuses whose money never reached the till. */
 const UNPAID_STATUSES = new Set(['cancelled', 'refunded'])
 
-const listMoney = (value: number | null) =>
-  value === null ? '—' : `${new Intl.NumberFormat('uk-UA').format(value)} $`
+/** Order values are in the accounting currency; no code when it is unknown. */
+const listMoney = (
+  value: number | null,
+  currency: string | null,
+  locale: Locale,
+) =>
+  value === null
+    ? '—'
+    : `${formatNumber(value, locale) ?? String(value)}${currency === null ? '' : ` ${currency}`}`
 
 function OrderDirectory({ definition }: CabinetModuleScreenProps) {
+  const { locale } = useLocale()
+  const t = useT(orderMessages)
+  const format = useFormat()
+  const errorMessage = useErrorMessage()
+  /** Dates arrive as ISO strings; anything unparsable is shown as it came. */
+  const day = (value: string) => format.date(value) ?? value
   const cabinet = useCabinet()
+  const { currency: accountingCurrency } = useAccountingCurrency()
   const createAllowed = canCreateOrder(definition, cabinet)
   const [params, setParams] = useSearchParams()
   const [orders, setOrders] = useState<OrderListItem[]>([])
@@ -249,6 +305,8 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
         if (!controller.signal.aborted) setError(errorMessage(error))
       })
     return () => controller.abort()
+    // The message is chosen when the request fails, not re-run per locale.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId, page, search, status])
 
   /* The endpoint reports a total per filter, not a breakdown, so each chip's
@@ -300,10 +358,10 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
           <div className="min-w-0">
             <p className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
-              Продажі
+              {t('eyebrow')}
             </p>
             <h1 className="mt-2.5 text-[38px] leading-none font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-              Замовлення
+              {t('title')}
             </h1>
           </div>
           {createAllowed ? (
@@ -314,7 +372,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
             >
               <Link to="new">
                 <Plus aria-hidden />
-                Нове замовлення
+                {t('newOrder')}
               </Link>
             </Button>
           ) : null}
@@ -322,17 +380,17 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
 
         <div className="mt-2.5">
           <SearchInput
-            aria-label="Пошук замовлень"
+            aria-label={t('searchLabel')}
             className="min-h-12.5 text-[15px]"
             onChange={(event) => setParam('q', event.target.value)}
-            placeholder="Номер замовлення або покупець"
+            placeholder={t('searchPlaceholder')}
             value={params.get('q') ?? ''}
           />
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
           <div
-            aria-label="Статус замовлення"
+            aria-label={t('statusFilter')}
             className="border-app-line bg-app-raised flex flex-wrap gap-[3px] rounded-xl border p-[3px]"
             role="radiogroup"
           >
@@ -356,7 +414,9 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
                     aria-hidden
                     className={cn('size-1.5 rounded-full', option.dot)}
                   />
-                  {option.label}
+                  {option.value === ''
+                    ? t('filterAll')
+                    : orderStatusPresentation(option.value, locale).label}
                   {counts === null ? null : (
                     <span className="text-app-muted font-mono text-[12px] font-medium">
                       {counts[option.value] ?? 0}
@@ -368,10 +428,10 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
           </div>
           <p className="flex items-baseline gap-2.5">
             <span className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
-              Сума на сторінці
+              {t('pageSum')}
             </span>
             <span className="text-[20px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
-              {listMoney(pageSum)}
+              {listMoney(pageSum, accountingCurrency, locale)}
             </span>
           </p>
         </div>
@@ -379,29 +439,27 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
         {error === null ? null : <Notice tone="danger">{error}</Notice>}
 
         <section
-          aria-label="Список замовлень"
+          aria-label={t('listLabel')}
           className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
         >
           <div
             aria-hidden
             className="border-app-line text-app-dim hidden gap-4 border-b px-6 py-3.5 font-mono text-[10px] tracking-[0.14em] uppercase md:grid md:grid-cols-[7rem_1.4fr_1fr_9.5rem_7.5rem]"
           >
-            <span>Замовлення</span>
-            <span>Покупець</span>
-            <span>Позиції</span>
-            <span>Статус</span>
-            <span className="text-right">Сума</span>
+            <span>{t('columnOrder')}</span>
+            <span>{t('columnBuyer')}</span>
+            <span>{t('columnItems')}</span>
+            <span>{t('columnStatus')}</span>
+            <span className="text-right">{t('columnTotal')}</span>
           </div>
 
           {orders.length === 0 ? (
             <div className="flex flex-col items-center gap-3.5 px-6 py-14 text-center">
               <p className="text-[16px] font-bold text-white">
-                {filtered ? 'Нічого не знайдено' : 'Замовлень поки немає'}
+                {filtered ? t('nothingFound') : t('noOrders')}
               </p>
               <p className="text-app-muted text-[14px]">
-                {filtered
-                  ? 'Спробуйте змінити пошук або статус.'
-                  : 'Замовлення зʼявляться тут, щойно ви створите перше.'}
+                {filtered ? t('nothingFoundHint') : t('noOrdersHint')}
               </p>
               {filtered ? (
                 <Button
@@ -414,14 +472,17 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
                     setParams(next)
                   }}
                 >
-                  Скинути фільтри
+                  {t('resetFilters')}
                 </Button>
               ) : null}
             </div>
           ) : (
             <ul className="grid">
               {orders.map((order) => {
-                const presentation = orderStatusPresentation(order.status)
+                const presentation = orderStatusPresentation(
+                  order.status,
+                  locale,
+                )
                 const unpaid = UNPAID_STATUSES.has(order.status)
                 return (
                   <li
@@ -449,17 +510,17 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
                               : 'text-white',
                           )}
                         >
-                          {order.customerName ?? 'Без покупця'}
+                          {order.customerName ?? t('noBuyer')}
                         </span>
                         <span className="text-app-muted mt-0.5 block truncate text-[13px]">
                           {order.paymentAccountNames.length === 0
-                            ? 'платежів ще немає'
+                            ? t('noPayments')
                             : order.paymentAccountNames.join(', ')}
                         </span>
                       </span>
                       <span className="text-app-muted min-w-0 truncate text-[14px] font-medium">
                         {order.partNames.length === 0
-                          ? `${String(order.itemCount)} ${plural(order.itemCount, ['позиція', 'позиції', 'позицій'])}`
+                          ? t('itemCount', { count: order.itemCount })
                           : order.partNames.join(', ')}
                       </span>
                       <span>
@@ -473,7 +534,11 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
                           unpaid ? 'text-app-dim' : 'text-white',
                         )}
                       >
-                        {listMoney(order.totalAmount)}
+                        {listMoney(
+                          order.totalAmount,
+                          accountingCurrency,
+                          locale,
+                        )}
                       </span>
                     </Link>
                   </li>
@@ -484,10 +549,10 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
 
           <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-t px-6 py-3.5">
             <p className="text-app-muted text-[13px] font-semibold">
-              {total} {plural(total, ['замовлення', 'замовлення', 'замовлень'])}
+              {t('orderCount', { count: total })}
             </p>
             <Pagination
-              label="Сторінки замовлень"
+              label={t('pagesLabel')}
               onPage={goToPage}
               page={page}
               totalPages={Math.max(totalPages, 1)}
@@ -497,6 +562,20 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
       </div>
     </div>
   )
+}
+
+/** What the order form keeps across the trip to the currency setting. */
+interface OrderFormDraft {
+  partId: string
+  partQuery: string
+  customerId: string
+  customerQuery: string
+  selectedCustomerName: string
+  quantity: string
+  unitPrice: string
+  notes: string
+  draftItems: { part: PartPickerItem; quantity: number; unitPrice: number }[]
+  selectedPartDraft: PartPickerItem | null
 }
 
 export function OrderForm({
@@ -509,6 +588,11 @@ export function OrderForm({
     orderBasePath: string
   }
 }) {
+  const t = useT(orderFormMessages)
+  const tc = useT(commonMessages)
+  const tenantCountry = useTenantSettings().countryCode
+  const phoneCountry = isPhoneCountry(tenantCountry) ? tenantCountry : 'UA'
+  const errorMessage = useErrorMessage()
   const cabinet = useCabinet()
   const toast = useOptionalToast()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
@@ -526,16 +610,25 @@ export function OrderForm({
     'customers.manage',
   )
   const dependenciesAllowed = partSearchAllowed && customerSearchAllowed
-  const [partId, setPartId] = useState('')
-  const [partQuery, setPartQuery] = useState('')
+  // The order typed before leaving for the currency setting comes back.
+  const draft = useCurrencyDraft<OrderFormDraft>(
+    `order-form:${createContext?.customer.id ?? 'new'}`,
+  )
+  const restored = draft.initial
+  const [partId, setPartId] = useState(() => restored?.partId ?? '')
+  const [partQuery, setPartQuery] = useState(() => restored?.partQuery ?? '')
   const [customerId, setCustomerId] = useState(
-    createContext?.customer.id ?? params.get('customerId') ?? '',
+    () =>
+      restored?.customerId ??
+      createContext?.customer.id ??
+      params.get('customerId') ??
+      '',
   )
   const [customerQuery, setCustomerQuery] = useState(
-    createContext?.customer.name ?? '',
+    () => restored?.customerQuery ?? createContext?.customer.name ?? '',
   )
   const [selectedCustomerName, setSelectedCustomerName] = useState(
-    createContext?.customer.name ?? '',
+    () => restored?.selectedCustomerName ?? createContext?.customer.name ?? '',
   )
   const [customerResults, setCustomerResults] = useState<CustomerSearchItem[]>(
     [],
@@ -544,30 +637,46 @@ export function OrderForm({
   const customerPickerRef = useRef<HTMLDivElement>(null)
   const [newCustomerName, setNewCustomerName] = useState('')
   const [newCustomerFormOpen, setNewCustomerFormOpen] = useState(false)
-  const [newCustomerPhone, setNewCustomerPhone] = useState(
-    newCustomerPhoneDraft,
+  const [newCustomerPhone, setNewCustomerPhone] = useState(() =>
+    newCustomerPhoneDraft(phoneCountry),
   )
   const [customerConflict, setCustomerConflict] =
     useState<CustomerPhoneConflict | null>(null)
   const [customerBusy, setCustomerBusy] = useState(false)
-  const [quantity, setQuantity] = useState('')
-  const [unitPrice, setUnitPrice] = useState('')
-  const [notes, setNotes] = useState('')
-  const [draftItems, setDraftItems] = useState<
-    {
-      part: PartPickerItem
-      quantity: number
-      unitPrice: number
-    }[]
-  >([])
+  const [quantity, setQuantity] = useState(() => restored?.quantity ?? '')
+  const [unitPrice, setUnitPrice] = useState(() => restored?.unitPrice ?? '')
+  const [notes, setNotes] = useState(() => restored?.notes ?? '')
+  const guard = useFirstPriceGuard()
+  const { locale } = useLocale()
+  const [draftItems, setDraftItems] = useState<OrderFormDraft['draftItems']>(
+    () => restored?.draftItems ?? [],
+  )
   const [selectedPartDraft, setSelectedPartDraft] =
-    useState<PartPickerItem | null>(null)
+    useState<PartPickerItem | null>(() => restored?.selectedPartDraft ?? null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const itemPrices = usePriceSlots(guard, {
+    values: [unitPrice, ...draftItems.map((item) => item.unitPrice)],
+    onAccept: (accepted) => void submit(undefined, accepted),
+    draftKept: true,
+    onLeave: () =>
+      draft.keep({
+        partId,
+        partQuery,
+        customerId,
+        customerQuery,
+        selectedCustomerName,
+        quantity,
+        unitPrice,
+        notes,
+        draftItems,
+        selectedPartDraft,
+      }),
+  })
   const closeNewCustomerForm = () => {
     setNewCustomerFormOpen(false)
     setNewCustomerName('')
-    setNewCustomerPhone(newCustomerPhoneDraft())
+    setNewCustomerPhone(newCustomerPhoneDraft(phoneCountry))
     setCustomerConflict(null)
   }
   const linkedCustomerId =
@@ -587,6 +696,7 @@ export function OrderForm({
         if (!controller.signal.aborted) setError(errorMessage(requestError))
       })
     return () => controller.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- message picked at failure time
   }, [createContext, customerSearchAllowed, linkedCustomerId])
   useEffect(() => {
     const closePickers = (event: PointerEvent) => {
@@ -619,9 +729,13 @@ export function OrderForm({
         if (!controller.signal.aborted) setError(errorMessage(requestError))
       })
     return () => controller.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- message picked at failure time
   }, [customerId, customerQuery, customerSearchAllowed])
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
+  const submit = async (
+    event?: FormEvent,
+    accepted?: SupportedCurrency | null,
+  ) => {
+    event?.preventDefault()
     const directItem =
       partId && quantity && unitPrice
         ? {
@@ -640,10 +754,20 @@ export function OrderForm({
         : directItem
           ? [directItem]
           : []
-    if (busy || !dependenciesAllowed || creationItems.length === 0) return
+    if (
+      busy ||
+      !dependenciesAllowed ||
+      creationItems.length === 0 ||
+      itemPrices.disabled
+    )
+      return
     setBusy(true)
     setError(null)
     try {
+      if (guard.needsCheck(true) && !(await guard.beforeSave(true, accepted))) {
+        setBusy(false)
+        return
+      }
       const scope = requireLatestMutation({ quota: true })
       requireLatestMutation({ permission: 'parts.view', quota: false })
       requireLatestMutation({ permission: 'customers.view', quota: false })
@@ -653,8 +777,9 @@ export function OrderForm({
         items: creationItems,
       })
       if (scope.signal.aborted) return
+      guard.afterSave(true)
       const detailPath = `${createContext?.orderBasePath ?? location.pathname.replace(/\/new$/, '')}/${detail.id}`
-      toast?.show({ message: 'Замовлення створено.', tone: 'ok' })
+      toast?.show({ message: t('created'), tone: 'ok' })
       await navigate(detailPath, { replace: true })
     } catch (error) {
       setError(errorMessage(error))
@@ -680,10 +805,7 @@ export function OrderForm({
       const result = await customersApi.create(
         {
           name: newCustomerName.trim(),
-          phone:
-            newCustomerPhone.trim() === newCustomerPhoneDraft()
-              ? null
-              : newCustomerPhone.trim() || null,
+          phone: customerPhoneForSave(newCustomerPhone, phoneCountry),
           notes: null,
         },
         { signal: scope.signal },
@@ -760,6 +882,15 @@ export function OrderForm({
       parsedUnitPrice < 0
     )
       return
+    const precision = amountPrecisionError(
+      parsedUnitPrice,
+      guard.currency,
+      locale,
+    )
+    if (precision !== null) {
+      setError(precision)
+      return
+    }
     setDraftItems((current) => {
       const existing = current.find(
         (item) => item.part.id === selectedPartDraft.id,
@@ -793,9 +924,9 @@ export function OrderForm({
     return (
       <PageBody width="narrow">
         <DeniedState
-          description="Потрібен доступ до запчастин і клієнтів. Попросіть адміністратора розбірки відкрити ці розділи для вашої ролі."
+          description={t('deniedDescription')}
           role="alert"
-          title="Замовлення недоступні для створення"
+          title={t('deniedTitle')}
         />
       </PageBody>
     )
@@ -814,6 +945,7 @@ export function OrderForm({
   const submitBlocked =
     !mutationsAllowed ||
     busy ||
+    itemPrices.disabled ||
     (draftItems.length === 0 && (!partId || !quantity || !unitPrice))
   const form = (
     <form
@@ -823,13 +955,14 @@ export function OrderForm({
     >
       {error && <Notice tone="danger">{error}</Notice>}
       <SectionPanel
-        description="Оберіть запчастину, вкажіть кількість і ціну, а потім додайте її до замовлення."
-        title="Позиція"
+        description={t('itemDescription')}
+        title={t('itemTitle')}
         variant="plain"
       >
         <div className="grid gap-3">
           {partSearchAllowed && (
             <PartSearchPicker
+              currency={guard.currency}
               onClear={() => {
                 setPartId('')
                 setSelectedPartDraft(null)
@@ -845,23 +978,26 @@ export function OrderForm({
             />
           )}
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Кількість">
+            <Field label={t('quantity')}>
               <QuantityStepper
-                label="Кількість"
+                label={t('quantity')}
                 min={0}
                 onChange={(value) => setQuantity(String(value))}
                 value={Number(quantity || '0')}
               />
             </Field>
-            <Field label="Ціна за одиницю">
-              <TextInput
+            <Field hint={itemPrices.hint} label={t('unitPrice')}>
+              <MoneyInput
                 className="text-left"
+                currency={itemPrices.currency}
+                disabled={itemPrices.disabled}
                 inputMode="decimal"
                 onChange={(event) => setUnitPrice(event.target.value)}
                 value={unitPrice}
               />
             </Field>
           </div>
+          {itemPrices.note}
           <Button
             className="w-full justify-center border-dashed"
             disabled={
@@ -874,12 +1010,12 @@ export function OrderForm({
             onClick={addDraftItem}
           >
             <Plus aria-hidden />
-            Додати деталь
+            {t('addPart')}
           </Button>
 
           {draftItems.length > 0 && (
             <div
-              aria-label="Позиції замовлення"
+              aria-label={t('orderItems')}
               className="border-app-line grid gap-2 border-t pt-4"
             >
               {draftItems.map((item) => (
@@ -892,17 +1028,19 @@ export function OrderForm({
                       {item.part.name}
                     </p>
                     <p className="text-app-muted mt-1 text-[13px] tabular-nums">
-                      {item.quantity} × ${item.unitPrice}
+                      {item.quantity} ×{' '}
+                      {money(item.unitPrice, guard.currency, locale)}
                     </p>
                   </div>
                   <p className="text-brand text-right text-[16px] font-extrabold tabular-nums">
-                    $
-                    {new Intl.NumberFormat('uk-UA').format(
+                    {money(
                       item.quantity * item.unitPrice,
+                      guard.currency,
+                      locale,
                     )}
                   </p>
                   <Button
-                    aria-label={`Прибрати ${item.part.name}`}
+                    aria-label={t('removeItem', { name: item.part.name })}
                     className="size-10 justify-center px-0"
                     onClick={() =>
                       setDraftItems((current) =>
@@ -924,13 +1062,13 @@ export function OrderForm({
       {customerSearchAllowed && (
         <SectionPanel
           variant="plain"
-          description="Замовлення можна створити й без клієнта — тоді поле лишається порожнім."
-          title="Клієнт"
+          description={t('customerDescription')}
+          title={t('customerTitle')}
         >
           <div className="grid gap-3" ref={customerPickerRef}>
             <Field
-              hint={customerId ? undefined : 'Клієнта не обрано'}
-              label="Пошук клієнта"
+              hint={customerId ? undefined : t('noCustomerChosen')}
+              label={t('searchCustomer')}
             >
               <SearchInput
                 className={
@@ -957,7 +1095,7 @@ export function OrderForm({
                   {customerResults.map((customer) => (
                     <li key={customer.id}>
                       <Button
-                        aria-label={`Обрати клієнта ${customer.name}`}
+                        aria-label={t('pickCustomer', { name: customer.name })}
                         className={
                           customer.id === customerId
                             ? 'border-brand/40 bg-brand/[0.1] w-full justify-between'
@@ -975,7 +1113,7 @@ export function OrderForm({
                           {customer.name}
                         </span>
                         <span className="text-app-dim text-[13px]">
-                          {customer.phone ?? 'без телефону'}
+                          {customer.phone ?? t('noPhone')}
                         </span>
                       </Button>
                     </li>
@@ -989,16 +1127,16 @@ export function OrderForm({
                 type="button"
               >
                 <Plus aria-hidden />
-                Створити нового клієнта
+                {t('createCustomer')}
               </Button>
             )}
             {customerMutationAllowed && !customerId && newCustomerFormOpen && (
               <fieldset className="border-app-line-2 rounded-control grid gap-3 border border-dashed p-3">
                 <legend className="text-app-muted px-1 text-[13.5px]">
-                  Новий клієнт
+                  {t('newCustomer')}
                 </legend>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Ім’я нового клієнта">
+                  <Field label={t('newCustomerName')}>
                     <TextInput
                       onChange={(event) =>
                         setNewCustomerName(event.target.value)
@@ -1006,7 +1144,7 @@ export function OrderForm({
                       value={newCustomerName}
                     />
                   </Field>
-                  <Field label="Телефон нового клієнта">
+                  <Field label={t('newCustomerPhone')}>
                     <TextInput
                       inputMode="tel"
                       onChange={(event) =>
@@ -1024,7 +1162,9 @@ export function OrderForm({
                     disabled={customerBusy || !newCustomerName.trim()}
                     onClick={() => void createCustomerInline()}
                   >
-                    {customerBusy ? 'Створюємо клієнта…' : 'Створити клієнта'}
+                    {customerBusy
+                      ? t('creatingCustomer')
+                      : t('createCustomerSubmit')}
                   </Button>
                   <Button
                     disabled={customerBusy}
@@ -1032,7 +1172,7 @@ export function OrderForm({
                     type="button"
                     variant="quiet"
                   >
-                    Скасувати
+                    {tc('cancel')}
                   </Button>
                 </div>
               </fieldset>
@@ -1042,7 +1182,9 @@ export function OrderForm({
                 action={
                   customerConflict.isActive ? (
                     <Button onClick={selectDuplicateCustomer} variant="primary">
-                      Використати клієнта {customerConflict.customerName}
+                      {t('useCustomer', {
+                        name: customerConflict.customerName,
+                      })}
                     </Button>
                   ) : (
                     <Button
@@ -1050,7 +1192,9 @@ export function OrderForm({
                       onClick={() => void reactivateDuplicateCustomer()}
                       variant="primary"
                     >
-                      Активувати {customerConflict.customerName}
+                      {t('activateCustomer', {
+                        name: customerConflict.customerName,
+                      })}
                     </Button>
                   )
                 }
@@ -1064,12 +1208,9 @@ export function OrderForm({
           </div>
         </SectionPanel>
       )}
-      <SectionPanel variant="plain" title="Нотатки">
+      <SectionPanel variant="plain" title={t('notes')}>
         <div>
-          <Field
-            hint="Видно команді розбірки на сторінці замовлення."
-            label="Нотатки"
-          >
+          <Field hint={t('notesHint')} label={t('notes')}>
             <TextArea
               onChange={(event) => setNotes(event.target.value)}
               value={notes}
@@ -1080,21 +1221,18 @@ export function OrderForm({
 
       {draftItems.length > 0 && (
         <Panel
-          aria-label="Підсумок замовлення"
+          aria-label={t('summary')}
           className="border-brand/25 bg-brand/[0.055]"
         >
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <p className="text-app-muted text-[13.5px]">
-                Разом за замовлення
-              </p>
+              <p className="text-app-muted text-[13.5px]">{t('orderTotal')}</p>
               <p className="text-app-dim mt-1 text-[12.5px]">
-                {draftItems.length}{' '}
-                {plural(draftItems.length, ['позиція', 'позиції', 'позицій'])}
+                {t('itemCount', { count: draftItems.length })}
               </p>
             </div>
             <p className="text-brand text-[28px] leading-none font-extrabold tracking-[-0.02em] tabular-nums">
-              ${new Intl.NumberFormat('uk-UA').format(draftItemsTotal)}
+              {money(draftItemsTotal, guard.currency, locale)}
             </p>
           </div>
         </Panel>
@@ -1103,13 +1241,14 @@ export function OrderForm({
   )
   return (
     <Sheet
-      description="Додайте позиції, виберіть клієнта та перевірте суму."
-      eyebrow="Продажі · Замовлення"
+      description={t('sheetDescription')}
+      eyebrow={t('sheetEyebrow')}
       footer={
         <div className="flex w-full flex-wrap items-center gap-2.5">
+          <div className="basis-full empty:hidden">{itemPrices.saveNotes}</div>
           <div className="ml-auto flex items-center gap-2.5">
             <Button disabled={busy} onClick={closeCreate} type="button">
-              Скасувати
+              {tc('cancel')}
             </Button>
             <Button
               aria-busy={busy}
@@ -1118,7 +1257,7 @@ export function OrderForm({
               type="submit"
               variant="primary"
             >
-              {busy ? 'Створюємо…' : 'Створити замовлення'}
+              {busy ? t('creating') : t('createOrder')}
             </Button>
           </div>
         </div>
@@ -1127,7 +1266,7 @@ export function OrderForm({
         if (!next && !busy) closeCreate()
       }}
       open
-      title="Нове замовлення"
+      title={t('sheetTitle')}
     >
       {form}
     </Sheet>
@@ -1139,6 +1278,12 @@ function OrderDetailScreen({
   definition,
   orderId,
 }: CabinetModuleScreenProps & { addingItem?: boolean; orderId: string }) {
+  const { locale } = useLocale()
+  const t = useT(orderMessages)
+  const tc = useT(commonMessages)
+  const errorMessage = useErrorMessage()
+  const formatTimestamp = useTimestamp()
+  const novaPoshta = useNovaPoshtaAvailability()
   const cabinet = useCabinet()
   const toast = useOptionalToast()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
@@ -1156,7 +1301,11 @@ function OrderDetailScreen({
    * order DTO carries no flag.
    */
   const [loadedCustomerId, setLoadedCustomerId] = useState<string | null>(null)
-  const deliveryLoad = useDeliveryOrder(orderId, loadedCustomerId)
+  const deliveryLoad = useDeliveryOrder(
+    orderId,
+    loadedCustomerId,
+    novaPoshta.available,
+  )
   const deliveryMoney = deliveryLoad.state?.money ?? null
   const deliveryOrder = deliveryMoney !== null
   const ordinaryFinance = financeAllowed && !deliveryOrder
@@ -1170,7 +1319,20 @@ function OrderDetailScreen({
   const [editingItems, setEditingItems] = useState(false)
   const [historyExpanded, setHistoryExpanded] = useState(false)
   const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null)
+  const [paymentOutcome, setPaymentOutcome] = useState<PaymentOutcome | null>(
+    null,
+  )
   const [customerOpen, setCustomerOpen] = useState(false)
+  const guard = useFirstPriceGuard()
+  const currency = guard.currency
+  const tp = useT(paymentMessages)
+  const tl = useT(lostResponseMessages)
+  // An item typed in the add-item drawer survives the currency setting.
+  const itemDraft = useCurrencyDraft<OrderItemDraft>(`order-item:${orderId}`)
+  const itemPrices = usePriceSlots(guard, {
+    values: itemDrafts.map((item) => item.unitPrice),
+    onAccept: (accepted) => saveItemDrafts(accepted),
+  })
   const changeRefundOpen = (next: boolean) => {
     setRefundOpen(next)
     setError(null)
@@ -1194,6 +1356,7 @@ function OrderDetailScreen({
         .catch((error) => {
           if (!signal?.aborted) setError(errorMessage(error))
         }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- message picked at failure time
     [acceptOrder, orderId],
   )
   useEffect(() => {
@@ -1227,9 +1390,29 @@ function OrderDetailScreen({
       setError(null)
       return true
     } catch (error) {
-      if (replay && !isAmbiguousMutationFailure(error))
-        replayKeys.clear(replay.operation)
-      setError(errorMessage(error))
+      if (!isAmbiguousMutationFailure(error)) {
+        if (replay) replayKeys.clear(replay.operation)
+        setError(errorMessage(error))
+        return false
+      }
+      // The answer was lost, not necessarily the write: read the order back
+      // before anything else. Confirm and refund carry an Idempotency-Key, so
+      // their retry (same key) is safe; other edits say to check first.
+      try {
+        const fresh = await ordersApi.getById(orderId)
+        acceptOrder(fresh)
+        const landed =
+          replay !== undefined &&
+          fresh.status === REPLAY_SETTLED_STATUS[replay.operation]
+        if (landed) {
+          replayKeys.clear(replay.operation)
+          setError(null)
+          return true
+        }
+        setError(replay ? tl('notSaved') : tl('reread'))
+      } catch {
+        setError(tl('checkFailed'))
+      }
       return false
     } finally {
       setBusy(false)
@@ -1241,17 +1424,17 @@ function OrderDetailScreen({
         <ErrorState
           description={error}
           onRetry={() => void reload()}
-          title="Не вдалося завантажити замовлення"
+          title={t('loadFailed')}
         />
       </PageBody>
     )
   if (!order)
     return (
       <PageBody width="narrow">
-        <SkeletonRows label="Завантажуємо замовлення…" rows={4} />
+        <SkeletonRows label={t('loading')} rows={4} />
       </PageBody>
     )
-  const status = orderStatusPresentation(order.status)
+  const status = orderStatusPresentation(order.status, locale)
   const orderEditable =
     mutationsAllowed && order.status === 'pending' && !deliveryOrder
   const itemsEditable = orderEditable && editingItems
@@ -1306,6 +1489,105 @@ function OrderDetailScreen({
       ? `${moduleBase}/settings/integrations`
       : null
   const summary = orderMoney(order)
+  /**
+   * Sale prices are accounting prices: the first-price check applies. Runs
+   * `save` synchronously when there is nothing to check.
+   */
+  const withPriceCheck = (
+    save: () => void,
+    accepted?: SupportedCurrency | null,
+  ) => {
+    if (!guard.needsCheck(true)) {
+      save()
+      return
+    }
+    void guard.beforeSave(true, accepted).then((ok) => {
+      if (ok) save()
+    })
+  }
+  const saveItemDrafts = (accepted?: SupportedCurrency | null) => {
+    if (busy) return
+    const precision =
+      itemDrafts
+        .map((item) => amountPrecisionError(item.unitPrice, currency, locale))
+        .find((message) => message !== null) ?? null
+    if (precision !== null) {
+      setError(precision)
+      return
+    }
+    withPriceCheck(() => {
+      void transition(() =>
+        ordersApi.updateItems(
+          order.id,
+          itemDrafts.map(({ partId, quantity, unitPrice }) => ({
+            partId,
+            quantity,
+            unitPrice,
+          })),
+        ),
+      ).then((saved) => {
+        if (saved) {
+          guard.afterSave(true)
+          setEditingItems(false)
+        }
+      })
+    }, accepted)
+  }
+  /**
+   * Records one more actual payment (board 3a/3c). A refusal keeps the draft
+   * and says why; an unknown outcome re-reads the order's payments before
+   * anything else, so the same money is never written twice.
+   */
+  const savePayment = async (
+    payments: ConfirmPayment[],
+    added: ConfirmPayment,
+  ) => {
+    if (busy) return
+    setBusy(true)
+    setPaymentOutcome(null)
+    setError(null)
+    const before = order.payments
+    try {
+      const scope = requireLatestMutation({ quota: false })
+      requireLatestMutation({ permission: 'finance.manage', quota: false })
+      // One key per payment set: a retry after a lost answer replays the
+      // first result instead of recording the money twice.
+      const idempotencyKey = replayKeys.forPayload(
+        scope.tenantId,
+        'order-payments',
+        [order.id, payments],
+      )
+      const updated = await ordersApi.updatePayments(order.id, payments, {
+        idempotencyKey,
+      })
+      replayKeys.clear('order-payments')
+      if (scope.signal.aborted) return
+      acceptOrder(updated)
+      setPaymentOrderId(null)
+      toast?.show({ message: tp('saved'), tone: 'ok' })
+    } catch (failure) {
+      if (!isUnknownOutcome(failure)) {
+        replayKeys.clear('order-payments')
+        setPaymentOutcome({ kind: 'refused', message: errorMessage(failure) })
+        return
+      }
+      setPaymentOutcome({ kind: 'checking' })
+      try {
+        const fresh = await ordersApi.getById(order.id)
+        acceptOrder(fresh)
+        if (paymentRecorded(before, fresh.payments, added)) {
+          replayKeys.clear('order-payments')
+          setPaymentOutcome(null)
+          setPaymentOrderId(null)
+          toast?.show({ message: tp('saved'), tone: 'ok' })
+        } else setPaymentOutcome({ kind: 'not-recorded' })
+      } catch {
+        setPaymentOutcome({ kind: 'check-failed' })
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
   const customerPath =
     order.customerId === null
       ? null
@@ -1328,29 +1610,26 @@ function OrderDetailScreen({
             to={ordersPath}
           >
             <ChevronLeft aria-hidden className="size-3.5" />
-            До замовлень
+            {t('backToOrders')}
           </Link>
           <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>Продажі</span>
+            <span>{t('eyebrow')}</span>
             <span aria-hidden className="text-white/20">
               /
             </span>
-            <span className="text-app-muted">Замовлення</span>
+            <span className="text-app-muted">{t('title')}</span>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
-          <Button
-            disabled
-            title="Друку замовлення поки немає: сервіс не формує документ."
-          >
-            Друк
+          <Button disabled title={t('printUnavailable')}>
+            {t('print')}
           </Button>
           {orderEditable ? (
             <ActionMenu
               actions={[
                 {
                   key: 'cancel',
-                  label: 'Скасувати замовлення',
+                  label: t('cancelOrder'),
                   icon: <XCircle aria-hidden />,
                   destructive: true,
                   disabled: busy,
@@ -1358,7 +1637,7 @@ function OrderDetailScreen({
                     void transition(() => ordersApi.cancel(order.id)),
                 },
               ]}
-              label="Інші дії із замовленням"
+              label={t('moreActions')}
             />
           ) : null}
         </div>
@@ -1368,39 +1647,44 @@ function OrderDetailScreen({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-4">
             <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-              Замовлення #{order.number}
+              {t('orderTitle', { number: String(order.number) })}
             </h1>
             <StatusPill
               tone={
                 deliveryMoney === null
                   ? status.tone
-                  : orderChip(deliveryMoney).tone
+                  : orderChip(deliveryMoney, locale).tone
               }
             >
               {deliveryMoney === null
                 ? status.label
-                : orderChip(deliveryMoney).label}
+                : orderChip(deliveryMoney, locale).label}
             </StatusPill>
             <p className="text-app-muted text-sm">
-              Створено {formatTimestamp(order.createdAt)} ·{' '}
-              {order.createdByName}
+              {t('createdBy', {
+                when: formatTimestamp(order.createdAt),
+                who: order.createdByName,
+              })}
             </p>
           </div>
           {deliveryMoney === null ? (
             <div className="mt-6">
-              <OrderSteps steps={orderSteps(order, formatTimestamp)} />
+              <OrderSteps steps={orderSteps(order, formatTimestamp, locale)} />
             </div>
           ) : null}
         </div>
 
         {deliveryMoney === null ? null : (
           <DeliveryOrderBody
+            countryCode={novaPoshta.countryCode}
+            accountingCurrency={currency}
             customerPath={customerPath}
             delivery={deliveryMoney}
             financeAllowed={financeAllowed}
             integrationsPath={integrationsPath}
             load={deliveryLoad}
             mutationsAllowed={mutationsAllowed}
+            novaPoshtaAvailable={novaPoshta.available}
             order={order}
             partsPath={partsPath}
           />
@@ -1417,37 +1701,29 @@ function OrderDetailScreen({
                 <SectionPanel
                   aside={
                     <span className="text-app-muted text-[13.5px] tabular-nums">
-                      Разом за позиціями {money(draftsTotal, 'USD')}
+                      {t('itemsTotal', {
+                        amount: money(draftsTotal, currency, locale),
+                      })}
                     </span>
                   }
                   description={
                     itemDrafts.length === 1
-                      ? 'Видалення останньої позиції скасує замовлення.'
-                      : 'Змініть кількість або ціну й збережіть позиції — набір замінюється цілком.'
+                      ? t('lastItemHint')
+                      : t('editItemsHint')
                   }
                   footer={
                     <>
+                      <div className="basis-full empty:hidden">
+                        {itemPrices.saveNotes}
+                      </div>
                       <Button
-                        disabled={busy || !itemDraftsValid}
-                        onClick={() => {
-                          void transition(() =>
-                            ordersApi.updateItems(
-                              order.id,
-                              itemDrafts.map(
-                                ({ partId, quantity, unitPrice }) => ({
-                                  partId,
-                                  quantity,
-                                  unitPrice,
-                                }),
-                              ),
-                            ),
-                          ).then((saved) => {
-                            if (saved) setEditingItems(false)
-                          })
-                        }}
+                        disabled={
+                          busy || !itemDraftsValid || itemPrices.disabled
+                        }
+                        onClick={() => saveItemDrafts()}
                         variant="primary"
                       >
-                        Зберегти позиції
+                        {t('saveItems')}
                       </Button>
                       <Button
                         disabled={busy}
@@ -1458,16 +1734,15 @@ function OrderDetailScreen({
                         }}
                         variant="ghost"
                       >
-                        Скасувати
+                        {tc('cancel')}
                       </Button>
                     </>
                   }
-                  title="Позиції"
+                  title={t('items')}
                 >
                   {itemDrafts.length === 0 && (
                     <p className="text-app-muted px-4 py-3 text-sm">
-                      Позицій немає. Додайте запчастину, щоб замовлення можна
-                      було підтвердити.
+                      {t('noItems')}
                     </p>
                   )}
                   <ul>
@@ -1484,11 +1759,13 @@ function OrderDetailScreen({
                               {item.partName}
                             </p>
                             <p className="text-app-dim mt-0.5 text-[12.5px] tabular-nums">
-                              Сума позиції{' '}
-                              {money(
-                                lineTotal(item.quantity, item.unitPrice),
-                                'USD',
-                              )}
+                              {t('lineTotal', {
+                                amount: money(
+                                  lineTotal(item.quantity, item.unitPrice),
+                                  currency,
+                                  locale,
+                                ),
+                              })}
                             </p>
                           </div>
                           <div className="flex flex-wrap items-end gap-2">
@@ -1497,10 +1774,12 @@ function OrderDetailScreen({
                                 aria-hidden
                                 className="text-app-dim text-[12.5px]"
                               >
-                                Кількість
+                                {t('quantity')}
                               </span>
                               <TextInput
-                                aria-label={`Кількість ${item.partName}`}
+                                aria-label={t('quantityOf', {
+                                  name: item.partName,
+                                })}
                                 className="text-right"
                                 inputMode="numeric"
                                 onChange={(event) =>
@@ -1525,10 +1804,17 @@ function OrderDetailScreen({
                                 aria-hidden
                                 className="text-app-dim text-[12.5px]"
                               >
-                                Ціна
+                                {t('price')}
                               </span>
                               <TextInput
-                                aria-label={`Ціна ${item.partName}`}
+                                aria-label={
+                                  currency === null
+                                    ? t('priceOf', { name: item.partName })
+                                    : t('priceOfIn', {
+                                        name: item.partName,
+                                        code: currency,
+                                      })
+                                }
                                 className="text-right"
                                 inputMode="decimal"
                                 onChange={(event) =>
@@ -1549,7 +1835,9 @@ function OrderDetailScreen({
                               />
                             </div>
                             <Button
-                              aria-label={`Видалити ${item.partName}`}
+                              aria-label={t('deleteItem', {
+                                name: item.partName,
+                              })}
                               disabled={busy}
                               onClick={() =>
                                 void transition(() =>
@@ -1588,7 +1876,7 @@ function OrderDetailScreen({
                   </ul>
                   {itemDrafts.length > itemsPageSize ? (
                     <Pagination
-                      label="Пагінація позицій замовлення"
+                      label={t('itemsPages')}
                       onPage={setItemsPage}
                       page={itemsPage}
                       totalPages={itemsTotalPages}
@@ -1607,6 +1895,7 @@ function OrderDetailScreen({
                     setEditingItems(true)
                     setError(null)
                   }}
+                  currency={currency}
                   partsPath={partsPath}
                   total={orderTotalUsd}
                 />
@@ -1615,9 +1904,9 @@ function OrderDetailScreen({
               {deliveryOrder ? null : (
                 <OrderPaymentsCard
                   paidLine={
-                    order.totalPaid === null || order.totalPaid <= 0
+                    summary.paid.length === 0
                       ? null
-                      : `сплачено ${money(order.totalPaid, order.paymentCurrency ?? 'USD')}`
+                      : moneyList(summary.paid, ' · ', locale)
                   }
                   payments={order.payments}
                 />
@@ -1645,15 +1934,14 @@ function OrderDetailScreen({
                           onClick={() => setPaymentOrderId(order.id)}
                           variant="primary"
                         >
-                          Додати платіж
+                          {t('addPayment')}
                         </Button>
+                        {/* Confirming is the operator's acknowledgement of
+                            full payment (R-10): it does not wait for a
+                            payment and compares nothing with the value. */}
                         <Button
                           className="w-full justify-center"
-                          disabled={
-                            busy ||
-                            ((orderTotalUsd ?? 0) > 0 &&
-                              order.payments.length === 0)
-                          }
+                          disabled={busy}
                           onClick={() => {
                             const input = {
                               payments: order.payments.map(
@@ -1677,7 +1965,7 @@ function OrderDetailScreen({
                             )
                           }}
                         >
-                          Підтвердити замовлення
+                          {t('confirmOrder')}
                         </Button>
                       </>
                     ) : ordinaryFinance && order.status === 'confirmed' ? (
@@ -1686,22 +1974,29 @@ function OrderDetailScreen({
                         onClick={() => changeRefundOpen(!refundOpen)}
                         variant="danger"
                       >
-                        Оформити повернення
+                        {t('startRefund')}
                       </Button>
                     ) : null
                   }
+                  accountingCurrency={currency}
                   hint={
                     ordinaryFinance && order.status === 'pending'
-                      ? 'Підтвердження спише позиції зі складу та зафіксує платежі.'
+                      ? tp('confirmNote')
                       : ordinaryFinance && order.status === 'confirmed'
-                        ? 'Повернення поверне позиції на склад і виведе кошти з каси.'
+                        ? t('refundHint')
                         : null
                   }
                   summary={summary}
+                  tills={[
+                    ...new Set(
+                      order.payments.map((payment) => payment.accountName),
+                    ),
+                  ]}
                 />
               )}
 
               <OrderCustomerCard
+                accountingCurrency={currency}
                 customerId={order.customerId}
                 customerName={order.customerName}
                 initials={initials(order.customerName ?? '—')}
@@ -1717,19 +2012,18 @@ function OrderDetailScreen({
               {deliveryLoad.state !== null && order.status === 'pending' ? (
                 <DeliveryConfigureCard
                   mutationsAllowed={mutationsAllowed}
+                  novaPoshtaAvailable={novaPoshta.available}
                   onConfigured={deliveryLoad.setMoney}
                   orderId={order.id}
                 />
               ) : null}
 
-              <Card title="Історія">
+              <Card title={t('history')}>
                 {historyRows.length === 0 ? (
-                  <p className="text-app-muted text-sm">
-                    Дії із замовленням зʼявляться тут одразу після збереження.
-                  </p>
+                  <p className="text-app-muted text-sm">{t('historyEmpty')}</p>
                 ) : (
                   <>
-                    <ol aria-label="Історія замовлення" className="grid">
+                    <ol aria-label={t('historyLabel')} className="grid">
                       {visibleHistoryRows.map((entry, index) => (
                         <li className="flex gap-3.5" key={entry.key}>
                           <span
@@ -1743,7 +2037,7 @@ function OrderDetailScreen({
                           </span>
                           <span className="min-w-0 flex-1 pb-5">
                             <span className="block text-[15px] font-bold text-white">
-                              {orderEventTitle(entry.eventType)}
+                              {orderEventTitle(entry.eventType, locale)}
                             </span>
                             <span className="text-app-muted mt-1 block text-[13px]">
                               {entry.userName} ·{' '}
@@ -1764,8 +2058,8 @@ function OrderDetailScreen({
                         type="button"
                       >
                         {historyExpanded
-                          ? 'Згорнути історію'
-                          : 'Показати всю історію'}
+                          ? t('historyCollapse')
+                          : t('historyExpand')}
                       </button>
                     ) : null}
                   </>
@@ -1775,11 +2069,17 @@ function OrderDetailScreen({
           </div>
         )}
         <ConfirmDialog
-          confirmLabel={`Повернути ${money(summary.paid ?? summary.totalUsd, summary.paidCurrency ?? 'USD')}`}
+          confirmLabel={
+            summary.paid.length === 0
+              ? tp('refundNothing')
+              : tp('refundLabel', {
+                  amounts: moneyList(summary.paid, tp('and'), locale),
+                })
+          }
           confirmDisabled={!refundReason.trim()}
-          consequence="Дію не можна скасувати. Причина потрапить в історію замовлення."
+          consequence={t('refundConsequence')}
           destructive
-          effects={refundEffects(order, summary)}
+          effects={refundEffects(order, summary, locale)}
           error={refundOpen ? error : null}
           icon={RotateCcw}
           onConfirm={() => {
@@ -1803,12 +2103,12 @@ function OrderDetailScreen({
           onOpenChange={changeRefundOpen}
           open={refundOpen && ordinaryFinance && order.status === 'confirmed'}
           pending={busy}
-          title="Оформити повернення?"
+          title={t('refundTitle')}
         >
-          <Field label="Причина">
+          <Field label={t('refundReason')}>
             <TextInput
               onChange={(event) => setRefundReason(event.target.value)}
-              placeholder="Наприклад: не підійшла за кріпленням"
+              placeholder={t('refundReasonPlaceholder')}
               value={refundReason}
             />
           </Field>
@@ -1816,31 +2116,37 @@ function OrderDetailScreen({
 
         <OrderItemDrawer
           busy={busy}
+          draft={itemDraft.initial}
           error={addingItem ? error : null}
+          guard={guard}
+          onKeepDraft={itemDraft.keep}
           onOpenChange={(next) => {
             if (!next) void navigate(`${ordersPath}/${order.id}`)
           }}
-          onSubmit={(item) => {
-            void transition(
-              () =>
-                ordersApi.updateItems(order.id, [
-                  ...order.items.map(({ partId, quantity, unitPrice }) => ({
-                    partId,
-                    quantity,
-                    unitPrice,
-                  })),
-                  item,
-                ]),
-              undefined,
-              // The part was chosen from the catalogue; losing the right to
-              // read it between opening the drawer and saving stops the save.
-              'parts.view',
-            ).then((saved) => {
-              if (saved) {
-                toast?.show({ message: 'Позицію додано.', tone: 'ok' })
-                void navigate(`${ordersPath}/${order.id}`)
-              }
-            })
+          onSubmit={(item, accepted) => {
+            const add = () =>
+              void transition(
+                () =>
+                  ordersApi.updateItems(order.id, [
+                    ...order.items.map(({ partId, quantity, unitPrice }) => ({
+                      partId,
+                      quantity,
+                      unitPrice,
+                    })),
+                    item,
+                  ]),
+                undefined,
+                // The part was chosen from the catalogue; losing the right to
+                // read it between opening the drawer and saving stops the save.
+                'parts.view',
+              ).then((saved) => {
+                if (saved) {
+                  guard.afterSave(true)
+                  toast?.show({ message: t('itemAdded'), tone: 'ok' })
+                  void navigate(`${ordersPath}/${order.id}`)
+                }
+              })
+            withPriceCheck(add, accepted)
           }}
           open={addingItem && orderEditable}
           orderNumber={order.number}
@@ -1859,7 +2165,7 @@ function OrderDetailScreen({
             ).then((saved) => {
               if (saved) {
                 setCustomerOpen(false)
-                toast?.show({ message: 'Клієнта призначено.', tone: 'ok' })
+                toast?.show({ message: t('customerAssigned'), tone: 'ok' })
               }
             })
           }}
@@ -1872,25 +2178,18 @@ function OrderDetailScreen({
         order.status === 'pending' &&
         paymentOrderId === order.id ? (
           <OrderPaymentDrawer
+            accountingCurrency={currency}
             busy={busy}
-            error={error}
             existing={order.payments}
-            onOpenChange={(next) => setPaymentOrderId(next ? order.id : null)}
-            onSave={(payments) => {
-              void transition(
-                () => ordersApi.updatePayments(order.id, payments),
-                undefined,
-                'finance.manage',
-              ).then((saved) => {
-                if (saved) {
-                  setPaymentOrderId(null)
-                  toast?.show({ message: 'Платіж збережено.', tone: 'ok' })
-                }
-              })
+            onOpenChange={(next) => {
+              setPaymentOutcome(null)
+              setPaymentOrderId(next ? order.id : null)
             }}
+            onSave={(payments, added) => void savePayment(payments, added)}
             open
             orderNumber={order.number}
-            outstanding={summary.remaining}
+            orderValue={summary.value}
+            outcome={paymentOutcome}
           />
         ) : null}
       </div>

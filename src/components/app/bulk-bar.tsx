@@ -2,6 +2,8 @@ import { X } from 'lucide-react'
 import { Button } from './button'
 import { cn } from '@/lib/utils'
 import type { ReactNode } from 'react'
+import { useT } from '@/i18n/hooks'
+import { appMessages } from './app-messages'
 
 export interface BulkAction {
   key: string
@@ -38,12 +40,13 @@ export function BulkBar({
   /** Progress of a running bulk operation, replacing the actions. */
   busy?: ReactNode
 }) {
+  const t = useT(appMessages)
   const everythingOnPage =
     pageCount !== undefined && pageCount > 0 && count >= pageCount
 
   return (
     <div
-      aria-label="Дії над обраними"
+      aria-label={t('bulkRegion')}
       className="border-brand/30 rounded-panel bg-brand/[0.07] flex flex-wrap items-center gap-x-4 gap-y-2.5 border p-2.5"
       role="region"
     >
@@ -52,8 +55,8 @@ export function BulkBar({
           {count}
         </span>{' '}
         <span>
-          {noun} обрано
-          {busy === undefined ? null : ' · виконуємо'}
+          {t('bulkSelected', { noun })}
+          {busy === undefined ? null : t('bulkRunning')}
         </span>
       </p>
 
@@ -65,7 +68,7 @@ export function BulkBar({
               onClick={onSelectPage}
               type="button"
             >
-              Обрати всі на сторінці
+              {t('selectPage')}
               {pageCount === undefined ? '' : ` (${String(pageCount)})`}
             </button>
           )}
@@ -87,7 +90,11 @@ export function BulkBar({
                 {action.label}
               </Button>
             ))}
-            <Button aria-label="Зняти вибір" onClick={onClear} size="icon">
+            <Button
+              aria-label={t('clearSelection')}
+              onClick={onClear}
+              size="icon"
+            >
               <X aria-hidden />
             </Button>
           </div>

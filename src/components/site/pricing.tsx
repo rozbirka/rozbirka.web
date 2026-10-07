@@ -1,17 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowUpRight, Check } from 'lucide-react'
 import { Link } from 'react-router'
 import { billingApi } from '@/api/billing'
 import { useAuth } from '@/auth/AuthContext'
-import {
-  FALLBACK_LANDING_PLANS,
-  resolveLandingPlans,
-  type LandingPlan,
-} from '@/lib/landing-plans'
+import { resolveLandingPlans, type LandingPlan } from '@/lib/landing-plans'
 import { cn } from '@/lib/utils'
 import { accountPathForPlan, loginPathForPlan } from '@/lib/plan-selection'
 import { Section } from '@/components/layout/section'
 import { PageContainer } from '@/components/layout/page-container'
+import { useLocale, useT } from '@/i18n'
+import { siteMessages } from './site-messages'
 
 const variantStyles: Record<
   LandingPlan['variant'],
@@ -35,17 +33,24 @@ const variantStyles: Record<
 
 export function Pricing() {
   const { status } = useAuth()
-  const [plans, setPlans] = useState(FALLBACK_LANDING_PLANS)
+  const { locale } = useLocale()
+  const t = useT(siteMessages)
+  // Raw API catalog; `null` (not loaded or failed) renders the fallback plans.
+  const [catalog, setCatalog] = useState<unknown>(null)
+  const plans = useMemo(
+    () => resolveLandingPlans(catalog, locale),
+    [catalog, locale],
+  )
 
   useEffect(() => {
     let cancelled = false
     void billingApi
       .getPlans()
       .then((value) => {
-        if (!cancelled) setPlans(resolveLandingPlans(value))
+        if (!cancelled) setCatalog(value)
       })
       .catch(() => {
-        if (!cancelled) setPlans(FALLBACK_LANDING_PLANS)
+        if (!cancelled) setCatalog(null)
       })
     return () => {
       cancelled = true
@@ -57,7 +62,7 @@ export function Pricing() {
       <PageContainer width="md">
         <div className="mx-auto max-w-[1100px]">
           <h2 className="mb-12 text-[40px] leading-[1] font-light tracking-[-0.02em] lg:mb-16 lg:text-[56px]">
-            Тарифні плани
+            {t('pricingTitle')}
           </h2>
           <ul role="list" className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {plans.map((plan) => {
@@ -88,6 +93,7 @@ function PlanCard({
   plan: LandingPlan
   destination: string
 }) {
+  const t = useT(siteMessages)
   const styles = variantStyles[plan.variant]
   const isPro = plan.variant === 'pro'
 
@@ -109,7 +115,7 @@ function PlanCard({
         </span>
         {isPro && (
           <span className="text-[11px] tracking-[0.1em] text-black/70 uppercase">
-            Популярний
+            {t('pricingPopular')}
           </span>
         )}
       </div>
@@ -125,7 +131,7 @@ function PlanCard({
         </p>
         {isPro && (
           <p className="text-[13px] font-medium opacity-80">
-            {plan.trialDays} днів безкоштовно
+            {t('pricingTrial', { count: plan.trialDays })}
           </p>
         )}
       </div>

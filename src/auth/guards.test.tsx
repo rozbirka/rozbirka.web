@@ -148,9 +148,7 @@ it('allows an authenticated user without a display name to finish the login name
       id: 'user-1',
       phone: '+380501112233',
       displayName: ' ',
-      role: 'owner',
-      isActive: true,
-      lastLoginAt: null,
+      effectiveLanguage: 'uk',
     },
   })
 

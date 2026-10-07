@@ -2,11 +2,14 @@ import { useEffect, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { RefreshCw, Search } from 'lucide-react'
 import { Button, Skeleton } from '@/components/app'
+import { useFormat, useLocale, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useCabinet } from '../CabinetContext'
 import { cabinetPath } from '../cabinet-paths'
 import { commandPaletteHint, openCommandPalette } from '../command-palette-open'
+import { moduleLabel } from '../module-messages'
 import { cabinetModules, type CabinetModuleKey } from '../module-registry'
+import { OnboardingChecklist } from '../onboarding/OnboardingChecklist'
 import { evaluateModuleAccess } from '../policy'
 import { ActivityCard } from './ActivityCard'
 import { CarPayoffCard } from './CarPayoffCard'
@@ -17,6 +20,9 @@ import { RecentOrdersCard } from './RecentOrdersCard'
 import { RevenueChart } from './RevenueChart'
 import { TillsCard } from './TillsCard'
 import { TopSalesCard } from './TopSalesCard'
+import { dashboardMessages } from './dashboard-messages'
+import { OrderValueCard } from './OrderValueCard'
+import { useAccountingCurrency } from '../currency/use-accounting-currency'
 import { readDashboardPeriod, writeDashboardPeriod } from './dashboard-period'
 import { useDashboardData } from './use-dashboard-data'
 import { getDashboardBillingPath } from './dashboard-billing-access'
@@ -32,25 +38,28 @@ import type { DashboardPeriod } from '@/api/dashboard-contract'
 const CARS_SHOWN = 5
 const ORDERS_SHOWN = 5
 
-const PERIOD_LABELS: Readonly<Record<DashboardPeriod, string>> = {
-  day: 'День',
-  week: 'Тиждень',
-  month: 'Місяць',
-}
+const PERIODS = {
+  day: 'period.day',
+  week: 'period.week',
+  month: 'period.month',
+} as const satisfies Record<DashboardPeriod, string>
 
-const dayName = new Intl.DateTimeFormat('uk-UA', {
+const DAY_NAME: Intl.DateTimeFormatOptions = {
   weekday: 'long',
   day: 'numeric',
   month: 'long',
-  timeZone: 'Europe/Kyiv',
-})
+}
 
 export function DashboardScreen() {
   const { targetTenant, snapshot } = useCabinet()
+  const accounting = useAccountingCurrency()
   const [searchParams, setSearchParams] = useSearchParams()
   const selection = readDashboardPeriod(searchParams)
   const dashboard = useDashboardData(selection.period)
   const now = useMemo(() => new Date(), [])
+  const { locale, timeZone } = useLocale()
+  const t = useT(dashboardMessages)
+  const format = useFormat()
 
   useEffect(() => {
     if (!selection.normalize) return
@@ -92,20 +101,22 @@ export function DashboardScreen() {
   const ordersPath = path('orders')
   const partsPath = path('parts')
   const cashPath = path('cash')
-  const periodLabel = PERIOD_LABELS[selection.period]
+  const periodLabel = t(PERIODS[selection.period])
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
       <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
         <p
-          aria-label="Розбірка і розділ"
+          aria-label={t('crumbLabel')}
           className="text-app-dim flex items-center gap-2.5 font-mono text-[11px] tracking-[0.14em] whitespace-nowrap uppercase"
         >
-          <span>{targetTenant?.name ?? 'Розбірка'}</span>
+          <span>{targetTenant?.name ?? t('businessFallback')}</span>
           <span aria-hidden className="text-white/20">
             ·
           </span>
-          <span className="text-app-muted">Головна</span>
+          <span className="text-app-muted">
+            {moduleLabel('dashboard', locale)}
+          </span>
         </p>
         <div className="flex flex-1 flex-wrap items-center justify-end gap-2.5">
           <button
@@ -115,7 +126,7 @@ export function DashboardScreen() {
           >
             <Search aria-hidden className="size-4 shrink-0" />
             <span className="min-w-0 flex-1 truncate">
-              Деталь, OEM, номер авто, клієнт
+              {t('searchPlaceholder')}
             </span>
             <kbd className="border-app-line-2 hidden shrink-0 rounded-[5px] border px-1.5 py-0.5 font-mono text-[11px] sm:block">
               {commandPaletteHint()}
@@ -123,9 +134,7 @@ export function DashboardScreen() {
           </button>
           <Button
             aria-busy={dashboard.refreshing}
-            aria-label={
-              dashboard.refreshing ? 'Оновлюємо дані' : 'Оновити дані'
-            }
+            aria-label={dashboard.refreshing ? t('refreshing') : t('refresh')}
             className="min-w-11 px-0"
             disabled={dashboard.refreshing}
             onClick={() => void dashboard.refresh()}
@@ -138,7 +147,7 @@ export function DashboardScreen() {
               className="px-5 text-sm font-bold"
               variant="primary"
             >
-              <Link to={`${ordersPath}/new`}>Нове замовлення</Link>
+              <Link to={`${ordersPath}/new`}>{t('newOrder')}</Link>
             </Button>
           )}
         </div>
@@ -148,12 +157,16 @@ export function DashboardScreen() {
         <div className="mb-3.5 flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
           <div className="min-w-0">
             <h1 className="text-[34px] leading-none font-extrabold tracking-[-0.03em] text-balance text-white sm:text-[46px]">
-              {greeting(now)}
-              {summary === null ? '' : `, ${summary.userName}`}
+              {summary === null
+                ? t(greeting(now, timeZone))
+                : t('greetingNamed', {
+                    greeting: t(greeting(now, timeZone)),
+                    name: summary.userName,
+                  })}
             </h1>
             <p className="text-app-muted mt-3 text-[15px]">
-              {capitalize(dayName.format(now))}
-              {dashboard.refreshing ? ' · оновлюємо…' : ''}
+              {capitalize(format.dateWith(now, DAY_NAME) ?? '')}
+              {dashboard.refreshing ? ` · ${t('refreshingNote')}` : ''}
             </p>
           </div>
           <PeriodSwitch
@@ -170,32 +183,37 @@ export function DashboardScreen() {
           <DashboardBillingBanner snapshot={snapshot} tenant={targetTenant} />
         ) : null}
 
+        {/* Owner onboarding of a new yard; renders nothing for anyone else. */}
+        {snapshot !== null && targetTenant !== null ? (
+          <OnboardingChecklist snapshot={snapshot} tenant={targetTenant} />
+        ) : null}
+
         <div
           aria-busy={dashboard.refreshing}
-          aria-label="Панель зведення"
+          aria-label={t('summaryPanel')}
           className="grid min-w-0 gap-3.5"
           role="region"
         >
           {dashboard.summary.status === 'error' ? (
             <DashboardErrorState
-              ariaLabel="Зведення"
+              ariaLabel={t('summary')}
               billingPath={billingPath}
-              genericMessage="Не вдалося завантажити зведення."
+              genericMessage={t('summaryError')}
               problem={dashboard.summary.error}
               retry={() => dashboard.retrySummary()}
             />
           ) : null}
           {dashboard.analytics.status === 'error' ? (
             <DashboardErrorState
-              ariaLabel="Аналітика"
+              ariaLabel={t('analytics')}
               billingPath={billingPath}
-              genericMessage="Не вдалося завантажити аналітику."
+              genericMessage={t('analyticsError')}
               problem={dashboard.analytics.error}
               retry={() => dashboard.retryAnalytics()}
             />
           ) : null}
           {summary === null && dashboard.summary.status === 'loading' ? (
-            <div aria-label="Завантаження зведення" role="status">
+            <div aria-label={t('summaryLoading')} role="status">
               <Skeleton className="h-[220px] rounded-[20px]" />
             </div>
           ) : null}
@@ -209,9 +227,20 @@ export function DashboardScreen() {
           <div className="gap-x-3.5 xl:columns-2 [&>*]:mb-3.5 [&>*]:break-inside-avoid">
             {summary === null ? null : (
               <DashboardKpis
+                accountingCurrency={accounting.currency}
                 analytics={analytics}
                 data={summary}
                 parts={parts}
+              />
+            )}
+            {summary === null ? null : (
+              <OrderValueCard
+                analyticsValue={analytics?.confirmedOrdersValue}
+                period={selection.period}
+                periodLabel={periodLabel}
+                settingsPath={accounting.owner ? accounting.settingsPath : null}
+                status={accounting.status}
+                summaryValue={summary.confirmedOrdersValue}
               />
             )}
             {analytics === null ? null : (
@@ -219,6 +248,7 @@ export function DashboardScreen() {
             )}
             {cars === null || slug === null ? null : (
               <CarPayoffCard
+                accountingCurrency={accounting.currency}
                 base={cabinetPath(slug, 'cars')}
                 cars={cars.items}
                 now={now}
@@ -226,13 +256,18 @@ export function DashboardScreen() {
               />
             )}
             {orders === null || ordersPath === null ? null : (
-              <RecentOrdersCard base={ordersPath} orders={orders} />
+              <RecentOrdersCard
+                accountingCurrency={accounting.currency}
+                base={ordersPath}
+                orders={orders}
+              />
             )}
             {registers === null || cashPath === null ? null : (
               <TillsCard base={cashPath} registers={registers} />
             )}
             {analytics === null ? null : (
               <TopSalesCard
+                accountingCurrency={accounting.currency}
                 partsPath={partsPath}
                 periodLabel={periodLabel}
                 topPart={analytics.topPart}
@@ -264,9 +299,10 @@ function PeriodSwitch({
   period: DashboardPeriod
   onPeriodChange: (period: DashboardPeriod) => void
 }) {
+  const t = useT(dashboardMessages)
   return (
     <div
-      aria-label="Період аналітики"
+      aria-label={t('periodGroup')}
       className="border-app-line bg-app-raised flex shrink-0 gap-0.5 rounded-[11px] border p-[3px]"
       onKeyDown={(event) => {
         const step =
@@ -286,7 +322,7 @@ function PeriodSwitch({
       }}
       role="group"
     >
-      {(Object.keys(PERIOD_LABELS) as DashboardPeriod[]).map((value) => (
+      {(Object.keys(PERIODS) as DashboardPeriod[]).map((value) => (
         <button
           aria-pressed={period === value}
           className={cn(
@@ -299,26 +335,33 @@ function PeriodSwitch({
           onClick={() => onPeriodChange(value)}
           type="button"
         >
-          {PERIOD_LABELS[value]}
+          {t(PERIODS[value])}
         </button>
       ))}
     </div>
   )
 }
 
-/** The hour the yard opens is the hour this greeting has to get right. */
-function greeting(now: Date): string {
+/**
+ * The hour the yard opens is the hour this greeting has to get right, so it
+ * is read on the business's own clock. The digits come from a fixed tag: they
+ * are parsed, never shown.
+ */
+function greeting(
+  now: Date,
+  timeZone: string,
+): 'greeting.night' | 'greeting.morning' | 'greeting.day' | 'greeting.evening' {
   const hour = Number(
-    new Intl.DateTimeFormat('uk-UA', {
+    new Intl.DateTimeFormat('en-GB', {
       hour: 'numeric',
       hourCycle: 'h23',
-      timeZone: 'Europe/Kyiv',
+      timeZone,
     }).format(now),
   )
-  if (hour < 5) return 'Доброї ночі'
-  if (hour < 12) return 'Добрий ранок'
-  if (hour < 18) return 'Добрий день'
-  return 'Добрий вечір'
+  if (hour < 5) return 'greeting.night'
+  if (hour < 12) return 'greeting.morning'
+  if (hour < 18) return 'greeting.day'
+  return 'greeting.evening'
 }
 
 const capitalize = (value: string) =>

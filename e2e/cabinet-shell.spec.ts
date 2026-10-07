@@ -1046,11 +1046,13 @@ const dashboardGreeting = (page: Page) =>
 
 /** The analytics half of the board: it names the period it just loaded. */
 const revenueChart = (page: Page) =>
-  page.getByRole('region', { name: 'Виручка за період' })
+  page.getByRole('region', { name: 'Фактичні надходження' })
 
 async function expectPopulatedDashboard(page: Page) {
   await expect(dashboardGreeting(page)).toContainText('Олена')
-  await expect(revenueChart(page)).toContainText('Виручка · Тиждень')
+  await expect(revenueChart(page)).toContainText(
+    'Фактичні надходження · Тиждень',
+  )
 }
 
 const releasedAccessPaths = [
@@ -1432,7 +1434,9 @@ test('loads a direct week dashboard once, navigates month and Back, and traverse
   await page.goto('/app/koval/dashboard?period=week')
   await expect(page).toHaveURL('/app/koval/dashboard?period=week')
   await expect(dashboardGreeting(page)).toContainText('Олена')
-  await expect(revenueChart(page)).toContainText('Виручка · Тиждень')
+  await expect(revenueChart(page)).toContainText(
+    'Фактичні надходження · Тиждень',
+  )
   await expect(page.getByRole('button', { name: 'Тиждень' })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -1452,14 +1456,18 @@ test('loads a direct week dashboard once, navigates month and Back, and traverse
 
   await page.getByRole('button', { name: 'Місяць' }).click()
   await expect(page).toHaveURL('/app/koval/dashboard?period=month')
-  await expect(revenueChart(page)).toContainText('Виручка · Місяць')
+  await expect(revenueChart(page)).toContainText(
+    'Фактичні надходження · Місяць',
+  )
   await expect
     .poll(async () => (await upstreamStats(request)).dashboardAnalyticsRequests)
     .toEqual({ day: 0, week: 1, month: 1 })
 
   await page.goBack()
   await expect(page).toHaveURL('/app/koval/dashboard?period=week')
-  await expect(revenueChart(page)).toContainText('Виручка · Тиждень')
+  await expect(revenueChart(page)).toContainText(
+    'Фактичні надходження · Тиждень',
+  )
   await expect
     .poll(async () => (await upstreamStats(request)).dashboardAnalyticsRequests)
     .toEqual({ day: 0, week: 2, month: 1 })
@@ -1528,7 +1536,9 @@ test('retries failed dashboard summary and analytics independently', async ({
   await analyticsError
     .getByRole('button', { name: 'Спробувати ще раз' })
     .click()
-  await expect(revenueChart(page)).toContainText('Виручка · Тиждень')
+  await expect(revenueChart(page)).toContainText(
+    'Фактичні надходження · Тиждень',
+  )
   await expect
     .poll(async () => {
       const stats = await upstreamStats(request)

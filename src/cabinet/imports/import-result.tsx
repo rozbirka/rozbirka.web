@@ -1,60 +1,28 @@
 import { Link } from 'react-router'
 import { Button } from '@/components/app'
-import { cn, plural } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import {
+  commonMessages,
+  formatDate,
+  formatDateTime,
+  useLocale,
+  useT,
+  type Locale,
+} from '@/i18n'
 import type { ImportRow, ImportStatus } from '@/api/part-imports'
-import { issueText, statusLabels } from './import-model'
+import { wholeMoney } from '../currency/money'
+import { importResultMessages } from './import-result-messages'
+import { issueText, statusLabel } from './import-model'
+import { useCount, useImportT } from './use-import-text'
 
 const PAGE_SIZE = 100
 
-const count = (value: number) =>
-  value.toLocaleString('uk-UA').replace(/\u00a0/g, ' ')
+/** Date and time in the business time zone; an unparsable value as received. */
+const moment = (value: string | null, locale: Locale, timeZone: string) =>
+  value === null ? null : (formatDateTime(value, locale, timeZone) ?? value)
 
-/** Parts are priced in dollars, like the cars they come off. */
-const money = (amount: number) =>
-  new Intl.NumberFormat('uk-UA', {
-    style: 'currency',
-    currency: 'USD',
-    currencyDisplay: 'narrowSymbol',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-    trailingZeroDisplay: 'stripIfInteger',
-  }).format(amount)
-
-const moment = (value: string | null) => {
-  if (value === null) return null
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.valueOf())
-    ? value
-    : parsed.toLocaleString('uk-UA', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-}
-
-const day = (value: string | null) => {
-  if (value === null) return null
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.valueOf())
-    ? value
-    : parsed.toLocaleDateString('uk-UA', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-      })
-}
-
-/**
- * The execution never reports how long it ran, who started it or what the
- * uploaded file was called — so those cells say so instead of guessing.
- */
-const NO_TIMING = 'Час початку й завершення виконання не показується.'
-const NO_TOTALS =
-  'Після запуску відомі лише кількість створених і невдалих рядків — решта сутностей за типом не розбивається.'
-const NO_FILE_NAME =
-  'Після перезавантаження сторінки назва файлу вже не показується.'
+const day = (value: string | null, locale: Locale, timeZone: string) =>
+  value === null ? null : (formatDate(value, locale, { timeZone }) ?? value)
 
 /** Rows the server will pick up again; everything else needs the file fixed. */
 const RETRYABLE = ['Pending', 'RetryableFailure']
@@ -143,6 +111,7 @@ function Panel({
  * because a page holds a hundred rows and an import can hold ten thousand.
  */
 export function ImportResultStep({
+  accountingCurrency = null,
   status,
   rows,
   rowTotal,
@@ -159,6 +128,8 @@ export function ImportResultStep({
   onNewImport,
   busy,
 }: {
+  /** What imported prices are in; `null` when unknown. */
+  accountingCurrency?: string | null
   status: ImportStatus
   rows: readonly ImportRow[]
   rowTotal: number
@@ -176,6 +147,15 @@ export function ImportResultStep({
   onNewImport: () => void
   busy: boolean
 }) {
+  const { locale, timeZone } = useLocale()
+  const t = useImportT(importResultMessages)
+  const tc = useT(commonMessages)
+  const count = useCount()
+  // The execution never reports how long it ran, who started it or what the
+  // uploaded file was called — so those cells say so instead of guessing.
+  const noTiming = t('noTiming')
+  const noTotals = t('noTotals')
+  const noFileName = t('noFileName')
   const execution = status.execution
   const selected = execution?.selected ?? status.rowCount
   const committed = execution?.committed ?? 0
@@ -202,36 +182,39 @@ export function ImportResultStep({
     return sum + (Number.isFinite(quantity) ? quantity : 0)
   }, 0)
   const unitsMeta = expired
-    ? 'деталізація вже недоступна'
-    : `${count(units)} ${plural(units, ['одиниця товару', 'одиниці товару', 'одиниць товару'])}${allCreated ? '' : ' на цій сторінці'}`
+    ? t('detailsUnavailable')
+    : t(allCreated ? 'units' : 'unitsOnPage', { count: units })
 
   const reportReady = !expired && status.report?.status === 'Ready'
   const reportFailed = status.report?.status === 'Failed'
 
   const headline = expired
-    ? 'Деталі цього імпорту вже недоступні'
+    ? t('headlineExpired')
     : running
-      ? 'Створюємо запчастини'
+      ? t('headlineRunning')
       : stopped
-        ? `Імпорт зупинено на ${count(committed)} позиції`
+        ? t('headlineStopped', { count: count(committed) })
         : partial
-          ? `${count(committed)} ${plural(committed, ['запчастина створена', 'запчастини створено', 'запчастин створено'])}, ${count(failed)} ${plural(failed, ['рядок не пройшов', 'рядки не пройшли', 'рядків не пройшли'])}`
-          : `${count(committed)} ${plural(committed, ['запчастина створена', 'запчастини створено', 'запчастин створено'])}`
+          ? t('headlinePartial', {
+              created: t('partsCreated', { count: committed }),
+              failed: t('rowsFailed', { count: failed }),
+            })
+          : t('partsCreated', { count: committed })
 
   const lede = expired
-    ? `Файл, рядки й звіт зберігаються обмежений час. Створені запчастини залишаються в каталозі — вони не видаляються.`
+    ? t('ledeExpired')
     : running
-      ? 'Сторінку можна закрити — робота продовжиться. Повернутися до неї можна з історії імпортів.'
+      ? t('ledeRunning')
       : stopped
-        ? `Створені ${count(committed)} ${plural(committed, ['позиція залишається', 'позиції залишаються', 'позицій залишаються'])} в каталозі. Решта рядків не опрацьована.`
+        ? t('ledeStopped', { count: committed })
         : partial
-          ? 'Створені позиції вже в каталозі й залишаться там. Рядки з тимчасовими помилками можна повторити — успішні не дублюватимуться.'
-          : 'Позиції вже доступні для продажу.'
+          ? t('ledePartial')
+          : t('ledeDone')
 
   return (
     <div className="flex min-w-0 flex-col gap-3.5">
       <section
-        aria-label="Стан імпорту"
+        aria-label={t('importState')}
         className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-6 pb-6 sm:px-8"
       >
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -249,10 +232,12 @@ export function ImportResultStep({
               expired && 'border-app-line text-app-dim',
             )}
           >
-            {statusLabels[status.status] ?? status.status}
+            {statusLabel(status.status, locale)}
           </span>
           <span className="text-app-dim text-[13.5px]">
-            Створено {moment(status.createdAt)}
+            {t('createdAt', {
+              date: moment(status.createdAt, locale, timeZone) ?? '',
+            })}
           </span>
         </p>
         <h2 className="text-app-ink mt-4 text-[26px] leading-[1.12] font-extrabold tracking-[-0.03em] text-pretty sm:text-[32px]">
@@ -269,93 +254,98 @@ export function ImportResultStep({
                 {count(committed)}
               </span>
               <span className="text-app-muted text-[15px] font-bold">
-                із {count(selected)} створено
+                {t('createdOf', { count: count(selected) })}
               </span>
             </p>
             <progress
-              aria-label="Поступ імпорту"
+              aria-label={t('progress')}
               className="mt-4 h-2 w-full"
               max={Math.max(1, selected)}
               value={committed}
             />
             <p className="text-app-dim mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[13px]">
-              <span>{count(committed)} створено</span>
+              <span>{t('createdCount', { count: count(committed) })}</span>
               <span className={cn(failed > 0 && 'text-state-warn')}>
-                {count(failed)} з помилкою
+                {t('failedCount', { count: count(failed) })}
               </span>
-              <span>{count(queued)} в черзі</span>
+              <span>{t('queuedCount', { count: count(queued) })}</span>
             </p>
           </div>
         ) : null}
 
         {status.errorCode ? (
           <p className="border-state-warn/26 bg-state-warn-soft text-state-warn mt-5 rounded-[14px] border px-4 py-3 text-[13.5px] leading-5 text-pretty">
-            {issueText(status.errorCode)}
+            {issueText(status.errorCode, locale)}
           </p>
         ) : null}
       </section>
 
       <Strip>
         <Kpi
-          label="Створено позицій"
+          label={t('itemsCreated')}
           meta={unitsMeta}
           tone={committed > 0 ? 'good' : 'dim'}
-          value={`${count(committed)} з ${count(selected)}`}
+          value={t('createdOfTotal', {
+            created: count(committed),
+            total: count(selected),
+          })}
         />
         <Kpi
-          label="Помилок"
+          label={t('errors')}
           meta={
             expired
-              ? 'деталізація вже недоступна'
+              ? t('detailsUnavailable')
               : failed === 0
                 ? stopped
-                  ? 'зупинка не є помилкою'
-                  : 'усі рядки пройшли'
-                : `${count(retryable)} можна повторити${allBroken ? '' : ' на цій сторінці'}`
+                  ? t('stopNotError')
+                  : t('allRowsPassed')
+                : t(allBroken ? 'retryable' : 'retryableOnPage', {
+                    count: count(retryable),
+                  })
           }
           tone={failed === 0 ? 'plain' : 'warn'}
-          value={`${count(failed)} ${plural(failed, ['рядок', 'рядки', 'рядків'])}`}
+          value={t('rows', { count: failed })}
         />
         <Kpi
-          label="Тривалість"
-          meta="невідомо"
-          title={NO_TIMING}
+          label={t('duration')}
+          meta={t('unknown')}
+          title={noTiming}
           tone="dim"
           value="—"
         />
         <Kpi
-          label="Звіт CSV"
+          label={t('report')}
           meta={
             expired
-              ? 'строк зберігання минув'
+              ? t('retentionEnded')
               : reportReady
-                ? `усі ${count(status.rowCount)} ${plural(status.rowCount, ['рядок', 'рядки', 'рядків'])} зі статусами`
+                ? t('allRowsWithStatuses', { count: status.rowCount })
                 : reportFailed
-                  ? 'підготовка не вдалася'
-                  : 'готується окремо від імпорту'
+                  ? t('reportFailed')
+                  : t('reportPreparing')
           }
           tone={reportReady && !expired ? 'plain' : 'dim'}
           value={
             expired
-              ? 'Недоступний'
+              ? t('reportUnavailable')
               : reportReady
-                ? 'Готовий'
+                ? t('reportReady')
                 : reportFailed
-                  ? 'Помилка'
-                  : 'Готується'
+                  ? t('reportError')
+                  : t('reportInProgress')
           }
         />
       </Strip>
 
       {expired ? (
         <div className="flex flex-wrap items-start gap-3.5">
-          <Panel label="Що недоступно" title="Що недоступно">
+          <Panel label={t('whatIsGone')} title={t('whatIsGone')}>
             <ul className="text-app-muted grid gap-2.5 px-5.5 py-4 text-[13.5px] leading-6">
               {[
-                'Вихідний файл',
-                'Перелік рядків і результат кожного з них',
-                'CSV-звіт імпорту',
-                'Повтор невдалих рядків',
+                t('goneSource'),
+                t('goneRows'),
+                t('goneReport'),
+                t('goneRetry'),
               ].map((item) => (
                 <li className="flex gap-3" key={item}>
                   <span aria-hidden className="text-app-dim">
@@ -367,15 +357,15 @@ export function ImportResultStep({
             </ul>
           </Panel>
           <Panel
-            footer="Щоб донести залишки, завантажте актуальний файл — новий імпорт створить лише те, чого немає."
-            label="Що залишилось"
-            title="Що залишилось"
+            footer={t('remainsFooter')}
+            label={t('whatRemains')}
+            title={t('whatRemains')}
           >
             <ul className="text-app-muted grid gap-2.5 px-5.5 py-4 text-[13.5px] leading-6">
               {[
-                `${count(committed)} ${plural(committed, ['запчастина', 'запчастини', 'запчастин'])} у каталозі`,
-                'Підсумкові числа в історії імпортів',
-                'Надходження й зони, створені цим імпортом',
+                t('partsInCatalogue', { count: committed }),
+                t('remainsTotals'),
+                t('remainsEntities'),
               ].map((item) => (
                 <li className="flex gap-3" key={item}>
                   <span aria-hidden className="text-state-ok">
@@ -391,22 +381,20 @@ export function ImportResultStep({
 
       {!expired && broken.length > 0 ? (
         <Panel
-          footer={
-            running
-              ? 'Повторити невдалі рядки можна буде після завершення — успішні не дублюватимуться.'
-              : 'Повтор створює тільки ті позиції, яких ще немає. Рядки з правками у файлі потрібно імпортувати заново.'
-          }
-          label="Рядки з помилками"
-          title={`Рядки з помилками · ${count(broken.length)}${allBroken ? '' : ' на цій сторінці'}`}
+          footer={running ? t('retryAfterFinish') : t('retryNote')}
+          label={t('failedRows')}
+          title={t(allBroken ? 'failedRowsTitle' : 'failedRowsTitleOnPage', {
+            count: count(broken.length),
+          })}
         >
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[14px]">
               <thead>
                 <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
-                  <th className="px-5.5 py-2.5 text-left">Рядок</th>
-                  <th className="px-3 py-2.5 text-left">Позиція</th>
-                  <th className="px-3 py-2.5 text-left">Причина</th>
-                  <th className="px-3 py-2.5 text-left">Що робити</th>
+                  <th className="px-5.5 py-2.5 text-left">{t('row')}</th>
+                  <th className="px-3 py-2.5 text-left">{t('item')}</th>
+                  <th className="px-3 py-2.5 text-left">{t('reason')}</th>
+                  <th className="px-3 py-2.5 text-left">{t('whatToDo')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -421,7 +409,7 @@ export function ImportResultStep({
                         {row.draft?.values['Name'] ?? '—'}
                       </td>
                       <td className="text-app-muted px-3 py-3.5">
-                        {issueText(row.executionErrorCode ?? '')}
+                        {issueText(row.executionErrorCode ?? '', locale)}
                       </td>
                       <td className="px-3 py-3.5">
                         <span
@@ -432,7 +420,7 @@ export function ImportResultStep({
                               : 'border-state-warn/24 text-state-warn bg-state-warn-soft',
                           )}
                         >
-                          {again ? 'Можна повторити' : 'Правка файлу'}
+                          {again ? t('canRetry') : t('fixFile')}
                         </span>
                       </td>
                     </tr>
@@ -446,19 +434,24 @@ export function ImportResultStep({
 
       {!expired && created.length > 0 ? (
         <Panel
-          footer={`Створених позицій на цій сторінці: ${count(created.length)}. Сторінка показує ${count(rows.length)} із ${count(rowTotal)} ${plural(rowTotal, ['рядка', 'рядків', 'рядків'])}, по ${count(PAGE_SIZE)} на сторінку.`}
-          label="Створені позиції"
-          title="Створені позиції"
+          footer={t('createdFooter', {
+            count: rowTotal,
+            created: count(created.length),
+            shown: count(rows.length),
+            size: count(PAGE_SIZE),
+          })}
+          label={t('createdItems')}
+          title={t('createdItems')}
         >
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[14px]">
               <thead>
                 <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
-                  <th className="px-5.5 py-2.5 text-left">Рядок</th>
-                  <th className="px-3 py-2.5 text-left">Запчастина</th>
-                  <th className="px-3 py-2.5 text-right">К-сть</th>
-                  <th className="px-3 py-2.5 text-right">Ціна</th>
-                  <th className="px-3 py-2.5 text-left">Зона</th>
+                  <th className="px-5.5 py-2.5 text-left">{t('row')}</th>
+                  <th className="px-3 py-2.5 text-left">{t('part')}</th>
+                  <th className="px-3 py-2.5 text-right">{t('quantity')}</th>
+                  <th className="px-3 py-2.5 text-right">{t('price')}</th>
+                  <th className="px-3 py-2.5 text-left">{t('zone')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -482,11 +475,13 @@ export function ImportResultStep({
                             className="text-app-ink hover:text-brand font-medium underline-offset-4 hover:underline"
                             to={partHref(row.partId)}
                           >
-                            {values['Name'] ?? `Рядок ${row.sourceRow}`}
+                            {values['Name'] ??
+                              t('rowFallback', { row: String(row.sourceRow) })}
                           </Link>
                         ) : (
                           <span className="text-app-ink font-medium">
-                            {values['Name'] ?? `Рядок ${row.sourceRow}`}
+                            {values['Name'] ??
+                              t('rowFallback', { row: String(row.sourceRow) })}
                           </span>
                         )}
                         {code === '' ? null : (
@@ -500,7 +495,7 @@ export function ImportResultStep({
                       </td>
                       <td className="text-app-ink px-3 py-3.5 text-right font-mono tabular-nums">
                         {Number.isFinite(price) && values['DesiredSalePrice']
-                          ? money(price)
+                          ? wholeMoney(price, accountingCurrency, locale)
                           : '—'}
                       </td>
                       <td className="text-app-muted px-3 py-3.5">
@@ -517,50 +512,57 @@ export function ImportResultStep({
 
       <div className="flex flex-wrap items-start gap-3.5">
         <section
-          aria-label="Створено разом"
+          aria-label={t('createdTogether')}
           className="border-app-line bg-app-raised min-w-0 flex-[1_1_320px] rounded-[20px] border px-5.5 py-5"
         >
-          <h2 className="text-app-ink text-[15px] font-bold">Створено разом</h2>
+          <h2 className="text-app-ink text-[15px] font-bold">
+            {t('createdTogether')}
+          </h2>
           <dl className="mt-3.5 grid gap-2.5">
             <div className="flex flex-wrap items-baseline justify-between gap-3">
-              <dt className="text-app-muted text-[13.5px]">Запчастини</dt>
+              <dt className="text-app-muted text-[13.5px]">
+                {t('totalsParts')}
+              </dt>
               <dd className="text-app-ink font-mono text-[13px] tabular-nums">
                 {count(committed)}
               </dd>
             </div>
-            {['Надходження', 'Складські зони', 'Замовлення'].map((label) => (
-              <div
-                className="flex flex-wrap items-baseline justify-between gap-3"
-                key={label}
-                title={NO_TOTALS}
-              >
-                <dt className="text-app-dim text-[13.5px]">{label}</dt>
-                <dd className="text-app-dim font-mono text-[13px]">—</dd>
-              </div>
-            ))}
+            {[t('totalsIntakes'), t('totalsZones'), t('totalsOrders')].map(
+              (label) => (
+                <div
+                  className="flex flex-wrap items-baseline justify-between gap-3"
+                  key={label}
+                  title={noTotals}
+                >
+                  <dt className="text-app-dim text-[13.5px]">{label}</dt>
+                  <dd className="text-app-dim font-mono text-[13px]">—</dd>
+                </div>
+              ),
+            )}
           </dl>
           <p className="text-app-dim mt-4 text-[13px] leading-5 text-pretty">
-            Скільки надходжень, зон і замовлень створив імпорт, після запуску не
-            повідомляє.
+            {t('totalsNote')}
           </p>
           <div className="mt-4">
             <Button asChild>
-              <Link to={partsHref}>До каталогу запчастин</Link>
+              <Link to={partsHref}>{t('toCatalogue')}</Link>
             </Button>
           </div>
         </section>
 
         <section
-          aria-label="Файл і звіт"
+          aria-label={t('fileAndReport')}
           className="border-app-line bg-app-raised min-w-0 flex-[1_1_320px] rounded-[20px] border px-5.5 py-5"
         >
-          <h2 className="text-app-ink text-[15px] font-bold">Файл і звіт</h2>
+          <h2 className="text-app-ink text-[15px] font-bold">
+            {t('fileAndReport')}
+          </h2>
           <dl className="mt-3.5 grid gap-2.5">
             <div
               className="flex flex-wrap items-baseline justify-between gap-3"
-              {...(fileName === null ? { title: NO_FILE_NAME } : {})}
+              {...(fileName === null ? { title: noFileName } : {})}
             >
-              <dt className="text-app-muted text-[13.5px]">Файл</dt>
+              <dt className="text-app-muted text-[13.5px]">{t('file')}</dt>
               <dd
                 className={cn(
                   'min-w-0 text-[13.5px] break-all',
@@ -571,13 +573,17 @@ export function ImportResultStep({
               </dd>
             </div>
             <div className="flex flex-wrap items-baseline justify-between gap-3">
-              <dt className="text-app-muted text-[13.5px]">Рядків у файлі</dt>
+              <dt className="text-app-muted text-[13.5px]">
+                {t('rowsInFile')}
+              </dt>
               <dd className="text-app-ink font-mono text-[13px] tabular-nums">
                 {count(status.rowCount)}
               </dd>
             </div>
             <div className="flex flex-wrap items-baseline justify-between gap-3">
-              <dt className="text-app-muted text-[13.5px]">Доступно до</dt>
+              <dt className="text-app-muted text-[13.5px]">
+                {t('availableUntil')}
+              </dt>
               <dd
                 className={cn(
                   'text-[13.5px]',
@@ -586,7 +592,8 @@ export function ImportResultStep({
                     : 'text-app-ink',
                 )}
               >
-                {day(status.retentionExpiresAt) ?? 'не вказано'}
+                {day(status.retentionExpiresAt, locale, timeZone) ??
+                  t('notSpecified')}
               </dd>
             </div>
           </dl>
@@ -594,22 +601,18 @@ export function ImportResultStep({
             <Button
               disabled={busy || !reportReady}
               onClick={onReport}
-              title={
-                reportReady
-                  ? undefined
-                  : 'Звіт ще готується — він збирається окремо від імпорту.'
-              }
+              title={reportReady ? undefined : t('reportStillPreparing')}
             >
-              Завантажити звіт
+              {t('downloadReport')}
             </Button>
             {reportFailed ? (
               <Button disabled={busy} onClick={onRetryReport}>
-                Підготувати звіт ще раз
+                {t('retryReport')}
               </Button>
             ) : null}
             {expired ? null : (
               <Button disabled={busy} onClick={onSource}>
-                Завантажити вихідний файл
+                {t('downloadSource')}
               </Button>
             )}
           </div>
@@ -619,21 +622,23 @@ export function ImportResultStep({
       {!expired && rowTotal > PAGE_SIZE ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-app-dim text-[13px]">
-            Сторінка {count(rowPage)} із{' '}
-            {count(Math.ceil(rowTotal / PAGE_SIZE))}
+            {t('pageOf', {
+              page: count(rowPage),
+              pages: count(Math.ceil(rowTotal / PAGE_SIZE)),
+            })}
           </p>
           <div className="flex gap-2.5">
             <Button
               disabled={busy || rowPage === 1}
               onClick={() => onRowPage(rowPage - 1)}
             >
-              Назад
+              {tc('back')}
             </Button>
             <Button
               disabled={busy || rowPage * PAGE_SIZE >= rowTotal}
               onClick={() => onRowPage(rowPage + 1)}
             >
-              Далі
+              {tc('next')}
             </Button>
           </div>
         </div>
@@ -642,26 +647,26 @@ export function ImportResultStep({
       <div className="border-app-line bg-app-raised flex flex-wrap items-center justify-between gap-4 rounded-[18px] border px-5.5 py-5">
         <p className="text-app-muted min-w-0 flex-[1_1_320px] text-[13.5px] leading-6 text-pretty">
           {running
-            ? 'Зупинка спрацює після завершення поточного пакета. Уже створені запчастини залишаться в каталозі.'
+            ? t('footerRunning')
             : expired
-              ? 'Підсумкові числа збережені в історії. Деталізацію по рядках і вихідний файл відновити не можна.'
-              : 'Щоб прибрати створене, потрібно видалити позиції вручну — імпорт не має загального скасування.'}
+              ? t('footerExpired')
+              : t('footerDone')}
         </p>
         <div className="flex flex-wrap gap-2.5">
           {running ? (
             <Button disabled={busy} onClick={onCancel} variant="primary">
-              Зупинити імпорт
+              {t('stopImport')}
             </Button>
           ) : null}
           {!running && !expired && (queued > 0 || retryable > 0) ? (
             <Button disabled={busy} onClick={onRetry} variant="primary">
               {queued > 0
-                ? `Імпортувати решту ${count(queued)} ${plural(queued, ['рядок', 'рядки', 'рядків'])}`
-                : `Повторити ${count(retryable)} ${plural(retryable, ['рядок', 'рядки', 'рядків'])}`}
+                ? t('importRest', { count: queued })
+                : t('retryRows', { count: retryable })}
             </Button>
           ) : null}
           <Button disabled={busy} onClick={onNewImport}>
-            Новий імпорт
+            {t('newImport')}
           </Button>
         </div>
       </div>

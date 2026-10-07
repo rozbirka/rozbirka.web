@@ -1,5 +1,9 @@
 import { useCallback, useRef, useState } from 'react'
 import { useOptionalToast } from './toast-context'
+import { useLocale } from '@/i18n/LocaleProvider'
+import { translate } from '@/i18n/messages'
+import type { Locale } from '@/i18n/locales'
+import { appMessages } from './app-messages'
 
 export type OperationStatus = 'idle' | 'pending' | 'done' | 'failed'
 
@@ -26,10 +30,10 @@ export interface OperationOptions<Result> {
   onError?: (error: unknown) => void
 }
 
-const defaultErrorMessage = (error: unknown): string =>
+const defaultErrorMessage = (error: unknown, locale: Locale): string =>
   error instanceof Error && error.message
     ? error.message
-    : 'Не вдалося виконати дію. Спробуйте ще раз.'
+    : translate(appMessages, locale, 'operationFailed')
 
 /**
  * One contract for "the user asked for something and it is happening": a
@@ -46,6 +50,7 @@ export function useOperation<Result>(
 ): OperationApi<Result> {
   const { successMessage, errorMessage, onSuccess, onError } = options
   const toast = useOptionalToast()
+  const { locale } = useLocale()
   const [status, setStatus] = useState<OperationStatus>('idle')
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<Result | null>(null)
@@ -67,14 +72,26 @@ export function useOperation<Result>(
         onSuccess?.(value)
       })
       .catch((failure: unknown) => {
-        setError((errorMessage ?? defaultErrorMessage)(failure))
+        setError(
+          errorMessage === undefined
+            ? defaultErrorMessage(failure, locale)
+            : errorMessage(failure),
+        )
         setStatus('failed')
         onError?.(failure)
       })
       .finally(() => {
         inFlight.current = false
       })
-  }, [errorMessage, onError, onSuccess, operation, successMessage, toast])
+  }, [
+    errorMessage,
+    locale,
+    onError,
+    onSuccess,
+    operation,
+    successMessage,
+    toast,
+  ])
 
   const reset = useCallback(() => {
     setStatus('idle')

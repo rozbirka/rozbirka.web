@@ -1,10 +1,13 @@
 import type { ComponentProps, ReactNode } from 'react'
 import { FileWarning, ImagePlus, RotateCcw, Upload, X } from 'lucide-react'
+import { useLocale } from '@/i18n/LocaleProvider'
 import { cn } from '@/lib/utils'
 import { Button } from './button'
 import { useFieldControl } from './field-context'
 import { formatFileSize } from './format'
 import { Thumbnail } from './photo'
+import { useT } from '@/i18n/hooks'
+import { appMessages } from './app-messages'
 
 /**
  * File picker sized like every other control: the browser's own button is the
@@ -38,6 +41,7 @@ export function PhotoFileField({
   ...props
 }: ComponentProps<'input'>) {
   const field = useFieldControl()
+  const t = useT(appMessages)
 
   return (
     <label
@@ -48,10 +52,10 @@ export function PhotoFileField({
       )}
     >
       <ImagePlus aria-hidden className="text-app-muted size-6" />
-      <span className="mt-2 text-sm font-bold text-white">Вибрати фото</span>
-      <span className="text-app-dim mt-1 text-xs">
-        Можна вибрати кілька фотографій одразу
+      <span className="mt-2 text-sm font-bold text-white">
+        {t('choosePhotos')}
       </span>
+      <span className="text-app-dim mt-1 text-xs">{t('choosePhotosHint')}</span>
       <input
         {...field}
         accept="image/*"
@@ -85,7 +89,7 @@ export function UploadList({
   label,
   onRetry,
   onRemove,
-  emptyLabel = 'Файли не вибрано.',
+  emptyLabel,
 }: {
   items: readonly UploadItem[]
   label: string
@@ -93,8 +97,12 @@ export function UploadList({
   onRemove?: (item: UploadItem) => void
   emptyLabel?: ReactNode
 }) {
+  const { locale } = useLocale()
+  const t = useT(appMessages)
   if (items.length === 0) {
-    return <p className="text-app-dim text-[13.5px]">{emptyLabel}</p>
+    return (
+      <p className="text-app-dim text-[13.5px]">{emptyLabel ?? t('noFiles')}</p>
+    )
   }
 
   return (
@@ -127,19 +135,19 @@ export function UploadList({
               )}
             >
               {item.status === 'failed'
-                ? (item.error ?? 'Не вдалося завантажити')
+                ? (item.error ?? t('uploadFailed'))
                 : item.status === 'pending'
-                  ? 'Завантажується…'
+                  ? t('uploading')
                   : item.size === undefined
-                    ? 'Збережено'
-                    : formatFileSize(item.size)}
+                    ? t('uploaded')
+                    : formatFileSize(item.size, locale)}
             </span>
           </span>
 
           <span className="flex shrink-0 flex-wrap gap-2">
             {item.status === 'failed' && onRetry !== undefined ? (
               <Button
-                aria-label={`Повторити ${item.name}`}
+                aria-label={t('retryFile', { name: item.name })}
                 onClick={() => onRetry(item)}
                 size="icon"
               >
@@ -148,7 +156,7 @@ export function UploadList({
             ) : null}
             {onRemove === undefined ? null : (
               <Button
-                aria-label={`Прибрати ${item.name}`}
+                aria-label={t('removeFile', { name: item.name })}
                 onClick={() => onRemove(item)}
                 size="icon"
                 variant="quiet"
@@ -165,6 +173,7 @@ export function UploadList({
 
 /** Sits under an upload list when some files did not make it. */
 export function UploadSummary({ failed }: { failed: number }) {
+  const t = useT(appMessages)
   if (failed === 0) return null
 
   return (
@@ -173,9 +182,7 @@ export function UploadSummary({ failed }: { failed: number }) {
       role="status"
     >
       <FileWarning aria-hidden className="size-4" />
-      {failed === 1
-        ? 'Один файл не завантажився. Повторіть або приберіть його, щоб зберегти.'
-        : `${String(failed)} файлів не завантажилися. Повторіть або приберіть їх, щоб зберегти.`}
+      {failed === 1 ? t('oneFileFailed') : t('filesFailed', { count: failed })}
     </p>
   )
 }

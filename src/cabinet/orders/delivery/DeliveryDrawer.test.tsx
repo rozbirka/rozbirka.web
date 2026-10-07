@@ -5,6 +5,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { integrationsApi } from '@/api/integrations'
 import type { DeliveryOrder } from '@/api/delivery'
 import { shippingApi, type Shipment } from '@/api/shipping'
+import { LocaleProvider } from '@/i18n'
 import { DeliveryDrawer } from './DeliveryDrawer'
 
 vi.mock('@/api/integrations', () => ({
@@ -200,7 +201,7 @@ it('shows the prepayment as both legs the carrier priced', async () => {
 
   expect(await screen.findByText('Розрахунок отримано')).toBeVisible()
   expect(screen.getByText('Необхідна передоплата')).toBeVisible()
-  expect(screen.getByText('360 ₴')).toBeVisible()
+  expect(screen.getByText(/^360\sUAH$/)).toBeVisible()
   expect(screen.getByRole('button', { name: 'Створити ТТН' })).toBeEnabled()
 })
 
@@ -215,4 +216,41 @@ it('stops offering a waybill on a quote that is a day old', async () => {
   expect(await screen.findByText('Розрахунок застарів')).toBeVisible()
   expect(screen.getByRole('button', { name: 'Створити ТТН' })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Перерахувати' })).toBeEnabled()
+})
+
+it('books in British English with a phone example from the business country', async () => {
+  render(
+    <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+      <DeliveryDrawer
+        countryCode="GB"
+        customerName="Ірина Олійник"
+        customerPhone={null}
+        declaredValue={4280}
+        delivery={money()}
+        paid={null}
+        dispatchPoints={[point]}
+        integrationId="integration-1"
+        onChanged={vi.fn()}
+        onClose={vi.fn()}
+        onMoneyChanged={vi.fn()}
+        orderId="order-1"
+        shipment={null}
+      />
+    </LocaleProvider>,
+  )
+
+  expect(
+    await screen.findByRole('dialog', { name: 'Book shipment' }),
+  ).toBeVisible()
+  expect(screen.getByLabelText(/^Phone/)).toHaveAttribute(
+    'placeholder',
+    '+44 7700 900123',
+  )
+  expect(screen.getByText('Delivery cost')).toBeVisible()
+  expect(
+    screen.getByRole('button', { name: 'Get delivery quote' }),
+  ).toBeDisabled()
+  expect(screen.getByLabelText(/Description of contents/)).toHaveValue(
+    'Car parts',
+  )
 })

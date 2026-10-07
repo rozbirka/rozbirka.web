@@ -1,12 +1,14 @@
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router'
+import { commonMessages, useT } from '@/i18n'
 import { useAuth } from './AuthContext'
 import { resolvePostLoginDestination } from './post-login'
 
 function FullScreenLoader() {
+  const tc = useT(commonMessages)
   return (
     <div className="bg-background grid min-h-screen place-items-center text-[14px] text-neutral-500">
-      Завантаження…
+      {tc('loading')}
     </div>
   )
 }

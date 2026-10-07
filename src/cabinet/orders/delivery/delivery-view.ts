@@ -1,8 +1,23 @@
 import type { StatusTone } from '@/components/app'
 import type { DeliveryOrder } from '@/api/delivery'
 import type { Shipment } from '@/api/shipping'
-import { plural } from '@/lib/utils'
+import {
+  DEFAULT_TIME_ZONE,
+  formatDateWith,
+  formatTime,
+  translate,
+  type Locale,
+  type MessageKey,
+  type MessageParams,
+} from '@/i18n'
 import { deliveryStage, uah } from './delivery-money'
+import { deliveryMessages } from './messages'
+
+const tr = (
+  locale: Locale,
+  key: MessageKey<typeof deliveryMessages>,
+  params?: MessageParams,
+) => translate(deliveryMessages, locale, key, params)
 
 /**
  * The shape of a delivery order on screen, read from the two records Core
@@ -26,10 +41,23 @@ export interface LifecycleStep {
   current: boolean
 }
 
-const stamp = (value: string | null): string => {
+/** Day, month and time in the business time zone: `21.09 · 14:02`. */
+const stamp = (
+  value: string | null,
+  locale: Locale,
+  timeZone: string,
+): string => {
   if (value === null) return ''
-  const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})/.exec(value)
-  return parts ? `${parts[3]}.${parts[2]} · ${parts[4]}` : value
+  const date = formatDateWith(
+    value,
+    locale,
+    { day: '2-digit', month: '2-digit' },
+    timeZone,
+  )
+  const time = formatTime(value, locale, timeZone)
+  return date === null || time === null
+    ? value
+    : tr(locale, 'stamp', { date, time })
 }
 
 /**
@@ -41,6 +69,8 @@ const stamp = (value: string | null): string => {
 export function lifecycle(
   delivery: DeliveryOrder,
   shipment: Shipment | null,
+  locale: Locale,
+  timeZone: string = DEFAULT_TIME_ZONE,
 ): LifecycleStep[] {
   const paidAt =
     delivery.outstandingUah > 0
@@ -62,25 +92,25 @@ export function lifecycle(
   }[] = [
     {
       key: 'paid',
-      label: 'Оплачено',
+      label: tr(locale, 'stepPaid'),
       done: delivery.outstandingUah === 0,
       at: paidAt,
     },
     {
       key: 'waybill',
-      label: 'ТТН',
+      label: tr(locale, 'stepWaybill'),
       done: hasWaybill(shipment),
       at: waybillAt,
     },
     {
       key: 'dispatched',
-      label: 'Передано перевізнику',
+      label: tr(locale, 'stepDispatched'),
       done: delivery.dispatchedAt !== null,
       at: delivery.dispatchedAt,
     },
     {
       key: 'received',
-      label: 'Отримано',
+      label: tr(locale, 'stepReceived'),
       done: delivery.receivedAt !== null,
       at: delivery.receivedAt,
     },
@@ -89,41 +119,48 @@ export function lifecycle(
   return steps.map((step, index) => ({
     key: step.key,
     label: step.label,
-    meta: step.done ? stamp(step.at) : '',
+    meta: step.done ? stamp(step.at, locale, timeZone) : '',
     done: step.done,
     current: step.done && steps[index + 1]?.done !== true,
   }))
 }
 
 /** The order's own state, said the way the yard says it. */
-export function orderChip(delivery: DeliveryOrder): {
+export function orderChip(
+  delivery: DeliveryOrder,
+  locale: Locale,
+): {
   label: string
   tone: StatusTone
 } {
-  if (delivery.returnedAt !== null) return { label: 'Повернене', tone: 'info' }
-  if (delivery.receivedAt !== null) return { label: 'Підтверджене', tone: 'ok' }
+  if (delivery.returnedAt !== null)
+    return { label: tr(locale, 'chipReturned'), tone: 'info' }
+  if (delivery.receivedAt !== null)
+    return { label: tr(locale, 'chipConfirmed'), tone: 'ok' }
   return delivery.outstandingUah === 0
-    ? { label: 'Очікує · оплачене', tone: 'info' }
-    : { label: 'Очікує · є залишок', tone: 'warn' }
+    ? { label: tr(locale, 'chipPendingPaid'), tone: 'info' }
+    : { label: tr(locale, 'chipPendingDue'), tone: 'warn' }
 }
 
 /** Where the parcel is, as the carrier record shows it. */
 export function shipmentChip(
   delivery: DeliveryOrder,
   shipment: Shipment | null,
+  locale: Locale,
 ): { label: string; tone: StatusTone } {
   if (delivery.receivedAt !== null)
-    return { label: 'Отримано клієнтом', tone: 'ok' }
+    return { label: tr(locale, 'shipReceived'), tone: 'ok' }
   if (delivery.dispatchedAt !== null)
-    return { label: 'Передано перевізнику', tone: 'info' }
-  if (hasWaybill(shipment)) return { label: 'ТТН створена', tone: 'neutral' }
+    return { label: tr(locale, 'stepDispatched'), tone: 'info' }
+  if (hasWaybill(shipment))
+    return { label: tr(locale, 'shipCreated'), tone: 'neutral' }
   if (shipment?.state === 'Creating')
-    return { label: 'ТТН створюється', tone: 'warn' }
+    return { label: tr(locale, 'shipCreating'), tone: 'warn' }
   if (shipment?.state === 'Unknown')
-    return { label: 'Результат невідомий', tone: 'danger' }
+    return { label: tr(locale, 'shipUnknown'), tone: 'danger' }
   if (shipment?.state === 'Cancelled')
-    return { label: 'ТТН скасована', tone: 'neutral' }
-  return { label: 'ТТН не створена', tone: 'warn' }
+    return { label: tr(locale, 'shipCancelled'), tone: 'neutral' }
+  return { label: tr(locale, 'shipNone'), tone: 'warn' }
 }
 
 export interface ShipmentFact {
@@ -143,6 +180,7 @@ export interface ShipmentFact {
 export function shipmentFacts(
   delivery: DeliveryOrder,
   shipment: Shipment | null,
+  locale: Locale,
 ): ShipmentFact[] {
   const created = hasWaybill(shipment)
   const parcels = shipment?.draft.parcels ?? []
@@ -154,55 +192,64 @@ export function shipmentFacts(
   return [
     {
       key: 'waybill',
-      label: 'ТТН',
-      value: created ? (shipment?.number ?? '—') : 'не створена',
+      label: tr(locale, 'stepWaybill'),
+      value: created ? (shipment?.number ?? '—') : tr(locale, 'factNotCreated'),
       note: created
         ? ''
         : delivery.outstandingUah > 0
-          ? 'буде з післяплатою'
-          : 'можна створити',
+          ? tr(locale, 'factWithCod')
+          : tr(locale, 'factCanCreate'),
       tone: created ? 'ink' : 'warn',
     },
     {
       key: 'cod',
-      label: 'Післяплата',
-      value: shipment?.codUah == null ? '—' : uah(shipment.codUah),
+      label: tr(locale, 'factCod'),
+      value: shipment?.codUah == null ? '—' : uah(shipment.codUah, locale),
       note: !created
         ? ''
         : codMatches
-          ? 'дорівнює залишку'
-          : 'не дорівнює залишку',
+          ? tr(locale, 'factCodMatches')
+          : tr(locale, 'factCodMismatch'),
       tone: !created ? 'dim' : codMatches ? 'ok' : 'danger',
     },
     {
       key: 'parcels',
-      label: 'Посилка',
+      label: tr(locale, 'factParcel'),
       value:
         parcels.length === 0
           ? '—'
-          : `${String(parcels.length)} ${plural(parcels.length, ['місце', 'місця', 'місць'])} · ${String(weight)} кг`,
+          : tr(locale, 'factParcelValue', {
+              count: parcels.length,
+              weight,
+            }),
       note:
         first === undefined
           ? ''
-          : `${String(first.lengthCm)} × ${String(first.widthCm)} × ${String(first.heightCm)} см`,
+          : tr(locale, 'factDimensions', {
+              length: first.lengthCm,
+              width: first.widthCm,
+              height: first.heightCm,
+            }),
       tone: parcels.length === 0 ? 'dim' : 'ink',
     },
     {
       key: 'deposit',
-      label: 'Депозит',
+      label: tr(locale, 'factDeposit'),
       value:
         delivery.requiredDepositUah <= 0
           ? '—'
-          : uah(delivery.requiredDepositUah),
+          : uah(delivery.requiredDepositUah, locale),
       note: !delivery.depositRequired
-        ? 'розбірка не вимагає депозиту'
+        ? tr(locale, 'depositNotRequired')
         : delivery.depositWaived
-          ? 'знято для довіреного клієнта'
+          ? tr(locale, 'depositWaivedTrusted')
           : delivery.requiredDepositUah <= 0
-            ? 'зʼявиться після розрахунку'
+            ? tr(locale, 'depositAfterQuote')
             : delivery.depositSatisfied
-              ? 'внесено'
-              : `бракує ${uah(delivery.depositShortfallUah)}`,
+              ? tr(locale, 'depositPaid')
+              : tr(locale, 'depositShort', {
+                  amount: uah(delivery.depositShortfallUah, locale),
+                }),
       tone: !delivery.depositRequired
         ? 'dim'
         : delivery.depositWaived || delivery.depositSatisfied
@@ -219,15 +266,18 @@ export function shipmentFacts(
  * nobody has paid anything against is not partly paid, and calling it that
  * hides the difference between a deposit taken and a deposit never asked for.
  */
-export function paymentStanding(delivery: DeliveryOrder): {
+export function paymentStanding(
+  delivery: DeliveryOrder,
+  locale: Locale,
+): {
   label: string
   tone: 'ok' | 'warn' | 'dim'
 } {
   if (delivery.outstandingUah === 0)
-    return { label: 'Оплачено повністю', tone: 'ok' }
+    return { label: tr(locale, 'standingFull'), tone: 'ok' }
   return delivery.appliedUah > 0
-    ? { label: 'Оплачено частково', tone: 'warn' }
-    : { label: 'Не оплачено', tone: 'dim' }
+    ? { label: tr(locale, 'standingPartial'), tone: 'warn' }
+    : { label: tr(locale, 'standingNone'), tone: 'dim' }
 }
 
 export interface PrimaryAction {
@@ -244,40 +294,43 @@ export interface PrimaryAction {
 export function primaryAction(
   delivery: DeliveryOrder,
   shipment: Shipment | null,
+  locale: Locale,
 ): PrimaryAction {
   if (delivery.returnedAt !== null)
     return {
       kind: null,
       label: '',
-      hint: 'Замовлення повернене. Кошти повертаються окремо по кожному платежу.',
+      hint: tr(locale, 'returnedHint'),
     }
   // Money no longer gates the parcel: whatever is still owed travels as the
   // post-payment, so the waybill is the next move even on an unpaid order.
   if (!hasWaybill(shipment))
     return {
       kind: 'create',
-      label: 'Створити ТТН',
+      label: tr(locale, 'actionCreate'),
       hint:
         delivery.outstandingUah > 0
-          ? `Післяплата буде ${uah(delivery.outstandingUah)} — рівно залишок.`
-          : 'Замовлення оплачене, тож накладна піде без післяплати.',
+          ? tr(locale, 'createHintCod', {
+              amount: uah(delivery.outstandingUah, locale),
+            })
+          : tr(locale, 'createHintPaid'),
     }
   if (delivery.dispatchedAt === null)
     return {
       kind: 'dispatch',
-      label: 'Передати перевізнику',
-      hint: 'Після передачі статус лишається «Очікує».',
+      label: tr(locale, 'actionDispatch'),
+      hint: tr(locale, 'dispatchHint'),
     }
   if (delivery.receivedAt === null)
     return {
       kind: 'receive',
-      label: 'Отримано клієнтом',
-      hint: 'Замовлення стане «Підтверджене».',
+      label: tr(locale, 'shipReceived'),
+      hint: tr(locale, 'receiveHint'),
     }
   return {
     kind: 'return',
-    label: 'Оформити повернення',
-    hint: 'Кошти повертаються окремо по кожному платежу.',
+    label: tr(locale, 'actionReturn'),
+    hint: tr(locale, 'returnHint'),
   }
 }
 
@@ -308,6 +361,7 @@ export function readiness(
   delivery: DeliveryOrder,
   shipment: Shipment | null,
   dispatchPointActive: boolean,
+  locale: Locale,
 ): ReadinessCheck[] {
   const quoteFresh =
     shipment?.quoteAt != null &&
@@ -320,27 +374,29 @@ export function readiness(
       key: 'outstanding',
       label:
         delivery.outstandingUah > 0
-          ? 'Залишок поїде післяплатою'
-          : 'Залишку немає — післяплати не буде',
-      state: uah(delivery.outstandingUah),
+          ? tr(locale, 'checkOutstandingCod')
+          : tr(locale, 'checkOutstandingNone'),
+      state: uah(delivery.outstandingUah, locale),
       ok: true,
     },
     {
       key: 'deposit',
-      label: 'Депозит за доставку внесено',
+      label: tr(locale, 'checkDeposit'),
       // A required deposit of zero is not a deposit that is covered: it is a
       // deposit nobody has worked out yet, because it equals the carrier quote
       // plus the return estimate and neither exists before the calculation.
       // Said as a shortfall it reads «бракує 0,00 ₴», which is not a fact.
       state: !delivery.depositRequired
-        ? 'розбірка не вимагає'
+        ? tr(locale, 'depositStateNotRequired')
         : delivery.depositWaived
-          ? 'знято'
+          ? tr(locale, 'depositStateWaived')
           : delivery.requiredDepositUah <= 0
-            ? 'зʼявиться після розрахунку'
+            ? tr(locale, 'depositAfterQuote')
             : delivery.depositSatisfied
-              ? uah(delivery.requiredDepositUah)
-              : `бракує ${uah(delivery.depositShortfallUah)}`,
+              ? uah(delivery.requiredDepositUah, locale)
+              : tr(locale, 'depositShort', {
+                  amount: uah(delivery.depositShortfallUah, locale),
+                }),
       ok:
         !delivery.depositRequired ||
         delivery.depositWaived ||
@@ -353,26 +409,28 @@ export function readiness(
     },
     {
       key: 'quote',
-      label: 'Розрахунок доставки свіжий',
+      label: tr(locale, 'checkQuote'),
       state:
         shipment?.quoteAt == null
-          ? 'зробимо на наступному кроці'
+          ? tr(locale, 'quoteNextStep')
           : quoteFresh
-            ? 'оновлено'
-            : 'застарів — оновимо на наступному кроці',
+            ? tr(locale, 'quoteUpdated')
+            : tr(locale, 'quoteStaleNext'),
       ok: quoteFresh,
       pending: true,
     },
     {
       key: 'dispatch-point',
-      label: 'Точка відправлення активна',
-      state: dispatchPointActive ? 'активна' : 'не обрана',
+      label: tr(locale, 'checkDispatchPoint'),
+      state: dispatchPointActive
+        ? tr(locale, 'pointActive')
+        : tr(locale, 'pointNone'),
       ok: dispatchPointActive,
     },
     {
       key: 'carrier',
-      label: 'Маршрут і габарити',
-      state: 'перевіряє Нова пошта під час створення',
+      label: tr(locale, 'checkCarrier'),
+      state: tr(locale, 'carrierChecks'),
       ok: true,
       deferred: true,
     },
@@ -397,7 +455,10 @@ export const readinessBlocks = (
   )
 
 /** The one move that gets this order closer to a waybill, said plainly. */
-export function readinessNextStep(checks: readonly ReadinessCheck[]): {
+export function readinessNextStep(
+  checks: readonly ReadinessCheck[],
+  locale: Locale,
+): {
   title: string
   note: string
 } {
@@ -405,27 +466,37 @@ export function readinessNextStep(checks: readonly ReadinessCheck[]): {
   const first = blocking[0]
   if (first !== undefined)
     return {
-      title: 'Спершу треба виправити налаштування',
-      note: `${first.label}: ${first.state}. На наступному кроці це не змінюється — відкрийте налаштування інтеграції.`,
+      title: tr(locale, 'nextFixTitle'),
+      note: tr(locale, 'nextFixNote', {
+        label: first.label,
+        state: first.state,
+      }),
     }
   if (checks.find((check) => check.key === 'quote')?.ok !== true)
     return {
-      title: 'Наступний крок — розрахувати доставку',
-      note: 'Далі заповнюєте отримувача й посилку та натискаєте «Розрахувати». Звідти ж стане відомий депозит.',
+      title: tr(locale, 'nextQuoteTitle'),
+      note: tr(locale, 'nextQuoteNote'),
     }
   if (checks.find((check) => check.key === 'deposit')?.ok !== true)
     return {
-      title: 'Депозит ще не внесено',
-      note: 'Накладну створити можна, але передати посилку перевізнику — лише після депозиту.',
+      title: tr(locale, 'nextDepositTitle'),
+      note: tr(locale, 'nextDepositNote'),
     }
   return {
-    title: 'Перешкод не знайдено',
-    note: 'Маршрут і габарити Нова пошта перевірить під час створення — відмова можлива вже там.',
+    title: tr(locale, 'nextClearTitle'),
+    note: tr(locale, 'nextClearNote'),
   }
 }
 
 /** What the yard calls a payment Core tagged with its kind. */
-export const paymentKindLabel = (kind: string | null): string =>
-  kind === 'prepayment' ? 'Завдаток' : kind === 'cod' ? 'Післяплата' : 'Оплата'
+export const paymentKindLabel = (kind: string | null, locale: Locale): string =>
+  tr(
+    locale,
+    kind === 'prepayment'
+      ? 'kindPrepayment'
+      : kind === 'cod'
+        ? 'factCod'
+        : 'kindOther',
+  )
 
 export { deliveryStage }

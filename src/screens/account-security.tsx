@@ -4,6 +4,8 @@ import { useAuth } from '@/auth/AuthContext'
 import { AccountDeletion } from '@/components/account/account-deletion'
 import { BrandLogo } from '@/components/site/brand-logo'
 import { Button } from '@/components/app'
+import { useT } from '@/i18n'
+import { accountMessages } from '@/components/account/account-messages'
 
 /**
  * Personal account controls deliberately do not require company access, so the
@@ -14,9 +16,10 @@ import { Button } from '@/components/app'
 export function AccountSecurityScreen() {
   const auth = useAuth()
   const user = auth.user
+  const t = useT(accountMessages)
   return (
     <div className="bg-app-canvas relative flex min-h-dvh flex-col text-white">
-      <title>Особистий акаунт · Rozbirka</title>
+      <title>{t('documentTitle')}</title>
       <meta name="robots" content="noindex, nofollow" />
       <header className="flex items-center justify-between gap-3 px-4 py-4 sm:px-6 sm:py-6 lg:px-10">
         <BrandLogo />
@@ -25,7 +28,7 @@ export function AccountSecurityScreen() {
           to="/account"
         >
           <ArrowLeft className="size-4 transition-transform group-hover:-translate-x-0.5" />
-          <span>Повернутися</span>
+          <span>{t('back')}</span>
         </Link>
       </header>
 
@@ -33,30 +36,29 @@ export function AccountSecurityScreen() {
         <div className="grid w-full max-w-[420px] content-start gap-6">
           <div className="flex flex-col gap-2">
             <span className="text-brand text-[11px] font-medium tracking-[0.28em] uppercase">
-              Акаунт
+              {t('eyebrow')}
             </span>
             <h1 className="text-[30px] leading-[1.05] font-light tracking-[-0.02em] text-balance sm:text-[38px]">
-              Особистий акаунт
+              {t('title')}
             </h1>
             <p className="text-app-muted text-[13.5px] leading-[1.5]">
-              Ці дії доступні завжди — навіть коли доступу до розбірки немає або
-              її підписка неактивна.
+              {t('lead')}
             </p>
           </div>
 
           <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5">
             <h2 className="text-app-ink text-[15px] font-bold">
-              Ви увійшли як
+              {t('signedInAs')}
             </h2>
             <dl className="mt-3 grid gap-2.5 text-[13.5px]">
               <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">Ім’я</dt>
+                <dt className="text-app-muted">{t('name')}</dt>
                 <dd className="text-app-ink min-w-0 truncate text-right font-medium">
                   {user?.displayName ?? '—'}
                 </dd>
               </div>
               <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">Телефон</dt>
+                <dt className="text-app-muted">{t('phone')}</dt>
                 <dd className="text-app-ink text-right font-medium tabular-nums">
                   {user?.phone ?? '—'}
                 </dd>
@@ -65,16 +67,18 @@ export function AccountSecurityScreen() {
           </section>
 
           <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5">
-            <h2 className="text-app-ink text-[15px] font-bold">Сеанс</h2>
+            <h2 className="text-app-ink text-[15px] font-bold">
+              {t('session')}
+            </h2>
             <Button
               className="mt-3.5 w-full justify-center"
               onClick={() => void auth.signOut()}
             >
               <LogOut aria-hidden />
-              Вийти
+              {t('logout')}
             </Button>
             <p className="text-app-dim mt-3 text-[12.5px] leading-5 text-pretty">
-              Вихід діє лише в цьому браузері.
+              {t('logoutHint')}
             </p>
           </section>
 
@@ -85,7 +89,7 @@ export function AccountSecurityScreen() {
               className="text-app-muted underline underline-offset-4 hover:text-white"
               to="/privacy"
             >
-              Політика конфіденційності
+              {t('privacy')}
             </Link>
           </p>
         </div>

@@ -1,27 +1,18 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/app'
-import { cn, plural } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { commonMessages, useT } from '@/i18n'
 import type { CashRegister, CashTransaction } from '@/api/cash'
-import {
-  count,
-  money,
-  moment,
-  movementText,
-  registerTypeHints,
-  registerTypeLabels,
-  signedMoney,
-} from './cash-labels'
+import { useCashText } from './cash-labels'
+import { cashMessages } from './cash-messages'
 import { RedesignShell, RedesignTitle } from '../redesign-shell'
 
-const NO_TYPE_FILTER =
-  'Журнал не фільтрується за типом операції — сегменти впорядковують те, що вже завантажено на цій сторінці.'
-
 const SEGMENTS = [
-  { key: 'all', label: 'Усі' },
-  { key: 'in', label: 'Надходження' },
-  { key: 'out', label: 'Витрата' },
-  { key: 'transfer', label: 'Переказ' },
+  { key: 'all', label: 'segAll' },
+  { key: 'in', label: 'mvIncome' },
+  { key: 'out', label: 'mvExpense' },
+  { key: 'transfer', label: 'mvTransfer' },
 ] as const
 
 type SegmentKey = (typeof SEGMENTS)[number]['key']
@@ -62,6 +53,7 @@ function MoneyLines({
   lines: readonly { currency: string; amount: number }[]
   empty: string
 }) {
+  const { money } = useCashText()
   if (lines.length === 0)
     return <p className="text-app-dim text-[13.5px]">{empty}</p>
   return (
@@ -115,7 +107,18 @@ export function CashCard({
   pagination: ReactNode
   children?: ReactNode
 }) {
+  const t = useT(cashMessages)
+  const tc = useT(commonMessages)
+  const {
+    count,
+    moment,
+    movementText,
+    registerHint,
+    registerType,
+    signedMoney,
+  } = useCashText()
   const [segment, setSegment] = useState<SegmentKey>('all')
+  const typeHint = registerHint(register.type)
   const currencies = Object.entries(register.balances)
   const counts = {
     all: ledger.length,
@@ -133,7 +136,7 @@ export function CashCard({
         <>
           {canManage ? (
             <Button asChild>
-              <Link to="edit">Редагувати</Link>
+              <Link to="edit">{tc('edit')}</Link>
             </Button>
           ) : null}
           {canManage && register.isActive ? (
@@ -142,7 +145,7 @@ export function CashCard({
               onClick={onNewOperation}
               variant="primary"
             >
-              Нова операція
+              {t('newOperation')}
             </Button>
           ) : null}
         </>
@@ -150,7 +153,7 @@ export function CashCard({
       crumb={
         <>
           <Link className="hover:text-app-muted" to={cashHref}>
-            Гроші · Каси
+            {t('crumb')}
           </Link>
           <span aria-hidden> · </span>
           <span className="text-app-muted">{register.name}</span>
@@ -174,10 +177,10 @@ export function CashCard({
                 register.isActive ? 'bg-state-ok' : 'bg-app-dim',
               )}
             />
-            {register.isActive ? 'Активна' : 'Неактивна'}
+            {register.isActive ? t('active') : t('inactive')}
           </span>
         }
-        lead={`${registerTypeLabels[register.type] ?? register.type}${registerTypeHints[register.type] ? ` · ${registerTypeHints[register.type]}` : ''}`}
+        lead={`${registerType(register.type)}${typeHint === null ? '' : ` · ${typeHint}`}`}
         title={register.name}
       />
 
@@ -192,24 +195,28 @@ export function CashCard({
 
       <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <section
-          aria-label="Операції"
+          aria-label={t('operations')}
           className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
         >
           <div className="border-app-line flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-5 py-4">
             <div>
-              <h2 className="text-app-ink text-[15px] font-bold">Операції</h2>
+              <h2 className="text-app-ink text-[15px] font-bold">
+                {t('operations')}
+              </h2>
               <p className="text-app-dim mt-1 text-[12px]">
                 {totalOperations === null
-                  ? 'Журнал завантажується'
-                  : `${count(totalOperations)} ${plural(totalOperations, ['операція', 'операції', 'операцій'])} усього`}
-                {lastOperationAt ? ` · остання ${moment(lastOperationAt)}` : ''}
+                  ? t('ledgerLoading')
+                  : t('operationsTotal', { count: totalOperations })}
+                {lastOperationAt
+                  ? ` · ${t('lastOperation', { when: moment(lastOperationAt) })}`
+                  : ''}
               </p>
             </div>
             <div
-              aria-label="Тип операції на цій сторінці"
+              aria-label={t('typeOnPage')}
               className="flex min-w-0 flex-wrap gap-1"
               role="group"
-              title={NO_TYPE_FILTER}
+              title={t('noTypeFilter')}
             >
               {SEGMENTS.map((one) => (
                 <button
@@ -224,7 +231,7 @@ export function CashCard({
                   onClick={() => setSegment(one.key)}
                   type="button"
                 >
-                  {one.label}
+                  {t(one.label)}
                   <span className="text-app-dim font-mono text-[12px]">
                     {count(counts[one.key])}
                   </span>
@@ -236,20 +243,20 @@ export function CashCard({
           {shown.length === 0 ? (
             <p className="text-app-muted px-5 py-8 text-[14px]">
               {ledger.length === 0
-                ? 'Операцій ще немає.'
-                : 'Операцій за цим фільтром на цій сторінці немає.'}
+                ? t('noOperations')
+                : t('noOperationsFiltered')}
             </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-[14px]">
                 <caption className="sr-only">
-                  Журнал операцій каси «{register.name}»
+                  {t('ledgerCaption', { name: register.name })}
                 </caption>
                 <thead>
                   <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
-                    <th className="px-5 py-2.5 text-left">Дата</th>
-                    <th className="px-3 py-2.5 text-left">Призначення</th>
-                    <th className="px-5 py-2.5 text-right">Сума</th>
+                    <th className="px-5 py-2.5 text-left">{t('colDate')}</th>
+                    <th className="px-3 py-2.5 text-left">{t('colPurpose')}</th>
+                    <th className="px-5 py-2.5 text-right">{t('colAmount')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -284,21 +291,20 @@ export function CashCard({
           )}
           <div className="border-app-line grid gap-3 border-t px-5 py-3.5">
             <p className="text-app-dim text-[13px]">
-              Показано {count(shown.length)} з {count(ledger.length)} на цій
-              сторінці, усього за фільтром — {count(ledgerTotal)}{' '}
-              {plural(ledgerTotal, ['операція', 'операції', 'операцій'])}.
+              {t('ledgerShown', {
+                shown: shown.length,
+                loaded: ledger.length,
+                count: ledgerTotal,
+              })}
             </p>
             {pagination}
           </div>
         </section>
 
         <div className="grid min-w-0 content-start gap-5">
-          <Card
-            note="Валюти зберігаються окремо, конвертація не застосовується."
-            title="Залишки"
-          >
+          <Card note={t('balancesNote')} title={t('balances')}>
             <MoneyLines
-              empty="Валют ще немає"
+              empty={t('noCurrencies')}
               lines={currencies.map(([currency, amount]) => ({
                 currency,
                 amount,

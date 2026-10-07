@@ -7,7 +7,7 @@ import type {
   LinkDeliveryPayment,
   RecordDeliveryPayment,
 } from '@/api/delivery'
-import { normalizeApiProblem } from '@/api/errors'
+import { commonMessages, useFormat, useLocale, useT, type Locale } from '@/i18n'
 import {
   hryvnia,
   linkableTransactions,
@@ -15,6 +15,8 @@ import {
   paymentOutcome,
   uah,
 } from './delivery-money'
+import { deliveryDrawerMessages } from './drawer-messages'
+import { deliveryProblemMessage } from './nova-poshta-availability'
 
 type Mode = 'record' | 'link'
 
@@ -23,23 +25,25 @@ const FORM_ID = 'delivery-payment-form'
 // Secondary text here stays at the muted step, never the dim one: the sheet
 // sits on the lighter overlay surface, where dim measures just under 4.5:1.
 
-const when = (value: string) =>
-  new Date(value).toLocaleString('uk-UA', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+const stampOptions: Intl.DateTimeFormatOptions = {
+  day: '2-digit',
+  month: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+}
 
-const balances = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 2 })
-
-/** How a sum is offered for editing: Ukrainian decimals use a comma. */
-const editable = (value: number) => value.toFixed(2).replace('.', ',')
+/**
+ * How a sum is offered for editing: two decimals with the interface
+ * language's separator (a comma in Ukrainian and Polish). `hryvnia()` reads
+ * either separator back.
+ */
+const editable = (value: number, locale: Locale) =>
+  value.toFixed(2).replace('.', locale === 'en-GB' ? '.' : ',')
 
 /** The hryvnia a till holds, or nothing when the module never named one. */
-const held = (register: CashRegister): string => {
+const held = (register: CashRegister, locale: Locale): string => {
   const value = register.balances['UAH']
-  return value === undefined ? '—' : `${balances.format(value)} ₴`
+  return value === undefined ? '—' : uah(value, locale)
 }
 
 /**
@@ -64,6 +68,11 @@ export function PaymentDrawer({
   onRecord: (input: RecordDeliveryPayment) => Promise<void>
   orderNumber: number
 }) {
+  const { locale } = useLocale()
+  const t = useT(deliveryDrawerMessages)
+  const tc = useT(commonMessages)
+  const format = useFormat()
+  const when = (value: string) => format.dateWith(value, stampOptions) ?? value
   const [mode, setMode] = useState<Mode>(initialMode)
   const [registers, setRegisters] = useState<CashRegister[] | null>(null)
   const [registerId, setRegisterId] = useState<string | null>(null)
@@ -131,35 +140,43 @@ export function PaymentDrawer({
         ? 0
         : linkedGross(receipt.amount, fee ?? 0)
   const outcome = paymentOutcome(gross, delivery.outstandingUah)
+  const outcomeTitle = outcome.over
+    ? t('outcomeOverTitle')
+    : outcome.remaining === 0
+      ? t('outcomeClosedTitle')
+      : t('outcomeLeftTitle')
+  const outcomeNote = outcome.over
+    ? t('outcomeOverNote')
+    : outcome.remaining === 0
+      ? t('outcomeClosedNote')
+      : t('outcomeLeftNote')
 
   const submit = async () => {
     if (pending) return
     if (fee === null) {
-      setError('Комісія має бути числом у гривнях, не більше двох знаків.')
+      setError(t('feeError'))
       return
     }
     if (mode === 'record') {
       if (amount === null) {
-        setError('Вкажіть суму в гривнях, не більше двох знаків після коми.')
+        setError(t('amountError'))
         return
       }
       if (fee >= amount) {
-        setError(
-          'Комісія не може дорівнювати сумі платежу або перевищувати її.',
-        )
+        setError(t('feeTooHigh'))
         return
       }
     }
     if (mode === 'link' && receipt === null) {
-      setError('Виберіть надходження зі списку каси.')
+      setError(t('pickReceipt'))
       return
     }
     if (outcome.over) {
-      setError(outcome.note)
+      setError(outcomeNote)
       return
     }
     if (registerId === null) {
-      setError('Виберіть касу.')
+      setError(t('pickTill'))
       return
     }
     setPending(true)
@@ -180,7 +197,7 @@ export function PaymentDrawer({
         })
       onClose()
     } catch (problem) {
-      setError(normalizeApiProblem(problem).message)
+      setError(deliveryProblemMessage(problem, locale))
       setPending(false)
     }
   }
@@ -191,16 +208,19 @@ export function PaymentDrawer({
 
   return (
     <Sheet
-      eyebrow={`Замовлення #${String(orderNumber)} · оплата`}
+      eyebrow={t('eyebrowOrder', {
+        number: String(orderNumber),
+        part: t('partPayment'),
+      })}
       footer={
         <>
           <p className="text-app-muted min-w-0 flex-1 truncate text-[13px]">
             {mode === 'record'
-              ? `Каса: ${registerName}`
-              : 'Прив’язка не створює платіж у касі'}
+              ? t('tillFooter', { name: registerName })
+              : t('linkFooter')}
           </p>
           <Button disabled={pending} onClick={onClose}>
-            Скасувати
+            {tc('cancel')}
           </Button>
           <Button
             aria-busy={pending}
@@ -211,7 +231,7 @@ export function PaymentDrawer({
           >
             {/* Not the tab's own words: two buttons in one dialog must not
                 answer to the same name. */}
-            {mode === 'record' ? 'Зберегти платіж' : 'Зберегти прив’язку'}
+            {mode === 'record' ? t('savePayment') : t('saveLink')}
           </Button>
         </>
       }
@@ -219,7 +239,7 @@ export function PaymentDrawer({
         if (!open && !pending) onClose()
       }}
       open
-      title={mode === 'record' ? 'Внести оплату' : 'Прив’язати транзакцію'}
+      title={mode === 'record' ? t('recordPayment') : t('linkTransaction')}
     >
       <form
         className="grid gap-5"
@@ -232,14 +252,14 @@ export function PaymentDrawer({
       >
         <div className="grid gap-2">
           <div
-            aria-label="Спосіб оплати"
+            aria-label={t('paymentMethod')}
             className="border-app-line bg-app-input grid grid-cols-2 gap-1 rounded-[12px] border p-1"
             role="group"
           >
             {(
               [
-                ['record', 'Внести оплату'],
-                ['link', 'Прив’язати транзакцію'],
+                ['record', t('recordPayment')],
+                ['link', t('linkTransaction')],
               ] as const
             ).map(([value, label]) => (
               <button
@@ -262,22 +282,18 @@ export function PaymentDrawer({
             ))}
           </div>
           <p className="text-app-muted text-[12px] leading-5 text-pretty">
-            {mode === 'record'
-              ? 'Брутто зменшує залишок за замовленням, у касу надходить брутто мінус комісія.'
-              : 'Платіж не створюється: замовленню зараховується сума транзакції плюс комісія.'}
+            {mode === 'record' ? t('recordExplained') : t('linkExplained')}
           </p>
         </div>
 
         {registers !== null && registers.length === 0 && (
-          <Notice tone="warn">
-            У розбірці немає активної каси. Створіть касу, щоб приймати оплату.
-          </Notice>
+          <Notice tone="warn">{t('noTills')}</Notice>
         )}
 
         {registers !== null && registers.length > 0 && (
           <fieldset className="grid gap-2">
             <legend className="text-app-ink mb-2 text-[13px] font-bold">
-              {mode === 'record' ? 'Куди зараховуємо' : 'Каса надходження'}
+              {mode === 'record' ? t('recordInto') : t('receiptTill')}
             </legend>
             {registers.map((register) => {
               const chosen = (registerId ?? registers[0]!.id) === register.id
@@ -306,7 +322,7 @@ export function PaymentDrawer({
                     {register.name}
                   </span>
                   <span className="text-app-muted font-mono text-[12px] whitespace-nowrap tabular-nums">
-                    {held(register)}
+                    {held(register, locale)}
                   </span>
                 </label>
               )
@@ -316,7 +332,7 @@ export function PaymentDrawer({
 
         {mode === 'record' ? (
           <>
-            <Field label="Сума, брутто">
+            <Field label={t('grossAmount')}>
               <TextInput
                 className={cn(
                   'h-[52px] rounded-[12px] px-4 font-mono text-[22px] tabular-nums',
@@ -331,11 +347,15 @@ export function PaymentDrawer({
 
             {suggested === null ? null : (
               <div className="-mt-3 flex flex-wrap gap-1.5">
-                <Preset onPick={() => setAmountDraft(editable(suggested))}>
-                  {`Увесь залишок · ${uah(suggested)}`}
+                <Preset
+                  onPick={() => setAmountDraft(editable(suggested, locale))}
+                >
+                  {t('wholeBalance', { amount: uah(suggested, locale) })}
                 </Preset>
-                <Preset onPick={() => setAmountDraft(editable(suggested / 2))}>
-                  Половина
+                <Preset
+                  onPick={() => setAmountDraft(editable(suggested / 2, locale))}
+                >
+                  {t('half')}
                 </Preset>
               </div>
             )}
@@ -343,10 +363,10 @@ export function PaymentDrawer({
             <Field
               hint={
                 fee !== null && fee > 0 && amount !== null && fee < amount
-                  ? `У касу надійде ${uah(amount - fee)}.`
-                  : 'Комісії немає.'
+                  ? t('tillReceives', { amount: uah(amount - fee, locale) })
+                  : t('noFee')
               }
-              label="Комісія каси"
+              label={t('tillFee')}
             >
               <TextInput
                 className="font-mono tabular-nums"
@@ -360,16 +380,13 @@ export function PaymentDrawer({
           <>
             <fieldset className="grid gap-2">
               <legend className="text-app-ink mb-2 text-[13px] font-bold">
-                Надходження
+                {t('receipts')}
               </legend>
               {receiptsError ? (
-                <Notice tone="danger">
-                  Не вдалося прочитати надходження каси.
-                </Notice>
+                <Notice tone="danger">{t('receiptsFailed')}</Notice>
               ) : options.length === 0 ? (
                 <p className="text-app-muted border-app-line bg-app-input rounded-[11px] border px-3.5 py-3.5 text-[13px] leading-5 text-pretty">
-                  У цій касі немає вільних надходжень. Виберіть іншу касу або
-                  внесіть оплату на вкладці «Внести оплату».
+                  {t('noReceipts')}
                 </p>
               ) : (
                 options.map((item) => {
@@ -389,32 +406,31 @@ export function PaymentDrawer({
                     >
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[14px] font-semibold text-white">
-                          {item.note ?? 'Надходження без призначення'}
+                          {item.note ?? t('receiptNoNote')}
                         </span>
                         <span className="text-app-muted mt-0.5 block font-mono text-[11.5px]">
                           {when(item.createdAt)} · {item.createdByName}
                         </span>
                       </span>
                       <span className="text-app-ink font-mono text-[14px] whitespace-nowrap tabular-nums">
-                        {uah(item.amount)}
+                        {uah(item.amount, locale)}
                       </span>
                     </button>
                   )
                 })
               )}
               <p className="text-app-muted text-[12px] leading-5 text-pretty">
-                Показані вхідні гривневі надходження цієї каси, які ще не
-                віднесені до жодного замовлення.
+                {t('receiptsExplained')}
               </p>
             </fieldset>
 
             <Field
               hint={
                 receipt === null
-                  ? 'Замовленню зараховується сума транзакції плюс комісія — тут формула протилежна до внесення платежу.'
-                  : `Замовленню зарахується ${uah(gross)}.`
+                  ? t('linkHint')
+                  : t('linkCredited', { amount: uah(gross, locale) })
               }
-              label="Комісія транзакції"
+              label={t('transactionFee')}
             >
               <TextInput
                 className="font-mono tabular-nums"
@@ -429,26 +445,26 @@ export function PaymentDrawer({
         {error !== null && <Notice tone="danger">{error}</Notice>}
 
         <dl className="border-app-line bg-app-raised grid grid-cols-[1fr_auto] items-baseline gap-y-2.5 rounded-[14px] border px-[18px] py-4 text-[14px]">
-          <dt className="text-app-muted">Погоджено за доставку</dt>
+          <dt className="text-app-muted">{t('agreed')}</dt>
           <dd className="text-right font-mono tabular-nums">
-            {uah(delivery.agreedTotalUah)}
+            {uah(delivery.agreedTotalUah, locale)}
           </dd>
-          <dt className="text-app-muted">До сплати</dt>
+          <dt className="text-app-muted">{t('due')}</dt>
           <dd className="text-right font-mono tabular-nums">
-            {uah(delivery.outstandingUah)}
+            {uah(delivery.outstandingUah, locale)}
           </dd>
-          <dt className="text-app-muted">Цей платіж</dt>
+          <dt className="text-app-muted">{t('thisPayment')}</dt>
           <dd
             className={cn(
               'text-right font-mono tabular-nums',
               gross > 0 ? 'text-state-ok' : 'text-app-dim',
             )}
           >
-            {gross > 0 ? uah(gross) : '—'}
+            {gross > 0 ? uah(gross, locale) : '—'}
           </dd>
           <span aria-hidden className="bg-app-line col-span-2 h-px" />
           <dt className="font-bold">
-            {outcome.over ? 'Переплата' : 'Залишиться'}
+            {outcome.over ? t('overpayment') : t('remaining')}
           </dt>
           <dd
             className={cn(
@@ -463,8 +479,8 @@ export function PaymentDrawer({
             )}
           >
             {outcome.over
-              ? uah(gross - delivery.outstandingUah)
-              : uah(outcome.remaining)}
+              ? uah(gross - delivery.outstandingUah, locale)
+              : uah(outcome.remaining, locale)}
           </dd>
           <p className="col-span-2 -mt-1 grid gap-0.5 text-[12px] text-pretty">
             <span
@@ -477,9 +493,9 @@ export function PaymentDrawer({
                     : 'text-state-warn',
               )}
             >
-              {outcome.title}
+              {outcomeTitle}
             </span>
-            <span className="text-app-muted leading-5">{outcome.note}</span>
+            <span className="text-app-muted leading-5">{outcomeNote}</span>
           </p>
         </dl>
       </form>

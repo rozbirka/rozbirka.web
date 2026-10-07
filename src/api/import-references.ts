@@ -4,6 +4,7 @@ import { intakesApi } from './intakes'
 import { customersApi } from './customers'
 import { inventoryApi } from './inventory'
 import type { RequestOptions } from './contracts'
+import { apiMessage } from './api-messages'
 export interface ImportReference {
   id: string
   name: string
@@ -23,7 +24,10 @@ export async function importReferences(
   if (field === 'IntakeId')
     return (
       await intakesApi.list({ search, page: 1, pageSize: 100 }, options)
-    ).items.map((c) => ({ id: c.id, name: c.name ?? c.supplier ?? 'Партія' }))
+    ).items.map((c) => ({
+      id: c.id,
+      name: c.name ?? c.supplier ?? apiMessage('intakeFallbackName'),
+    }))
   if (field === 'CustomerId')
     return (
       await customersApi.list({ q: search, page: 1, pageSize: 100 }, options)

@@ -22,9 +22,68 @@ function hasCanonicalLink(html, canonical) {
   })
 }
 
+function documentLang(html) {
+  const tag = html.match(/<html\b[^>]*>/i)?.[0] ?? ''
+  return attributeValue(tag, 'lang')
+}
+
+function hasAlternateLink(html, hreflang, href) {
+  return [...html.matchAll(/<link\b[^>]*>/gi)].some((match) => {
+    const rel = attributeValue(match[0], 'rel')
+    return (
+      attributeValue(match[0], 'hreflang') === hreflang &&
+      attributeValue(match[0], 'href') === href &&
+      rel?.split(/\s+/).some((token) => token.toLowerCase() === 'alternate')
+    )
+  })
+}
+
+/** Language versions of the landing and the `hreflang` set each must carry. */
+export const landingLanguages = [
+  { name: 'home', path: '/', lang: 'uk', canonical: 'https://rozbirka.pro/' },
+  {
+    name: 'landing-en',
+    path: '/en',
+    lang: 'en-GB',
+    canonical: 'https://rozbirka.pro/en',
+  },
+  {
+    name: 'landing-pl',
+    path: '/pl',
+    lang: 'pl',
+    canonical: 'https://rozbirka.pro/pl',
+  },
+]
+
+const landingAlternates = [
+  ...landingLanguages.map(({ lang, canonical }) => [lang, canonical]),
+  ['x-default', 'https://rozbirka.pro/'],
+]
+
 export function validateProductionResponses(result) {
-  assert(result.home.status === 200, 'home must return 200')
-  assert(result.home.contentType.includes('text/html'), 'home must be HTML')
+  for (const { name, lang, canonical } of landingLanguages) {
+    const response = name === 'home' ? result.home : result.landings?.[name]
+    assert(response, `${name} must be checked`)
+    assert(response.status === 200, `${name} must return 200`)
+    assert(
+      response.contentType.includes('text/html'),
+      `${name} must return HTML`,
+    )
+    assert(
+      hasCanonicalLink(response.body, canonical),
+      `${name} canonical URL is wrong`,
+    )
+    assert(
+      documentLang(response.body) === lang,
+      `${name} must declare <html lang="${lang}">`,
+    )
+    for (const [hreflang, href] of landingAlternates) {
+      assert(
+        hasAlternateLink(response.body, hreflang, href),
+        `${name} is missing the ${hreflang} hreflang alternate`,
+      )
+    }
+  }
   assert(result.unknown.status === 404, 'unknown route must return 404')
   assert(result.robots.status === 200, 'robots must return 200')
   assert(
@@ -128,6 +187,8 @@ export function buildRouteTargets(baseUrl, apiBaseUrl, assetPath) {
   const apiBase = new URL(apiBaseUrl)
   return {
     home: new URL('/', base).href,
+    landingEn: new URL('/en', base).href,
+    landingPl: new URL('/pl', base).href,
     unknown: new URL('/definitely-missing', base).href,
     robots: new URL('/robots.txt', base).href,
     sitemap: new URL('/sitemap.xml', base).href,
@@ -172,6 +233,10 @@ export async function checkProductionRoutes(baseUrl, apiBaseUrl) {
 
   const result = {
     home,
+    landings: {
+      'landing-en': await inspect(targets.landingEn),
+      'landing-pl': await inspect(targets.landingPl),
+    },
     unknown: await inspect(targets.unknown),
     robots: await inspect(targets.robots),
     sitemap: await inspect(targets.sitemap),

@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { LocaleProvider, type Locale } from '@/i18n'
 import type { Tenant } from '../api/types'
 import type { TenantAccessSnapshot } from './access-types'
 import { CommandPalette } from './CommandPalette'
@@ -55,24 +56,26 @@ function Probe() {
   return <output aria-label="Поточний маршрут">{location.pathname}</output>
 }
 
-const renderPalette = (permissions: string[]) =>
+const renderPalette = (permissions: string[], locale: Locale = 'uk') =>
   render(
-    <MemoryRouter initialEntries={['/app/koval/dashboard']}>
-      <Routes>
-        <Route
-          element={
-            <>
-              <CommandPalette
-                snapshot={snapshotWith(permissions)}
-                tenant={tenant}
-              />
-              <Probe />
-            </>
-          }
-          path="*"
-        />
-      </Routes>
-    </MemoryRouter>,
+    <LocaleProvider locale={locale} syncDocumentLang={false}>
+      <MemoryRouter initialEntries={['/app/koval/dashboard']}>
+        <Routes>
+          <Route
+            element={
+              <>
+                <CommandPalette
+                  snapshot={snapshotWith(permissions)}
+                  tenant={tenant}
+                />
+                <Probe />
+              </>
+            }
+            path="*"
+          />
+        </Routes>
+      </MemoryRouter>
+    </LocaleProvider>,
   )
 
 beforeEach(() => {
@@ -229,4 +232,32 @@ it('hides results from the previous query as soon as the text changes', async ()
   await user.type(search, ' нова')
 
   expect(screen.queryByRole('option', { name: /Фара ліва/ })).toBeNull()
+})
+
+it('speaks English (UK) inside an en-GB locale', async () => {
+  const user = userEvent.setup()
+  ordersMock.list.mockResolvedValue({
+    items: [{ id: 'order-1', number: 1042, customerName: 'Ivan' }],
+    page: 1,
+    pageSize: 5,
+    total: 1,
+    totalPages: 1,
+  })
+  renderPalette(['orders.view'], 'en-GB')
+  await user.keyboard('{Control>}k{/Control}')
+
+  const input = screen.getByRole('combobox', { name: 'Search the cabinet' })
+  expect(input).toHaveAttribute(
+    'placeholder',
+    'Section, part, car, customer or order',
+  )
+
+  await user.type(input, 'or')
+  const list = screen.getByRole('listbox')
+  expect(within(list).getByText('Sections')).toBeVisible()
+  expect(within(list).getByRole('option', { name: /^Orders/ })).toBeVisible()
+  expect(
+    await screen.findByRole('option', { name: /Order No\. 1042/ }),
+  ).toBeVisible()
+  expect(screen.getByText('Orders', { selector: 'p' })).toBeVisible()
 })

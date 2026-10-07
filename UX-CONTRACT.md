@@ -66,8 +66,8 @@ filename. Resuming an unmapped upload without a filename requires entering the
 name. Mapping source changes invalidate confirmation. Legacy schema mappings
 and profiles must be reviewed before proceeding; an outdated profile explains
 itself instead of raising a confirmation conflict. Source error codes
-(`PART_SOURCE_ARCHIVED`, `IMPORT_SOURCE_*`, `SOURCE_HAS_PARTS`) read in
-Ukrainian; unknown codes fall back to the server message. `ImportConfirmStep` shows the destination
+(`PART_SOURCE_ARCHIVED`, `IMPORT_SOURCE_*`, `SOURCE_HAS_PARTS`) read in the
+interface language; unknown codes fall back to the server message. `ImportConfirmStep` shows the destination
 alongside server validation; row columns cannot override it. Source lookups use
 abort signals and localized unavailable/archive errors. The Core API remains
 authoritative for permissions, source validity, quotas and retry behavior.
@@ -75,3 +75,140 @@ authoritative for permissions, source validity, quotas and retry behavior.
 Verification owners: `PartsScreen.test.tsx`, `ImportScreen.test.tsx` and
 `import-model.test.ts` cover mandatory source, compatibility, legacy filters,
 legacy mapping review and source-wide import payloads.
+
+## Localization (ROZ-160 / ROZ-161)
+
+Interface languages are `uk` (source), `en-GB` and `pl`. The personal language
+resolves profile language → language remembered in this browser → first
+supported browser language → `en-GB`; it is chosen in Profile («Мова
+інтерфейсу», automatic or one language) and saved through Core
+`PATCH /auth/me/language`. A failed save keeps the old language and offers a
+retry; without that endpoint the choice is kept on the device and the card says
+so. Requests carry the interface language as `Accept-Language`, so OTP SMS and
+server messages follow it. Copy lives in per-feature `defineMessages`
+namespaces; a missing key is a type error, so no technical key is ever shown.
+
+Numbers, dates and money format by the interface language; times and the
+reporting day use the business time zone (tenant `timeZoneId`, Europe/Kyiv
+while unknown). Money shows the ISO code with per-currency precision.
+
+Business country, time zone and document language live in Business → «Регіон і
+документи». Every member can read them — on that screen and, for roles
+without business settings access, read-only in Profile → «Документи
+бізнесу» (`RegionSummary`). Only the owner edits them; country and time zone
+become read-only after the first operation (`regionLocked`; a 409
+`BUSINESS_SETTINGS_LOCKED` race locks the block), while the document language
+stays editable (REQ-LOCALIZATION AC-23 — the board's 3c shows it read-only; the
+requirement wins). Core sends no lock reason, so the text names the rule Core
+enforces: the first saved car, batch, part, order (or order item), car expense
+or till transaction locks the region. Printed labels and documents use the
+document language, not the interface language.
+
+Business settings read top to bottom as 01 «Реквізити», 02 «Регіон і
+документи», 03 «Валюта обліку», 04 «Склади», 05 «Облік»; `#region` and
+`#accounting-currency` (`BUSINESS_SECTION_IDS`) open the two settings blocks.
+
+Terminology follows one glossary in every catalog (`defineMessages` in
+`src/**/*messages*.ts`); translators and reviewers check new copy against it:
+
+| uk                 | en-GB                          | pl                   | Notes                                        |
+| ------------------ | ------------------------------ | -------------------- | -------------------------------------------- |
+| розбірка           | business                       | firma                | the tenant; never «yard», «breaker», «szrot» |
+| власник            | owner (account/business owner) | właściciel (konta)   | role                                         |
+| менеджер           | Manager                        | Menedżer             | role                                         |
+| майстер            | Mechanic                       | Mechanik             | role (`master` in Core)                      |
+| каса               | till                           | kasa                 | never «cash desk», «cash register»           |
+| валюта обліку      | accounting currency            | waluta rozliczeniowa |                                              |
+| партія / приймання | batch / intake                 | partia / przyjęcie   |                                              |
+
+en-GB uses British spelling (colour, catalogue, licence, -ise is not forced
+but -ize is avoided in copy) and pl uses the CLDR one/few/many/other plural
+forms for every count.
+
+SMS sign-in accepts Ukrainian, British and Polish numbers in E.164 with a
+number-country choice; customer phones may be from any country and are never
+rewritten with +380. Customer address fields (country, city, street, house,
+postcode) are optional. Nova Poshta is offered to Ukrainian businesses only;
+GB/PL businesses see an unavailable state (Core enforces the same rule).
+
+The public landing has one URL per language and each URL always shows that
+language: `/` Ukrainian (unchanged URL, canonical and content; also
+`x-default`), `/en` English (UK), `/pl` Polish. All three are prerendered with
+their own title, description, canonical, `og:locale`, `<html lang>` and
+hreflang alternates for all three. The language is never detected or
+redirected and there is no "switch language" banner. The header switcher (code
+button with a menu of native names on desktop, three segments in the mobile
+menu) uses plain links that work without JavaScript; choosing remembers the
+public-site language in this browser (`siteLocalePreference`) and moves focus
+to the new page's h1. The site language and the cabinet language are separate:
+the landing choice never changes the interface language of the cabinet or the
+sign-in screen (`localePreference`, profile language), and choosing a
+language in Profile never changes the site language.
+
+`/privacy` is one URL. Its Ukrainian text is the legal source; English (UK)
+and Polish translations (`src/screens/privacy-translations.ts`) are **pending
+legal review** — not approved by a lawyer — and each says the Ukrainian
+original prevails. The page opens in the site language (Ukrainian when none
+was chosen) and a page-language switch of buttons changes only this page and
+the remembered site language.
+
+Verification owners: `src/i18n/i18n.test.tsx`, `language-card.test.tsx`,
+`region-settings.test.tsx`, `login-international.test.tsx`, `src/lib/phone.test.ts`
+and the en-GB render tests next to each migrated screen.
+
+## Accounting currency in price forms (ROZ-162)
+
+Every price form — part, car and its expenses, batch, batch position and
+batch rows, order and order item — keeps what was typed (except photos) when
+the owner follows «Обрати валюту обліку» to the setting and comes back
+(`src/cabinet/currency/form-draft.ts`, the part form keeps its own
+`source-return.ts` draft). The draft is session-scoped to the tenant's
+cabinet, offered back only on the `draft=1` return path, and removed from
+storage once read.
+
+Amounts keep to Core's precision, mirrored in
+`src/cabinet/currency/amount-precision.ts`: Core never rounds and refuses
+(`INVALID_CURRENCY_PRECISION`) more than two decimals, or any decimals for
+JPY, and magnitudes of 10^10 and above (10^16 for a batch cost). Each money
+form — prices, car expenses, batch cost, order items, order payments, till
+movements and transfers — says so in the interface language before saving.
+Currency choices list the catalog order (`catalog-order.ts`), never a
+«popular» shortlist, and transfers show no computed rate.
+
+## Lost answers and safe retries
+
+A write whose answer is lost (no connection, timeout) may still have landed.
+The cabinet then reads the actual state back first, keeps what was typed,
+and only afterwards reports success or failure (`src/cabinet/lost-response.ts`).
+A retry is offered only where Core makes repeating safe: requests with an
+`Idempotency-Key` (order confirm, payments and refund, till transactions and
+transfers, checkout, reports, delivery payments; the same key is reused until
+a definitive outcome) and naturally idempotent writes (business, region and
+currency settings, onboarding PATCH, a part's price, order items). Creates are
+never repeated blindly. Applied to order payments and confirmation/refund,
+part price saves, business and region settings, the accounting currency and
+onboarding.
+
+## Owner onboarding
+
+Creating the first yard asks only for name and city, then opens the dashboard.
+There `OnboardingChecklist` shows the owner of an eligible yard four steps —
+business settings, accounting currency, a car or a batch, the first part —
+with progress read from Core's onboarding facts only; opening a form or
+pressing «Продовжити» credits nothing. Steps open the existing screens
+(business settings sections by fragment, new car/intake with `return_to`, new
+part); the dashboard re-reads on mount, focus and reconnection and announces
+credited steps in a status toast. «Зробити пізніше» is saved on the server and
+collapses the list into «Завершіть налаштування», which never re-expands by
+itself; its «Продовжити» clears the deferral first (busy while saving) and
+opens the step only after Core confirms, otherwise it stays with an error.
+Completion offers the cash desk and team as recommendations and «Сховати»
+saves Core `dismissed` (shared with mobile; a card hidden in this browser
+before Core stored it is migrated once and the local key removed). Saving the
+first part keeps the parts screen and shows the completion notice with «До
+дашборду». Every onboarding PATCH re-reads the fact after a lost answer before
+reporting failure. Workers, yards created before launch and Cores without the
+endpoint see nothing; a first read without a connection is a neutral notice
+(eligibility unknown) that re-reads once online; any other failed read shows a
+retry, never guessed progress. Verification owners: `onboarding-policy.test.ts`,
+`OnboardingChecklist.test.tsx`, `tenant-onboarding.test.tsx`.

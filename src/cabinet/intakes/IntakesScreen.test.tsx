@@ -980,3 +980,52 @@ it('explains that an intake with parts cannot be deleted before asking the serve
   await user.click(within(dialog).getByRole('button', { name: 'Зрозуміло' }))
   expect(intakesApi.remove).not.toHaveBeenCalled()
 })
+
+it('prices batch rows in the accounting currency and blocks them without one', async () => {
+  const withCurrency = (
+    accountingCurrency: 'GBP' | null,
+    currencyLocked: boolean,
+  ) => {
+    const base = cabinet([
+      'intakes.view',
+      'intakes.manage',
+      'parts.view',
+      'parts.manage',
+    ])
+    return {
+      ...base,
+      targetTenant: {
+        ...base.targetTenant,
+        accountingCurrency,
+        currencyLocked,
+      },
+    }
+  }
+  const renderBatch = () =>
+    render(
+      <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/batch']}>
+        <Routes>
+          <Route
+            path="/app/:tenant/intakes/:intakeId/parts/batch"
+            element={<IntakesScreen />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+  vi.mocked(useCabinet).mockReturnValue(withCurrency('GBP', true))
+  const view = renderBatch()
+  expect(await screen.findByText('Ціна, GBP')).toBeInTheDocument()
+  expect(screen.getByLabelText('Ціна в рядку 1, GBP')).toBeEnabled()
+  view.unmount()
+
+  vi.mocked(useCabinet).mockReturnValue(withCurrency(null, false))
+  renderBatch()
+  expect(await screen.findByLabelText('Ціна в рядку 1')).toBeDisabled()
+  expect(
+    screen.getByText('Перед збереженням ціни оберіть валюту обліку'),
+  ).toBeVisible()
+  expect(
+    screen.getByText('Зверніться до власника розбірки, щоб він обрав валюту.'),
+  ).toBeVisible()
+})

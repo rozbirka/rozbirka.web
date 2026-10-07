@@ -27,16 +27,19 @@ import { cabinetPath } from '../cabinet-paths'
 import { ModuleAccessDeniedError } from '../policy'
 import { Kpi, KpiStrip } from '../redesign-kpi'
 import { BillingCard, BillingDead, BillingShell } from './billing-shell'
+import { translate, useLocale, useT, type Locale } from '@/i18n'
 import {
-  dayWord,
+  daysText,
   daysUntil,
   featureLabel,
-  LIMIT_LABELS,
+  limitLabels,
   paymentStatusMeta,
   paymentTypeLabel,
 } from './billing-vocabulary'
+import { billingMessages } from './messages'
+import { subscriptionMessages } from './subscription-messages'
 import {
-  BILLING_MANAGEMENT_UNAVAILABLE,
+  billingManagementUnavailable,
   BillingContractNotice,
   BillingManagementUnavailableError,
   BillingMutationGate,
@@ -50,20 +53,11 @@ type SubscriptionMutation = 'checkout' | 'cancel'
 /** How many payments the overview shows before sending the reader to the ledger. */
 const HISTORY_SIZE = 4
 
-/** What the billing endpoints do not carry, said where the design asks for it. */
-const NO_CARD_MANAGEMENT =
-  'Замінити картку тут не можна: у кабінеті є оформлення, скасування й історія платежів.'
-const NO_CARD_EXPIRY =
-  'Строку дії картки кабінет не показує — лише бренд і останні чотири цифри.'
-const NO_CYCLE_DISCOUNT =
-  'Річних циклів зі знижкою тут не позначено: у тарифі є сума, валюта й період, і жодного відсотка економії. Що є — видно в «Усіх тарифах».'
-const NO_RETENTION_POLICY =
-  'Скільки днів дані живуть після скасування — питання до підтримки: у кабінеті цього строку немає.'
-
 /** A result that arrived for a tenant we have already left changes nothing. */
 type MutationOutcome = 'applied' | 'stale'
 
 export function SubscriptionScreen() {
+  const { locale } = useLocale()
   const navigate = useNavigate()
   const toast = useToast()
   const { cabinet, controlDecision, requireLatestMutation } =
@@ -123,7 +117,10 @@ export function SubscriptionScreen() {
       return 'applied'
     },
     // No success toast: a checkout leaves the app for the Mono pay page.
-    { errorMessage: (error) => subscriptionFailureMessage('checkout', error) },
+    {
+      errorMessage: (error) =>
+        subscriptionFailureMessage('checkout', error, locale),
+    },
   )
 
   const cancelSubscription = useOperation<MutationOutcome>(
@@ -158,14 +155,13 @@ export function SubscriptionScreen() {
     {
       errorMessage: (error) =>
         cancelStageRef.current === 'refresh'
-          ? 'Підписку скасовано, але не вдалося оновити її стан. Оновіть сторінку, щоб побачити актуальний статус.'
-          : subscriptionFailureMessage('cancel', error),
+          ? translate(subscriptionMessages, locale, 'cancelledButRefreshFailed')
+          : subscriptionFailureMessage('cancel', error, locale),
       onSuccess: (outcome) => {
         setConfirmingCancel(false)
         if (outcome === 'applied') {
           toast.show({
-            message:
-              'Підписку скасовано. Доступ діє до кінця сплаченого періоду.',
+            message: translate(subscriptionMessages, locale, 'cancelledToast'),
             tone: 'ok',
           })
         }
@@ -246,16 +242,20 @@ function SubscriptionPanel({
   paymentsPath: string
   plansPath: string
 }) {
+  const { locale } = useLocale()
+  const t = useT(subscriptionMessages)
+  const tb = useT(billingMessages)
   const accessEnded = subscription.state === 'blocked'
   const providerSubscription = subscription as ProviderAwareSubscriptionDto
   const management = resolveProviderManagement(providerSubscription)
   const contractManaged = isContractManagedSubscription(providerSubscription)
   const state = stateMeta[subscription.state]
+  const stateLabel = t(state.message)
   const planLabel = accessEnded
-    ? 'Доступ закрито'
+    ? t('accessClosed')
     : subscription.state === 'trial'
-      ? (subscription.planName ?? 'Пробний доступ')
-      : (subscription.planName ?? 'Без тарифу')
+      ? (subscription.planName ?? t('trialAccess'))
+      : (subscription.planName ?? t('noPlan'))
   const canReactivate =
     subscription.canReactivate && subscription.state !== 'blocked'
   const isMono = management.kind === 'mono'
@@ -270,7 +270,7 @@ function SubscriptionPanel({
     subscription.state === 'trial'
       ? subscription.trialDaysRemaining
       : daysUntil(nextChargeAt)
-  const limits = LIMIT_LABELS.map((limit) => ({
+  const limits = limitLabels(locale).map((limit) => ({
     label: limit.label,
     data: subscription.usage[limit.key],
   }))
@@ -284,7 +284,7 @@ function SubscriptionPanel({
       actions={
         <>
           <Button asChild>
-            <Link to={paymentsPath}>Платежі</Link>
+            <Link to={paymentsPath}>{t('payments')}</Link>
           </Button>
           {canCheckout && (
             <BillingMutationGate decision={manageDecision}>
@@ -296,33 +296,32 @@ function SubscriptionPanel({
                 variant="primary"
               >
                 {accessEnded
-                  ? 'Оформити підписку'
+                  ? t('subscribe')
                   : canReactivate
-                    ? 'Поновити підписку'
-                    : 'Продовжити підписку'}
+                    ? t('reactivate')
+                    : t('renew')}
               </Button>
             </BillingMutationGate>
           )}
         </>
       }
-      crumb="Налаштування · Підписка"
-      lead="Поточний тариф, ліміти й дата продовження."
-      title="Підписка"
+      crumb={t('crumb')}
+      lead={t('lead')}
+      title={t('title')}
     >
       {mutationError === null ? null : (
         <Notice tone="danger">{mutationError}</Notice>
       )}
       {management.kind === 'provider' && (
         <Notice tone="info">
-          Цією підпискою керує {management.label}. Змінюйте або скасовуйте її
-          там.{' '}
+          {t('managedByProvider', { provider: management.label })}{' '}
           <a
             className="text-brand underline underline-offset-4"
             href={management.url}
             rel="noopener noreferrer"
             target="_blank"
           >
-            Керувати в {management.label}
+            {t('manageIn', { provider: management.label })}
           </a>
         </Notice>
       )}
@@ -343,21 +342,21 @@ function SubscriptionPanel({
       >
         <div className="min-w-0 flex-[1_1_320px]">
           <p className="flex flex-wrap items-center gap-2.5">
-            <StatusPill tone={state.tone}>{state.label}</StatusPill>
+            <StatusPill tone={state.tone}>{stateLabel}</StatusPill>
             <span className="text-app-ink text-[15px] font-bold">
               {daysLeft === null
-                ? 'Дати наступного списання немає'
+                ? t('noNextChargeDate')
                 : daysLeft >= 0
-                  ? `${String(daysLeft)} ${dayWord(daysLeft)} до списання`
-                  : `Прострочено на ${String(-daysLeft)} ${dayWord(daysLeft)}`}
+                  ? t('daysToCharge', { days: daysText(daysLeft, locale) })
+                  : t('overdueBy', { days: daysText(-daysLeft, locale) })}
             </span>
           </p>
           <p className="text-app-muted mt-2 text-[13.5px] leading-5 text-pretty">
             {nextChargeAt === null ? (
-              'Наступної дати списання поки немає.'
+              t('noNextChargeYet')
             ) : (
               <>
-                Наступне списання{' '}
+                {t('nextCharge')}{' '}
                 <DateValue value={nextChargeAt} withTime={false} />
                 {typeof subscription.amount === 'number' && (
                   <>
@@ -373,17 +372,21 @@ function SubscriptionPanel({
             )}
             {subscription.cardLast4 ? (
               <>
-                Картка {(subscription.cardBrand ?? 'Card').toUpperCase()} ••••{' '}
+                {t('card', {
+                  brand: (subscription.cardBrand ?? 'Card').toUpperCase(),
+                })}{' '}
                 {subscription.cardLast4}.{' '}
-                <span title={NO_CARD_EXPIRY}>Строку дії не показуємо.</span>
+                <span title={t('noCardExpiry')}>{t('expiryHidden')}</span>
               </>
             ) : (
-              'Картка ще не привʼязана.'
+              t('noCardLinked')
             )}
           </p>
         </div>
         <div className="flex flex-wrap gap-2.5">
-          <BillingDead title={NO_CARD_MANAGEMENT}>Змінити карту</BillingDead>
+          <BillingDead title={t('noCardManagement')}>
+            {t('changeCard')}
+          </BillingDead>
           {canCheckout && (
             <BillingMutationGate decision={manageDecision}>
               <Button
@@ -392,7 +395,7 @@ function SubscriptionPanel({
                 onClick={onSubscribe}
                 variant="primary"
               >
-                Оплатити зараз
+                {t('payNow')}
               </Button>
             </BillingMutationGate>
           )}
@@ -403,19 +406,19 @@ function SubscriptionPanel({
         <Kpi
           label={
             subscription.state === 'trial'
-              ? 'Днів пробного'
-              : 'Днів до списання'
+              ? t('kpiTrialDays')
+              : t('kpiDaysToCharge')
           }
           meta={
             nextChargeAt === null
-              ? 'дати списання поки немає'
-              : 'до наступного списання'
+              ? t('kpiNoChargeDate')
+              : t('kpiUntilNextCharge')
           }
           tone={daysLeft !== null && daysLeft < 0 ? 'warn' : 'plain'}
           value={daysLeft === null ? '—' : String(daysLeft)}
         />
         <Kpi
-          label="Вартість періоду"
+          label={t('kpiPeriodPrice')}
           meta={planLabel}
           value={
             typeof subscription.amount === 'number' ? (
@@ -429,10 +432,10 @@ function SubscriptionPanel({
           }
         />
         <Kpi
-          label="Лімітів вичерпано"
+          label={t('kpiLimitsReached')}
           meta={
             overLimits.length === 0
-              ? 'усі ліміти тарифу з запасом'
+              ? t('kpiLimitsOk')
               : overLimits.map((item) => item.label).join(', ')
           }
           tone={overLimits.length === 0 ? 'plain' : 'warn'}
@@ -445,7 +448,7 @@ function SubscriptionPanel({
           <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
             <div className="min-w-0">
               <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                Поточний тариф
+                {t('currentPlan')}
               </p>
               <h2 className="text-app-ink mt-2 text-[24px] leading-tight font-extrabold tracking-[-0.02em]">
                 {planLabel}
@@ -463,15 +466,13 @@ function SubscriptionPanel({
                 )}
               </span>
               <span className="text-app-dim mt-1 block text-[12.5px]">
-                за період
+                {t('perPeriod')}
               </span>
             </p>
           </div>
           <ul className="mt-4 grid gap-2">
             {features.length === 0 ? (
-              <li className="text-app-dim text-[13.5px]">
-                Перелік можливостей цього тарифу порожній.
-              </li>
+              <li className="text-app-dim text-[13.5px]">{t('noFeatures')}</li>
             ) : (
               features.map((code) => (
                 <li
@@ -482,14 +483,14 @@ function SubscriptionPanel({
                     aria-hidden
                     className="text-state-ok mt-0.5 size-4 shrink-0"
                   />
-                  {featureLabel(code)}
+                  {featureLabel(code, locale)}
                 </li>
               ))
             )}
           </ul>
           <div className="mt-5 flex flex-wrap gap-2.5">
             <Button asChild>
-              <Link to={plansPath}>Усі тарифи</Link>
+              <Link to={plansPath}>{t('allPlans')}</Link>
             </Button>
             {isMono && subscription.canCancel && (
               <BillingMutationGate decision={manageDecision}>
@@ -498,34 +499,34 @@ function SubscriptionPanel({
                   onClick={onCancelRequest}
                   variant="danger"
                 >
-                  Скасувати підписку
+                  {t('cancelSubscription')}
                 </Button>
               </BillingMutationGate>
             )}
           </div>
           <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-            {NO_CYCLE_DISCOUNT}
+            {t('noCycleDiscount')}
           </p>
         </BillingCard>
 
-        <BillingCard title="Ліміти тарифу">
+        <BillingCard title={t('planLimits')}>
           {overLimits.length > 0 && (
             <Notice
               action={
                 <Button onClick={onSeePlans} variant="primary">
-                  Підвищити тариф
+                  {t('upgrade')}
                 </Button>
               }
               tone="warn"
             >
-              Ліміт вичерпано:{' '}
-              {overLimits
-                .map(
-                  (item) =>
-                    `${item.label} ${String(item.data.used)}/${item.data.max == null ? '∞' : String(item.data.max)}`,
-                )
-                .join(', ')}
-              . Наявні дані лишаються на місці, але додавати нові не вийде.
+              {t('limitReached', {
+                limits: overLimits
+                  .map(
+                    (item) =>
+                      `${item.label} ${String(item.data.used)}/${item.data.max == null ? '∞' : String(item.data.max)}`,
+                  )
+                  .join(', '),
+              })}
             </Notice>
           )}
           <ul className="grid gap-3" role="list">
@@ -570,8 +571,10 @@ function SubscriptionPanel({
                   </div>
                   <p className="text-app-dim mt-1 text-[12px]">
                     {max == null
-                      ? 'без обмеження'
-                      : `лишилось ${String(Math.max(max - item.data.used, 0))}`}
+                      ? t('unlimited')
+                      : t('remaining', {
+                          count: Math.max(max - item.data.used, 0),
+                        })}
                   </p>
                 </li>
               )
@@ -586,19 +589,19 @@ function SubscriptionPanel({
             className="text-brand text-[13px] font-bold underline-offset-4 hover:underline"
             to={paymentsPath}
           >
-            Усі платежі
+            {t('allPayments')}
           </Link>
         }
-        title="Історія підписки"
+        title={t('history')}
       >
         {history === null ? (
-          <p className="text-app-dim text-[13.5px]">Завантажуємо платежі…</p>
+          <p className="text-app-dim text-[13.5px]">{tb('loadingPayments')}</p>
         ) : history.length === 0 ? (
-          <p className="text-app-muted text-[13.5px]">Платежів ще не було.</p>
+          <p className="text-app-muted text-[13.5px]">{tb('noPayments')}</p>
         ) : (
           <ul className="grid gap-2.5">
             {history.map((payment) => {
-              const status = paymentStatusMeta[payment.status]
+              const status = paymentStatusMeta(payment.status, locale)
               return (
                 <li
                   className="border-app-line flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[16px] border px-4 py-3.5"
@@ -609,11 +612,10 @@ function SubscriptionPanel({
                   </span>
                   <span className="min-w-0 flex-[1_1_180px]">
                     <span className="text-app-ink block font-medium">
-                      {paymentTypeLabel(payment.type)}
+                      {paymentTypeLabel(payment.type, locale)}
                     </span>
                     <span className="text-app-dim block text-[12.5px]">
-                      {payment.providerInvoiceId ??
-                        'номер рахунку не повернувся'}
+                      {payment.providerInvoiceId ?? tb('noInvoiceNumber')}
                     </span>
                   </span>
                   <span className="text-app-ink ml-auto font-mono tabular-nums">
@@ -629,14 +631,14 @@ function SubscriptionPanel({
           </ul>
         )}
         <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-          {NO_RETENTION_POLICY}
+          {t('noRetentionPolicy')}
         </p>
       </BillingCard>
 
       <ConfirmDialog
-        cancelLabel="Залишити підписку"
-        confirmLabel="Так, скасувати підписку"
-        consequence="Списань більше не буде, доступ до кабінету діятиме до кінця сплаченого періоду, а далі закриється. Оформити підписку знову можна будь-коли."
+        cancelLabel={t('keepSubscription')}
+        confirmLabel={t('confirmCancel')}
+        consequence={t('cancelConsequence')}
         error={cancelError}
         onConfirm={onCancelConfirm}
         onOpenChange={(open) => {
@@ -644,19 +646,25 @@ function SubscriptionPanel({
         }}
         open={confirmingCancel}
         pending={cancelPending}
-        title="Скасувати підписку?"
+        title={t('cancelTitle')}
       />
     </BillingShell>
   )
 }
 
-const stateMeta: Record<BillingState, { label: string; tone: StatusTone }> = {
-  none: { label: 'Початок', tone: 'neutral' },
-  trial: { label: 'Пробний період', tone: 'info' },
-  active: { label: 'Активна', tone: 'ok' },
-  pastDue: { label: 'Прострочена', tone: 'warn' },
-  cancelled: { label: 'Скасована', tone: 'neutral' },
-  blocked: { label: 'Доступ закрито', tone: 'danger' },
+const stateMeta: Record<
+  BillingState,
+  {
+    message: keyof (typeof subscriptionMessages)['uk']
+    tone: StatusTone
+  }
+> = {
+  none: { message: 'stateNone', tone: 'neutral' },
+  trial: { message: 'stateTrial', tone: 'info' },
+  active: { message: 'stateActive', tone: 'ok' },
+  pastDue: { message: 'statePastDue', tone: 'warn' },
+  cancelled: { message: 'stateCancelled', tone: 'neutral' },
+  blocked: { message: 'stateBlocked', tone: 'danger' },
 }
 
 function hasMonoManagement(subscription: unknown) {
@@ -675,28 +683,29 @@ function hasMonoManagement(subscription: unknown) {
 function subscriptionFailureMessage(
   mutation: SubscriptionMutation,
   error: unknown,
+  locale: Locale,
 ): string {
   if (error instanceof BillingManagementUnavailableError) {
-    return BILLING_MANAGEMENT_UNAVAILABLE
+    return billingManagementUnavailable(locale)
   }
   if (error instanceof ModuleAccessDeniedError) {
-    return 'Дія більше недоступна: права або стан підписки змінилися. Оновіть сторінку.'
+    return translate(billingMessages, locale, 'actionUnavailable')
   }
   const problem = normalizeApiProblem(error)
   if (problem.kind === 'forbidden') {
-    return 'У вас більше немає права змінювати підписку. Попросіть власника розбірки надати доступ до білінгу.'
+    return translate(billingMessages, locale, 'noRightToChange')
   }
   if (problem.kind === 'conflict') {
-    return 'Підписка вже змінилася. Оновіть сторінку та спробуйте ще раз.'
+    return translate(billingMessages, locale, 'subscriptionChanged')
   }
   if (problem.kind === 'network' || problem.kind === 'timeout') {
     return mutation === 'cancel'
-      ? 'Не вдалося скасувати підписку: немає з’єднання з мережею. Перевірте інтернет і спробуйте ще раз.'
-      : 'Не вдалося розпочати оплату: немає з’єднання з мережею. Перевірте інтернет і спробуйте ще раз.'
+      ? translate(subscriptionMessages, locale, 'cancelNetwork')
+      : translate(billingMessages, locale, 'checkoutNetwork')
   }
   return mutation === 'cancel'
-    ? 'Не вдалося скасувати підписку. Спробуйте ще раз.'
-    : 'Не вдалося розпочати оплату. Спробуйте ще раз.'
+    ? translate(subscriptionMessages, locale, 'cancelFailed')
+    : translate(billingMessages, locale, 'checkoutFailed')
 }
 
 function isCurrentScope(

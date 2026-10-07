@@ -36,6 +36,12 @@ interface VerifyBrowserDto {
     id: string
     phone: string
     displayName: string
+    /**
+     * Core `VerifyUserDto.language`: the saved personal interface language,
+     * `null` = automatic. Passed through so the cabinet opens in it at once;
+     * absent when Core does not send it (the browser validates the value).
+     */
+    language?: string | null
   }
   isNewUser: boolean
 }
@@ -236,6 +242,13 @@ export function verifyBrowserData(data: unknown): {
         id: data.user.id,
         phone: data.user.phone,
         displayName: data.user.displayName,
+        // Only a short language tag or `null`; anything else is dropped,
+        // never a reason to fail the sign-in.
+        ...(data.user.language === null ||
+        (typeof data.user.language === 'string' &&
+          /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$/.test(data.user.language))
+          ? { language: data.user.language }
+          : {}),
       },
       isNewUser: data.isNewUser,
     },
@@ -307,15 +320,30 @@ export async function safeOtpFailure(
   )
 }
 
+/**
+ * Identity localises OTP SMS and messages from Accept-Language. Forward only
+ * a plain, short language list; anything else is dropped.
+ */
+export function safeAcceptLanguage(value: string | null | undefined) {
+  if (!value) return null
+  const trimmed = value.trim()
+  return trimmed.length <= 100 && /^[A-Za-z0-9\-_,;=.* ]+$/.test(trimmed)
+    ? trimmed
+    : null
+}
+
 export async function callIdentity(
   url: string,
   body: JsonRecord,
   authorization?: string | null,
   registration?: { key: string; session?: string; clientIp?: string | null },
   method = 'POST',
+  acceptLanguage?: string | null,
 ) {
   const headers = new Headers({ 'Content-Type': 'application/json' })
   if (authorization) headers.set('Authorization', authorization)
+  const language = safeAcceptLanguage(acceptLanguage)
+  if (language) headers.set('Accept-Language', language)
   if (registration) {
     headers.set('X-Rozbirka-Registration-Key', registration.key)
     if (registration.session)
@@ -462,6 +490,8 @@ export async function handleSessionRequest(
             clientIp: request.headers.get('CF-Connecting-IP'),
           }
         : undefined,
+      'POST',
+      request.headers.get('Accept-Language'),
     )
     if (!response) return identityFailure()
     if (!response.ok)

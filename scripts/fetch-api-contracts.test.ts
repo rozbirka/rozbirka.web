@@ -28,13 +28,13 @@ interface ContractSource {
 interface ContractManifest {
   version: number
   core: ContractSource
-  identity: ContractSource
+  identity?: ContractSource
   unexpected?: boolean
 }
 interface ManifestOverride {
   version?: number
   core?: Partial<ContractSource>
-  identity?: Partial<ContractSource>
+  identity?: ContractSource
   unexpected?: boolean
 }
 
@@ -48,16 +48,12 @@ function sha256(contents: string) {
   return createHash('sha256').update(contents).digest('hex')
 }
 
-function manifest(coreContents: string, identityContents: string) {
+function manifest(coreContents: string) {
   return {
     version: 1,
     core: {
       uri: `gs://rozbirka-ci-openapi-contracts/core/${commit}/rozbirka-core.json`,
       sha256: sha256(coreContents),
-    },
-    identity: {
-      uri: `gs://rozbirka-ci-openapi-contracts/identity/${commit}/rozbirka-identity.json`,
-      sha256: sha256(identityContents),
     },
   }
 }
@@ -67,15 +63,12 @@ async function fixture() {
   const fakeBin = join(directory, 'bin')
   const output = join(directory, 'downloaded')
   const coreContents = '{"openapi":"3.0.4","info":{"title":"Core"}}\n'
-  const identityContents = '{"openapi":"3.0.4","info":{"title":"Identity"}}\n'
   const coreSource = join(directory, 'core-source.json')
-  const identitySource = join(directory, 'identity-source.json')
   const manifestPath = join(directory, 'manifest.json')
   const invocationLog = join(directory, 'gcloud.log')
   await mkdir(fakeBin, { recursive: true })
   await Promise.all([
     writeFile(coreSource, coreContents),
-    writeFile(identitySource, identityContents),
     writeFile(
       join(fakeBin, 'gcloud'),
       `#!/usr/bin/env bash
@@ -85,7 +78,6 @@ test "$1" = storage
 test "$2" = cp
 case "$3" in
   gs://*/core/*/rozbirka-core.json) cp "$FAKE_CORE_SOURCE" "$4" ;;
-  gs://*/identity/*/rozbirka-identity.json) cp "$FAKE_IDENTITY_SOURCE" "$4" ;;
   *) exit 22 ;;
 esac
 `,
@@ -94,16 +86,14 @@ esac
   await chmod(join(fakeBin, 'gcloud'), 0o700)
   await writeFile(
     manifestPath,
-    `${JSON.stringify(manifest(coreContents, identityContents), null, 2)}\n`,
+    `${JSON.stringify(manifest(coreContents), null, 2)}\n`,
   )
   return {
     directory,
     fakeBin,
     output,
     coreContents,
-    identityContents,
     coreSource,
-    identitySource,
     manifestPath,
     invocationLog,
   }
@@ -122,7 +112,6 @@ async function runFetch(
         ...process.env,
         PATH: `${testFixture.fakeBin}:${process.env.PATH}`,
         FAKE_CORE_SOURCE: testFixture.coreSource,
-        FAKE_IDENTITY_SOURCE: testFixture.identitySource,
         FAKE_GCLOUD_LOG: testFixture.invocationLog,
       },
     },
@@ -186,6 +175,7 @@ describe('private OpenAPI contract fetcher', () => {
     expect(gitignore).toContain('gha-creds-*.json')
     expect(prettierignore).toContain('gha-creds-*.json')
     expect(reusable).not.toContain('inputs.identity_contract')
+    expect(reusable).not.toContain('--identity')
   })
 
   it('downloads exact GCS objects and emits only verified local paths as JSON', async () => {
@@ -194,22 +184,16 @@ describe('private OpenAPI contract fetcher', () => {
     const { stdout, stderr } = await runFetch(testFixture)
 
     expect(stderr).toBe('')
-    const paths = JSON.parse(stdout) as { core: string; identity: string }
+    const paths = JSON.parse(stdout) as { core: string }
     expect(paths).toEqual({
       core: resolve(testFixture.output, 'core.json'),
-      identity: resolve(testFixture.output, 'identity.json'),
     })
     expect(await readFile(paths.core, 'utf8')).toBe(testFixture.coreContents)
-    expect(await readFile(paths.identity, 'utf8')).toBe(
-      testFixture.identityContents,
-    )
     const invocations = await readFile(testFixture.invocationLog, 'utf8')
     expect(invocations).toContain(
       `storage cp gs://rozbirka-ci-openapi-contracts/core/${commit}/rozbirka-core.json`,
     )
-    expect(invocations).toContain(
-      `storage cp gs://rozbirka-ci-openapi-contracts/identity/${commit}/rozbirka-identity.json`,
-    )
+    expect(invocations).not.toContain('identity')
   })
 
   it.each([
@@ -231,8 +215,18 @@ describe('private OpenAPI contract fetcher', () => {
     ['extra root key', { unexpected: true }, 'exactly'],
     [
       'invalid digest',
-      { identity: { sha256: 'abc' } },
+      { core: { sha256: 'abc' } },
       '64-character lowercase SHA-256',
+    ],
+    [
+      'obsolete Identity source',
+      {
+        identity: {
+          uri: `gs://rozbirka-ci-openapi-contracts/identity/${commit}/rozbirka-identity.json`,
+          sha256: '0'.repeat(64),
+        },
+      },
+      'exactly: version, core',
     ],
   ])('rejects %s before invoking gcloud', async (_name, override, message) => {
     const testFixture = await fixture()
@@ -244,10 +238,6 @@ describe('private OpenAPI contract fetcher', () => {
       ...original,
       ...manifestOverride,
       core: { ...original.core, ...manifestOverride.core },
-      identity: {
-        ...original.identity,
-        ...manifestOverride.identity,
-      },
     }
     await writeFile(testFixture.manifestPath, JSON.stringify(modified))
 

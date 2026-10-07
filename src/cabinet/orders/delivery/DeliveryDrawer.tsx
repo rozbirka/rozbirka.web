@@ -23,7 +23,8 @@ import {
   type Shipment,
   type ShipmentDraft,
 } from '@/api/shipping'
-import { normalizeApiProblem } from '@/api/errors'
+import type { BusinessCountry } from '@/api/tenant-settings'
+import { commonMessages, formatMoney, useFormat, useLocale, useT } from '@/i18n'
 import { SettlementPicker } from '../../integrations/settlement-picker'
 import {
   prepayment,
@@ -32,13 +33,12 @@ import {
   sameDraft,
   type QuoteState,
 } from './delivery-labels'
-
-const uah = new Intl.NumberFormat('uk-UA', {
-  style: 'currency',
-  currency: 'UAH',
-  currencyDisplay: 'narrowSymbol',
-  maximumFractionDigits: 0,
-})
+import { deliveryDrawerMessages } from './drawer-messages'
+import { uah, wholeUah } from './delivery-money'
+import {
+  deliveryProblemMessage,
+  phoneExample,
+} from './nova-poshta-availability'
 
 const PHONE = /^\+?[1-9]\d{7,14}$/
 
@@ -103,6 +103,7 @@ function Section({
  * never offers a waybill on numbers that no longer answer the form.
  */
 export function DeliveryDrawer({
+  countryCode = null,
   customerName,
   customerPhone,
   declaredValue,
@@ -116,6 +117,8 @@ export function DeliveryDrawer({
   orderId,
   shipment,
 }: {
+  /** The tenant's country; only picks the phone example. */
+  countryCode?: BusinessCountry | null
   customerName: string | null
   customerPhone: string | null
   declaredValue: number | null
@@ -136,6 +139,11 @@ export function DeliveryDrawer({
   orderId: string
   shipment: Shipment | null
 }) {
+  const { locale } = useLocale()
+  const t = useT(deliveryDrawerMessages)
+  const tc = useT(commonMessages)
+  const format = useFormat()
+  const example = phoneExample(countryCode)
   const saved = shipment?.draft ?? null
   const defaultPoint =
     dispatchPoints.find((point) => point.isDefault) ?? dispatchPoints[0] ?? null
@@ -170,7 +178,7 @@ export function DeliveryDrawer({
     saved?.parcels.length ? saved.parcels.map(toParcelDraft) : [emptyParcel],
   )
   const [description, setDescription] = useState(
-    saved?.description ?? 'Автозапчастини',
+    saved?.description ?? t('cargoDescriptionDefault'),
   )
   const [declared, setDeclared] = useState(
     String(saved?.declaredValueUah ?? declaredValue ?? ''),
@@ -209,12 +217,12 @@ export function DeliveryDrawer({
         () => {
           if (!controller.signal.aborted) {
             setLoadedDivisions({ settlementRef, items: [] })
-            setLookupError('Довідник відділень Нової пошти зараз недоступний.')
+            setLookupError(t('divisionsUnavailable'))
           }
         },
       )
     return () => controller.abort()
-  }, [integrationId, settlementRef])
+  }, [integrationId, settlementRef, t])
 
   const divisions =
     settlementRef !== null && loadedDivisions?.settlementRef === settlementRef
@@ -289,7 +297,7 @@ export function DeliveryDrawer({
     busy: busy === 'estimate',
     failure: quoteFailure,
   })
-  const quote = quotePresentation(state)
+  const quote = quotePresentation(state, locale)
   const total = prepayment(shipment)
 
   const run = async <T,>(
@@ -301,7 +309,7 @@ export function DeliveryDrawer({
     try {
       return await action()
     } catch (problem) {
-      const message = normalizeApiProblem(problem).message
+      const message = deliveryProblemMessage(problem, locale)
       if (kind === 'estimate') setQuoteFailure(message)
       else setError(message)
       return null
@@ -349,8 +357,8 @@ export function DeliveryDrawer({
 
   return (
     <Sheet
-      description="Україною, відділення → відділення."
-      eyebrow="Замовлення · Нова пошта"
+      description={t('bookingDescription')}
+      eyebrow={t('eyebrowNp')}
       footer={
         <>
           <Button
@@ -358,20 +366,16 @@ export function DeliveryDrawer({
             disabled={busy !== null || draft === null}
             onClick={() => void saveDraft()}
           >
-            Зберегти чернетку
+            {t('saveDraft')}
           </Button>
           <Button
             aria-busy={busy === 'create'}
             disabled={busy !== null || !quote.canCreate}
             onClick={() => void create()}
-            title={
-              quote.canCreate
-                ? undefined
-                : 'ТТН створюється лише за свіжим розрахунком.'
-            }
+            title={quote.canCreate ? undefined : t('createNeedsQuote')}
             variant="primary"
           >
-            Створити ТТН
+            {t('createWaybill')}
           </Button>
         </>
       }
@@ -380,21 +384,18 @@ export function DeliveryDrawer({
       }}
       open
       size="lg"
-      title="Оформлення відправлення"
+      title={t('bookingTitle')}
     >
       {error !== null && <Notice tone="danger">{error}</Notice>}
       {lookupError !== null && <Notice tone="warn">{lookupError}</Notice>}
 
       <div className="grid">
-        <Section title="Відправлення">
+        <Section title={t('sectionDispatch')}>
           {dispatchPoints.length === 0 ? (
-            <Notice tone="warn">
-              Немає жодної точки відправлення. Додайте її в налаштуваннях
-              інтеграції — без неї накладну не створити.
-            </Notice>
+            <Notice tone="warn">{t('noDispatchPoints')}</Notice>
           ) : (
             <>
-              <Field label="Точка відправлення" required>
+              <Field label={t('dispatchPoint')} required>
                 <SelectInput
                   onChange={(event) => setPointId(event.target.value)}
                   value={pointId}
@@ -402,43 +403,46 @@ export function DeliveryDrawer({
                   {dispatchPoints.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}
-                      {item.isDefault ? ' · за замовчуванням' : ''}
+                      {item.isDefault ? t('defaultPoint') : ''}
                     </option>
                   ))}
                 </SelectInput>
               </Field>
               {point !== null && (
                 <p className="text-app-dim text-[12.5px] leading-5 text-pretty">
-                  Відправник: {point.senderName} · {point.phone}
-                  {point.companyName === null ? '' : ` · ${point.companyName}`}
+                  {t('sender', {
+                    details: [point.senderName, point.phone, point.companyName]
+                      .filter((part) => part !== null && part !== '')
+                      .join(' · '),
+                  })}
                 </p>
               )}
             </>
           )}
         </Section>
 
-        <Section title="Отримувач">
-          <Field label="Ім’я отримувача" required>
+        <Section title={t('sectionRecipient')}>
+          <Field label={t('recipientName')} required>
             <TextInput
               onChange={(event) => setName(event.target.value)}
-              placeholder="ПІБ"
+              placeholder={t('recipientNamePlaceholder')}
               value={name}
             />
           </Field>
           <Field
             error={
               phone !== '' && !PHONE.test(trimmedPhone)
-                ? 'Телефон у міжнародному форматі, напр. +380503381172'
+                ? t('phoneFormat', { example })
                 : undefined
             }
-            label="Телефон"
+            label={t('phone')}
             required
           >
             <TextInput
               className="font-mono"
               inputMode="tel"
               onChange={(event) => setPhone(event.target.value)}
-              placeholder="+380"
+              placeholder={example}
               value={phone}
             />
           </Field>
@@ -446,21 +450,17 @@ export function DeliveryDrawer({
             integrationId={integrationId}
             onPick={setSettlement}
             picked={settlement}
-            savedHint={
-              saved === null
-                ? undefined
-                : 'Збережений пункт залишається, доки не виберете інший.'
-            }
+            savedHint={saved === null ? undefined : t('savedSettlement')}
             use="receiving"
           />
 
           <Field
             hint={
               settlementRef === null
-                ? 'Спершу оберіть населений пункт.'
-                : 'Показані лише відділення, які видають відправлення.'
+                ? t('divisionPickSettlement')
+                : t('divisionHint')
             }
-            label="Відділення"
+            label={t('division')}
             required
           >
             <SelectInput
@@ -473,7 +473,7 @@ export function DeliveryDrawer({
               value={warehouseRef ?? ''}
             >
               <option value="">
-                {divisions === null ? 'Завантажуємо…' : 'Оберіть відділення'}
+                {divisions === null ? t('divisionsLoading') : t('divisionPick')}
               </option>
               {(divisions ?? []).map((item) => (
                 <option key={item.ref} value={item.ref}>
@@ -489,23 +489,21 @@ export function DeliveryDrawer({
               onChange={(event) => setIsCompany(event.target.checked)}
               type="checkbox"
             />
-            <span className="text-app-muted">
-              Отримувач — компанія (назва та код у накладній)
-            </span>
+            <span className="text-app-muted">{t('isCompany')}</span>
           </label>
           {isCompany && (
             <>
-              <Field label="Назва компанії" required>
+              <Field label={t('companyName')} required>
                 <TextInput
                   onChange={(event) => setCompanyName(event.target.value)}
                   value={companyName}
                 />
               </Field>
-              <Field label="Ідентифікаційний код" required>
+              <Field label={t('companyTin')} required>
                 <TextInput
                   className="font-mono"
                   onChange={(event) => setCompanyTin(event.target.value)}
-                  placeholder="ЄДРПОУ або ІПН"
+                  placeholder={t('companyTinPlaceholder')}
                   value={companyTin}
                 />
               </Field>
@@ -516,10 +514,10 @@ export function DeliveryDrawer({
         <Section
           aside={
             <span className="text-app-dim font-mono text-[11px] tracking-[0.1em] uppercase">
-              {parcels.length} місць
+              {t('parcelsCount', { count: parcels.length })}
             </span>
           }
-          title="Посилки"
+          title={t('sectionParcels')}
         >
           {parcels.map((parcel, index) => (
             <div
@@ -528,11 +526,11 @@ export function DeliveryDrawer({
             >
               <div className="flex items-center justify-between gap-3">
                 <span className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
-                  Місце {index + 1}
+                  {t('parcelPlace', { number: index + 1 })}
                 </span>
                 {parcels.length > 1 && (
                   <Button
-                    aria-label={`Видалити місце ${index + 1}`}
+                    aria-label={t('parcelRemove', { number: index + 1 })}
                     className="min-h-9 px-2.5 text-xs"
                     onClick={() =>
                       setParcels((list) =>
@@ -540,23 +538,23 @@ export function DeliveryDrawer({
                       )
                     }
                   >
-                    Видалити
+                    {tc('delete')}
                   </Button>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {(
                   [
-                    ['weightKg', 'Вага, кг'],
-                    ['lengthCm', 'Довжина, см'],
-                    ['widthCm', 'Ширина, см'],
-                    ['heightCm', 'Висота, см'],
+                    ['weightKg', t('weight')],
+                    ['lengthCm', t('length')],
+                    ['widthCm', t('width')],
+                    ['heightCm', t('height')],
                   ] as const
                 ).map(([key, label]) => (
                   <Field
                     key={key}
                     label={label}
-                    srLabel={`місце ${index + 1}`}
+                    srLabel={t('parcelSr', { number: index + 1 })}
                     required
                   >
                     <TextInput
@@ -579,22 +577,18 @@ export function DeliveryDrawer({
             </div>
           ))}
           <Button onClick={() => setParcels((list) => [...list, emptyParcel])}>
-            Додати посилку
+            {t('addParcel')}
           </Button>
         </Section>
 
-        <Section title="Вантаж">
-          <Field label="Опис вантажу" required>
+        <Section title={t('sectionCargo')}>
+          <Field label={t('cargoDescription')} required>
             <TextInput
               onChange={(event) => setDescription(event.target.value)}
               value={description}
             />
           </Field>
-          <Field
-            hint="Скільки Нова пошта відшкодує в разі втрати."
-            label="Оголошена вартість, ₴"
-            required
-          >
+          <Field hint={t('declaredHint')} label={t('declaredLabel')} required>
             <TextInput
               className="font-mono"
               inputMode="decimal"
@@ -602,13 +596,13 @@ export function DeliveryDrawer({
               value={declared}
             />
           </Field>
-          <Field label="Оплата доставки" required>
+          <Field label={t('payer')} required>
             <SelectInput
               onChange={(event) => setPayer(event.target.value as PayerType)}
               value={payer}
             >
-              <option value="Recipient">Платить отримувач</option>
-              <option value="Sender">Платить відправник</option>
+              <option value="Recipient">{t('payerRecipient')}</option>
+              <option value="Sender">{t('payerSender')}</option>
             </SelectInput>
           </Field>
         </Section>
@@ -631,12 +625,14 @@ export function DeliveryDrawer({
           </h3>
           {shipment?.quoteAt != null && (
             <span className="text-app-dim font-mono text-[11px]">
-              розраховано{' '}
-              {new Date(shipment.quoteAt).toLocaleString('uk-UA', {
-                day: '2-digit',
-                month: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
+              {t('quotedAt', {
+                when:
+                  format.dateWith(shipment.quoteAt, {
+                    day: '2-digit',
+                    month: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }) ?? shipment.quoteAt,
               })}
             </span>
           )}
@@ -647,26 +643,18 @@ export function DeliveryDrawer({
 
         {paid === null ? null : (
           <Notice tone="info">
-            За цим замовленням уже отримано{' '}
+            {t('alreadyPaidBefore')}{' '}
             <span className="font-mono">
-              {paid.amount.toLocaleString('uk-UA', {
-                style: 'currency',
-                currency: paid.currency,
-                currencyDisplay: 'narrowSymbol',
-              })}
+              {formatMoney(paid.amount, paid.currency, locale)}
             </span>
-            . Врахуйте це в післяплаті, щоб клієнт не заплатив удруге.
+            {t('alreadyPaidAfter')}
           </Notice>
         )}
 
         <Field
-          error={
-            goodsUah === null
-              ? 'Вкажіть суму в гривнях або лишіть поле порожнім.'
-              : undefined
-          }
-          hint="Скільки клієнт має за це замовлення в гривні. Ціни позицій живуть окремо, у валюті замовлення."
-          label="Погоджено за доставку, ₴"
+          error={goodsUah === null ? t('goodsError') : undefined}
+          hint={t('goodsHint')}
+          label={t('goodsLabel')}
         >
           <TextInput
             className="font-mono tabular-nums"
@@ -681,23 +669,21 @@ export function DeliveryDrawer({
             owes, and showing it as a field invited editing the price of the
             goods by accident. */}
         <dl className="border-app-line bg-app-raised grid grid-cols-[1fr_auto] items-baseline gap-y-2 rounded-[12px] border px-4 py-3.5 text-[13px]">
-          <dt className="text-app-muted">Уже сплачено</dt>
+          <dt className="text-app-muted">{t('alreadyPaid')}</dt>
           <dd className="text-right font-mono tabular-nums">
-            {uah.format(delivery.appliedUah)}
+            {uah(delivery.appliedUah, locale)}
           </dd>
-          <dt className="font-semibold">Післяплата в накладній</dt>
+          <dt className="font-semibold">{t('codOnWaybill')}</dt>
           <dd
             className={cn(
               'text-right font-mono text-[15px] tabular-nums',
               codUah === null || codUah === 0 ? 'text-app-muted' : 'text-white',
             )}
           >
-            {codUah === null ? '—' : uah.format(codUah)}
+            {codUah === null ? '—' : uah(codUah, locale)}
           </dd>
           <p className="text-app-dim col-span-2 -mt-0.5 text-[12px] text-pretty">
-            {codUah === 0
-              ? 'Нічого утримувати — посилка їде як оплачена.'
-              : 'Нова пошта утримає цю суму з отримувача й перекаже вам. Комісію переказу платить отримувач.'}
+            {codUah === 0 ? t('codNothing') : t('codNote')}
           </p>
         </dl>
 
@@ -708,23 +694,23 @@ export function DeliveryDrawer({
             }`}
           >
             <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-app-muted">Доставка туди</dt>
+              <dt className="text-app-muted">{t('deliveryThere')}</dt>
               <dd className="text-app-ink font-mono">
-                {uah.format(shipment.quoteUah)}
+                {wholeUah(shipment.quoteUah, locale)}
               </dd>
             </div>
             <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-app-muted">Зворотна доставка</dt>
+              <dt className="text-app-muted">{t('deliveryBack')}</dt>
               <dd className="text-app-ink font-mono">
-                {uah.format(shipment.returnEstimateUah)}
+                {wholeUah(shipment.returnEstimateUah, locale)}
               </dd>
             </div>
             <div className="border-app-line flex items-baseline justify-between gap-4 border-t pt-2.5">
               <dt className="text-app-ink font-semibold">
-                Необхідна передоплата
+                {t('prepaymentNeeded')}
               </dt>
               <dd className="text-brand font-mono text-[16px] font-bold">
-                {total === null ? '—' : uah.format(total)}
+                {total === null ? '—' : wholeUah(total, locale)}
               </dd>
             </div>
           </dl>
@@ -735,11 +721,7 @@ export function DeliveryDrawer({
             aria-busy={busy === 'estimate'}
             disabled={busy !== null || draft === null}
             onClick={() => void estimate()}
-            title={
-              draft === null
-                ? 'Заповніть отримувача, посилки й суми.'
-                : undefined
-            }
+            title={draft === null ? t('fillForm') : undefined}
             variant={quote.canCreate ? 'ghost' : 'primary'}
           >
             {quote.action}
@@ -747,8 +729,7 @@ export function DeliveryDrawer({
         </div>
         {quote.showMoney && (
           <p className="text-app-dim text-[12px] leading-5 text-pretty">
-            Обидві суми порахувала Нова пошта. Депозит покриває ризик розбірки:
-            якщо посилку не заберуть, ви заплатите за обидві дороги.
+            {t('quoteExplained')}
           </p>
         )}
       </section>

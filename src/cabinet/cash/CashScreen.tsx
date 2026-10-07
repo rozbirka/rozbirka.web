@@ -14,6 +14,14 @@ import {
   useOptionalToast,
 } from '@/components/app'
 import { cn } from '@/lib/utils'
+import {
+  commonMessages,
+  currencyName,
+  SUPPORTED_CURRENCIES,
+  useLocale,
+  useT,
+  type Translate,
+} from '@/i18n'
 import { normalizeApiProblem } from '@/api/errors'
 import {
   cashApi,
@@ -24,6 +32,8 @@ import {
 } from '@/api/cash'
 import { useCabinet } from '../CabinetContext'
 import { CashCard } from './cash-card'
+import { useCashText } from './cash-labels'
+import { cashMessages } from './cash-messages'
 import { CashList } from './cash-list'
 import { readCashFeed, type CashFeedEntry } from './cash-feed'
 import { CashMovementDrawer } from './CashMovementDrawer'
@@ -40,11 +50,11 @@ const localDate = (timeZone: string) =>
     month: '2-digit',
     day: '2-digit',
   }).format(new Date())
-const problemMessage = (error: unknown) => {
+type CashT = Translate<(typeof cashMessages)['uk']>
+const problemMessage = (error: unknown, t: CashT) => {
   const problem = normalizeApiProblem(error)
-  if (problem.status === 402) return 'Функція потребує активної підписки.'
-  if (problem.kind === 'forbidden') return 'У вас немає прав для цієї дії.'
-  if (problem.kind === 'conflict') return problem.message
+  if (problem.status === 402) return t('needsSubscription')
+  if (problem.kind === 'forbidden') return t('forbidden')
   return problem.message
 }
 type CashReplayOperation = 'movement' | 'transfer'
@@ -137,6 +147,7 @@ export function CashScreen({ definition }: CabinetModuleScreenProps) {
 }
 
 function CashOverview({ definition }: CabinetModuleScreenProps) {
+  const t = useT(cashMessages)
   const cabinet = useCabinet()
   const toast = useOptionalToast()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
@@ -174,9 +185,9 @@ function CashOverview({ definition }: CabinetModuleScreenProps) {
           setFeedTruncated(latest.truncated)
         })
         .catch((failure) => {
-          if (!signal?.aborted) setError(problemMessage(failure))
+          if (!signal?.aborted) setError(problemMessage(failure, t))
         }),
-    [date, timeZone],
+    [date, t, timeZone],
   )
   useEffect(() => {
     const controller = new AbortController()
@@ -202,10 +213,10 @@ function CashOverview({ definition }: CabinetModuleScreenProps) {
       if (scope.signal.aborted) return
       await load()
       setTransferOpen(false)
-      toast?.show({ message: 'Переказ виконано.', tone: 'ok' })
+      toast?.show({ message: t('transferDone'), tone: 'ok' })
     } catch (failure) {
       if (!isAmbiguousMutationFailure(failure)) replayKeys.clear('transfer')
-      setTransferError(problemMessage(failure))
+      setTransferError(problemMessage(failure, t))
     } finally {
       setTransferBusy(false)
     }
@@ -243,6 +254,7 @@ function CashRegisterDetail({
   definition,
   registerId,
 }: CabinetModuleScreenProps & { registerId: string }) {
+  const t = useT(cashMessages)
   const cabinet = useCabinet()
   const toast = useOptionalToast()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
@@ -295,9 +307,9 @@ function CashRegisterDetail({
           }
         })
         .catch((failure) => {
-          if (!signal?.aborted) setError(problemMessage(failure))
+          if (!signal?.aborted) setError(problemMessage(failure, t))
         }),
-    [ledgerCurrency, ledgerFrom, ledgerPage, ledgerTo, registerId],
+    [ledgerCurrency, ledgerFrom, ledgerPage, ledgerTo, registerId, t],
   )
   useEffect(() => {
     const controller = new AbortController()
@@ -321,10 +333,10 @@ function CashRegisterDetail({
       if (scope.signal.aborted) return
       await load()
       setMovementOpen(false)
-      toast?.show({ message: 'Операцію записано.', tone: 'ok' })
+      toast?.show({ message: t('movementSaved'), tone: 'ok' })
     } catch (failure) {
       if (!isAmbiguousMutationFailure(failure)) replayKeys.clear('movement')
-      setMovementError(problemMessage(failure))
+      setMovementError(problemMessage(failure, t))
     } finally {
       setMovementBusy(false)
     }
@@ -332,13 +344,13 @@ function CashRegisterDetail({
   if (error && !register)
     return (
       <PageBody width="narrow">
-        <ErrorState description={error} title="Не вдалося завантажити касу" />
+        <ErrorState description={error} title={t('loadFailed')} />
       </PageBody>
     )
   if (!register)
     return (
       <PageBody width="narrow">
-        <SkeletonRows label="Завантажуємо касу…" rows={3} />
+        <SkeletonRows label={t('loadingTill')} rows={3} />
       </PageBody>
     )
   const setFilter = (key: 'currency' | 'from' | 'to', value: string) => {
@@ -365,14 +377,14 @@ function CashRegisterDetail({
         filters={
           <Toolbar>
             <label className="grid min-w-[130px] gap-1 text-[12px] text-app-dim">
-              Валюта
+              {t('currency')}
               <select
-                aria-label="Валюта журналу"
+                aria-label={t('ledgerCurrency')}
                 className="border-app-line bg-app-input text-app-ink h-10 rounded-[10px] border px-3 text-[14px]"
                 onChange={(event) => setFilter('currency', event.target.value)}
                 value={ledgerCurrency ?? ''}
               >
-                <option value="">Усі</option>
+                <option value="">{t('segAll')}</option>
                 {Object.keys(register.balances).map((currency) => (
                   <option key={currency} value={currency}>
                     {currency}
@@ -381,9 +393,9 @@ function CashRegisterDetail({
               </select>
             </label>
             <label className="grid min-w-[150px] gap-1 text-[12px] text-app-dim">
-              Від
+              {t('from')}
               <input
-                aria-label="Операції від"
+                aria-label={t('operationsFrom')}
                 className="border-app-line bg-app-input text-app-ink h-10 rounded-[10px] border px-3 text-[14px]"
                 onChange={(event) => setFilter('from', event.target.value)}
                 type="date"
@@ -391,9 +403,9 @@ function CashRegisterDetail({
               />
             </label>
             <label className="grid min-w-[150px] gap-1 text-[12px] text-app-dim">
-              До
+              {t('to')}
               <input
-                aria-label="Операції до"
+                aria-label={t('operationsTo')}
                 className="border-app-line bg-app-input text-app-ink h-10 rounded-[10px] border px-3 text-[14px]"
                 onChange={(event) => setFilter('to', event.target.value)}
                 type="date"
@@ -407,7 +419,7 @@ function CashRegisterDetail({
         ledgerTotal={ledgerTotal}
         pagination={
           <Pagination
-            label="Сторінки журналу"
+            label={t('ledgerPages')}
             onPage={(nextPage) => {
               const next = new URLSearchParams(params)
               next.set('page', String(nextPage))
@@ -436,6 +448,8 @@ function CashRegisterEdit({
   definition,
   registerId,
 }: CabinetModuleScreenProps & { registerId: string }) {
+  const t = useT(cashMessages)
+  const tc = useT(commonMessages)
   const cabinet = useCabinet()
   const location = useLocation()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
@@ -457,9 +471,9 @@ function CashRegisterEdit({
           setError(null)
         })
         .catch((failure) => {
-          if (!signal?.aborted) setError(problemMessage(failure))
+          if (!signal?.aborted) setError(problemMessage(failure, t))
         }),
-    [registerId],
+    [registerId, t],
   )
   useEffect(() => {
     const controller = new AbortController()
@@ -475,7 +489,7 @@ function CashRegisterEdit({
       if (scope.signal.aborted) return
       await navigate(detailPath, { replace: true })
     } catch (failure) {
-      setError(problemMessage(failure))
+      setError(problemMessage(failure, t))
       setBusy(false)
     }
   }
@@ -486,11 +500,13 @@ function CashRegisterEdit({
   }
   return (
     <Sheet
-      eyebrow={register ? `Гроші · ${register.name}` : 'Гроші · Каси'}
+      eyebrow={
+        register ? t('eyebrowTill', { name: register.name }) : t('crumb')
+      }
       footer={
         <>
           <Button disabled={busy} onClick={close} type="button">
-            Скасувати
+            {tc('cancel')}
           </Button>
           {mutationsAllowed && register ? (
             <Button
@@ -500,7 +516,7 @@ function CashRegisterEdit({
               type="submit"
               variant="primary"
             >
-              {busy ? 'Зберігаємо…' : 'Зберегти зміни'}
+              {busy ? tc('saving') : t('saveChanges')}
             </Button>
           ) : null}
         </>
@@ -509,16 +525,16 @@ function CashRegisterEdit({
         if (!next) close()
       }}
       open
-      title="Редагування каси"
+      title={t('editTitle')}
     >
       {error && !register ? (
         <ErrorState
           description={error}
           onRetry={() => void load()}
-          title="Не вдалося завантажити касу"
+          title={t('loadFailed')}
         />
       ) : !register ? (
-        <SkeletonRows label="Завантажуємо касу…" rows={3} />
+        <SkeletonRows label={t('loadingTill')} rows={3} />
       ) : (
         <form
           aria-busy={busy}
@@ -530,22 +546,17 @@ function CashRegisterEdit({
             if (ready) void save()
           }}
         >
-          {!mutationsAllowed && (
-            <Notice tone="warn">
-              Зберегти не вдасться: бракує права finance.manage. Попросіть
-              власника кабінету відкрити доступ.
-            </Notice>
-          )}
+          {!mutationsAllowed && <Notice tone="warn">{t('editNoRight')}</Notice>}
           {error && <Notice tone="danger">{error}</Notice>}
           <Field
-            error={named ? null : 'Назва не може бути порожньою.'}
-            hint="Так каса підписана у звітах, переказах і журналі"
-            label="Назва каси"
+            error={named ? null : t('nameEmpty')}
+            hint={t('nameHintEdit')}
+            label={t('tillName')}
           >
             <TextInput
               disabled={!mutationsAllowed}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Основна каса"
+              placeholder={t('namePlaceholder')}
               value={name}
             />
           </Field>
@@ -561,6 +572,9 @@ function CashRegisterForm({
   definition,
   registerId,
 }: CabinetModuleScreenProps & { registerId: string | null }) {
+  const t = useT(cashMessages)
+  const tc = useT(commonMessages)
+  const { registerType } = useCashText()
   const cabinet = useCabinet()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const mutationsAllowed = canMutate(definition, cabinet, registerId === null)
@@ -569,6 +583,7 @@ function CashRegisterForm({
   const cashPath = location.pathname.replace(/\/(?:new|[^/]+\/edit)$/, '')
   const [name, setName] = useState('')
   const [type, setType] = useState('cash')
+  const { locale } = useLocale()
   const [currencies, setCurrencies] = useState<string[]>(['UAH'])
   const [initialBalances, setInitialBalances] = useState<
     Record<string, string>
@@ -587,11 +602,11 @@ function CashRegisterForm({
           }
         })
         .catch((error) => {
-          if (!controller.signal.aborted) setError(problemMessage(error))
+          if (!controller.signal.aborted) setError(problemMessage(error, t))
         })
       return () => controller.abort()
     }
-  }, [registerId])
+  }, [registerId, t])
   const save = async (event: FormEvent) => {
     event.preventDefault()
     if (busy || !name.trim()) return
@@ -615,7 +630,7 @@ function CashRegisterForm({
         replace: true,
       })
     } catch (error) {
-      setError(problemMessage(error))
+      setError(problemMessage(error, t))
       setBusy(false)
     }
   }
@@ -627,11 +642,11 @@ function CashRegisterForm({
   }
   return (
     <Sheet
-      eyebrow="Гроші · Каси"
+      eyebrow={t('crumb')}
       footer={
         <>
           <Button disabled={busy} onClick={close} type="button">
-            Скасувати
+            {tc('cancel')}
           </Button>
           <Button
             aria-busy={busy}
@@ -640,7 +655,7 @@ function CashRegisterForm({
             type="submit"
             variant="primary"
           >
-            {busy ? 'Зберігаємо…' : 'Зберегти'}
+            {busy ? tc('saving') : tc('save')}
           </Button>
         </>
       }
@@ -648,7 +663,7 @@ function CashRegisterForm({
         if (!next) close()
       }}
       open
-      title={registerId ? 'Редагувати касу' : 'Нова каса'}
+      title={registerId ? t('editTill') : t('newTill')}
     >
       <form
         aria-busy={busy}
@@ -656,33 +671,36 @@ function CashRegisterForm({
         id={CASH_REGISTER_FORM}
         onSubmit={(event) => void save(event)}
       >
-        <Field hint="Так каса підписана у звітах і переказах" label="Назва">
+        <Field hint={t('nameHint')} label={t('name')}>
           <TextInput
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Основна каса"
+            placeholder={t('namePlaceholder')}
           />
         </Field>
         {registerId ? (
           <div className="border-app-line bg-app-canvas rounded-control grid gap-1 border px-3.5 py-3">
-            <p className="text-app-muted text-[14.5px]">Тип каси: {type}</p>
-            <p className="text-app-dim text-[12.5px]">
-              Тип задають при створенні й далі не змінюють. Потрібен інший тип —
-              створіть окрему касу.
+            <p className="text-app-muted text-[14.5px]">
+              {t('tillType', { type: registerType(type) })}
             </p>
+            <p className="text-app-dim text-[12.5px]">{t('typeFixed')}</p>
           </div>
         ) : (
           <fieldset className="grid gap-2">
             <legend className="text-app-muted text-sm font-semibold">
-              Тип
+              {t('colType')}
             </legend>
             <div className="grid gap-2 sm:grid-cols-2">
               {[
-                { value: 'cash', label: 'Готівкова', hint: 'Готівка в касі' },
+                {
+                  value: 'cash',
+                  label: t('typeCash'),
+                  hint: t('cashOptionHint'),
+                },
                 {
                   value: 'bank',
-                  label: 'Безготівкова',
-                  hint: 'Банківський рахунок',
+                  label: t('typeBank'),
+                  hint: t('bankOptionHint'),
                 },
               ].map((option) => (
                 <button
@@ -710,20 +728,20 @@ function CashRegisterForm({
           <>
             <fieldset className="grid gap-2">
               <legend className="text-app-muted text-sm font-semibold">
-                Валюти
+                {t('currencies')}
               </legend>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {[
-                  { code: 'UAH', symbol: '₴' },
-                  { code: 'USD', symbol: '$' },
-                  { code: 'EUR', symbol: '€' },
-                ].map(({ code, symbol }) => {
+              {/* The supported catalog with ISO codes: symbols cannot tell
+                  CAD from USD. A till may keep any of them; this is not the
+                  accounting currency. */}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                {SUPPORTED_CURRENCIES.map((code) => {
                   const selected = currencies.includes(code)
                   return (
                     <button
+                      aria-label={`${code} (${currencyName(code, locale)})`}
                       aria-pressed={selected}
                       className={cn(
-                        'border-app-line rounded-control flex min-h-16 items-center justify-between border p-3',
+                        'border-app-line rounded-control grid min-h-14 content-center gap-0.5 border px-3 py-2 text-left',
                         selected
                           ? 'border-brand bg-brand/10 text-white'
                           : 'bg-app-input text-app-muted',
@@ -740,8 +758,12 @@ function CashRegisterForm({
                       }
                       type="button"
                     >
-                      <span className="text-xl font-bold">{symbol}</span>
-                      <span className="font-mono text-sm">{code}</span>
+                      <span className="font-mono text-sm font-bold">
+                        {code}
+                      </span>
+                      <span className="text-app-dim text-[11px] leading-tight text-pretty">
+                        {currencyName(code, locale)}
+                      </span>
                     </button>
                   )
                 })}
@@ -749,14 +771,12 @@ function CashRegisterForm({
             </fieldset>
             <fieldset className="grid gap-3">
               <legend className="text-app-muted text-sm font-semibold">
-                Початкові баланси
+                {t('initialBalances')}
               </legend>
-              <p className="text-app-dim text-xs">
-                Необов’язково. Порожнє поле означає нульовий баланс.
-              </p>
+              <p className="text-app-dim text-xs">{t('initialBalancesHint')}</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {currencies.map((code) => (
-                  <Field key={code} label={`Баланс ${code}`}>
+                  <Field key={code} label={t('balanceOf', { code })}>
                     <TextInput
                       inputMode="decimal"
                       numeric
@@ -775,13 +795,7 @@ function CashRegisterForm({
             </fieldset>
           </>
         )}
-        {!mutationsAllowed && (
-          <Notice tone="warn">
-            Зберегти не вдасться: бракує права finance.manage або вичерпано
-            ліміт кас у тарифі. Попросіть власника кабінету відкрити доступ чи
-            змінити тариф.
-          </Notice>
-        )}
+        {!mutationsAllowed && <Notice tone="warn">{t('createNoRight')}</Notice>}
         {error && <Notice tone="danger">{error}</Notice>}
       </form>
     </Sheet>

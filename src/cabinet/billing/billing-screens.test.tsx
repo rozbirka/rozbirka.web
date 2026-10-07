@@ -8,6 +8,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { billingApi, type ProviderAwareSubscriptionDto } from '@/api/billing'
 import type { PublicPlanDto } from '@/api/types'
 import { ToastProvider } from '@/components/app'
+import { LocaleProvider } from '@/i18n'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { tenantRequestScope } from '../tenant-request-scope'
 import { PaymentsScreen } from './payments-screen'
@@ -1055,4 +1056,61 @@ it('does not substitute trial dates for an unknown paid-store period end', async
   renderScreen(<PlansScreen />)
   await screen.findByRole('heading', { name: 'Lite' })
   expect(screen.queryByRole('button', { name: 'Обрати' })).toBeNull()
+})
+
+it('renders the subscription in English (UK) with UK dates', async () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, {
+      ...cancellableSubscription,
+      nextChargeAt: '2026-08-21T00:00:00Z',
+      planName: 'Pro',
+    }),
+  )
+  vi.mocked(billingApi.getPayments).mockResolvedValue(paymentPage())
+
+  renderScreen(
+    <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+      <SubscriptionScreen />
+    </LocaleProvider>,
+  )
+
+  expect(
+    screen.getByRole('heading', { name: 'Subscription' }),
+  ).toBeInTheDocument()
+  // Server plan names stay as received.
+  expect(screen.getByRole('heading', { name: 'Pro' })).toBeVisible()
+  expect(screen.getByText('Active')).toBeInTheDocument()
+  expect(screen.getByText(/^Next charge/)).toHaveTextContent('21/08/2026')
+  expect(screen.getByRole('heading', { name: 'Plan limits' })).toBeVisible()
+  expect(
+    screen.getByRole('button', { name: 'Cancel subscription' }),
+  ).toBeVisible()
+  expect(await screen.findByText('First payment')).toBeInTheDocument()
+  expect(screen.getByText('Pending')).toBeInTheDocument()
+  expect(screen.getByText('15/08/2026')).toBeInTheDocument()
+  expect(screen.queryByText(/Підписка|Наступне списання/)).toBeNull()
+})
+
+it('renders plans in English (UK) and Polish', async () => {
+  vi.mocked(billingApi.getPlans).mockResolvedValue([litePlan])
+
+  const { unmount } = renderScreen(
+    <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+      <PlansScreen />
+    </LocaleProvider>,
+  )
+  expect(await screen.findByText('per month')).toBeInTheDocument()
+  expect(screen.getByText('14 days free')).toBeInTheDocument()
+  expect(screen.getAllByText('Tills').length).toBeGreaterThan(0)
+  expect(screen.getByRole('button', { name: 'Choose' })).toBeVisible()
+  unmount()
+
+  renderScreen(
+    <LocaleProvider locale="pl" syncDocumentLang={false}>
+      <PlansScreen />
+    </LocaleProvider>,
+  )
+  expect(await screen.findByText('za miesiąc')).toBeInTheDocument()
+  expect(screen.getByText('14 dni za darmo')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Wybierz' })).toBeVisible()
 })

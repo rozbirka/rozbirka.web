@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
+import { LocaleProvider } from '@/i18n'
 import { OrderCustomerDrawer } from './OrderCustomerDrawer'
 
 const customerMocks = vi.hoisted(() => ({
@@ -149,4 +150,88 @@ it('does not show results from the previous opening while reloading', async () =
     screen.queryByText('Клієнт із попереднього відкриття'),
   ).not.toBeInTheDocument()
   await waitFor(() => expect(customerMocks.search).toHaveBeenCalledTimes(2))
+})
+
+const drawerProps = {
+  busy: false,
+  currentId: null,
+  currentName: null,
+  error: null,
+  onOpenChange: vi.fn(),
+  open: true,
+  orderNumber: 12,
+}
+
+it.each([
+  ['Ukrainian national', '050 111 22 33', '+380501112233'],
+  ['British', '+44 7700 900123', '+447700900123'],
+  ['German', '+49 30 1234567', '+49301234567'],
+])(
+  'creates a customer with a %s number without rewriting it',
+  async (_, typed, saved) => {
+    customerMocks.search.mockResolvedValue([])
+    customerMocks.create.mockResolvedValue({ customer: { id: 'customer-new' } })
+    const onAssign = vi.fn()
+    const user = userEvent.setup()
+    render(<OrderCustomerDrawer {...drawerProps} onAssign={onAssign} />)
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Новий клієнт' }),
+    )
+    await user.type(screen.getByLabelText('Ім’я або назва компанії'), 'Клієнт')
+    const phone = screen.getByLabelText('Телефон')
+    expect(phone).toHaveValue('+380')
+    await user.clear(phone)
+    await user.type(phone, typed)
+    await user.click(
+      screen.getByRole('button', { name: 'Створити й призначити' }),
+    )
+
+    expect(customerMocks.create).toHaveBeenCalledWith({
+      name: 'Клієнт',
+      phone: saved,
+    })
+    await waitFor(() => expect(onAssign).toHaveBeenCalledWith('customer-new'))
+  },
+)
+
+it('explains an incomplete number in an international, country-neutral way', async () => {
+  customerMocks.search.mockResolvedValue([])
+  const user = userEvent.setup()
+  render(<OrderCustomerDrawer {...drawerProps} onAssign={vi.fn()} />)
+
+  await user.click(await screen.findByRole('button', { name: 'Новий клієнт' }))
+  await user.type(screen.getByLabelText('Ім’я або назва компанії'), 'Клієнт')
+  await user.type(screen.getByLabelText('Телефон'), '50111')
+  await user.tab()
+
+  expect(screen.getByLabelText('Телефон')).toHaveAccessibleDescription(
+    /потрібен міжнародний формат/,
+  )
+  expect(
+    screen.getByRole('button', { name: 'Створити й призначити' }),
+  ).toBeDisabled()
+})
+
+it('renders the customer picker in British English', async () => {
+  customerMocks.search.mockResolvedValue([
+    {
+      id: 'customer-1',
+      name: 'John Smith',
+      phone: '+447700900123',
+      ordersCount: 2,
+    },
+  ])
+  render(
+    <LocaleProvider locale="en-GB">
+      <OrderCustomerDrawer {...drawerProps} onAssign={vi.fn()} />
+    </LocaleProvider>,
+  )
+
+  expect(await screen.findByText('+44 7700 900123 · 2 orders')).toBeVisible()
+  expect(screen.getByRole('dialog', { name: 'Add customer' })).toBeVisible()
+  expect(screen.getByText('Order #12 · customer')).toBeVisible()
+  expect(screen.getByLabelText('Search customers')).toBeVisible()
+  expect(screen.getByText('No customer set')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Assign customer' })).toBeDisabled()
 })

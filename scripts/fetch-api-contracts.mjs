@@ -14,12 +14,6 @@ const sourceDefinitions = {
     uriPattern:
       /^gs:\/\/rozbirka-ci-openapi-contracts\/core\/[0-9a-f]{40}\/rozbirka-core\.json$/,
   },
-  identity: {
-    label: 'Identity',
-    filename: 'identity.json',
-    uriPattern:
-      /^gs:\/\/rozbirka-ci-openapi-contracts\/identity\/[0-9a-f]{40}\/rozbirka-identity\.json$/,
-  },
 }
 
 function assertExactKeys(value, expected, label) {
@@ -48,11 +42,7 @@ export function parseManifest(contents) {
   }
 
   assertObject(parsed, 'OpenAPI source manifest')
-  assertExactKeys(
-    parsed,
-    ['version', 'core', 'identity'],
-    'OpenAPI source manifest',
-  )
+  assertExactKeys(parsed, ['version', 'core'], 'OpenAPI source manifest')
   if (parsed.version !== 1) {
     throw new Error('OpenAPI source manifest version must equal 1')
   }
@@ -97,7 +87,6 @@ export async function fetchContracts({
 
   const paths = {
     core: resolve(absoluteOutput, sourceDefinitions.core.filename),
-    identity: resolve(absoluteOutput, sourceDefinitions.identity.filename),
   }
 
   try {

@@ -9,6 +9,10 @@ import {
   TextInput,
 } from '@/components/app'
 import { cn } from '@/lib/utils'
+import { commonMessages, useLocale, useT } from '@/i18n'
+import { amountPrecisionError } from '../currency/amount-precision'
+import { cashMessages } from './cash-messages'
+import { tillCurrencies } from '../currency/catalog-order'
 
 type MovementType = CashTransactionInput['type']
 
@@ -34,11 +38,10 @@ function OpenCashMovementDrawer({
   open,
   register,
 }: CashMovementDrawerProps) {
-  const currencies = Object.keys(register.balances).sort((left, right) => {
-    const priority = (currency: string) =>
-      currency === 'UAH' ? 0 : currency === 'USD' ? 1 : 2
-    return priority(left) - priority(right) || left.localeCompare(right)
-  })
+  const t = useT(cashMessages)
+  const tc = useT(commonMessages)
+  const { locale } = useLocale()
+  const currencies = tillCurrencies(register)
   const [type, setType] = useState<MovementType>('manual_in')
   const [amount, setAmount] = useState('')
   const [currency, setCurrency] = useState('')
@@ -55,13 +58,19 @@ function OpenCashMovementDrawer({
     amount !== '' &&
     Number.isFinite(numericAmount) &&
     numericAmount > (register.balances[selectedCurrency] ?? 0)
+  // Core refuses an amount finer than its currency allows (JPY: whole).
+  const precision =
+    amount !== '' && Number.isFinite(numericAmount) && numericAmount > 0
+      ? amountPrecisionError(numericAmount, selectedCurrency || null, locale)
+      : null
   const invalid =
     busy ||
     amount === '' ||
     !Number.isFinite(numericAmount) ||
     numericAmount <= 0 ||
     selectedCurrency === '' ||
-    insufficientBalance
+    insufficientBalance ||
+    precision !== null
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -76,8 +85,8 @@ function OpenCashMovementDrawer({
 
   return (
     <Sheet
-      description="Запис у журнал цієї каси без переказу та документа."
-      eyebrow={`Гроші · ${register.name}`}
+      description={t('movementDescription')}
+      eyebrow={t('eyebrowTill', { name: register.name })}
       footer={
         <>
           <Button
@@ -85,7 +94,7 @@ function OpenCashMovementDrawer({
             onClick={() => onOpenChange(false)}
             type="button"
           >
-            Скасувати
+            {tc('cancel')}
           </Button>
           <Button
             aria-busy={busy}
@@ -94,7 +103,7 @@ function OpenCashMovementDrawer({
             type="submit"
             variant="primary"
           >
-            {busy ? 'Зберігаємо…' : 'Записати операцію'}
+            {busy ? tc('saving') : t('recordMovement')}
           </Button>
         </>
       }
@@ -103,7 +112,7 @@ function OpenCashMovementDrawer({
         onOpenChange(next)
       }}
       open={open}
-      title="Нова операція"
+      title={t('newOperation')}
     >
       <form
         aria-busy={busy}
@@ -111,9 +120,9 @@ function OpenCashMovementDrawer({
         id={CASH_MOVEMENT_FORM}
         onSubmit={submit}
       >
-        <Field label="Тип операції">
+        <Field label={t('movementType')}>
           <div
-            aria-label="Тип операції"
+            aria-label={t('movementType')}
             className="grid grid-cols-2 gap-2"
             role="group"
           >
@@ -128,7 +137,7 @@ function OpenCashMovementDrawer({
               onClick={() => setType('manual_in')}
               type="button"
             >
-              Надходження
+              {t('mvIncome')}
             </button>
             <button
               aria-pressed={type === 'manual_out'}
@@ -141,13 +150,21 @@ function OpenCashMovementDrawer({
               onClick={() => setType('manual_out')}
               type="button"
             >
-              Витрата
+              {t('mvExpense')}
             </button>
           </div>
         </Field>
 
-        <Field label="Сума">
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)] items-stretch gap-2">
+        <Field label={t('colAmount')}>
+          <div
+            className={cn(
+              'grid items-stretch gap-2',
+              // Up to three codes fit beside the amount; more wrap under it
+              // so no code is cut off.
+              currencies.length <= 3 &&
+                'grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)]',
+            )}
+          >
             <TextInput
               className="h-11 min-h-11 rounded-[10px] px-3.5 font-mono text-[17px] font-semibold tabular-nums"
               inputMode="decimal"
@@ -161,8 +178,13 @@ function OpenCashMovementDrawer({
               value={amount}
             />
             <Segmented
-              className="h-11 flex-nowrap rounded-[10px] p-1 [&>label]:h-full [&>label]:min-h-0 [&>label]:min-w-0 [&>label]:rounded-[7px] [&>label]:px-2"
-              label="Валюта операції"
+              className={cn(
+                'rounded-[10px] p-1 [&>label]:rounded-[7px] [&>label]:px-2 [&>label]:font-mono',
+                currencies.length <= 3
+                  ? 'h-11 flex-nowrap [&>label]:h-full [&>label]:min-h-0 [&>label]:min-w-0'
+                  : 'w-fit max-w-full flex-wrap [&>label]:min-h-9 [&>label]:min-w-14 [&>label]:flex-none',
+              )}
+              label={t('movementCurrency')}
               name="movement-currency"
               onChange={setCurrency}
               options={currencies.map((one) => ({
@@ -186,8 +208,8 @@ function OpenCashMovementDrawer({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-app-muted text-[13.5px]">
                 {type === 'manual_in'
-                  ? `Надходження до каси «${register.name}»`
-                  : `Витрата з каси «${register.name}»`}
+                  ? t('incomeTo', { name: register.name })
+                  : t('expenseFrom', { name: register.name })}
               </span>
               <span
                 className={cn(
@@ -202,16 +224,15 @@ function OpenCashMovementDrawer({
           </div>
         ) : null}
 
-        <Field hint="Необовʼязково" label="Нотатка">
+        <Field hint={t('optional')} label={t('note')}>
           <TextInput
             onChange={(event) => setNote(event.target.value)}
             value={note}
           />
         </Field>
+        {precision !== null ? <Notice tone="warn">{precision}</Notice> : null}
         {insufficientBalance ? (
-          <Notice tone="warn">
-            У касі недостатньо коштів для цієї витрати.
-          </Notice>
+          <Notice tone="warn">{t('insufficient')}</Notice>
         ) : null}
         {error ? <Notice tone="danger">{error}</Notice> : null}
       </form>

@@ -1,8 +1,10 @@
 import { useState, type ReactNode } from 'react'
 import { Check, Plus, Truck } from 'lucide-react'
 import { Button, Notice, StatusPill } from '@/components/app'
+import { useFormat, useLocale, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { uah } from './delivery-money'
+import { deliveryMessages } from './messages'
 import {
   lifecycle,
   paymentKindLabel,
@@ -11,6 +13,7 @@ import {
   shipmentChip,
   shipmentFacts,
   type LifecycleStep,
+  type PrimaryAction,
   type ShipmentFact,
 } from './delivery-view'
 import type { DeliveryOrderState } from './use-delivery-order'
@@ -23,20 +26,16 @@ const TONE: Record<ShipmentFact['tone'], string> = {
   dim: 'text-app-dim',
 }
 
-const when = (value: string) => {
-  const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})/.exec(value)
-  return parts ? `${parts[3]}.${parts[2]}.${parts[1]}, ${parts[4]}` : value
-}
-
 /** The four moments of a delivery order, drawn as one rail across the card. */
 export function DeliveryLifecycle({
   steps,
 }: {
   steps: readonly LifecycleStep[]
 }) {
+  const t = useT(deliveryMessages)
   return (
     <ol
-      aria-label="Етапи доставки"
+      aria-label={t('lifecycleLabel')}
       className="grid grid-cols-2 gap-1.5 sm:grid-cols-4"
     >
       {steps.map((step) => (
@@ -89,22 +88,24 @@ export function DeliveryTabs({
   shipment: DeliveryOrderState['shipment']
   tab: DeliveryTab
 }) {
-  const parcel = shipmentChip(delivery, shipment)
+  const { locale } = useLocale()
+  const t = useT(deliveryMessages)
+  const parcel = shipmentChip(delivery, shipment, locale)
   const options: { key: DeliveryTab; label: string; meta: string }[] = [
     {
       key: 'sales',
-      label: 'Продажі',
+      label: t('tabSales'),
       meta:
         delivery.outstandingUah === 0
-          ? 'оплачено'
-          : `залишок ${uah(delivery.outstandingUah)}`,
+          ? t('tabPaid')
+          : t('tabBalance', { amount: uah(delivery.outstandingUah, locale) }),
     },
-    { key: 'shipping', label: 'Доставка', meta: parcel.label },
+    { key: 'shipping', label: t('tabShipping'), meta: parcel.label },
   ]
 
   return (
     <div
-      aria-label="Розділи замовлення"
+      aria-label={t('tabsLabel')}
       className="border-app-line flex gap-6 border-b"
       role="tablist"
     >
@@ -149,18 +150,20 @@ export function ShipmentCard({
   delivery: NonNullable<DeliveryOrderState['money']>
   shipment: DeliveryOrderState['shipment']
 }) {
-  const parcel = shipmentChip(delivery, shipment)
-  const facts = shipmentFacts(delivery, shipment)
+  const { locale } = useLocale()
+  const t = useT(deliveryMessages)
+  const parcel = shipmentChip(delivery, shipment, locale)
+  const facts = shipmentFacts(delivery, shipment, locale)
 
   return (
     <section
-      aria-label="Нова пошта"
+      aria-label={t('novaPoshta')}
       className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 px-6 pt-5 pb-4">
         <div className="flex min-w-0 items-center gap-3">
           <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-            Нова пошта
+            {t('novaPoshta')}
           </h2>
           <StatusPill tone={parcel.tone}>{parcel.label}</StatusPill>
         </div>
@@ -189,7 +192,9 @@ export function ShipmentCard({
           </div>
         ))}
       </dl>
-      <div className="flex flex-wrap gap-2.5 px-6 py-4">{actions}</div>
+      {actions === null ? null : (
+        <div className="flex flex-wrap gap-2.5 px-6 py-4">{actions}</div>
+      )}
     </section>
   )
 }
@@ -202,16 +207,17 @@ export function RecipientCard({
   phone: string | null
   shipment: DeliveryOrderState['shipment']
 }) {
+  const t = useT(deliveryMessages)
   const recipient = shipment?.draft.recipient ?? null
   if (recipient === null) return null
 
   return (
     <section
-      aria-label="Отримувач"
+      aria-label={t('recipient')}
       className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-5 pb-5"
     >
       <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-        Отримувач
+        {t('recipient')}
       </h2>
       <p className="mt-3 text-[15px] font-bold text-white">{recipient.name}</p>
       <p className="text-app-muted mt-1 font-mono text-[13px]">
@@ -220,7 +226,7 @@ export function RecipientCard({
       {/* The carrier identifies a branch by a GUID, so the draft carries the
           name it was chosen by — that is the only readable form there is. */}
       <p className="text-app-dim mt-2 text-[13px]">
-        {recipient.warehouseName ?? 'Відділення обрано'}
+        {recipient.warehouseName ?? t('branchChosen')}
       </p>
     </section>
   )
@@ -237,19 +243,22 @@ export function DeliveryPaymentsCard({
   /** Names the till behind an account id, when the cash module is readable. */
   tillName: (accountId: string) => string | null
 }) {
+  const { locale } = useLocale()
+  const t = useT(deliveryMessages)
+  const format = useFormat()
   const live = delivery.payments.filter(
     (payment) => payment.refundedAt === null,
   )
 
   return (
     <section
-      aria-label="Платежі"
+      aria-label={t('payments')}
       className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 px-6 pt-5 pb-4">
         <div className="flex min-w-0 items-baseline gap-3">
           <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-            Платежі
+            {t('payments')}
           </h2>
           <span className="text-app-muted font-mono text-[12px]">
             {String(live.length)}
@@ -259,10 +268,10 @@ export function DeliveryPaymentsCard({
       </div>
       {live.length === 0 ? (
         <p className="border-app-line text-app-muted border-t px-6 pt-4 pb-5 text-[14px]">
-          Платежів ще немає.
+          {t('noPayments')}
         </p>
       ) : (
-        <ul aria-label="Платежі замовлення">
+        <ul aria-label={t('orderPayments')}>
           {live.map((payment) => (
             <li
               className="border-app-line flex items-center gap-3.5 border-t px-6 py-3.5"
@@ -273,18 +282,18 @@ export function DeliveryPaymentsCard({
               </span>
               <span className="min-w-0">
                 <span className="block text-[15px] font-semibold text-white">
-                  {paymentKindLabel(payment.kind)}
+                  {paymentKindLabel(payment.kind, locale)}
                 </span>
                 <span className="text-app-muted mt-0.5 block truncate text-[13px]">
-                  {tillName(payment.accountId) ?? 'каса'} ·{' '}
-                  {when(payment.createdAt)}
+                  {tillName(payment.accountId) ?? t('till')} ·{' '}
+                  {format.dateTime(payment.createdAt) ?? payment.createdAt}
                   {payment.feeUah > 0
-                    ? ` · комісія ${uah(payment.feeUah)}`
+                    ? t('fee', { amount: uah(payment.feeUah, locale) })
                     : ''}
                 </span>
               </span>
               <span className="ml-auto font-mono text-[15px] font-medium whitespace-nowrap text-white tabular-nums">
-                {uah(payment.amountUah)}
+                {uah(payment.amountUah, locale)}
               </span>
             </li>
           ))}
@@ -298,6 +307,7 @@ export function DeliveryPaymentsCard({
 export function DeliveryDueCard({
   busy,
   delivery,
+  novaPoshtaAvailable = true,
   onPrimary,
   shipment,
 }: {
@@ -307,8 +317,19 @@ export function DeliveryDueCard({
     kind: NonNullable<ReturnType<typeof primaryAction>['kind']>,
   ) => void
   shipment: DeliveryOrderState['shipment']
+  /**
+   * False outside Ukraine: there is no carrier to book with, so the waybill
+   * is not offered as the next move.
+   */
+  novaPoshtaAvailable?: boolean
 }) {
-  const action = primaryAction(delivery, shipment)
+  const { locale } = useLocale()
+  const t = useT(deliveryMessages)
+  const proposed = primaryAction(delivery, shipment, locale)
+  const action: PrimaryAction =
+    !novaPoshtaAvailable && proposed.kind === 'create'
+      ? { kind: null, label: '', hint: t('countryUnavailable') }
+      : proposed
   const paidPercent =
     delivery.agreedTotalUah <= 0
       ? 0
@@ -316,16 +337,16 @@ export function DeliveryDueCard({
           100,
           Math.round((delivery.appliedUah / delivery.agreedTotalUah) * 100),
         )
-  const standing = paymentStanding(delivery)
+  const standing = paymentStanding(delivery, locale)
 
   return (
     <section
-      aria-label="До сплати"
+      aria-label={t('due')}
       className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
     >
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-          До сплати
+          {t('due')}
         </h2>
         <p
           className={cn(
@@ -341,7 +362,7 @@ export function DeliveryDueCard({
         </p>
       </div>
       <p className="mt-3 text-[38px] leading-none font-extrabold tracking-[-0.03em] text-white tabular-nums">
-        {uah(delivery.outstandingUah)}
+        {uah(delivery.outstandingUah, locale)}
       </p>
       <span aria-hidden className="mt-4.5 flex gap-0.5">
         <span
@@ -354,13 +375,13 @@ export function DeliveryDueCard({
         />
       </span>
       <dl className="mt-4 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
-        <dt className="text-app-muted text-[14px]">Погоджено за доставку</dt>
+        <dt className="text-app-muted text-[14px]">{t('agreed')}</dt>
         <dd className="font-mono text-[14px] text-white tabular-nums">
-          {uah(delivery.agreedTotalUah)}
+          {uah(delivery.agreedTotalUah, locale)}
         </dd>
-        <dt className="text-app-muted text-[14px]">Сплачено</dt>
+        <dt className="text-app-muted text-[14px]">{t('paid')}</dt>
         <dd className="text-state-ok font-mono text-[14px] tabular-nums">
-          {uah(delivery.appliedUah)}
+          {uah(delivery.appliedUah, locale)}
         </dd>
       </dl>
       {action.kind === null ? null : (
@@ -385,7 +406,7 @@ export function DeliveryDueCard({
           onClick={() => onPrimary('pay')}
         >
           <Plus aria-hidden />
-          Внести оплату
+          {t('recordPayment')}
         </Button>
       ) : null}
       <p className="text-app-dim mt-3 text-center text-[12px] leading-[1.5] text-pretty">
@@ -403,14 +424,16 @@ export function DeliverySteps({
   delivery: NonNullable<DeliveryOrderState['money']>
   shipment: DeliveryOrderState['shipment']
 }) {
+  const { locale, timeZone } = useLocale()
+  const t = useT(deliveryMessages)
   // The rail at the top of the card is the four moments an order passes
   // through; this list adds the one it may end on, which is never reached in
   // the ordinary course of things and so is not a step of the rail.
   const steps = [
-    ...lifecycle(delivery, shipment),
+    ...lifecycle(delivery, shipment, locale, timeZone),
     {
       key: 'returned',
-      label: 'Повернення',
+      label: t('stepReturned'),
       meta: '',
       done: delivery.returnedAt !== null,
       current: delivery.receivedAt !== null && delivery.returnedAt === null,
@@ -418,31 +441,28 @@ export function DeliverySteps({
   ]
   const [expanded, setExpanded] = useState(false)
   const notes: Record<string, string> = {
-    paid: 'ТТН не створюється, поки є будь-який залишок.',
-    waybill: 'Післяплата в накладній має дорівнювати залишку.',
-    dispatched:
-      'Фіксується дата передачі. Статус замовлення лишається «Очікує».',
-    received:
-      'Переводить замовлення в «Підтверджене» і вмикає звірку післяплати.',
-    returned:
-      'Доступне лише після отримання. Ставить замовленню статус «Повернено».',
+    paid: t('notePaid'),
+    waybill: t('noteWaybill'),
+    dispatched: t('noteDispatched'),
+    received: t('noteReceived'),
+    returned: t('noteReturned'),
   }
 
   return (
     <section
-      aria-label="Порядок дій"
+      aria-label={t('stepsTitle')}
       className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-5 pb-5"
     >
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-          Порядок дій
+          {t('stepsTitle')}
         </h2>
         <button
           className="text-app-muted hover:text-app-ink relative text-[12px] font-semibold transition-colors after:absolute after:-inset-2 after:content-['']"
           onClick={() => setExpanded((value) => !value)}
           type="button"
         >
-          {expanded ? 'Коротко' : 'Що це означає'}
+          {expanded ? t('stepsShort') : t('stepsExplain')}
         </button>
       </div>
       <ol className="mt-4 grid gap-3.5">
@@ -498,16 +518,18 @@ export function DeliveryGateCard({
 }: {
   delivery: NonNullable<DeliveryOrderState['money']>
 }) {
+  const t = useT(deliveryMessages)
+  const { locale } = useLocale()
   const blocked = delivery.outstandingUah > 0
   return (
     <Notice tone={blocked ? 'warn' : 'ok'}>
       <p className="font-semibold">
-        {blocked ? 'ТТН буде з післяплатою' : 'ТТН можна створити'}
+        {blocked ? t('gateCodTitle') : t('gateReadyTitle')}
       </p>
       <p className="mt-1">
         {blocked
-          ? `Нова пошта утримає з отримувача ${uah(delivery.outstandingUah)} — рівно залишок за замовленням — і перекаже їх вам. Комісію переказу платить отримувач.`
-          : 'Замовлення оплачене, тож накладна піде без післяплати.'}
+          ? t('gateCodNote', { amount: uah(delivery.outstandingUah, locale) })
+          : t('createHintPaid')}
       </p>
     </Notice>
   )

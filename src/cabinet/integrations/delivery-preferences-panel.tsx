@@ -8,6 +8,13 @@ import {
   type NovaPoshtaPreferences,
 } from '@/api/integrations'
 import { normalizeApiProblem } from '@/api/errors'
+import { commonMessages, useLocale, useT } from '@/i18n'
+import {
+  integrationProblemMessage,
+  isCountryUnavailableProblem,
+  novaPoshtaUnavailableText,
+} from './integration-labels'
+import { npFormsMessages } from './np-forms-messages'
 
 /**
  * What the yard decides about delivery once, rather than on every parcel: the
@@ -22,6 +29,9 @@ export function DeliveryPreferencesPanel({
 }: {
   integrationId: string
 }) {
+  const { locale } = useLocale()
+  const t = useT(npFormsMessages)
+  const tc = useT(commonMessages)
   const [saved, setSaved] = useState<NovaPoshtaPreferences | null>(null)
   const [senders, setSenders] = useState<NovaPoshtaCounterparty[] | null>(null)
   const [contacts, setContacts] = useState<{
@@ -34,6 +44,7 @@ export function DeliveryPreferencesPanel({
   const [till, setTill] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<'senders' | 'country' | null>(null)
   const [done, setDone] = useState(false)
 
   useEffect(() => {
@@ -59,7 +70,11 @@ export function DeliveryPreferencesPanel({
           : [],
       )
       if (senderList.status === 'rejected')
-        setError('Не вдалося прочитати відправників із кабінету Нової пошти.')
+        setLoadError(
+          isCountryUnavailableProblem(normalizeApiProblem(senderList.reason))
+            ? 'country'
+            : 'senders',
+        )
     })
     return () => controller.abort()
   }, [integrationId])
@@ -100,6 +115,7 @@ export function DeliveryPreferencesPanel({
     if (busy || !changed) return
     setBusy(true)
     setError(null)
+    setLoadError(null)
     setDone(false)
     void integrationsApi
       .savePreferences(integrationId, {
@@ -112,21 +128,27 @@ export function DeliveryPreferencesPanel({
         setDone(true)
       })
       .catch((problem: unknown) => {
-        setError(normalizeApiProblem(problem).message)
+        setError(
+          integrationProblemMessage(normalizeApiProblem(problem), locale),
+        )
       })
       .finally(() => setBusy(false))
   }
 
   return (
-    <Card title="Доставка">
+    <Card title={t('deliveryCard')}>
       <div className="grid gap-3.5">
         {error === null ? null : <Notice tone="danger">{error}</Notice>}
-        {done ? <Notice tone="ok">Налаштування збережено.</Notice> : null}
+        {loadError === null ? null : (
+          <Notice tone="danger">
+            {loadError === 'country'
+              ? novaPoshtaUnavailableText(locale).message
+              : t('sendersError')}
+          </Notice>
+        )}
+        {done ? <Notice tone="ok">{t('prefsSaved')}</Notice> : null}
 
-        <Field
-          hint="Відправник із кабінету Нової пошти. Усі накладні йдуть від його імені."
-          label="Відправник"
-        >
+        <Field hint={t('senderHint')} label={t('senderLabel')}>
           <SelectInput
             disabled={busy || senders === null}
             onChange={(event) => {
@@ -138,10 +160,10 @@ export function DeliveryPreferencesPanel({
           >
             <option value="">
               {senders === null
-                ? 'Завантажуємо…'
+                ? t('loading')
                 : senders.length === 0
-                  ? 'Кабінет не повернув жодного відправника'
-                  : 'Не обрано'}
+                  ? t('noSenders')
+                  : t('notChosen')}
             </option>
             {(senders ?? []).map((item) => (
               <option key={item.ref} value={item.ref}>
@@ -153,12 +175,8 @@ export function DeliveryPreferencesPanel({
         </Field>
 
         <Field
-          hint={
-            sender === null
-              ? 'Спершу оберіть відправника.'
-              : 'Ця особа буде вказана в накладній як контакт відправника.'
-          }
-          label="Контактна особа"
+          hint={sender === null ? t('pickSenderFirst') : t('contactHint')}
+          label={t('contactLabel')}
         >
           <SelectInput
             disabled={busy || sender === null || contactOptions === null}
@@ -169,7 +187,7 @@ export function DeliveryPreferencesPanel({
             value={chosenContact ?? ''}
           >
             <option value="">
-              {contactOptions === null ? 'Завантажуємо…' : 'Не обрано'}
+              {contactOptions === null ? t('loading') : t('notChosen')}
             </option>
             {(contactOptions ?? []).map((item) => (
               <option key={item.ref} value={item.ref}>
@@ -181,12 +199,8 @@ export function DeliveryPreferencesPanel({
         </Field>
 
         <Field
-          hint={
-            till === null
-              ? 'Без каси післяплату доведеться вносити вручну — замовлення чекатиме в черзі на звірку.'
-              : 'Щойно клієнт забере посилку, післяплата зарахується в цю касу автоматично.'
-          }
-          label="Каса для післяплати"
+          hint={till === null ? t('tillNoneHint') : t('tillHint')}
+          label={t('tillLabel')}
         >
           <SelectInput
             disabled={busy || tills === null}
@@ -198,10 +212,10 @@ export function DeliveryPreferencesPanel({
           >
             <option value="">
               {tills === null
-                ? 'Завантажуємо…'
+                ? t('loading')
                 : tills.length === 0
-                  ? 'Немає активної каси з гривнею'
-                  : 'Вносити вручну'}
+                  ? t('noUahTill')
+                  : t('manualEntry')}
             </option>
             {(tills ?? []).map((item) => (
               <option key={item.id} value={item.id}>
@@ -218,7 +232,7 @@ export function DeliveryPreferencesPanel({
           onClick={save}
           variant="primary"
         >
-          {busy ? 'Зберігаємо…' : 'Зберегти'}
+          {busy ? tc('saving') : tc('save')}
         </Button>
       </div>
     </Card>

@@ -1,5 +1,6 @@
 import axios, { AxiosError, AxiosHeaders } from 'axios'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { requestLocale } from '@/i18n'
 import { isProblemCode, normalizeApiProblem } from './errors'
 
 function axiosFailure(status: number, data: unknown, headers = {}) {
@@ -121,5 +122,33 @@ describe('isProblemCode', () => {
       false,
     )
     expect(isProblemCode(new Error('boom'), 'ORDER_INVALID_STATUS')).toBe(false)
+  })
+})
+
+describe('fallback messages follow the request locale', () => {
+  afterEach(() => requestLocale.set(null))
+
+  it('uses Ukrainian before a locale is known', () => {
+    expect(normalizeApiProblem(axiosFailure(500, {})).message).toBe(
+      'Сталася помилка сервера. Спробуйте пізніше.',
+    )
+  })
+
+  it('uses the interface locale the requests carry', () => {
+    requestLocale.set('en-GB')
+    expect(normalizeApiProblem(axiosFailure(403, {})).message).toBe(
+      'You don’t have access to this action.',
+    )
+    requestLocale.set('pl')
+    expect(normalizeApiProblem(new Error('boom')).message).toBe(
+      'Wystąpił nieoczekiwany błąd. Spróbuj ponownie.',
+    )
+  })
+
+  it('keeps the server message as received', () => {
+    requestLocale.set('en-GB')
+    expect(
+      normalizeApiProblem(axiosFailure(409, { message: 'Вже існує' })).message,
+    ).toBe('Вже існує')
   })
 })

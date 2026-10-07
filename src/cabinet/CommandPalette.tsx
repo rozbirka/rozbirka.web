@@ -6,14 +6,24 @@ import { partsApi } from '@/api/parts'
 import { carsApi } from '@/api/cars'
 import { customersApi } from '@/api/customers'
 import { ordersApi } from '@/api/orders'
+import {
+  translate,
+  useLocale,
+  useT,
+  type Locale,
+  type MessageKey,
+  type MessageParams,
+} from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { LucideIcon } from 'lucide-react'
 import type { Tenant } from '@/api/types'
 import type { TenantAccessSnapshot } from './access-types'
 import { cabinetPath } from './cabinet-paths'
 import { onOpenCommandPalette } from './command-palette-open'
+import { moduleLabel } from './module-messages'
 import { cabinetModules, type CabinetModuleKey } from './module-registry'
 import { evaluateModuleAccess } from './policy'
+import { shellMessages } from './shell-messages'
 
 interface Command {
   id: string
@@ -52,6 +62,8 @@ export function CommandPalette({
   snapshot: TenantAccessSnapshot
 }) {
   const navigate = useNavigate()
+  const { locale } = useLocale()
+  const t = useT(shellMessages)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [found, setFound] = useState<CommandGroup[]>([])
@@ -81,14 +93,14 @@ export function CommandPalette({
         return [
           {
             id: `module:${definition.key}`,
-            label: navigation.label,
+            label: moduleLabel(definition.key, locale),
             detail: null,
             to: cabinetPath(tenant.slug, definition.key),
             icon: navigation.icon,
           },
         ]
       }),
-    [canView, tenant.slug],
+    [canView, locale, tenant.slug],
   )
 
   useEffect(() => {
@@ -120,7 +132,13 @@ export function CommandPalette({
         return
       }
       setSearching(true)
-      void searchEverything(trimmed, canView, tenant.slug, controller.signal)
+      void searchEverything(
+        trimmed,
+        canView,
+        tenant.slug,
+        locale,
+        controller.signal,
+      )
         .then((groups) => {
           if (controller.signal.aborted) return
           setFound(groups)
@@ -136,7 +154,7 @@ export function CommandPalette({
       controller.abort()
       clearTimeout(timer)
     }
-  }, [canView, open, tenant.slug, trimmed])
+  }, [canView, locale, open, tenant.slug, trimmed])
 
   const groups = useMemo<CommandGroup[]>(() => {
     const matching = destinations.filter((destination) =>
@@ -144,11 +162,11 @@ export function CommandPalette({
     )
     return [
       ...(matching.length > 0
-        ? [{ key: 'modules', label: 'Розділи', commands: matching }]
+        ? [{ key: 'modules', label: t('palette.modules'), commands: matching }]
         : []),
       ...found,
     ]
-  }, [destinations, found, trimmed])
+  }, [destinations, found, t, trimmed])
 
   const flat = groups.flatMap((group) => group.commands)
   const current = flat[Math.min(active, Math.max(flat.length - 1, 0))]
@@ -189,7 +207,7 @@ export function CommandPalette({
             }
           }}
         >
-          <Dialog.Title className="sr-only">Пошук по кабінету</Dialog.Title>
+          <Dialog.Title className="sr-only">{t('palette.title')}</Dialog.Title>
           <div className="border-app-line flex items-center gap-3 border-b px-4">
             <Search aria-hidden className="text-app-dim size-4 shrink-0" />
             <input
@@ -197,7 +215,7 @@ export function CommandPalette({
                 current === undefined ? undefined : `${listId}-${current.id}`
               }
               aria-controls={listId}
-              aria-label="Пошук по кабінету"
+              aria-label={t('palette.title')}
               autoComplete="off"
               className="text-app-ink placeholder:text-app-dim min-w-0 flex-1 bg-transparent py-4 text-[15px] outline-none"
               onChange={(event) => {
@@ -208,7 +226,7 @@ export function CommandPalette({
                 setActive(0)
               }}
               aria-expanded={flat.length > 0}
-              placeholder="Розділ, деталь, авто, клієнт або замовлення"
+              placeholder={t('palette.placeholder')}
               role="combobox"
               value={query}
             />
@@ -221,10 +239,10 @@ export function CommandPalette({
             {flat.length === 0 ? (
               <p className="text-app-muted px-3 py-8 text-center text-sm">
                 {trimmed.length < 2
-                  ? 'Наберіть принаймні дві літери.'
+                  ? t('palette.typeMore')
                   : searching
-                    ? 'Шукаємо…'
-                    : 'Нічого не знайшли.'}
+                    ? t('palette.searching')
+                    : t('palette.nothing')}
               </p>
             ) : (
               groups.map((group) => (
@@ -286,15 +304,18 @@ async function searchEverything(
   query: string,
   canView: ReadonlySet<CabinetModuleKey>,
   slug: string,
+  locale: Locale,
   signal: AbortSignal,
 ): Promise<CommandGroup[]> {
+  const t = (key: MessageKey<typeof shellMessages>, params?: MessageParams) =>
+    translate(shellMessages, locale, key, params)
   const settled = await Promise.allSettled([
     canView.has('parts')
       ? partsApi
           .search({ query, page: 1, pageSize: PER_SOURCE }, { signal })
           .then((page) => ({
             key: 'parts',
-            label: 'Деталі',
+            label: t('palette.parts'),
             commands: page.items.map((part) => ({
               id: `part:${part.id}`,
               label: part.name,
@@ -310,7 +331,7 @@ async function searchEverything(
           .list({ search: query, page: 1, pageSize: PER_SOURCE }, { signal })
           .then((page) => ({
             key: 'cars',
-            label: 'Автомобілі',
+            label: t('palette.cars'),
             commands: page.items.map((car) => ({
               id: `car:${car.id}`,
               label: `${car.brand} ${car.model}`,
@@ -322,7 +343,7 @@ async function searchEverything(
     canView.has('customers')
       ? customersApi.search(query, { signal }).then((items) => ({
           key: 'customers',
-          label: 'Клієнти',
+          label: t('palette.customers'),
           commands: items.slice(0, PER_SOURCE).map((customer) => ({
             id: `customer:${customer.id}`,
             label: customer.name,
@@ -336,10 +357,10 @@ async function searchEverything(
           .list({ search: query, page: 1, pageSize: PER_SOURCE }, { signal })
           .then((page) => ({
             key: 'orders',
-            label: 'Замовлення',
+            label: t('palette.orders'),
             commands: page.items.map((order) => ({
               id: `order:${order.id}`,
-              label: `Замовлення №${String(order.number)}`,
+              label: t('palette.order', { number: String(order.number) }),
               detail: order.customerName,
               to: cabinetPath(slug, 'orders', order.id),
             })),

@@ -1,19 +1,19 @@
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/app'
-import { cn, plural } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { commonMessages, useLocale, useT } from '@/i18n'
 import type { ImportRow, ImportValidation } from '@/api/part-imports'
-import { fieldLabels, issueText } from './import-model'
+import { fieldLabel, issueText } from './import-model'
+import { importReviewMessages } from './import-review-messages'
+import { useCount, useImportT } from './use-import-text'
 
 const PAGE_SIZE = 100
 
-const count = (value: number) =>
-  value.toLocaleString('uk-UA').replace(/\u00a0/g, ' ')
-
 const FILTERS = [
-  { key: 'all', label: 'Усі' },
-  { key: 'ready', label: 'Готові' },
-  { key: 'issues', label: 'З проблемами' },
-  { key: 'decision', label: 'Потребують рішення' },
+  { key: 'all', label: 'filterAll' },
+  { key: 'ready', label: 'filterReady' },
+  { key: 'issues', label: 'filterIssues' },
+  { key: 'decision', label: 'filterDecision' },
 ] as const
 
 /** A blocking issue stops the row; a warning only colours it. */
@@ -97,6 +97,10 @@ export function ImportReviewStep({
   busy: boolean
   editable: boolean
 }) {
+  const { locale } = useLocale()
+  const t = useImportT(importReviewMessages)
+  const tc = useT(commonMessages)
+  const count = useCount()
   const [filter, setFilter] = useState<string>('all')
   const picked = useMemo(() => new Set(selected), [selected])
 
@@ -135,37 +139,40 @@ export function ImportReviewStep({
     <div className="flex min-w-0 flex-col gap-3.5">
       <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,190px),1fr))] gap-px overflow-hidden rounded-[20px] border">
         <Kpi
-          label="Майбутніх позицій"
+          label={t('futureItems')}
           meta={
             rows.length - chosen.length === 0
-              ? 'нічого не виключено'
-              : `${count(rows.length - chosen.length)} ${plural(rows.length - chosen.length, ['рядок виключено', 'рядки виключено', 'рядків виключено'])}`
+              ? t('nothingExcluded')
+              : t('rowsExcluded', { count: rows.length - chosen.length })
           }
-          unit={`з ${count(rowTotal)}`}
+          unit={t('ofTotal', { count: count(rowTotal) })}
           value={count(chosen.length)}
         />
         <Kpi
-          label="Одиниць товару"
-          meta="позиція може мати кілька одиниць"
-          unit="шт"
+          label={t('units')}
+          meta={t('unitsMeta')}
+          unit={t('pieces')}
           value={count(units)}
         />
         <Kpi
-          label="Рядків з проблемами"
+          label={t('rowsWithIssues')}
           meta={
             counts.decision === 0
-              ? 'усі на цій сторінці'
-              : `${count(counts.decision)} ${plural(counts.decision, ['потребує рішення', 'потребують рішення', 'потребують рішення'])}`
+              ? t('allOnThisPage')
+              : t('needDecision', { count: counts.decision })
           }
           tone={counts.issues > 0 ? 'warn' : 'plain'}
           value={count(counts.issues)}
         />
         <Kpi
-          label="Нових сутностей"
+          label={t('newEntities')}
           meta={
             validation === null
-              ? 'порахується на кроці підтвердження'
-              : `${count(validation.plannedZones)} зон · ${count(validation.plannedIntakes)} надходжень`
+              ? t('countedOnConfirm')
+              : t('zonesAndIntakes', {
+                  zones: count(validation.plannedZones),
+                  intakes: count(validation.plannedIntakes),
+                })
           }
           value={
             validation === null
@@ -188,21 +195,15 @@ export function ImportReviewStep({
         >
           <div className="min-w-0 flex-[1_1_320px]">
             <p className="text-state-warn text-[15px] font-bold">
-              {count(chosenProblems.length)}{' '}
-              {plural(chosenProblems.length, [
-                'рядок потребує рішення',
-                'рядки потребують рішення',
-                'рядків потребують рішення',
-              ])}
+              {t('rowsNeedDecision', { count: chosenProblems.length })}
             </p>
             <p className="text-app-muted mt-1.5 text-[14px] leading-6 text-pretty">
-              Виправте їх або виключіть із цього імпорту. Редагувати комірки тут
-              не можна — змініть зіставлення колонок або сам файл.
+              {t('fixOrExclude')}
             </p>
           </div>
           <div className="flex flex-wrap gap-2.5">
             <Button onClick={() => setFilter('issues')}>
-              Показати проблемні
+              {t('showProblems')}
             </Button>
             <Button
               disabled={!editable}
@@ -214,7 +215,7 @@ export function ImportReviewStep({
                 )
               }
             >
-              Виключити всі {count(chosenProblems.length)}
+              {t('excludeAll', { count: count(chosenProblems.length) })}
             </Button>
           </div>
         </div>
@@ -222,7 +223,7 @@ export function ImportReviewStep({
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div
-          aria-label="Групи рядків"
+          aria-label={t('rowGroups')}
           className="border-app-line bg-app-raised flex max-w-full flex-wrap gap-1 rounded-[12px] border p-1"
           role="group"
         >
@@ -241,7 +242,7 @@ export function ImportReviewStep({
                 onClick={() => setFilter(option.key)}
                 type="button"
               >
-                {option.label}{' '}
+                {t(option.label)}{' '}
                 <span
                   className={cn(
                     'font-mono text-[11px] font-medium',
@@ -256,9 +257,7 @@ export function ImportReviewStep({
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-app-dim text-[13px]">
-            {filter === 'all'
-              ? 'Фільтр не застосований'
-              : 'Фільтр застосований'}
+            {filter === 'all' ? t('filterOff') : t('filterOn')}
           </span>
           <Button
             disabled={!editable}
@@ -276,8 +275,8 @@ export function ImportReviewStep({
             }
           >
             {chosen.length === rows.length
-              ? 'Зняти вибір'
-              : `Вибрати всі ${count(rows.length)}`}
+              ? t('clearSelection')
+              : t('selectAll', { count: count(rows.length) })}
           </Button>
         </div>
       </div>
@@ -285,17 +284,17 @@ export function ImportReviewStep({
       <div className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border">
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-[14px]">
-            <caption className="sr-only">Майбутні позиції імпорту</caption>
+            <caption className="sr-only">{t('tableCaption')}</caption>
             <thead>
               <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
                 <th className="w-12 px-5.5 py-2.5 text-left">
-                  <span className="sr-only">Вибір</span>
+                  <span className="sr-only">{t('choice')}</span>
                 </th>
-                <th className="px-3 py-2.5 text-left">Рядок</th>
-                <th className="px-3 py-2.5 text-left">Майбутня позиція</th>
-                <th className="px-3 py-2.5 text-right">К-сть</th>
-                <th className="px-3 py-2.5 text-right">Ціна</th>
-                <th className="px-3 py-2.5 text-left">Стан рядка</th>
+                <th className="px-3 py-2.5 text-left">{t('row')}</th>
+                <th className="px-3 py-2.5 text-left">{t('futureItem')}</th>
+                <th className="px-3 py-2.5 text-right">{t('quantity')}</th>
+                <th className="px-3 py-2.5 text-right">{t('price')}</th>
+                <th className="px-3 py-2.5 text-left">{t('rowState')}</th>
               </tr>
             </thead>
             <tbody>
@@ -315,7 +314,9 @@ export function ImportReviewStep({
                   >
                     <td className="px-5.5 py-3.5">
                       <input
-                        aria-label={`Імпортувати рядок ${String(row.sourceRow)}`}
+                        aria-label={t('importRow', {
+                          row: String(row.sourceRow),
+                        })}
                         checked={on}
                         className="accent-brand size-4.5"
                         disabled={!editable}
@@ -335,7 +336,7 @@ export function ImportReviewStep({
                           on ? 'text-app-ink' : 'text-app-dim',
                         )}
                       >
-                        {row.draft?.values['Name'] ?? 'Не зіставлено'}
+                        {row.draft?.values['Name'] ?? t('notMapped')}
                       </span>
                       <span className="text-app-muted mt-0.5 block font-mono text-[12.5px]">
                         {[
@@ -375,7 +376,7 @@ export function ImportReviewStep({
                             aria-hidden
                             className="size-1.5 rounded-full bg-current"
                           />
-                          Готово
+                          {t('ready')}
                         </span>
                       ) : (
                         <ul className="grid gap-2">
@@ -389,10 +390,10 @@ export function ImportReviewStep({
                                     : 'text-state-danger',
                                 )}
                               >
-                                {fieldLabels[issue.field] ?? issue.field}
+                                {fieldLabel(issue.field, locale)}
                               </p>
                               <p className="text-app-muted mt-0.5 text-[12.5px] leading-5 text-pretty">
-                                {issueText(issue.code)}
+                                {issueText(issue.code, locale)}
                               </p>
                               {issue.code === 'DUPLICATE_DECISION_REQUIRED' ? (
                                 <Button
@@ -403,8 +404,8 @@ export function ImportReviewStep({
                                   }
                                 >
                                   {decided
-                                    ? 'Створюємо окремо'
-                                    : 'Створити окремо'}
+                                    ? t('creatingSeparately')
+                                    : t('createSeparately')}
                                 </Button>
                               ) : null}
                             </li>
@@ -420,15 +421,18 @@ export function ImportReviewStep({
         </div>
         <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-t px-5.5 py-4">
           <p className="text-app-dim text-[13px]">
-            Показано {count(visible.length)} з {count(rowTotal)} · по{' '}
-            {count(PAGE_SIZE)} рядків на сторінку
+            {t('shown', {
+              shown: count(visible.length),
+              total: count(rowTotal),
+              size: count(PAGE_SIZE),
+            })}
           </p>
           <span className="flex items-center gap-2.5">
             <Button
               disabled={rowPage === 1}
               onClick={() => onRowPage(rowPage - 1)}
             >
-              Назад
+              {tc('back')}
             </Button>
             <span className="text-app-muted font-mono text-[13px] tabular-nums">
               {rowPage}
@@ -437,7 +441,7 @@ export function ImportReviewStep({
               disabled={rowPage * PAGE_SIZE >= rowTotal}
               onClick={() => onRowPage(rowPage + 1)}
             >
-              Далі
+              {tc('next')}
             </Button>
           </span>
         </div>
@@ -447,16 +451,15 @@ export function ImportReviewStep({
         <dl className="flex flex-wrap items-center gap-x-8 gap-y-2">
           <div>
             <dt className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
-              Вибрано
+              {t('selected')}
             </dt>
             <dd className="text-app-ink mt-1 text-[16px] font-bold">
-              {count(chosen.length)}{' '}
-              {plural(chosen.length, ['позиція', 'позиції', 'позицій'])}
+              {t('items', { count: chosen.length })}
             </dd>
           </div>
           <div>
             <dt className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
-              Одиниць товару
+              {t('units')}
             </dt>
             <dd className="text-app-ink mt-1 font-mono text-[16px] font-medium">
               {count(units)}
@@ -464,7 +467,7 @@ export function ImportReviewStep({
           </div>
           <div>
             <dt className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
-              Виключено
+              {t('excluded')}
             </dt>
             <dd className="text-app-muted mt-1 font-mono text-[16px] font-medium">
               {count(rows.length - chosen.length)}
@@ -477,14 +480,12 @@ export function ImportReviewStep({
           onClick={onContinue}
           variant="primary"
         >
-          До підтвердження
+          {t('toConfirmation')}
         </Button>
       </div>
 
       <p className="text-app-dim text-[13px] leading-6">
-        Ці числа рахуються по завантаженій сторінці — рядки приходять сторінками
-        по {count(PAGE_SIZE)}. Повний підсумок дає крок підтвердження, і саме
-        він іде в роботу.
+        {t('pageNote', { size: count(PAGE_SIZE) })}
       </p>
     </div>
   )

@@ -4,15 +4,17 @@ import { useLocation } from 'react-router'
 import { PageContainer } from '@/components/layout/page-container'
 import { BrandLogo } from '@/components/site/brand-logo'
 import { NavLinks } from '@/components/site/nav-links'
-
-const secondaryLinks = [
-  { label: 'Політика конфіденційності', href: '/privacy' },
-]
+import { useLocale, useT } from '@/i18n'
+import { landingLocaleForPath, landingPathFor } from '@/seo/landing-locales'
+import { siteMessages } from './site-messages'
 
 export function SiteFooter() {
   const { pathname } = useLocation()
   const reducedMotion = useRef(false)
-  const activeNavProps = pathname === '/' ? { activeHref: '#top' } : {}
+  const { locale } = useLocale()
+  const t = useT(siteMessages)
+  const activeNavProps =
+    landingLocaleForPath(pathname) !== null ? { activeHref: '#top' } : {}
 
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return
@@ -36,31 +38,31 @@ export function SiteFooter() {
     <footer className="font-visuelt bg-background px-6 pt-12 pb-0">
       <PageContainer>
         <nav
-          aria-label="Footer"
+          aria-label={t('footerNav')}
           className="flex flex-wrap items-center justify-between gap-6"
         >
           <div className="flex flex-wrap items-center gap-6">
-            <BrandLogo />
+            <BrandLogo href={landingPathFor(locale)} />
             <NavLinks {...activeNavProps} />
           </div>
 
           <div className="flex flex-wrap items-center gap-6">
             <ul role="list" className="flex flex-wrap items-center gap-6">
-              {secondaryLinks.map((link) => (
-                <li key={link.href}>
-                  <a
-                    href={link.href}
-                    className="inline-flex min-h-11 items-center text-[15px] text-neutral-300 hover:text-white"
-                  >
-                    {link.label}
-                  </a>
-                </li>
-              ))}
+              <li>
+                {/* The privacy policy is a Ukrainian legal text only. */}
+                <a
+                  href="/privacy"
+                  hrefLang={locale === 'uk' ? undefined : 'uk'}
+                  className="inline-flex min-h-11 items-center text-[15px] text-neutral-300 hover:text-white"
+                >
+                  {t('privacyPolicy')}
+                </a>
+              </li>
             </ul>
             <button
               type="button"
               onClick={scrollToTop}
-              aria-label="Нагору"
+              aria-label={t('backToTop')}
               className="grid size-14 place-items-center rounded-full text-white ring-1 ring-white/15 transition-colors hover:bg-white/[0.04]"
             >
               <ArrowUp className="size-5" aria-hidden />

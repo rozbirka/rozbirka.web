@@ -1,4 +1,6 @@
 import type { OrderDetail } from '@/api/orders'
+import { translate, type Locale } from '@/i18n'
+import { orderMessages } from './messages'
 
 /**
  * The life of an order as a row of steps. Only the steps Core actually knows
@@ -22,10 +24,14 @@ type Stamp = (value: string) => string
 const at = (stamp: Stamp, when?: string | null, who?: string | null) =>
   when == null ? '' : who == null ? stamp(when) : `${stamp(when)} · ${who}`
 
-export function orderSteps(order: OrderDetail, stamp: Stamp): OrderStep[] {
+export function orderSteps(
+  order: OrderDetail,
+  stamp: Stamp,
+  locale: Locale,
+): OrderStep[] {
   const created: OrderStep = {
     key: 'created',
-    label: 'Створено',
+    label: translate(orderMessages, locale, 'stepCreated'),
     meta: at(stamp, order.createdAt, order.createdByName),
     state: 'done',
   }
@@ -35,7 +41,7 @@ export function orderSteps(order: OrderDetail, stamp: Stamp): OrderStep[] {
       created,
       {
         key: 'cancelled',
-        label: 'Скасовано',
+        label: translate(orderMessages, locale, 'statusCancelled'),
         meta: at(stamp, order.cancelledAt, order.cancelledByName),
         state: 'current',
       },
@@ -53,7 +59,7 @@ export function orderSteps(order: OrderDetail, stamp: Stamp): OrderStep[] {
   // order leaves it ahead.
   const paid: OrderStep = {
     key: 'confirmed',
-    label: 'Підтверджено',
+    label: translate(orderMessages, locale, 'statusConfirmed'),
     meta: at(stamp, order.confirmedAt, order.confirmedByName),
     state: order.status === 'pending' ? 'upcoming' : 'current',
   }
@@ -66,7 +72,7 @@ export function orderSteps(order: OrderDetail, stamp: Stamp): OrderStep[] {
       paid,
       {
         key: 'refunded',
-        label: 'Повернено',
+        label: translate(orderMessages, locale, 'statusRefunded'),
         meta: at(stamp, order.refundedAt, order.refundedByName),
         state: 'current',
       },

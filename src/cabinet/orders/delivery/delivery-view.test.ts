@@ -96,6 +96,7 @@ it('walks the lifecycle in Core order and marks the furthest step reached', () =
   const steps = lifecycle(
     delivery({ dispatchedAt: '2026-09-22T08:04:00Z' }),
     shipment(),
+    'uk',
   )
 
   expect(steps.map((step) => [step.label, step.done, step.current])).toEqual([
@@ -104,34 +105,37 @@ it('walks the lifecycle in Core order and marks the furthest step reached', () =
     ['Передано перевізнику', true, true],
     ['Отримано', false, false],
   ])
-  expect(steps[0]?.meta).toBe('21.09 · 11:02')
+  // Stamped in the business time zone (Kyiv, UTC+3 in September).
+  expect(steps[0]?.meta).toBe('21.09 · 14:02')
   expect(steps[3]?.meta).toBe('')
 })
 
 it('does not call an order paid while anything is still owed', () => {
-  const steps = lifecycle(delivery({ outstandingUah: 1200 }), null)
+  const steps = lifecycle(delivery({ outstandingUah: 1200 }), null, 'uk')
 
   expect(steps[0]).toMatchObject({ done: false, meta: '' })
   expect(steps[0]?.current).toBe(false)
 })
 
 it('names the order and the parcel separately', () => {
-  expect(orderChip(delivery({ outstandingUah: 1200 })).label).toBe(
+  expect(orderChip(delivery({ outstandingUah: 1200 }), 'uk').label).toBe(
     'Очікує · є залишок',
   )
-  expect(orderChip(delivery()).label).toBe('Очікує · оплачене')
-  expect(orderChip(delivery({ receivedAt: 'x' })).label).toBe('Підтверджене')
-  expect(orderChip(delivery({ returnedAt: 'x' })).label).toBe('Повернене')
-
-  expect(shipmentChip(delivery(), null).label).toBe('ТТН не створена')
-  expect(shipmentChip(delivery(), shipment()).label).toBe('ТТН створена')
-  expect(shipmentChip(delivery({ dispatchedAt: 'x' }), shipment()).label).toBe(
-    'Передано перевізнику',
+  expect(orderChip(delivery(), 'uk').label).toBe('Очікує · оплачене')
+  expect(orderChip(delivery({ receivedAt: 'x' }), 'uk').label).toBe(
+    'Підтверджене',
   )
+  expect(orderChip(delivery({ returnedAt: 'x' }), 'uk').label).toBe('Повернене')
+
+  expect(shipmentChip(delivery(), null, 'uk').label).toBe('ТТН не створена')
+  expect(shipmentChip(delivery(), shipment(), 'uk').label).toBe('ТТН створена')
+  expect(
+    shipmentChip(delivery({ dispatchedAt: 'x' }), shipment(), 'uk').label,
+  ).toBe('Передано перевізнику')
 })
 
 it('reads post-payment against what the order still owes', () => {
-  const matching = shipmentFacts(delivery(), shipment())
+  const matching = shipmentFacts(delivery(), shipment(), 'uk')
   expect(matching[1]).toMatchObject({
     label: 'Післяплата',
     note: 'дорівнює залишку',
@@ -141,6 +145,7 @@ it('reads post-payment against what the order still owes', () => {
   const drifted = shipmentFacts(
     delivery({ outstandingUah: 1200 }),
     shipment({ codUah: 0 }),
+    'uk',
   )
   expect(drifted[1]).toMatchObject({
     note: 'не дорівнює залишку',
@@ -149,7 +154,7 @@ it('reads post-payment against what the order still owes', () => {
 })
 
 it('sums the parcel and keeps its dimensions beside it', () => {
-  expect(shipmentFacts(delivery(), shipment())[2]).toMatchObject({
+  expect(shipmentFacts(delivery(), shipment(), 'uk')[2]).toMatchObject({
     value: '1 місце · 42 кг',
     note: '60 × 40 × 35 см',
   })
@@ -158,25 +163,33 @@ it('sums the parcel and keeps its dimensions beside it', () => {
 it('offers exactly the step the order is waiting for', () => {
   // An unpaid order is not waiting for money: the balance rides along as the
   // post-payment, so the waybill is still the next move.
-  expect(primaryAction(delivery({ outstandingUah: 1200 }), null).kind).toBe(
-    'create',
-  )
-  expect(primaryAction(delivery(), null).kind).toBe('create')
-  expect(primaryAction(delivery(), shipment()).kind).toBe('dispatch')
-  expect(primaryAction(delivery({ dispatchedAt: 'x' }), shipment()).kind).toBe(
-    'receive',
-  )
   expect(
-    primaryAction(delivery({ dispatchedAt: 'x', receivedAt: 'y' }), shipment())
-      .kind,
+    primaryAction(delivery({ outstandingUah: 1200 }), null, 'uk').kind,
+  ).toBe('create')
+  expect(primaryAction(delivery(), null, 'uk').kind).toBe('create')
+  expect(primaryAction(delivery(), shipment(), 'uk').kind).toBe('dispatch')
+  expect(
+    primaryAction(delivery({ dispatchedAt: 'x' }), shipment(), 'uk').kind,
+  ).toBe('receive')
+  expect(
+    primaryAction(
+      delivery({ dispatchedAt: 'x', receivedAt: 'y' }),
+      shipment(),
+      'uk',
+    ).kind,
   ).toBe('return')
   expect(
-    primaryAction(delivery({ returnedAt: 'z' }), shipment()).kind,
+    primaryAction(delivery({ returnedAt: 'z' }), shipment(), 'uk').kind,
   ).toBeNull()
 })
 
 it('does not treat an outstanding balance as an obstacle to a waybill', () => {
-  const owing = readiness(delivery({ outstandingUah: 1200 }), shipment(), true)
+  const owing = readiness(
+    delivery({ outstandingUah: 1200 }),
+    shipment(),
+    true,
+    'uk',
+  )
 
   expect(readinessPassed(owing)).toBe(true)
   expect(owing[0]).toMatchObject({
@@ -184,7 +197,7 @@ it('does not treat an outstanding balance as an obstacle to a waybill', () => {
     ok: true,
   })
 
-  const ready = readiness(delivery(), shipment(), true)
+  const ready = readiness(delivery(), shipment(), true, 'uk')
   expect(readinessPassed(ready)).toBe(true)
   // The route and the parcel are the carrier's call, not ours.
   expect(ready.at(-1)).toMatchObject({ deferred: true, ok: true })
@@ -201,6 +214,7 @@ it('does not report a deposit nobody has worked out as short by nothing', () => 
     }),
     shipment(),
     true,
+    'uk',
   )
 
   expect(checks.find((check) => check.key === 'deposit')).toMatchObject({
@@ -224,6 +238,7 @@ it('lets a yard that asks for no deposit ship without one', () => {
     }),
     shipment(),
     true,
+    'uk',
   )
 
   expect(checks.find((check) => check.key === 'deposit')).toMatchObject({
@@ -238,6 +253,7 @@ it('counts a stale carrier quote as a failed check', () => {
     delivery(),
     shipment({ quoteAt: '2026-01-01T00:00:00Z' }),
     true,
+    'uk',
   )
 
   expect(stale.find((check) => check.key === 'quote')).toMatchObject({
@@ -250,20 +266,22 @@ it('counts a stale carrier quote as a failed check', () => {
 })
 
 it('keeps a fresh order out only when the fix lives somewhere else', () => {
-  const fresh = readiness(delivery(), null, false)
+  const fresh = readiness(delivery(), null, false, 'uk')
 
   // Nothing calculated, no deposit, no waybill — and still nothing blocking,
   // because all of that is done on the next screen.
   const blocked = readinessBlocks(fresh)
   expect(blocked.map((check) => check.key)).toEqual(['dispatch-point'])
-  expect(readinessNextStep(fresh).title).toBe(
+  expect(readinessNextStep(fresh, 'uk').title).toBe(
     'Спершу треба виправити налаштування',
   )
 
-  expect(readinessBlocks(readiness(delivery(), null, true))).toHaveLength(0)
-  expect(readinessNextStep(readiness(delivery(), null, true)).title).toBe(
-    'Наступний крок — розрахувати доставку',
+  expect(readinessBlocks(readiness(delivery(), null, true, 'uk'))).toHaveLength(
+    0,
   )
+  expect(
+    readinessNextStep(readiness(delivery(), null, true, 'uk'), 'uk').title,
+  ).toBe('Наступний крок — розрахувати доставку')
 })
 
 it('does not call an untouched order partly paid', () => {
@@ -271,14 +289,15 @@ it('does not call an untouched order partly paid', () => {
   expect(
     paymentStanding(
       delivery({ appliedUah: 0, outstandingUah: 4000, payments: [] }),
+      'uk',
     ),
   ).toEqual({ label: 'Не оплачено', tone: 'dim' })
 
   expect(
-    paymentStanding(delivery({ appliedUah: 1000, outstandingUah: 3000 })),
+    paymentStanding(delivery({ appliedUah: 1000, outstandingUah: 3000 }), 'uk'),
   ).toEqual({ label: 'Оплачено частково', tone: 'warn' })
 
-  expect(paymentStanding(delivery())).toEqual({
+  expect(paymentStanding(delivery(), 'uk')).toEqual({
     label: 'Оплачено повністю',
     tone: 'ok',
   })

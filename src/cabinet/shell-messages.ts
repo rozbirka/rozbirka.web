@@ -1,0 +1,193 @@
+import { defineMessages } from '@/i18n'
+
+/** Cabinet frame: navigation, tenant switching, Cmd+K and shell states. */
+export const shellMessages = defineMessages({
+  uk: {
+    'nav.desktop': 'Навігація кабінету',
+    'nav.tablet': 'Навігація планшета',
+    'nav.mobile': 'Мобільна навігація',
+    'nav.showMenu': 'Показати меню',
+    'nav.hideMenu': 'Сховати меню',
+    'nav.more': 'Ще',
+    'nav.menuTitle': 'Меню кабінету',
+    'nav.closeMenu': 'Закрити меню',
+    'nav.menuDescription': 'Навігація та перемикання між розбірками',
+    'nav.currentTenant': 'Поточна розбірка',
+    'nav.logout': 'Вийти',
+    'tenant.switch': 'Перемкнути розбірку',
+    'tenant.switching': 'Перемикаємо…',
+    'palette.title': 'Пошук по кабінету',
+    'palette.placeholder': 'Розділ, деталь, авто, клієнт або замовлення',
+    'palette.typeMore': 'Наберіть принаймні дві літери.',
+    'palette.searching': 'Шукаємо…',
+    'palette.nothing': 'Нічого не знайшли.',
+    'palette.modules': 'Розділи',
+    'palette.parts': 'Деталі',
+    'palette.cars': 'Автомобілі',
+    'palette.customers': 'Клієнти',
+    'palette.orders': 'Замовлення',
+    'palette.order': 'Замовлення №{number}',
+    'offline.title': 'Немає звʼязку',
+    'offline.body':
+      'Уже відкрите лишається на екрані, а введене — у формі. Надсилання не пройде, доки мережа не повернеться.',
+    'shell.account': 'Особистий акаунт',
+    'shell.loadingTitle': 'Завантажуємо розбірку…',
+    'shell.loadingLabel': 'Завантаження розбірки',
+    'shell.loadingBody':
+      'Готуємо доступи, тарифи й дані розбірки. Це триває кілька секунд.',
+    'shell.switchingLabel': 'Перемикання розбірки',
+    'shell.switchingTitle': 'Перемикаємо розбірку…',
+    'shell.switchingTo': 'Відкриваємо «{name}»…',
+    'shell.switchingBody':
+      'Закриваємо дані попередньої розбірки, щоб вони не змішалися з новою.',
+    'shell.loadFailedTitle': 'Не вдалося завантажити розбірку',
+    'shell.loadFailedLabel': 'Помилка завантаження розбірки',
+    'shell.loadFailedBody':
+      'Не вдалося отримати доступи до розбірки. Перевірте зв’язок і спробуйте ще раз — дані залишилися на місці.',
+    'shell.cleanupTitle':
+      'Не вдалося безпечно очистити дані попередньої розбірки.',
+    'shell.cleanupLabel': 'Помилка очищення даних розбірки',
+    'shell.cleanupBody':
+      'Дані попередньої розбірки лишилися в пам’яті застосунку. Перезапустіть його, щоб відкрити наступну розбірку з чистими даними.',
+    'shell.restart': 'Перезапустити застосунок',
+    'shell.notFoundTitle': 'Розбірку не знайдено',
+    'shell.notFoundLabel': 'Невідома розбірка',
+    'shell.notFoundHome':
+      'Ця адреса не веде до жодної з ваших розбірок. Перевірте посилання або поверніться на головну сторінку.',
+    'shell.notFoundActive':
+      'Ця адреса не веде до жодної з ваших розбірок. Перевірте посилання або відкрийте активну розбірку.',
+    'shell.inactiveTitle': 'Розбірка неактивна',
+    'shell.inactiveLabel': 'Неактивна розбірка',
+    'shell.inactiveHome':
+      'Доступ до цієї розбірки призупинено. Попросіть власника поновити її або поверніться на головну сторінку.',
+    'shell.inactiveActive':
+      'Доступ до цієї розбірки призупинено. Відкрийте активну розбірку або попросіть власника поновити цю.',
+    'shell.toHome': 'На головну',
+    'shell.toActive': 'До активної розбірки',
+  },
+  'en-GB': {
+    'nav.desktop': 'Cabinet navigation',
+    'nav.tablet': 'Tablet navigation',
+    'nav.mobile': 'Mobile navigation',
+    'nav.showMenu': 'Show menu',
+    'nav.hideMenu': 'Hide menu',
+    'nav.more': 'More',
+    'nav.menuTitle': 'Cabinet menu',
+    'nav.closeMenu': 'Close menu',
+    'nav.menuDescription': 'Navigation and switching between businesses',
+    'nav.currentTenant': 'Current business',
+    'nav.logout': 'Log out',
+    'tenant.switch': 'Switch business',
+    'tenant.switching': 'Switching…',
+    'palette.title': 'Search the cabinet',
+    'palette.placeholder': 'Section, part, car, customer or order',
+    'palette.typeMore': 'Type at least two letters.',
+    'palette.searching': 'Searching…',
+    'palette.nothing': 'Nothing found.',
+    'palette.modules': 'Sections',
+    'palette.parts': 'Parts',
+    'palette.cars': 'Cars',
+    'palette.customers': 'Customers',
+    'palette.orders': 'Orders',
+    'palette.order': 'Order No. {number}',
+    'offline.title': 'No connection',
+    'offline.body':
+      'What’s open stays on screen and what you’ve typed stays in the form. Nothing can be sent until the network is back.',
+    'shell.account': 'Personal account',
+    'shell.loadingTitle': 'Loading business…',
+    'shell.loadingLabel': 'Loading business',
+    'shell.loadingBody':
+      'Getting access, plans and business data ready. This takes a few seconds.',
+    'shell.switchingLabel': 'Switching business',
+    'shell.switchingTitle': 'Switching business…',
+    'shell.switchingTo': 'Opening “{name}”…',
+    'shell.switchingBody':
+      'Closing the previous business’s data so it doesn’t mix with the new one.',
+    'shell.loadFailedTitle': 'Couldn’t load the business',
+    'shell.loadFailedLabel': 'Business loading error',
+    'shell.loadFailedBody':
+      'Couldn’t get your access for this business. Check your connection and try again — your data is safe.',
+    'shell.cleanupTitle': 'Couldn’t safely clear the previous business’s data.',
+    'shell.cleanupLabel': 'Business data clean-up error',
+    'shell.cleanupBody':
+      'The previous business’s data is still in the app’s memory. Restart the app to open the next business with clean data.',
+    'shell.restart': 'Restart the app',
+    'shell.notFoundTitle': 'Business not found',
+    'shell.notFoundLabel': 'Unknown business',
+    'shell.notFoundHome':
+      'This address doesn’t lead to any of your businesses. Check the link or go back to the home page.',
+    'shell.notFoundActive':
+      'This address doesn’t lead to any of your businesses. Check the link or open your active business.',
+    'shell.inactiveTitle': 'Business inactive',
+    'shell.inactiveLabel': 'Inactive business',
+    'shell.inactiveHome':
+      'Access to this business has been suspended. Ask the owner to restore it or go back to the home page.',
+    'shell.inactiveActive':
+      'Access to this business has been suspended. Open your active business or ask the owner to restore this one.',
+    'shell.toHome': 'Go to home page',
+    'shell.toActive': 'Go to active business',
+  },
+  pl: {
+    'nav.desktop': 'Nawigacja panelu',
+    'nav.tablet': 'Nawigacja tabletu',
+    'nav.mobile': 'Nawigacja mobilna',
+    'nav.showMenu': 'Pokaż menu',
+    'nav.hideMenu': 'Ukryj menu',
+    'nav.more': 'Więcej',
+    'nav.menuTitle': 'Menu panelu',
+    'nav.closeMenu': 'Zamknij menu',
+    'nav.menuDescription': 'Nawigacja i przełączanie między firmami',
+    'nav.currentTenant': 'Bieżąca firma',
+    'nav.logout': 'Wyloguj',
+    'tenant.switch': 'Przełącz firmę',
+    'tenant.switching': 'Przełączanie…',
+    'palette.title': 'Szukaj w panelu',
+    'palette.placeholder': 'Sekcja, część, auto, klient lub zamówienie',
+    'palette.typeMore': 'Wpisz co najmniej dwie litery.',
+    'palette.searching': 'Szukamy…',
+    'palette.nothing': 'Nic nie znaleziono.',
+    'palette.modules': 'Sekcje',
+    'palette.parts': 'Części',
+    'palette.cars': 'Samochody',
+    'palette.customers': 'Klienci',
+    'palette.orders': 'Zamówienia',
+    'palette.order': 'Zamówienie nr {number}',
+    'offline.title': 'Brak połączenia',
+    'offline.body':
+      'To, co otwarte, zostaje na ekranie, a wpisane dane — w formularzu. Wysyłanie nie zadziała, dopóki sieć nie wróci.',
+    'shell.account': 'Konto osobiste',
+    'shell.loadingTitle': 'Wczytujemy firmę…',
+    'shell.loadingLabel': 'Wczytywanie firmy',
+    'shell.loadingBody':
+      'Przygotowujemy dostępy, plany i dane firmy. To potrwa kilka sekund.',
+    'shell.switchingLabel': 'Przełączanie firmy',
+    'shell.switchingTitle': 'Przełączamy firmę…',
+    'shell.switchingTo': 'Otwieramy „{name}”…',
+    'shell.switchingBody':
+      'Zamykamy dane poprzedniej firmy, żeby nie pomieszały się z nową.',
+    'shell.loadFailedTitle': 'Nie udało się wczytać firmy',
+    'shell.loadFailedLabel': 'Błąd wczytywania firmy',
+    'shell.loadFailedBody':
+      'Nie udało się pobrać dostępów do firmy. Sprawdź połączenie i spróbuj ponownie — dane zostały na miejscu.',
+    'shell.cleanupTitle':
+      'Nie udało się bezpiecznie wyczyścić danych poprzedniej firmy.',
+    'shell.cleanupLabel': 'Błąd czyszczenia danych firmy',
+    'shell.cleanupBody':
+      'Dane poprzedniej firmy zostały w pamięci aplikacji. Uruchom ją ponownie, żeby otworzyć następną firmę z czystymi danymi.',
+    'shell.restart': 'Uruchom aplikację ponownie',
+    'shell.notFoundTitle': 'Nie znaleziono firmy',
+    'shell.notFoundLabel': 'Nieznana firma',
+    'shell.notFoundHome':
+      'Ten adres nie prowadzi do żadnej z Twoich firm. Sprawdź link lub wróć na stronę główną.',
+    'shell.notFoundActive':
+      'Ten adres nie prowadzi do żadnej z Twoich firm. Sprawdź link lub otwórz aktywną firmę.',
+    'shell.inactiveTitle': 'Firma nieaktywna',
+    'shell.inactiveLabel': 'Nieaktywna firma',
+    'shell.inactiveHome':
+      'Dostęp do tej firmy został zawieszony. Poproś właściciela o jego przywrócenie lub wróć na stronę główną.',
+    'shell.inactiveActive':
+      'Dostęp do tej firmy został zawieszony. Otwórz aktywną firmę lub poproś właściciela o przywrócenie tej.',
+    'shell.toHome': 'Na stronę główną',
+    'shell.toActive': 'Do aktywnej firmy',
+  },
+})

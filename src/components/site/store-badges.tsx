@@ -1,4 +1,7 @@
 import type { MouseEventHandler, SVGProps } from 'react'
+import { useT } from '@/i18n'
+import { cn } from '@/lib/utils'
+import { siteMessages } from './site-messages'
 
 const APP_STORE_URL = 'https://apps.apple.com/ua/app/rozbirka/id6762130912'
 
@@ -7,29 +10,34 @@ export function AppStoreBadge({
 }: {
   onClick?: MouseEventHandler<HTMLAnchorElement>
 }) {
+  const t = useT(siteMessages)
   return (
     <a
       href={APP_STORE_URL}
       target="_blank"
       rel="noreferrer"
       onClick={onClick}
-      aria-label="Завантажити в App Store"
+      aria-label={t('appStoreLabel')}
       className="flex min-h-12 items-center gap-2.5 rounded-full bg-black px-4 ring-1 ring-white/10 transition-colors hover:bg-white/[0.08]"
     >
       <AppleLogo className="size-7 text-white" />
-      <StoreBadgeText line1="Available on the" line2="App Store" />
+      <StoreBadgeText line1={t('appStoreLine1')} line2="App Store" />
     </a>
   )
 }
 
-export function GooglePlayBadge() {
+export function GooglePlayBadge({ className }: { className?: string }) {
+  const t = useT(siteMessages)
   return (
     <div
-      aria-label="Google Play — скоро"
-      className="flex min-h-12 items-center gap-2.5 rounded-full bg-black/70 px-4 text-white/70 ring-1 ring-white/10"
+      aria-label={t('googlePlayLabel')}
+      className={cn(
+        'flex min-h-12 items-center gap-2.5 rounded-full bg-black/70 px-4 text-white/70 ring-1 ring-white/10',
+        className,
+      )}
     >
       <GooglePlayLogo className="size-6 opacity-70" />
-      <StoreBadgeText line1="Google Play" line2="Скоро" />
+      <StoreBadgeText line1="Google Play" line2={t('googlePlaySoon')} />
     </div>
   )
 }

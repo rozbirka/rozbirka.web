@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { FALLBACK_LANDING_PLANS, resolveLandingPlans } from './landing-plans'
+import {
+  FALLBACK_LANDING_PLANS,
+  fallbackLandingPlans,
+  resolveLandingPlans,
+} from './landing-plans'
 
 export const apiPlans = [
   {
@@ -109,5 +113,39 @@ describe('landing plan contract', () => {
     expect(text).not.toMatch(
       /api access|multi-location|priority support|analytics|bulk export/i,
     )
+  })
+
+  it('localizes plan copy without changing names, prices or the contract', () => {
+    expect(resolveLandingPlans(apiPlans, 'en-GB')).toEqual([
+      expect.objectContaining({
+        code: 'pro_monthly',
+        name: 'Pro',
+        price: '$59',
+        period: 'month',
+        description: 'Everything you need to scale your sales',
+        perks: [
+          '20 cars, 2,000 parts',
+          '5 users, 2 tills',
+          'Batches, reports and QR codes',
+        ],
+        ctaLabel: 'Start 14-day free trial',
+      }),
+      expect.objectContaining({
+        code: 'enterprise_monthly',
+        name: 'Enterprise',
+        price: '$299',
+        ctaLabel: 'Choose',
+      }),
+    ])
+    expect(resolveLandingPlans(null, 'pl')).toEqual(fallbackLandingPlans('pl'))
+    expect(fallbackLandingPlans('pl')[0]).toMatchObject({
+      period: 'miesiąc',
+      perks: [
+        '20 aut, 2000 części',
+        '5 użytkowników, 2 kasy',
+        'Partie, raporty i kody QR',
+      ],
+    })
+    expect(fallbackLandingPlans()).toEqual(FALLBACK_LANDING_PLANS)
   })
 })
