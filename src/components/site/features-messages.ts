@@ -47,7 +47,7 @@ export const featuresMessages = defineMessages({
 
     ordersTitle: 'Замовлення',
     orders1: 'Збираєш замовлення в кілька кліків: клієнт, деталь, ціна',
-    orders2: 'Ціна фіксується в доларах — стабільно, без прив’язки до курсу',
+    orders2: 'Ціни ведуться у валюті обліку, яку обираєш для розбірки',
     orders3: 'Оплата гнучка: кілька платежів, різні валюти й рахунки',
     orders4: 'Бачиш статус від резерву до відвантаження',
     orders5: 'Клієнт привʼязаний — вся історія покупок під рукою',
@@ -125,7 +125,8 @@ export const featuresMessages = defineMessages({
 
     ordersTitle: 'Orders',
     orders1: 'Build an order in a few clicks: customer, part, price',
-    orders2: 'Prices are fixed in dollars — stable, whatever the exchange rate',
+    orders2:
+      'Prices are kept in the accounting currency you choose for your business',
     orders3:
       'Flexible payment: several payments, different currencies and accounts',
     orders4: 'Track status from reservation to dispatch',
@@ -204,7 +205,7 @@ export const featuresMessages = defineMessages({
 
     ordersTitle: 'Zamówienia',
     orders1: 'Składasz zamówienie w kilka kliknięć: klient, część, cena',
-    orders2: 'Cena ustalana w dolarach — stabilnie, niezależnie od kursu',
+    orders2: 'Ceny w walucie rozliczeniowej wybranej dla Twojej firmy',
     orders3: 'Elastyczne płatności: kilka wpłat, różne waluty i konta',
     orders4: 'Widzisz status od rezerwacji do wysyłki',
     orders5: 'Klient przypisany — cała historia zakupów pod ręką',
