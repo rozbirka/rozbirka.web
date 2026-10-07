@@ -6,6 +6,8 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { businessApi } from '@/api/business'
 import type { BillingState, Tenant } from '@/api/types'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
+import { LocaleProvider } from '@/i18n'
+import { BUSINESS_SECTION_IDS } from './business-anchors'
 import { BusinessSettingsScreen } from './business-settings-screen'
 
 vi.mock('@/api/business', () => ({ businessApi: { update: vi.fn() } }))
@@ -258,4 +260,29 @@ it('saves the delivery deposit policy the yard actually keeps', async () => {
   )
   // Turning it off is a real change, so the form offers to save it.
   expect(await screen.findByText(/Відправляєте без передоплати/)).toBeVisible()
+})
+
+it('numbers the sections and anchors region and accounting currency', async () => {
+  const view = render(
+    <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+      <MemoryRouter initialEntries={['/app/koval/settings/business']}>
+        <BusinessSettingsScreen />
+      </MemoryRouter>
+    </LocaleProvider>,
+  )
+
+  const region = view.container.querySelector(`#${BUSINESS_SECTION_IDS.region}`)
+  const currency = await waitFor(() => {
+    const found = view.container.querySelector(
+      `#${BUSINESS_SECTION_IDS.accountingCurrency}`,
+    )
+    expect(found).not.toBeNull()
+    return found
+  })
+  expect(region).toHaveTextContent('02')
+  expect(currency).toHaveTextContent('03')
+  expect(screen.getByRole('heading', { name: 'Warehouses' })).toBeVisible()
+  expect(screen.getByRole('heading', { name: 'Accounting' })).toBeVisible()
+  expect(screen.getByText('Require a delivery deposit')).toBeVisible()
+  expect(screen.queryByText('Валюти й облік')).toBeNull()
 })
