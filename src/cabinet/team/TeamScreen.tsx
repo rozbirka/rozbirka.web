@@ -32,7 +32,9 @@ import {
   type StatusTone,
   Sheet,
 } from '@/components/app'
-import { cn, plural } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { commonMessages, translate, useLocale, useT } from '@/i18n'
+import { roleLabel, teamMessages } from './messages'
 import { Kpi, KpiStrip } from '../redesign-kpi'
 import { RedesignShell, RedesignTitle } from '../redesign-shell'
 import { ALL_PERMISSIONS } from '../access-types'
@@ -65,26 +67,25 @@ interface Confirmation {
 
 type AccessRefreshState = 'ready' | 'refreshing' | 'failed'
 
-const accessLostMessage =
-  'Право керувати командою було змінено. Оновіть права або попросіть власника розбірки повернути доступ.'
+type TeamKey = keyof (typeof teamMessages)['uk']
 
 /** The module each permission belongs to, so a role is composed, not hunted. */
-const permissionGroupTitles: Record<string, string> = {
-  cars: 'Автомобілі',
-  parts: 'Запчастини',
-  orders: 'Замовлення',
-  customers: 'Клієнти',
-  finance: 'Фінанси',
-  intakes: 'Приймання',
-  inventory: 'Інвентаризація',
-  stickers: 'Стікери',
-  reports: 'Звіти',
-  team: 'Команда',
-  billing: 'Підписка',
+const permissionGroupTitles: Record<string, TeamKey> = {
+  cars: 'groupCars',
+  parts: 'groupParts',
+  orders: 'groupOrders',
+  customers: 'groupCustomers',
+  finance: 'groupFinance',
+  intakes: 'groupIntakes',
+  inventory: 'groupInventory',
+  stickers: 'groupStickers',
+  reports: 'groupReports',
+  team: 'groupTeam',
+  billing: 'groupBilling',
 }
 
 const permissionGroups = ALL_PERMISSIONS.reduce<
-  { prefix: string; title: string; permissions: string[] }[]
+  { prefix: string; title: TeamKey | null; permissions: string[] }[]
 >((groups, permission) => {
   const prefix = permission.split('.')[0] ?? permission
   const group = groups.find((candidate) => candidate.prefix === prefix)
@@ -92,25 +93,17 @@ const permissionGroups = ALL_PERMISSIONS.reduce<
   else
     groups.push({
       prefix,
-      title: permissionGroupTitles[prefix] ?? prefix,
+      title: permissionGroupTitles[prefix] ?? null,
       permissions: [permission],
     })
   return groups
 }, [])
 
 const MEMBER_SEGMENTS = [
-  { key: 'all', label: 'Усі' },
-  { key: 'active', label: 'Активні' },
-  { key: 'off', label: 'Вимкнені' },
+  { key: 'all', message: 'segmentAll' },
+  { key: 'active', message: 'segmentActive' },
+  { key: 'off', message: 'segmentOff' },
 ] as const
-
-/** What the team endpoints do not carry, said out loud where it is missing. */
-const NO_LAST_SEEN =
-  'Останній вхід учасника не зберігається — відома лише дата приєднання.'
-const NO_EMAIL =
-  'Пошти в учасника немає — кабінет знає імʼя й телефон, а телефон тут не вказано.'
-const NO_EMAIL_INVITE =
-  'Листів кабінет не надсилає й пошти не питає: запрошення — це код, який ви передаєте людині самі. Місце в тарифі рахується за учасниками, а не за виданими кодами.'
 
 /** Two letters standing in for a photo the API does not keep. */
 const initials = (name: string) =>
@@ -123,15 +116,22 @@ const initials = (name: string) =>
 
 const invitationStatus = (
   invitation: InvitationDto,
-): { label: string; tone: StatusTone } => {
-  if (invitation.isUsed) return { label: 'Використано', tone: 'info' }
-  if (invitation.isRevoked) return { label: 'Відкликано', tone: 'neutral' }
-  if (invitation.isExpired) return { label: 'Прострочено', tone: 'warn' }
-  return { label: 'Активне', tone: 'ok' }
+): { message: TeamKey; tone: StatusTone; active: boolean } => {
+  if (invitation.isUsed)
+    return { message: 'invitationUsed', tone: 'info', active: false }
+  if (invitation.isRevoked)
+    return { message: 'invitationRevoked', tone: 'neutral', active: false }
+  if (invitation.isExpired)
+    return { message: 'invitationExpired', tone: 'warn', active: false }
+  return { message: 'invitationActive', tone: 'ok', active: true }
 }
 
 export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
   const cabinet = useCabinet()
+  const { locale } = useLocale()
+  const t = useT(teamMessages)
+  const tc = useT(commonMessages)
+  const accessLostMessage = t('accessLost')
   const [data, setData] = useState<TeamData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -184,13 +184,11 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
         setData({ tenantId, generation, members, roles, invitations })
     } catch {
       if (!signal.aborted)
-        setError(
-          'Не вдалося завантажити дані команди. Перевірте зв’язок і оновіть сторінку.',
-        )
+        setError(translate(teamMessages, locale, 'loadFailed'))
     } finally {
       if (!signal.aborted) setLoading(false)
     }
-  }, [generation, tenantId])
+  }, [generation, locale, tenantId])
 
   useEffect(() => {
     if (!canView || accessRefreshState !== 'ready') return
@@ -210,12 +208,10 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       return true
     } catch {
       setAccessRefreshState('failed')
-      setAccessWarning(
-        'Дію виконано, але не вдалося оновити права. Натисніть «Оновити права», щоб продовжити роботу.',
-      )
+      setAccessWarning(translate(teamMessages, locale, 'accessRefreshFailed'))
       return false
     }
-  }, [cabinet])
+  }, [cabinet, locale])
 
   const mutate = useCallback(
     async (
@@ -235,7 +231,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
         // A dead request is reported where the user triggered it; a tenant
         // switch is not a failure, it is the old screen going away.
         if (signal.aborted) return false
-        throw new Error('Не вдалося виконати дію. Спробуйте ще раз.')
+        throw new Error(translate(teamMessages, locale, 'actionFailed'))
       }
       if (signal.aborted) return false
 
@@ -243,7 +239,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       await refreshAccess()
       return true
     },
-    [canManage, refreshAccess],
+    [accessLostMessage, canManage, locale, refreshAccess],
   )
 
   const teamData =
@@ -254,20 +250,19 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
     async () => {
       const target = roleAssignmentRef.current
       if (target === null) return false
-      return mutate('Роль учасника оновлено.', (signal) =>
+      return mutate(t('roleUpdated'), (signal) =>
         teamApi.changeRole(target.memberId, target.roleId, { signal }),
       )
     },
     {
-      errorMessage: () =>
-        'Не вдалося змінити роль учасника. Перевірте зв’язок і спробуйте ще раз.',
+      errorMessage: () => t('roleUpdateFailed'),
     },
   )
 
   const memberPermissions = useOperation(
     async () => {
       if (permissionMember === null) return false
-      return mutate('Права учасника оновлено.', (signal) =>
+      return mutate(t('permissionsUpdated'), (signal) =>
         teamApi.updateUserPermissions(
           permissionMember.userId,
           selectedPermissions,
@@ -276,8 +271,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       )
     },
     {
-      errorMessage: () =>
-        'Не вдалося зберегти права. Перевірте зв’язок і спробуйте ще раз.',
+      errorMessage: () => t('permissionsSaveFailed'),
       onSuccess: () => setPermissionMember(null),
     },
   )
@@ -285,13 +279,12 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
   const invitationCreation = useOperation(
     async () => {
       if (!invitationRoleId) return false
-      return mutate('Запрошення створено.', (signal) =>
+      return mutate(t('invitationCreated'), (signal) =>
         teamApi.createInvitation(invitationRoleId, { signal }),
       )
     },
     {
-      errorMessage: () =>
-        'Не вдалося створити запрошення. Перевірте зв’язок і спробуйте ще раз.',
+      errorMessage: () => t('invitationCreateFailed'),
       onSuccess: (created) => {
         if (created) setInvitationDrawerOpen(false)
       },
@@ -316,8 +309,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       return confirmation.confirm()
     },
     {
-      errorMessage: () =>
-        confirmation?.failure ?? 'Не вдалося виконати дію. Спробуйте ще раз.',
+      errorMessage: () => confirmation?.failure ?? t('actionFailed'),
       onSuccess: () => setConfirmation(null),
     },
   )
@@ -339,10 +331,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       setPermissionMember(member)
       setSelectedPermissions(result.permissions)
     } catch {
-      if (!signal.aborted)
-        setError(
-          'Не вдалося завантажити права учасника. Перевірте зв’язок і спробуйте ще раз.',
-        )
+      if (!signal.aborted) setError(t('permissionsLoadFailed'))
     }
   }
 
@@ -372,10 +361,9 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
   if (!canView) {
     return (
       <PageBody>
-        <PageHeader eyebrow="Налаштування доступу" title="Команда" />
+        <PageHeader eyebrow={t('accessEyebrow')} title={t('title')} />
         <Notice role="alert" tone="danger">
-          Недостатньо прав для перегляду команди. Попросіть власника розбірки
-          відкрити вам розділ «Команда».
+          {t('noViewPermission')}
         </Notice>
       </PageBody>
     )
@@ -404,10 +392,10 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
         (one.phone ?? '').toLowerCase().includes(needle),
     )
   const openInvitations = (teamData?.invitations ?? []).filter(
-    (one) => invitationStatus(one).label === 'Активне',
+    (one) => invitationStatus(one).active,
   )
   const invitationHistory = (teamData?.invitations ?? []).filter(
-    (one) => invitationStatus(one).label !== 'Активне',
+    (one) => !invitationStatus(one).active,
   )
   const visibleInvitations = invitationHistoryOpen
     ? [...openInvitations, ...invitationHistory]
@@ -424,10 +412,10 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
             <span className="border-app-line bg-app-raised focus-within:border-app-line-2 flex h-10 w-full min-w-0 items-center gap-2.5 rounded-[10px] border px-3 sm:w-[260px]">
               <Search aria-hidden className="text-app-dim size-4 shrink-0" />
               <input
-                aria-label="Пошук учасників"
+                aria-label={t('searchMembers')}
                 className="text-app-ink placeholder:text-app-dim min-w-0 flex-1 bg-transparent text-[14px] outline-none"
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Імʼя або телефон"
+                placeholder={t('searchPlaceholder')}
                 value={query}
               />
             </span>
@@ -439,17 +427,14 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                 variant="primary"
               >
                 <Plus aria-hidden />
-                Запросити
+                {t('invite')}
               </Button>
             )}
           </>
         }
-        crumb="Налаштування · Команда"
+        crumb={t('crumb')}
       >
-        <RedesignTitle
-          lead="Хто має доступ до складу, продажів і грошей."
-          title="Команда"
-        />
+        <RedesignTitle lead={t('lead')} title={t('title')} />
 
         {feedback && <Notice tone="ok">{feedback}</Notice>}
         {pageError && <Notice tone="danger">{pageError}</Notice>}
@@ -462,7 +447,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                   void refreshAccess()
                 }}
               >
-                Оновити права
+                {t('refreshAccess')}
               </Button>
             }
             role="alert"
@@ -471,28 +456,33 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
             {accessWarning}
           </Notice>
         )}
-        {loading && <SkeletonRows label="Завантажуємо команду…" />}
+        {loading && <SkeletonRows label={t('loading')} />}
 
         {teamData && (
           <>
             <KpiStrip>
               <Kpi
-                label="Учасників"
-                meta={`${String(activeMembers)} ${plural(activeMembers, ['активний', 'активні', 'активних'])}${
+                label={t('kpiMembers')}
+                meta={`${t('activeCount', { count: activeMembers })}${
                   offMembers === 0
                     ? ''
-                    : ` · ${String(offMembers)} ${plural(offMembers, ['вимкнений', 'вимкнені', 'вимкнених'])}`
+                    : ` · ${t('offCount', { count: offMembers })}`
                 }`}
                 value={String(teamData.members.length)}
               />
               <Kpi
-                label="Місць у тарифі"
+                label={t('kpiSeats')}
                 meta={
                   seats === null
-                    ? 'тариф не повідомляє ліміт місць'
+                    ? t('seatsUnknown')
                     : seats.max == null
-                      ? `${planName ?? 'Тариф'} · без обмеження`
-                      : `${planName ?? 'Тариф'} · вільно ${String(Math.max(seats.max - seats.used, 0))}`
+                      ? t('seatsUnlimited', {
+                          plan: planName ?? t('planFallback'),
+                        })
+                      : t('seatsFree', {
+                          plan: planName ?? t('planFallback'),
+                          count: Math.max(seats.max - seats.used, 0),
+                        })
                 }
                 tone={
                   seats?.max != null && seats.used >= seats.max
@@ -508,11 +498,11 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                 }
               />
               <Kpi
-                label="Запрошень діє"
+                label={t('kpiInvitations')}
                 meta={
                   openInvitations.length === 0
-                    ? 'усі коди використані або відкликані'
-                    : 'код вводять під час реєстрації'
+                    ? t('invitationsNone')
+                    : t('invitationsHint')
                 }
                 value={String(openInvitations.length)}
               />
@@ -520,7 +510,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
 
             <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
               <div
-                aria-label="Стан учасника"
+                aria-label={t('memberState')}
                 className="border-app-line bg-app-raised flex min-w-0 flex-wrap gap-1 rounded-[14px] border p-1"
                 role="group"
               >
@@ -537,7 +527,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                     onClick={() => setSegment(one.key)}
                     type="button"
                   >
-                    {one.label}
+                    {t(one.message)}
                     <span className="text-app-dim font-mono text-[12px]">
                       {segmentCounts[one.key]}
                     </span>
@@ -545,12 +535,10 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                 ))}
               </div>
               <p className="text-app-dim text-[13px]">
-                Показано {shownMembers.length} з {teamData.members.length}{' '}
-                {plural(teamData.members.length, [
-                  'учасника',
-                  'учасників',
-                  'учасників',
-                ])}
+                {t('shownMembers', {
+                  shown: shownMembers.length,
+                  count: teamData.members.length,
+                })}
               </p>
             </div>
 
@@ -559,34 +547,40 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
               className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
             >
               <h2 className="sr-only" id="team-members-heading">
-                Учасники
+                {t('members')}
               </h2>
               {shownMembers.length === 0 ? (
                 <p className="text-app-muted px-5.5 py-8 text-[14px]">
-                  Учасників за цим фільтром немає.
+                  {t('noMembersForFilter')}
                 </p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse text-[14px]">
-                    <caption className="sr-only">Учасники команди</caption>
+                    <caption className="sr-only">{t('membersCaption')}</caption>
                     <thead>
                       <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
-                        <th className="px-5.5 py-2.5 text-left">Користувач</th>
-                        <th className="px-3 py-2.5 text-left">Роль</th>
+                        <th className="px-5.5 py-2.5 text-left">
+                          {t('columnUser')}
+                        </th>
+                        <th className="px-3 py-2.5 text-left">
+                          {t('columnRole')}
+                        </th>
                         <th
                           className="px-3 py-2.5 text-left"
-                          title={NO_LAST_SEEN}
+                          title={t('noLastSeen')}
                         >
-                          Активність
+                          {t('columnActivity')}
                         </th>
-                        <th className="px-3 py-2.5 text-left">Статус</th>
+                        <th className="px-3 py-2.5 text-left">
+                          {t('columnStatus')}
+                        </th>
                         {canManageAccess && (
                           // `relative` keeps the visually hidden label's
                           // containing block inside the cell: absolutely
                           // positioned at the page root it would widen the
                           // document and break the 320px floor.
                           <th className="relative px-5.5 py-2.5 text-right">
-                            <span className="sr-only">Дії</span>
+                            <span className="sr-only">{tc('actions')}</span>
                           </th>
                         )}
                       </tr>
@@ -610,7 +604,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                                   {member.name}
                                   {member.userId === myUserId && (
                                     <span className="border-app-line text-app-dim rounded-full border px-2 py-0.5 text-[11px]">
-                                      це ви
+                                      {t('itsYou')}
                                     </span>
                                   )}
                                 </span>
@@ -621,9 +615,9 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                                 ) : (
                                   <span
                                     className="text-app-dim text-[12.5px]"
-                                    title={NO_EMAIL}
+                                    title={t('noEmail')}
                                   >
-                                    пошти й телефону не вказано
+                                    {t('noContact')}
                                   </span>
                                 )}
                               </span>
@@ -633,7 +627,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                             {canManageAccess ? (
                               <SelectInput
                                 aria-busy={roleAssignment.pending}
-                                aria-label={`Роль для ${member.name}`}
+                                aria-label={t('roleFor', { name: member.name })}
                                 className="min-w-40"
                                 onChange={(event) => {
                                   roleAssignmentRef.current = {
@@ -646,24 +640,27 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                               >
                                 {availableRoles.map((role) => (
                                   <option key={role.id} value={role.id}>
-                                    {role.name}
+                                    {roleLabel(role, locale)}
                                   </option>
                                 ))}
                               </SelectInput>
                             ) : (
                               <span className="text-app-muted">
-                                {member.role.name}
+                                {roleLabel(member.role, locale)}
                               </span>
                             )}
                           </td>
                           <td className="text-app-muted px-3 py-3.5">
-                            у команді з <DateValue value={member.joinedAt} />
+                            {t('inTeamSince')}{' '}
+                            <DateValue value={member.joinedAt} />
                           </td>
                           <td className="px-3 py-3.5">
                             <StatusPill
                               tone={member.isActive ? 'ok' : 'neutral'}
                             >
-                              {member.isActive ? 'Активний' : 'Вимкнений'}
+                              {member.isActive
+                                ? t('memberActive')
+                                : t('memberOff')}
                             </StatusPill>
                           </td>
                           {canManageAccess && (
@@ -673,7 +670,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                                   actions={[
                                     {
                                       key: 'permissions',
-                                      label: 'Права',
+                                      label: t('permissions'),
                                       icon: <KeyRound aria-hidden />,
                                       onSelect: () =>
                                         void openPermissions(member),
@@ -681,8 +678,8 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                                     {
                                       key: 'lifecycle',
                                       label: member.isActive
-                                        ? 'Вимкнути'
-                                        : 'Активувати',
+                                        ? t('deactivate')
+                                        : t('activate'),
                                       icon: member.isActive ? (
                                         <PowerOff aria-hidden />
                                       ) : (
@@ -691,19 +688,27 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                                       onSelect: () =>
                                         askConfirmation({
                                           title: member.isActive
-                                            ? 'Вимкнути учасника'
-                                            : 'Активувати учасника',
+                                            ? t('deactivateTitle')
+                                            : t('activateTitle'),
                                           description: member.isActive
-                                            ? `${member.name} втратить доступ до кабінету. Ви зможете активувати цей обліковий запис пізніше.`
-                                            : `${member.name} знову отримає доступ до кабінету з роллю «${member.role.name}».`,
+                                            ? t('deactivateDescription', {
+                                                name: member.name,
+                                              })
+                                            : t('activateDescription', {
+                                                name: member.name,
+                                                role: roleLabel(
+                                                  member.role,
+                                                  locale,
+                                                ),
+                                              }),
                                           failure: member.isActive
-                                            ? 'Не вдалося вимкнути учасника. Перевірте зв’язок і спробуйте ще раз.'
-                                            : 'Не вдалося активувати учасника. Перевірте зв’язок і спробуйте ще раз.',
+                                            ? t('deactivateFailed')
+                                            : t('activateFailed'),
                                           confirm: () =>
                                             mutate(
                                               member.isActive
-                                                ? 'Учасника вимкнено.'
-                                                : 'Учасника активовано.',
+                                                ? t('deactivated')
+                                                : t('activated'),
                                               (signal) =>
                                                 member.isActive
                                                   ? teamApi.deactivateMember(
@@ -719,28 +724,28 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                                     },
                                     {
                                       key: 'delete',
-                                      label: 'Видалити',
+                                      label: tc('delete'),
                                       icon: <Trash2 aria-hidden />,
                                       destructive: true,
                                       onSelect: () =>
                                         askConfirmation({
-                                          title: 'Видалити учасника',
-                                          description: `${member.name} втратить доступ назавжди. Щоб повернути людину в команду, доведеться створити нове запрошення.`,
-                                          failure:
-                                            'Не вдалося видалити учасника. Перевірте зв’язок і спробуйте ще раз.',
+                                          title: t('deleteTitle'),
+                                          description: t('deleteDescription', {
+                                            name: member.name,
+                                          }),
+                                          failure: t('deleteFailed'),
                                           confirm: () =>
-                                            mutate(
-                                              'Учасника видалено.',
-                                              (signal) =>
-                                                teamApi.deleteMember(
-                                                  member.id,
-                                                  { signal },
-                                                ),
+                                            mutate(t('deleted'), (signal) =>
+                                              teamApi.deleteMember(member.id, {
+                                                signal,
+                                              }),
                                             ),
                                         }),
                                     },
                                   ]}
-                                  label={`Дії з учасником ${member.name}`}
+                                  label={t('memberActions', {
+                                    name: member.name,
+                                  })}
                                 />
                               </span>
                             </td>
@@ -753,21 +758,18 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
               )}
               <div className="border-app-line flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t px-5.5 py-3.5">
                 <p className="text-app-dim text-[13px] leading-5 text-pretty">
-                  <span title={NO_LAST_SEEN}>
-                    Останній вхід не зберігається — у колонці «Активність» лише
-                    дата приєднання.
-                  </span>{' '}
+                  <span title={t('noLastSeen')}>{t('lastSeenNote')}</span>{' '}
                   {seats === null
-                    ? 'Скільки місць дає тариф, зараз невідомо.'
+                    ? t('seatsNoteUnknown')
                     : seats.max == null
-                      ? `Зайнято ${String(seats.used)} — тариф не обмежує кількість людей.`
-                      : `Зайнято ${String(seats.used)} з ${String(seats.max)} місць тарифу.`}
+                      ? t('seatsNoteUnlimited', { used: seats.used })
+                      : t('seatsNote', { used: seats.used, max: seats.max })}
                 </p>
                 <Link
                   className="text-brand text-[13px] font-bold underline-offset-4 hover:underline"
                   to={`/app/${cabinet.targetTenant?.slug ?? ''}/settings/billing/overview`}
                 >
-                  Збільшити ліміт
+                  {t('raiseLimit')}
                 </Link>
               </div>
             </section>
@@ -783,16 +785,18 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                     className="text-app-ink text-[15px] font-bold"
                     id="team-invitations-heading"
                   >
-                    Запрошення
+                    {t('invitations')}
                   </h2>
                   <p className="text-app-dim mt-1 text-[13px]">
-                    Передайте активний код людині для реєстрації.
+                    {t('invitationsLead')}
                   </p>
                 </div>
                 <span className="text-app-dim font-mono text-[12px]">
                   {openInvitations.length === 0
-                    ? 'жодного активного'
-                    : `${String(openInvitations.length)} ${plural(openInvitations.length, ['діє', 'діють', 'діють'])}`}
+                    ? t('noActive')
+                    : t('activeInvitations', {
+                        count: openInvitations.length,
+                      })}
                 </span>
               </div>
               <ul className="border-app-line divide-app-line divide-y border-t">
@@ -811,38 +815,41 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                           {item.code}
                         </p>
                         <p className="text-app-dim mt-0.5 text-[12.5px]">
-                          {item.role.name} · діє до{' '}
+                          {t('validUntil', {
+                            role: roleLabel(item.role, locale),
+                          })}{' '}
                           <DateValue value={item.expiresAt} />
                         </p>
                       </div>
-                      <StatusPill tone={status.tone}>{status.label}</StatusPill>
-                      {canManageAccess && status.label === 'Активне' && (
+                      <StatusPill tone={status.tone}>
+                        {t(status.message)}
+                      </StatusPill>
+                      {canManageAccess && status.active && (
                         <span className="shrink-0">
                           <ActionMenu
                             actions={[
                               {
                                 key: 'revoke',
-                                label: 'Відкликати',
+                                label: t('revoke'),
                                 icon: <Ban aria-hidden />,
                                 destructive: true,
                                 onSelect: () =>
                                   askConfirmation({
-                                    title: 'Відкликати запрошення',
-                                    description: `Код ${item.code} перестане працювати. Створіть нове запрошення, якщо доступ ще потрібен.`,
-                                    failure:
-                                      'Не вдалося відкликати запрошення. Перевірте зв’язок і спробуйте ще раз.',
+                                    title: t('revokeTitle'),
+                                    description: t('revokeDescription', {
+                                      code: item.code,
+                                    }),
+                                    failure: t('revokeFailed'),
                                     confirm: () =>
-                                      mutate(
-                                        'Запрошення відкликано.',
-                                        (signal) =>
-                                          teamApi.revokeInvitation(item.id, {
-                                            signal,
-                                          }),
+                                      mutate(t('revoked'), (signal) =>
+                                        teamApi.revokeInvitation(item.id, {
+                                          signal,
+                                        }),
                                       ),
                                   }),
                               },
                             ]}
-                            label={`Дії із запрошенням ${item.code}`}
+                            label={t('invitationActions', { code: item.code })}
                           />
                         </span>
                       )}
@@ -851,13 +858,13 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                 })}
                 {visibleInvitations.length === 0 && (
                   <li className="text-app-muted px-5.5 py-5 text-[13.5px]">
-                    Активних запрошень немає.
+                    {t('noActiveInvitations')}
                   </li>
                 )}
               </ul>
               <div className="border-app-line flex flex-wrap items-center justify-between gap-3 border-t px-5.5 py-3.5">
                 <p className="text-app-dim text-[12.5px] leading-5">
-                  {NO_EMAIL_INVITE}
+                  {t('noEmailInvite')}
                 </p>
                 {invitationHistory.length > 0 && (
                   <Button
@@ -868,8 +875,10 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                     type="button"
                   >
                     {invitationHistoryOpen
-                      ? 'Сховати історію'
-                      : `Історія запрошень (${String(invitationHistory.length)})`}
+                      ? t('hideHistory')
+                      : t('invitationHistory', {
+                          count: invitationHistory.length,
+                        })}
                   </Button>
                 )}
               </div>
@@ -880,8 +889,8 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
 
       {invitationDrawerOpen && (
         <Sheet
-          description="Оберіть роль. Після створення передайте код людині — він знадобиться їй під час реєстрації."
-          eyebrow="Налаштування · Команда"
+          description={t('newInvitationDescription')}
+          eyebrow={t('crumb')}
           footer={
             <>
               <Button
@@ -889,7 +898,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                 onClick={() => setInvitationDrawerOpen(false)}
                 type="button"
               >
-                Скасувати
+                {tc('cancel')}
               </Button>
               <Button
                 aria-busy={invitationCreation.pending}
@@ -902,7 +911,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                 type="submit"
                 variant="primary"
               >
-                Створити запрошення
+                {t('createInvitation')}
               </Button>
             </>
           }
@@ -911,7 +920,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
               setInvitationDrawerOpen(false)
           }}
           open
-          title="Нове запрошення"
+          title={t('newInvitation')}
         >
           <form
             aria-busy={invitationCreation.pending}
@@ -926,8 +935,8 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
               <Notice tone="danger">{invitationCreation.error}</Notice>
             )}
             <Field
-              hint="Новий учасник отримає права цієї ролі."
-              label="Роль для запрошення"
+              hint={t('invitationRoleHint')}
+              label={t('invitationRole')}
               required
             >
               <SelectInput
@@ -936,7 +945,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
               >
                 {availableRoles.map((role) => (
                   <option key={role.id} value={role.id}>
-                    {role.name}
+                    {roleLabel(role, locale)}
                   </option>
                 ))}
               </SelectInput>
@@ -947,8 +956,11 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
 
       {permissionMember !== null && (
         <Sheet
-          description={`Індивідуальні права для ${permissionMember.name}. Вони замінюють права ролі «${permissionMember.role.name}».`}
-          eyebrow="Команда · Права"
+          description={t('permissionsDescription', {
+            name: permissionMember.name,
+            role: roleLabel(permissionMember.role, locale),
+          })}
+          eyebrow={t('permissionsEyebrow')}
           footer={
             <>
               <Button
@@ -956,7 +968,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                 onClick={() => setPermissionMember(null)}
                 type="button"
               >
-                Скасувати
+                {tc('cancel')}
               </Button>
               <Button
                 aria-busy={memberPermissions.pending}
@@ -965,7 +977,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                 type="submit"
                 variant="primary"
               >
-                Зберегти права
+                {t('savePermissions')}
               </Button>
             </>
           }
@@ -973,7 +985,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
             if (!open && !memberPermissions.pending) setPermissionMember(null)
           }}
           open
-          title={`Права: ${permissionMember.name}`}
+          title={t('permissionsTitle', { name: permissionMember.name })}
         >
           <form
             aria-busy={memberPermissions.pending}
@@ -989,7 +1001,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
               <Notice tone="danger">{memberPermissions.error}</Notice>
             )}
             <PermissionChecklist
-              legend="Права користувача"
+              legend={t('userPermissions')}
               onToggle={toggleUserPermission}
               selected={selectedPermissions}
             />
@@ -1023,7 +1035,9 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                 {/* Cancel first, and focused on open: the way out of a
                     destructive question is never the default. */}
                 <AlertDialog.Cancel asChild>
-                  <Button disabled={confirmedAction.pending}>Скасувати</Button>
+                  <Button disabled={confirmedAction.pending}>
+                    {tc('cancel')}
+                  </Button>
                 </AlertDialog.Cancel>
                 <AlertDialog.Action asChild>
                   <Button
@@ -1035,7 +1049,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                     }}
                     variant="danger"
                   >
-                    Підтвердити
+                    {t('confirm')}
                   </Button>
                 </AlertDialog.Action>
               </div>
@@ -1050,23 +1064,27 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
 function PermissionChecklist({
   selected,
   onToggle,
-  legend = 'Права ролі',
+  legend,
 }: {
   selected: string[]
   onToggle: (this: void, permission: string) => void
   legend?: string
 }) {
+  const t = useT(teamMessages)
   return (
     <fieldset className="grid min-w-0 gap-3">
       <legend className="text-app-dim mb-1 text-[13.5px]">
-        {legend} — обрано{' '}
-        {ALL_PERMISSIONS.filter((item) => selected.includes(item)).length} з{' '}
-        {ALL_PERMISSIONS.length}
+        {t('selectedCount', {
+          legend: legend ?? t('rolePermissions'),
+          selected: ALL_PERMISSIONS.filter((item) => selected.includes(item))
+            .length,
+          total: ALL_PERMISSIONS.length,
+        })}
       </legend>
       {permissionGroups.map((group) => (
         <fieldset className="grid min-w-0 gap-1" key={group.prefix}>
           <legend className="text-app-dim font-mono text-[11.5px] tracking-[0.08em] uppercase">
-            {group.title}
+            {group.title === null ? group.prefix : t(group.title)}
           </legend>
           <div className="grid min-w-0 gap-1 sm:grid-cols-2">
             {group.permissions.map((permission) => (
