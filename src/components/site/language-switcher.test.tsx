@@ -7,6 +7,7 @@ import {
   LocaleOverride,
   LocaleProvider,
   localePreference,
+  siteLocalePreference,
   type Locale,
 } from '@/i18n'
 import { SiteHeader } from './header'
@@ -136,8 +137,9 @@ describe('site language switcher', () => {
     expect(screen.getByRole('menuitemradio', { name: 'Polski' })).toHaveFocus()
   })
 
-  it('remembers the choice and opens the language page without a redirect banner', async () => {
+  it('remembers the site language and opens its page without a redirect banner', async () => {
     const user = userEvent.setup()
+    localePreference.set('pl')
     renderHeader('/')
     await user.click(
       screen.getByRole('button', { name: 'Мова сайту: українська' }),
@@ -145,7 +147,9 @@ describe('site language switcher', () => {
     await user.keyboard('{ArrowDown}{Enter}')
 
     expect(screen.getByTestId('path')).toHaveTextContent('/en')
-    expect(localePreference.get()).toBe('en-GB')
+    expect(siteLocalePreference.get()).toBe('en-GB')
+    // The cabinet language is a separate choice and stays as it was.
+    expect(localePreference.get()).toBe('pl')
     expect(
       screen.getByRole('button', { name: 'Site language: English (UK)' }),
     ).toHaveTextContent('EN')
@@ -182,7 +186,8 @@ describe('site language switcher', () => {
 
     await user.click(links[0]!)
     expect(screen.getByTestId('path')).toHaveTextContent('/')
-    expect(localePreference.get()).toBe('uk')
+    expect(siteLocalePreference.get()).toBe('uk')
+    expect(localePreference.get()).toBeNull()
     expect(
       screen.getByRole('button', { name: 'Відкрити меню' }),
     ).toHaveAttribute('aria-expanded', 'false')

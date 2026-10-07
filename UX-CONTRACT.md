@@ -122,9 +122,11 @@ hreflang alternates for all three. The language is never detected or
 redirected and there is no "switch language" banner. The header switcher (code
 button with a menu of native names on desktop, three segments in the mobile
 menu) uses plain links that work without JavaScript; choosing remembers the
-language in this browser (the cabinet uses it until the profile has a
-language) and moves focus to the new page's h1. `/privacy` stays
-Ukrainian-only.
+public-site language in this browser (`siteLocalePreference`) and moves focus
+to the new page's h1. The site language and the cabinet language are separate:
+the landing choice never changes the interface language of the cabinet or the
+sign-in screen (`localePreference`, profile language), and choosing a
+language in Profile never changes the site language.
 
 Verification owners: `src/i18n/i18n.test.tsx`, `language-card.test.tsx`,
 `region-settings.test.tsx`, `login-international.test.tsx`, `src/lib/phone.test.ts`

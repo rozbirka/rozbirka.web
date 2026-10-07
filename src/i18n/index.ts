@@ -3,7 +3,7 @@ export * from './plural'
 export * from './messages'
 export * from './format'
 export * from './currencies'
-export { localePreference } from './locale-preference'
+export { localePreference, siteLocalePreference } from './locale-preference'
 export {
   LocaleProvider,
   LocaleOverride,

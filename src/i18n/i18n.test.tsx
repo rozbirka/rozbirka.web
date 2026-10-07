@@ -20,7 +20,7 @@ import {
   formatTime,
 } from './format'
 import { useFormat, useT } from './hooks'
-import { localePreference } from './locale-preference'
+import { localePreference, siteLocalePreference } from './locale-preference'
 import { LocaleOverride, LocaleProvider, useLocale } from './LocaleProvider'
 import { matchLocale, resolveLocale } from './locales'
 import { defineMessages, translate } from './messages'
@@ -58,6 +58,7 @@ const messages = defineMessages({
 
 afterEach(() => {
   localePreference.set(null)
+  siteLocalePreference.set(null)
   document.documentElement.lang = 'uk'
 })
 
@@ -266,6 +267,21 @@ describe('LocaleProvider', () => {
     expect(screen.getByTestId('title')).toHaveTextContent('Język interfejsu')
     expect(localePreference.get()).toBe('pl')
     expect(document.documentElement.lang).toBe('pl')
+  })
+
+  it('keeps the public-site language apart from the cabinet language', async () => {
+    siteLocalePreference.set('en-GB')
+    render(
+      <LocaleProvider profileLanguage={null}>
+        <Probe />
+      </LocaleProvider>,
+    )
+    // The site choice does not pick the cabinet language…
+    expect(screen.getByTestId('locale')).not.toHaveTextContent('en-GB:device')
+    // …and choosing the cabinet language leaves the site choice alone.
+    await userEvent.click(screen.getByRole('button', { name: 'pl' }))
+    expect(localePreference.get()).toBe('pl')
+    expect(siteLocalePreference.get()).toBe('en-GB')
   })
 
   it('ignores an unsupported profile language', () => {

@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils'
 import {
   LOCALE_NATIVE_NAMES,
   SUPPORTED_LOCALES,
+  siteLocalePreference,
   useLocale,
   useT,
   type Locale,
@@ -28,16 +29,18 @@ export interface LandingNavigationState {
 /**
  * Click handler for a language link. The links are plain anchors to `/`,
  * `/en`, `/pl` so they work without JavaScript and in new tabs; with
- * JavaScript a plain click remembers the choice in this browser (the same
- * preference the cabinet reads) and navigates inside the app.
+ * JavaScript a click remembers the public-site language in this browser and
+ * a plain click navigates inside the app. The site language is separate from
+ * the cabinet one: choosing here never changes the interface language a
+ * signed-in user works in, and the profile choice never changes this.
  */
 function useChooseLanguage(onDone?: () => void) {
-  const { locale: current, setDevicePreference } = useLocale()
+  const { locale: current } = useLocale()
   const navigate = useNavigate()
 
   return useCallback(
     (event: MouseEvent<HTMLAnchorElement>, locale: Locale) => {
-      setDevicePreference(locale)
+      siteLocalePreference.set(locale)
       if (
         event.defaultPrevented ||
         event.button !== 0 ||
@@ -54,7 +57,7 @@ function useChooseLanguage(onDone?: () => void) {
       const state: LandingNavigationState = { focusHeading: true }
       void navigate(landingPathFor(locale), { state })
     },
-    [current, navigate, onDone, setDevicePreference],
+    [current, navigate, onDone],
   )
 }
 
