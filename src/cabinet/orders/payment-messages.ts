@@ -51,6 +51,21 @@ export const paymentMessages = defineMessages({
     noPaymentsYet: 'Платежів ще немає.',
     refundLabel: 'Повернути {amounts}',
     refundNothing: 'Оформити повернення',
+    refundNoPayments:
+      'Платежів за замовленням немає — з каси нічого не списується',
+    refundReturns: {
+      one: '{amounts} повернеться клієнту з каси: {tills}',
+      few: '{amounts} повернеться клієнту з кас: {tills}',
+      many: '{amounts} повернеться клієнту з кас: {tills}',
+      other: '{amounts} повернеться клієнту з кас: {tills}',
+    },
+    refundPositions: {
+      one: '{count} позиція повернеться на склад',
+      few: '{count} позиції повернуться на склад',
+      many: '{count} позицій повернеться на склад',
+      other: '{count} позиції повернеться на склад',
+    },
+    refundStatus: 'Статус замовлення зміниться на «{status}»',
     and: ' і ',
   },
   'en-GB': {
@@ -98,6 +113,17 @@ export const paymentMessages = defineMessages({
     noPaymentsYet: 'No payments yet.',
     refundLabel: 'Refund {amounts}',
     refundNothing: 'Process refund',
+    refundNoPayments:
+      'The order has no payments — nothing is taken from a till',
+    refundReturns: {
+      one: '{amounts} goes back to the customer from the till: {tills}',
+      other: '{amounts} goes back to the customer from the tills: {tills}',
+    },
+    refundPositions: {
+      one: '{count} item goes back to stock',
+      other: '{count} items go back to stock',
+    },
+    refundStatus: 'The order status will change to “{status}”',
     and: ' and ',
   },
   pl: {
@@ -146,6 +172,21 @@ export const paymentMessages = defineMessages({
     noPaymentsYet: 'Brak płatności.',
     refundLabel: 'Zwróć {amounts}',
     refundNothing: 'Przeprowadź zwrot',
+    refundNoPayments:
+      'Zamówienie nie ma płatności — z kasy nic nie zostanie pobrane',
+    refundReturns: {
+      one: '{amounts} wróci do klienta z kasy: {tills}',
+      few: '{amounts} wróci do klienta z kas: {tills}',
+      many: '{amounts} wróci do klienta z kas: {tills}',
+      other: '{amounts} wróci do klienta z kas: {tills}',
+    },
+    refundPositions: {
+      one: '{count} pozycja wróci do magazynu',
+      few: '{count} pozycje wrócą do magazynu',
+      many: '{count} pozycji wróci do magazynu',
+      other: '{count} pozycji wróci do magazynu',
+    },
+    refundStatus: 'Status zamówienia zmieni się na „{status}”',
     and: ' i ',
   },
 })

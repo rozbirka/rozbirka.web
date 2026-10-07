@@ -26,6 +26,7 @@ import {
 import { isProblemCode, normalizeApiProblem } from '@/api/errors'
 import {
   commonMessages,
+  formatNumber,
   translate,
   useFormat,
   useLocale,
@@ -242,10 +243,14 @@ const ORDER_STATUS_FILTERS = [
 const UNPAID_STATUSES = new Set(['cancelled', 'refunded'])
 
 /** Order values are in the accounting currency; no code when it is unknown. */
-const listMoney = (value: number | null, currency: string | null) =>
+const listMoney = (
+  value: number | null,
+  currency: string | null,
+  locale: Locale,
+) =>
   value === null
     ? '—'
-    : `${new Intl.NumberFormat('uk-UA').format(value)}${currency === null ? '' : ` ${currency}`}`
+    : `${formatNumber(value, locale) ?? String(value)}${currency === null ? '' : ` ${currency}`}`
 
 function OrderDirectory({ definition }: CabinetModuleScreenProps) {
   const { locale } = useLocale()
@@ -416,7 +421,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
               {t('pageSum')}
             </span>
             <span className="text-[20px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
-              {listMoney(pageSum, accountingCurrency)}
+              {listMoney(pageSum, accountingCurrency, locale)}
             </span>
           </p>
         </div>
@@ -519,7 +524,11 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
                           unpaid ? 'text-app-dim' : 'text-white',
                         )}
                       >
-                        {listMoney(order.totalAmount, accountingCurrency)}
+                        {listMoney(
+                          order.totalAmount,
+                          accountingCurrency,
+                          locale,
+                        )}
                       </span>
                     </Link>
                   </li>
@@ -1974,7 +1983,7 @@ function OrderDetailScreen({
           confirmDisabled={!refundReason.trim()}
           consequence={t('refundConsequence')}
           destructive
-          effects={refundEffects(order, summary)}
+          effects={refundEffects(order, summary, locale)}
           error={refundOpen ? error : null}
           icon={RotateCcw}
           onConfirm={() => {

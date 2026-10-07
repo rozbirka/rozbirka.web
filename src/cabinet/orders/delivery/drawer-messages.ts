@@ -192,6 +192,15 @@ export const deliveryDrawerMessages = defineMessages({
     agreed: 'Погоджено за доставку',
     due: 'До сплати',
     thisPayment: 'Цей платіж',
+    outcomeOverTitle: 'Переплата — запис відмовить',
+    outcomeOverNote:
+      'Брутто не може перевищувати залишок за замовленням: і запис платежу, і прив’язка транзакції падають. Зменшіть суму або комісію.',
+    outcomeClosedTitle: 'Залишок буде закритий',
+    outcomeClosedNote:
+      'Після збереження залишок стане нульовим і накладна піде без післяплати.',
+    outcomeLeftTitle: 'Залишок лишиться',
+    outcomeLeftNote:
+      'Залишок не заважає створити ТТН — він поїде післяплатою, яку Нова пошта утримає з отримувача.',
     overpayment: 'Переплата',
     remaining: 'Залишиться',
   },
@@ -377,6 +386,15 @@ export const deliveryDrawerMessages = defineMessages({
     agreed: 'Agreed for delivery',
     due: 'To pay',
     thisPayment: 'This payment',
+    outcomeOverTitle: 'Overpayment — the record will be refused',
+    outcomeOverNote:
+      'The gross can’t exceed what the order still owes: both recording the payment and linking a transaction fail. Lower the amount or the fee.',
+    outcomeClosedTitle: 'The balance will be cleared',
+    outcomeClosedNote:
+      'Once saved, the balance is zero and the waybill goes without cash on delivery.',
+    outcomeLeftTitle: 'A balance will remain',
+    outcomeLeftNote:
+      'The balance doesn’t stop the waybill — it goes as cash on delivery, which Nova Poshta collects from the recipient.',
     overpayment: 'Overpayment',
     remaining: 'Remaining',
   },
@@ -572,6 +590,15 @@ export const deliveryDrawerMessages = defineMessages({
     agreed: 'Uzgodniono za dostawę',
     due: 'Do zapłaty',
     thisPayment: 'Ta płatność',
+    outcomeOverTitle: 'Nadpłata — zapis zostanie odrzucony',
+    outcomeOverNote:
+      'Kwota brutto nie może przekraczać salda zamówienia: zarówno zapis płatności, jak i powiązanie transakcji się nie powiodą. Zmniejsz kwotę lub prowizję.',
+    outcomeClosedTitle: 'Saldo zostanie zamknięte',
+    outcomeClosedNote:
+      'Po zapisaniu saldo wyniesie zero, a przesyłka pójdzie bez pobrania.',
+    outcomeLeftTitle: 'Pozostanie saldo',
+    outcomeLeftNote:
+      'Saldo nie blokuje listu przewozowego — zostanie pobrane za pobraniem, które Nova Poshta ściągnie od odbiorcy.',
     overpayment: 'Nadpłata',
     remaining: 'Pozostanie',
   },

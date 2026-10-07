@@ -1,6 +1,14 @@
-import { formatMoney, SOURCE_LOCALE, type Locale } from '@/i18n'
-import { plural } from '@/lib/utils'
+import {
+  formatMoney,
+  SOURCE_LOCALE,
+  translate,
+  type Locale,
+  type MessageKey,
+  type MessageParams,
+} from '@/i18n'
 import type { OrderDetail } from '@/api/orders'
+import { orderMessages } from './messages'
+import { paymentMessages } from './payment-messages'
 import { sumByCurrency } from './payment-policy'
 
 /**
@@ -84,7 +92,10 @@ export function orderMoney(order: OrderDetail): OrderMoney {
 export function refundEffects(
   order: OrderDetail,
   summary: OrderMoney,
+  locale: Locale = SOURCE_LOCALE,
 ): string[] {
+  const t = (key: MessageKey<typeof paymentMessages>, params?: MessageParams) =>
+    translate(paymentMessages, locale, key, params)
   const tills = [
     ...new Set(order.payments.map((payment) => payment.accountName)),
   ]
@@ -92,9 +103,15 @@ export function refundEffects(
 
   return [
     tills.length === 0
-      ? 'Платежів за замовленням немає — з каси нічого не списується'
-      : `${moneyList(summary.paid, ' і ')} повернеться клієнту з ${tills.length === 1 ? 'каси' : 'кас'}: ${tills.join(', ')}`,
-    `${String(positions)} ${plural(positions, ['позиція повернеться', 'позиції повернуться', 'позицій повернеться'])} на склад`,
-    'Статус замовлення зміниться на «Повернено»',
+      ? t('refundNoPayments')
+      : t('refundReturns', {
+          count: tills.length,
+          amounts: moneyList(summary.paid, t('and'), locale),
+          tills: tills.join(', '),
+        }),
+    t('refundPositions', { count: positions }),
+    t('refundStatus', {
+      status: translate(orderMessages, locale, 'statusRefunded'),
+    }),
   ]
 }

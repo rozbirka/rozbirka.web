@@ -1555,10 +1555,10 @@ function IntakeForm({
                     error={fieldErrors.totalCost}
                     hint={
                       price.hint === undefined
-                        ? 'Скільки заплачено за всю партію'
-                        : `Скільки заплачено за всю партію. ${price.hint}`
+                        ? tf('totalCostHint')
+                        : `${tf('totalCostHint')}. ${price.hint}`
                     }
-                    label="Загальна вартість"
+                    label={tf('totalCost')}
                   >
                     <MoneyInput
                       className="font-mono"
@@ -2087,8 +2087,8 @@ function PartForm({
                   />
                 </Field>
                 <Field
-                  hint={priceSlots.hint ?? 'Бажана ціна'}
-                  label="Ціна продажу"
+                  hint={priceSlots.hint ?? tf('desiredPriceHint')}
+                  label={tf('salePrice')}
                 >
                   <MoneyInput
                     currency={priceSlots.currency}
@@ -2616,7 +2616,14 @@ function BatchPartsForm({
                       value={row.quantity}
                     />
                     <TextInput
-                      aria-label={`Ціна в рядку ${String(index + 1)}${guard.currency === null ? '' : `, ${guard.currency}`}`}
+                      aria-label={
+                        guard.currency === null
+                          ? tf('rowPrice', { number: index + 1 })
+                          : tf('rowPriceIn', {
+                              number: index + 1,
+                              code: guard.currency,
+                            })
+                      }
                       className="font-mono"
                       disabled={priceSlots.disabled}
                       inputMode="decimal"

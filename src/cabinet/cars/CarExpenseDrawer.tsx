@@ -91,7 +91,7 @@ export function CarExpenseDrawer({
             value={name}
           />
         </Field>
-        <Field hint={price.hint} label="Сума витрати">
+        <Field hint={price.hint} label={t('expenseAmount')}>
           <MoneyInput
             currency={price.currency}
             disabled={price.disabled}

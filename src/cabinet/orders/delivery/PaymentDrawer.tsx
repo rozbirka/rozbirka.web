@@ -137,6 +137,16 @@ export function PaymentDrawer({
         ? 0
         : linkedGross(receipt.amount, fee ?? 0)
   const outcome = paymentOutcome(gross, delivery.outstandingUah)
+  const outcomeTitle = outcome.over
+    ? t('outcomeOverTitle')
+    : outcome.remaining === 0
+      ? t('outcomeClosedTitle')
+      : t('outcomeLeftTitle')
+  const outcomeNote = outcome.over
+    ? t('outcomeOverNote')
+    : outcome.remaining === 0
+      ? t('outcomeClosedNote')
+      : t('outcomeLeftNote')
 
   const submit = async () => {
     if (pending) return
@@ -159,7 +169,7 @@ export function PaymentDrawer({
       return
     }
     if (outcome.over) {
-      setError(outcome.note)
+      setError(outcomeNote)
       return
     }
     if (registerId === null) {
@@ -476,9 +486,9 @@ export function PaymentDrawer({
                     : 'text-state-warn',
               )}
             >
-              {outcome.title}
+              {outcomeTitle}
             </span>
-            <span className="text-app-muted leading-5">{outcome.note}</span>
+            <span className="text-app-muted leading-5">{outcomeNote}</span>
           </p>
         </dl>
       </form>

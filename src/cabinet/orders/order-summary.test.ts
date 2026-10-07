@@ -179,3 +179,18 @@ it('names every refunded sum in its own currency', () => {
     '4 200,00 UAH і 30,00 EUR повернеться клієнту з каси: Основна каса',
   )
 })
+
+it('says what a refund does in English (UK)', () => {
+  const current = order({
+    status: 'confirmed',
+    payments: [payment(4200, 'UAH'), payment(30, 'EUR')],
+  })
+  const lines = refundEffects(current, orderMoney(current), 'en-GB').map(
+    (line) => line.replace(/\s/g, ' '),
+  )
+  expect(lines).toEqual([
+    '4,200.00 UAH and 30.00 EUR goes back to the customer from the till: Основна каса',
+    expect.stringMatching(/items? go(es)? back to stock$/),
+    'The order status will change to “Refunded”',
+  ])
+})

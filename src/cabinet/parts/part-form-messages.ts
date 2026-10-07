@@ -95,6 +95,10 @@ export const partFormMessages = defineMessages({
       'Скільки одиниць на складі та за скільки їх продавати.',
     quantityStep: 'Кількість і ціна',
     quantity: 'Кількість',
+    desiredPrice: 'Бажана ціна',
+    priceOptional: 'Можна залишити порожнім',
+    priceInvalid:
+      'Вкажіть число від 0, наприклад 1250.50, або залиште поле порожнім.',
     unitHint: 'Фіксована одиниця обліку',
     unit: 'Одиниця',
     compatDescription:
@@ -262,6 +266,10 @@ export const partFormMessages = defineMessages({
       'How many units are in the warehouse and what to sell them for.',
     quantityStep: 'Quantity and price',
     quantity: 'Quantity',
+    desiredPrice: 'Asking price',
+    priceOptional: 'Can be left empty',
+    priceInvalid:
+      'Enter a number from 0, for example 1250.50, or leave the field empty.',
     unitHint: 'Fixed unit of account',
     unit: 'Unit',
     compatDescription:
@@ -428,6 +436,10 @@ export const partFormMessages = defineMessages({
     quantityDescription: 'Ile sztuk jest w magazynie i za ile je sprzedawać.',
     quantityStep: 'Ilość i cena',
     quantity: 'Ilość',
+    desiredPrice: 'Cena oczekiwana',
+    priceOptional: 'Można zostawić puste',
+    priceInvalid:
+      'Podaj liczbę od 0, na przykład 1250.50, albo zostaw pole puste.',
     unitHint: 'Stała jednostka ewidencyjna',
     unit: 'Jednostka',
     compatDescription:

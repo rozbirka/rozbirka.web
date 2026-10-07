@@ -2561,7 +2561,12 @@ function partFieldErrors(
   { requireSource, locale }: { requireSource: boolean; locale: Locale },
 ): PartFieldErrors {
   const t = (
-    key: 'nameRequired' | 'quantityInvalid' | 'chooseCar' | 'chooseIntake',
+    key:
+      | 'nameRequired'
+      | 'quantityInvalid'
+      | 'priceInvalid'
+      | 'chooseCar'
+      | 'chooseIntake',
   ) => translate(partFormMessages, locale, key)
   const errors: PartFieldErrors = {}
   if (!values.name.trim()) errors.name = t('nameRequired')
@@ -2570,8 +2575,7 @@ function partFieldErrors(
     errors.quantity = t('quantityInvalid')
   const price = optionalNumber(values.desiredSalePrice)
   if (price !== undefined && (!Number.isFinite(price) || price < 0))
-    errors.desiredSalePrice =
-      'Вкажіть число від 0, наприклад 1250.50, або залиште поле порожнім.'
+    errors.desiredSalePrice = t('priceInvalid')
   if (requireSource && !values.sourceId.trim())
     errors.sourceId =
       values.sourceType === 'car' ? t('chooseCar') : t('chooseIntake')
@@ -3315,11 +3319,11 @@ function PartFields({
           </Field>
           <Field
             error={errors.desiredSalePrice}
-            hint={price.hint ?? 'Можна залишити порожнім'}
-            label="Бажана ціна"
+            hint={price.hint ?? t('priceOptional')}
+            label={t('desiredPrice')}
           >
             <MoneyInput
-              aria-label="Бажана ціна"
+              aria-label={t('desiredPrice')}
               currency={price.currency}
               disabled={price.disabled}
               inputMode="decimal"
@@ -4178,7 +4182,7 @@ function PartEdit({
                   <Field
                     error={errors.desiredSalePrice}
                     hint={price.hint}
-                    label="Бажана ціна"
+                    label={t('desiredPrice')}
                   >
                     <MoneyInput
                       currency={price.currency}

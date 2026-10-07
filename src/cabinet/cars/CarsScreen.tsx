@@ -1740,12 +1740,8 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                     <TextInput {...bind('acquiredAt')} type="date" />
                   </Field>
                   <Field
-                    hint={
-                      priceLocked
-                        ? 'Ціну змінює користувач із правом на фінанси'
-                        : price.hint
-                    }
-                    label="Ціна придбання"
+                    hint={priceLocked ? tf('purchasePriceLocked') : price.hint}
+                    label={tf('checkPrice')}
                     required={!priceLocked}
                   >
                     <MoneyInput
@@ -2131,8 +2127,8 @@ function NewCarExpenses({
                 </Field>
                 <Field
                   hint={index === 0 ? price.hint : undefined}
-                  label="Сума"
-                  srLabel={`витрати ${String(index + 1)}`}
+                  label={tf('expenseAmountLabel')}
+                  srLabel={tf('expenseRowSr', { number: index + 1 })}
                 >
                   <MoneyInput
                     className="font-mono"
