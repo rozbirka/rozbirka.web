@@ -30,6 +30,10 @@ import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { tenantRequestScope } from '../tenant-request-scope'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import { commonMessages, translate, useLocale, useT, type Locale } from '@/i18n'
+import { reportsMessages } from './messages'
+
+type ReportsKey = keyof (typeof reportsMessages)['uk']
 
 const POLL_INTERVAL_MS = 5_000
 
@@ -57,7 +61,7 @@ interface ScopedFlight {
 
 interface ScopedError {
   key: string
-  message: string
+  message: ReportsKey
 }
 
 interface ScopedDownload {
@@ -107,14 +111,14 @@ const validRange = (range: DateRange) =>
   range.from <= range.to
 
 /** What is wrong with each end of the range, said at the field it belongs to. */
-const rangeProblems = (range: DateRange) => ({
+const rangeProblems = (range: DateRange, locale: Locale) => ({
   from: isCalendarDate(range.from)
     ? null
-    : 'Оберіть перший день періоду у форматі РРРР-ММ-ДД',
+    : translate(reportsMessages, locale, 'fromInvalid'),
   to: !isCalendarDate(range.to)
-    ? 'Оберіть останній день періоду у форматі РРРР-ММ-ДД'
+    ? translate(reportsMessages, locale, 'toInvalid')
     : isCalendarDate(range.from) && range.to < range.from
-      ? 'Кінець періоду не може бути раніше за початок'
+      ? translate(reportsMessages, locale, 'toBeforeFrom')
       : null,
 })
 
@@ -150,13 +154,16 @@ const statusOf = (report: ReportJob): DisplayStatus => {
   return 'unknown'
 }
 
-const statusPill: Record<DisplayStatus, { label: string; tone: StatusTone }> = {
-  queued: { label: 'У черзі', tone: 'neutral' },
-  processing: { label: 'Обробляється', tone: 'info' },
-  completed: { label: 'Готовий', tone: 'ok' },
-  failed: { label: 'Не вдалося', tone: 'danger' },
-  expired: { label: 'Прострочений', tone: 'warn' },
-  unknown: { label: 'Невідомий стан', tone: 'neutral' },
+const statusPill: Record<
+  DisplayStatus,
+  { message: ReportsKey; tone: StatusTone }
+> = {
+  queued: { message: 'statusQueued', tone: 'neutral' },
+  processing: { message: 'statusProcessing', tone: 'info' },
+  completed: { message: 'statusCompleted', tone: 'ok' },
+  failed: { message: 'statusFailed', tone: 'danger' },
+  expired: { message: 'statusExpired', tone: 'warn' },
+  unknown: { message: 'statusUnknown', tone: 'neutral' },
 }
 
 const isPollingStatus = (status: DisplayStatus) =>
@@ -169,16 +176,26 @@ const percentOf = (report: ReportJob): number | null => {
   return Math.min(100, Math.round(value))
 }
 
-const progressText = (report: ReportJob, status: DisplayStatus): string => {
-  if (status === 'queued') return 'У черзі — обробка почнеться автоматично'
+const progressText = (
+  report: ReportJob,
+  status: DisplayStatus,
+  locale: Locale,
+): string => {
+  if (status === 'queued') {
+    return translate(reportsMessages, locale, 'progressQueued')
+  }
   const percent = percentOf(report)
-  if (percent === null) return 'Обробка почалася, відсоток ще не надійшов'
+  if (percent === null) {
+    return translate(reportsMessages, locale, 'progressNoPercent')
+  }
   const { itemsProcessed, itemsTotal } = report
-  const items =
-    itemsTotal !== null && itemsTotal > 0 && itemsProcessed !== null
-      ? ` · ${String(itemsProcessed)} з ${String(itemsTotal)}`
-      : ''
-  return `Оброблено ${String(percent)}%${items}`
+  return itemsTotal !== null && itemsTotal > 0 && itemsProcessed !== null
+    ? translate(reportsMessages, locale, 'progressItems', {
+        percent,
+        processed: itemsProcessed,
+        total: itemsTotal,
+      })
+    : translate(reportsMessages, locale, 'progressPercent', { percent })
 }
 
 const sameReport = (left: ReportJob, right: ReportJob) =>
@@ -200,6 +217,9 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
   definition,
 }) => {
   const cabinet = useCabinet()
+  const { locale } = useLocale()
+  const t = useT(reportsMessages)
+  const tc = useT(commonMessages)
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const scope = useMemo<Scope | null>(() => {
     const snapshot = cabinet.snapshot
@@ -234,7 +254,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
   const scopeKey = scope?.key ?? null
   const visibleReports = reportsScopeKey === scopeKey ? reports : EMPTY_REPORTS
   const isLoading = scopeKey !== null && settledScopeKey !== scopeKey
-  const visibleError = error?.key === scopeKey ? error.message : null
+  const visibleError = error?.key === scopeKey ? t(error.message) : null
   const isCreating = creatingScopeKey === scopeKey
   const currentDownloading =
     downloading?.key === scopeKey ? downloading.id : null
@@ -269,8 +289,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
         if (!signal.aborted && currentScopeRef.current === key) {
           setError({
             key,
-            message:
-              'Не вдалося завантажити список звітів. Перевірте з’єднання та оновіть сторінку.',
+            message: 'listFailed',
           })
         }
       })
@@ -339,8 +358,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
       if (access.key !== null && currentScopeRef.current === access.key) {
         setError({
           key: access.key,
-          message:
-            'Недостатньо прав для створення звіту. Попросіть власника кабінету відкрити доступ до звітів.',
+          message: 'noCreatePermission',
         })
       }
       return
@@ -380,8 +398,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
       if (!signal.aborted && currentScopeRef.current === access.key) {
         setError({
           key: access.key,
-          message:
-            'Не вдалося створити звіт. Перевірте з’єднання та натисніть «Створити звіт» ще раз.',
+          message: 'createFailed',
         })
       }
     } finally {
@@ -447,13 +464,13 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
   // confirmation, and a tenant switch mid-flight ends the run without a file.
   const savePdf = useOperation(() => transfer(false), {
     errorMessage: (failure) =>
-      `${normalizeApiProblem(failure).message} Натисніть «Завантажити PDF» ще раз.`,
+      t('downloadRetry', { reason: normalizeApiProblem(failure).message }),
   })
   const printPdf = useOperation(() => transfer(true), {
     errorMessage: (failure) =>
       failure instanceof PrintWindowBlockedError
-        ? 'Браузер заблокував вікно друку. Дозвольте спливні вікна для цього сайту та натисніть «Друкувати» ще раз.'
-        : `${normalizeApiProblem(failure).message} Натисніть «Друкувати» ще раз.`,
+        ? t('printBlocked')
+        : t('printRetry', { reason: normalizeApiProblem(failure).message }),
   })
   const { reset: resetSave } = savePdf
   const { reset: resetPrint } = printPdf
@@ -464,7 +481,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
     resetPrint()
   }, [resetPrint, resetSave, scopeKey])
 
-  const problems = rangeProblems(range)
+  const problems = rangeProblems(range, locale)
   const rangeIsValid = validRange(range)
   const transferBusy = savePdf.pending || printPdf.pending
   const transferError = savePdf.error ?? printPdf.error
@@ -472,18 +489,15 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
   return (
     <PageBody aria-labelledby="reports-title" className="gap-5">
       <PageHeader
-        eyebrow="Гроші"
-        title={<span id="reports-title">Звіти</span>}
+        eyebrow={t('eyebrow')}
+        title={<span id="reports-title">{t('title')}</span>}
       />
-      <p className="text-app-muted max-w-[60ch] text-sm">
-        Звіт про продажі за обраний період: PDF формується у фоні, а список
-        нижче показує, на якому він етапі.
-      </p>
+      <p className="text-app-muted max-w-[60ch] text-sm">{t('lead')}</p>
 
       {canManage ? (
         <form
           aria-busy={isCreating}
-          aria-label="Створення звіту"
+          aria-label={t('createForm')}
           noValidate
           onSubmit={(event) => {
             event.preventDefault()
@@ -491,7 +505,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
           }}
         >
           <SectionPanel
-            description="У звіт потраплять продажі за ці дні включно."
+            description={t('newReportHint')}
             footer={
               <Button
                 aria-busy={isCreating}
@@ -499,16 +513,16 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                 type="submit"
                 variant="primary"
               >
-                {isCreating ? 'Створюємо звіт…' : 'Створити звіт'}
+                {isCreating ? t('creating') : t('create')}
               </Button>
             }
-            title="Новий звіт"
+            title={t('newReport')}
           >
             <div className="grid gap-3 sm:grid-cols-2">
               <Field
                 error={problems.from}
-                hint="Перший день у звіті"
-                label="Початок періоду"
+                hint={t('fromHint')}
+                label={t('fromLabel')}
                 required
               >
                 <TextInput
@@ -525,8 +539,8 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
               </Field>
               <Field
                 error={problems.to}
-                hint="Останній день у звіті"
-                label="Кінець періоду"
+                hint={t('toHint')}
+                label={t('toLabel')}
                 required
               >
                 <TextInput
@@ -545,24 +559,21 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
           </SectionPanel>
         </form>
       ) : (
-        <Notice tone="info">
-          Звіти можна переглядати та завантажувати. Щоб створювати нові,
-          попросіть власника кабінету відкрити доступ до звітів.
-        </Notice>
+        <Notice tone="info">{t('viewOnly')}</Notice>
       )}
 
       {visibleError ? <Notice tone="danger">{visibleError}</Notice> : null}
       {transferError ? <Notice tone="danger">{transferError}</Notice> : null}
 
       {isLoading ? (
-        <SkeletonRows label="Завантажуємо звіти…" rows={3} />
+        <SkeletonRows label={t('loading')} rows={3} />
       ) : (
         <DataTable
-          caption="Список звітів"
+          caption={t('list')}
           columns={[
             {
               key: 'period',
-              label: 'Період',
+              label: t('columnPeriod'),
               variant: 'primary',
               cell: (report) => {
                 const known = periods[report.id]
@@ -573,7 +584,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                       <span aria-hidden className="text-app-dim">
                         —
                       </span>
-                      <span className="sr-only">Період невідомий</span>
+                      <span className="sr-only">{t('periodUnknown')}</span>
                     </>
                   )
                 }
@@ -588,19 +599,19 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
             },
             {
               key: 'requested',
-              label: 'Створено',
+              label: t('columnCreated'),
               cell: (report) => <DateValue value={report.requestedAt} />,
             },
             {
               key: 'status',
-              label: 'Стан',
+              label: t('columnStatus'),
               cell: (report) => {
                 const status = statusOf(report)
                 const pill = statusPill[status]
                 const percent = percentOf(report)
                 return (
                   <span className="grid min-w-0 justify-items-end gap-1.5 md:justify-items-start">
-                    <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
+                    <StatusPill tone={pill.tone}>{t(pill.message)}</StatusPill>
                     {isPollingStatus(status) ? (
                       <span
                         aria-live="polite"
@@ -608,7 +619,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                         role="status"
                       >
                         <span className="text-app-muted text-[12.5px]">
-                          {progressText(report, status)}
+                          {progressText(report, status, locale)}
                         </span>
                         {percent === null ? null : (
                           <span
@@ -626,21 +637,17 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                     {status === 'failed' ? (
                       <span className="text-app-muted text-[12.5px]">
                         {report.errorMessage
-                          ? `Причина: ${report.errorMessage}.`
-                          : 'Причина невідома.'}{' '}
-                        {canManage
-                          ? 'Створіть заміну — вона візьме період із форми вгорі.'
-                          : 'Попросіть власника кабінету сформувати звіт ще раз.'}
+                          ? t('failedReason', { reason: report.errorMessage })
+                          : t('failedUnknown')}{' '}
+                        {canManage ? t('replaceHint') : t('askOwner')}
                       </span>
                     ) : null}
                     {status === 'expired' ? (
                       <span className="text-app-muted text-[12.5px]">
-                        Строк зберігання минув{' '}
-                        <DateValue value={report.expiresAt} withTime={false} />,
-                        файл видалено.{' '}
-                        {canManage
-                          ? 'Створіть новий звіт — він візьме період із форми вгорі.'
-                          : 'Попросіть власника кабінету сформувати звіт ще раз.'}
+                        {t('expiredPrefix')}{' '}
+                        <DateValue value={report.expiresAt} withTime={false} />,{' '}
+                        {t('fileDeleted')}{' '}
+                        {canManage ? t('newReportHint2') : t('askOwner')}
                       </span>
                     ) : null}
                     {status === 'completed' ? (
@@ -648,8 +655,8 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                         PDF
                         {report.fileSizeBytes === null
                           ? ''
-                          : ` · ${formatFileSize(report.fileSizeBytes)}`}{' '}
-                        · доступний до{' '}
+                          : ` · ${formatFileSize(report.fileSizeBytes, locale)}`}{' '}
+                        · {t('availableUntil')}{' '}
                         <DateValue value={report.expiresAt} withTime={false} />
                       </span>
                     ) : null}
@@ -659,7 +666,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
             },
             {
               key: 'actions',
-              label: 'Дії',
+              label: tc('actions'),
               align: 'end',
               headerHidden: true,
               cell: (report) => {
@@ -678,7 +685,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                         variant="primary"
                       >
                         <Download aria-hidden />
-                        Завантажити PDF
+                        {t('downloadPdf')}
                       </Button>
                       <Button
                         aria-busy={printPdf.pending && active}
@@ -689,7 +696,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                         }}
                       >
                         <Printer aria-hidden />
-                        Друкувати
+                        {t('print')}
                       </Button>
                     </span>
                   )
@@ -706,8 +713,8 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                       >
                         <RefreshCw aria-hidden />
                         {status === 'failed'
-                          ? 'Створити заміну'
-                          : 'Створити новий звіт'}
+                          ? t('createReplacement')
+                          : t('createNew')}
                       </Button>
                     </span>
                   )
@@ -718,9 +725,9 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
           ]}
           empty={
             <EmptyState
-              description="Оберіть період і створіть перший звіт — він з’явиться у цьому списку."
-              label="Список звітів"
-              title="Звітів ще немає"
+              description={t('emptyDescription')}
+              label={t('list')}
+              title={t('emptyTitle')}
             />
           }
           rowKey={(report) => report.id}
