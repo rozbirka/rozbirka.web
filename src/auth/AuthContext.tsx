@@ -28,6 +28,13 @@ export interface AuthContextValue {
   hydrate: (accessToken?: string) => Promise<void>
   /** Commit a tenant whose cabinet access snapshot is ready. */
   commitTenant: (tenantId: string) => void
+  /**
+   * Replace a tenant the server just returned (e.g. after PATCH /tenants/{id})
+   * in `tenants` and, when it is the current one, in `tenant`, so settings
+   * read through `useTenantSettings` refresh without a reload. Optional only
+   * for hand-built test doubles.
+   */
+  replaceTenant?: (next: Tenant) => void
   /** Update the authenticated user's display name without reloading tenant state. */
   updateName: (name: string) => Promise<void>
   /**
@@ -197,6 +204,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const replaceTenant = useCallback((next: Tenant) => {
+    setTenants((list) =>
+      list.some((item) => item.id === next.id)
+        ? list.map((item) => (item.id === next.id ? next : item))
+        : list,
+    )
+    setTenantState((current) => (current?.id === next.id ? next : current))
+  }, [])
+
   const updateName = useCallback<AuthContextValue['updateName']>(
     async (name) => {
       const generation = authGenerationRef.current
@@ -304,6 +320,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     tenants,
     hydrate,
     commitTenant,
+    replaceTenant,
     updateName,
     updateLanguage,
     signOut,

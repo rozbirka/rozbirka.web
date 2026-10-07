@@ -13,6 +13,10 @@ import { businessApi } from '@/api/business'
 import { inventoryApi, type Warehouse } from '@/api/inventory'
 import { useCabinet } from '../CabinetContext'
 import { RedesignShell, RedesignTitle } from '../redesign-shell'
+import { useAuthOrNull } from '@/auth/useTenantSettings'
+import { useT } from '@/i18n/hooks'
+import { businessMessages } from './business-messages'
+import { RegionSettings } from './region-settings'
 import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 
@@ -20,7 +24,7 @@ type SaveState = 'idle' | 'pending' | 'success' | 'error' | 'denied'
 
 const FORM_ID = 'business-form'
 
-const LEGAL_FORMS = ['ФОП', 'ТОВ', 'Без реєстрації'] as const
+const LEGAL_FORMS = ['legalSole', 'legalLlc', 'legalNone'] as const
 const ACCOUNTING_CURRENCIES = ['USD', 'UAH', 'EUR'] as const
 const COSTING = [
   {
@@ -45,24 +49,12 @@ const RULES = [
 ] as const
 
 /** What `PATCH /tenants/{id}` does not take, said where the design asks for it. */
-const NO_LEGAL_FORM =
-  'Юридичної форми розбірка не тримає: у ній є назва, місто й логотип, і більше нічого з реквізитів.'
-const NO_TAX_ID = 'Поля для ЄДРПОУ чи ІПН у розбірці немає.'
-const NO_PHONE = 'Телефон розбірки поки не зберігається.'
-const NO_ADDRESS =
-  'Повної адреси немає — з місця розбірка тримає лише місто, і воно тут поруч.'
 const NO_ACCOUNTING_CURRENCY =
   'Основної валюти обліку кабінет не веде: ціни лишаються у своїй валюті, а каси рахують кожну окремо й без конвертації.'
 const NO_COSTING =
   'Способу рахувати собівартість деталі в налаштуваннях немає — як ділити ціну авто, кабінет не питає.'
 const NO_RULES =
   'Цих правил обліку кабінет поки не має: ні контролю мінімального залишку, ні вимоги VIN, ні дозволу на відʼємний залишок.'
-const NO_EXPORT =
-  'Вивантажити всі дані кабінету одним файлом поки не можна — окремого експорту немає в жодному розділі.'
-const NO_TENANT_DELETE =
-  'Видалити розбірку з кабінету не можна — звертайтеся в підтримку.'
-const NO_WAREHOUSE_PARTS =
-  'Скільки деталей лежить на складі, тут не рахується — у складу є код, зони й стан.'
 
 function Step({
   number,
@@ -115,7 +107,14 @@ function Note({ children }: { children: ReactNode }) {
 
 export function BusinessSettingsScreen() {
   const cabinet = useCabinet()
-  const tenant = cabinet.targetTenant
+  const auth = useAuthOrNull()
+  const t = useT(businessMessages)
+  // The auth list holds the tenant as last saved; the cabinet keeps the
+  // object it committed at the switch.
+  const tenant =
+    auth?.tenants.find(
+      (candidate) => candidate.id === cabinet.targetTenant?.id,
+    ) ?? cabinet.targetTenant
   const inventoryPath = `/app/${tenant?.slug ?? ''}/inventory`
   const generation = cabinet.snapshot?.generation
   const [name, setName] = useState(tenant?.name ?? '')
@@ -165,11 +164,7 @@ export function BusinessSettingsScreen() {
   }, [generation, tenant?.id])
 
   if (!tenant) {
-    return (
-      <p className="text-app-muted text-sm">
-        Оберіть розбірку, щоб змінити її налаштування.
-      </p>
-    )
+    return <p className="text-app-muted text-sm">{t('noTenant')}</p>
   }
 
   const normalizedName = name.trim()
@@ -217,6 +212,7 @@ export function BusinessSettingsScreen() {
       setCity(updated.city ?? '')
       setDeposit(updated.requireDeliveryDeposit)
       setSaveState('success')
+      auth?.replaceTenant?.(updated)
       void Promise.resolve(cabinet.switchTenant(updated.id)).catch(
         () => undefined,
       )
@@ -238,7 +234,7 @@ export function BusinessSettingsScreen() {
       actions={
         <>
           <Button disabled={busy || !changed} onClick={reset}>
-            Скасувати зміни
+            {t('cancelChanges')}
           </Button>
           <Button
             className="px-5 text-sm font-bold"
@@ -247,62 +243,45 @@ export function BusinessSettingsScreen() {
             type="submit"
             variant="primary"
           >
-            {busy ? 'Зберігаємо…' : 'Зберегти'}
+            {busy ? t('saving') : t('save')}
           </Button>
         </>
       }
-      crumb="Налаштування · Бізнес"
+      crumb={t('crumb')}
     >
-      <RedesignTitle
-        lead="Реквізити розбірки, склади й правила обліку."
-        title="Бізнес"
-      />
+      <RedesignTitle lead={t('lead')} title={t('title')} />
 
-      {saveState === 'success' && (
-        <Notice tone="ok">Налаштування бізнесу збережено.</Notice>
-      )}
-      {saveState === 'denied' && (
-        <Notice tone="danger">
-          Ви більше не маєте права змінювати налаштування бізнесу.
-        </Notice>
-      )}
-      {saveState === 'error' && (
-        <Notice tone="danger">
-          Не вдалося зберегти налаштування бізнесу. Спробуйте ще раз.
-        </Notice>
-      )}
+      {saveState === 'success' && <Notice tone="ok">{t('saved')}</Notice>}
+      {saveState === 'denied' && <Notice tone="danger">{t('denied')}</Notice>}
+      {saveState === 'error' && <Notice tone="danger">{t('error')}</Notice>}
 
       <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="grid min-w-0 content-start gap-5">
-          <Step number="01" title="Реквізити">
+          <Step number="01" title={t('details')}>
             <form
               className="grid gap-3.5"
               id={FORM_ID}
               onSubmit={(event) => void save(event)}
             >
-              <Field
-                hint="Показується в документах, стікерах і рахунках."
-                label="Назва бізнесу"
-                required
-              >
+              <Field hint={t('nameHint')} label={t('nameLabel')} required>
                 <TextInput
                   disabled={busy}
                   onChange={(event) => {
                     setName(event.target.value)
                     if (!busy) setSaveState('idle')
                   }}
-                  placeholder="Розбірка Коваль"
+                  placeholder={t('namePlaceholder')}
                   value={name}
                 />
               </Field>
-              <Field label="Місто">
+              <Field label={t('cityLabel')}>
                 <TextInput
                   disabled={busy}
                   onChange={(event) => {
                     setCity(event.target.value)
                     if (!busy) setSaveState('idle')
                   }}
-                  placeholder="Львів"
+                  placeholder={t('cityPlaceholder')}
                   value={city}
                 />
               </Field>
@@ -310,66 +289,72 @@ export function BusinessSettingsScreen() {
             <div className="grid gap-3.5 sm:grid-cols-2">
               <div>
                 <p className="text-app-muted text-[13px] font-medium">
-                  Юридична форма
+                  {t('legalForm')}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {LEGAL_FORMS.map((label) => (
-                    <Dead key={label} title={NO_LEGAL_FORM}>
-                      {label}
+                  {LEGAL_FORMS.map((key) => (
+                    <Dead key={key} title={t('noLegalForm')}>
+                      {t(key)}
                     </Dead>
                   ))}
                 </div>
               </div>
-              <Field label="ЄДРПОУ / ІПН">
+              <Field label={t('taxId')}>
                 <TextInput
                   disabled
-                  placeholder="не зберігається"
-                  title={NO_TAX_ID}
+                  placeholder={t('notStored')}
+                  title={t('noTaxId')}
                   value=""
                 />
               </Field>
             </div>
             <div className="grid gap-3.5 sm:grid-cols-2">
-              <Field label="Телефон">
+              <Field label={t('phone')}>
                 <TextInput
                   disabled
-                  placeholder="не зберігається"
-                  title={NO_PHONE}
+                  placeholder={t('notStored')}
+                  title={t('noPhone')}
                   value=""
                 />
               </Field>
-              <Field label="Адреса">
+              <Field label={t('address')}>
                 <TextInput
                   disabled
-                  placeholder="є тільки місто"
-                  title={NO_ADDRESS}
+                  placeholder={t('onlyCity')}
+                  title={t('noAddress')}
                   value=""
                 />
               </Field>
             </div>
             <Note>
-              {NO_LEGAL_FORM} {NO_ADDRESS}
+              {t('noLegalForm')} {t('noAddress')}
             </Note>
           </Step>
+
+          <RegionSettings
+            onSaved={(updated) => {
+              auth?.replaceTenant?.(updated)
+            }}
+            role={cabinet.snapshot?.role}
+            tenant={tenant}
+          />
 
           <Step
             action={
               <Button asChild>
                 <Link to={inventoryPath}>
                   <Plus aria-hidden />
-                  Додати склад
+                  {t('addWarehouse')}
                 </Link>
               </Button>
             }
-            number="02"
-            title="Склади"
+            number="03"
+            title={t('warehouses')}
           >
             {warehouses === null ? (
-              <Note>Завантажуємо склади…</Note>
+              <Note>{t('warehousesLoading')}</Note>
             ) : warehouses.length === 0 ? (
-              <Note>
-                Складів ще немає. Перший створюється в розділі «Інвентаризація».
-              </Note>
+              <Note>{t('warehousesEmpty')}</Note>
             ) : (
               <ul className="grid gap-2.5">
                 {warehouses.map((warehouse) => (
@@ -384,41 +369,39 @@ export function BusinessSettingsScreen() {
                         </span>
                         {warehouse.isSystemDefault && (
                           <span className="border-app-line text-app-dim rounded-full border px-2.5 py-0.5 text-[11px]">
-                            Основний
+                            {t('warehouseMain')}
                           </span>
                         )}
                         {!warehouse.isActive && (
                           <span className="border-app-line text-app-dim rounded-full border px-2.5 py-0.5 text-[11px]">
-                            Архівний
+                            {t('warehouseArchived')}
                           </span>
                         )}
                       </p>
                       <p className="text-app-dim mt-1 text-[12.5px]">
                         <span className="font-mono">{warehouse.code}</span> ·{' '}
-                        {warehouse.zoneCount}{' '}
-                        {warehouse.zoneCount === 1 ? 'зона' : 'зон'}
+                        {t('zones', { count: warehouse.zoneCount })}
                       </p>
                     </div>
                     <span
                       className="text-app-dim ml-auto text-[13px]"
-                      title={NO_WAREHOUSE_PARTS}
+                      title={t('noWarehouseParts')}
                     >
-                      деталей — не рахується
+                      {t('partsNotCounted')}
                     </span>
                     <Button asChild>
-                      <Link to={inventoryPath}>Змінити</Link>
+                      <Link to={inventoryPath}>{t('change')}</Link>
                     </Button>
                   </li>
                 ))}
               </ul>
             )}
             <Note>
-              Склади й зони живуть в «Інвентаризації» — тут вони лише показані.{' '}
-              {NO_WAREHOUSE_PARTS}
+              {t('warehousesNote')} {t('noWarehouseParts')}
             </Note>
           </Step>
 
-          <Step number="03" title="Валюти й облік">
+          <Step number="04" title="Валюти й облік">
             <div>
               <p className="text-app-muted text-[13px] font-medium">
                 Основна валюта обліку
@@ -507,7 +490,9 @@ export function BusinessSettingsScreen() {
 
         <div className="grid min-w-0 content-start gap-5">
           <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5">
-            <h2 className="text-app-ink text-[15px] font-bold">Зведення</h2>
+            <h2 className="text-app-ink text-[15px] font-bold">
+              {t('summary')}
+            </h2>
             <p
               className={
                 normalizedName.length > 1
@@ -515,14 +500,14 @@ export function BusinessSettingsScreen() {
                   : 'text-app-dim mt-3.5 text-[17px] font-bold'
               }
             >
-              {normalizedName.length > 1 ? normalizedName : 'Назва бізнесу'}
+              {normalizedName.length > 1 ? normalizedName : t('nameLabel')}
             </p>
             <p className="text-app-muted mt-1 text-[13px]">
-              {normalizedCity === '' ? 'місто не вказано' : normalizedCity}
+              {normalizedCity === '' ? t('cityMissing') : normalizedCity}
             </p>
             <dl className="mt-4 grid gap-2.5 text-[13.5px]">
               <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">Складів</dt>
+                <dt className="text-app-muted">{t('warehouseCount')}</dt>
                 <dd className="text-app-ink text-right font-medium">
                   {warehouses === null ? '…' : warehouses.length}
                 </dd>
@@ -550,29 +535,26 @@ export function BusinessSettingsScreen() {
               type="submit"
               variant="primary"
             >
-              {busy ? 'Зберігаємо…' : 'Зберегти'}
+              {busy ? t('saving') : t('save')}
             </Button>
             <p className="text-app-dim mt-3 text-[12.5px] leading-5 text-pretty">
-              {normalizedName.length > 1
-                ? 'Зберігаються назва й місто — решти реквізитів розбірка не тримає.'
-                : 'Вкажіть назву бізнесу.'}
+              {normalizedName.length > 1 ? t('summaryHint') : t('nameRequired')}
             </p>
           </section>
 
           <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5">
             <h2 className="text-app-ink text-[15px] font-bold">
-              Дані кабінету
+              {t('dataTitle')}
             </h2>
             <p className="text-app-muted mt-2.5 text-[13px] leading-5 text-pretty">
-              Вивантажити все одним файлом чи видалити розбірку через кабінет
-              поки не можна.
+              {t('dataBody')}
             </p>
             <div className="mt-3.5 grid gap-2.5">
-              <Dead title={NO_EXPORT}>Експорт усіх даних</Dead>
-              <Dead title={NO_TENANT_DELETE}>Видалити кабінет</Dead>
+              <Dead title={t('noExport')}>{t('exportAll')}</Dead>
+              <Dead title={t('noTenantDelete')}>{t('deleteCabinet')}</Dead>
             </div>
             <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-              {NO_EXPORT} {NO_TENANT_DELETE}
+              {t('noExport')} {t('noTenantDelete')}
             </p>
           </section>
         </div>

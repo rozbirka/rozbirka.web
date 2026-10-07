@@ -1,0 +1,203 @@
+import { defineMessages } from '@/i18n/messages'
+
+/**
+ * Business settings outside the currency step («Валюти й облік»), which the
+ * currency work owns.
+ */
+export const businessMessages = defineMessages({
+  uk: {
+    noTenant: 'Оберіть розбірку, щоб змінити її налаштування.',
+    cancelChanges: 'Скасувати зміни',
+    save: 'Зберегти',
+    saving: 'Зберігаємо…',
+    crumb: 'Налаштування · Бізнес',
+    lead: 'Реквізити розбірки, склади й правила обліку.',
+    title: 'Бізнес',
+    saved: 'Налаштування бізнесу збережено.',
+    denied: 'Ви більше не маєте права змінювати налаштування бізнесу.',
+    error: 'Не вдалося зберегти налаштування бізнесу. Спробуйте ще раз.',
+    details: 'Реквізити',
+    nameHint: 'Показується в документах, стікерах і рахунках.',
+    nameLabel: 'Назва бізнесу',
+    namePlaceholder: 'Розбірка Коваль',
+    cityLabel: 'Місто',
+    cityPlaceholder: 'Львів',
+    legalForm: 'Юридична форма',
+    legalSole: 'ФОП',
+    legalLlc: 'ТОВ',
+    legalNone: 'Без реєстрації',
+    taxId: 'ЄДРПОУ / ІПН',
+    notStored: 'не зберігається',
+    phone: 'Телефон',
+    address: 'Адреса',
+    onlyCity: 'є тільки місто',
+    noLegalForm:
+      'Юридичної форми розбірка не тримає: у ній є назва, місто й логотип, і більше нічого з реквізитів.',
+    noTaxId: 'Поля для ЄДРПОУ чи ІПН у розбірці немає.',
+    noPhone: 'Телефон розбірки поки не зберігається.',
+    noAddress:
+      'Повної адреси немає — з місця розбірка тримає лише місто, і воно тут поруч.',
+    warehouses: 'Склади',
+    addWarehouse: 'Додати склад',
+    warehousesLoading: 'Завантажуємо склади…',
+    warehousesEmpty:
+      'Складів ще немає. Перший створюється в розділі «Інвентаризація».',
+    warehouseMain: 'Основний',
+    warehouseArchived: 'Архівний',
+    zones: {
+      one: '{count} зона',
+      few: '{count} зони',
+      many: '{count} зон',
+      other: '{count} зони',
+    },
+    partsNotCounted: 'деталей — не рахується',
+    noWarehouseParts:
+      'Скільки деталей лежить на складі, тут не рахується — у складу є код, зони й стан.',
+    change: 'Змінити',
+    warehousesNote:
+      'Склади й зони живуть в «Інвентаризації» — тут вони лише показані.',
+    summary: 'Зведення',
+    cityMissing: 'місто не вказано',
+    warehouseCount: 'Складів',
+    summaryHint:
+      'Зберігаються назва й місто — решти реквізитів розбірка не тримає.',
+    nameRequired: 'Вкажіть назву бізнесу.',
+    dataTitle: 'Дані кабінету',
+    dataBody:
+      'Вивантажити все одним файлом чи видалити розбірку через кабінет поки не можна.',
+    exportAll: 'Експорт усіх даних',
+    deleteCabinet: 'Видалити кабінет',
+    noExport:
+      'Вивантажити всі дані кабінету одним файлом поки не можна — окремого експорту немає в жодному розділі.',
+    noTenantDelete:
+      'Видалити розбірку з кабінету не можна — звертайтеся в підтримку.',
+  },
+  'en-GB': {
+    noTenant: 'Choose a business to change its settings.',
+    cancelChanges: 'Discard changes',
+    save: 'Save',
+    saving: 'Saving…',
+    crumb: 'Settings · Business',
+    lead: 'Business details, warehouses and accounting rules.',
+    title: 'Business',
+    saved: 'Business settings saved.',
+    denied: 'You no longer have permission to change business settings.',
+    error: 'Couldn’t save business settings. Please try again.',
+    details: 'Details',
+    nameHint: 'Shown on documents, labels and invoices.',
+    nameLabel: 'Business name',
+    namePlaceholder: 'Smith Auto Parts',
+    cityLabel: 'City',
+    cityPlaceholder: 'Manchester',
+    legalForm: 'Legal form',
+    legalSole: 'Sole trader',
+    legalLlc: 'Limited company',
+    legalNone: 'Unregistered',
+    taxId: 'Company / tax number',
+    notStored: 'not stored',
+    phone: 'Phone',
+    address: 'Address',
+    onlyCity: 'city only',
+    noLegalForm:
+      'The business record doesn’t keep a legal form: it has a name, city and logo, and no other details.',
+    noTaxId: 'There’s no field for a company or tax number.',
+    noPhone: 'The business phone isn’t stored yet.',
+    noAddress:
+      'There’s no full address — the business only keeps its city, shown next to this.',
+    warehouses: 'Warehouses',
+    addWarehouse: 'Add warehouse',
+    warehousesLoading: 'Loading warehouses…',
+    warehousesEmpty: 'No warehouses yet. Create the first one in Stocktake.',
+    warehouseMain: 'Main',
+    warehouseArchived: 'Archived',
+    zones: { one: '{count} zone', other: '{count} zones' },
+    partsNotCounted: 'parts — not counted',
+    noWarehouseParts:
+      'Parts per warehouse aren’t counted here — a warehouse has a code, zones and a status.',
+    change: 'Change',
+    warehousesNote:
+      'Warehouses and zones are managed in Stocktake — they’re only shown here.',
+    summary: 'Summary',
+    cityMissing: 'no city',
+    warehouseCount: 'Warehouses',
+    summaryHint:
+      'The name and city are saved — the business keeps no other details.',
+    nameRequired: 'Enter the business name.',
+    dataTitle: 'Account data',
+    dataBody:
+      'Exporting everything in one file or deleting the business from the account isn’t possible yet.',
+    exportAll: 'Export all data',
+    deleteCabinet: 'Delete account',
+    noExport:
+      'You can’t export all account data in one file yet — no section has a full export.',
+    noTenantDelete:
+      'A business can’t be deleted from the account — please contact support.',
+  },
+  pl: {
+    noTenant: 'Wybierz firmę, aby zmienić jej ustawienia.',
+    cancelChanges: 'Odrzuć zmiany',
+    save: 'Zapisz',
+    saving: 'Zapisywanie…',
+    crumb: 'Ustawienia · Firma',
+    lead: 'Dane firmy, magazyny i zasady ewidencji.',
+    title: 'Firma',
+    saved: 'Zapisano ustawienia firmy.',
+    denied: 'Nie masz już uprawnień do zmiany ustawień firmy.',
+    error: 'Nie udało się zapisać ustawień firmy. Spróbuj ponownie.',
+    details: 'Dane firmy',
+    nameHint: 'Widoczna na dokumentach, etykietach i fakturach.',
+    nameLabel: 'Nazwa firmy',
+    namePlaceholder: 'Auto Części Kowalski',
+    cityLabel: 'Miasto',
+    cityPlaceholder: 'Kraków',
+    legalForm: 'Forma prawna',
+    legalSole: 'JDG',
+    legalLlc: 'Sp. z o.o.',
+    legalNone: 'Bez rejestracji',
+    taxId: 'NIP / REGON',
+    notStored: 'nie jest zapisywany',
+    phone: 'Telefon',
+    address: 'Adres',
+    onlyCity: 'tylko miasto',
+    noLegalForm:
+      'Firma nie przechowuje formy prawnej: ma nazwę, miasto i logo, bez innych danych.',
+    noTaxId: 'Nie ma pola na NIP ani REGON.',
+    noPhone: 'Telefon firmy nie jest jeszcze zapisywany.',
+    noAddress:
+      'Nie ma pełnego adresu — firma przechowuje tylko miasto, widoczne obok.',
+    warehouses: 'Magazyny',
+    addWarehouse: 'Dodaj magazyn',
+    warehousesLoading: 'Wczytywanie magazynów…',
+    warehousesEmpty:
+      'Nie ma jeszcze magazynów. Pierwszy utworzysz w sekcji „Inwentaryzacja”.',
+    warehouseMain: 'Główny',
+    warehouseArchived: 'Zarchiwizowany',
+    zones: {
+      one: '{count} strefa',
+      few: '{count} strefy',
+      many: '{count} stref',
+      other: '{count} strefy',
+    },
+    partsNotCounted: 'części — nie są liczone',
+    noWarehouseParts:
+      'Liczba części w magazynie nie jest tu liczona — magazyn ma kod, strefy i status.',
+    change: 'Zmień',
+    warehousesNote:
+      'Magazynami i strefami zarządzasz w „Inwentaryzacji” — tutaj są tylko pokazane.',
+    summary: 'Podsumowanie',
+    cityMissing: 'nie podano miasta',
+    warehouseCount: 'Magazyny',
+    summaryHint:
+      'Zapisywane są nazwa i miasto — firma nie przechowuje innych danych.',
+    nameRequired: 'Podaj nazwę firmy.',
+    dataTitle: 'Dane konta',
+    dataBody:
+      'Eksport wszystkiego do jednego pliku ani usunięcie firmy z konta nie są jeszcze możliwe.',
+    exportAll: 'Eksport wszystkich danych',
+    deleteCabinet: 'Usuń konto',
+    noExport:
+      'Nie można jeszcze wyeksportować wszystkich danych konta do jednego pliku — żadna sekcja nie ma pełnego eksportu.',
+    noTenantDelete:
+      'Firmy nie można usunąć z konta — skontaktuj się z pomocą techniczną.',
+  },
+})

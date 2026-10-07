@@ -143,9 +143,12 @@ it('round-trips trimmed business settings through the active tenant', async () =
     requireDeliveryDeposit: true,
   })
   expect(updateCall?.[2]?.signal).toBeInstanceOf(AbortSignal)
-  expect(await screen.findByRole('status')).toHaveTextContent(
-    'Налаштування бізнесу збережено.',
-  )
+  // The region block adds its own static notice, so find the save status by text.
+  expect(
+    (await screen.findByText('Налаштування бізнесу збережено.')).closest(
+      '[role="status"]',
+    ),
+  ).not.toBeNull()
   expect(screen.getByLabelText('Назва бізнесу')).toHaveValue('Koval Parts LLC')
   expect(screen.getByLabelText('Місто')).toHaveValue('Буча')
   expect(currentCabinet.switchTenant).toHaveBeenCalledWith('tenant-1')
