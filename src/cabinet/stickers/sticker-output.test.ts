@@ -58,3 +58,29 @@ it('prints every sticker copy on its own 40 by 58 millimetre page', async () => 
   )
   expect(html).not.toContain('grid-template-columns:repeat(3,1fr)')
 })
+
+it('prints sticker text in the given document language', async () => {
+  const sticker = {
+    id: 'part-1',
+    name: 'Bumper',
+    qrCode: 'QR-1',
+    quantity: 1,
+    carLabel: null,
+  }
+  const uk = await buildStickerHtml([sticker], 'https://app.example')
+  expect(uk).toContain('<html lang="uk">')
+  expect(uk).toContain('<title>Стікери Rozbirka</title>')
+  expect(uk).toContain('aria-label="QR-код Bumper"')
+
+  const english = await buildStickerHtml(
+    [sticker],
+    'https://app.example',
+    'en-GB',
+  )
+  expect(english).toContain('<html lang="en-GB">')
+  expect(english).toContain('<title>Rozbirka stickers</title>')
+  expect(english).toContain('aria-label="QR code Bumper"')
+
+  const polish = await buildStickerHtml([sticker], 'https://app.example', 'pl')
+  expect(polish).toContain('<title>Naklejki Rozbirka</title>')
+})

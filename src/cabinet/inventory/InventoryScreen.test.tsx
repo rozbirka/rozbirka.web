@@ -8,6 +8,7 @@ import {
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
+import { LocaleProvider, type Locale } from '@/i18n'
 import { InventoryScreen } from './InventoryScreen'
 
 const api = vi.hoisted(() => ({
@@ -272,6 +273,50 @@ const renderAt = (path: string) =>
       <InventoryScreen definition={definition as never} />
     </MemoryRouter>,
   )
+
+const renderIn = (locale: Locale, path: string) =>
+  render(
+    <LocaleProvider locale={locale} syncDocumentLang={false}>
+      <MemoryRouter initialEntries={[path]}>
+        <InventoryScreen definition={definition as never} />
+      </MemoryRouter>
+    </LocaleProvider>,
+  )
+
+it('renders the inventory overview in British English', async () => {
+  renderIn('en-GB', '/app/yard/inventory')
+  const houses = await screen.findByRole('region', { name: 'Warehouses' })
+  // Warehouse names are user data and stay as entered.
+  expect(within(houses).getByText('Основний склад')).toBeInTheDocument()
+  expect(within(houses).getByText('4 zones')).toBeInTheDocument()
+  expect(
+    screen.getByRole('heading', { level: 1, name: 'Stocktake' }),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'New session' })).toBeInTheDocument()
+  expect(screen.getByLabelText('Search sessions')).toBeInTheDocument()
+  expect(screen.getByText('Active sessions')).toBeInTheDocument()
+  expect(screen.getByText('In progress')).toBeInTheDocument()
+  expect(screen.getByText('1 session · newest first')).toBeInTheDocument()
+  expect(screen.getByText('0 / 1 zone')).toBeInTheDocument()
+  expect(screen.queryByText(/Інвентаризація|Склади|сесія/)).toBeNull()
+})
+
+it('renders the inventory overview in Polish', async () => {
+  renderIn('pl', '/app/yard/inventory')
+  expect(
+    await screen.findByRole('region', { name: 'Magazyny' }),
+  ).toBeInTheDocument()
+  expect(screen.getByText('4 strefy')).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Nowa sesja' })).toBeInTheDocument()
+})
+
+it('renders a session in British English with zone lease and status', async () => {
+  renderIn('en-GB', '/app/yard/inventory/sessions/session-1')
+  expect(await screen.findByText('Стелаж A1')).toBeInTheDocument()
+  expect(screen.getByText('Counting')).toBeInTheDocument()
+  expect(screen.getByText(/Zone taken by a user until/)).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Results' })).toBeInTheDocument()
+})
 
 it('renders responsive management overview without physical scanning controls', async () => {
   renderAt('/app/yard/inventory')
@@ -653,13 +698,16 @@ it('offers warehouse and zone management and prints actual zone QR labels', asyn
   await waitFor(() =>
     expect(api.getZones).toHaveBeenCalledWith({ warehouseId: 'wh-1' }),
   )
-  expect(printable.buildZoneLabelHtml).toHaveBeenCalledWith([
-    expect.objectContaining({
-      zoneName: 'Стелаж A1',
-      warehouseName: 'Основний склад',
-      qrCode: 'ZONE-1',
-    }),
-  ])
+  expect(printable.buildZoneLabelHtml).toHaveBeenCalledWith(
+    [
+      expect.objectContaining({
+        zoneName: 'Стелаж A1',
+        warehouseName: 'Основний склад',
+        qrCode: 'ZONE-1',
+      }),
+    ],
+    'uk',
+  )
   expect(write).toHaveBeenCalledWith('<html>zones</html>')
   expect(print).toHaveBeenCalled()
 })

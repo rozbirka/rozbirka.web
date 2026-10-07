@@ -10,6 +10,8 @@ import {
   SearchInput,
 } from '@/components/app'
 import { stickersApi } from '@/api/stickers'
+import { useTenantSettings } from '@/auth/useTenantSettings'
+import { useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
@@ -21,6 +23,7 @@ import {
   type PrintableSticker,
   type RenderedSticker,
 } from './sticker-output'
+import { stickersMessages } from './messages'
 
 interface QueueItem {
   id: string
@@ -157,6 +160,9 @@ function TenantStickerQueue({
     typeof useLatestMutationGuard
   >['requireLatestMutation']
 }) {
+  const t = useT(stickersMessages)
+  // Printed stickers follow the tenant document language, not the UI locale.
+  const documentLocale = useTenantSettings().documentLanguage ?? 'uk'
   const [searchParams, setSearchParams] = useSearchParams()
   // Another screen can send parts here to be printed — one from a part card, a
   // whole batch from an intake. The ids arrive in the URL and join the queue as
@@ -261,13 +267,11 @@ function TenantStickerQueue({
   const selectPart = (part: PartListItem) => {
     if (!canGenerate || partsUnavailable) return
     if (part.quantityAvailable <= 0) {
-      setError('Для цієї запчастини немає доступного залишку.')
+      setError(t('noStock'))
       return
     }
     if (total >= MAX_STICKERS) {
-      setError(
-        `За один раз можна підготувати не більше ${MAX_STICKERS} стікерів.`,
-      )
+      setError(t('limit', { max: MAX_STICKERS }))
       return
     }
     setQueue((current) => {
@@ -314,9 +318,7 @@ function TenantStickerQueue({
 
   const changeQuantity = (partId: string, delta: number) => {
     if (delta > 0 && total >= MAX_STICKERS) {
-      setError(
-        `За один раз можна підготувати не більше ${MAX_STICKERS} стікерів.`,
-      )
+      setError(t('limit', { max: MAX_STICKERS }))
       return
     }
     setQueue((current) => {
@@ -372,13 +374,13 @@ function TenantStickerQueue({
       setPrintable(next)
       setPreview(rendered)
     } catch {
-      if (generation === generationRef.current)
-        setError('Не вдалося підготувати дані стікерів.')
+      if (generation === generationRef.current) setError(t('prepareFailed'))
     } finally {
       if (generation === generationRef.current) setBusy(false)
     }
   }
-  const artifact = () => buildStickerHtml(printable, window.location.origin)
+  const artifact = () =>
+    buildStickerHtml(printable, window.location.origin, documentLocale)
   const download = async () => {
     try {
       const html = await artifact()
@@ -394,7 +396,7 @@ function TenantStickerQueue({
         URL.revokeObjectURL(url)
       }
     } catch {
-      setError('Не вдалося завантажити макет стікерів.')
+      setError(t('downloadFailed'))
     }
   }
   const print = async () => {
@@ -408,7 +410,7 @@ function TenantStickerQueue({
       printWindow.focus()
       printWindow.print()
     } catch {
-      setError('Не вдалося відкрити макет для друку.')
+      setError(t('printFailed'))
     }
   }
   const share = async () => {
@@ -418,20 +420,19 @@ function TenantStickerQueue({
         type: 'text/html',
       })
       if (!navigator.share || !navigator.canShare?.({ files: [file] })) {
-        setError('Обмін файлами не підтримується цим браузером.')
+        setError(t('shareUnsupported'))
         return
       }
       await navigator.share({
         files: [file],
-        title: 'Стікери Rozbirka',
+        title: t('shareTitle'),
       })
     } catch {
-      setError('Не вдалося поділитися макетом стікерів.')
+      setError(t('shareFailed'))
     }
   }
 
-  const labelFor = (item: QueueItem) =>
-    item.name ?? 'Деталь, додана з іншого екрана'
+  const labelFor = (item: QueueItem) => item.name ?? t('unknownPart')
   const selectedIds = new Set(queue.map((item) => item.id))
   const previewCards = preview.length
     ? preview.slice(0, 6).map((sticker) => ({
@@ -486,37 +487,32 @@ function TenantStickerQueue({
     <PageBody className="gap-6 pb-8">
       <header>
         <h1 className="text-[clamp(34px,4vw,48px)] leading-none font-extrabold tracking-[-0.035em] text-white">
-          Стікери
+          {t('title')}
         </h1>
         <p className="text-app-muted mt-3 max-w-3xl text-[14px] leading-6">
-          QR-стікери для запчастин. Сканер відкриває запчастину за її кодом.
+          {t('subtitle')}
         </p>
       </header>
-      {!scope ? (
-        <Notice tone="danger">
-          Відновлення черги заблоковано без стабільної ідентичності користувача
-          та розбірки.
-        </Notice>
-      ) : null}
+      {!scope ? <Notice tone="danger">{t('noScope')}</Notice> : null}
       <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <section className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border">
           <div className="border-app-line border-b p-4 sm:p-5">
             <SearchInput
-              aria-label="Пошук запчастини"
+              aria-label={t('searchLabel')}
               className="min-h-14 rounded-[16px]"
               disabled={!canGenerate}
               onChange={(event) => {
                 setSearch(event.target.value)
                 setPartsPage(1)
               }}
-              placeholder="Назва, артикул або QR-код"
+              placeholder={t('searchPlaceholder')}
               value={search}
             />
           </div>
 
           <div className="border-app-line flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5">
             <p className="text-app-muted text-[13px] tabular-nums">
-              Вибрано {queue.length} обʼєктів · {total} стікерів
+              {t('selectedSummary', { objects: queue.length, stickers: total })}
             </p>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -526,38 +522,36 @@ function TenantStickerQueue({
                 }
                 onClick={selectVisible}
               >
-                Вибрати всі
+                {t('selectAll')}
               </Button>
               <Button
                 className="min-h-9 px-3 text-[12.5px]"
                 disabled={!queue.length}
                 onClick={clear}
               >
-                Зняти
+                {t('clear')}
               </Button>
             </div>
           </div>
 
           {partsUnavailable ? (
             <div className="p-5">
-              <Notice tone="danger">
-                Не вдалося завантажити список запчастин.
-              </Notice>
+              <Notice tone="danger">{t('partsLoadFailed')}</Notice>
             </div>
           ) : null}
           <ul
             className="divide-app-line grid divide-y"
-            aria-label="Список запчастин"
+            aria-label={t('partsList')}
           >
             {parts.map((part) => {
               const selected = selectedIds.has(part.id)
               const queued = queue.find((item) => item.id === part.id)
               const vehicle = part.car
                 ? `${part.car.make} ${part.car.model} · ${String(part.car.year)}`
-                : 'Без привʼязки до автомобіля'
+                : t('noCar')
               return (
                 <li
-                  aria-label={`Запчастина ${part.name}`}
+                  aria-label={t('partItem', { name: part.name })}
                   className={
                     selected
                       ? 'cursor-pointer bg-white/[0.035] shadow-[inset_2px_0_0_var(--color-brand)]'
@@ -588,7 +582,7 @@ function TenantStickerQueue({
                               : 'text-state-danger ml-2'
                           }
                         >
-                          Доступно: {part.quantityAvailable} шт.
+                          {t('available', { count: part.quantityAvailable })}
                         </span>
                       </p>
                     </div>
@@ -598,7 +592,7 @@ function TenantStickerQueue({
                         onClick={(event) => event.stopPropagation()}
                       >
                         <button
-                          aria-label={`Зменшити кількість ${part.name}`}
+                          aria-label={t('decrease', { name: part.name })}
                           className="text-app-muted hover:text-app-ink grid size-9 place-items-center disabled:opacity-35"
                           disabled={queued.quantity <= 1}
                           onClick={() => changeQuantity(queued.id, -1)}
@@ -610,7 +604,7 @@ function TenantStickerQueue({
                           {queued.quantity}
                         </span>
                         <button
-                          aria-label={`Збільшити кількість ${part.name}`}
+                          aria-label={t('increase', { name: part.name })}
                           className="text-app-muted hover:text-app-ink grid size-9 place-items-center disabled:opacity-35"
                           disabled={
                             total >= MAX_STICKERS ||
@@ -634,7 +628,7 @@ function TenantStickerQueue({
             })}
           </ul>
           <Pagination
-            label="Пагінація запчастин для стікерів"
+            label={t('pagination')}
             onPage={setPartsPage}
             page={partsPage}
             pageSize={PARTS_PAGE_SIZE}
@@ -644,16 +638,14 @@ function TenantStickerQueue({
         </section>
 
         <section
-          aria-label="Аркуш стікерів"
+          aria-label={t('sheetLabel')}
           className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border xl:sticky xl:top-5"
         >
           <div className="border-app-line flex items-center justify-between gap-3 border-b px-5 py-4">
             <h2 className="font-mono text-[11.5px] tracking-[0.14em] text-white uppercase">
-              Аркуш
+              {t('sheet')}
             </h2>
-            <span className="text-app-dim text-[12px]">
-              Попередній перегляд
-            </span>
+            <span className="text-app-dim text-[12px]">{t('preview')}</span>
           </div>
           <div className="p-5">
             <div className="grid min-h-[310px] grid-cols-2 gap-1.5 rounded-[16px] bg-[#eee] p-3">
@@ -661,13 +653,13 @@ function TenantStickerQueue({
                 const sticker = previewCards[index]
                 return sticker ? (
                   <article
-                    aria-label={`Попередній перегляд стікера ${sticker.name}`}
+                    aria-label={t('previewSticker', { name: sticker.name })}
                     className="grid min-h-[88px] grid-cols-[42px_minmax(0,1fr)] content-center gap-2 overflow-hidden rounded-[7px] border border-black/10 bg-white p-2 text-black"
                     key={`${sticker.id}-${String(index)}`}
                   >
                     {sticker.qrSvg ? (
                       <div
-                        aria-label={`QR-код ${sticker.name}`}
+                        aria-label={t('qrCode', { name: sticker.name })}
                         className="grid size-[42px] place-items-center overflow-hidden bg-white [&>svg]:block [&>svg]:size-full"
                         dangerouslySetInnerHTML={{ __html: sticker.qrSvg }}
                         role="img"
@@ -698,18 +690,18 @@ function TenantStickerQueue({
             </div>
 
             <p className="text-app-dim mt-3 text-center text-[12px] leading-5">
-              Кожен стікер друкується на окремому аркуші 40×58 мм.
+              {t('sheetHint')}
             </p>
 
             <dl className="mt-5 grid gap-2.5 text-[13px]">
               <div className="flex items-center justify-between gap-4">
-                <dt className="text-app-muted">Вибрано обʼєктів</dt>
+                <dt className="text-app-muted">{t('selectedObjects')}</dt>
                 <dd className="font-mono text-white tabular-nums">
                   {queue.length}
                 </dd>
               </div>
               <div className="flex items-center justify-between gap-4">
-                <dt className="text-app-muted">Стікерів</dt>
+                <dt className="text-app-muted">{t('stickersCount')}</dt>
                 <dd className="font-mono text-white tabular-nums">{total}</dd>
               </div>
             </dl>
@@ -723,10 +715,10 @@ function TenantStickerQueue({
             >
               <Printer aria-hidden />
               {busy
-                ? 'Готуємо макет…'
+                ? t('preparing')
                 : preview.length
-                  ? `Друкувати ${String(total)}`
-                  : `Підготувати ${String(total)}`}
+                  ? t('print', { count: total })
+                  : t('prepare', { count: total })}
             </Button>
             {preview.length ? (
               <div className="mt-2 grid grid-cols-2 gap-2">
@@ -736,7 +728,7 @@ function TenantStickerQueue({
                   onClick={() => void download()}
                 >
                   <Download aria-hidden />
-                  Завантажити
+                  {t('download')}
                 </Button>
                 <Button
                   className="min-w-0 px-2.5 text-[12.5px]"
@@ -744,7 +736,7 @@ function TenantStickerQueue({
                   onClick={() => void share()}
                 >
                   <Share2 aria-hidden />
-                  Поділитися
+                  {t('share')}
                 </Button>
               </div>
             ) : null}
@@ -755,12 +747,12 @@ function TenantStickerQueue({
       {!canGenerate ? (
         <p className="text-app-dim text-[13.5px]" role="status">
           {generationDecision === 'subscription-blocked'
-            ? 'Поточна підписка не дозволяє генерацію стікерів.'
+            ? t('subscriptionBlocked')
             : generationDecision === 'access-loading'
-              ? 'Перевіряємо право на генерацію стікерів…'
+              ? t('accessLoading')
               : generationDecision === 'access-error'
-                ? 'Не вдалося перевірити право на генерацію стікерів.'
-                : 'Недостатньо прав для генерації стікерів.'}
+                ? t('accessError')
+                : t('noPermission')}
         </p>
       ) : null}
       {error ? <Notice tone="danger">{error}</Notice> : null}

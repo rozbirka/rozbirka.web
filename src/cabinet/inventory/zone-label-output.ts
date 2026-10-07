@@ -1,4 +1,6 @@
 import QRCode from 'qrcode'
+import { SOURCE_LOCALE, translate, type Locale } from '@/i18n'
+import { zoneLabelMessages } from './zone-label-messages'
 
 export interface PrintableZoneLabel {
   id: string
@@ -16,7 +18,16 @@ const escapeHtml = (value: string) =>
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;')
 
-export const buildZoneLabelHtml = async (zones: PrintableZoneLabel[]) => {
+/**
+ * Printable zone labels. `locale` is the tenant document language (printed
+ * labels do not follow the operator's interface language).
+ */
+export const buildZoneLabelHtml = async (
+  zones: PrintableZoneLabel[],
+  locale: Locale = SOURCE_LOCALE,
+) => {
+  const text = (key: 'documentTitle' | 'qrAlt', name = '') =>
+    escapeHtml(translate(zoneLabelMessages, locale, key, { name }))
   const labels = await Promise.all(
     zones.map(async (zone) => ({
       zone,
@@ -31,7 +42,7 @@ export const buildZoneLabelHtml = async (zones: PrintableZoneLabel[]) => {
   const body = labels
     .map(
       ({ zone, svg }) => `<article class="label">
-  <div class="qr" role="img" aria-label="QR зони ${escapeHtml(zone.zoneName)}">${svg}</div>
+  <div class="qr" role="img" aria-label="${text('qrAlt', zone.zoneName)}">${svg}</div>
   <strong>${escapeHtml(zone.zoneName)}</strong>
   <span>${escapeHtml(zone.zoneCode)}</span>
   <small>${escapeHtml(zone.warehouseName)}</small>
@@ -40,11 +51,11 @@ export const buildZoneLabelHtml = async (zones: PrintableZoneLabel[]) => {
     .join('\n')
 
   return `<!doctype html>
-<html lang="uk">
+<html lang="${locale}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>QR-етикетки зон</title>
+  <title>${text('documentTitle')}</title>
   <style>
     @page { size: 40mm 58mm; margin: 0; }
     html,body{margin:0;padding:0}

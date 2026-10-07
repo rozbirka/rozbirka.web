@@ -1,0 +1,158 @@
+import { defineMessages } from '@/i18n'
+
+/** Where one part lies: warehouse, zones and placement history. */
+export const placementMessages = defineMessages({
+  uk: {
+    backToPart: 'До деталі',
+    crumbParts: 'Запчастини',
+    scanUnavailable:
+      'Зону сканують у мобільному застосунку — кабінет вибирає її зі списку',
+    scanZone: 'Сканувати зону',
+    saving: 'Зберігаємо…',
+    place: 'Розмістити',
+    title: 'Розміщення на складі',
+    partHidden: 'Картку запчастини видно тим, хто має право «parts.view».',
+    inStock: '{count} {unit} на складі',
+    saved: 'Розміщення збережено',
+    warehouseHint: 'Фізичне приміщення, де лежить запчастина.',
+    warehouse: 'Склад',
+    legendEmpty: 'порожня',
+    legendFilled: 'є позиції',
+    legendBusiest: 'найзавантаженіша',
+    zoneHint:
+      'Зона — найдрібніше місце в нашій системі: саме її і сканують. Можна вибрати кілька.',
+    zone: 'Зона',
+    zoneSearch: 'Пошук зони',
+    zoneSearchPlaceholder: 'Назва або код зони, наприклад A1',
+    noActiveZones: 'На цьому складі немає активних зон.',
+    noZonesFound:
+      'Зон за запитом не знайдено. Перевірте код або виберіть інший склад.',
+    quantityHint: 'Скільки одиниць кладемо у вибрану зону.',
+    quantity: 'Кількість',
+    notSplitTitle:
+      'Залишок між зонами не ділиться — запчастина лежить у зоні цілком',
+    notSplit:
+      'Залишок між зонами не ділиться: запчастина лежить у вибраних зонах цілком, тому кількість тут не редагується.',
+    records: {
+      one: '{count} запис',
+      few: '{count} записи',
+      many: '{count} записів',
+      other: '{count} запису',
+    },
+    historyTitle: 'Історія розміщень',
+    historyHidden: 'Історію видно тим, хто має право «parts.view».',
+    neverMoved: 'Запчастину ще не переміщували.',
+    newPlacement: 'Нове розміщення',
+    noZonesPicked: 'Зони не вибрані',
+    zonesPicked: 'Зон вибрано',
+    before: 'Було',
+    capacityNotCounted: 'Місткість зони не рахується',
+    capacity: 'Місткість зони',
+    savePlacement: 'Зберегти розміщення',
+    pickOne:
+      'Виберіть хоча б одну зону — запчастина не може лишитися без місця.',
+    replacesAll:
+      'Збереження замінить увесь набір зон цієї запчастини, а не тільки вибраний склад.',
+    unchanged: 'Нічого не змінилося — набір зон уже такий.',
+  },
+  'en-GB': {
+    backToPart: 'Back to part',
+    crumbParts: 'Parts',
+    scanUnavailable:
+      'Zones are scanned in the mobile app — the cabinet picks one from the list',
+    scanZone: 'Scan zone',
+    saving: 'Saving…',
+    place: 'Place',
+    title: 'Warehouse location',
+    partHidden:
+      'The part card is visible to those with the “parts.view” permission.',
+    inStock: '{count} {unit} in stock',
+    saved: 'Location saved',
+    warehouseHint: 'The physical room where the part is kept.',
+    warehouse: 'Warehouse',
+    legendEmpty: 'empty',
+    legendFilled: 'has items',
+    legendBusiest: 'busiest',
+    zoneHint:
+      'A zone is the smallest place in our system — it’s what gets scanned. You can pick several.',
+    zone: 'Zone',
+    zoneSearch: 'Search zones',
+    zoneSearchPlaceholder: 'Zone name or code, e.g. A1',
+    noActiveZones: 'This warehouse has no active zones.',
+    noZonesFound: 'No zones match. Check the code or choose another warehouse.',
+    quantityHint: 'How many units go into the selected zone.',
+    quantity: 'Quantity',
+    notSplitTitle:
+      'Stock isn’t split between zones — the whole part lies in the zone',
+    notSplit:
+      'Stock isn’t split between zones: the whole part lies in the selected zones, so the quantity can’t be edited here.',
+    records: { one: '{count} entry', other: '{count} entries' },
+    historyTitle: 'Location history',
+    historyHidden:
+      'History is visible to those with the “parts.view” permission.',
+    neverMoved: 'This part hasn’t been moved yet.',
+    newPlacement: 'New location',
+    noZonesPicked: 'No zones selected',
+    zonesPicked: 'Zones selected',
+    before: 'Before',
+    capacityNotCounted: 'Zone capacity isn’t tracked',
+    capacity: 'Zone capacity',
+    savePlacement: 'Save location',
+    pickOne: 'Select at least one zone — a part can’t be left without a place.',
+    replacesAll:
+      'Saving replaces this part’s whole set of zones, not just the selected warehouse.',
+    unchanged: 'Nothing has changed — the zones are already set like this.',
+  },
+  pl: {
+    backToPart: 'Do części',
+    crumbParts: 'Części',
+    scanUnavailable:
+      'Strefę skanuje się w aplikacji mobilnej — panel wybiera ją z listy',
+    scanZone: 'Skanuj strefę',
+    saving: 'Zapisywanie…',
+    place: 'Rozmieść',
+    title: 'Lokalizacja w magazynie',
+    partHidden: 'Kartę części widzą osoby z uprawnieniem „parts.view”.',
+    inStock: '{count} {unit} w magazynie',
+    saved: 'Lokalizację zapisano',
+    warehouseHint: 'Fizyczne pomieszczenie, w którym leży część.',
+    warehouse: 'Magazyn',
+    legendEmpty: 'pusta',
+    legendFilled: 'są pozycje',
+    legendBusiest: 'najbardziej zajęta',
+    zoneHint:
+      'Strefa to najmniejsze miejsce w naszym systemie — to ją się skanuje. Można wybrać kilka.',
+    zone: 'Strefa',
+    zoneSearch: 'Szukaj strefy',
+    zoneSearchPlaceholder: 'Nazwa lub kod strefy, np. A1',
+    noActiveZones: 'W tym magazynie nie ma aktywnych stref.',
+    noZonesFound: 'Nie znaleziono stref. Sprawdź kod lub wybierz inny magazyn.',
+    quantityHint: 'Ile sztuk odkładamy do wybranej strefy.',
+    quantity: 'Ilość',
+    notSplitTitle:
+      'Stan nie dzieli się między strefy — część leży w strefie w całości',
+    notSplit:
+      'Stan nie dzieli się między strefy: część leży w wybranych strefach w całości, dlatego ilości nie można tu edytować.',
+    records: {
+      one: '{count} wpis',
+      few: '{count} wpisy',
+      many: '{count} wpisów',
+      other: '{count} wpisu',
+    },
+    historyTitle: 'Historia lokalizacji',
+    historyHidden: 'Historię widzą osoby z uprawnieniem „parts.view”.',
+    neverMoved: 'Część nie była jeszcze przenoszona.',
+    newPlacement: 'Nowa lokalizacja',
+    noZonesPicked: 'Nie wybrano stref',
+    zonesPicked: 'Wybrane strefy',
+    before: 'Było',
+    capacityNotCounted: 'Pojemność strefy nie jest liczona',
+    capacity: 'Pojemność strefy',
+    savePlacement: 'Zapisz lokalizację',
+    pickOne:
+      'Wybierz co najmniej jedną strefę — część nie może zostać bez miejsca.',
+    replacesAll:
+      'Zapis zastąpi cały zestaw stref tej części, a nie tylko wybrany magazyn.',
+    unchanged: 'Nic się nie zmieniło — zestaw stref już taki jest.',
+  },
+})

@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, expect, it, vi } from 'vitest'
+import { LocaleProvider } from '@/i18n'
 import { ScannerScreen } from './ScannerScreen'
 import { normalizeScanCode } from './scan-code'
 
@@ -517,4 +518,33 @@ it('keeps the yard actions on the 56px gloved-thumb touch floor', () => {
   expect(screen.getByRole('button', { name: 'Знайти деталь' })).toHaveClass(
     'min-h-14',
   )
+})
+
+it('renders the scanner and a resolved part in British English', async () => {
+  render(
+    <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+      <MemoryRouter>
+        <ScannerScreen definition={{} as never} />
+      </MemoryRouter>
+    </LocaleProvider>,
+  )
+  expect(screen.getByText('QR scanner')).toBeInTheDocument()
+  expect(screen.getByText('Ready to scan')).toBeInTheDocument()
+  expect(
+    screen.getByRole('button', { name: 'Turn on camera' }),
+  ).toBeInTheDocument()
+  expect(screen.getByLabelText('QR code file')).toBeInTheDocument()
+
+  fireEvent.change(screen.getByLabelText('QR code'), {
+    target: { value: 'QR-123' },
+  })
+  fireEvent.submit(
+    screen.getByRole('button', { name: 'Find part' }).closest('form')!,
+  )
+  expect(await screen.findByText('Code recognised')).toBeInTheDocument()
+  expect(screen.getByText(/· 2 pcs$/)).toBeInTheDocument()
+  expect(
+    screen.getByRole('link', { name: 'Open part card' }),
+  ).toBeInTheDocument()
+  expect(screen.getByText('No bin set')).toBeInTheDocument()
 })

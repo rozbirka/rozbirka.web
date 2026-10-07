@@ -31,6 +31,7 @@ import {
   partStatusPresentation,
   conditionLabel,
   historyLabel,
+  unitLabel,
 } from '../parts/part-labels'
 import { scannersApi } from '@/api/scanners'
 import { partsApi, type PartHistory } from '@/api/parts'
@@ -38,6 +39,10 @@ import { inventoryApi, type PartInventoryZone } from '@/api/inventory'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { normalizeScanCode } from './scan-code'
+import { scannerMessages } from './messages'
+import { useLocale, useT, type MessageKey } from '@/i18n'
+
+type ScannerMessageKey = MessageKey<typeof scannerMessages>
 
 interface BarcodeResult {
   rawValue: string
@@ -63,7 +68,7 @@ const getDetector = (): BarcodeDetectorConstructor | null =>
  * are outcomes the yard has to act on, not asides.
  */
 type ScanNotice =
-  | { kind: 'inline'; tone: NoticeTone; text: string }
+  | { kind: 'inline'; tone: NoticeTone; text: ScannerMessageKey }
   | { kind: 'not-found' }
   | { kind: 'camera-denied' }
 
@@ -98,6 +103,8 @@ interface RecentScan {
 
 export function ScannerScreen(_props: CabinetModuleScreenProps) {
   const { targetTenant } = useCabinet()
+  const t = useT(scannerMessages)
+  const { locale } = useLocale()
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const mountedRef = useRef(true)
@@ -177,7 +184,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
       setStatus({
         kind: 'inline',
         tone: 'info',
-        text: 'Перевіряємо код у поточній розбірці…',
+        text: 'checkingInline',
       })
       try {
         const result = await scannersApi.resolveQr(normalized, {
@@ -288,7 +295,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
     setStatus({
       kind: 'inline',
       tone: 'info',
-      text: 'Камеру зупинено. Введіть код вручну або ввімкніть камеру знову.',
+      text: 'cameraStopped',
     })
   }
 
@@ -313,12 +320,12 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
           ? {
               kind: 'inline',
               tone: 'info',
-              text: 'Камера ввімкнена. Тримайте стікер у рамці, поки код не зчитається.',
+              text: 'cameraOn',
             }
           : {
               kind: 'inline',
               tone: 'warn',
-              text: 'Цей браузер не читає QR із камери. Введіть код зі стікера вручну нижче.',
+              text: 'cameraUnsupported',
             },
       )
     } catch {
@@ -346,7 +353,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
       setStatus({
         kind: 'inline',
         tone: 'warn',
-        text: 'Цей браузер не читає QR із зображення. Введіть код зі стікера вручну.',
+        text: 'imageUnsupported',
       })
       return
     }
@@ -363,14 +370,14 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
         setStatus({
           kind: 'inline',
           tone: 'warn',
-          text: 'На цьому фото QR-коду немає. Сфотографуйте стікер ближче або введіть код вручну.',
+          text: 'imageNoCode',
         })
     } catch {
       if (mountedRef.current && generation === fileGenerationRef.current)
         setStatus({
           kind: 'inline',
           tone: 'danger',
-          text: 'Не вдалося прочитати файл. Виберіть інше фото стікера або введіть код вручну.',
+          text: 'imageFailed',
         })
     }
   }
@@ -384,20 +391,19 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
   }
 
   const cameraLive = cameraState === 'active'
-  const partStatus = part?.status ? partStatusPresentation(part.status) : null
+  const partStatus = part?.status
+    ? partStatusPresentation(part.status, locale)
+    : null
 
   return (
     <PageBody width="narrow">
-      <PageHeader eyebrow="Склад" title="QR-сканер" />
-      <p className="text-app-muted text-sm">
-        Наведіть камеру на стікер деталі. Дані деталі не показуються до
-        перевірки доступу.
-      </p>
+      <PageHeader eyebrow={t('eyebrow')} title={t('title')} />
+      <p className="text-app-muted text-sm">{t('intro')}</p>
 
       {cameraLive ? (
         <div className="rounded-panel border-app-line relative overflow-hidden border bg-black">
           <video
-            aria-label="Камера QR"
+            aria-label={t('cameraLabel')}
             autoPlay
             className="aspect-4/3 w-full object-cover"
             muted
@@ -420,8 +426,8 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
                 {part.qrCode ?? part.code}
               </span>
             }
-            description="Переконайтеся, що це та сама деталь, яку тримаєте в руках."
-            title="Код розпізнано"
+            description={t('recognisedHint')}
+            title={t('recognisedTitle')}
           >
             <div className="flex flex-wrap items-start gap-4">
               {part.photo ? (
@@ -440,13 +446,13 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
                     <StatusPill tone={partStatus.tone}>
                       {partStatus.label}
                       {typeof part.quantityAvailable === 'number'
-                        ? ` · ${String(part.quantityAvailable)} ${part.unit ?? 'шт'}`
+                        ? ` · ${t('quantity', { count: part.quantityAvailable, unit: unitLabel(part.unit, locale) })}`
                         : ''}
                     </StatusPill>
                   ) : null}
                   {part.condition ? (
                     <span className="border-app-line bg-app-input text-app-muted rounded-full border px-2.5 py-1 text-[13px]">
-                      {conditionLabel(part.condition)}
+                      {conditionLabel(part.condition, locale)}
                     </span>
                   ) : null}
                 </div>
@@ -456,8 +462,8 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
 
           <div className="grid items-start gap-4 lg:grid-cols-2">
             <SectionPanel
-              description="Дії виконуються одразу для цієї запчастини."
-              title="Що зробити"
+              description={t('actionsHint')}
+              title={t('actionsTitle')}
             >
               <div className="grid gap-2.5">
                 <div className="border-app-line rounded-panel flex flex-wrap items-center justify-between gap-3 border p-3.5">
@@ -465,11 +471,11 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
                     <MapPin aria-hidden className="text-app-dim size-4" />
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold text-white">
-                        Розміщення
+                        {t('placement')}
                       </span>
                       <span className="text-app-muted block text-[13px]">
                         {placement.length === 0
-                          ? 'Комірку не вказано'
+                          ? t('noPlacement')
                           : placement
                               .map((zone) => zone.zoneCode ?? zone.zoneName)
                               .filter(Boolean)
@@ -481,7 +487,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
                     <Link
                       to={`/app/${targetTenant?.slug ?? ''}/parts/${part.id}/inventory`}
                     >
-                      Перемістити
+                      {t('move')}
                     </Link>
                   </Button>
                 </div>
@@ -489,14 +495,14 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
                   <span className="flex min-w-0 items-center gap-2.5">
                     <Printer aria-hidden className="text-app-dim size-4" />
                     <span className="text-sm font-semibold text-white">
-                      Стікер
+                      {t('sticker')}
                     </span>
                   </span>
                   <Button asChild>
                     <Link
                       to={`/app/${targetTenant?.slug ?? ''}/stickers?part=${part.id}`}
                     >
-                      Надрукувати
+                      {t('print')}
                     </Link>
                   </Button>
                 </div>
@@ -506,7 +512,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
                       <QrCode aria-hidden className="text-app-dim size-4" />
                       <span className="min-w-0">
                         <span className="block text-sm font-semibold text-white">
-                          Джерело
+                          {t('source')}
                         </span>
                         <span className="text-app-muted block text-[13px]">
                           {[part.carCode, part.car].filter(Boolean).join(' · ')}
@@ -517,7 +523,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
                       <Link
                         to={`/app/${targetTenant?.slug ?? ''}/cars/${part.carId}`}
                       >
-                        Відкрити авто
+                        {t('openCar')}
                       </Link>
                     </Button>
                   </div>
@@ -531,15 +537,13 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
                   className="hover:text-brand text-app-muted text-[13px]"
                   to={`/app/${targetTenant?.slug ?? ''}/parts/${part.id}`}
                 >
-                  Повна історія
+                  {t('fullHistory')}
                 </Link>
               }
-              title="Рух запчастини"
+              title={t('movementTitle')}
             >
               {history.length === 0 ? (
-                <p className="text-app-dim text-[13px]">
-                  Подій ще немає — вони зʼявляться після першої зміни.
-                </p>
+                <p className="text-app-dim text-[13px]">{t('noEvents')}</p>
               ) : (
                 <ol className="grid">
                   {history.map((event, index) => (
@@ -551,7 +555,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
                       key={event.id}
                     >
                       <span className="text-sm font-semibold text-white">
-                        {historyLabel(event.eventType)}
+                        {historyLabel(event.eventType, locale)}
                       </span>
                       <span className="text-app-dim flex flex-wrap gap-x-2.5 text-[12px]">
                         {event.user.name}
@@ -565,7 +569,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
           </div>
 
           {recent.length > 1 ? (
-            <SectionPanel title="Попередні скани коду">
+            <SectionPanel title={t('recentTitle')}>
               <ol className="grid">
                 {recent.slice(1).map((entry, index) => (
                   <li
@@ -595,17 +599,17 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
         </div>
       ) : pending ? (
         <StateScreen
-          description="Звіряємо стікер із деталями цієї розбірки. Це займає секунду."
+          description={t('checkingHint')}
           icon={<ScanLine aria-hidden />}
-          title="Перевіряємо код…"
+          title={t('checkingTitle')}
           tone="brand"
         />
       ) : status?.kind === 'not-found' ? (
         <StateScreen
-          description="Стікер може належати іншій розбірці, або деталь уже видалено. Звірте код на стікері й спробуйте ще раз."
+          description={t('notFoundHint')}
           icon={<SearchX aria-hidden />}
           role="alert"
-          title="Код не знайдено в цій розбірці"
+          title={t('notFoundTitle')}
           tone="warn"
           actions={
             <Button
@@ -614,20 +618,20 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
               variant="primary"
             >
               <ScanLine aria-hidden />
-              Сканувати ще раз
+              {t('scanAgain')}
             </Button>
           }
         />
       ) : status?.kind === 'camera-denied' ? (
         <DeniedState
-          description="Дозвольте доступ до камери в налаштуваннях браузера й увімкніть її ще раз. Поки що введіть код зі стікера вручну або виберіть його фото."
-          title="Камера недоступна"
+          description={t('cameraDeniedHint')}
+          title={t('cameraDeniedTitle')}
         />
       ) : cameraLive ? null : (
         <EmptyState
-          description="Увімкніть камеру й наведіть її на QR-стікер деталі. Знайдену деталь покажемо тут — перед тим, як відкривати картку."
+          description={t('readyHint')}
           icon={<QrCode aria-hidden />}
-          title="Готово до сканування"
+          title={t('readyTitle')}
         />
       )}
 
@@ -636,7 +640,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
           role={status.tone === 'danger' ? 'alert' : 'status'}
           tone={status.tone}
         >
-          {status.text}
+          {t(status.text)}
         </Notice>
       ) : null}
 
@@ -646,7 +650,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
           <>
             <Button asChild className="min-h-14 w-full" variant="primary">
               <Link to={`/app/${targetTenant?.slug ?? ''}/parts/${part.id}`}>
-                Відкрити картку деталі
+                {t('openPart')}
               </Link>
             </Button>
             <Button
@@ -655,7 +659,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
               variant="ghost"
             >
               <ScanLine aria-hidden />
-              Сканувати наступний код
+              {t('scanNext')}
             </Button>
           </>
         ) : (
@@ -666,7 +670,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
                 onClick={stopCamera}
                 variant="ghost"
               >
-                Зупинити камеру
+                {t('stopCamera')}
               </Button>
             ) : null}
             <Button
@@ -675,21 +679,18 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
               variant={cameraLive ? 'quiet' : 'primary'}
             >
               {cameraLive ? <RotateCcw aria-hidden /> : <Camera aria-hidden />}
-              Увімкнути камеру
+              {t('startCamera')}
             </Button>
             {cameraLive ? (
               <p className="text-app-dim text-center text-[12.5px]">
-                Зображення завмерло? Увімкніть камеру ще раз.
+                {t('frozenHint')}
               </p>
             ) : null}
           </>
         )}
       </div>
 
-      <SectionPanel
-        description="Запасний шлях, коли стікер потертий або камера недоступна."
-        title="Ввести код вручну"
-      >
+      <SectionPanel description={t('manualHint')} title={t('manualTitle')}>
         <form
           className="grid gap-3"
           onSubmit={(event) => {
@@ -697,24 +698,18 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
             void resolve(code)
           }}
         >
-          <Field
-            hint="Код зі стікера або посилання виду /scan/…"
-            label="QR-код"
-          >
+          <Field hint={t('codeHint')} label={t('codeLabel')}>
             <TextInput
-              aria-label="QR-код"
+              aria-label={t('codeLabel')}
               autoComplete="off"
               onChange={(event) => setCode(event.target.value)}
-              placeholder="Напр. QR-123"
+              placeholder={t('codePlaceholder')}
               value={code}
             />
           </Field>
-          <Field
-            hint="Фото стікера з галереї — код розпізнаємо із зображення."
-            label="Файл QR-коду"
-          >
+          <Field hint={t('fileHint')} label={t('fileLabel')}>
             <PhotoFileField
-              aria-label="Файл QR-коду"
+              aria-label={t('fileLabel')}
               onChange={(event) =>
                 void scanFile(event.target.files?.[0] ?? null)
               }
@@ -722,7 +717,7 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
             {filePreview ? (
               <div className="border-app-line flex min-w-0 items-center gap-3 rounded-control border p-2">
                 <img
-                  alt={`Попередній перегляд ${filePreview.name}`}
+                  alt={t('filePreview', { name: filePreview.name })}
                   className="size-14 shrink-0 rounded-control object-cover"
                   src={filePreview.url}
                 />
@@ -742,14 +737,12 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
               cameraState === 'unavailable' && !part ? 'primary' : 'ghost'
             }
           >
-            Знайти деталь
+            {t('findPart')}
           </Button>
         </form>
       </SectionPanel>
 
-      <p className="text-app-dim text-[13.5px]">
-        VIN та OEM-декодування поки недоступні.
-      </p>
+      <p className="text-app-dim text-[13.5px]">{t('vinUnavailable')}</p>
     </PageBody>
   )
 }

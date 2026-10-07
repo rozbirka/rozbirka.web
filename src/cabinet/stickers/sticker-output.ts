@@ -1,4 +1,6 @@
 import QRCode from 'qrcode'
+import { SOURCE_LOCALE, translate, type Locale } from '@/i18n'
+import { stickerOutputMessages } from './sticker-output-messages'
 
 export interface PrintableSticker {
   id: string
@@ -50,15 +52,22 @@ export const renderStickers = async (
     ),
   )
 
+/**
+ * Printable sticker sheet. `locale` is the tenant document language (printed
+ * labels do not follow the operator's interface language).
+ */
 export const buildStickerHtml = async (
   stickers: PrintableSticker[],
   origin: string,
+  locale: Locale = SOURCE_LOCALE,
 ) => {
+  const text = (key: 'documentTitle' | 'qrAlt', name = '') =>
+    escapeHtml(translate(stickerOutputMessages, locale, key, { name }))
   const rendered = await renderStickers(stickers, origin)
   const cards = rendered
     .map(
       (sticker) => `<article class="sticker">
-  <div class="qr" role="img" aria-label="QR-код ${escapeHtml(sticker.name)}">${sticker.qrSvg}</div>
+  <div class="qr" role="img" aria-label="${text('qrAlt', sticker.name)}">${sticker.qrSvg}</div>
   <strong>${escapeHtml(sticker.name)}</strong>
   ${sticker.carLabel ? `<span>${escapeHtml(sticker.carLabel)}</span>` : ''}
   <a href="${escapeHtml(sticker.resumeUrl)}">${escapeHtml(sticker.resumeUrl)}</a>
@@ -66,11 +75,11 @@ export const buildStickerHtml = async (
     )
     .join('\n')
   return `<!doctype html>
-<html lang="uk">
+<html lang="${locale}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Стікери Rozbirka</title>
+  <title>${text('documentTitle')}</title>
   <style>
     @page{size:40mm 58mm;margin:0}
     html,body{margin:0;padding:0}
