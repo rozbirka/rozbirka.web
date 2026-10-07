@@ -28,58 +28,61 @@ function request(
 }
 afterEach(() => vi.unstubAllGlobals())
 
-it('returns native credentials in a Core envelope without cookies and strips forged headers/body', async () => {
-  let upstream: Request | undefined
-  vi.stubGlobal(
-    'fetch',
-    vi.fn((input: RequestInfo | URL, init: RequestInit) => {
-      upstream = new Request(input, init)
-      return Promise.resolve(
-        Response.json(
-          { data: { ...auth, privateKey: 'never-emit' } },
-          { headers: { 'Set-Cookie': 'upstream-private=1' } },
-        ),
-      )
-    }),
-  )
-  const body = {
-    phone: '+380501112233',
-    code: '123456',
-    challengeId: 'challenge',
-  }
-  const result = await handleNativeAuth(
-    request(
-      '/auth/login/verify',
-      'POST',
-      { ...body, allowRegistration: true },
-      {
-        cookie: 'rozbirka_refresh=browser-secret',
-        'CF-Connecting-IP': '203.0.113.7',
-        'X-Rozbirka-Client-IP': 'forged',
-        'X-Rozbirka-Registration-Key': 'forged',
-        'X-Rozbirka-Registration-Session': 'forged',
-        authorization: 'Bearer caller',
-      },
-    ),
-    env,
-  )
-  expect(upstream?.url).toBe(`${env.CORE_ORIGIN}/auth/login/verify`)
-  expect(upstream?.redirect).toBe('manual')
-  expect(upstream?.headers.get('X-Rozbirka-Client-IP')).toBe('203.0.113.7')
-  expect(upstream?.headers.get('X-Rozbirka-Registration-Key')).toBe(
-    env.AUTH_REGISTRATION_KEY,
-  )
-  for (const header of [
-    'cookie',
-    'authorization',
-    'X-Rozbirka-Registration-Session',
-  ])
-    expect(upstream?.headers.get(header)).toBeNull()
-  expect(await upstream?.json()).toEqual(body)
-  expect(await result?.json()).toEqual({ data: auth })
-  expect(result?.headers.get('set-cookie')).toBeNull()
-  expect(result?.headers.get('cache-control')).toBe('no-store')
-})
+it.each(['/auth/login/verify', '/auth/v2/verify'])(
+  'returns native credentials safely through %s',
+  async (route) => {
+    let upstream: Request | undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init: RequestInit) => {
+        upstream = new Request(input, init)
+        return Promise.resolve(
+          Response.json(
+            { data: { ...auth, privateKey: 'never-emit' } },
+            { headers: { 'Set-Cookie': 'upstream-private=1' } },
+          ),
+        )
+      }),
+    )
+    const body = {
+      phone: '+380501112233',
+      code: '123456',
+      challengeId: 'challenge',
+    }
+    const result = await handleNativeAuth(
+      request(
+        route,
+        'POST',
+        { ...body, allowRegistration: true },
+        {
+          cookie: 'rozbirka_refresh=browser-secret',
+          'CF-Connecting-IP': '203.0.113.7',
+          'X-Rozbirka-Client-IP': 'forged',
+          'X-Rozbirka-Registration-Key': 'forged',
+          'X-Rozbirka-Registration-Session': 'forged',
+          authorization: 'Bearer caller',
+        },
+      ),
+      env,
+    )
+    expect(upstream?.url).toBe(`${env.CORE_ORIGIN}${route}`)
+    expect(upstream?.redirect).toBe('manual')
+    expect(upstream?.headers.get('X-Rozbirka-Client-IP')).toBe('203.0.113.7')
+    expect(upstream?.headers.get('X-Rozbirka-Registration-Key')).toBe(
+      env.AUTH_REGISTRATION_KEY,
+    )
+    for (const header of [
+      'cookie',
+      'authorization',
+      'X-Rozbirka-Registration-Session',
+    ])
+      expect(upstream?.headers.get(header)).toBeNull()
+    expect(await upstream?.json()).toEqual(body)
+    expect(await result?.json()).toEqual({ data: auth })
+    expect(result?.headers.get('set-cookie')).toBeNull()
+    expect(result?.headers.get('cache-control')).toBe('no-store')
+  },
+)
 
 it.each([
   '/auth/registration/phone',
