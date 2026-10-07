@@ -1,7 +1,9 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 import { ChevronDown, Store } from 'lucide-react'
 import type { Tenant } from '../api/types'
+import { useT } from '@/i18n'
 import { cn } from '../lib/utils'
+import { shellMessages } from './shell-messages'
 
 export interface TenantSwitcherProps {
   tenant: Tenant
@@ -16,6 +18,7 @@ export function TenantSwitcher({
   onSwitch,
   compact = false,
 }: TenantSwitcherProps) {
+  const t = useT(shellMessages)
   const [isSwitching, setIsSwitching] = useState(false)
   const switchPending = useRef(false)
 
@@ -49,7 +52,7 @@ export function TenantSwitcher({
         )}
       />
       <select
-        aria-label="Перемкнути розбірку"
+        aria-label={t('tenant.switch')}
         className={cn(
           'bg-app-input rounded-control border-app-line-2 min-h-11 min-w-11 appearance-none border text-sm text-white transition-colors outline-none hover:bg-white/[0.06] disabled:cursor-wait disabled:opacity-60',
           compact
@@ -77,7 +80,7 @@ export function TenantSwitcher({
       )}
       {!compact && context ? (
         <p className="text-app-dim mt-1 px-1 font-mono text-[11.5px]">
-          {isSwitching ? 'Перемикаємо…' : context}
+          {isSwitching ? t('tenant.switching') : context}
         </p>
       ) : null}
     </div>

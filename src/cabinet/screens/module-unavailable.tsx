@@ -4,30 +4,21 @@ import { Check, Minus, PackageOpen } from 'lucide-react'
 import { Amount, Button, StateScreen } from '@/components/app'
 import { billingApi } from '@/api/billing'
 import type { BillingState, PublicPlanDto } from '@/api/types'
+import { useFormat, useLocale, useT, type MessageKey } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { accessMessages } from '../access-messages'
 import { featureLabel } from '../billing/billing-vocabulary'
 import { cabinetPath } from '../cabinet-paths'
 import { useCabinet } from '../CabinetContext'
+import { moduleLabel } from '../module-messages'
 import {
   cabinetModules,
   type CabinetModuleDefinition,
   type CabinetModuleKey,
 } from '../module-registry'
 
-const moduleLabel = (definition: CabinetModuleDefinition) =>
-  definition.navigation?.label ?? definition.key
-
 /** The support address the cabinet already hands out for billing questions. */
 const SUPPORT_MAIL = 'support@rozbirka.app'
-
-const NO_PLAN_PITCH =
-  'Тариф описаний переліком можливостей і лімітів — розгорнутого опису в ньому немає.'
-const NO_PRORATION =
-  'Скільки доплатити за залишок періоду, кабінет не рахує — сума буде видна в рахунку Mono.'
-const NO_RETENTION =
-  'До якої дати зберігаються дані після зупинки підписки — питання до підтримки.'
-const NO_RETRY_DATE =
-  'Дати наступної спроби списання кабінет не показує — є лише дата, на яку призначене списання.'
 
 export function ModuleUnavailableScreen({
   definition,
@@ -35,6 +26,8 @@ export function ModuleUnavailableScreen({
   definition: CabinetModuleDefinition
 }) {
   const { targetTenant } = useCabinet()
+  const { locale } = useLocale()
+  const t = useT(accessMessages)
 
   return (
     <StateScreen
@@ -42,15 +35,17 @@ export function ModuleUnavailableScreen({
         targetTenant === null ? undefined : (
           <Button asChild variant="primary">
             <Link to={cabinetPath(targetTenant.slug, 'dashboard')}>
-              До головної
+              {t('toDashboard')}
             </Link>
           </Button>
         )
       }
       className="min-h-[50dvh] content-center"
-      description={`${moduleLabel(definition)} поки недоступний у вашій розбірці. Посилання запрацює, щойно розділ увімкнуть.`}
+      description={t('unavailableBody', {
+        module: moduleLabel(definition.key, locale),
+      })}
       icon={<PackageOpen aria-hidden />}
-      title="Розділ поки недоступний"
+      title={t('unavailableTitle')}
       tone="neutral"
     />
   )
@@ -68,6 +63,8 @@ export function FeatureUnavailableScreen({
   definition: CabinetModuleDefinition
 }) {
   const { targetTenant, snapshot } = useCabinet()
+  const { locale } = useLocale()
+  const t = useT(accessMessages)
   const [plans, setPlans] = useState<PublicPlanDto[] | null>(null)
   const required = definition.requiredFeature
 
@@ -93,7 +90,7 @@ export function FeatureUnavailableScreen({
       : (plans
           .filter((plan) => plan.features.includes(required))
           .sort((a, b) => a.amount - b.amount)[0] ?? null)
-  const label = moduleLabel(definition)
+  const label = moduleLabel(definition.key, locale)
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
@@ -102,17 +99,16 @@ export function FeatureUnavailableScreen({
           <span className="border-state-warn/30 bg-state-warn/10 text-state-warn inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[12px] font-bold">
             <span aria-hidden className="bg-state-warn size-1.5 rounded-full" />
             {currentPlan === null
-              ? 'Недоступно у поточному тарифі'
-              : `Недоступно у тарифі ${currentPlan}`}
+              ? t('notInCurrentPlan')
+              : t('notInPlan', { plan: currentPlan })}
           </span>
           <h1 className="mt-3.5 text-[32px] leading-[1.04] font-extrabold tracking-[-0.03em] text-white sm:text-[40px]">
             {unlocking === null
-              ? `Розділ «${label}» не входить у ваш тариф`
-              : `Розділ «${label}» входить у тариф ${unlocking.name}`}
+              ? t('notIncludedTitle', { module: label })
+              : t('includedInTitle', { module: label, plan: unlocking.name })}
           </h1>
           <p className="text-app-muted mt-3 max-w-[64ch] text-[14.5px] leading-6 text-pretty">
-            Розділ вимкнений тарифом — дані розбірки від цього не змінюються й
-            нікуди не зникають. Щойно тариф дозволить, усе буде на місці.
+            {t('planLockedBody')}
           </p>
         </div>
 
@@ -120,13 +116,11 @@ export function FeatureUnavailableScreen({
           <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-4">
             <div className="min-w-0">
               <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                {unlocking === null ? 'Тариф із цим модулем' : 'Потрібен тариф'}
+                {unlocking === null ? t('planWithModule') : t('planRequired')}
               </p>
               {unlocking === null ? (
                 <p className="text-app-dim mt-2.5 max-w-[52ch] text-[13.5px] leading-5 text-pretty">
-                  {plans === null
-                    ? 'Дивимось, який тариф відкриває цей розділ…'
-                    : 'Каталог тарифів не називає тарифу з цим модулем — подивіться повний перелік.'}
+                  {plans === null ? t('findingPlan') : t('noPlanInCatalogue')}
                 </p>
               ) : (
                 <>
@@ -143,8 +137,8 @@ export function FeatureUnavailableScreen({
                   <p className="text-app-dim mt-2 max-w-[52ch] text-[12.5px] leading-5 text-pretty">
                     {currentPlan === null
                       ? ''
-                      : `Зараз у вас «${currentPlan}». `}
-                    {NO_PRORATION}
+                      : `${t('currentPlan', { plan: currentPlan })} `}
+                    {t('noProration')}
                   </p>
                 </>
               )}
@@ -153,7 +147,7 @@ export function FeatureUnavailableScreen({
               <div className="flex flex-wrap gap-2.5">
                 <Button asChild>
                   <Link to={cabinetPath(targetTenant.slug, 'plans')}>
-                    Порівняти тарифи
+                    {t('comparePlans')}
                   </Link>
                 </Button>
                 {unlocking !== null && (
@@ -161,7 +155,7 @@ export function FeatureUnavailableScreen({
                     <Link
                       to={`${cabinetPath(targetTenant.slug, 'plans')}?plan=${encodeURIComponent(unlocking.code)}`}
                     >
-                      Перейти на {unlocking.name}
+                      {t('switchToPlan', { plan: unlocking.name })}
                     </Link>
                   </Button>
                 )}
@@ -191,49 +185,39 @@ export function FeatureUnavailableScreen({
             </ul>
           )}
           <p className="text-app-dim mt-4 text-[12.5px] leading-5 text-pretty">
-            {NO_PLAN_PITCH}
+            {t('noPlanPitch')}
           </p>
         </section>
 
         <p className="text-app-dim text-[13px]">
-          Потрібен лише цей модуль?{' '}
+          {t('onlyThisModule')}{' '}
           <a
             className="text-brand underline underline-offset-4"
             href={`mailto:${SUPPORT_MAIL}`}
           >
-            Напишіть нам
+            {t('writeToUs')}
           </a>{' '}
-          — підберемо варіант.
+          {t('weWillHelp')}
         </p>
       </div>
     </div>
   )
 }
 
-const stateCopy: Partial<
-  Record<BillingState, { chip: string; title: string; body: string }>
-> = {
-  pastDue: {
-    chip: 'Оплата прострочена',
-    title: 'Платіж не пройшов',
-    body: 'Списання за підписку не вдалося. Поки платіж не пройде, частина розділів працює лише на перегляд — дані розбірки лишаються на місці.',
-  },
-  blocked: {
-    chip: 'Кабінет у режимі перегляду',
-    title: 'Підписка неактивна — дані лише для читання',
-    body: 'Склад, замовлення й історія грошей збереглися повністю, але створювати й змінювати записи не можна, доки підписка не відновиться.',
-  },
-  cancelled: {
-    chip: 'Підписку скасовано',
-    title: 'Підписка скасована — доступ діє до кінця періоду',
-    body: 'Списань більше не буде. Коли сплачений період завершиться, кабінет перейде в режим перегляду.',
-  },
-  none: {
-    chip: 'Підписки ще немає',
-    title: 'Щоб відкрити цей розділ, потрібна підписка',
-    body: 'Оформіть тариф — усе, що вже є в розбірці, лишиться на місці й стане доступним одразу після оплати.',
-  },
+type StateCopyKey = 'pastDue' | 'blocked' | 'cancelled' | 'none' | 'other'
+
+const stateCopyKeys: ReadonlySet<BillingState> = new Set<BillingState>([
+  'pastDue',
+  'blocked',
+  'cancelled',
+  'none',
+])
+
+function stateCopyKey(state: BillingState): StateCopyKey {
+  return stateCopyKeys.has(state) ? (state as StateCopyKey) : 'other'
 }
+
+type AccessKey = MessageKey<typeof accessMessages>
 
 /**
  * Стан підписки на весь екран. The «що доступно зараз» list is not a promise:
@@ -249,11 +233,16 @@ export function SubscriptionStateScreen({
 }) {
   const { targetTenant, snapshot } = useCabinet()
   const subscription = snapshot?.subscription ?? null
-  const copy = stateCopy[state] ?? {
-    chip: 'Підписка потребує уваги',
-    title: 'Розділ доступний лише після оплати',
-    body: 'Поки підписка неактивна, цей розділ закритий. Історія платежів і тарифи лишаються відкритими.',
+  const { locale } = useLocale()
+  const format = useFormat()
+  const t = useT(accessMessages)
+  const copyKey = stateCopyKey(state)
+  const copy = {
+    chip: t(`state.${copyKey}.chip` satisfies AccessKey),
+    title: t(`state.${copyKey}.title` satisfies AccessKey),
+    body: t(`state.${copyKey}.body` satisfies AccessKey),
   }
+  const noRetryDate = t('noRetryDate')
   const modules = (Object.keys(cabinetModules) as CabinetModuleKey[])
     .map((key) => cabinetModules[key])
     .filter(
@@ -263,7 +252,7 @@ export function SubscriptionStateScreen({
           snapshot?.permissions.has(one.viewPermission) === true),
     )
     .map((one) => ({
-      label: moduleLabel(one),
+      label: moduleLabel(one.key, locale),
       open:
         one.allowedSubscriptionStates === undefined ||
         one.allowedSubscriptionStates.includes(state),
@@ -294,7 +283,8 @@ export function SubscriptionStateScreen({
             {copy.title}
           </h1>
           <p className="text-app-muted mt-3 max-w-[64ch] text-[14.5px] leading-6 text-pretty">
-            {copy.body} Ви намагалися відкрити «{moduleLabel(definition)}».
+            {copy.body}{' '}
+            {t('triedToOpen', { module: moduleLabel(definition.key, locale) })}
           </p>
         </div>
 
@@ -302,7 +292,7 @@ export function SubscriptionStateScreen({
           <dl className="grid gap-4 sm:grid-cols-3">
             <div>
               <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                Сума до сплати
+                {t('amountDue')}
               </dt>
               <dd className="text-app-ink mt-2 text-[20px] font-extrabold tracking-[-0.02em]">
                 {typeof subscription?.amount === 'number' ? (
@@ -315,45 +305,39 @@ export function SubscriptionStateScreen({
                 )}
               </dd>
               <dd className="text-app-dim mt-1 text-[12.5px]">
-                {subscription?.planName ?? 'тариф не вказано'}
+                {subscription?.planName ?? t('planNotSet')}
               </dd>
             </div>
             <div>
               <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                Наступне списання
+                {t('nextCharge')}
               </dt>
               <dd className="text-app-ink mt-2 text-[20px] font-extrabold tracking-[-0.02em]">
                 {subscription?.nextChargeAt === null ||
                 subscription?.nextChargeAt === undefined ? (
-                  <span className="text-app-dim" title={NO_RETRY_DATE}>
+                  <span className="text-app-dim" title={noRetryDate}>
                     —
                   </span>
                 ) : (
-                  new Date(subscription.nextChargeAt).toLocaleDateString(
-                    'uk-UA',
-                  )
+                  format.date(subscription.nextChargeAt)
                 )}
               </dd>
-              <dd className="text-app-dim mt-1 text-[12.5px]">
-                {NO_RETRY_DATE}
-              </dd>
+              <dd className="text-app-dim mt-1 text-[12.5px]">{noRetryDate}</dd>
             </div>
             <div>
               <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                Доступ до
+                {t('accessUntil')}
               </dt>
               <dd className="text-app-ink mt-2 text-[20px] font-extrabold tracking-[-0.02em]">
                 {subscription?.currentPeriodEnd === null ||
                 subscription?.currentPeriodEnd === undefined ? (
                   <span className="text-app-dim">—</span>
                 ) : (
-                  new Date(subscription.currentPeriodEnd).toLocaleDateString(
-                    'uk-UA',
-                  )
+                  format.date(subscription.currentPeriodEnd)
                 )}
               </dd>
               <dd className="text-app-dim mt-1 text-[12.5px]">
-                {NO_RETENTION}
+                {t('noRetention')}
               </dd>
             </div>
           </dl>
@@ -361,17 +345,17 @@ export function SubscriptionStateScreen({
             <div className="border-app-line mt-5 flex flex-wrap gap-2.5 border-t pt-4">
               <Button asChild variant="primary">
                 <Link to={cabinetPath(targetTenant.slug, 'billing')}>
-                  Перейти до підписки
+                  {t('toSubscription')}
                 </Link>
               </Button>
               <Button asChild>
                 <Link to={cabinetPath(targetTenant.slug, 'plans')}>
-                  Порівняти тарифи
+                  {t('comparePlans')}
                 </Link>
               </Button>
               <Button asChild>
                 <Link to={cabinetPath(targetTenant.slug, 'payments')}>
-                  Історія платежів
+                  {t('paymentHistory')}
                 </Link>
               </Button>
             </div>
@@ -380,7 +364,7 @@ export function SubscriptionStateScreen({
 
         <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5.5 py-5">
           <h2 className="text-app-ink text-[15px] font-bold">
-            Що доступно зараз
+            {t('availableNow')}
           </h2>
           <ul className="mt-3.5 grid gap-2 sm:grid-cols-2">
             {modules.map((one) => (
@@ -393,12 +377,12 @@ export function SubscriptionStateScreen({
               >
                 {one.open ? (
                   <Check
-                    aria-label="доступний"
+                    aria-label={t('moduleOpen')}
                     className="text-state-ok mt-0.5 size-4 shrink-0"
                   />
                 ) : (
                   <Minus
-                    aria-label="закритий"
+                    aria-label={t('moduleClosed')}
                     className="text-app-dim mt-0.5 size-4 shrink-0"
                   />
                 )}
@@ -407,13 +391,12 @@ export function SubscriptionStateScreen({
             ))}
           </ul>
           <p className="text-app-dim mt-4 text-[12.5px] leading-5 text-pretty">
-            Перелік зібраний з тих самих правил, за якими кабінет пускає в
-            розділ, — це не обіцянка, а те, що застосується прямо зараз.
+            {t('availableNowNote')}
           </p>
         </section>
 
         <p className="text-app-dim text-[13px]">
-          Питання щодо оплати —{' '}
+          {t('paymentQuestions')}{' '}
           <a
             className="text-brand underline underline-offset-4"
             href={`mailto:${SUPPORT_MAIL}`}

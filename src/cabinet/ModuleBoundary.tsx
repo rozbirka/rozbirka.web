@@ -7,6 +7,8 @@ import {
   SkeletonRows,
   StateScreen,
 } from '@/components/app'
+import { useT } from '@/i18n'
+import { accessMessages } from './access-messages'
 import { cabinetPath } from './cabinet-paths'
 import { useCabinet } from './CabinetContext'
 import {
@@ -44,19 +46,20 @@ export function ModuleBoundary({
   screen: Screen,
 }: ModuleBoundaryProps) {
   const cabinet = useCabinet()
+  const t = useT(accessMessages)
   const definition = cabinetModules[module]
   const access = cabinetAccessState(cabinet)
   const decision = evaluateModuleAccess(definition, access, 'view')
 
   if (decision.kind === 'allowed') {
     return (
-      <Suspense fallback={<SkeletonRows label="Завантажуємо модуль…" />}>
+      <Suspense fallback={<SkeletonRows label={t('loadingModule')} />}>
         <Screen definition={definition} />
       </Suspense>
     )
   }
 
-  return decisionScreen(definition, decision)
+  return <DecisionScreen decision={decision} definition={definition} />
 }
 
 function cabinetAccessState(
@@ -71,19 +74,20 @@ function cabinetAccessState(
   return { status: 'loading', snapshot: null, error: null }
 }
 
-function decisionScreen(
-  definition: CabinetModuleDefinition,
-  decision: Exclude<ModuleAccessDecision, { kind: 'allowed' }>,
-) {
+function DecisionScreen({
+  definition,
+  decision,
+}: {
+  definition: CabinetModuleDefinition
+  decision: Exclude<ModuleAccessDecision, { kind: 'allowed' }>
+}) {
+  const t = useT(accessMessages)
   switch (decision.kind) {
     case 'feature-unavailable':
       return <FeatureUnavailableScreen definition={definition} />
     case 'permission-denied':
       return (
-        <DeniedState
-          description="Доступ до цього розділу відкриває власник розбірки в «Команді»."
-          title="Недостатньо прав"
-        />
+        <DeniedState description={t('deniedBody')} title={t('deniedTitle')} />
       )
     case 'subscription-blocked':
       return (
@@ -95,23 +99,26 @@ function decisionScreen(
     case 'quota-exhausted':
       return (
         <BoundaryStateScreen
-          action={<BillingLink label="Порівняти тарифи" module="plans" />}
-          description={`Ліміт тарифу вичерпано: ${String(decision.used)} з ${String(decision.max)}. Підвищте тариф або звільніть місце.`}
-          title="Ліміт вичерпано"
+          action={<BillingLink label={t('comparePlans')} module="plans" />}
+          description={t('quotaBody', {
+            used: decision.used,
+            max: decision.max,
+          })}
+          title={t('quotaTitle')}
           tone="warn"
         />
       )
     case 'access-error':
       return (
         <BoundaryStateScreen
-          description="Не вдалося отримати ваші права для цієї розбірки. Оновіть сторінку та спробуйте ще раз."
+          description={t('accessErrorBody')}
           role="alert"
-          title="Не вдалося перевірити доступ"
+          title={t('accessErrorTitle')}
           tone="danger"
         />
       )
     case 'access-loading':
-      return <SkeletonRows label="Перевіряємо доступ…" />
+      return <SkeletonRows label={t('checkingAccess')} />
   }
 }
 

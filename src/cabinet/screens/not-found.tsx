@@ -2,8 +2,11 @@ import { useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { Search } from 'lucide-react'
 import { Button } from '@/components/app'
+import { commonMessages, useLocale, useT } from '@/i18n'
+import { accessMessages } from '../access-messages'
 import { cabinetPath } from '../cabinet-paths'
 import { useCabinet } from '../CabinetContext'
+import { moduleLabel } from '../module-messages'
 import { cabinetModules, type CabinetModuleKey } from '../module-registry'
 
 /** Where a lost reader usually meant to go, in the order they usually mean it. */
@@ -26,6 +29,9 @@ export function CabinetNotFoundScreen() {
   const location = useLocation()
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
+  const { locale } = useLocale()
+  const t = useT(accessMessages)
+  const tc = useT(commonMessages)
 
   const permitted = SHORTCUTS.filter((key) => {
     const definition = cabinetModules[key]
@@ -53,14 +59,13 @@ export function CabinetNotFoundScreen() {
       <div className="grid w-full max-w-[620px] gap-6 px-4 py-16 sm:px-6 md:px-8 lg:px-12">
         <div role="alert">
           <p className="text-app-dim font-mono text-[12px] tracking-[0.14em] uppercase">
-            Помилка 404
+            {t('notFoundEyebrow')}
           </p>
           <h1 className="mt-2.5 text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-            Сторінку не знайдено
+            {t('notFoundTitle')}
           </h1>
           <p className="text-app-muted mt-3 max-w-[56ch] text-[14.5px] leading-6 text-pretty">
-            Можливо, запис видалили або посилання неповне. Спробуйте знайти
-            деталь за номером — або поверніться на головну.
+            {t('notFoundBody')}
           </p>
         </div>
 
@@ -71,17 +76,17 @@ export function CabinetNotFoundScreen() {
           >
             <Search aria-hidden className="text-app-dim size-4 shrink-0" />
             <input
-              aria-label="Пошук запчастин"
+              aria-label={t('searchParts')}
               className="text-app-ink placeholder:text-app-dim min-w-0 flex-1 bg-transparent text-sm outline-none"
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Номер деталі, назва, VIN"
+              placeholder={t('searchPartsPlaceholder')}
               value={query}
             />
             <button
               className="text-app-muted hover:text-app-ink shrink-0 text-[13px] font-bold"
               type="submit"
             >
-              Знайти
+              {t('find')}
             </button>
           </form>
         )}
@@ -94,17 +99,17 @@ export function CabinetNotFoundScreen() {
               variant="primary"
             >
               <Link to={cabinetPath(targetTenant.slug, 'dashboard')}>
-                На головну
+                {t('toHome')}
               </Link>
             </Button>
           )}
-          <Button onClick={() => void navigate(-1)}>Назад</Button>
+          <Button onClick={() => void navigate(-1)}>{tc('back')}</Button>
         </div>
 
         {targetTenant === null || permitted.length === 0 ? null : (
           <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5">
             <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-              Часті розділи
+              {t('frequentSections')}
             </h2>
             <div className="mt-3 flex flex-wrap gap-2">
               {permitted.map((key) => (
@@ -113,7 +118,7 @@ export function CabinetNotFoundScreen() {
                   key={key}
                   to={cabinetPath(targetTenant.slug, key)}
                 >
-                  {cabinetModules[key].navigation?.label ?? key}
+                  {moduleLabel(key, locale)}
                 </Link>
               ))}
             </div>

@@ -4,6 +4,7 @@ import { Dialog } from 'radix-ui'
 import { NavLink } from 'react-router'
 import type { Tenant } from '../api/types'
 import { BrandLogo } from '../components/site/brand-logo'
+import { useLocale, useT, type Locale } from '@/i18n'
 import { cn } from '../lib/utils'
 import type { TenantAccessSnapshot } from './access-types'
 import { cabinetPath } from './cabinet-paths'
@@ -13,7 +14,9 @@ import {
   type CabinetModuleKey,
   type CabinetNavigationGroup,
 } from './module-registry'
+import { moduleLabel, navigationGroupLabel } from './module-messages'
 import { evaluateModuleAccess } from './policy'
+import { shellMessages } from './shell-messages'
 import { TenantSwitcher } from './TenantSwitcher'
 import { useNavigationCollapsed } from './use-navigation-collapsed'
 
@@ -25,14 +28,6 @@ interface NavigationEntry {
   group: CabinetNavigationGroup
   mobilePriority: number
   to: string
-}
-
-const groupLabel: Record<CabinetNavigationGroup, string | null> = {
-  overview: null,
-  stock: 'Склад',
-  sales: 'Продажі',
-  money: 'Гроші',
-  settings: 'Налаштування',
 }
 
 const groupOrder: readonly CabinetNavigationGroup[] = [
@@ -49,11 +44,11 @@ const MOBILE_TAB_LIMIT = 4
 const byMobilePriority = (a: NavigationEntry, b: NavigationEntry) =>
   a.mobilePriority - b.mobilePriority
 
-const groupsOf = (entries: readonly NavigationEntry[]) =>
+const groupsOf = (entries: readonly NavigationEntry[], locale: Locale) =>
   groupOrder
     .map((group) => ({
       group,
-      label: groupLabel[group],
+      label: navigationGroupLabel(group, locale),
       entries: entries.filter((entry) => entry.group === group),
     }))
     .filter((section) => section.entries.length > 0)
@@ -73,6 +68,7 @@ export function CabinetNavigation({
   onSwitchTenant,
   onLogout,
 }: CabinetNavigationProps) {
+  const { locale } = useLocale()
   const entries = useMemo(
     () =>
       Object.values(cabinetModules).flatMap((definition): NavigationEntry[] => {
@@ -91,7 +87,7 @@ export function CabinetNavigation({
         return [
           {
             key: definition.key,
-            label: navigation.label,
+            label: moduleLabel(definition.key, locale),
             icon: navigation.icon,
             placement: navigation.placement,
             group: navigation.group,
@@ -101,7 +97,7 @@ export function CabinetNavigation({
           },
         ]
       }),
-    [snapshot, tenant.slug],
+    [locale, snapshot, tenant.slug],
   )
 
   return (
@@ -150,6 +146,8 @@ function DesktopNavigation({
   const account = entries.filter((entry) => entry.placement === 'account')
 
   const [collapsed, toggleCollapsed] = useNavigationCollapsed()
+  const { locale } = useLocale()
+  const t = useT(shellMessages)
 
   return (
     <div
@@ -165,10 +163,10 @@ function DesktopNavigation({
       >
         <BrandLogo href={cabinetPath(tenant.slug, 'dashboard')} />
         <nav
-          aria-label="Навігація кабінету"
+          aria-label={t('nav.desktop')}
           className="mt-8 flex flex-1 flex-col"
         >
-          {groupsOf(primary).map((section) => (
+          {groupsOf(primary, locale).map((section) => (
             <NavigationList
               className="mt-1"
               entries={section.entries}
@@ -181,7 +179,7 @@ function DesktopNavigation({
             <NavigationList
               className="mt-auto pt-6"
               entries={account}
-              label="Налаштування"
+              label={navigationGroupLabel('settings', locale)}
               presentation="desktop"
             />
           ) : null}
@@ -200,7 +198,7 @@ function DesktopNavigation({
       <button
         aria-controls="cabinet-navigation"
         aria-expanded={!collapsed}
-        aria-label={collapsed ? 'Показати меню' : 'Сховати меню'}
+        aria-label={collapsed ? t('nav.showMenu') : t('nav.hideMenu')}
         className={cn(
           "border-app-line-2 bg-app-raised text-app-muted hover:text-app-ink focus-visible:outline-brand absolute top-1/2 z-30 grid size-7 -translate-y-1/2 cursor-pointer place-items-center rounded-full border shadow-lg before:absolute before:-inset-2.5 before:content-[''] hover:bg-white/[0.06]",
           // Folded away, the control still needs to be fully on screen.
@@ -230,6 +228,8 @@ function TabletNavigation({
 }: PresentationProps) {
   const primary = entries.filter((entry) => entry.placement === 'primary')
   const account = entries.filter((entry) => entry.placement === 'account')
+  const { locale } = useLocale()
+  const t = useT(shellMessages)
 
   return (
     <aside className="bg-surface-1 scrollbar-none sticky top-0 hidden h-dvh w-[72px] shrink-0 flex-col items-center self-start overflow-y-auto border-r border-white/[0.06] px-3 py-5 md:flex lg:hidden">
@@ -237,10 +237,10 @@ function TabletNavigation({
         r
       </span>
       <nav
-        aria-label="Навігація планшета"
+        aria-label={t('nav.tablet')}
         className="mt-7 flex w-full flex-1 flex-col"
       >
-        {groupsOf(primary).map((section) => (
+        {groupsOf(primary, locale).map((section) => (
           <NavigationList
             className="mt-1"
             entries={section.entries}
@@ -257,7 +257,7 @@ function TabletNavigation({
         ) : null}
       </nav>
       <div className="mt-4 border-t border-white/[0.06] pt-4">
-        <RailControl label="Перемкнути розбірку">
+        <RailControl label={t('tenant.switch')}>
           <TenantSwitcher
             compact
             tenant={tenant}
@@ -284,11 +284,12 @@ function MobileNavigation({
     .slice(0, MOBILE_TAB_LIMIT)
   const mobileKeys = new Set(mobileEntries.map((entry) => entry.key))
   const moreEntries = entries.filter((entry) => !mobileKeys.has(entry.key))
+  const t = useT(shellMessages)
 
   return (
     <Dialog.Root>
       <nav
-        aria-label="Мобільна навігація"
+        aria-label={t('nav.mobile')}
         className="bg-surface-1/95 fixed inset-x-0 bottom-0 z-40 flex min-h-16 items-start justify-around border-t border-white/10 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden"
       >
         {mobileEntries.map((entry) => (
@@ -300,7 +301,7 @@ function MobileNavigation({
             className="flex min-h-11 min-w-11 flex-col items-center justify-center gap-1 rounded-xl px-3 text-[12px] text-neutral-400 transition-colors hover:bg-white/[0.05] hover:text-white"
           >
             <Ellipsis aria-hidden className="size-5" />
-            <span>Ще</span>
+            <span>{t('nav.more')}</span>
           </button>
         </Dialog.Trigger>
       </nav>
@@ -309,17 +310,17 @@ function MobileNavigation({
         <Dialog.Content className="bg-surface-2 fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 max-h-[min(76dvh,42rem)] overflow-y-auto rounded-3xl border border-white/10 p-5 shadow-2xl data-[state=closed]:animate-out data-[state=open]:animate-in md:hidden">
           <div className="flex items-center justify-between gap-4">
             <Dialog.Title className="text-lg font-medium text-white">
-              Меню кабінету
+              {t('nav.menuTitle')}
             </Dialog.Title>
             <Dialog.Close
-              aria-label="Закрити меню"
+              aria-label={t('nav.closeMenu')}
               className="grid min-h-11 min-w-11 place-items-center rounded-full text-neutral-400 transition-colors hover:bg-white/[0.06] hover:text-white"
             >
               <X aria-hidden className="size-5" />
             </Dialog.Close>
           </div>
           <Dialog.Description className="sr-only">
-            Навігація та перемикання між розбірками
+            {t('nav.menuDescription')}
           </Dialog.Description>
           <div className="mt-4 grid grid-cols-2 gap-2">
             {moreEntries.map((entry) => (
@@ -329,7 +330,9 @@ function MobileNavigation({
             ))}
           </div>
           <div className="mt-5 border-t border-white/10 pt-5">
-            <p className="mb-2 text-xs text-neutral-500">Поточна розбірка</p>
+            <p className="mb-2 text-xs text-neutral-500">
+              {t('nav.currentTenant')}
+            </p>
             <TenantSwitcher
               tenant={tenant}
               tenants={tenants}
@@ -352,10 +355,11 @@ function LogoutButton({
   onLogout: () => Promise<void>
   presentation: 'desktop' | 'rail' | 'dialog'
 }) {
+  const t = useT(shellMessages)
   const button = (
     <button
       type="button"
-      aria-label={presentation === 'rail' ? 'Вийти' : undefined}
+      aria-label={presentation === 'rail' ? t('nav.logout') : undefined}
       onClick={() => void onLogout()}
       className={cn(
         'min-h-11 min-w-11 rounded-xl text-neutral-400 transition-colors hover:bg-white/[0.05] hover:text-white',
@@ -367,12 +371,12 @@ function LogoutButton({
       )}
     >
       <LogOut aria-hidden className="size-5 shrink-0" />
-      {presentation !== 'rail' && <span>Вийти</span>}
+      {presentation !== 'rail' && <span>{t('nav.logout')}</span>}
     </button>
   )
 
   return presentation === 'rail' ? (
-    <RailControl className="mt-3" label="Вийти">
+    <RailControl className="mt-3" label={t('nav.logout')}>
       {button}
     </RailControl>
   ) : (
