@@ -89,6 +89,12 @@ export interface FirstPriceGuard extends AccountingCurrency {
   /** Currency a save of `hasPrice` would lock now (board 2a), if any. */
   willLock: (hasPrice: boolean) => SupportedCurrency | null
   /**
+   * Whether `beforeSave` has anything to check: only a price before the
+   * currency is known to be locked. Lets a form dispatch synchronously
+   * otherwise.
+   */
+  needsCheck: (hasPrice: boolean) => boolean
+  /**
    * Run before saving. `true` lets the save go on. Before the first price it
    * re-reads the setting: a currency changed while the form was open stops
    * the save with a conflict (board 2c) instead of saving in the new one.
@@ -120,6 +126,14 @@ export function useFirstPriceGuard(): FirstPriceGuard {
   // existed had no price to type, so it takes the first one it sees.
   const [opened] = useState<SupportedCurrency | null>(accounting.currency)
   const formCurrency = accepted ?? opened ?? accounting.currency
+
+  const needsCheck = useCallback(
+    (hasPrice: boolean) =>
+      hasPrice &&
+      status.kind !== 'unknown' &&
+      !(status.kind === 'chosen' && status.locked === true),
+    [status],
+  )
 
   const beforeSave = useCallback(
     async (hasPrice: boolean, acceptedNow?: SupportedCurrency | null) => {
@@ -175,6 +189,7 @@ export function useFirstPriceGuard(): FirstPriceGuard {
     ...accounting,
     check,
     willLock: (hasPrice) => willLockCurrency(status, hasPrice),
+    needsCheck,
     beforeSave,
     afterSave,
     acceptConflict,

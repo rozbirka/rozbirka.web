@@ -10,7 +10,7 @@ import {
   useLocation,
   useNavigate,
 } from 'react-router'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FEATURES } from '@/api/types'
 import { PartsScreen } from './PartsScreen'
 
@@ -134,6 +134,13 @@ const mediaMocks = vi.hoisted(() => ({
   remove: vi.fn(),
 }))
 const cabinetMock = vi.hoisted(() => ({
+  // Older contract by default: no accounting currency reported at all.
+  tenant: {
+    id: 'tenant-1',
+    slug: 'yard',
+    accountingCurrency: null as string | null,
+    currencyLocked: null as boolean | null,
+  },
   snapshot: {
     userId: 'user-1',
     tenantId: 'tenant-1',
@@ -187,11 +194,22 @@ vi.mock('../CabinetContext', () => ({
     status: 'ready',
     snapshot: cabinetMock.snapshot,
     error: null,
-    targetTenant: { id: 'tenant-1', slug: 'yard' },
+    targetTenant: cabinetMock.tenant,
   }),
 }))
+const tenantMocks = vi.hoisted(() => ({ list: vi.fn() }))
+vi.mock('@/api/tenants', () => ({ tenantsApi: tenantMocks }))
 
 beforeEach(() => {
+  cabinetMock.tenant = {
+    id: 'tenant-1',
+    slug: 'yard',
+    accountingCurrency: null,
+    currencyLocked: null,
+  }
+  tenantMocks.list
+    .mockReset()
+    .mockImplementation(() => Promise.resolve([cabinetMock.tenant]))
   partMocks.list.mockReset().mockResolvedValue({
     items: [],
     page: 1,
@@ -2927,4 +2945,78 @@ it('offers the existing import link when the tenant flag is enabled', async () =
   expect(
     await screen.findByRole('link', { name: 'Імпорт запчастин' }),
   ).toHaveAttribute('href', '/app/yard/parts/imports')
+})
+
+describe('asking price and the accounting currency', () => {
+  const renderNewPart = () =>
+    render(
+      <MemoryRouter initialEntries={['/app/yard/parts/new?intake_id=intake-1']}>
+        <Routes>
+          <Route
+            path="/app/:tenant/parts/new"
+            element={<PartsScreen definition={partsDefinition as never} />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+  it('keeps the typed part when the owner leaves to choose the currency', () => {
+    cabinetMock.tenant = {
+      id: 'tenant-1',
+      slug: 'yard',
+      accountingCurrency: null,
+      currencyLocked: false,
+    }
+    cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
+    renderNewPart()
+    fireEvent.change(screen.getByLabelText('Назва'), {
+      target: { value: 'Фара ліва' },
+    })
+
+    expect(screen.getByLabelText('Бажана ціна')).toBeDisabled()
+    expect(
+      screen.getByText('Чернетку збережемо, після вибору повернемо сюди.'),
+    ).toBeVisible()
+    const link = screen.getByRole('link', { name: 'Обрати валюту обліку →' })
+    expect(link).toHaveAttribute(
+      'href',
+      `/app/yard/settings/business?return_to=${encodeURIComponent('/app/yard/parts/new?intake_id=intake-1')}`,
+    )
+    fireEvent.click(link)
+    expect(sessionStorage.getItem('rozbirka:part-create-draft')).toContain(
+      'Фара ліва',
+    )
+  })
+
+  it('treats 0 as the first price and saves it in the shown currency', async () => {
+    cabinetMock.tenant = {
+      id: 'tenant-1',
+      slug: 'yard',
+      accountingCurrency: 'USD',
+      currencyLocked: false,
+    }
+    cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
+    partMocks.create.mockResolvedValueOnce({ id: 'part-9' })
+    renderNewPart()
+    fireEvent.change(screen.getByLabelText('Назва'), {
+      target: { value: 'Фара ліва' },
+    })
+    fireEvent.change(screen.getByLabelText('Бажана ціна'), {
+      target: { value: '0' },
+    })
+
+    expect(
+      screen.getByText(
+        'Після збереження цієї ціни валюту обліку USD буде зафіксовано.',
+      ),
+    ).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
+
+    expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
+    expect(tenantMocks.list).toHaveBeenCalled()
+    expect(partMocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({ desiredSalePrice: 0 }),
+      expect.anything(),
+    )
+  })
 })

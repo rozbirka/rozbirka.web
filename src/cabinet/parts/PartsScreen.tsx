@@ -115,6 +115,13 @@ import {
   savePartDraft,
   sourceCreateHref,
 } from './source-return'
+import type { SupportedCurrency } from '@/i18n'
+import { MoneyInput } from '../currency/price-currency'
+import {
+  useAccountingCurrency,
+  useFirstPriceGuard,
+} from '../currency/use-accounting-currency'
+import { usePriceSlots, type PriceSlots } from '../currency/use-price-slots'
 
 const partStatuses = new Set(['available', 'reserved', 'sold'])
 /** Every group the filter panel draws; the server counts each one for us. */
@@ -1141,7 +1148,6 @@ function FilterRow({
  * Parts are priced in dollars, like the cars they are pulled off: the contract
  * sends bare numbers, so the currency is stated here until it carries one.
  */
-const PART_CURRENCY = 'USD'
 
 /** The conditions the yard sorts by, in the server's own vocabulary. */
 const PART_CONDITIONS = [
@@ -1186,6 +1192,7 @@ function PartDetailScreen({
   tenantSlug: string
 }) {
   const navigate = useNavigate()
+  const { currency: partCurrency } = useAccountingCurrency()
   const [deleting, setDeleting] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -1559,7 +1566,8 @@ function PartDetailScreen({
                       <p className="flex items-baseline gap-2.5">
                         <Amount
                           className="font-mono text-[30px] font-medium tracking-[-0.01em] text-white"
-                          currency={PART_CURRENCY}
+                          currency={partCurrency}
+                          currencyDisplay="code"
                           value={detail.effectiveSalePrice}
                         />
                         <span className="text-app-muted text-[13px]">
@@ -1571,7 +1579,8 @@ function PartDetailScreen({
                           <>
                             Вільний залишок на{' '}
                             <Amount
-                              currency={PART_CURRENCY}
+                              currency={partCurrency}
+                              currencyDisplay="code"
                               value={
                                 detail.effectiveSalePrice *
                                 detail.quantityAvailable
@@ -1592,7 +1601,8 @@ function PartDetailScreen({
                         <p className="text-app-dim mt-1 text-[12.5px]">
                           бажана{' '}
                           <Amount
-                            currency={PART_CURRENCY}
+                            currency={partCurrency}
+                            currencyDisplay="code"
                             value={detail.desiredSalePrice}
                           />
                         </p>
@@ -1686,7 +1696,11 @@ function PartDetailScreen({
                     <div className="flex items-baseline gap-2.5">
                       <dt className="text-app-muted text-[13px]">Виручка</dt>
                       <dd className="font-mono text-[17px] font-medium text-white">
-                        <Amount currency={PART_CURRENCY} value={soldRevenue} />
+                        <Amount
+                          currency={partCurrency}
+                          currencyDisplay="code"
+                          value={soldRevenue}
+                        />
                       </dd>
                     </div>
                     <div className="flex items-baseline gap-2.5">
@@ -1708,7 +1722,11 @@ function PartDetailScreen({
                           soldDiscount > 0 ? 'text-state-warn' : 'text-app-dim',
                         )}
                       >
-                        <Amount currency={PART_CURRENCY} value={soldDiscount} />
+                        <Amount
+                          currency={partCurrency}
+                          currencyDisplay="code"
+                          value={soldDiscount}
+                        />
                       </dd>
                     </div>
                   </dl>
@@ -1864,7 +1882,8 @@ function PartDetailScreen({
                                   <span title={RESERVE_HAS_NO_PRICE}>—</span>
                                 ) : (
                                   <Amount
-                                    currency={PART_CURRENCY}
+                                    currency={partCurrency}
+                                    currencyDisplay="code"
                                     value={row.unitPrice}
                                   />
                                 )}
@@ -1873,7 +1892,8 @@ function PartDetailScreen({
                                 <span className="text-state-warn mt-1 block font-mono text-[12px]">
                                   −
                                   <Amount
-                                    currency={PART_CURRENCY}
+                                    currency={partCurrency}
+                                    currencyDisplay="code"
                                     value={row.discount}
                                   />
                                 </span>
@@ -1889,7 +1909,8 @@ function PartDetailScreen({
                                 </span>
                               ) : (
                                 <Amount
-                                  currency={PART_CURRENCY}
+                                  currency={partCurrency}
+                                  currencyDisplay="code"
                                   value={row.unitPrice * row.quantity}
                                 />
                               )}
@@ -1932,7 +1953,8 @@ function PartDetailScreen({
                               </span>
                             ) : (
                               <Amount
-                                currency={PART_CURRENCY}
+                                currency={partCurrency}
+                                currencyDisplay="code"
                                 value={salesRows.reduce(
                                   (sum, row) =>
                                     sum + (row.unitPrice ?? 0) * row.quantity,
@@ -2941,8 +2963,11 @@ function PartFields({
   compatibility,
   errors,
   edit,
+  price,
   variant = 'panel',
 }: {
+  /** Accounting currency of the asking price: suffix, gate and notes. */
+  price: PriceSlots
   /** The vehicles this part fits. Absent on the edit screen, which hides them. */
   compatibility?:
     | { rows: CompatibilityRow[]; setRows: (rows: CompatibilityRow[]) => void }
@@ -3294,11 +3319,13 @@ function PartFields({
           </Field>
           <Field
             error={errors.desiredSalePrice}
-            hint="У гривнях, можна залишити порожнім"
+            hint={price.hint ?? 'Можна залишити порожнім'}
             label="Бажана ціна"
           >
-            <TextInput
+            <MoneyInput
               aria-label="Бажана ціна"
+              currency={price.currency}
+              disabled={price.disabled}
               inputMode="decimal"
               min="0"
               onChange={field('desiredSalePrice')}
@@ -3308,6 +3335,7 @@ function PartFields({
             />
           </Field>
         </div>
+        {price.note}
       </SectionPanel>
       {showCompatibility ? (
         <SectionPanel
@@ -3488,8 +3516,24 @@ function PartForm({
   )
   const requireSource = true
   const errors = showErrors ? partFieldErrors(values, { requireSource }) : {}
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault()
+  const guard = useFirstPriceGuard()
+  const price = usePriceSlots(guard, {
+    values: [values.desiredSalePrice],
+    onAccept: (accepted) => void submit(undefined, accepted),
+    // The typed part survives the trip to the currency setting.
+    draftKept: true,
+    onLeave: () =>
+      savePartDraft({
+        root: `/app/${cabinet.targetTenant!.slug}`,
+        values,
+        compatibility: compatRows,
+      }),
+  })
+  const submit = async (
+    event?: React.FormEvent,
+    accepted?: SupportedCurrency | null,
+  ) => {
+    event?.preventDefault()
     if (pendingRef.current || mediaPending) return
     const parsed = validFormNumbers(values)
     if (Object.keys(partFieldErrors(values, { requireSource })).length > 0) {
@@ -3517,13 +3561,22 @@ function PartForm({
       ...(notes !== undefined ? { notes } : {}),
       ...(oemCode !== undefined ? { oemCode } : {}),
       ...(partType !== undefined ? { partType } : {}),
-      ...(parsed.price !== undefined ? { desiredSalePrice: parsed.price } : {}),
+      // No price without an accounting currency; the part itself still saves.
+      ...(parsed.price !== undefined && !price.disabled
+        ? { desiredSalePrice: parsed.price }
+        : {}),
     }
+    const pricing = price.hasPrice && !price.disabled
     pendingRef.current = true
     setPending(true)
     setStatus(null)
     setError(null)
     try {
+      if (
+        guard.needsCheck(pricing) &&
+        !(await guard.beforeSave(pricing, accepted))
+      )
+        return
       const scope = requireLatestMutation()
       if (request.sourceType === 'car')
         carMutation.requireLatestMutation({
@@ -3619,6 +3672,7 @@ function PartForm({
           resolved.items,
         )
       }
+      guard.afterSave(pricing)
       setStatus('Деталь створено.')
     } catch {
       setError(
@@ -3657,6 +3711,7 @@ function PartForm({
       }
       footer={
         <div className="flex flex-wrap items-center gap-2.5">
+          <div className="basis-full empty:hidden">{price.saveNotes}</div>
           <p
             className={cn(
               'min-w-0 text-[12px] text-pretty',
@@ -3706,6 +3761,7 @@ function PartForm({
           errors={
             archivedSource ? { ...errors, sourceId: archivedMessage } : errors
           }
+          price={price}
           setValues={setValues}
           sourceOptions={sourceOptions}
           values={values}
@@ -3762,6 +3818,11 @@ function PartEdit({
     showErrors && values
       ? partFieldErrors(values, { requireSource: false })
       : {}
+  const guard = useFirstPriceGuard()
+  const price = usePriceSlots(guard, {
+    values: [values?.desiredSalePrice],
+    onAccept: (accepted) => void save(undefined, accepted),
+  })
   useEffect(() => {
     const controller = new AbortController()
     void partsApi.get(partId, { signal: controller.signal }).then(
@@ -3807,8 +3868,11 @@ function PartEdit({
     )
     return () => controller.abort()
   }, [partId])
-  const save = async (event: React.FormEvent) => {
-    event.preventDefault()
+  const save = async (
+    event?: React.FormEvent,
+    accepted?: SupportedCurrency | null,
+  ) => {
+    event?.preventDefault()
     if (!values || pendingRef.current || mediaPending) return
     const parsed = validFormNumbers(values)
     if (
@@ -3824,7 +3888,13 @@ function PartEdit({
     setPending(true)
     setStatus(null)
     setError(null)
+    const pricing = price.hasPrice && !price.disabled
     try {
+      if (
+        guard.needsCheck(pricing) &&
+        !(await guard.beforeSave(pricing, accepted))
+      )
+        return
       const scope = requireLatestMutation({ quota: false })
       await partsApi.update(
         partId,
@@ -3836,13 +3906,14 @@ function PartEdit({
           partType: optional(values.partType) ?? null,
           unit: 'шт',
           photoKeys: committedPhotoKeys(mediaItems),
-          desiredSalePrice: {
-            isSet: true,
-            value: parsed.price ?? null,
-          },
+          // Without an accounting currency the price is left as it is.
+          desiredSalePrice: price.disabled
+            ? { isSet: false }
+            : { isSet: true, value: parsed.price ?? null },
         },
         { signal: scope.signal },
       )
+      guard.afterSave(pricing)
       setStatus('Зміни збережено.')
     } catch {
       setError(
@@ -4083,10 +4154,12 @@ function PartEdit({
                   </Field>
                   <Field
                     error={errors.desiredSalePrice}
-                    hint="У доларах"
+                    hint={price.hint}
                     label="Бажана ціна"
                   >
-                    <TextInput
+                    <MoneyInput
+                      currency={price.currency}
+                      disabled={price.disabled}
                       inputMode="decimal"
                       name="desiredSalePrice"
                       onChange={(event) =>
@@ -4103,6 +4176,8 @@ function PartEdit({
                     />
                   </Field>
                 </div>
+                {price.note}
+                {price.saveNotes}
               </Card>
 
               <Card

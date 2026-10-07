@@ -958,7 +958,8 @@ function Expenses({
     setFormError(null)
     setBusy(true)
     try {
-      if (!(await guard.beforeSave(true, accepted))) return
+      if (guard.needsCheck(true) && !(await guard.beforeSave(true, accepted)))
+        return
       requireLatestMutation({ permission: 'cars.view', quota: false })
       const scope = requireLatestMutation({
         permission: 'finance.manage',
@@ -1305,7 +1306,10 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     setProblem(null)
     setBusy(true)
     try {
-      if (!(await guard.beforeSave(price.hasPrice, accepted))) {
+      if (
+        guard.needsCheck(price.hasPrice) &&
+        !(await guard.beforeSave(price.hasPrice, accepted))
+      ) {
         setBusy(false)
         return
       }
