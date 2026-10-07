@@ -116,7 +116,7 @@ beforeEach(() => {
   vi.spyOn(authApi, 'me').mockResolvedValue(user)
   vi.spyOn(authApi, 'updateName').mockResolvedValue({
     id: user.id,
-    phone: user.phone!,
+    phone: user.phone,
     displayName: 'Нове імʼя',
   })
   vi.spyOn(authApi, 'logout').mockResolvedValue(undefined)
@@ -268,7 +268,7 @@ it('updates the authenticated display name without reloading tenant state', asyn
   await act(async () => {
     pendingUpdate.resolve({
       id: user.id,
-      phone: user.phone!,
+      phone: user.phone,
       displayName: 'Нове імʼя',
     })
     await pendingUpdate.promise
@@ -312,7 +312,7 @@ it('aborts a pending display-name update when the session signs out', async () =
   await act(async () => {
     pendingUpdate.resolve({
       id: user.id,
-      phone: user.phone!,
+      phone: user.phone,
       displayName: 'Запізніле імʼя',
     })
     await pendingUpdate.promise
