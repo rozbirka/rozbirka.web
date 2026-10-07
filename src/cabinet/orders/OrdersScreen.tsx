@@ -910,6 +910,7 @@ export function OrderForm({
         <div className="grid gap-3">
           {partSearchAllowed && (
             <PartSearchPicker
+              currency={guard.currency}
               onClear={() => {
                 setPartId('')
                 setSelectedPartDraft(null)

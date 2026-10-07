@@ -67,6 +67,7 @@ function Harness({
   const [query, setQuery] = useState('')
   return (
     <PartSearchPicker
+      currency="USD"
       onClear={vi.fn()}
       onQueryChange={setQuery}
       onSelect={(selected) => {
@@ -214,7 +215,7 @@ describe('PartSearchPicker', () => {
     expect(reservedFilter).not.toHaveClass('bg-state-warn-soft')
     expect(within(dropdown).queryByRole('button', { name: /Немає/ })).toBeNull()
     expect(within(dropdown).queryByText('І1')).toBeNull()
-    expect(within(dropdown).getByText('0 $')).toBeVisible()
+    expect(within(dropdown).getByText(/^0,00\sUSD$/)).toBeVisible()
     expect(within(dropdown).getByText('—')).toBeVisible()
     expect(
       within(dropdown).getAllByText('Volkswagen ID.4 · 2022'),

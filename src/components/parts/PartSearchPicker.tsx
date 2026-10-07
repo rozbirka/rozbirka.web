@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { partsApi, type PartListItem, type PartSearchItem } from '@/api/parts'
 import { cn } from '@/lib/utils'
-import { translate, useLocale, useT, type Locale } from '@/i18n'
+import { formatMoney, translate, useLocale, useT, type Locale } from '@/i18n'
 import { partPickerMessages } from './part-picker-messages'
 
 type PartPickerFilter = 'all' | 'available' | 'reserved'
@@ -18,6 +18,8 @@ interface PartSearchPickerProps {
   onSelect: (part: PartPickerItem) => void
   onClear: () => void
   disabled?: boolean
+  /** The accounting currency of the prices; `null` shows bare numbers. */
+  currency?: string | null
 }
 
 const filterOptions: readonly PartPickerFilter[] = [
@@ -27,10 +29,11 @@ const filterOptions: readonly PartPickerFilter[] = [
 ]
 const PAGE_SIZE = 6
 
-const price = (value: number | null) =>
-  value === null
-    ? '—'
-    : `${new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 2 }).format(value)} $`
+const price = (
+  value: number | null,
+  currency: string | null,
+  locale: Locale,
+) => (value === null ? '—' : (formatMoney(value, currency, locale) ?? '—'))
 
 const statusPresentation = (part: PartPickerItem, locale: Locale) => {
   if (part.status === 'reserved')
@@ -83,6 +86,7 @@ export function PartSearchPicker({
   onSelect,
   onClear,
   disabled = false,
+  currency = null,
 }: PartSearchPickerProps) {
   const inputId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
@@ -391,7 +395,7 @@ export function PartSearchPicker({
                         </span>
                         <span className="grid justify-items-end gap-1 pl-2">
                           <span className="font-mono text-[15px] font-bold text-white tabular-nums">
-                            {price(part.effectiveSalePrice)}
+                            {price(part.effectiveSalePrice, currency, locale)}
                           </span>
                           <span className="text-app-dim font-mono text-xs">
                             {part.externalCode ?? '—'}
