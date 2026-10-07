@@ -9,12 +9,11 @@ import { LogOut } from 'lucide-react'
 import { Button, Field, Notice, TextInput } from '@/components/app'
 import { useAuth } from '@/auth/AuthContext'
 import { AccountDeletion } from '@/components/account/account-deletion'
-import { useTenantSettings } from '@/auth/useTenantSettings'
-import { LOCALE_NATIVE_NAMES } from '@/i18n/locales'
 import { useT } from '@/i18n/hooks'
 import { useCabinet } from '../CabinetContext'
 import { RedesignShell, RedesignTitle } from '../redesign-shell'
 import { LanguageCard } from './language-card'
+import { RegionSummary } from '../business/region-settings'
 import { profileMessages } from './profile-messages'
 
 type SaveState = 'idle' | 'pending' | 'success' | 'error'
@@ -40,7 +39,6 @@ export function ProfileScreen() {
   const auth = useAuth()
   const cabinet = useCabinet()
   const t = useT(profileMessages)
-  const { documentLanguage } = useTenantSettings()
   const currentName = auth.user?.displayName ?? ''
   const [name, setName] = useState(currentName)
   const [savedName, setSavedName] = useState(currentName.trim())
@@ -188,19 +186,22 @@ export function ProfileScreen() {
         <div className="grid min-w-0 content-start gap-5">
           <LanguageCard />
 
+          {/* Every member reads the business region here, read-only; the
+              owner edits it in Business → «Регіон і документи». */}
           <Card title={t('docCardTitle')}>
             <p className="text-app-muted text-[13.5px]">{t('docCardBody')}</p>
-            <dl className="mt-3 flex items-baseline justify-between gap-4 text-[13.5px]">
-              <dt className="text-app-muted">{t('docLang')}</dt>
-              <dd
-                className="text-app-ink text-right font-medium"
-                lang={documentLanguage ?? undefined}
-              >
-                {documentLanguage
-                  ? LOCALE_NATIVE_NAMES[documentLanguage]
-                  : t('docLangUnknown')}
-              </dd>
-            </dl>
+            {cabinet.targetTenant ? (
+              <div className="mt-3 grid gap-3 text-[13.5px]">
+                <RegionSummary tenant={cabinet.targetTenant} />
+              </div>
+            ) : (
+              <dl className="mt-3 flex items-baseline justify-between gap-4 text-[13.5px]">
+                <dt className="text-app-muted">{t('docLang')}</dt>
+                <dd className="text-app-ink text-right font-medium">
+                  {t('docLangUnknown')}
+                </dd>
+              </dl>
+            )}
           </Card>
 
           <Card title={t('access')}>

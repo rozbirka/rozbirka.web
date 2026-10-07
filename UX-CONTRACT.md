@@ -93,12 +93,16 @@ reporting day use the business time zone (tenant `timeZoneId`, Europe/Kyiv
 while unknown). Money shows the ISO code with per-currency precision.
 
 Business country, time zone and document language live in Business → «Регіон і
-документи». Only the owner edits them; country and time zone become read-only
-after the first operation (`regionLocked`; a 409 `BUSINESS_SETTINGS_LOCKED`
-race locks the block), while the document language stays editable
-(REQ-LOCALIZATION AC-23 — the board's 3c shows it read-only; the requirement
-wins). Printed labels and documents use the document language, not the
-interface language.
+документи». Every member can read them — on that screen and, for roles
+without business settings access, read-only in Profile → «Документи
+бізнесу» (`RegionSummary`). Only the owner edits them; country and time zone
+become read-only after the first operation (`regionLocked`; a 409
+`BUSINESS_SETTINGS_LOCKED` race locks the block), while the document language
+stays editable (REQ-LOCALIZATION AC-23 — the board's 3c shows it read-only; the
+requirement wins). Core sends no lock reason, so the text names the rule Core
+enforces: the first saved car, batch, part, order (or order item), car expense
+or till transaction locks the region. Printed labels and documents use the
+document language, not the interface language.
 
 Business settings read top to bottom as 01 «Реквізити», 02 «Регіон і
 документи», 03 «Валюта обліку», 04 «Склади», 05 «Облік»; `#region` and

@@ -15,7 +15,11 @@ export const regionMessages = defineMessages({
     docLangHint:
       'Накладні, рахунки, стікери, PDF і повідомлення клієнтам. Не залежить від мови інтерфейсу.',
     beforeFirst:
-      'Можна змінити до першої операції: продажу, приймання чи платежу. Після неї ці налаштування зафіксуються.',
+      'Країну й часовий пояс можна змінити до першої операції. Після неї вони зафіксуються, а мову документів можна буде змінювати й далі.',
+    lockReasons:
+      'Першою операцією вважається будь-який збережений запис: авто, партія, запчастина, замовлення, витрата на авто або касова операція.',
+    notLockedYet:
+      'Ще не зафіксовано: власник може змінити країну й часовий пояс до першої операції.',
     preview: 'Так виглядатимуть документи',
     previewDate: 'Дата',
     previewTime: 'Час',
@@ -60,7 +64,11 @@ export const regionMessages = defineMessages({
     docLangHint:
       'Invoices, bills, labels, PDFs and customer messages. Independent of the interface language.',
     beforeFirst:
-      'You can change these until the first operation: a sale, intake or payment. After that they’re locked.',
+      'You can change the country and time zone until the first operation. After that they’re locked; the document language can still be changed.',
+    lockReasons:
+      'The first operation is any saved record: a car, batch, part, order, car expense or till transaction.',
+    notLockedYet:
+      'Not locked yet: the owner can change the country and time zone until the first operation.',
     preview: 'How documents will look',
     previewDate: 'Date',
     previewTime: 'Time',
@@ -105,7 +113,11 @@ export const regionMessages = defineMessages({
     docLangHint:
       'Faktury, rachunki, etykiety, PDF-y i wiadomości do klientów. Niezależny od języka interfejsu.',
     beforeFirst:
-      'Możesz je zmienić do pierwszej operacji: sprzedaży, przyjęcia lub płatności. Potem zostaną zablokowane.',
+      'Kraj i strefę czasową można zmienić do pierwszej operacji. Potem zostaną zablokowane, a język dokumentów nadal będzie można zmieniać.',
+    lockReasons:
+      'Pierwszą operacją jest każdy zapisany rekord: samochód, partia, część, zamówienie, wydatek na samochód lub operacja kasowa.',
+    notLockedYet:
+      'Jeszcze niezablokowane: właściciel może zmienić kraj i strefę czasową do pierwszej operacji.',
     preview: 'Tak będą wyglądać dokumenty',
     previewDate: 'Data',
     previewTime: 'Godzina',

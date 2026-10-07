@@ -100,6 +100,58 @@ function ReadOnlyRow({
   )
 }
 
+/**
+ * The region as everyone may read it (ROZ-161 3d): country, time zone and
+ * document language, plus whether country and time zone are locked and what
+ * locks them. Core sends only `regionLocked` (no reason field), so the reason
+ * is the rule itself: the first saved car, batch, part, order (or its item),
+ * car expense or till transaction.
+ */
+export function RegionSummary({ tenant }: { tenant: Tenant }) {
+  const t = useT(regionMessages)
+  const settings = tenantSettings(tenant)
+  if (settings.countryCode === null || settings.documentLanguage === null)
+    return (
+      <p className="text-app-muted text-[13px] leading-5 text-pretty">
+        <strong className="text-app-ink">{t('unknownTitle')}</strong>{' '}
+        {t('unknownBody')}
+      </p>
+    )
+  return (
+    <>
+      <LockStatus locked={settings.regionLocked === true} t={t} />
+      <dl>
+        <ReadOnlyRow label={t('country')}>
+          {t(COUNTRY_KEY[settings.countryCode])}
+        </ReadOnlyRow>
+        <ReadOnlyRow label={t('tz')}>
+          {zoneLabel(settings.timeZone, t)}
+        </ReadOnlyRow>
+        <ReadOnlyRow label={t('docLang')} lang={settings.documentLanguage}>
+          {LOCALE_NATIVE_NAMES[settings.documentLanguage]}
+        </ReadOnlyRow>
+      </dl>
+    </>
+  )
+}
+
+/** Static text, not a live region: it describes a state, not an event. */
+function LockStatus({ locked, t }: { locked: boolean; t: Translate }) {
+  return (
+    <p className="border-app-line text-app-muted rounded-[12px] border px-3.5 py-2.5 text-[13px] leading-5 text-pretty">
+      {locked ? (
+        <>
+          <strong className="text-app-ink">{t('lockedTitle')}</strong>{' '}
+          {t('lockedBody')}
+        </>
+      ) : (
+        t('notLockedYet')
+      )}{' '}
+      {t('lockReasons')}
+    </p>
+  )
+}
+
 type SaveState =
   | { kind: 'idle' }
   | { kind: 'pending' }
@@ -109,8 +161,9 @@ type SaveState =
 
 /**
  * Business country, time zone and document language (ROZ-161 board 3a–3f).
- * Only the owner edits; country and time zone lock after the first operation
- * (`regionLocked`), the document language stays editable (REQ AC-23). A 409
+ * Every member reads them; only the owner edits. Country and time zone lock
+ * after the first operation (`regionLocked`, reasons in `RegionSummary`), the
+ * document language stays editable (REQ AC-23). A 409
  * `BUSINESS_SETTINGS_LOCKED` race turns the block into its locked state.
  */
 export function RegionSettings({
@@ -266,15 +319,7 @@ export function RegionSettings({
           {t('yourRole')}: {roleKey ? t(roleKey) : (role ?? t('unknownValue'))}.{' '}
           {t('noRights')}
         </Notice>
-        <dl>
-          <ReadOnlyRow label={t('country')}>
-            {countryName(savedCountry)}
-          </ReadOnlyRow>
-          <ReadOnlyRow label={t('tz')}>{zoneLabel(savedZone, t)}</ReadOnlyRow>
-          <ReadOnlyRow label={t('docLang')} lang={savedLanguage}>
-            {LOCALE_NATIVE_NAMES[savedLanguage]}
-          </ReadOnlyRow>
-        </dl>
+        <RegionSummary tenant={tenant} />
       </>
     )
   } else {
@@ -282,9 +327,7 @@ export function RegionSettings({
       <>
         {locked ? (
           <>
-            <Notice tone="info">
-              <strong>{t('lockedTitle')}</strong> {t('lockedBody')}
-            </Notice>
+            <LockStatus locked t={t} />
             <dl>
               <ReadOnlyRow label={t('country')}>
                 {countryName(savedCountry)}
@@ -296,7 +339,9 @@ export function RegionSettings({
           </>
         ) : (
           <>
-            <Notice tone="warn">{t('beforeFirst')}</Notice>
+            <Notice tone="warn">
+              {t('beforeFirst')} {t('lockReasons')}
+            </Notice>
             <div className="grid gap-3.5 sm:grid-cols-2">
               <Field label={t('country')}>
                 <SelectInput

@@ -209,3 +209,31 @@ it('is the #region deep-link target of the business settings page', () => {
     screen.getByRole('region', { name: 'Region and documents' }),
   ).toHaveAttribute('id', 'region')
 })
+
+it('names what counts as the first operation before it happens', () => {
+  renderRegion()
+  expect(
+    screen.getByText(
+      /The first operation is any saved record: a car, batch, part, order, car expense or till transaction/,
+    ),
+  ).toBeVisible()
+})
+
+it('shows a non-owner the region and its lock state without any control', () => {
+  renderRegion({ regionLocked: true, documentLanguage: 'pl' }, 'Master')
+  expect(screen.getByText(/Your role: Mechanic/)).toBeVisible()
+  expect(screen.getByText(/Locked after the first operation/)).toBeVisible()
+  expect(screen.getByText(/till transaction/)).toBeVisible()
+  expect(screen.getByText('Polski')).toHaveAttribute('lang', 'pl')
+  expect(screen.queryByRole('combobox')).toBeNull()
+  expect(screen.queryByRole('button')).toBeNull()
+})
+
+it('tells a non-owner the region is not locked yet', () => {
+  renderRegion({}, 'Manager')
+  expect(
+    screen.getByText(
+      /Not locked yet: the owner can change the country and time zone/,
+    ),
+  ).toBeVisible()
+})
