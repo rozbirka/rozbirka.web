@@ -202,6 +202,7 @@ const renderBody = (value: DeliveryOrderLoad) =>
   render(
     <MemoryRouter>
       <DeliveryOrderBody
+        accountingCurrency="USD"
         customerPath="/app/koval/customers/cust-1"
         delivery={value.state!.money!}
         financeAllowed
@@ -243,10 +244,10 @@ it('sums an order from its parts and keeps the hryvnia figure out of it', () => 
 
   const items = screen.getByRole('region', { name: 'Позиції' })
   // The line's own sum and the card total — both in the order's currency.
-  expect(within(items).getAllByText('3 200,00 $')).toHaveLength(2)
+  expect(within(items).getAllByText('3 200,00 USD')).toHaveLength(2)
   // What the carrier collects is a different number about a different thing,
   // and it does not belong beside the price of the goods.
-  expect(items).not.toHaveTextContent('₴')
+  expect(items).not.toHaveTextContent('UAH')
 })
 
 it('offers only the step the order is waiting for', () => {

@@ -32,9 +32,19 @@ import {
   useT,
   type Locale,
   type MessageKey,
+  type SupportedCurrency,
 } from '@/i18n'
 import { orderEventTitle, orderStatusPresentation } from './order-labels'
-import { money, orderMoney, refundEffects } from './order-money'
+import { money, moneyList, orderMoney, refundEffects } from './order-money'
+import { paymentMessages } from './payment-messages'
+import { paymentRecorded } from './payment-policy'
+import { isUnknownOutcome } from '../currency/accounting-currency'
+import { MoneyInput } from '../currency/price-currency'
+import {
+  useAccountingCurrency,
+  useFirstPriceGuard,
+} from '../currency/use-accounting-currency'
+import { usePriceSlots } from '../currency/use-price-slots'
 import { orderSteps } from './order-steps'
 import {
   OrderCustomerCard,
@@ -62,7 +72,12 @@ import {
   type CustomerPhoneConflict,
   type CustomerSearchItem,
 } from '@/api/customers'
-import { ordersApi, type OrderDetail, type OrderListItem } from '@/api/orders'
+import {
+  ordersApi,
+  type ConfirmPayment,
+  type OrderDetail,
+  type OrderListItem,
+} from '@/api/orders'
 import {
   PartSearchPicker,
   type PartPickerItem,
@@ -81,7 +96,7 @@ import { useTenantSettings } from '@/auth/useTenantSettings'
 import { isPhoneCountry } from '@/lib/phone'
 import { OrderCustomerDrawer } from './OrderCustomerDrawer'
 import { OrderItemDrawer } from './OrderItemDrawer'
-import { OrderPaymentDrawer } from './OrderPaymentDrawer'
+import { OrderPaymentDrawer, type PaymentOutcome } from './OrderPaymentDrawer'
 
 const idFromPath = (path: string) => /\/orders\/([^/]+)/.exec(path)?.[1] ?? null
 const orderErrorMessage = (error: unknown, locale: Locale) => {
@@ -226,8 +241,11 @@ const ORDER_STATUS_FILTERS = [
 /** Statuses whose money never reached the till. */
 const UNPAID_STATUSES = new Set(['cancelled', 'refunded'])
 
-const listMoney = (value: number | null) =>
-  value === null ? '—' : `${new Intl.NumberFormat('uk-UA').format(value)} $`
+/** Order values are in the accounting currency; no code when it is unknown. */
+const listMoney = (value: number | null, currency: string | null) =>
+  value === null
+    ? '—'
+    : `${new Intl.NumberFormat('uk-UA').format(value)}${currency === null ? '' : ` ${currency}`}`
 
 function OrderDirectory({ definition }: CabinetModuleScreenProps) {
   const { locale } = useLocale()
@@ -237,6 +255,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
   /** Dates arrive as ISO strings; anything unparsable is shown as it came. */
   const day = (value: string) => format.date(value) ?? value
   const cabinet = useCabinet()
+  const { currency: accountingCurrency } = useAccountingCurrency()
   const createAllowed = canCreateOrder(definition, cabinet)
   const [params, setParams] = useSearchParams()
   const [orders, setOrders] = useState<OrderListItem[]>([])
@@ -397,7 +416,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
               {t('pageSum')}
             </span>
             <span className="text-[20px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
-              {listMoney(pageSum)}
+              {listMoney(pageSum, accountingCurrency)}
             </span>
           </p>
         </div>
@@ -500,7 +519,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
                           unpaid ? 'text-app-dim' : 'text-white',
                         )}
                       >
-                        {listMoney(order.totalAmount)}
+                        {listMoney(order.totalAmount, accountingCurrency)}
                       </span>
                     </Link>
                   </li>
@@ -585,6 +604,8 @@ export function OrderForm({
   const [quantity, setQuantity] = useState('')
   const [unitPrice, setUnitPrice] = useState('')
   const [notes, setNotes] = useState('')
+  const guard = useFirstPriceGuard()
+  const { locale } = useLocale()
   const [draftItems, setDraftItems] = useState<
     {
       part: PartPickerItem
@@ -596,6 +617,10 @@ export function OrderForm({
     useState<PartPickerItem | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const itemPrices = usePriceSlots(guard, {
+    values: [unitPrice, ...draftItems.map((item) => item.unitPrice)],
+    onAccept: (accepted) => void submit(undefined, accepted),
+  })
   const closeNewCustomerForm = () => {
     setNewCustomerFormOpen(false)
     setNewCustomerName('')
@@ -654,8 +679,11 @@ export function OrderForm({
     return () => controller.abort()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- message picked at failure time
   }, [customerId, customerQuery, customerSearchAllowed])
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
+  const submit = async (
+    event?: FormEvent,
+    accepted?: SupportedCurrency | null,
+  ) => {
+    event?.preventDefault()
     const directItem =
       partId && quantity && unitPrice
         ? {
@@ -674,10 +702,20 @@ export function OrderForm({
         : directItem
           ? [directItem]
           : []
-    if (busy || !dependenciesAllowed || creationItems.length === 0) return
+    if (
+      busy ||
+      !dependenciesAllowed ||
+      creationItems.length === 0 ||
+      itemPrices.disabled
+    )
+      return
     setBusy(true)
     setError(null)
     try {
+      if (guard.needsCheck(true) && !(await guard.beforeSave(true, accepted))) {
+        setBusy(false)
+        return
+      }
       const scope = requireLatestMutation({ quota: true })
       requireLatestMutation({ permission: 'parts.view', quota: false })
       requireLatestMutation({ permission: 'customers.view', quota: false })
@@ -687,6 +725,7 @@ export function OrderForm({
         items: creationItems,
       })
       if (scope.signal.aborted) return
+      guard.afterSave(true)
       const detailPath = `${createContext?.orderBasePath ?? location.pathname.replace(/\/new$/, '')}/${detail.id}`
       toast?.show({ message: t('created'), tone: 'ok' })
       await navigate(detailPath, { replace: true })
@@ -845,6 +884,7 @@ export function OrderForm({
   const submitBlocked =
     !mutationsAllowed ||
     busy ||
+    itemPrices.disabled ||
     (draftItems.length === 0 && (!partId || !quantity || !unitPrice))
   const form = (
     <form
@@ -884,15 +924,18 @@ export function OrderForm({
                 value={Number(quantity || '0')}
               />
             </Field>
-            <Field label={t('unitPrice')}>
-              <TextInput
+            <Field hint={itemPrices.hint} label={t('unitPrice')}>
+              <MoneyInput
                 className="text-left"
+                currency={itemPrices.currency}
+                disabled={itemPrices.disabled}
                 inputMode="decimal"
                 onChange={(event) => setUnitPrice(event.target.value)}
                 value={unitPrice}
               />
             </Field>
           </div>
+          {itemPrices.note}
           <Button
             className="w-full justify-center border-dashed"
             disabled={
@@ -923,13 +966,15 @@ export function OrderForm({
                       {item.part.name}
                     </p>
                     <p className="text-app-muted mt-1 text-[13px] tabular-nums">
-                      {item.quantity} × ${item.unitPrice}
+                      {item.quantity} ×{' '}
+                      {money(item.unitPrice, guard.currency, locale)}
                     </p>
                   </div>
                   <p className="text-brand text-right text-[16px] font-extrabold tabular-nums">
-                    $
-                    {new Intl.NumberFormat('uk-UA').format(
+                    {money(
                       item.quantity * item.unitPrice,
+                      guard.currency,
+                      locale,
                     )}
                   </p>
                   <Button
@@ -1125,7 +1170,7 @@ export function OrderForm({
               </p>
             </div>
             <p className="text-brand text-[28px] leading-none font-extrabold tracking-[-0.02em] tabular-nums">
-              ${new Intl.NumberFormat('uk-UA').format(draftItemsTotal)}
+              {money(draftItemsTotal, guard.currency, locale)}
             </p>
           </div>
         </Panel>
@@ -1138,6 +1183,7 @@ export function OrderForm({
       eyebrow={t('sheetEyebrow')}
       footer={
         <div className="flex w-full flex-wrap items-center gap-2.5">
+          <div className="basis-full empty:hidden">{itemPrices.saveNotes}</div>
           <div className="ml-auto flex items-center gap-2.5">
             <Button disabled={busy} onClick={closeCreate} type="button">
               {tc('cancel')}
@@ -1211,7 +1257,17 @@ function OrderDetailScreen({
   const [editingItems, setEditingItems] = useState(false)
   const [historyExpanded, setHistoryExpanded] = useState(false)
   const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null)
+  const [paymentOutcome, setPaymentOutcome] = useState<PaymentOutcome | null>(
+    null,
+  )
   const [customerOpen, setCustomerOpen] = useState(false)
+  const guard = useFirstPriceGuard()
+  const currency = guard.currency
+  const tp = useT(paymentMessages)
+  const itemPrices = usePriceSlots(guard, {
+    values: itemDrafts.map((item) => item.unitPrice),
+    onAccept: (accepted) => saveItemDrafts(accepted),
+  })
   const changeRefundOpen = (next: boolean) => {
     setRefundOpen(next)
     setError(null)
@@ -1348,6 +1404,85 @@ function OrderDetailScreen({
       ? `${moduleBase}/settings/integrations`
       : null
   const summary = orderMoney(order)
+  /**
+   * Sale prices are accounting prices: the first-price check applies. Runs
+   * `save` synchronously when there is nothing to check.
+   */
+  const withPriceCheck = (
+    save: () => void,
+    accepted?: SupportedCurrency | null,
+  ) => {
+    if (!guard.needsCheck(true)) {
+      save()
+      return
+    }
+    void guard.beforeSave(true, accepted).then((ok) => {
+      if (ok) save()
+    })
+  }
+  const saveItemDrafts = (accepted?: SupportedCurrency | null) => {
+    if (busy) return
+    withPriceCheck(() => {
+      void transition(() =>
+        ordersApi.updateItems(
+          order.id,
+          itemDrafts.map(({ partId, quantity, unitPrice }) => ({
+            partId,
+            quantity,
+            unitPrice,
+          })),
+        ),
+      ).then((saved) => {
+        if (saved) {
+          guard.afterSave(true)
+          setEditingItems(false)
+        }
+      })
+    }, accepted)
+  }
+  /**
+   * Records one more actual payment (board 3a/3c). A refusal keeps the draft
+   * and says why; an unknown outcome re-reads the order's payments before
+   * anything else, so the same money is never written twice.
+   */
+  const savePayment = async (
+    payments: ConfirmPayment[],
+    added: ConfirmPayment,
+  ) => {
+    if (busy) return
+    setBusy(true)
+    setPaymentOutcome(null)
+    setError(null)
+    const before = order.payments
+    try {
+      const scope = requireLatestMutation({ quota: false })
+      requireLatestMutation({ permission: 'finance.manage', quota: false })
+      const updated = await ordersApi.updatePayments(order.id, payments)
+      if (scope.signal.aborted) return
+      acceptOrder(updated)
+      setPaymentOrderId(null)
+      toast?.show({ message: tp('saved'), tone: 'ok' })
+    } catch (failure) {
+      if (!isUnknownOutcome(failure)) {
+        setPaymentOutcome({ kind: 'refused', message: errorMessage(failure) })
+        return
+      }
+      setPaymentOutcome({ kind: 'checking' })
+      try {
+        const fresh = await ordersApi.getById(order.id)
+        acceptOrder(fresh)
+        if (paymentRecorded(before, fresh.payments, added)) {
+          setPaymentOutcome(null)
+          setPaymentOrderId(null)
+          toast?.show({ message: tp('saved'), tone: 'ok' })
+        } else setPaymentOutcome({ kind: 'not-recorded' })
+      } catch {
+        setPaymentOutcome({ kind: 'check-failed' })
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
   const customerPath =
     order.customerId === null
       ? null
@@ -1437,6 +1572,7 @@ function OrderDetailScreen({
         {deliveryMoney === null ? null : (
           <DeliveryOrderBody
             countryCode={novaPoshta.countryCode}
+            accountingCurrency={currency}
             customerPath={customerPath}
             delivery={deliveryMoney}
             financeAllowed={financeAllowed}
@@ -1460,7 +1596,9 @@ function OrderDetailScreen({
                 <SectionPanel
                   aside={
                     <span className="text-app-muted text-[13.5px] tabular-nums">
-                      {t('itemsTotal', { amount: money(draftsTotal, 'USD') })}
+                      {t('itemsTotal', {
+                        amount: money(draftsTotal, currency, locale),
+                      })}
                     </span>
                   }
                   description={
@@ -1470,24 +1608,14 @@ function OrderDetailScreen({
                   }
                   footer={
                     <>
+                      <div className="basis-full empty:hidden">
+                        {itemPrices.saveNotes}
+                      </div>
                       <Button
-                        disabled={busy || !itemDraftsValid}
-                        onClick={() => {
-                          void transition(() =>
-                            ordersApi.updateItems(
-                              order.id,
-                              itemDrafts.map(
-                                ({ partId, quantity, unitPrice }) => ({
-                                  partId,
-                                  quantity,
-                                  unitPrice,
-                                }),
-                              ),
-                            ),
-                          ).then((saved) => {
-                            if (saved) setEditingItems(false)
-                          })
-                        }}
+                        disabled={
+                          busy || !itemDraftsValid || itemPrices.disabled
+                        }
+                        onClick={() => saveItemDrafts()}
                         variant="primary"
                       >
                         {t('saveItems')}
@@ -1529,7 +1657,8 @@ function OrderDetailScreen({
                               {t('lineTotal', {
                                 amount: money(
                                   lineTotal(item.quantity, item.unitPrice),
-                                  'USD',
+                                  currency,
+                                  locale,
                                 ),
                               })}
                             </p>
@@ -1573,9 +1702,14 @@ function OrderDetailScreen({
                                 {t('price')}
                               </span>
                               <TextInput
-                                aria-label={t('priceOf', {
-                                  name: item.partName,
-                                })}
+                                aria-label={
+                                  currency === null
+                                    ? t('priceOf', { name: item.partName })
+                                    : t('priceOfIn', {
+                                        name: item.partName,
+                                        code: currency,
+                                      })
+                                }
                                 className="text-right"
                                 inputMode="decimal"
                                 onChange={(event) =>
@@ -1656,6 +1790,7 @@ function OrderDetailScreen({
                     setEditingItems(true)
                     setError(null)
                   }}
+                  currency={currency}
                   partsPath={partsPath}
                   total={orderTotalUsd}
                 />
@@ -1664,14 +1799,9 @@ function OrderDetailScreen({
               {deliveryOrder ? null : (
                 <OrderPaymentsCard
                   paidLine={
-                    order.totalPaid === null || order.totalPaid <= 0
+                    summary.paid.length === 0
                       ? null
-                      : t('paidLine', {
-                          amount: money(
-                            order.totalPaid,
-                            order.paymentCurrency ?? 'USD',
-                          ),
-                        })
+                      : moneyList(summary.paid, ' · ', locale)
                   }
                   payments={order.payments}
                 />
@@ -1701,13 +1831,12 @@ function OrderDetailScreen({
                         >
                           {t('addPayment')}
                         </Button>
+                        {/* Confirming is the operator's acknowledgement of
+                            full payment (R-10): it does not wait for a
+                            payment and compares nothing with the value. */}
                         <Button
                           className="w-full justify-center"
-                          disabled={
-                            busy ||
-                            ((orderTotalUsd ?? 0) > 0 &&
-                              order.payments.length === 0)
-                          }
+                          disabled={busy}
                           onClick={() => {
                             const input = {
                               payments: order.payments.map(
@@ -1744,18 +1873,25 @@ function OrderDetailScreen({
                       </Button>
                     ) : null
                   }
+                  accountingCurrency={currency}
                   hint={
                     ordinaryFinance && order.status === 'pending'
-                      ? t('confirmHint')
+                      ? tp('confirmNote')
                       : ordinaryFinance && order.status === 'confirmed'
                         ? t('refundHint')
                         : null
                   }
                   summary={summary}
+                  tills={[
+                    ...new Set(
+                      order.payments.map((payment) => payment.accountName),
+                    ),
+                  ]}
                 />
               )}
 
               <OrderCustomerCard
+                accountingCurrency={currency}
                 customerId={order.customerId}
                 customerName={order.customerName}
                 initials={initials(order.customerName ?? '—')}
@@ -1828,12 +1964,13 @@ function OrderDetailScreen({
           </div>
         )}
         <ConfirmDialog
-          confirmLabel={t('refundConfirm', {
-            amount: money(
-              summary.paid ?? summary.totalUsd,
-              summary.paidCurrency ?? 'USD',
-            ),
-          })}
+          confirmLabel={
+            summary.paid.length === 0
+              ? tp('refundNothing')
+              : tp('refundLabel', {
+                  amounts: moneyList(summary.paid, tp('and'), locale),
+                })
+          }
           confirmDisabled={!refundReason.trim()}
           consequence={t('refundConsequence')}
           destructive
@@ -1875,30 +2012,34 @@ function OrderDetailScreen({
         <OrderItemDrawer
           busy={busy}
           error={addingItem ? error : null}
+          guard={guard}
           onOpenChange={(next) => {
             if (!next) void navigate(`${ordersPath}/${order.id}`)
           }}
-          onSubmit={(item) => {
-            void transition(
-              () =>
-                ordersApi.updateItems(order.id, [
-                  ...order.items.map(({ partId, quantity, unitPrice }) => ({
-                    partId,
-                    quantity,
-                    unitPrice,
-                  })),
-                  item,
-                ]),
-              undefined,
-              // The part was chosen from the catalogue; losing the right to
-              // read it between opening the drawer and saving stops the save.
-              'parts.view',
-            ).then((saved) => {
-              if (saved) {
-                toast?.show({ message: t('itemAdded'), tone: 'ok' })
-                void navigate(`${ordersPath}/${order.id}`)
-              }
-            })
+          onSubmit={(item, accepted) => {
+            const add = () =>
+              void transition(
+                () =>
+                  ordersApi.updateItems(order.id, [
+                    ...order.items.map(({ partId, quantity, unitPrice }) => ({
+                      partId,
+                      quantity,
+                      unitPrice,
+                    })),
+                    item,
+                  ]),
+                undefined,
+                // The part was chosen from the catalogue; losing the right to
+                // read it between opening the drawer and saving stops the save.
+                'parts.view',
+              ).then((saved) => {
+                if (saved) {
+                  guard.afterSave(true)
+                  toast?.show({ message: t('itemAdded'), tone: 'ok' })
+                  void navigate(`${ordersPath}/${order.id}`)
+                }
+              })
+            withPriceCheck(add, accepted)
           }}
           open={addingItem && orderEditable}
           orderNumber={order.number}
@@ -1930,25 +2071,18 @@ function OrderDetailScreen({
         order.status === 'pending' &&
         paymentOrderId === order.id ? (
           <OrderPaymentDrawer
+            accountingCurrency={currency}
             busy={busy}
-            error={error}
             existing={order.payments}
-            onOpenChange={(next) => setPaymentOrderId(next ? order.id : null)}
-            onSave={(payments) => {
-              void transition(
-                () => ordersApi.updatePayments(order.id, payments),
-                undefined,
-                'finance.manage',
-              ).then((saved) => {
-                if (saved) {
-                  setPaymentOrderId(null)
-                  toast?.show({ message: t('paymentSaved'), tone: 'ok' })
-                }
-              })
+            onOpenChange={(next) => {
+              setPaymentOutcome(null)
+              setPaymentOrderId(next ? order.id : null)
             }}
+            onSave={(payments, added) => void savePayment(payments, added)}
             open
             orderNumber={order.number}
-            outstanding={summary.remaining}
+            orderValue={summary.value}
+            outcome={paymentOutcome}
           />
         ) : null}
       </div>

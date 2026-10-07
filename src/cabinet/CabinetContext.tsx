@@ -399,6 +399,15 @@ export function CabinetProvider({ children }: { children: ReactNode }) {
         error: null,
       }
     }
+    // Same tenant, newer object (e.g. business settings merged after a save
+    // or a re-read): expose the fresh one without a scope transition.
+    if (
+      state.targetTenant !== null &&
+      state.targetTenant !== routeTarget &&
+      state.targetTenant.id === routeTarget.id
+    ) {
+      return { ...state, targetTenant: routeTarget }
+    }
     return state
   }, [auth.status, auth.user, routeTarget, state])
 

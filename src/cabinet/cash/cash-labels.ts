@@ -1,3 +1,4 @@
+import { formatMoney, SOURCE_LOCALE } from '@/i18n'
 import type { CashTransaction } from '@/api/cash'
 
 /** The two kinds of till the API accepts when one is created. */
@@ -30,23 +31,12 @@ export const movementText = (code: string) => movementLabels[code] ?? code
 
 /**
  * Every currency keeps its own balance and the server never converts between
- * them, so each sum is formatted in its own currency and never added up.
+ * them, so each sum is formatted in its own currency and never added up. The
+ * ISO code follows the number («142 300,00 UAH»): symbols cannot tell CAD
+ * from USD. Precision is the currency's own (JPY has none).
  */
-export const money = (amount: number, currency: string) => {
-  try {
-    return new Intl.NumberFormat('uk-UA', {
-      style: 'currency',
-      currency,
-      currencyDisplay: 'narrowSymbol',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount)
-  } catch {
-    // An unexpected code (the server accepts any three letters) still has to
-    // render as a number rather than throw the screen away.
-    return `${amount.toFixed(2)} ${currency}`
-  }
-}
+export const money = (amount: number, currency: string) =>
+  formatMoney(amount, currency, SOURCE_LOCALE) ?? `${amount} ${currency}`
 
 /** A signed amount reads as money first and as a direction second. */
 export const signedMoney = (entry: CashTransaction) =>

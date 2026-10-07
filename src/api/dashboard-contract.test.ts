@@ -253,3 +253,45 @@ describe('parseDashboardAnalytics', () => {
     ).toThrow(DashboardContractError)
   })
 })
+
+describe('pending accounting currency fields', () => {
+  it('reads the accounting currency and per-currency series when Core sends them', () => {
+    const parsed = parseDashboardAnalytics({
+      ...analytics,
+      accountingCurrency: 'gbp',
+      revenue: {
+        ...analytics.revenue,
+        seriesCurrency: 'GBP',
+        seriesByCurrency: { GBP: [1, 2, 3], UAH: [0, 0, 1200] },
+      },
+      topPart: {
+        ...analytics.topPart,
+        revenueUsd: null,
+        revenue: 180,
+        accountingCurrency: 'GBP',
+      },
+    })
+
+    expect(parsed.accountingCurrency).toBe('GBP')
+    expect(parsed.revenue.seriesCurrency).toBe('GBP')
+    expect(parsed.revenue.seriesByCurrency).toEqual({
+      GBP: [1, 2, 3],
+      UAH: [0, 0, 1200],
+    })
+    // A non-USD business gets no dollar figure; that is not a broken payload.
+    expect(parsed.topPart).toMatchObject({ revenueUsd: null, revenue: 180 })
+  })
+
+  it('treats an unknown accounting currency as unsupported, never a default', () => {
+    const parsed = parseDashboardData({
+      ...ownerDashboard,
+      accountingCurrency: 'XYZ',
+      totalBalances: [{ currency: 'UAH', amount: 10 }],
+    })
+    expect(parsed.accountingCurrency).toBeNull()
+    expect(parsed.totalBalances).toEqual([{ currency: 'UAH', amount: 10 }])
+    expect(parseDashboardData(ownerDashboard)).not.toHaveProperty(
+      'accountingCurrency',
+    )
+  })
+})

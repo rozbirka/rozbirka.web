@@ -1,3 +1,5 @@
+import { parseCurrency, type SupportedCurrency } from '../i18n/currencies'
+
 export const DASHBOARD_PERIODS = ['day', 'week', 'month'] as const
 
 export type DashboardPeriod = (typeof DASHBOARD_PERIODS)[number]
@@ -42,6 +44,13 @@ export interface DashboardData {
   totalPartsSold: number | null
   myPartsToday: number | null
   lastMyActivity: LastActivity | null
+  /*
+   * Pending Core contract (feat/backend-localization-currency-onboarding):
+   * absent on the pinned one. `null` = not chosen or not a supported code.
+   */
+  accountingCurrency?: SupportedCurrency | null
+  /** Active tills' balances per currency; never added up. */
+  totalBalances?: RevenueByCurrency[] | null
 }
 
 export interface DashboardCounter {
@@ -51,16 +60,29 @@ export interface DashboardCounter {
 }
 
 export interface DashboardAnalyticsRevenue {
+  /** Actual cash receipts of the period per currency. */
   totals: Record<string, number>
   trendPercent: number
   series: number[]
+  /** Pending: the one currency `series` is in; `null` when there is none. */
+  seriesCurrency?: string | null
+  /** Pending: a series per currency, aligned with `labels`. */
+  seriesByCurrency?: Record<string, number[]>
 }
 
 export interface DashboardTopPart {
   id: string
   name: string
   photoUrl: string | null
-  revenueUsd: number
+  /**
+   * Revenue in USD on the pinned contract. The pending one sends it only for
+   * a USD business (else `null`) and adds `revenue` in the accounting
+   * currency.
+   */
+  revenueUsd: number | null
+  /** Pending: confirmed sales of the part in `accountingCurrency`. */
+  revenue?: number
+  accountingCurrency?: SupportedCurrency | null
   salesCount: number
   salesSeries: number[]
 }
@@ -72,7 +94,22 @@ export interface DashboardAnalytics {
   partsSold: DashboardCounter
   activeOrders: DashboardCounter
   topPart: DashboardTopPart | null
+  /** Pending; see `DashboardData.accountingCurrency`. */
+  accountingCurrency?: SupportedCurrency | null
 }
+
+/**
+ * A field the pinned contract lacks: absent stays absent (unknown), present is
+ * validated. Spread into the parsed object.
+ */
+const pending = <K extends string, T>(
+  record: UnknownRecord,
+  key: K,
+  parse: (value: unknown) => T,
+): Partial<Record<K, T>> =>
+  record[key] === undefined
+    ? {}
+    : ({ [key]: parse(record[key]) } as Partial<Record<K, T>>)
 
 const DASHBOARD_CONTRACT_ERROR_MESSAGE = 'Invalid dashboard response'
 
@@ -211,6 +248,10 @@ export const parseDashboardData = (value: unknown): DashboardData => {
     totalPartsSold: asNullable(record['totalPartsSold'], asFiniteNumber),
     myPartsToday: asNullable(record['myPartsToday'], asFiniteNumber),
     lastMyActivity: asNullable(record['lastMyActivity'], parseLastActivity),
+    ...pending(record, 'accountingCurrency', parseCurrency),
+    ...pending(record, 'totalBalances', (value) =>
+      asNullable(value, (list) => asArray(list, parseRevenueByCurrency)),
+    ),
   }
 }
 
@@ -235,6 +276,17 @@ const parseAnalyticsRevenue = (value: unknown): DashboardAnalyticsRevenue => {
     ),
     trendPercent: asFiniteNumber(record['trendPercent']),
     series: asArray(record['series'], asFiniteNumber),
+    ...pending(record, 'seriesCurrency', (value) =>
+      asNullable(value, asString),
+    ),
+    ...pending(record, 'seriesByCurrency', (value) =>
+      Object.fromEntries(
+        Object.entries(asRecord(value)).map(([currency, series]) => [
+          currency,
+          asArray(series, asFiniteNumber),
+        ]),
+      ),
+    ),
   }
 }
 
@@ -244,7 +296,9 @@ const parseTopPart = (value: unknown): DashboardTopPart => {
     id: asString(record['id']),
     name: asString(record['name']),
     photoUrl: asNullable(record['photoUrl'], asString),
-    revenueUsd: asFiniteNumber(record['revenueUsd']),
+    revenueUsd: asNullable(record['revenueUsd'], asFiniteNumber),
+    ...pending(record, 'revenue', asFiniteNumber),
+    ...pending(record, 'accountingCurrency', parseCurrency),
     salesCount: asFiniteNumber(record['salesCount']),
     salesSeries: asArray(record['salesSeries'], asFiniteNumber),
   }
@@ -277,5 +331,6 @@ export const parseDashboardAnalytics = (value: unknown): DashboardAnalytics => {
     partsSold,
     activeOrders,
     topPart,
+    ...pending(record, 'accountingCurrency', parseCurrency),
   }
 }

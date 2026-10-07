@@ -15,6 +15,10 @@ import { partsApi, type PartListItem } from '@/api/parts'
 import { inventoryApi, type PartInventoryZone } from '@/api/inventory'
 import { normalizeApiProblem } from '@/api/errors'
 import { orderCardMessages } from './order-cards-messages'
+import { useLocale, type SupportedCurrency } from '@/i18n'
+import { MoneyInput } from '../currency/price-currency'
+import type { FirstPriceGuard } from '../currency/use-accounting-currency'
+import { usePriceSlots } from '../currency/use-price-slots'
 import { money } from './order-money'
 
 const SEARCH_DEBOUNCE_MS = 250
@@ -62,12 +66,18 @@ interface OrderItemDrawerProps {
   busy: boolean
   error: string | null
   onOpenChange: (open: boolean) => void
-  onSubmit: (item: {
-    partId: string
-    quantity: number
-    unitPrice: number
-  }) => void
+  onSubmit: (
+    item: {
+      partId: string
+      quantity: number
+      unitPrice: number
+    },
+    /** The currency accepted after a «Save in EUR» conflict, if any. */
+    accepted?: SupportedCurrency | null,
+  ) => void
   open: boolean
+  /** First-price pattern of the order's accounting currency. */
+  guard: FirstPriceGuard
   orderNumber: number
   /** What the order is worth now, so the footer can say what it will become. */
   orderTotal: number | null
@@ -82,6 +92,7 @@ export function OrderItemDrawer(props: OrderItemDrawerProps) {
 function OpenOrderItemDrawer({
   busy,
   error,
+  guard,
   onOpenChange,
   onSubmit,
   open,
@@ -191,6 +202,18 @@ function OpenOrderItemDrawer({
     quantity <= picked.quantityAvailable &&
     !taken.has(picked.id)
   const lineTotal = valid ? (unitPrice ?? 0) * quantity : 0
+  const { locale } = useLocale()
+  const currency = guard.currency
+  const submit = (accepted?: SupportedCurrency | null) => {
+    if (!valid || picked === null || priceSlots.disabled) return
+    const item = { partId: picked.id, quantity, unitPrice: unitPrice ?? 0 }
+    if (accepted === undefined) onSubmit(item)
+    else onSubmit(item, accepted)
+  }
+  const priceSlots = usePriceSlots(guard, {
+    values: picked === null ? [] : [unitPrice],
+    onAccept: (accepted) => submit(accepted),
+  })
 
   const reset = () => {
     setPickedId(null)
@@ -214,9 +237,13 @@ function OpenOrderItemDrawer({
           <p className="text-app-muted min-w-0 flex-1 text-[13px]">
             {valid
               ? t('totalWillBe', {
-                  amount: money((orderTotal ?? 0) + lineTotal, 'USD'),
+                  amount: money(
+                    (orderTotal ?? 0) + lineTotal,
+                    currency,
+                    locale,
+                  ),
                 })
-              : t('totalNow', { amount: money(orderTotal, 'USD') })}
+              : t('totalNow', { amount: money(orderTotal, currency, locale) })}
           </p>
           <Button
             disabled={busy}
@@ -229,15 +256,8 @@ function OpenOrderItemDrawer({
           </Button>
           <Button
             aria-busy={busy}
-            disabled={busy || !valid}
-            onClick={() => {
-              if (!valid || picked === null) return
-              onSubmit({
-                partId: picked.id,
-                quantity,
-                unitPrice: unitPrice ?? 0,
-              })
-            }}
+            disabled={busy || !valid || priceSlots.disabled}
+            onClick={() => submit()}
             variant="primary"
           >
             {t('addToOrder')}
@@ -369,7 +389,7 @@ function OpenOrderItemDrawer({
                           disabled ? 'text-app-dim' : 'text-app-ink',
                         )}
                       >
-                        {money(item.price, 'USD')}
+                        {money(item.price, currency, locale)}
                       </span>
                       <span
                         className={cn(
@@ -416,9 +436,15 @@ function OpenOrderItemDrawer({
                 value={quantity}
               />
             </Field>
-            <Field className="flex-[1_1_140px]" label={t('unitPrice')}>
-              <TextInput
+            <Field
+              className="flex-[1_1_140px]"
+              hint={priceSlots.hint}
+              label={t('unitPrice')}
+            >
+              <MoneyInput
                 className="font-mono"
+                currency={priceSlots.currency}
+                disabled={priceSlots.disabled}
                 inputMode="decimal"
                 onChange={(event) => setPrice(event.target.value)}
                 value={price ?? String(picked.price ?? '')}
@@ -429,10 +455,12 @@ function OpenOrderItemDrawer({
                 {t('lineSum')}
               </span>
               <span className="mt-2.5 block font-mono text-[17px] whitespace-nowrap text-white tabular-nums">
-                {money(lineTotal, 'USD')}
+                {money(lineTotal, currency, locale)}
               </span>
             </p>
           </div>
+          {priceSlots.note}
+          {priceSlots.saveNotes}
           <p className="text-app-dim text-[12px]">
             {t('stockNote', {
               count: picked.quantityAvailable,

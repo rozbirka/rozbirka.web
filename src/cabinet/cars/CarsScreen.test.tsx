@@ -120,6 +120,8 @@ const cabinet = (
       createdAt: '2026-08-01T00:00:00Z',
       roleName: 'owner',
       requireDeliveryDeposit: true,
+      accountingCurrency: 'USD' as const,
+      currencyLocked: true,
     },
     snapshot: {
       userId: 'user-1',
@@ -438,7 +440,7 @@ it('edits an expense with PUT, retains the form while pending, and refetches det
     name: /Транспорт/,
   })
   expect(
-    within(transportRow).getByRole('cell', { name: /500\s?\$/ }),
+    within(transportRow).getByRole('cell', { name: /500\sUSD/ }),
   ).toBeVisible()
   await user.click(
     within(transportRow).getByRole('button', {
@@ -474,7 +476,7 @@ it('edits an expense with PUT, retains the form while pending, and refetches det
   await waitFor(() => expect(carsApi.get).toHaveBeenCalledTimes(2))
   const deliveryRow = await screen.findByRole('row', { name: /Доставка/ })
   expect(
-    within(deliveryRow).getByRole('cell', { name: /750\s?\$/ }),
+    within(deliveryRow).getByRole('cell', { name: /750\sUSD/ }),
   ).toBeVisible()
   expect(screen.getByText('Разом 1 витрата')).toBeVisible()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()

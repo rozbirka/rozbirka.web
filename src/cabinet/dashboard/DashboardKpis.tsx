@@ -4,6 +4,8 @@ import type {
   DashboardData,
 } from '@/api/dashboard-contract'
 import type { PartsSummary } from '@/api/parts'
+import { useT } from '@/i18n'
+import { dashboardMoneyMessages } from './money-messages'
 
 const count = new Intl.NumberFormat('uk-UA')
 const sum = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 0 })
@@ -42,17 +44,21 @@ interface Kpi {
  * shows fewer measures, never a dash where money should be.
  */
 export function DashboardKpis({
+  accountingCurrency = null,
   analytics,
   data,
   parts,
 }: {
+  /** What invested/recouped are counted in; `null` when unknown. */
+  accountingCurrency?: string | null
   analytics: DashboardAnalytics | null
   data: DashboardData
   parts: PartsSummary | null
 }) {
+  const t = useT(dashboardMoneyMessages)
   const tiles = [
-    revenueToday(data),
-    stockPayoff(data),
+    receiptsToday(data, t('receiptsToday')),
+    stockPayoff(data, accountingCurrency),
     activeOrders(analytics),
     availableParts(data, parts),
   ].filter((tile): tile is Kpi => tile !== null)
@@ -108,25 +114,34 @@ export function DashboardKpis({
 }
 
 /**
- * The server tags today's takings with their own currency rather than assuming
- * one, so the code it sent becomes the unit instead of a hard-coded dollar.
+ * Today's actual receipts, each in its own currency. The largest one (the
+ * server sorts them) is the headline with its ISO code as the unit; any other
+ * currency is listed beside it, never converted or added.
  */
-function revenueToday(data: DashboardData): Kpi | null {
-  const entry = data.revenue?.today[0]
+function receiptsToday(data: DashboardData, label: string): Kpi | null {
+  const [entry, ...others] = data.revenue?.today ?? []
   if (entry === undefined) return null
   const sales = data.todaySalesCount
   return {
-    label: 'Виручка сьогодні',
+    label,
     value: sum.format(entry.amount),
     unit: entry.currency,
-    meta: `${count.format(sales)} ${plural(sales, ['продаж', 'продажі', 'продажів'])}`,
+    meta: [
+      ...others.map(
+        (other) => `+ ${sum.format(other.amount)} ${other.currency}`,
+      ),
+      `${count.format(sales)} ${plural(sales, ['продаж', 'продажі', 'продажів'])}`,
+    ].join(' · '),
     tone: 'ink',
     metaTone: 'ink',
   }
 }
 
 /** What the yard has earned back against everything it has put into cars. */
-function stockPayoff(data: DashboardData): Kpi | null {
+function stockPayoff(
+  data: DashboardData,
+  accountingCurrency: string | null,
+): Kpi | null {
   const { totalRecouped: recouped, totalInvested: invested } = data
   if (recouped === null || invested === null || invested <= 0) return null
   const percent = Math.round((recouped / invested) * 100)
@@ -134,7 +149,7 @@ function stockPayoff(data: DashboardData): Kpi | null {
     label: 'Окупність складу',
     value: String(percent),
     unit: '%',
-    meta: `${sum.format(recouped)} з ${sum.format(invested)} $`,
+    meta: `${sum.format(recouped)} з ${sum.format(invested)}${accountingCurrency === null ? '' : ` ${accountingCurrency}`}`,
     // Green once most of the money is back; amber while the yard is still
     // deep in what it spent, on the same scale the car rows use.
     tone: percent >= 60 ? 'ok' : 'warn',

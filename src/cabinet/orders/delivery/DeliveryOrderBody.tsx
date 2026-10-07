@@ -93,6 +93,7 @@ const usePaymentIdempotencyKeys = () => {
  */
 export function DeliveryOrderBody({
   countryCode = null,
+  accountingCurrency = null,
   customerPath,
   delivery,
   financeAllowed,
@@ -105,6 +106,8 @@ export function DeliveryOrderBody({
 }: {
   /** The tenant's country, for the phone example in the booking form. */
   countryCode?: BusinessCountry | null
+  /** The order lines' currency; `null` when not chosen or not reported. */
+  accountingCurrency?: string | null
   customerPath: string | null
   delivery: DeliveryOrder
   financeAllowed: boolean
@@ -244,6 +247,7 @@ export function DeliveryOrderBody({
             <>
               <OrderItemsCard
                 addPath={null}
+                currency={accountingCurrency}
                 editable={false}
                 items={order.items}
                 onEdit={() => undefined}
@@ -395,6 +399,7 @@ export function DeliveryOrderBody({
             shipment={shipment}
           />
           <OrderCustomerCard
+            accountingCurrency={accountingCurrency}
             customerId={order.customerId}
             customerName={order.customerName}
             initials={initials(order.customerName ?? '—')}

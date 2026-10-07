@@ -13,49 +13,30 @@ import { businessApi } from '@/api/business'
 import { inventoryApi, type Warehouse } from '@/api/inventory'
 import { useCabinet } from '../CabinetContext'
 import { RedesignShell, RedesignTitle } from '../redesign-shell'
-import { useAuthOrNull } from '@/auth/useTenantSettings'
+import { useOptionalAuth } from '@/auth/AuthContext'
 import { useT } from '@/i18n/hooks'
 import { businessMessages } from './business-messages'
 import { RegionSettings } from './region-settings'
 import { cabinetModules } from '../module-registry'
 import { useHashTarget } from '../use-hash-target'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import { AccountingCurrencySection } from './accounting-currency-section'
+import { AccountingCurrencySummary } from './accounting-currency-summary'
 
 type SaveState = 'idle' | 'pending' | 'success' | 'error' | 'denied'
 
 const FORM_ID = 'business-form'
 
 const LEGAL_FORMS = ['legalSole', 'legalLlc', 'legalNone'] as const
-const ACCOUNTING_CURRENCIES = ['USD', 'UAH', 'EUR'] as const
 const COSTING = [
-  {
-    label: 'Розподіл за вагою',
-    hint: 'Ціна авто ділиться на деталі пропорційно вазі',
-  },
-  { label: 'Вручну', hint: 'Собівартість вказує комірник при розміщенні' },
+  { label: 'costWeight', hint: 'costWeightHint' },
+  { label: 'costManual', hint: 'costManualHint' },
 ] as const
 const RULES = [
-  {
-    label: 'Контролювати мінімальний залишок',
-    hint: 'Позначати деталі, яких менше норми',
-  },
-  {
-    label: 'Вимагати VIN при додаванні авто',
-    hint: 'Без VIN авто не зберігається',
-  },
-  {
-    label: 'Дозволити відʼємний залишок',
-    hint: 'Продаж деталі, якої немає фізично на складі',
-  },
+  { label: 'ruleMinStock', hint: 'ruleMinStockHint' },
+  { label: 'ruleVin', hint: 'ruleVinHint' },
+  { label: 'ruleNegative', hint: 'ruleNegativeHint' },
 ] as const
-
-/** What `PATCH /tenants/{id}` does not take, said where the design asks for it. */
-const NO_ACCOUNTING_CURRENCY =
-  'Основної валюти обліку кабінет не веде: ціни лишаються у своїй валюті, а каси рахують кожну окремо й без конвертації.'
-const NO_COSTING =
-  'Способу рахувати собівартість деталі в налаштуваннях немає — як ділити ціну авто, кабінет не питає.'
-const NO_RULES =
-  'Цих правил обліку кабінет поки не має: ні контролю мінімального залишку, ні вимоги VIN, ні дозволу на відʼємний залишок.'
 
 function Step({
   number,
@@ -110,7 +91,7 @@ export function BusinessSettingsScreen() {
   // `#region` / `#accounting-currency` open that section (business-anchors).
   useHashTarget()
   const cabinet = useCabinet()
-  const auth = useAuthOrNull()
+  const auth = useOptionalAuth()
   const t = useT(businessMessages)
   // The auth list holds the tenant as last saved; the cabinet keeps the
   // object it committed at the switch.
@@ -215,7 +196,7 @@ export function BusinessSettingsScreen() {
       setCity(updated.city ?? '')
       setDeposit(updated.requireDeliveryDeposit)
       setSaveState('success')
-      auth?.replaceTenant?.(updated)
+      auth?.mergeTenantSettings?.([updated])
       void Promise.resolve(cabinet.switchTenant(updated.id)).catch(
         () => undefined,
       )
@@ -336,11 +317,13 @@ export function BusinessSettingsScreen() {
 
           <RegionSettings
             onSaved={(updated) => {
-              auth?.replaceTenant?.(updated)
+              auth?.mergeTenantSettings?.([updated])
             }}
             role={cabinet.snapshot?.role}
             tenant={tenant}
           />
+
+          <AccountingCurrencySection />
 
           <Step
             action={
@@ -351,7 +334,7 @@ export function BusinessSettingsScreen() {
                 </Link>
               </Button>
             }
-            number="03"
+            number="04"
             title={t('warehouses')}
           >
             {warehouses === null ? (
@@ -404,23 +387,10 @@ export function BusinessSettingsScreen() {
             </Note>
           </Step>
 
-          <Step number="04" title="Валюти й облік">
+          <Step number="05" title={t('accounting')}>
             <div>
               <p className="text-app-muted text-[13px] font-medium">
-                Основна валюта обліку
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {ACCOUNTING_CURRENCIES.map((label) => (
-                  <Dead key={label} title={NO_ACCOUNTING_CURRENCY}>
-                    {label}
-                  </Dead>
-                ))}
-              </div>
-              <Note>{NO_ACCOUNTING_CURRENCY}</Note>
-            </div>
-            <div>
-              <p className="text-app-muted text-[13px] font-medium">
-                Собівартість запчастини
+                {t('partCost')}
               </p>
               <div className="mt-2 flex flex-wrap gap-2.5">
                 {COSTING.map((option) => (
@@ -428,19 +398,19 @@ export function BusinessSettingsScreen() {
                     className="border-app-line min-w-0 flex-[1_1_200px] cursor-not-allowed rounded-[14px] border px-4 py-3 text-left"
                     disabled
                     key={option.label}
-                    title={NO_COSTING}
+                    title={t('noCosting')}
                     type="button"
                   >
                     <span className="text-app-dim block text-[14px] font-bold">
-                      {option.label}
+                      {t(option.label)}
                     </span>
                     <span className="text-app-dim mt-1 block text-[12.5px]">
-                      {option.hint}
+                      {t(option.hint)}
                     </span>
                   </button>
                 ))}
               </div>
-              <Note>{NO_COSTING}</Note>
+              <Note>{t('noCosting')}</Note>
             </div>
             {/* The one rule in this step the service actually keeps. It sits
                 above the rest so a real control is not mistaken for the dead
@@ -449,17 +419,15 @@ export function BusinessSettingsScreen() {
               <Switch
                 checked={deposit}
                 disabled={busy}
-                label="Вимагати депозит за доставку"
+                label={t('deposit')}
                 onChange={setDeposit}
               />
               <span className="min-w-0">
                 <span className="text-app-ink block text-[13.5px] font-medium">
-                  Вимагати депозит за доставку
+                  {t('deposit')}
                 </span>
                 <span className="text-app-muted mt-0.5 block text-[12.5px] leading-5 text-pretty">
-                  {deposit
-                    ? 'ТТН не створюється, поки клієнт не внесе вартість доставки в обидва боки. Вимкніть, якщо готові відправляти без передоплати.'
-                    : 'Відправляєте без передоплати. Якщо посилку не заберуть, обидві дороги оплачує розбірка.'}
+                  {deposit ? t('depositOn') : t('depositOff')}
                 </span>
               </span>
             </div>
@@ -468,7 +436,7 @@ export function BusinessSettingsScreen() {
                 <div
                   className="border-app-line flex items-start gap-3 rounded-[14px] border px-3.5 py-3"
                   key={rule.label}
-                  title={NO_RULES}
+                  title={t('noRules')}
                 >
                   <span
                     aria-hidden
@@ -478,16 +446,16 @@ export function BusinessSettingsScreen() {
                   </span>
                   <span className="min-w-0">
                     <span className="text-app-dim block text-[13.5px] font-medium">
-                      {rule.label}
+                      {t(rule.label)}
                     </span>
                     <span className="text-app-dim mt-0.5 block text-[12.5px]">
-                      {rule.hint}
+                      {t(rule.hint)}
                     </span>
                   </span>
                 </div>
               ))}
             </div>
-            <Note>{NO_RULES}</Note>
+            <Note>{t('noRules')}</Note>
           </Step>
         </div>
 
@@ -515,18 +483,10 @@ export function BusinessSettingsScreen() {
                   {warehouses === null ? '…' : warehouses.length}
                 </dd>
               </div>
+              <AccountingCurrencySummary />
               <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">Валюта обліку</dt>
-                <dd
-                  className="text-app-dim text-right"
-                  title={NO_ACCOUNTING_CURRENCY}
-                >
-                  —
-                </dd>
-              </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">Собівартість</dt>
-                <dd className="text-app-dim text-right" title={NO_COSTING}>
+                <dt className="text-app-muted">{t('costSummary')}</dt>
+                <dd className="text-app-dim text-right" title={t('noCosting')}>
                   —
                 </dd>
               </div>

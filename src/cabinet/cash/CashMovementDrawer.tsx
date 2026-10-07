@@ -9,6 +9,7 @@ import {
   TextInput,
 } from '@/components/app'
 import { cn } from '@/lib/utils'
+import { tillCurrencies } from '../currency/catalog-order'
 
 type MovementType = CashTransactionInput['type']
 
@@ -34,11 +35,7 @@ function OpenCashMovementDrawer({
   open,
   register,
 }: CashMovementDrawerProps) {
-  const currencies = Object.keys(register.balances).sort((left, right) => {
-    const priority = (currency: string) =>
-      currency === 'UAH' ? 0 : currency === 'USD' ? 1 : 2
-    return priority(left) - priority(right) || left.localeCompare(right)
-  })
+  const currencies = tillCurrencies(register)
   const [type, setType] = useState<MovementType>('manual_in')
   const [amount, setAmount] = useState('')
   const [currency, setCurrency] = useState('')
@@ -147,7 +144,15 @@ function OpenCashMovementDrawer({
         </Field>
 
         <Field label="Сума">
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)] items-stretch gap-2">
+          <div
+            className={cn(
+              'grid items-stretch gap-2',
+              // Up to three codes fit beside the amount; more wrap under it
+              // so no code is cut off.
+              currencies.length <= 3 &&
+                'grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)]',
+            )}
+          >
             <TextInput
               className="h-11 min-h-11 rounded-[10px] px-3.5 font-mono text-[17px] font-semibold tabular-nums"
               inputMode="decimal"
@@ -161,7 +166,12 @@ function OpenCashMovementDrawer({
               value={amount}
             />
             <Segmented
-              className="h-11 flex-nowrap rounded-[10px] p-1 [&>label]:h-full [&>label]:min-h-0 [&>label]:min-w-0 [&>label]:rounded-[7px] [&>label]:px-2"
+              className={cn(
+                'rounded-[10px] p-1 [&>label]:rounded-[7px] [&>label]:px-2 [&>label]:font-mono',
+                currencies.length <= 3
+                  ? 'h-11 flex-nowrap [&>label]:h-full [&>label]:min-h-0 [&>label]:min-w-0'
+                  : 'w-fit max-w-full flex-wrap [&>label]:min-h-9 [&>label]:min-w-14 [&>label]:flex-none',
+              )}
               label="Валюта операції"
               name="movement-currency"
               onChange={setCurrency}

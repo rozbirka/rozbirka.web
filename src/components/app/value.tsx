@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { currencyName, parseCurrency } from '@/i18n/currencies'
 import { formatDate, formatMoney, formatNumber } from '@/i18n/format'
 import { useLocale } from '@/i18n/LocaleProvider'
 import { cn } from '@/lib/utils'
@@ -52,10 +53,16 @@ export function Amount({
     currencyDisplay === 'symbol' && currency
       ? (currencyLabel[currency] ?? currency)
       : ''
+  // The ISO code is read letter by letter; the currency's name, said after
+  // the amount, is what a screen reader user actually needs.
+  const supported = currencyDisplay === 'code' ? parseCurrency(currency) : null
   return (
     <span className={cn('tabular-nums whitespace-nowrap', className)}>
       {text}
       {suffix ? ` ${suffix}` : ''}
+      {supported ? (
+        <span className="sr-only">{` (${currencyName(supported, locale)})`}</span>
+      ) : null}
     </span>
   )
 }

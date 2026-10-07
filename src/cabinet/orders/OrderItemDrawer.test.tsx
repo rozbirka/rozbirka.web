@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
+import { guardFixture } from '../currency/guard-fixture'
 import { OrderItemDrawer } from './OrderItemDrawer'
 
 const partsApi = vi.hoisted(() => ({ list: vi.fn(), get: vi.fn() }))
@@ -21,6 +22,7 @@ beforeEach(() => {
 function renderDrawer() {
   return render(
     <OrderItemDrawer
+      guard={guardFixture()}
       open
       busy={false}
       error={null}
@@ -138,6 +140,7 @@ it('only offers available stock, including the free remainder of a reserved part
   const user = userEvent.setup()
   render(
     <OrderItemDrawer
+      guard={guardFixture()}
       open
       busy={false}
       error={null}
@@ -249,6 +252,7 @@ it('starts with an empty search after it is closed and opened again', async () =
     orderNumber: 1,
     orderTotal: 0,
     takenPartIds: [] as string[],
+    guard: guardFixture(),
     onOpenChange: vi.fn(),
     onSubmit: vi.fn(),
   }

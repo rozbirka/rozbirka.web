@@ -40,6 +40,7 @@ it('clears the previous customer while a newly assigned customer is loading', as
   const view = render(
     <MemoryRouter>
       <OrderCustomerCard
+        accountingCurrency="USD"
         customerId="customer-1"
         customerName="Старий клієнт"
         initials="СК"
@@ -53,6 +54,7 @@ it('clears the previous customer while a newly assigned customer is loading', as
   view.rerender(
     <MemoryRouter>
       <OrderCustomerCard
+        accountingCurrency="USD"
         customerId="customer-2"
         customerName="Новий клієнт"
         initials="НК"
@@ -86,6 +88,7 @@ it('ignores a previous customer response that arrives after reassignment', async
   const view = render(
     <MemoryRouter>
       <OrderCustomerCard
+        accountingCurrency="USD"
         customerId="customer-1"
         customerName="Старий клієнт"
         initials="СК"
@@ -96,6 +99,7 @@ it('ignores a previous customer response that arrives after reassignment', async
   view.rerender(
     <MemoryRouter>
       <OrderCustomerCard
+        accountingCurrency="USD"
         customerId="customer-2"
         customerName="Новий клієнт"
         initials="НК"
@@ -135,6 +139,7 @@ it('renders an order whose API response omits the unassigned customer', async ()
     render(
       <MemoryRouter>
         <OrderCustomerCard
+          accountingCurrency="USD"
           customerId={order.customerId}
           customerName={order.customerName}
           initials=""

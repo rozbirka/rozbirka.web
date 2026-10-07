@@ -9,13 +9,15 @@ import {
   Sheet,
   TextInput,
 } from '@/components/app'
+import { tillCurrencies } from '../currency/catalog-order'
 
 const eyebrowClass =
   'text-app-dim font-mono text-[11.5px] tracking-[0.12em] uppercase'
-const transferCurrencies = [
-  { label: 'UAH', value: 'UAH' },
-  { label: 'USD', value: 'USD' },
-] as const
+/** A till's own currencies (catalog order); a transfer never invents one. */
+const currencyOptions = (register: CashRegister | undefined) =>
+  register === undefined
+    ? []
+    : tillCurrencies(register).map((code) => ({ label: code, value: code }))
 
 interface CashTransferDrawerProps {
   busy: boolean
@@ -189,7 +191,7 @@ function OpenCashTransferDrawer({
                 />
               </Field>
               <Field label="Сума списання">
-                <div className="grid grid-cols-[minmax(0,1fr)_7.25rem] items-stretch gap-2">
+                <div className="grid gap-2">
                   <TextInput
                     className="h-11 min-h-11 rounded-[10px] px-3.5 font-mono text-[17px] font-semibold tabular-nums"
                     inputMode="decimal"
@@ -203,16 +205,11 @@ function OpenCashTransferDrawer({
                     value={amountOut}
                   />
                   <Segmented
-                    className="h-11 flex-nowrap rounded-[10px] p-1 [&>label]:h-full [&>label]:min-h-0 [&>label]:min-w-0 [&>label]:rounded-[7px] [&>label]:px-2"
+                    className="w-fit max-w-full flex-wrap rounded-[10px] p-1 [&>label]:min-h-9 [&>label]:min-w-14 [&>label]:flex-none [&>label]:rounded-[7px] [&>label]:px-2 [&>label]:font-mono"
                     label="Валюта списання"
                     name="transfer-from-currency"
                     onChange={setFromCurrency}
-                    options={transferCurrencies.map((currency) => ({
-                      ...currency,
-                      disabled:
-                        source === undefined ||
-                        !Object.hasOwn(source.balances, currency.value),
-                    }))}
+                    options={currencyOptions(source)}
                     selectionTone="brand"
                     value={fromCurrency}
                   />
@@ -253,7 +250,7 @@ function OpenCashTransferDrawer({
                 />
               </Field>
               <Field label="Сума зарахування">
-                <div className="grid grid-cols-[minmax(0,1fr)_7.25rem] items-stretch gap-2">
+                <div className="grid gap-2">
                   <TextInput
                     className="h-11 min-h-11 rounded-[10px] px-3.5 font-mono text-[17px] font-semibold tabular-nums"
                     inputMode="decimal"
@@ -267,16 +264,11 @@ function OpenCashTransferDrawer({
                     value={amountIn}
                   />
                   <Segmented
-                    className="h-11 flex-nowrap rounded-[10px] p-1 [&>label]:h-full [&>label]:min-h-0 [&>label]:min-w-0 [&>label]:rounded-[7px] [&>label]:px-2"
+                    className="w-fit max-w-full flex-wrap rounded-[10px] p-1 [&>label]:min-h-9 [&>label]:min-w-14 [&>label]:flex-none [&>label]:rounded-[7px] [&>label]:px-2 [&>label]:font-mono"
                     label="Валюта зарахування"
                     name="transfer-to-currency"
                     onChange={setToCurrency}
-                    options={transferCurrencies.map((currency) => ({
-                      ...currency,
-                      disabled:
-                        destination === undefined ||
-                        !Object.hasOwn(destination.balances, currency.value),
-                    }))}
+                    options={currencyOptions(destination)}
                     selectionTone="brand"
                     value={toCurrency}
                   />

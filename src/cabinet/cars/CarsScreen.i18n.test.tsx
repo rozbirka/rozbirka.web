@@ -185,6 +185,7 @@ it('localizes the parts and profitability cards', () => {
       <MemoryRouter>
         <CarPartsCard partsHref="/app/demo/parts" profit={profit} />
         <CarProfitabilityCard
+          currency="GBP"
           expensesTotal={0}
           profit={profit}
           purchasePrice={12000}
@@ -199,6 +200,7 @@ it('localizes the parts and profitability cards', () => {
   expect(screen.getByText('Paying off')).toBeVisible()
   expect(screen.getByText('from selling 1 item')).toBeVisible()
   expect(screen.getByText('To break even')).toBeVisible()
+  expect(screen.getAllByText(/GBP/).length).toBeGreaterThan(0)
   expect(screen.getByRole('progressbar', { name: 'Payback' })).toHaveAttribute(
     'aria-valuetext',
     '42% of investment recouped',

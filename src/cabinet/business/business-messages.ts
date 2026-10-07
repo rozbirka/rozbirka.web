@@ -1,8 +1,8 @@
 import { defineMessages } from '@/i18n/messages'
 
 /**
- * Business settings outside the currency step («Валюти й облік»), which the
- * currency work owns.
+ * Business settings screen. The region block (`region-settings.tsx`) and the
+ * accounting currency block (`currencyMessages`) keep their own namespaces.
  */
 export const businessMessages = defineMessages({
   uk: {
@@ -71,6 +71,28 @@ export const businessMessages = defineMessages({
       'Вивантажити всі дані кабінету одним файлом поки не можна — окремого експорту немає в жодному розділі.',
     noTenantDelete:
       'Видалити розбірку з кабінету не можна — звертайтеся в підтримку.',
+    accounting: 'Облік',
+    partCost: 'Собівартість запчастини',
+    costSummary: 'Собівартість',
+    costWeight: 'Розподіл за вагою',
+    costWeightHint: 'Ціна авто ділиться на деталі пропорційно вазі',
+    costManual: 'Вручну',
+    costManualHint: 'Собівартість вказує комірник при розміщенні',
+    noCosting:
+      'Способу рахувати собівартість деталі в налаштуваннях немає — як ділити ціну авто, кабінет не питає.',
+    deposit: 'Вимагати депозит за доставку',
+    depositOn:
+      'ТТН не створюється, поки клієнт не внесе вартість доставки в обидва боки. Вимкніть, якщо готові відправляти без передоплати.',
+    depositOff:
+      'Відправляєте без передоплати. Якщо посилку не заберуть, обидві дороги оплачує розбірка.',
+    ruleMinStock: 'Контролювати мінімальний залишок',
+    ruleMinStockHint: 'Позначати деталі, яких менше норми',
+    ruleVin: 'Вимагати VIN при додаванні авто',
+    ruleVinHint: 'Без VIN авто не зберігається',
+    ruleNegative: 'Дозволити відʼємний залишок',
+    ruleNegativeHint: 'Продаж деталі, якої немає фізично на складі',
+    noRules:
+      'Цих правил обліку кабінет поки не має: ні контролю мінімального залишку, ні вимоги VIN, ні дозволу на відʼємний залишок.',
   },
   'en-GB': {
     noTenant: 'Choose a business to change its settings.',
@@ -132,6 +154,28 @@ export const businessMessages = defineMessages({
       'You can’t export all account data in one file yet — no section has a full export.',
     noTenantDelete:
       'A business can’t be deleted from the account — please contact support.',
+    accounting: 'Accounting',
+    partCost: 'Part cost',
+    costSummary: 'Cost',
+    costWeight: 'Split by weight',
+    costWeightHint: 'The car price is split across its parts by weight',
+    costManual: 'Manually',
+    costManualHint: 'The storekeeper enters the cost when shelving',
+    noCosting:
+      'Settings have no way to calculate a part’s cost — the cabinet doesn’t ask how to split a car’s price.',
+    deposit: 'Require a delivery deposit',
+    depositOn:
+      'No waybill is created until the customer pays for delivery both ways. Turn this off if you’re ready to ship without prepayment.',
+    depositOff:
+      'You ship without prepayment. If the parcel isn’t collected, the yard pays for both ways.',
+    ruleMinStock: 'Track minimum stock',
+    ruleMinStockHint: 'Flag parts that fall below the minimum',
+    ruleVin: 'Require a VIN when adding a car',
+    ruleVinHint: 'A car isn’t saved without a VIN',
+    ruleNegative: 'Allow negative stock',
+    ruleNegativeHint: 'Sell a part that isn’t physically in the warehouse',
+    noRules:
+      'The cabinet doesn’t have these accounting rules yet: no minimum stock tracking, no VIN requirement and no negative stock.',
   },
   pl: {
     noTenant: 'Wybierz firmę, aby zmienić jej ustawienia.',
@@ -199,5 +243,27 @@ export const businessMessages = defineMessages({
       'Nie można jeszcze wyeksportować wszystkich danych konta do jednego pliku — żadna sekcja nie ma pełnego eksportu.',
     noTenantDelete:
       'Firmy nie można usunąć z konta — skontaktuj się z pomocą techniczną.',
+    accounting: 'Rozliczenia',
+    partCost: 'Koszt części',
+    costSummary: 'Koszt',
+    costWeight: 'Podział według wagi',
+    costWeightHint: 'Cena auta dzielona jest na części proporcjonalnie do wagi',
+    costManual: 'Ręcznie',
+    costManualHint: 'Koszt podaje magazynier przy rozmieszczaniu',
+    noCosting:
+      'W ustawieniach nie ma sposobu liczenia kosztu części — kabinet nie pyta, jak dzielić cenę auta.',
+    deposit: 'Wymagaj kaucji za dostawę',
+    depositOn:
+      'List przewozowy nie powstanie, dopóki klient nie opłaci dostawy w obie strony. Wyłącz, jeśli możesz wysyłać bez przedpłaty.',
+    depositOff:
+      'Wysyłasz bez przedpłaty. Jeśli paczka nie zostanie odebrana, dostawę w obie strony opłaca firma.',
+    ruleMinStock: 'Kontroluj minimalny stan',
+    ruleMinStockHint: 'Oznaczaj części poniżej normy',
+    ruleVin: 'Wymagaj VIN przy dodawaniu auta',
+    ruleVinHint: 'Auto bez VIN nie zostanie zapisane',
+    ruleNegative: 'Zezwalaj na ujemny stan',
+    ruleNegativeHint: 'Sprzedaż części, której fizycznie nie ma w magazynie',
+    noRules:
+      'Kabinet nie ma jeszcze tych reguł: ani kontroli minimalnego stanu, ani wymogu VIN, ani ujemnego stanu.',
   },
 })

@@ -25,6 +25,7 @@ import {
 } from '@/i18n/locales'
 import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import { BUSINESS_SECTION_IDS } from './business-anchors'
 import { regionMessages } from './region-messages'
 
 type Translate = ReturnType<typeof useT<typeof regionMessages.uk>>
@@ -405,9 +406,9 @@ export function RegionSettings({
     <section
       aria-busy={pending || undefined}
       aria-labelledby={titleId}
-      className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-5"
+      className="border-app-line bg-app-raised min-w-0 scroll-mt-24 rounded-[20px] border px-5 py-5"
       // Deep-link target: onboarding opens /settings/business#region.
-      id="region"
+      id={BUSINESS_SECTION_IDS.region}
     >
       <div className="flex items-center gap-3">
         <span className="border-app-line text-app-dim inline-flex size-7 shrink-0 items-center justify-center rounded-full border font-mono text-[11px]">

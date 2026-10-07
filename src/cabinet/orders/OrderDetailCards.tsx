@@ -2,12 +2,13 @@ import { useEffect, useId, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { CreditCard, Plus } from 'lucide-react'
 import { Button, TextArea, Thumbnail } from '@/components/app'
-import { commonMessages, useT } from '@/i18n'
+import { commonMessages, useLocale, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { customersApi, type CustomerDetail } from '@/api/customers'
 import type { OrderDetail, OrderDetailItem } from '@/api/orders'
 import { money, type OrderMoney } from './order-money'
 import { orderCardMessages } from './order-cards-messages'
+import { paymentMessages } from './payment-messages'
 import type { OrderStep } from './order-steps'
 
 /**
@@ -149,7 +150,7 @@ export function OrderSteps({ steps }: { steps: readonly OrderStep[] }) {
  */
 export function OrderItemsCard({
   addPath,
-  currency = 'USD',
+  currency,
   editable,
   items,
   note,
@@ -159,8 +160,8 @@ export function OrderItemsCard({
 }: {
   /** Where a new line is added, when this order may still be changed. */
   addPath: string | null
-  /** What the line prices are kept in. Core prices an order's items in USD. */
-  currency?: string
+  /** The accounting currency line prices are kept in; `null` if unknown. */
+  currency: string | null
   editable: boolean
   items: readonly OrderDetailItem[]
   /** One line under the total, when the total needs explaining. */
@@ -438,62 +439,80 @@ const DUE_TONE: Record<OrderMoney['tone'], string> = {
   dim: 'text-app-dim',
 }
 
-/** What is still owed, and the one or two moves that can be made about it. */
+const STATUS_KEY = {
+  pending: 'statusPending',
+  confirmed: 'statusConfirmed',
+  refunded: 'statusRefunded',
+  cancelled: 'statusCancelled',
+  other: null,
+} as const
+
+/**
+ * What the order is worth and what was actually paid (ROZ-162 board 3b): the
+ * value in the accounting currency and each currency's payments, side by
+ * side. No remaining sum, no debt or overpayment, no progress bar — the two
+ * are not comparable without a rate, and full payment is the operator's
+ * acknowledgement when confirming.
+ */
 export function OrderDueCard({
+  accountingCurrency,
   actions,
   hint,
   summary,
+  tills,
 }: {
+  accountingCurrency: string | null
   actions: ReactNode
   hint: string | null
   summary: OrderMoney
+  /** The tills the payments went to, in the order recorded. */
+  tills: readonly string[]
 }) {
-  const t = useT(orderCardMessages)
-  const headline = summary.remaining ?? summary.totalUsd
+  const t = useT(paymentMessages)
+  const { locale } = useLocale()
+  const statusKey = STATUS_KEY[summary.status]
 
   return (
     <section
-      aria-label={t('due')}
+      aria-label={t('orderValue')}
       className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
     >
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-          {t('due')}
+          {t('orderValue')}
         </h2>
-        <p className={cn('text-[13px] font-bold', DUE_TONE[summary.tone])}>
-          {summary.label}
-        </p>
+        {statusKey === null ? null : (
+          <p className={cn('text-[13px] font-bold', DUE_TONE[summary.tone])}>
+            {t(statusKey)}
+          </p>
+        )}
       </div>
-      <p className="mt-3 text-[38px] leading-none font-extrabold tracking-[-0.03em] text-white tabular-nums">
-        {money(headline, 'USD')}
+      <p className="mt-3 text-[34px] leading-none font-extrabold tracking-[-0.03em] text-white tabular-nums">
+        {money(summary.value, accountingCurrency, locale)}
       </p>
-      <span aria-hidden className="mt-4.5 flex gap-0.5">
-        <span
-          className="bg-state-ok h-[5px] rounded-l-full"
-          style={{ flex: summary.paidPercent }}
-        />
-        <span
-          className="h-[5px] rounded-r-full bg-white/[0.08]"
-          style={{ flex: 100 - summary.paidPercent }}
-        />
-      </span>
-      <dl className="mt-4 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
-        <dt className="text-app-muted text-[14px]">{t('orderTotal')}</dt>
-        <dd className="font-mono text-[14px] text-white tabular-nums">
-          {money(summary.totalUsd, 'USD')}
-        </dd>
-        <dt className="text-app-muted text-[14px]">{t('paid')}</dt>
-        <dd
-          className={cn(
-            'font-mono text-[14px] tabular-nums',
-            summary.paid !== null && summary.paid > 0
-              ? 'text-state-ok'
-              : 'text-app-muted',
+      <p className="text-app-dim mt-1.5 text-[12px]">
+        {accountingCurrency === null ? t('valueUnknown') : t('inAccounting')}
+      </p>
+      <dl className="border-app-line mt-4 grid gap-1.5 border-t pt-4">
+        <dt className="text-app-muted text-[14px]">{t('actualPayments')}</dt>
+        <dd className="grid gap-1">
+          {summary.paid.length === 0 ? (
+            <span className="text-app-dim text-[14px]">{t('noPayments')}</span>
+          ) : (
+            summary.paid.map((sum) => (
+              <span
+                className="font-mono text-[16px] font-semibold text-white tabular-nums"
+                key={sum.currency}
+              >
+                {money(sum.amount, sum.currency, locale)}
+              </span>
+            ))
           )}
-        >
-          {summary.paid === null
-            ? '—'
-            : money(summary.paid, summary.paidCurrency ?? 'USD')}
+          {tills.length === 0 ? null : (
+            <span className="text-app-muted text-[12.5px]">
+              {`${t('till')} ${tills.join(', ')}`}
+            </span>
+          )}
         </dd>
       </dl>
       <div className="mt-5 grid gap-2">{actions}</div>
@@ -512,12 +531,15 @@ export function OrderDueCard({
  * stays a name until they arrive.
  */
 export function OrderCustomerCard({
+  accountingCurrency,
   customerId,
   customerName,
   initials,
   onChange,
   to,
 }: {
+  /** What the customer's spending is counted in; `null` if unknown. */
+  accountingCurrency: string | null
   customerId: string | null
   customerName: string | null
   initials: string
@@ -599,7 +621,7 @@ export function OrderCustomerCard({
           <div className="px-[22px] py-3">
             <dt className="text-app-muted text-[12px]">{t('customerSpent')}</dt>
             <dd className="mt-[3px] font-mono text-[14px] text-white tabular-nums">
-              {money(customer.totalAmount, 'USD')}
+              {money(customer.totalAmount, accountingCurrency)}
             </dd>
           </div>
         </dl>

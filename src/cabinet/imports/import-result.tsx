@@ -10,22 +10,12 @@ import {
   type Locale,
 } from '@/i18n'
 import type { ImportRow, ImportStatus } from '@/api/part-imports'
+import { wholeMoney } from '../currency/money'
 import { importResultMessages } from './import-result-messages'
 import { issueText, statusLabel } from './import-model'
 import { useCount, useImportT } from './use-import-text'
 
 const PAGE_SIZE = 100
-
-/** Parts are priced in dollars, like the cars they come off. */
-const money = (amount: number) =>
-  new Intl.NumberFormat('uk-UA', {
-    style: 'currency',
-    currency: 'USD',
-    currencyDisplay: 'narrowSymbol',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-    trailingZeroDisplay: 'stripIfInteger',
-  }).format(amount)
 
 /** Date and time in the business time zone; an unparsable value as received. */
 const moment = (value: string | null, locale: Locale, timeZone: string) =>
@@ -121,6 +111,7 @@ function Panel({
  * because a page holds a hundred rows and an import can hold ten thousand.
  */
 export function ImportResultStep({
+  accountingCurrency = null,
   status,
   rows,
   rowTotal,
@@ -137,6 +128,8 @@ export function ImportResultStep({
   onNewImport,
   busy,
 }: {
+  /** What imported prices are in; `null` when unknown. */
+  accountingCurrency?: string | null
   status: ImportStatus
   rows: readonly ImportRow[]
   rowTotal: number
@@ -502,7 +495,7 @@ export function ImportResultStep({
                       </td>
                       <td className="text-app-ink px-3 py-3.5 text-right font-mono tabular-nums">
                         {Number.isFinite(price) && values['DesiredSalePrice']
-                          ? money(price)
+                          ? wholeMoney(price, accountingCurrency, locale)
                           : '—'}
                       </td>
                       <td className="text-app-muted px-3 py-3.5">

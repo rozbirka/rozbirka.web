@@ -31,7 +31,13 @@ import {
   Wallet,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { commonMessages, useLocale, useT, type Translate } from '@/i18n'
+import {
+  commonMessages,
+  useLocale,
+  useT,
+  type SupportedCurrency,
+  type Translate,
+} from '@/i18n'
 import {
   ActionMenu,
   Button,
@@ -82,10 +88,17 @@ import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { CarExpenseDrawer } from './CarExpenseDrawer'
 import { CarPartsCard } from './CarPartsCard'
 import { CarProfitabilityCard } from './CarProfitabilityCard'
-import { money } from './car-money'
 import { carFormMessages } from './car-form-messages'
 import { formatDay } from './day'
 import { carsMessages } from './messages'
+import { useCarMoney } from './car-money'
+import { currencyMessages } from '../currency/messages'
+import { MoneyInput } from '../currency/price-currency'
+import {
+  useAccountingCurrency,
+  useFirstPriceGuard,
+} from '../currency/use-accounting-currency'
+import { usePriceSlots, type PriceSlots } from '../currency/use-price-slots'
 
 /**
  * The shots that make a car card usable to someone who never saw the car. The
@@ -234,14 +247,17 @@ const sortCars = (cars: readonly CarListItem[], sort: CarSort) =>
 /** One car in the grid: what it looks like, what came back, how far it is. */
 function CarCard({
   car,
+  currency,
   href,
   showMoney,
 }: {
   car: CarListItem
+  currency: string | null
   href: string
   showMoney: boolean
 }) {
   const t = useT(carsMessages)
+  const money = useCarMoney(currency)
   const percent = car.profitability?.recoupedPercent ?? null
   const paidOff = percent !== null && percent >= 100
 
@@ -343,6 +359,7 @@ function CarsList({ base }: { base: string }) {
   const { createDecision, financeView } = useAccess()
   const t = useT(carsMessages)
   const tc = useT(commonMessages)
+  const accounting = useAccountingCurrency()
   const [params, setParams] = useSearchParams()
   const selected = useMemo<CarListParams>(
     () => ({
@@ -484,6 +501,7 @@ function CarsList({ base }: { base: string }) {
               <li className="grid" key={car.id}>
                 <CarCard
                   car={car}
+                  currency={accounting.currency}
                   href={`${base}/${car.id}`}
                   showMoney={financeView}
                 />
@@ -590,6 +608,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
   const t = useT(carsMessages)
   const tc = useT(commonMessages)
   const day = useDay()
+  const accounting = useAccountingCurrency()
   const navigate = useNavigate()
   const [car, setCar] = useState<Car | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
@@ -864,6 +883,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
           <aside aria-label={t('summaryLabel')} className="grid min-w-0 gap-6">
             {financeView && profit ? (
               <CarProfitabilityCard
+                currency={accounting.currency}
                 expensesTotal={expensesTotal}
                 profit={profit}
                 purchasePrice={car.purchasePrice}
@@ -952,10 +972,19 @@ function Expenses({
   const [pendingRemoval, setPendingRemoval] = useState<CarExpense | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const create = async (event: FormEvent) => {
-    event.preventDefault()
+  const guard = useFirstPriceGuard()
+  const money = useCarMoney(guard.currency)
+  const price = usePriceSlots(guard, {
+    values: [amount],
+    onAccept: (accepted) => void create(undefined, accepted),
+  })
+  const create = async (
+    event?: FormEvent,
+    accepted?: SupportedCurrency | null,
+  ) => {
+    event?.preventDefault()
     const value = Number(amount)
-    if (!canManage || busy) return
+    if (!canManage || busy || price.disabled) return
     if (!name.trim()) {
       setFormError(t('expenseNameRequired'))
       return
@@ -967,6 +996,8 @@ function Expenses({
     setFormError(null)
     setBusy(true)
     try {
+      if (guard.needsCheck(true) && !(await guard.beforeSave(true, accepted)))
+        return
       requireLatestMutation({ permission: 'cars.view', quota: false })
       const scope = requireLatestMutation({
         permission: 'finance.manage',
@@ -992,6 +1023,7 @@ function Expenses({
           { signal: scope.signal },
         )
       }
+      guard.afterSave(true)
       await onChanged()
       const message = editing ? t('expenseUpdated') : t('expenseAdded')
       setName('')
@@ -1149,6 +1181,7 @@ function Expenses({
         }}
         onSubmit={(event) => void create(event)}
         open={formOpen}
+        price={price}
       />
 
       <ConfirmDialog
@@ -1217,6 +1250,19 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
   const [loading, setLoading] = useState(carId !== undefined)
   const [problem, setProblem] = useState<string | null>(null)
   const { requireLatestMutation } = useLatestMutationGuard(cabinetModules.cars)
+  const tCurrency = useT(currencyMessages)
+  const guard = useFirstPriceGuard()
+  const money = useCarMoney(guard.currency)
+  const priceEditable = !carId || financeManage
+  const price = usePriceSlots(guard, {
+    values: priceEditable
+      ? [
+          values.purchasePrice,
+          ...(carId ? [] : expenses.map((expense) => expense.amount)),
+        ]
+      : [],
+    onAccept: (accepted) => void submit(undefined, accepted),
+  })
   useEffect(() => {
     if (!carId) return
     void carsApi.get(carId).then(
@@ -1247,9 +1293,17 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
       },
     )
   }, [carId])
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
+  const submit = async (
+    event?: FormEvent,
+    accepted?: SupportedCurrency | null,
+  ) => {
+    event?.preventDefault()
     if (busy) return
+    if (!carId && price.disabled) {
+      // A new car needs its purchase price, and a price needs the currency.
+      setProblem(tCurrency('needCurrency'))
+      return
+    }
     const purchasePrice = Number(values.purchasePrice)
     const request = {
       code: values.code.trim(),
@@ -1292,11 +1346,20 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     setProblem(null)
     setBusy(true)
     try {
+      if (
+        guard.needsCheck(price.hasPrice) &&
+        !(await guard.beforeSave(price.hasPrice, accepted))
+      ) {
+        setBusy(false)
+        return
+      }
       let savedCarId = carId ?? createdCarId
       if (carId) {
         const updateRequest: UpdateCarRequest = {
           ...request,
-          ...(financeManage ? { purchasePrice } : {}),
+          // Without an accounting currency the price stays as it is; the
+          // rest of the car still saves.
+          ...(financeManage && !price.disabled ? { purchasePrice } : {}),
         }
         const scope = requireLatestMutation({ quota: false })
         if ('purchasePrice' in updateRequest)
@@ -1371,6 +1434,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
           }
         }
       }
+      guard.afterSave(price.hasPrice)
       void navigate(
         (carId === undefined
           ? sourceReturnPath(searchParams, cabinetRoot, { carId: savedCarId })
@@ -1679,21 +1743,23 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                     hint={
                       priceLocked
                         ? 'Ціну змінює користувач із правом на фінанси'
-                        : 'У доларах, без пробілів'
+                        : price.hint
                     }
                     label="Ціна придбання"
                     required={!priceLocked}
                   >
-                    <TextInput
+                    <MoneyInput
                       {...bind('purchasePrice')}
                       className="font-mono"
-                      disabled={busy || priceLocked}
+                      currency={price.currency}
+                      disabled={busy || priceLocked || price.disabled}
                       inputMode="decimal"
                       placeholder="10380"
-                      required={!priceLocked}
+                      required={!priceLocked && !price.disabled}
                     />
                   </Field>
                 </div>
+                {priceLocked ? null : price.note}
               </CarStep>
 
               {financeManage ? (
@@ -1705,6 +1771,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                   {carId ? (
                     <CarFormExpenses
                       expenses={loaded?.expenses ?? []}
+                      money={money}
                       to={`${base}/${carId}`}
                     />
                   ) : (
@@ -1713,6 +1780,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                       completed={completedExpenseIds}
                       expenses={expenses}
                       onChange={setExpenses}
+                      price={price}
                     />
                   )}
                 </CarStep>
@@ -1864,6 +1932,9 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                   </li>
                 ))}
               </ul>
+              {priceEditable ? (
+                <div className="mt-5.5 empty:hidden">{price.saveNotes}</div>
+              ) : null}
               <Button
                 aria-busy={busy}
                 className="mt-5.5 min-h-11.5 w-full text-[15px] font-bold"
@@ -1958,9 +2029,11 @@ function CarStep({
 /** What an existing car has already spent, and where it is managed. */
 function CarFormExpenses({
   expenses,
+  money,
   to,
 }: {
   expenses: readonly CarExpense[]
+  money: (value: number) => string
   to: string
 }) {
   const tf = useT(carFormMessages)
@@ -2003,7 +2076,9 @@ function NewCarExpenses({
   completed,
   expenses,
   onChange,
+  price,
 }: {
+  price: PriceSlots
   busy: boolean
   completed: ReadonlySet<number>
   expenses: { id: number; name: string; amount: string }[]
@@ -2055,13 +2130,14 @@ function NewCarExpenses({
                   />
                 </Field>
                 <Field
-                  hint={index === 0 ? 'У доларах' : undefined}
+                  hint={index === 0 ? price.hint : undefined}
                   label="Сума"
                   srLabel={`витрати ${String(index + 1)}`}
                 >
-                  <TextInput
+                  <MoneyInput
                     className="font-mono"
-                    disabled={busy || saved}
+                    currency={price.currency}
+                    disabled={busy || saved || price.disabled}
                     inputMode="decimal"
                     onChange={(event) =>
                       onChange((current) =>

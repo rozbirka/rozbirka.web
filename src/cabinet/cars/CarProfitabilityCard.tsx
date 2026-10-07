@@ -3,7 +3,7 @@ import type { CarProfitability } from '@/api/cars'
 import { useLocale, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { carCardMessages } from './car-card-messages'
-import { money } from './car-money'
+import { useCarMoney } from './car-money'
 import {
   payoffKind,
   payoffLabel,
@@ -19,10 +19,13 @@ import {
  * merely broke even.
  */
 export function CarProfitabilityCard({
+  currency,
   expensesTotal,
   profit,
   purchasePrice,
 }: {
+  /** The accounting currency every figure here is kept in; `null` if unknown. */
+  currency: string | null
   /** Named so the invested figure is not a number to take on trust. */
   expensesTotal: number
   profit: CarProfitability
@@ -30,6 +33,7 @@ export function CarProfitabilityCard({
 }) {
   const { locale } = useLocale()
   const t = useT(carCardMessages)
+  const money = useCarMoney(currency)
   const kind = payoffKind(profit)
   const paid = kind === 'paid'
   const result = payoffResult(profit, locale)
