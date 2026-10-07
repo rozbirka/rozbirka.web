@@ -67,7 +67,14 @@ jobs:
               exit 0
             fi
             echo "playwright install attempt ${attempt} failed or timed out; retrying"
-            sleep 10
+            # `timeout` stops npx but not the root apt-get it started, which
+            # keeps downloading and holds the dpkg lock; let it finish (its
+            # packages then make the retry fast) instead of racing it.
+            for _ in $(seq 1 60); do
+              pgrep -x apt-get >/dev/null || pgrep -x dpkg >/dev/null || break
+              sleep 5
+            done
+            sleep 5
           done
           exit 1
 
