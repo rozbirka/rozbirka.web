@@ -286,9 +286,10 @@ export function createAppRoutes(
   includePrototypeRoutes: boolean,
 ): RouteObject[] {
   const routes: RouteObject[] = [
-    // Each landing URL has one fixed language (`/` uk, `/en`, `/pl`) and the
-    // privacy policy is Ukrainian only: pin their locale so hydration matches
-    // the prerendered HTML and <html lang> stays truthful.
+    // Each landing URL has one fixed language (`/` uk, `/en`, `/pl`): pin it
+    // so hydration matches the prerendered HTML and <html lang> stays
+    // truthful. The privacy policy (not prerendered) pins its own page
+    // language: Ukrainian source, translations on request.
     {
       path: '/',
       element: (
@@ -318,13 +319,7 @@ export function createAppRoutes(
       hydrateFallbackElement,
       lazy: async () => {
         const { PrivacyScreen } = await import('@/screens/privacy')
-        return {
-          element: (
-            <LocaleOverride locale="uk">
-              <PrivacyScreen />
-            </LocaleOverride>
-          ),
-        }
+        return { element: <PrivacyScreen /> }
       },
     },
     {

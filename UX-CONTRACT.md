@@ -128,6 +128,13 @@ the landing choice never changes the interface language of the cabinet or the
 sign-in screen (`localePreference`, profile language), and choosing a
 language in Profile never changes the site language.
 
+`/privacy` is one URL. Its Ukrainian text is the legal source; English (UK)
+and Polish translations (`src/screens/privacy-translations.ts`) are **pending
+legal review** — not approved by a lawyer — and each says the Ukrainian
+original prevails. The page opens in the site language (Ukrainian when none
+was chosen) and a page-language switch of buttons changes only this page and
+the remembered site language.
+
 Verification owners: `src/i18n/i18n.test.tsx`, `language-card.test.tsx`,
 `region-settings.test.tsx`, `login-international.test.tsx`, `src/lib/phone.test.ts`
 and the en-GB render tests next to each migrated screen.

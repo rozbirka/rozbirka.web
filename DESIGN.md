@@ -27,5 +27,7 @@ record to the flows it names (auth, billing, part source and import); it is not
 a claim that older screens have all been audited.
 
 Legal pages retain existing type/colors and readable long-form layout, with plain
-text branding and mailto contacts only. Personal account controls use app Button
+text branding and mailto contacts only; the privacy policy adds a row of
+page-language buttons (translations pending legal review, see
+`UX-CONTRACT.md`). Personal account controls use app Button
 and Notice primitives and remain accessible outside company entitlement gates.
