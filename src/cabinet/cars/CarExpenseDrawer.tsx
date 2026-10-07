@@ -1,6 +1,8 @@
 import type { FormEvent } from 'react'
 import { Button, Field, Notice, Sheet, TextInput } from '@/components/app'
 import type { CarExpense } from '@/api/cars'
+import { commonMessages, useT } from '@/i18n'
+import { carCardMessages } from './car-card-messages'
 
 export function CarExpenseDrawer({
   amount,
@@ -25,16 +27,16 @@ export function CarExpenseDrawer({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   open: boolean
 }) {
-  const title = editing ? 'Редагувати витрату' : 'Додати витрату'
+  const t = useT(carCardMessages)
+  const tc = useT(commonMessages)
+  const title = editing ? t('expenseEditTitle') : t('expenseAddTitle')
 
   return (
     <Sheet
       description={
-        editing
-          ? 'Оновіть назву або суму. Прибутковість авто перерахується після збереження.'
-          : 'Додайте витрату понад ціну придбання автомобіля.'
+        editing ? t('expenseEditDescription') : t('expenseAddDescription')
       }
-      eyebrow="Автомобілі · Витрати"
+      eyebrow={t('expenseEyebrow')}
       footer={
         <>
           <Button
@@ -42,7 +44,7 @@ export function CarExpenseDrawer({
             onClick={() => onOpenChange(false)}
             type="button"
           >
-            Скасувати
+            {tc('cancel')}
           </Button>
           <Button
             aria-busy={busy}
@@ -53,11 +55,11 @@ export function CarExpenseDrawer({
           >
             {busy
               ? editing
-                ? 'Зберігаємо…'
-                : 'Додаємо…'
+                ? tc('saving')
+                : t('expenseAdding')
               : editing
-                ? 'Зберегти витрату'
-                : 'Додати витрату'}
+                ? t('expenseSave')
+                : t('expenseAddTitle')}
           </Button>
         </>
       }
@@ -75,11 +77,11 @@ export function CarExpenseDrawer({
         onSubmit={onSubmit}
       >
         {error ? <Notice tone="danger">{error}</Notice> : null}
-        <Field label="Назва витрати">
+        <Field label={t('expenseName')}>
           <TextInput
             autoFocus
             onChange={(event) => onNameChange(event.target.value)}
-            placeholder="Наприклад, транспортування"
+            placeholder={t('expenseNamePlaceholder')}
             value={name}
           />
         </Field>

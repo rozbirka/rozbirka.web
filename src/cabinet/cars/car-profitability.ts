@@ -1,4 +1,6 @@
 import type { CarProfitability } from '@/api/cars'
+import { SOURCE_LOCALE, translate, type Locale } from '@/i18n'
+import { carCardMessages } from './car-card-messages'
 
 /**
  * Where a car stands against the money that went into it. Core reports
@@ -14,10 +16,18 @@ export function payoffKind(profit: CarProfitability): PayoffKind {
   return profit.remaining <= 0 ? 'paid' : 'recouping'
 }
 
-export const PAYOFF_LABEL: Record<PayoffKind, string> = {
-  paid: 'Окупилось',
-  recouping: 'Окупається',
-  idle: 'Без продажів',
+const PAYOFF_LABEL_KEY = {
+  paid: 'payoffPaid',
+  recouping: 'payoffRecouping',
+  idle: 'payoffIdle',
+} as const satisfies Record<PayoffKind, string>
+
+/** The status pill of a car's payback, in the reader's language. */
+export function payoffLabel(
+  kind: PayoffKind,
+  locale: Locale = SOURCE_LOCALE,
+): string {
+  return translate(carCardMessages, locale, PAYOFF_LABEL_KEY[kind])
 }
 
 /**
@@ -53,10 +63,17 @@ export interface PayoffResult {
   positive: boolean
 }
 
-export function payoffResult(profit: CarProfitability): PayoffResult {
+export function payoffResult(
+  profit: CarProfitability,
+  locale: Locale = SOURCE_LOCALE,
+): PayoffResult {
   const paid = payoffKind(profit) === 'paid'
   return {
-    label: paid ? 'Прибуток' : 'До окупності',
+    label: translate(
+      carCardMessages,
+      locale,
+      paid ? 'resultProfit' : 'resultToPayback',
+    ),
     amount: Math.abs(profit.remaining),
     positive: paid,
   }

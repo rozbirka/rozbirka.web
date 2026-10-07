@@ -1,10 +1,12 @@
 import { Card, StatusPill } from '@/components/app'
 import type { CarProfitability } from '@/api/cars'
-import { cn, plural } from '@/lib/utils'
+import { useLocale, useT } from '@/i18n'
+import { cn } from '@/lib/utils'
+import { carCardMessages } from './car-card-messages'
 import { money } from './car-money'
 import {
-  PAYOFF_LABEL,
   payoffKind,
+  payoffLabel,
   payoffResult,
   payoffScale,
   surplusPercent,
@@ -26,9 +28,11 @@ export function CarProfitabilityCard({
   profit: CarProfitability
   purchasePrice: number
 }) {
+  const { locale } = useLocale()
+  const t = useT(carCardMessages)
   const kind = payoffKind(profit)
   const paid = kind === 'paid'
-  const result = payoffResult(profit)
+  const result = payoffResult(profit, locale)
   const scale = payoffScale(profit)
   const surplus = surplusPercent(profit)
 
@@ -36,27 +40,30 @@ export function CarProfitabilityCard({
     <Card
       aside={
         <StatusPill tone={paid ? 'ok' : 'neutral'}>
-          {PAYOFF_LABEL[kind]}
+          {payoffLabel(kind, locale)}
         </StatusPill>
       }
-      title="Прибутковість"
+      title={t('profitabilityTitle')}
     >
       <dl className="border-app-line bg-app-line grid gap-px overflow-hidden rounded-[14px] border sm:grid-cols-3">
         <Tile
-          label="Вкладено"
+          label={t('invested')}
           note={
             expensesTotal > 0
-              ? `авто ${money(purchasePrice)} + витрати ${money(expensesTotal)}`
-              : 'ціна придбання'
+              ? t('investedWithExpenses', {
+                  car: money(purchasePrice),
+                  expenses: money(expensesTotal),
+                })
+              : t('investedPriceOnly')
           }
           value={money(profit.invested)}
         />
         <Tile
-          label="Повернено"
+          label={t('recouped')}
           note={
             profit.partsSold > 0
-              ? `з продажу ${String(profit.partsSold)} ${plural(profit.partsSold, ['позиції', 'позицій', 'позицій'])}`
-              : 'продажів ще не було'
+              ? t('recoupedFromSales', { count: profit.partsSold })
+              : t('noSalesYet')
           }
           value={money(profit.recouped)}
         />
@@ -65,9 +72,9 @@ export function CarProfitabilityCard({
           note={
             paid
               ? surplus === null
-                ? 'понад вкладене'
-                : `+${String(surplus)} % до вкладеного`
-              : 'ще продати на цю суму'
+                ? t('overInvested')
+                : t('surplusOfInvested', { percent: surplus })
+              : t('stillToSell')
           }
           tone={paid ? 'ok' : 'plain'}
           value={`${paid ? '+' : ''}${money(result.amount)}`}
@@ -78,7 +85,7 @@ export function CarProfitabilityCard({
         <section className="mt-[22px]">
           <div className="flex items-baseline justify-between gap-3">
             <h3 className="text-app-ink text-[13px] font-semibold">
-              Окупність
+              {t('payback')}
             </h3>
             <p
               className={cn(
@@ -86,16 +93,18 @@ export function CarProfitabilityCard({
                 paid ? 'text-state-ok' : 'text-app-muted',
               )}
             >
-              {profit.recoupedPercent ?? 0} % вкладеного повернено
+              {t('recoupedShare', { percent: profit.recoupedPercent ?? 0 })}
             </p>
           </div>
 
           <div
-            aria-label="Окупність"
+            aria-label={t('payback')}
             aria-valuemax={100}
             aria-valuemin={0}
             aria-valuenow={profit.recoupedPercent ?? 0}
-            aria-valuetext={`${String(profit.recoupedPercent ?? 0)} % вкладеного повернено`}
+            aria-valuetext={t('recoupedShare', {
+              percent: profit.recoupedPercent ?? 0,
+            })}
             className="relative mt-2.5 h-2.5 rounded-full bg-white/[0.06]"
             role="progressbar"
           >
@@ -128,7 +137,7 @@ export function CarProfitabilityCard({
                 transform: `translateX(${scale.marker > 80 ? '-100%' : '-50%'})`,
               }}
             >
-              беззбитковість {money(profit.invested)}
+              {t('breakEven', { amount: money(profit.invested) })}
             </span>
           </p>
         </section>
