@@ -31,7 +31,10 @@ import { paymentRecorded } from './payment-policy'
 import { useLocale, useT, type SupportedCurrency } from '@/i18n'
 import { isUnknownOutcome } from '../currency/accounting-currency'
 import { MoneyInput } from '../currency/price-currency'
-import { useFirstPriceGuard } from '../currency/use-accounting-currency'
+import {
+  useAccountingCurrency,
+  useFirstPriceGuard,
+} from '../currency/use-accounting-currency'
 import { usePriceSlots } from '../currency/use-price-slots'
 import { orderSteps } from './order-steps'
 import {
@@ -222,11 +225,15 @@ const ORDER_STATUS_FILTERS = [
 /** Statuses whose money never reached the till. */
 const UNPAID_STATUSES = new Set(['cancelled', 'refunded'])
 
-const listMoney = (value: number | null) =>
-  value === null ? '—' : `${new Intl.NumberFormat('uk-UA').format(value)} $`
+/** Order values are in the accounting currency; no code when it is unknown. */
+const listMoney = (value: number | null, currency: string | null) =>
+  value === null
+    ? '—'
+    : `${new Intl.NumberFormat('uk-UA').format(value)}${currency === null ? '' : ` ${currency}`}`
 
 function OrderDirectory({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
+  const { currency: accountingCurrency } = useAccountingCurrency()
   const createAllowed = canCreateOrder(definition, cabinet)
   const [params, setParams] = useSearchParams()
   const [orders, setOrders] = useState<OrderListItem[]>([])
@@ -383,7 +390,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
               Сума на сторінці
             </span>
             <span className="text-[20px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
-              {listMoney(pageSum)}
+              {listMoney(pageSum, accountingCurrency)}
             </span>
           </p>
         </div>
@@ -485,7 +492,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
                           unpaid ? 'text-app-dim' : 'text-white',
                         )}
                       >
-                        {listMoney(order.totalAmount)}
+                        {listMoney(order.totalAmount, accountingCurrency)}
                       </span>
                     </Link>
                   </li>
