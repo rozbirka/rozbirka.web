@@ -13,6 +13,17 @@ vi.mock('@/api/inventory', () => ({
   inventoryApi: { getWarehouses: vi.fn(() => Promise.resolve([])) },
 }))
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
+// The accounting currency block re-reads the tenant; here it is locked, so it
+// renders as text and adds no controls or alerts to these scenarios.
+vi.mock('@/api/tenants', () => ({
+  tenantsApi: {
+    list: vi.fn(() =>
+      Promise.resolve([
+        { id: 'tenant-1', accountingCurrency: 'USD', currencyLocked: true },
+      ]),
+    ),
+  },
+}))
 
 const tenant: Tenant = {
   id: 'tenant-1',
@@ -209,8 +220,11 @@ it('shows the business fields the tenant record cannot hold as disabled', async 
   // `PATCH /tenants/{id}` takes a name, a city and a logo — nothing else.
   for (const label of ['ЄДРПОУ / ІПН', 'Телефон', 'Адреса'])
     expect(await screen.findByLabelText(label)).toBeDisabled()
-  for (const label of ['ФОП', 'USD', 'Експорт усіх даних', 'Видалити кабінет'])
+  for (const label of ['ФОП', 'Експорт усіх даних', 'Видалити кабінет'])
     expect(screen.getByRole('button', { name: label })).toBeDisabled()
+  // The accounting currency is a real setting now, not a dead control.
+  expect(screen.queryByRole('button', { name: 'USD' })).toBeNull()
+  expect(await screen.findByText('Зафіксовано')).toBeVisible()
   expect(
     screen.getByRole('button', { name: 'Видалити кабінет' }).title,
   ).toContain('Видалити розбірку з кабінету не можна')

@@ -15,13 +15,14 @@ import { useCabinet } from '../CabinetContext'
 import { RedesignShell, RedesignTitle } from '../redesign-shell'
 import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import { AccountingCurrencySection } from './accounting-currency-section'
+import { AccountingCurrencySummary } from './accounting-currency-summary'
 
 type SaveState = 'idle' | 'pending' | 'success' | 'error' | 'denied'
 
 const FORM_ID = 'business-form'
 
 const LEGAL_FORMS = ['ФОП', 'ТОВ', 'Без реєстрації'] as const
-const ACCOUNTING_CURRENCIES = ['USD', 'UAH', 'EUR'] as const
 const COSTING = [
   {
     label: 'Розподіл за вагою',
@@ -51,8 +52,6 @@ const NO_TAX_ID = 'Поля для ЄДРПОУ чи ІПН у розбірці 
 const NO_PHONE = 'Телефон розбірки поки не зберігається.'
 const NO_ADDRESS =
   'Повної адреси немає — з місця розбірка тримає лише місто, і воно тут поруч.'
-const NO_ACCOUNTING_CURRENCY =
-  'Основної валюти обліку кабінет не веде: ціни лишаються у своїй валюті, а каси рахують кожну окремо й без конвертації.'
 const NO_COSTING =
   'Способу рахувати собівартість деталі в налаштуваннях немає — як ділити ціну авто, кабінет не питає.'
 const NO_RULES =
@@ -352,6 +351,8 @@ export function BusinessSettingsScreen() {
             </Note>
           </Step>
 
+          <AccountingCurrencySection />
+
           <Step
             action={
               <Button asChild>
@@ -418,20 +419,7 @@ export function BusinessSettingsScreen() {
             </Note>
           </Step>
 
-          <Step number="03" title="Валюти й облік">
-            <div>
-              <p className="text-app-muted text-[13px] font-medium">
-                Основна валюта обліку
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {ACCOUNTING_CURRENCIES.map((label) => (
-                  <Dead key={label} title={NO_ACCOUNTING_CURRENCY}>
-                    {label}
-                  </Dead>
-                ))}
-              </div>
-              <Note>{NO_ACCOUNTING_CURRENCY}</Note>
-            </div>
+          <Step number="03" title="Облік">
             <div>
               <p className="text-app-muted text-[13px] font-medium">
                 Собівартість запчастини
@@ -527,15 +515,7 @@ export function BusinessSettingsScreen() {
                   {warehouses === null ? '…' : warehouses.length}
                 </dd>
               </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">Валюта обліку</dt>
-                <dd
-                  className="text-app-dim text-right"
-                  title={NO_ACCOUNTING_CURRENCY}
-                >
-                  —
-                </dd>
-              </div>
+              <AccountingCurrencySummary />
               <div className="flex items-baseline justify-between gap-4">
                 <dt className="text-app-muted">Собівартість</dt>
                 <dd className="text-app-dim text-right" title={NO_COSTING}>
