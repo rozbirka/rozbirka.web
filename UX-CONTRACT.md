@@ -75,3 +75,20 @@ authoritative for permissions, source validity, quotas and retry behavior.
 Verification owners: `PartsScreen.test.tsx`, `ImportScreen.test.tsx` and
 `import-model.test.ts` cover mandatory source, compatibility, legacy filters,
 legacy mapping review and source-wide import payloads.
+
+## Owner onboarding
+
+Creating the first yard asks only for name and city, then opens the dashboard.
+There `OnboardingChecklist` shows the owner of an eligible yard four steps —
+business settings, accounting currency, a car or a batch, the first part —
+with progress read from Core's onboarding facts only; opening a form or
+pressing «Продовжити» credits nothing. Steps open the existing screens
+(business settings sections by fragment, new car/intake with `return_to`, new
+part); the dashboard re-reads on mount and focus and announces credited steps
+in a status toast. «Зробити пізніше» is saved on the server and collapses the
+list into «Завершіть налаштування», which never re-expands by itself.
+Completion offers the cash desk and team as recommendations and can be hidden
+(in this browser until Core stores it). Workers, yards created before launch
+and Cores without the endpoint see nothing; a failed read shows a retry, never
+guessed progress. Verification owners: `onboarding-policy.test.ts`,
+`OnboardingChecklist.test.tsx`, `tenant-onboarding.test.tsx`.
