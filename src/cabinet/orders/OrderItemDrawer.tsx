@@ -17,6 +17,7 @@ import { normalizeApiProblem } from '@/api/errors'
 import { orderCardMessages } from './order-cards-messages'
 import { useLocale, type SupportedCurrency } from '@/i18n'
 import { MoneyInput } from '../currency/price-currency'
+import { amountPrecisionError } from '../currency/amount-precision'
 import type { FirstPriceGuard } from '../currency/use-accounting-currency'
 import { usePriceSlots } from '../currency/use-price-slots'
 import { money } from './order-money'
@@ -193,17 +194,23 @@ function OpenOrderItemDrawer({
     price === null
       ? (picked?.price ?? null)
       : Number(price.replace(/\s/g, '').replace(',', '.'))
+  const { locale } = useLocale()
+  const currency = guard.currency
+  // Core refuses a price finer than the accounting currency allows.
+  const pricePrecision =
+    price !== null && unitPrice !== null && Number.isFinite(unitPrice)
+      ? amountPrecisionError(unitPrice, currency, locale)
+      : null
   const valid =
     picked !== null &&
     unitPrice !== null &&
     Number.isFinite(unitPrice) &&
     unitPrice >= 0 &&
+    pricePrecision === null &&
     quantity > 0 &&
     quantity <= picked.quantityAvailable &&
     !taken.has(picked.id)
   const lineTotal = valid ? (unitPrice ?? 0) * quantity : 0
-  const { locale } = useLocale()
-  const currency = guard.currency
   const submit = (accepted?: SupportedCurrency | null) => {
     if (!valid || picked === null || priceSlots.disabled) return
     const item = { partId: picked.id, quantity, unitPrice: unitPrice ?? 0 }
@@ -438,6 +445,7 @@ function OpenOrderItemDrawer({
             </Field>
             <Field
               className="flex-[1_1_140px]"
+              error={pricePrecision ?? undefined}
               hint={priceSlots.hint}
               label={t('unitPrice')}
             >

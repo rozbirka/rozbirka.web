@@ -9,7 +9,8 @@ import {
   TextInput,
 } from '@/components/app'
 import { cn } from '@/lib/utils'
-import { commonMessages, useT } from '@/i18n'
+import { commonMessages, useLocale, useT } from '@/i18n'
+import { amountPrecisionError } from '../currency/amount-precision'
 import { cashMessages } from './cash-messages'
 import { tillCurrencies } from '../currency/catalog-order'
 
@@ -39,6 +40,7 @@ function OpenCashMovementDrawer({
 }: CashMovementDrawerProps) {
   const t = useT(cashMessages)
   const tc = useT(commonMessages)
+  const { locale } = useLocale()
   const currencies = tillCurrencies(register)
   const [type, setType] = useState<MovementType>('manual_in')
   const [amount, setAmount] = useState('')
@@ -56,13 +58,19 @@ function OpenCashMovementDrawer({
     amount !== '' &&
     Number.isFinite(numericAmount) &&
     numericAmount > (register.balances[selectedCurrency] ?? 0)
+  // Core refuses an amount finer than its currency allows (JPY: whole).
+  const precision =
+    amount !== '' && Number.isFinite(numericAmount) && numericAmount > 0
+      ? amountPrecisionError(numericAmount, selectedCurrency || null, locale)
+      : null
   const invalid =
     busy ||
     amount === '' ||
     !Number.isFinite(numericAmount) ||
     numericAmount <= 0 ||
     selectedCurrency === '' ||
-    insufficientBalance
+    insufficientBalance ||
+    precision !== null
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -222,6 +230,7 @@ function OpenCashMovementDrawer({
             value={note}
           />
         </Field>
+        {precision !== null ? <Notice tone="warn">{precision}</Notice> : null}
         {insufficientBalance ? (
           <Notice tone="warn">{t('insufficient')}</Notice>
         ) : null}

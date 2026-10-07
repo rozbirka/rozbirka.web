@@ -3221,6 +3221,33 @@ describe('asking price and the accounting currency', () => {
       expect.anything(),
     )
   })
+
+  it('keeps a yen price whole, as Core does, and does not save', async () => {
+    cabinetMock.tenant = {
+      id: 'tenant-1',
+      slug: 'yard',
+      accountingCurrency: 'JPY',
+      currencyLocked: true,
+    }
+    cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
+    renderNewPart()
+    fireEvent.change(screen.getByLabelText('Назва'), {
+      target: { value: 'Фара ліва' },
+    })
+    fireEvent.change(screen.getByLabelText('Бажана ціна'), {
+      target: { value: '1500.5' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
+
+    expect(
+      (
+        await screen.findAllByText(
+          'Сума в JPY має бути цілою, без дробової частини.',
+        )
+      )[0],
+    ).toBeVisible()
+    expect(partMocks.create).not.toHaveBeenCalled()
+  })
 })
 
 describe('the owner’s first part', () => {

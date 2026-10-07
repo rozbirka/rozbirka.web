@@ -46,6 +46,7 @@ import {
   useFirstPriceGuard,
 } from '../currency/use-accounting-currency'
 import { usePriceSlots } from '../currency/use-price-slots'
+import { amountPrecisionError } from '../currency/amount-precision'
 import { orderSteps } from './order-steps'
 import {
   OrderCustomerCard,
@@ -839,6 +840,15 @@ export function OrderForm({
       parsedUnitPrice < 0
     )
       return
+    const precision = amountPrecisionError(
+      parsedUnitPrice,
+      guard.currency,
+      locale,
+    )
+    if (precision !== null) {
+      setError(precision)
+      return
+    }
     setDraftItems((current) => {
       const existing = current.find(
         (item) => item.part.id === selectedPartDraft.id,
@@ -1432,6 +1442,14 @@ function OrderDetailScreen({
   }
   const saveItemDrafts = (accepted?: SupportedCurrency | null) => {
     if (busy) return
+    const precision =
+      itemDrafts
+        .map((item) => amountPrecisionError(item.unitPrice, currency, locale))
+        .find((message) => message !== null) ?? null
+    if (precision !== null) {
+      setError(precision)
+      return
+    }
     withPriceCheck(() => {
       void transition(() =>
         ordersApi.updateItems(

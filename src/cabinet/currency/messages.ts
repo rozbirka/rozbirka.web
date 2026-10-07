@@ -47,6 +47,9 @@ export const currencyMessages = defineMessages({
     saveIn: 'Зберегти в {code}',
     precheckFailed:
       'Не вдалося перевірити валюту обліку перед збереженням ціни. Спробуйте ще раз.',
+    precision: 'Для {code} — не більше двох знаків після коми.',
+    precisionWhole: 'Сума в {code} має бути цілою, без дробової частини.',
+    tooLarge: 'Сума завелика.',
   },
   'en-GB': {
     title: 'Accounting currency',
@@ -90,6 +93,9 @@ export const currencyMessages = defineMessages({
     saveIn: 'Save in {code}',
     precheckFailed:
       'Couldn’t check the accounting currency before saving the price. Try again.',
+    precision: 'Use no more than two decimal places for {code}.',
+    precisionWhole: 'Amounts in {code} must be whole numbers.',
+    tooLarge: 'This amount is too large.',
   },
   pl: {
     title: 'Waluta rozliczeniowa',
@@ -135,5 +141,8 @@ export const currencyMessages = defineMessages({
     saveIn: 'Zapisz w {code}',
     precheckFailed:
       'Nie udało się sprawdzić waluty rozliczeniowej przed zapisaniem ceny. Spróbuj ponownie.',
+    precision: 'Dla {code} podaj najwyżej dwa miejsca po przecinku.',
+    precisionWhole: 'Kwota w {code} musi być liczbą całkowitą.',
+    tooLarge: 'Ta kwota jest za duża.',
   },
 })

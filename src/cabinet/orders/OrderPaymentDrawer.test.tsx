@@ -131,3 +131,23 @@ it('does not offer a retry while an unknown result is being checked', async () =
     within(dialog).getByRole('button', { name: 'Записати оплату' }),
   ).toBeDisabled()
 })
+
+it('refuses a third decimal before saving, as Core would', async () => {
+  const onSave = vi.fn()
+  const user = userEvent.setup()
+  renderDrawer(null, onSave)
+  const dialog = await screen.findByRole('dialog', { name: 'Додати платіж' })
+  await within(dialog).findByRole('radio', { name: /Основна/ })
+  await user.click(
+    within(dialog).getByRole('button', { name: 'UAH (Українська гривня)' }),
+  )
+  await user.type(within(dialog).getByLabelText('Сума'), '10,555')
+
+  expect(
+    within(dialog).getByText('Для UAH — не більше двох знаків після коми.'),
+  ).toBeVisible()
+  expect(
+    within(dialog).getByRole('button', { name: 'Записати оплату' }),
+  ).toBeDisabled()
+  expect(onSave).not.toHaveBeenCalled()
+})

@@ -9,7 +9,8 @@ import {
   Sheet,
   TextInput,
 } from '@/components/app'
-import { commonMessages, useT } from '@/i18n'
+import { commonMessages, useLocale, useT } from '@/i18n'
+import { amountPrecisionError } from '../currency/amount-precision'
 import { tillCurrencies } from '../currency/catalog-order'
 import { cashMessages } from './cash-messages'
 
@@ -45,6 +46,7 @@ function OpenCashTransferDrawer({
 }: CashTransferDrawerProps) {
   const t = useT(cashMessages)
   const tc = useT(commonMessages)
+  const { locale } = useLocale()
   const activeRegisters = useMemo(
     () => registers.filter((register) => register.isActive),
     [registers],
@@ -81,8 +83,16 @@ function OpenCashTransferDrawer({
     destination !== undefined &&
     toCurrency !== '' &&
     Object.hasOwn(destination.balances, toCurrency)
+  const precisionMessage =
+    (amountOut !== '' && Number.isFinite(amountOutNumber) && fromCurrency
+      ? amountPrecisionError(amountOutNumber, fromCurrency, locale)
+      : null) ??
+    (amountIn !== '' && Number.isFinite(amountInNumber) && toCurrency
+      ? amountPrecisionError(amountInNumber, toCurrency, locale)
+      : null)
   const validationMessage =
-    sourceSupportsCurrency &&
+    precisionMessage ??
+    (sourceSupportsCurrency &&
     amountOut !== '' &&
     Number.isFinite(amountOutNumber) &&
     amountOutNumber > (source.balances[fromCurrency] ?? 0)
@@ -97,7 +107,7 @@ function OpenCashTransferDrawer({
               amountIn !== '' &&
               amountOutNumber !== amountInNumber
             ? t('errSameCurrency')
-            : null
+            : null)
   const invalid =
     busy ||
     !source ||

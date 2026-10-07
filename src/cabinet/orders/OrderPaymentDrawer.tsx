@@ -13,6 +13,7 @@ import {
   type Locale,
 } from '@/i18n'
 import { MoneyInput } from '../currency/price-currency'
+import { amountPrecisionError } from '../currency/amount-precision'
 import { paymentMessages } from './payment-messages'
 import {
   choosePaymentCurrency,
@@ -105,8 +106,17 @@ export function OrderPaymentDrawer({
       ? (available[0] ?? null)
       : null)
   const amount = parseAmount(draft)
+  // A payment keeps to its own currency's precision (Core refuses the rest).
+  const precision =
+    amount !== null && amount > 0
+      ? amountPrecisionError(amount, active, locale)
+      : null
   const valid =
-    till !== undefined && active !== null && amount !== null && amount > 0
+    till !== undefined &&
+    active !== null &&
+    amount !== null &&
+    amount > 0 &&
+    precision === null
 
   const pickTill = (next: CashRegister) => {
     if (next.id === till?.id) return
@@ -334,7 +344,7 @@ export function OrderPaymentDrawer({
               </fieldset>
             )}
 
-            <Field label={t('amount')}>
+            <Field error={precision ?? undefined} label={t('amount')}>
               <MoneyInput
                 className="h-[52px] rounded-[12px] px-4 font-mono text-[22px] tabular-nums"
                 currency={active}

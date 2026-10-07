@@ -138,6 +138,7 @@ import {
   useFirstPriceGuard,
 } from '../currency/use-accounting-currency'
 import { usePriceSlots, type PriceSlots } from '../currency/use-price-slots'
+import { amountPrecisionError } from '../currency/amount-precision'
 import { OnboardingCompletedNotice } from '../onboarding/first-part-completion'
 import { useFirstPartCompletion } from '../onboarding/use-first-part-completion'
 
@@ -2561,7 +2562,16 @@ type PartFieldErrors = Partial<
 
 function partFieldErrors(
   values: PartFormValues,
-  { requireSource, locale }: { requireSource: boolean; locale: Locale },
+  {
+    requireSource,
+    locale,
+    currency = null,
+  }: {
+    requireSource: boolean
+    locale: Locale
+    /** Accounting currency: the price keeps to its precision, as in Core. */
+    currency?: string | null
+  },
 ): PartFieldErrors {
   const t = (
     key:
@@ -2579,6 +2589,10 @@ function partFieldErrors(
   const price = optionalNumber(values.desiredSalePrice)
   if (price !== undefined && (!Number.isFinite(price) || price < 0))
     errors.desiredSalePrice = t('priceInvalid')
+  else if (price !== undefined) {
+    const precision = amountPrecisionError(price, currency, locale)
+    if (precision !== null) errors.desiredSalePrice = precision
+  }
   if (requireSource && !values.sourceId.trim())
     errors.sourceId =
       values.sourceType === 'car' ? t('chooseCar') : t('chooseIntake')
@@ -3547,10 +3561,14 @@ function PartForm({
     (item) => item.status !== 'uploaded' && item.status !== 'selected',
   )
   const requireSource = true
-  const errors = showErrors
-    ? partFieldErrors(values, { requireSource, locale })
-    : {}
   const guard = useFirstPriceGuard()
+  const errors = showErrors
+    ? partFieldErrors(values, {
+        requireSource,
+        locale,
+        currency: guard.currency,
+      })
+    : {}
   const price = usePriceSlots(guard, {
     values: [values.desiredSalePrice],
     onAccept: (accepted) => void submit(undefined, accepted),
@@ -3571,7 +3589,13 @@ function PartForm({
     if (pendingRef.current || mediaPending) return
     const parsed = validFormNumbers(values)
     if (
-      Object.keys(partFieldErrors(values, { requireSource, locale })).length > 0
+      Object.keys(
+        partFieldErrors(values, {
+          requireSource,
+          locale,
+          currency: guard.currency,
+        }),
+      ).length > 0
     ) {
       setShowErrors(true)
       setStatus(null)
@@ -3719,7 +3743,11 @@ function PartForm({
   // The footer says the single next thing to fix, in the order the form reads.
   const archivedMessage = t('archivedSource')
   const blocking = {
-    ...partFieldErrors(values, { requireSource, locale }),
+    ...partFieldErrors(values, {
+      requireSource,
+      locale,
+      currency: guard.currency,
+    }),
     ...(archivedSource ? { sourceId: archivedMessage } : {}),
   }
   const footerNote = mediaPending
@@ -3855,11 +3883,15 @@ function PartEdit({
   const [error, setError] = useState<string | null>(null)
   const [showErrors, setShowErrors] = useState(false)
   const mediaPending = mediaItems.some((item) => item.status !== 'uploaded')
+  const guard = useFirstPriceGuard()
   const errors =
     showErrors && values
-      ? partFieldErrors(values, { requireSource: false, locale })
+      ? partFieldErrors(values, {
+          requireSource: false,
+          locale,
+          currency: guard.currency,
+        })
       : {}
-  const guard = useFirstPriceGuard()
   const price = usePriceSlots(guard, {
     values: [values?.desiredSalePrice],
     onAccept: (accepted) => void save(undefined, accepted),
@@ -3918,8 +3950,13 @@ function PartEdit({
     if (!values || pendingRef.current || mediaPending) return
     const parsed = validFormNumbers(values)
     if (
-      Object.keys(partFieldErrors(values, { requireSource: false, locale }))
-        .length > 0
+      Object.keys(
+        partFieldErrors(values, {
+          requireSource: false,
+          locale,
+          currency: guard.currency,
+        }),
+      ).length > 0
     ) {
       setShowErrors(true)
       setStatus(null)

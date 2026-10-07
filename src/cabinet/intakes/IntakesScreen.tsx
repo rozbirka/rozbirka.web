@@ -83,6 +83,10 @@ import {
   useFirstPriceGuard,
 } from '../currency/use-accounting-currency'
 import { usePriceSlots } from '../currency/use-price-slots'
+import {
+  amountPrecisionError,
+  BATCH_COST_LIMIT,
+} from '../currency/amount-precision'
 
 const defaultPageSize = 20
 const positiveInteger = (value: string | null, fallback: number) => {
@@ -1286,6 +1290,7 @@ function IntakeForm({
     cabinetModules.intakes,
   )
   const guard = useFirstPriceGuard()
+  const { locale } = useLocale()
   const money = useWholeMoney(guard.currency)
   const price = usePriceSlots(guard, {
     values: canManageFinance ? [values.totalCost] : [],
@@ -1345,6 +1350,17 @@ function IntakeForm({
       setFieldErrors({
         totalCost: tf('costInvalid'),
       })
+      return
+    }
+    // Core refuses a cost finer than the currency allows; say so here.
+    const costPrecision =
+      canManageFinance && amount !== null && sendCost
+        ? amountPrecisionError(amount, guard.currency, locale, {
+            limit: BATCH_COST_LIMIT,
+          })
+        : null
+    if (costPrecision !== null) {
+      setFieldErrors({ totalCost: costPrecision })
       return
     }
     setFieldErrors({})
@@ -1792,6 +1808,7 @@ function PartForm({
   const intakeMutation = useLatestMutationGuard(cabinetModules.intakes)
   const partMutation = useLatestMutationGuard(cabinetModules.parts)
   const guard = useFirstPriceGuard()
+  const { locale } = useLocale()
   const money = useWholeMoney(guard.currency)
   const lastAnother = useRef(false)
 
@@ -1862,6 +1879,13 @@ function PartForm({
       setFieldErrors({
         name: tf('partNameRequired'),
       })
+      return
+    }
+    const pricePrecision = pricing
+      ? amountPrecisionError(price, guard.currency, locale)
+      : null
+    if (pricePrecision !== null) {
+      setProblem(pricePrecision)
       return
     }
     setFieldErrors({})
@@ -2346,6 +2370,7 @@ function BatchPartsForm({
   const intakeMutation = useLatestMutationGuard(cabinetModules.intakes)
   const partMutation = useLatestMutationGuard(cabinetModules.parts)
   const guard = useFirstPriceGuard()
+  const { locale } = useLocale()
   const money = useWholeMoney(guard.currency)
 
   useEffect(() => {
@@ -2421,6 +2446,17 @@ function BatchPartsForm({
   ) => {
     event?.preventDefault()
     if (busy || filled.length === 0) return
+    const rowPrecision = pricing
+      ? (filled
+          .map((row) => batchNumber(row.price))
+          .filter((price) => price > 0)
+          .map((price) => amountPrecisionError(price, guard.currency, locale))
+          .find((message) => message !== null) ?? null)
+      : null
+    if (rowPrecision !== null) {
+      setProblem(rowPrecision)
+      return
+    }
     setProblem(null)
     setSaved(0)
     setBusy(true)

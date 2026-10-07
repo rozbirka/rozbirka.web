@@ -99,6 +99,7 @@ import {
   useFirstPriceGuard,
 } from '../currency/use-accounting-currency'
 import { usePriceSlots, type PriceSlots } from '../currency/use-price-slots'
+import { amountPrecisionError } from '../currency/amount-precision'
 
 /**
  * The shots that make a car card usable to someone who never saw the car. The
@@ -963,6 +964,7 @@ function Expenses({
   const { requireLatestMutation } = useLatestMutationGuard(cabinetModules.cars)
   const t = useT(carsMessages)
   const tc = useT(commonMessages)
+  const { locale } = useLocale()
   const day = useDay()
   const toast = useOptionalToast()
   const [name, setName] = useState('')
@@ -991,6 +993,11 @@ function Expenses({
     }
     if (!Number.isFinite(value) || value <= 0) {
       setFormError(t('expenseAmountInvalid'))
+      return
+    }
+    const precision = amountPrecisionError(value, guard.currency, locale)
+    if (precision !== null) {
+      setFormError(precision)
       return
     }
     setFormError(null)
@@ -1212,6 +1219,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
   const t = useT(carsMessages)
   const tf = useT(carFormMessages)
   const tc = useT(commonMessages)
+  const { locale } = useLocale()
   const day = useDay()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -1325,6 +1333,15 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
       setProblem(tf('requiredFieldsMissing'))
       return
     }
+    // Core refuses an amount finer than the currency allows; say so here.
+    const pricePrecision =
+      (!carId || financeManage) && values.purchasePrice.trim() !== ''
+        ? amountPrecisionError(purchasePrice, guard.currency, locale)
+        : null
+    if (pricePrecision !== null) {
+      setProblem(pricePrecision)
+      return
+    }
     const preparedExpenses = expenses.map((expense) => ({
       id: expense.id,
       name: expense.name.trim(),
@@ -1341,6 +1358,17 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
       )
     ) {
       setProblem(tf('expensesInvalid'))
+      return
+    }
+    const expensePrecision = carId
+      ? null
+      : (preparedExpenses
+          .map((expense) =>
+            amountPrecisionError(expense.amount, guard.currency, locale),
+          )
+          .find((message) => message !== null) ?? null)
+    if (expensePrecision !== null) {
+      setProblem(expensePrecision)
       return
     }
     setProblem(null)
