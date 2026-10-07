@@ -116,6 +116,7 @@ export async function handleNativeAuth(
       clientIp: request.headers.get('CF-Connecting-IP'),
     },
     request.method,
+    request.headers.get('Accept-Language'),
   )
   if (!response) return identityFailure()
   if (!response.ok)

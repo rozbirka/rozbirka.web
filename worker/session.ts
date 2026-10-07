@@ -307,15 +307,30 @@ export async function safeOtpFailure(
   )
 }
 
+/**
+ * Identity localises OTP SMS and messages from Accept-Language. Forward only
+ * a plain, short language list; anything else is dropped.
+ */
+export function safeAcceptLanguage(value: string | null | undefined) {
+  if (!value) return null
+  const trimmed = value.trim()
+  return trimmed.length <= 100 && /^[A-Za-z0-9\-_,;=.* ]+$/.test(trimmed)
+    ? trimmed
+    : null
+}
+
 export async function callIdentity(
   url: string,
   body: JsonRecord,
   authorization?: string | null,
   registration?: { key: string; session?: string; clientIp?: string | null },
   method = 'POST',
+  acceptLanguage?: string | null,
 ) {
   const headers = new Headers({ 'Content-Type': 'application/json' })
   if (authorization) headers.set('Authorization', authorization)
+  const language = safeAcceptLanguage(acceptLanguage)
+  if (language) headers.set('Accept-Language', language)
   if (registration) {
     headers.set('X-Rozbirka-Registration-Key', registration.key)
     if (registration.session)
@@ -462,6 +477,8 @@ export async function handleSessionRequest(
             clientIp: request.headers.get('CF-Connecting-IP'),
           }
         : undefined,
+      'POST',
+      request.headers.get('Accept-Language'),
     )
     if (!response) return identityFailure()
     if (!response.ok)

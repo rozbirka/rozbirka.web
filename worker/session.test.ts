@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { handleSessionRequest } from './session'
+import { handleSessionRequest, safeAcceptLanguage } from './session'
 
 const challengeData = (seconds = 0) => ({
   challengeId: 'test-challenge',
@@ -164,6 +164,43 @@ describe('session BFF', () => {
       expect(upstreamFetch).not.toHaveBeenCalled()
     },
   )
+
+  it('forwards a plain Accept-Language so Identity localises the OTP SMS', async () => {
+    let upstreamRequest: Request | undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        upstreamRequest = new Request(input, init)
+        return Promise.resolve(
+          Response.json({
+            data: {
+              ...challengeData(),
+              cooldownSeconds: 60,
+              retryAfterSeconds: 300,
+            },
+          }),
+        )
+      }),
+    )
+
+    await handleSessionRequest(
+      new Request('https://rozbirka.pro/session/otp/send', {
+        method: 'POST',
+        headers: {
+          origin: 'https://rozbirka.pro',
+          'content-type': 'application/json',
+          'accept-language': 'pl',
+        },
+        body: JSON.stringify({ phone: '+48512345678' }),
+      }),
+      env,
+    )
+
+    expect(upstreamRequest?.headers.get('accept-language')).toBe('pl')
+    expect(safeAcceptLanguage('en-GB,en;q=0.9')).toBe('en-GB,en;q=0.9')
+    expect(safeAcceptLanguage('pl\r\nX-Evil: 1')).toBeNull()
+    expect(safeAcceptLanguage('x'.repeat(101))).toBeNull()
+  })
 
   it('collapses a verify-only OTP error code on the send route', async () => {
     identityResponse(
