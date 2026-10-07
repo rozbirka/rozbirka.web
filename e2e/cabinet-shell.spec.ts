@@ -1628,6 +1628,8 @@ test('inventory overview remains usable at mobile and desktop widths @cabinet-sm
       page.getByRole('region', { name: 'Склади' }).getByText('Основний склад'),
     ).toBeVisible()
     await expect(page.getByText('INV-001')).toBeVisible()
+    // Font swapping changes intrinsic text widths after the content is visible.
+    await page.evaluate(() => document.fonts.ready.then(() => undefined))
     const layout = await page.evaluate(() => ({
       width: window.innerWidth,
       scrollWidth: document.documentElement.scrollWidth,
