@@ -2,6 +2,8 @@ import { Link } from 'react-router'
 import { Button } from '@/components/app'
 import { cn, plural } from '@/lib/utils'
 import type { ImportRow, ImportStatus } from '@/api/part-imports'
+import { SOURCE_LOCALE } from '@/i18n'
+import { wholeMoney } from '../currency/money'
 import { issueText, statusLabels } from './import-model'
 
 const PAGE_SIZE = 100
@@ -9,16 +11,9 @@ const PAGE_SIZE = 100
 const count = (value: number) =>
   value.toLocaleString('uk-UA').replace(/\u00a0/g, ' ')
 
-/** Parts are priced in dollars, like the cars they come off. */
-const money = (amount: number) =>
-  new Intl.NumberFormat('uk-UA', {
-    style: 'currency',
-    currency: 'USD',
-    currencyDisplay: 'narrowSymbol',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-    trailingZeroDisplay: 'stripIfInteger',
-  }).format(amount)
+/** Parts are priced in the accounting currency, like the cars they come off. */
+const money = (amount: number, currency: string | null) =>
+  wholeMoney(amount, currency, SOURCE_LOCALE)
 
 const moment = (value: string | null) => {
   if (value === null) return null
@@ -143,6 +138,7 @@ function Panel({
  * because a page holds a hundred rows and an import can hold ten thousand.
  */
 export function ImportResultStep({
+  accountingCurrency = null,
   status,
   rows,
   rowTotal,
@@ -159,6 +155,8 @@ export function ImportResultStep({
   onNewImport,
   busy,
 }: {
+  /** What imported prices are in; `null` when unknown. */
+  accountingCurrency?: string | null
   status: ImportStatus
   rows: readonly ImportRow[]
   rowTotal: number
@@ -500,7 +498,7 @@ export function ImportResultStep({
                       </td>
                       <td className="text-app-ink px-3 py-3.5 text-right font-mono tabular-nums">
                         {Number.isFinite(price) && values['DesiredSalePrice']
-                          ? money(price)
+                          ? money(price, accountingCurrency)
                           : '—'}
                       </td>
                       <td className="text-app-muted px-3 py-3.5">

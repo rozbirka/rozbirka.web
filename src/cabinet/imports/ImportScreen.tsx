@@ -32,6 +32,7 @@ import { ImportFileStep } from './import-file'
 import { ImportHistory } from './import-history'
 import { ImportMappingStep } from './import-mapping'
 import { ImportResultStep } from './import-result'
+import { useAccountingCurrency } from '../currency/use-accounting-currency'
 import { ImportReviewStep } from './import-review'
 import {
   createMapping,
@@ -87,6 +88,7 @@ export function ImportScreen(props: CabinetModuleScreenProps) {
 }
 function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
+  const { currency: accountingCurrency } = useAccountingCurrency()
   const navigate = useNavigate()
   const location = useLocation()
   const { importId } = useParams<{ importId: string }>()
@@ -1002,6 +1004,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
         ) : null}
         {step === 5 && status ? (
           <ImportResultStep
+            accountingCurrency={accountingCurrency}
             busy={busy}
             fileName={file?.name ?? null}
             onCancel={() =>

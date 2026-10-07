@@ -55,6 +55,7 @@ import { normalizeApiProblem } from '@/api/errors'
 import { cn, plural } from '@/lib/utils'
 import { cabinetPath } from '../cabinet-paths'
 import { useCabinet } from '../CabinetContext'
+import { useAccountingCurrency } from '../currency/use-accounting-currency'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
@@ -743,6 +744,7 @@ async function loadWarehouseStock(
 }
 
 function WarehouseView({ id }: { id: string }) {
+  const { currency: inventoryCurrency } = useAccountingCurrency()
   const base = useInventoryBase()
   const { targetTenant } = useCabinet()
   const navigate = useNavigate()
@@ -1107,7 +1109,7 @@ function WarehouseView({ id }: { id: string }) {
                 <WarehouseStat
                   label="Вартість залишку"
                   meta="вартість складу не рахується"
-                  unit="USD"
+                  unit={inventoryCurrency ?? ''}
                   value="—"
                 />
                 <WarehouseStat
