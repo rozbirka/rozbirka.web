@@ -53,7 +53,11 @@ import {
 import { inventoryApi, type InventoryZone } from '@/api/inventory'
 import { partsApi } from '@/api/parts'
 import { normalizeApiProblem } from '@/api/errors'
-import { cn, plural } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { commonMessages, useLocale, useT, type Translate } from '@/i18n'
+import { formatDay } from '../cars/day'
+import { intakeFormMessages } from './intake-form-messages'
+import { intakesMessages } from './messages'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { MediaPicker } from '../cars/CarsScreen'
@@ -88,13 +92,21 @@ const money = (amount: number) =>
     trailingZeroDisplay: 'stripIfInteger',
   }).format(amount)
 
-/** Dates arrive as ISO strings; anything unparsable is shown as it came. */
-const day = (value: string) => {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime())
-    ? value
-    : new Intl.DateTimeFormat('uk-UA', { dateStyle: 'medium' }).format(parsed)
+/** `formatDay` bound to the reader's locale and the business time zone. */
+function useDay() {
+  const { locale, timeZone } = useLocale()
+  return (value: string) => formatDay(value, locale, timeZone)
 }
+
+/**
+ * The unit the forms send is the stored code `шт`; it is shown in the reader's
+ * language. Any other unit is the yard's own word and is shown as written.
+ */
+const PIECES = 'шт'
+const unitLabel = (
+  t: Translate<(typeof intakesMessages)['uk']>,
+  unit: string,
+) => (unit === PIECES ? t('pcs') : unit)
 
 /** Two initials for the avatar chip; a single word gives one. */
 const initials = (name: string) =>
@@ -191,14 +203,15 @@ const allowedToView = (
   ).kind === 'allowed'
 
 function Denied({ decision }: { decision: ModuleAccessDecision }) {
+  const t = useT(intakesMessages)
   const message =
     decision.kind === 'quota-exhausted'
       ? decision.resource === 'parts'
-        ? 'Ліміт запчастин вичерпано.'
-        : 'Ліміт приймань вичерпано.'
+        ? t('deniedPartsQuota')
+        : t('deniedIntakesQuota')
       : decision.kind === 'subscription-blocked'
-        ? 'Поточна підписка не дозволяє цю дію.'
-        : 'Недостатньо прав.'
+        ? t('deniedSubscription')
+        : t('deniedPermission')
   return (
     <Notice role="alert" tone="warn">
       {message}
@@ -215,6 +228,7 @@ export function IntakesScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
     partsMediaManage,
     financeManage,
   } = useIntakeAccess()
+  const tf = useT(intakeFormMessages)
   const params = useParams<{ tenant: string; intakeId: string }>()
   const location = useLocation()
   const tenant = params.tenant ?? cabinet.targetTenant?.slug ?? ''
@@ -248,7 +262,7 @@ export function IntakesScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
     return (
       <IntakeForm
         canManageFinance={financeManage}
-        title="Нове приймання"
+        title={tf('newIntake')}
         submit={(request, signal) => intakesApi.create(request, { signal })}
       />
     )
@@ -260,7 +274,7 @@ export function IntakesScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
       <IntakeForm
         canManageFinance={financeManage}
         intakeId={intakeId}
-        title="Редагування приймання"
+        title={tf('editIntake')}
         submit={(request, signal) =>
           intakesApi.update(intakeId, request, { signal })
         }
@@ -273,9 +287,9 @@ export function IntakesScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
 
 /** The lifecycle segments the list endpoint really understands. */
 const INTAKE_SEGMENTS = [
-  { value: '', label: 'Усі' },
-  { value: 'active', label: 'Активні' },
-  { value: 'closed', label: 'Закриті' },
+  { value: '', label: 'segmentAll' },
+  { value: 'active', label: 'segmentActive' },
+  { value: 'closed', label: 'segmentClosed' },
 ] as const
 
 /**
@@ -283,18 +297,23 @@ const INTAKE_SEGMENTS = [
  * lifecycle status of its own, so this is what the numbers actually support.
  */
 const intakeSaleState = (
-  intake: IntakeListItem,
-): { label: string; tone: StatusTone } =>
+  intake: Pick<IntakeListItem, 'partsCount' | 'soldCount'>,
+): {
+  label: 'saleNoItems' | 'saleNothingSold' | 'saleSelling' | 'saleSoldOut'
+  tone: StatusTone
+} =>
   intake.partsCount === 0
-    ? { label: 'Без позицій', tone: 'neutral' }
+    ? { label: 'saleNoItems', tone: 'neutral' }
     : intake.soldCount === 0
-      ? { label: 'Нічого не продано', tone: 'warn' }
+      ? { label: 'saleNothingSold', tone: 'warn' }
       : intake.soldCount < intake.partsCount
-        ? { label: 'Розпродається', tone: 'ok' }
-        : { label: 'Розпродано', tone: 'neutral' }
+        ? { label: 'saleSelling', tone: 'ok' }
+        : { label: 'saleSoldOut', tone: 'neutral' }
 
 function IntakesList({ base }: { base: string }) {
   const { createDecision, financeView } = useIntakeAccess()
+  const t = useT(intakesMessages)
+  const day = useDay()
   const [searchParams, setSearchParams] = useSearchParams()
   const selection = useMemo<IntakeListParams>(
     () => ({
@@ -353,11 +372,11 @@ function IntakesList({ base }: { base: string }) {
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
       <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
         <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-          <span>Склад</span>
+          <span>{t('eyebrow')}</span>
           <span aria-hidden className="text-white/20">
             /
           </span>
-          <span className="text-app-muted">Приймання</span>
+          <span className="text-app-muted">{t('title')}</span>
         </p>
         <div className="flex flex-1 flex-wrap items-center justify-end gap-2.5">
           <form
@@ -368,9 +387,9 @@ function IntakesList({ base }: { base: string }) {
             }}
           >
             <SearchInput
-              aria-label="Пошук приймань"
+              aria-label={t('searchLabel')}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Назва, постачальник"
+              placeholder={t('searchPlaceholder')}
               value={query}
             />
           </form>
@@ -382,7 +401,7 @@ function IntakesList({ base }: { base: string }) {
             >
               <Link to={`${base}/new`}>
                 <Plus aria-hidden />
-                Нове приймання
+                {t('newIntake')}
               </Link>
             </Button>
           ) : null}
@@ -392,37 +411,35 @@ function IntakesList({ base }: { base: string }) {
       <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="min-w-0">
           <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-            Приймання
+            {t('title')}
           </h1>
-          <p className="text-app-muted mt-3 text-[15px]">
-            Надходження запчастин з авто, від постачальників і з аукціонів
-          </p>
+          <p className="text-app-muted mt-3 text-[15px]">{t('subtitle')}</p>
         </div>
 
         {state.error ? <Notice tone="danger">{state.error}</Notice> : null}
 
         <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-px overflow-hidden rounded-[20px] border">
           <IntakeStat
-            label="Приймань"
-            meta="усього за фільтром"
+            label={t('statIntakes')}
+            meta={t('statTotalFiltered')}
             value={String(state.page?.total ?? 0)}
           />
           <IntakeStat
-            label="Позицій"
-            meta="на цій сторінці"
-            unit="шт"
+            label={t('statPositions')}
+            meta={t('statThisPage')}
+            unit={t('pcs')}
             value={String(positions)}
           />
           <IntakeStat
-            label="Продано"
-            meta="на цій сторінці"
-            unit="шт"
+            label={t('statSold')}
+            meta={t('statThisPage')}
+            unit={t('pcs')}
             value={String(sold)}
           />
           {financeView ? (
             <IntakeStat
-              label="Вартість надходжень"
-              meta="на цій сторінці"
+              label={t('statCost')}
+              meta={t('statThisPage')}
               value={money(cost)}
             />
           ) : null}
@@ -430,7 +447,7 @@ function IntakesList({ base }: { base: string }) {
 
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div
-            aria-label="Які приймання показувати"
+            aria-label={t('segmentsLabel')}
             className="border-app-line bg-app-raised flex flex-wrap gap-1 rounded-xl border p-1"
             role="radiogroup"
           >
@@ -456,7 +473,7 @@ function IntakesList({ base }: { base: string }) {
                   role="radio"
                   type="button"
                 >
-                  {option.label}
+                  {t(option.label)}
                   {/* Only the chosen segment has a count: the list endpoint
                       totals what it returns, not the segments beside it. */}
                   {active ? (
@@ -471,15 +488,15 @@ function IntakesList({ base }: { base: string }) {
         </div>
 
         <section
-          aria-label="Список приймань"
+          aria-label={t('listLabel')}
           className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
         >
           <DataTable
-            caption="Список приймань"
+            caption={t('listLabel')}
             columns={[
               {
                 key: 'name',
-                label: 'Приймання',
+                label: t('columnIntake'),
                 variant: 'primary',
                 cell: (intake) => (
                   <Link
@@ -487,7 +504,7 @@ function IntakesList({ base }: { base: string }) {
                     to={`${base}/${intake.id}`}
                   >
                     <span className="font-semibold text-white">
-                      {intake.name ?? 'Без назви'}
+                      {intake.name ?? t('untitled')}
                     </span>
                     <span className="text-app-muted text-[13px]">
                       {intake.createdBy.displayName}
@@ -497,7 +514,7 @@ function IntakesList({ base }: { base: string }) {
               },
               {
                 key: 'date',
-                label: 'Дата',
+                label: t('columnDate'),
                 cell: (intake) => (
                   <span className="text-app-muted font-mono text-[13px]">
                     {day(intake.purchasedAt ?? intake.createdAt)}
@@ -506,7 +523,7 @@ function IntakesList({ base }: { base: string }) {
               },
               {
                 key: 'parts',
-                label: 'Позицій',
+                label: t('columnPositions'),
                 align: 'end',
                 cell: (intake) => (
                   <span className="font-mono text-white tabular-nums">
@@ -518,7 +535,7 @@ function IntakesList({ base }: { base: string }) {
                 ? [
                     {
                       key: 'cost',
-                      label: 'Вартість',
+                      label: t('columnCost'),
                       align: 'end' as const,
                       cell: (intake: IntakeListItem) => (
                         <span className="font-mono font-bold text-white tabular-nums">
@@ -532,11 +549,13 @@ function IntakesList({ base }: { base: string }) {
                 : []),
               {
                 key: 'status',
-                label: 'Статус',
+                label: t('columnStatus'),
                 align: 'end',
                 cell: (intake) => {
                   const sale = intakeSaleState(intake)
-                  return <StatusPill tone={sale.tone}>{sale.label}</StatusPill>
+                  return (
+                    <StatusPill tone={sale.tone}>{t(sale.label)}</StatusPill>
+                  )
                 },
               },
             ]}
@@ -545,14 +564,14 @@ function IntakesList({ base }: { base: string }) {
                 description={
                   (selection.search ?? '') === '' &&
                   selection.status === undefined
-                    ? 'Створіть перше приймання, щоб оприбуткувати партію запчастин.'
-                    : 'Спробуйте інший фільтр або очистіть пошук.'
+                    ? t('emptyDescription')
+                    : t('emptyFilteredDescription')
                 }
                 title={
                   (selection.search ?? '') === '' &&
                   selection.status === undefined
-                    ? 'Приймань поки немає'
-                    : 'Приймань за цим фільтром немає'
+                    ? t('emptyTitle')
+                    : t('emptyFilteredTitle')
                 }
               />
             }
@@ -560,15 +579,13 @@ function IntakesList({ base }: { base: string }) {
             footer={
               <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-t px-6 py-4">
                 <p className="text-app-dim text-[13px]">
-                  Показано {items.length} з {state.page?.total ?? 0}{' '}
-                  {plural(state.page?.total ?? 0, [
-                    'приймання',
-                    'приймання',
-                    'приймань',
-                  ])}
+                  {t('shownOfIntakes', {
+                    shown: items.length,
+                    count: state.page?.total ?? 0,
+                  })}
                 </p>
                 <Pagination
-                  label="Пагінація приймань"
+                  label={t('paginationLabel')}
                   onPage={(nextPage) => updatePage(nextPage, currentPageSize)}
                   page={currentPage}
                   totalPages={totalPages}
@@ -586,19 +603,21 @@ function IntakesList({ base }: { base: string }) {
 
 /** The three ways a yard looks at the positions of one batch. */
 const INTAKE_PART_FILTERS = [
-  { value: 'all', label: 'Усі' },
-  { value: 'available', label: 'Доступні' },
-  { value: 'sold', label: 'Продані' },
+  { value: 'all', label: 'partFilterAll' },
+  { value: 'available', label: 'partFilterAvailable' },
+  { value: 'sold', label: 'partFilterSold' },
 ] as const
 
 type IntakePartFilter = (typeof INTAKE_PART_FILTERS)[number]['value']
 
+/** Known statuses in the reader's language; an unknown one is shown as sent. */
 const partStatusPill = (
+  t: Translate<(typeof intakesMessages)['uk']>,
   status: string,
 ): { label: string; tone: StatusTone } => {
-  if (status === 'available') return { label: 'Доступна', tone: 'ok' }
-  if (status === 'reserved') return { label: 'У резерві', tone: 'warn' }
-  if (status === 'sold') return { label: 'Продана', tone: 'danger' }
+  if (status === 'available') return { label: t('partAvailable'), tone: 'ok' }
+  if (status === 'reserved') return { label: t('partReserved'), tone: 'warn' }
+  if (status === 'sold') return { label: t('partSold'), tone: 'danger' }
   return { label: status, tone: 'neutral' }
 }
 
@@ -652,6 +671,9 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
     partsMediaManage,
     financeView,
   } = useIntakeAccess()
+  const t = useT(intakesMessages)
+  const tc = useT(commonMessages)
+  const day = useDay()
   const navigate = useNavigate()
   const [intake, setIntake] = useState<Intake | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
@@ -692,18 +714,18 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
         <ErrorState
           actions={
             <Button asChild>
-              <Link to={base}>До списку</Link>
+              <Link to={base}>{t('backToList')}</Link>
             </Button>
           }
           description={problem}
-          title="Не вдалося завантажити приймання"
+          title={t('loadFailed')}
         />
       </PageBody>
     )
   if (!intake)
     return (
       <PageBody width="narrow">
-        <SkeletonRows label="Завантажуємо приймання…" rows={3} />
+        <SkeletonRows label={t('loading')} rows={3} />
       </PageBody>
     )
 
@@ -729,14 +751,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
   )
   const partsBase = base.replace(/\/intakes$/, '/parts')
   const profit = intake.profitability ?? null
-  const saleState =
-    intake.partsCount === 0
-      ? { label: 'Без позицій', tone: 'neutral' as StatusTone }
-      : intake.soldCount === 0
-        ? { label: 'Нічого не продано', tone: 'warn' as StatusTone }
-        : intake.soldCount < intake.partsCount
-          ? { label: 'Розпродається', tone: 'ok' as StatusTone }
-          : { label: 'Розпродано', tone: 'neutral' as StatusTone }
+  const saleState = intakeSaleState(intake)
   /**
    * The batch's own trail, built from the timestamps the records carry: when
    * it was opened, and what was booked into it since. Anything a person did in
@@ -751,14 +766,17 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
       .slice(0, 4)
       .map((part) => ({
         id: part.id,
-        title: `Додано «${part.name}»`,
+        title: t('historyAdded', { name: part.name }),
         meta: day(part.createdAt),
-        value: `${String(part.quantity)} ${part.unit}`,
+        value: t('quantityWithUnit', {
+          count: part.quantity,
+          unit: unitLabel(t, part.unit),
+        }),
         tone: 'ok' as const,
       })),
     {
       id: 'created',
-      title: 'Приймання створено',
+      title: t('historyCreated'),
       meta: `${day(intake.createdAt)} · ${intake.createdBy.displayName}`,
       value: intake.name ?? '—',
       tone: 'dim' as const,
@@ -784,20 +802,20 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
             to={base}
           >
             <ChevronLeft aria-hidden className="size-3.5" />
-            До приймань
+            {t('backToIntakes')}
           </Link>
           <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>Склад</span>
+            <span>{t('eyebrow')}</span>
             <span aria-hidden className="text-white/20">
               /
             </span>
-            <span>Приймання</span>
+            <span>{t('title')}</span>
           </p>
         </div>
         {manage ? (
           <div className="flex flex-wrap items-center gap-2.5">
             <Button asChild className="px-[18px] text-sm font-semibold">
-              <Link to={`${base}/${intake.id}/edit`}>Редагувати</Link>
+              <Link to={`${base}/${intake.id}/edit`}>{tc('edit')}</Link>
             </Button>
             {/* Import is a parts mutation, the same gate as the parts list. */}
             {partCreateDecision.kind === 'allowed' && partsMediaManage ? (
@@ -806,7 +824,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                   <Link
                     to={`${base.replace(/\/intakes$/, '/parts')}/imports?intake_id=${encodeURIComponent(intake.id)}`}
                   >
-                    Імпорт запчастин
+                    {t('importParts')}
                   </Link>
                 </Button>
               </FeatureGate>
@@ -817,7 +835,9 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                 className="px-5 text-sm font-bold"
                 variant="primary"
               >
-                <Link to={`${base}/${intake.id}/parts/new`}>Додати деталь</Link>
+                <Link to={`${base}/${intake.id}/parts/new`}>
+                  {t('addPart')}
+                </Link>
               </Button>
             ) : null}
             <ActionMenu
@@ -826,7 +846,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                   ? [
                       {
                         key: 'stickers',
-                        label: 'Друк стікерів партії',
+                        label: t('printStickers'),
                         icon: <Printer aria-hidden />,
                         disabled: stickerHref === null,
                         onSelect: () => {
@@ -839,7 +859,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                   ? [
                       {
                         key: 'batch',
-                        label: 'Додати партією',
+                        label: t('addBatch'),
                         icon: <PackagePlus aria-hidden />,
                         onSelect: () =>
                           void navigate(`${base}/${intake.id}/parts/batch`),
@@ -848,14 +868,14 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                   : []),
                 {
                   key: 'delete',
-                  label: 'Видалити приймання',
+                  label: t('deleteIntake'),
                   icon: <Trash2 aria-hidden />,
                   destructive: true,
                   disabled: busy,
                   onSelect: () => setConfirmDelete(true),
                 },
               ]}
-              label="Інші дії з прийманням"
+              label={t('moreActions')}
             />
           </div>
         ) : null}
@@ -865,21 +885,24 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-4">
             <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-              {intake.name ?? 'Приймання без назви'}
+              {intake.name ?? t('untitledIntake')}
             </h1>
-            <StatusPill tone={saleState.tone}>{saleState.label}</StatusPill>
+            <StatusPill tone={saleState.tone}>{t(saleState.label)}</StatusPill>
           </div>
           <p className="text-app-muted mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-[15px]">
             <span>
               {intake.purchasedAt === null
-                ? 'без дати придбання'
+                ? t('noPurchaseDate')
                 : day(intake.purchasedAt)}
             </span>
             <span aria-hidden className="text-white/20">
               ·
             </span>
             <span>
-              Створив {intake.createdBy.displayName}, {day(intake.createdAt)}
+              {t('createdBy', {
+                name: intake.createdBy.displayName,
+                date: day(intake.createdAt),
+              })}
             </span>
           </p>
         </div>
@@ -888,31 +911,35 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
 
         <div className="bg-app-line border-app-line grid gap-px overflow-hidden rounded-[20px] border sm:grid-cols-2 lg:grid-cols-4">
           <IntakeStat
-            label="Позицій"
-            meta={`${String(units)} ${plural(units, ['одиниця', 'одиниці', 'одиниць'])}`}
-            unit="найменувань"
+            label={t('statPositions')}
+            meta={t('statUnits', { count: units })}
+            unit={t('statPositionsUnit')}
             value={String(intake.partsCount)}
           />
           <IntakeStat
-            label="Продано"
-            meta={`${String(intake.partsCount - intake.soldCount)} ще на складі`}
-            unit={`з ${String(intake.partsCount)}`}
+            label={t('statSold')}
+            meta={t('statStillInStock', {
+              count: intake.partsCount - intake.soldCount,
+            })}
+            unit={t('statOf', { count: intake.partsCount })}
             value={String(intake.soldCount)}
           />
           {financeView ? (
             <>
               <IntakeStat
-                label="Інвестовано"
-                meta="вартість партії"
+                label={t('statInvested')}
+                meta={t('statBatchCost')}
                 value={money(profit?.invested ?? intake.totalCost ?? 0)}
               />
               <IntakeStat
-                label="Повернено"
+                label={t('statRecouped')}
                 meta={
                   profit?.recoupedPercent === null ||
                   profit?.recoupedPercent === undefined
-                    ? 'ще нічого не повернулося'
-                    : `${String(profit.recoupedPercent)}% від вкладеного`
+                    ? t('statNothingBack')
+                    : t('statRecoupedShare', {
+                        percent: profit.recoupedPercent,
+                      })
                 }
                 tone="ok"
                 value={money(profit?.recouped ?? 0)}
@@ -927,15 +954,15 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
           <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
             {partsView ? (
               <section
-                aria-label="Позиції приймання"
+                aria-label={t('positionsTitle')}
                 className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
               >
                 <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-b px-6 pt-5 pb-4">
                   <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-                    Позиції приймання
+                    {t('positionsTitle')}
                   </h2>
                   <div
-                    aria-label="Які позиції показувати"
+                    aria-label={t('partFiltersLabel')}
                     className="border-app-line bg-app-input flex gap-1 rounded-[10px] border p-1"
                     role="radiogroup"
                   >
@@ -958,7 +985,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                           role="radio"
                           type="button"
                         >
-                          {option.label}
+                          {t(option.label)}
                           <span className="text-app-dim font-mono text-[11px] font-medium">
                             {counts[option.value]}
                           </span>
@@ -968,11 +995,11 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                   </div>
                 </div>
                 <DataTable
-                  caption="Позиції приймання"
+                  caption={t('positionsTitle')}
                   columns={[
                     {
                       key: 'qr',
-                      label: 'Код',
+                      label: t('columnCode'),
                       cell: (part) => (
                         <span className="text-app-muted font-mono text-[13px]">
                           {part.qrCode}
@@ -981,7 +1008,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                     },
                     {
                       key: 'name',
-                      label: 'Назва',
+                      label: t('columnName'),
                       variant: 'primary',
                       cell: (part) => (
                         <Link
@@ -992,27 +1019,30 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                             {part.name}
                           </span>
                           <span className="text-app-dim font-mono text-[12px]">
-                            {part.partType ?? 'без типу'}
+                            {part.partType ?? t('noType')}
                           </span>
                         </Link>
                       ),
                     },
                     {
                       key: 'quantity',
-                      label: 'К-сть',
+                      label: t('columnQuantity'),
                       align: 'end',
                       cell: (part) => (
                         <span className="text-app-muted font-mono tabular-nums">
-                          {part.quantity} {part.unit}
+                          {t('quantityWithUnit', {
+                            count: part.quantity,
+                            unit: unitLabel(t, part.unit),
+                          })}
                         </span>
                       ),
                     },
                     {
                       key: 'status',
-                      label: 'Стан',
+                      label: t('columnState'),
                       align: 'end',
                       cell: (part) => {
-                        const pill = partStatusPill(part.status)
+                        const pill = partStatusPill(t, part.status)
                         return (
                           <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
                         )
@@ -1023,13 +1053,13 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                     <EmptyState
                       description={
                         filter === 'all'
-                          ? 'Додайте запчастину, щоб оприбуткувати вміст цього приймання.'
-                          : 'За цим фільтром позицій немає — спробуйте «Усі».'
+                          ? t('partsEmptyDescription')
+                          : t('partsEmptyFilteredDescription')
                       }
                       title={
                         filter === 'all'
-                          ? 'У прийманні ще немає запчастин'
-                          : 'Порожньо за фільтром'
+                          ? t('partsEmptyTitle')
+                          : t('partsEmptyFilteredTitle')
                       }
                     />
                   }
@@ -1038,10 +1068,13 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                     filteredRows.length > partsPageSize ? (
                       <div className="border-app-line flex items-center justify-between gap-4 border-t px-6 py-4">
                         <p className="text-app-dim text-[13px]">
-                          Показано {rows.length} з {filteredRows.length}
+                          {t('shownOf', {
+                            shown: rows.length,
+                            total: filteredRows.length,
+                          })}
                         </p>
                         <Pagination
-                          label="Пагінація позицій приймання"
+                          label={t('partsPaginationLabel')}
                           onPage={setPartsPage}
                           page={currentPartsPage}
                           totalPages={partsTotalPages}
@@ -1058,12 +1091,11 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
             <Card
               aside={
                 <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
-                  {history.length}{' '}
-                  {plural(history.length, ['подія', 'події', 'подій'])}
+                  {t('historyCount', { count: history.length })}
                 </span>
               }
               bodyClassName="p-0"
-              title="Історія"
+              title={t('historyTitle')}
             >
               <ul className="divide-app-line grid divide-y">
                 {history.map((event) => (
@@ -1095,7 +1127,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
             </Card>
 
             {intake.notes === null ? null : (
-              <Card title="Нотатки">
+              <Card title={t('notesTitle')}>
                 <p className="text-app-muted text-sm leading-[1.6] whitespace-pre-line">
                   {intake.notes}
                 </p>
@@ -1103,7 +1135,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
             )}
 
             {intake.photos.length > 0 ? (
-              <Card title="Фото партії">
+              <Card title={t('photosTitle')}>
                 <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {intake.photos.map((photo, index) => (
                     <li key={photo.url}>
@@ -1112,7 +1144,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                         href={photo.url}
                       >
                         <img
-                          alt={`Фото приймання ${String(index + 1)}`}
+                          alt={t('photoAlt', { number: index + 1 })}
                           className="aspect-4/3 w-full object-cover"
                           src={photo.thumbnailUrl || photo.url}
                         />
@@ -1125,18 +1157,17 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
           </div>
 
           <aside className="sticky top-24 grid min-w-[300px] flex-[0_1_340px] gap-5">
-            <Card title="Продаж партії">
+            <Card title={t('salesTitle')}>
               <p className="flex items-baseline gap-2.5">
                 <span className="text-[26px] leading-none font-extrabold tracking-[-0.03em] text-white">
                   {intake.soldCount}
                 </span>
                 <span className="text-app-muted font-mono text-[13px]">
-                  з {intake.partsCount}{' '}
-                  {plural(intake.partsCount, ['позиції', 'позицій', 'позицій'])}
+                  {t('ofPositions', { count: intake.partsCount })}
                 </span>
               </p>
               <span
-                aria-label="Продано позицій партії"
+                aria-label={t('soldProgress')}
                 aria-valuemax={100}
                 aria-valuemin={0}
                 aria-valuenow={
@@ -1162,8 +1193,13 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
               </span>
               <p className="text-app-muted mt-3 text-[13px]">
                 {profit === null
-                  ? `${String(intake.partsCount - intake.soldCount)} позицій ще на складі`
-                  : `${String(profit.partsAvailable)} доступно · ${String(profit.partsSold)} продано`}
+                  ? t('positionsInStock', {
+                      count: intake.partsCount - intake.soldCount,
+                    })
+                  : t('availableAndSold', {
+                      available: profit.partsAvailable,
+                      sold: profit.partsSold,
+                    })}
               </p>
               {partCreateDecision.kind === 'allowed' ? (
                 <Button
@@ -1172,7 +1208,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                   variant="primary"
                 >
                   <Link to={`${base}/${intake.id}/parts/new`}>
-                    Додати деталь
+                    {t('addPart')}
                   </Link>
                 </Button>
               ) : null}
@@ -1182,11 +1218,11 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
       </div>
 
       <ConfirmDialog
-        confirmLabel={intake.partsCount > 0 ? 'Зрозуміло' : 'Видалити'}
+        confirmLabel={intake.partsCount > 0 ? t('understood') : tc('delete')}
         consequence={
           intake.partsCount > 0
-            ? `До партії прив’язано ${String(intake.partsCount)} ${plural(intake.partsCount, ['деталь', 'деталі', 'деталей'])}, тому видалити її не можна. Деталі та історія партії залишаються.`
-            : 'Приймання буде видалено назавжди.'
+            ? t('deleteBlocked', { count: intake.partsCount })
+            : t('deleteForever')
         }
         destructive={intake.partsCount === 0}
         onConfirm={() => {
@@ -1197,9 +1233,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
         open={confirmDelete}
         pending={busy}
         title={
-          intake.partsCount > 0
-            ? 'Партію не можна видалити'
-            : 'Видалити приймання?'
+          intake.partsCount > 0 ? t('deleteBlockedTitle') : t('deleteTitle')
         }
       />
     </div>
@@ -1218,6 +1252,10 @@ function IntakeForm({
   submit: (request: CreateIntakeRequest, signal: AbortSignal) => Promise<Intake>
 }) {
   const cabinet = useCabinet()
+  const t = useT(intakesMessages)
+  const tf = useT(intakeFormMessages)
+  const tc = useT(commonMessages)
+  const day = useDay()
   const params = useParams<{ tenant: string }>()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -1284,8 +1322,7 @@ function IntakeForm({
       (!Number.isFinite(amount) || amount < 0)
     ) {
       setFieldErrors({
-        totalCost:
-          'Вартість має бути числом не менше нуля. Введіть суму цифрами, наприклад 7500.',
+        totalCost: tf('costInvalid'),
       })
       return
     }
@@ -1338,12 +1375,10 @@ function IntakeForm({
   const backTo = intakeId
     ? `${base}/${intakeId}`
     : (sourceReturnPath(searchParams, cabinetRoot) ?? base)
-  const saveLabel = intakeId ? 'Зберегти зміни' : 'Створити приймання'
+  const saveLabel = intakeId ? tf('saveChanges') : tf('createIntake')
   const checks = [
-    { done: named, label: 'Назва партії вказана' },
-    ...(canManageFinance
-      ? [{ done: hasCost, label: 'Сума придбання вказана' }]
-      : []),
+    { done: named, label: tf('checkNamed') },
+    ...(canManageFinance ? [{ done: hasCost, label: tf('checkCost') }] : []),
   ]
 
   return (
@@ -1355,14 +1390,14 @@ function IntakeForm({
             to={backTo}
           >
             <ChevronLeft aria-hidden className="size-3.5" />
-            {intakeId ? 'До приймання' : 'До приймань'}
+            {intakeId ? tf('backToIntake') : t('backToIntakes')}
           </Link>
           <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>Склад</span>
+            <span>{t('eyebrow')}</span>
             <span aria-hidden className="text-white/20">
               /
             </span>
-            <span>Приймання</span>
+            <span>{t('title')}</span>
             {named ? (
               <>
                 <span aria-hidden className="text-white/20">
@@ -1377,7 +1412,7 @@ function IntakeForm({
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           <Button asChild className="px-[18px] text-sm font-semibold">
-            <Link to={backTo}>Скасувати</Link>
+            <Link to={backTo}>{tc('cancel')}</Link>
           </Button>
           <Button
             aria-busy={busy}
@@ -1398,14 +1433,11 @@ function IntakeForm({
             {title}
           </h1>
           {intakeId === undefined ? (
-            <p className="text-app-muted mt-3.5 text-[15px]">
-              Спочатку створіть приймання, потім додайте до нього запчастини —
-              по одній або партією.
-            </p>
+            <p className="text-app-muted mt-3.5 text-[15px]">{tf('intro')}</p>
           ) : (
             <p className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-[15px] font-medium">
               <span className="text-app-ink font-mono">
-                {values.name || 'Без назви'}
+                {values.name || t('untitled')}
               </span>
               {intake ? (
                 <>
@@ -1413,16 +1445,17 @@ function IntakeForm({
                     ·
                   </span>
                   <span>
-                    {positions}{' '}
-                    {plural(positions, ['позиція', 'позиції', 'позицій'])} ·{' '}
-                    {units} шт
+                    {tf('positionsCount', { count: positions })} ·{' '}
+                    {t('quantityWithUnit', { count: units, unit: t('pcs') })}
                   </span>
                   <span aria-hidden className="text-white/20">
                     ·
                   </span>
                   <span>
-                    Створено {day(intake.createdAt)} ·{' '}
-                    {intake.createdBy.displayName}
+                    {tf('createdOnBy', {
+                      date: day(intake.createdAt),
+                      name: intake.createdBy.displayName,
+                    })}
                   </span>
                 </>
               ) : null}
@@ -1439,23 +1472,23 @@ function IntakeForm({
           onSubmit={(event) => void save(event)}
         >
           <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
-            <FormCard step="01" title="Основні дані">
+            <FormCard step="01" title={tf('basicsTitle')}>
               <div className="grid gap-4">
-                <Field hint="Назва приймання у списку" label="Назва">
+                <Field hint={tf('nameHint')} label={tf('nameLabel')}>
                   <TextInput
                     autoComplete="off"
                     name="name"
                     onChange={update('name')}
-                    placeholder="Липнева партія"
+                    placeholder={tf('namePlaceholder')}
                     value={values.name}
                   />
                 </Field>
               </div>
             </FormCard>
 
-            <FormCard step="02" title="Дата й відповідальний">
+            <FormCard step="02" title={tf('dateOwnerTitle')}>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Дата приймання">
+                <Field label={tf('intakeDate')}>
                   <TextInput
                     name="purchasedAt"
                     onChange={update('purchasedAt')}
@@ -1464,7 +1497,7 @@ function IntakeForm({
                   />
                 </Field>
               </div>
-              <Field hint="Хто прийняв партію" label="Відповідальний">
+              <Field hint={tf('ownerHint')} label={tf('ownerLabel')}>
                 {intake ? (
                   <p className="border-app-line-2 text-app-ink inline-flex w-fit min-h-11 items-center gap-2.5 rounded-full border py-1.5 pr-4 pl-2 text-sm font-semibold">
                     <span className="text-app-muted grid size-7 place-items-center rounded-full bg-white/[0.06] text-xs font-bold">
@@ -1473,9 +1506,7 @@ function IntakeForm({
                     {intake.createdBy.displayName}
                   </p>
                 ) : (
-                  <p className="text-app-dim text-sm">
-                    Відповідальним стає той, хто створює приймання.
-                  </p>
+                  <p className="text-app-dim text-sm">{tf('ownerOnCreate')}</p>
                 )}
               </Field>
             </FormCard>
@@ -1483,11 +1514,11 @@ function IntakeForm({
             <FormCard
               description={
                 positions > 0
-                  ? `Сума придбання ділиться між позиціями партії — зараз їх ${String(positions)}.`
-                  : 'Сума придбання ділиться між позиціями партії й формує їхню собівартість.'
+                  ? tf('costSplitNow', { count: positions })
+                  : tf('costSplit')
               }
               step="03"
-              title="Вартість партії"
+              title={tf('costTitle')}
             >
               {canManageFinance ? (
                 <div className="grid gap-4">
@@ -1507,14 +1538,11 @@ function IntakeForm({
                   </Field>
                 </div>
               ) : null}
-              <Field
-                hint="Домовленості, стан партії, усе, що знадобиться складу згодом"
-                label="Коментар"
-              >
+              <Field hint={tf('commentHint')} label={tf('commentLabel')}>
                 <TextArea
                   name="notes"
                   onChange={update('notes')}
-                  placeholder="Стан партії, домовленості, що перевірити"
+                  placeholder={tf('commentPlaceholder')}
                   rows={2}
                   value={values.notes}
                 />
@@ -1522,7 +1550,7 @@ function IntakeForm({
             </FormCard>
 
             {!intakeId ? (
-              <FormCard step="04" title="Фото партії">
+              <FormCard step="04" title={tf('photosTitle')}>
                 <MediaPicker
                   entityType="intakes"
                   items={media}
@@ -1534,7 +1562,11 @@ function IntakeForm({
 
           <aside className="sticky top-24 grid min-w-[280px] flex-[0_0_320px] gap-5">
             <Card
-              title={intakeId === undefined ? 'Перед створенням' : 'Зведення'}
+              title={
+                intakeId === undefined
+                  ? tf('beforeCreateTitle')
+                  : tf('summaryTitle')
+              }
             >
               <div className="border-app-line bg-app-input rounded-[14px] border p-4">
                 <p
@@ -1543,7 +1575,7 @@ function IntakeForm({
                     named ? 'text-white' : 'text-app-dim',
                   )}
                 >
-                  {named ? values.name : 'Назва не вказана'}
+                  {named ? values.name : tf('nameMissing')}
                 </p>
                 <p className="text-app-muted mt-1.5 text-sm">
                   {[
@@ -1551,18 +1583,18 @@ function IntakeForm({
                     intake?.createdBy.displayName ?? null,
                   ]
                     .filter((part) => part !== null)
-                    .join(' · ') || 'Дата не вказана'}
+                    .join(' · ') || tf('dateMissing')}
                 </p>
                 <p className="text-app-dim mt-3 font-mono text-[12px]">
                   {intakeId === undefined
-                    ? 'номер присвоїться автоматично'
-                    : `${values.name || 'без назви'} · ${String(positions)} ${plural(positions, ['позиція', 'позиції', 'позицій'])}`}
+                    ? tf('numberAssigned')
+                    : `${values.name || tf('untitledLower')} · ${tf('positionsCount', { count: positions })}`}
                 </p>
               </div>
               {canManageFinance ? (
                 <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
                   <dt className="text-app-muted text-sm font-semibold">
-                    Сума придбання
+                    {tf('summaryCost')}
                   </dt>
                   <dd
                     className={cn(
@@ -1573,16 +1605,18 @@ function IntakeForm({
                     {hasCost && cost !== null ? money(cost) : '—'}
                   </dd>
                   <dt className="text-app-muted text-sm font-semibold">
-                    Витрати
+                    {tf('summaryExpenses')}
                   </dt>
                   <dd
                     className="text-app-dim font-mono text-[15px] tabular-nums"
-                    title="Супутні витрати приймання поки не зберігає"
+                    title={tf('expensesNotStored')}
                   >
                     —
                   </dd>
                   <div className="bg-app-line col-span-2 my-1 h-px" />
-                  <dt className="text-[15px] font-bold text-white">Разом</dt>
+                  <dt className="text-[15px] font-bold text-white">
+                    {tf('summaryTotal')}
+                  </dt>
                   <dd className="font-mono text-[20px] text-white tabular-nums">
                     {money(hasCost && cost !== null ? cost : 0)}
                   </dd>
@@ -1622,20 +1656,17 @@ function IntakeForm({
                 {saveLabel}
               </Button>
               <p className="text-app-dim mt-3 text-[13px] leading-[1.5]">
-                {intakeId === undefined
-                  ? 'Далі відкриється картка приймання, де додаються запчастини.'
-                  : 'Зміна суми придбання перерахує собівартість усіх позицій партії.'}
+                {intakeId === undefined ? tf('nextOnCreate') : tf('nextOnEdit')}
               </p>
             </Card>
 
             {intakeId ? (
-              <Card title="Видалити приймання">
+              <Card title={tf('deleteIntake')}>
                 <p className="text-app-muted text-[13px] leading-[1.5]">
-                  У прийманні {positions}{' '}
-                  {plural(positions, ['позиція', 'позиції', 'позицій'])}.
+                  {tf('deleteInfo', { count: positions })}{' '}
                   {positions > 0
-                    ? ' Партію з деталями видалити не можна.'
-                    : ' Видалення прибирає приймання назавжди.'}
+                    ? tf('deleteInfoBlocked')
+                    : tf('deleteInfoFree')}
                 </p>
                 <Button
                   className="mt-3 min-h-10 w-full text-[13px] font-bold"
@@ -1644,7 +1675,7 @@ function IntakeForm({
                   type="button"
                   variant="danger"
                 >
-                  Видалити приймання
+                  {tf('deleteIntake')}
                 </Button>
               </Card>
             ) : null}
@@ -1653,13 +1684,13 @@ function IntakeForm({
       </div>
 
       <ConfirmDialog
-        confirmLabel="Видалити"
-        consequence="Приймання буде видалено назавжди. Якщо до нього прив’язані деталі, видалення буде відхилено."
+        confirmLabel={tc('delete')}
+        consequence={tf('deleteConsequence')}
         onConfirm={() => void remove()}
         onOpenChange={setConfirmDelete}
         open={confirmDelete}
         pending={busy}
-        title="Видалити приймання?"
+        title={tf('deleteTitle')}
       />
     </div>
   )
@@ -1667,11 +1698,16 @@ function IntakeForm({
 
 /** The four states a yard actually sorts parts into, mapped to the server enum. */
 const INTAKE_CONDITIONS = [
-  { value: 'good', label: 'б/в' },
-  { value: 'refurbished', label: 'після ремонту' },
-  { value: 'new', label: 'нова' },
-  { value: 'scrap', label: 'під відновлення' },
+  { value: 'good', label: 'conditionUsed' },
+  { value: 'refurbished', label: 'conditionRefurbished' },
+  { value: 'new', label: 'conditionNew' },
+  { value: 'scrap', label: 'conditionForRebuild' },
 ] as const
+const conditionOptions = (tf: Translate<(typeof intakeFormMessages)['uk']>) =>
+  INTAKE_CONDITIONS.map((option) => ({
+    value: option.value,
+    label: tf(option.label),
+  }))
 
 /** A part added in this sitting, kept only for the session's own recap. */
 interface AddedPart {
@@ -1691,6 +1727,8 @@ function PartForm({
 }) {
   const navigate = useNavigate()
   const cabinet = useCabinet()
+  const t = useT(intakesMessages)
+  const tf = useT(intakeFormMessages)
   const params = useParams<{ tenant: string }>()
   const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
   const canPlace = allowedToView(cabinetModules.inventory, cabinet)
@@ -1700,7 +1738,7 @@ function PartForm({
     oemCode: '',
     condition: 'good',
     quantity: 1,
-    unit: 'шт',
+    unit: PIECES,
     price: '',
     zoneId: '',
     notes: '',
@@ -1769,7 +1807,7 @@ function PartForm({
     if (busy) return
     if (!named) {
       setFieldErrors({
-        name: 'Вкажіть назву деталі, як її шукатимуть на складі — наприклад, «Бампер передній».',
+        name: tf('partNameRequired'),
       })
       return
     }
@@ -1813,7 +1851,7 @@ function PartForm({
           id: created.id,
           name: request.name,
           quantity: values.quantity,
-          unit: values.unit || 'шт',
+          unit: values.unit || PIECES,
           zone: zone?.code ?? null,
         },
         ...current,
@@ -1840,9 +1878,7 @@ function PartForm({
   }
 
   const backTo = `${base}/${intakeId}`
-  const saveNote = named
-    ? 'Деталь отримає QR-код і потрапить у це приймання.'
-    : 'Вкажіть назву, щоб додати деталь.'
+  const saveNote = named ? tf('saveNoteNamed') : tf('saveNoteUnnamed')
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
@@ -1853,14 +1889,14 @@ function PartForm({
             to={backTo}
           >
             <ChevronLeft aria-hidden className="size-3.5" />
-            До приймання
+            {tf('backToIntake')}
           </Link>
           <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>Склад</span>
+            <span>{t('eyebrow')}</span>
             <span aria-hidden className="text-white/20">
               /
             </span>
-            <span>Приймання</span>
+            <span>{t('title')}</span>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
@@ -1870,7 +1906,7 @@ function PartForm({
             disabled={busy || !named}
             onClick={(event) => void save(event, true)}
           >
-            Зберегти й додати ще
+            {tf('saveAndAddAnother')}
           </Button>
           <Button
             aria-busy={busy}
@@ -1879,7 +1915,7 @@ function PartForm({
             onClick={(event) => void save(event)}
             variant="primary"
           >
-            Додати деталь
+            {tf('addPart')}
           </Button>
         </div>
       </div>
@@ -1887,11 +1923,11 @@ function PartForm({
       <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="min-w-0">
           <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
-            Додати деталь
+            {tf('addPart')}
           </h1>
           <p className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm font-medium">
             <span>
-              Деталь у приймання{' '}
+              {tf('partInIntake')}{' '}
               <span className="text-app-ink font-semibold">
                 {intake?.name ?? '…'}
               </span>
@@ -1902,8 +1938,7 @@ function PartForm({
                   ·
                 </span>
                 <span>
-                  уже {intake.partsCount}{' '}
-                  {plural(intake.partsCount, ['позиція', 'позиції', 'позицій'])}
+                  {tf('alreadyPositions', { count: intake.partsCount })}
                 </span>
               </>
             ) : null}
@@ -1918,36 +1953,33 @@ function PartForm({
           onSubmit={(event) => void save(event)}
         >
           <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
-            <FormCard step="01" title="Опис">
+            <FormCard step="01" title={tf('descriptionTitle')}>
               <Field
                 error={fieldErrors.name}
-                hint="Назва, за якою деталь шукатимуть на складі"
-                label="Назва"
+                hint={tf('partNameHint')}
+                label={tf('nameLabel')}
                 required
               >
                 <TextInput
                   autoComplete="off"
                   name="name"
                   onChange={(event) => update('name', event.target.value)}
-                  placeholder="Наприклад: Фара права LED"
+                  placeholder={tf('partNamePlaceholder')}
                   required
                   value={values.name}
                 />
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Тип деталі">
+                <Field label={tf('partType')}>
                   <TextInput
                     autoComplete="off"
                     name="partType"
                     onChange={(event) => update('partType', event.target.value)}
-                    placeholder="оптика, кузов, ходова"
+                    placeholder={tf('partTypePlaceholder')}
                     value={values.partType}
                   />
                 </Field>
-                <Field
-                  hint="Приймання поки не зберігає OEM — впишіть його на картці деталі"
-                  label="OEM-код"
-                >
+                <Field hint={tf('oemHint')} label={tf('oemLabel')}>
                   <TextInput
                     className="font-mono"
                     disabled
@@ -1957,11 +1989,11 @@ function PartForm({
                   />
                 </Field>
               </div>
-              <Field label="Стан">
+              <Field label={tf('conditionLabel')}>
                 <PillGroup
-                  label="Стан деталі"
+                  label={tf('conditionGroup')}
                   onChange={(next) => update('condition', next)}
-                  options={INTAKE_CONDITIONS}
+                  options={conditionOptions(tf)}
                   value={values.condition}
                 />
               </Field>
@@ -1970,27 +2002,27 @@ function PartForm({
             <FormCard
               description={
                 unitCost === null
-                  ? 'Собівартість позиції з’явиться, щойно приймання матиме ціну й позиції.'
-                  : `Собівартість підтягується з партії — ${money(unitCost)} на одиницю.`
+                  ? tf('unitCostPending')
+                  : tf('unitCostFromBatch', { amount: money(unitCost) })
               }
               step="02"
-              title="Кількість і ціна"
+              title={tf('quantityPriceTitle')}
             >
               <div className="grid items-start gap-4 sm:grid-cols-3">
-                <Field label="Кількість" required>
+                <Field label={tf('quantity')} required>
                   <QuantityStepper
-                    label="Кількість деталей"
+                    label={tf('quantityStepper')}
                     min={1}
                     onChange={(next) => update('quantity', next)}
                     value={values.quantity}
                   />
                 </Field>
-                <Field hint="Фіксована одиниця обліку" label="Одиниця">
+                <Field hint={tf('unitHint')} label={tf('unitLabel')}>
                   <TextInput
                     autoComplete="off"
                     name="unit"
                     readOnly
-                    value="шт"
+                    value={unitLabel(t, values.unit)}
                   />
                 </Field>
                 <Field hint="Бажана ціна, у доларах" label="Ціна продажу">
@@ -2007,18 +2039,18 @@ function PartForm({
 
             {canPlace ? (
               <FormCard
-                description="Можна вказати комірку зараз або розмістити партію пізніше."
+                description={tf('placementHint')}
                 step="03"
-                title="Розміщення"
+                title={tf('placementTitle')}
               >
                 <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
-                  <Field label="Комірка">
+                  <Field label={tf('cell')}>
                     <SelectInput
                       name="zoneId"
                       onChange={(event) => update('zoneId', event.target.value)}
                       value={values.zoneId}
                     >
-                      <option value="">Без комірки</option>
+                      <option value="">{tf('noCell')}</option>
                       {zones.map((item) => (
                         <option key={item.id} value={item.id}>
                           {item.code} · {item.name}
@@ -2029,17 +2061,20 @@ function PartForm({
                   <Button
                     className="min-h-11"
                     disabled
-                    title="Сканування комірки камерою ще не підключене до цієї форми"
+                    title={tf('scanUnavailable')}
                     type="button"
                   >
                     <ScanLine aria-hidden />
-                    Сканувати
+                    {tf('scan')}
                   </Button>
                 </div>
               </FormCard>
             ) : null}
 
-            <FormCard step={canPlace ? '04' : '03'} title="Фото й нотатки">
+            <FormCard
+              step={canPlace ? '04' : '03'}
+              title={tf('photosNotesTitle')}
+            >
               {canUploadMedia ? (
                 <MediaPicker
                   beforeDispatch={() => {
@@ -2054,11 +2089,11 @@ function PartForm({
                   onChange={setMedia}
                 />
               ) : null}
-              <Field label="Нотатки">
+              <Field label={tf('notes')}>
                 <TextArea
                   name="notes"
                   onChange={(event) => update('notes', event.target.value)}
-                  placeholder="Дефекти, комплектність"
+                  placeholder={tf('notesPlaceholder')}
                   rows={2}
                   value={values.notes}
                 />
@@ -2067,7 +2102,7 @@ function PartForm({
           </div>
 
           <aside className="sticky top-24 grid min-w-[280px] flex-[0_0_320px] gap-5">
-            <Card title="Нова позиція">
+            <Card title={tf('newPosition')}>
               <div className="border-app-line bg-app-input rounded-[14px] border p-4">
                 <p
                   className={cn(
@@ -2075,26 +2110,31 @@ function PartForm({
                     named ? 'text-white' : 'text-app-dim',
                   )}
                 >
-                  {named ? values.name : 'Назва деталі'}
+                  {named ? values.name : tf('partNameFallback')}
                 </p>
                 <div className="mt-2.5 flex flex-wrap items-center gap-2">
                   <StatusPill tone={zone ? 'ok' : 'warn'}>
-                    {zone ? `Доступно · ${zone.code}` : 'Без комірки'}
+                    {zone
+                      ? tf('availableInCell', { code: zone.code })
+                      : tf('noCell')}
                   </StatusPill>
                   <span className="text-app-muted font-mono text-[13px]">
-                    {values.quantity} {values.unit || 'шт'}
+                    {t('quantityWithUnit', {
+                      count: values.quantity,
+                      unit: unitLabel(t, values.unit || PIECES),
+                    })}
                   </span>
                 </div>
               </div>
               <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
                 <dt className="text-app-muted text-sm font-semibold">
-                  Собівартість
+                  {tf('unitCost')}
                 </dt>
                 <dd className="font-mono text-[16px] text-white tabular-nums">
                   {unitCost === null ? '—' : money(unitCost)}
                 </dd>
                 <dt className="text-app-muted text-sm font-semibold">
-                  Ціна продажу
+                  {tf('salePrice')}
                 </dt>
                 <dd
                   className={cn(
@@ -2105,7 +2145,9 @@ function PartForm({
                   {hasPrice ? money(price) : '—'}
                 </dd>
                 <div className="bg-app-line col-span-2 my-1 h-px" />
-                <dt className="text-[16px] font-bold text-white">Маржа</dt>
+                <dt className="text-[16px] font-bold text-white">
+                  {tf('margin')}
+                </dt>
                 <dd
                   className={cn(
                     'font-mono text-[20px] tabular-nums',
@@ -2128,7 +2170,7 @@ function PartForm({
                 type="submit"
                 variant="primary"
               >
-                Додати деталь
+                {tf('addPart')}
               </Button>
               <p className="text-app-dim mt-3 text-[13px] leading-[1.5]">
                 {saveNote}
@@ -2143,7 +2185,7 @@ function PartForm({
                   </span>
                 }
                 bodyClassName="p-0"
-                title="Додані щойно"
+                title={tf('justAdded')}
               >
                 <ul className="divide-app-line grid divide-y">
                   {added.map((item) => (
@@ -2156,11 +2198,14 @@ function PartForm({
                           {item.name}
                         </span>
                         <span className="text-app-muted mt-0.5 block font-mono text-[13px]">
-                          {item.zone ?? 'без комірки'}
+                          {item.zone ?? tf('noCellLower')}
                         </span>
                       </span>
                       <span className="text-app-muted font-mono text-[14px] whitespace-nowrap">
-                        {item.quantity} {item.unit}
+                        {t('quantityWithUnit', {
+                          count: item.quantity,
+                          unit: unitLabel(t, item.unit),
+                        })}
                       </span>
                     </li>
                   ))}
@@ -2212,6 +2257,8 @@ function BatchPartsForm({
 }) {
   const navigate = useNavigate()
   const cabinet = useCabinet()
+  const t = useT(intakesMessages)
+  const tf = useT(intakeFormMessages)
   const params = useParams<{ tenant: string }>()
   const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
   const canPlace = allowedToView(cabinetModules.inventory, cabinet)
@@ -2304,7 +2351,7 @@ function BatchPartsForm({
         partType: null,
         condition,
         quantity: Math.max(1, Math.round(batchNumber(row.quantity)) || 1),
-        unit: 'шт',
+        unit: PIECES,
         notes: null,
         photoKeys: [],
         ...(zoneId ? { inventoryZoneIds: [zoneId] } : {}),
@@ -2329,7 +2376,11 @@ function BatchPartsForm({
         setSaved(index + 1)
       } catch (error: unknown) {
         setProblem(
-          `${normalizeApiProblem(error).message} Прийнято ${String(index)} з ${String(filled.length)} позицій — решта лишилася в таблиці.`,
+          tf('batchFailed', {
+            error: normalizeApiProblem(error).message,
+            done: index,
+            total: filled.length,
+          }),
         )
         setRows(filled.slice(index))
         setBusy(false)
@@ -2342,8 +2393,8 @@ function BatchPartsForm({
   const backTo = `${base}/${intakeId}`
   const ready = filled.length > 0
   const saveLabel = ready
-    ? `Прийняти ${String(filled.length)} ${plural(filled.length, ['позицію', 'позиції', 'позицій'])}`
-    : 'Прийняти партію'
+    ? tf('acceptPositions', { count: filled.length })
+    : tf('acceptBatch')
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
@@ -2354,22 +2405,19 @@ function BatchPartsForm({
             to={backTo}
           >
             <ChevronLeft aria-hidden className="size-3.5" />
-            До приймання
+            {tf('backToIntake')}
           </Link>
           <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>Приймання</span>
+            <span>{t('title')}</span>
             <span aria-hidden className="text-white/20">
               /
             </span>
-            <span className="text-app-muted">Партією</span>
+            <span className="text-app-muted">{tf('batchCrumb')}</span>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
-          <Button
-            disabled
-            title="Чернетки партії поки не зберігаються — заповніть таблицю за один раз"
-          >
-            Зберегти чернетку
+          <Button disabled title={tf('draftsUnavailable')}>
+            {tf('saveDraft')}
           </Button>
           <Button
             aria-busy={busy}
@@ -2387,12 +2435,12 @@ function BatchPartsForm({
       <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="min-w-0">
           <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-            Приймання партією
+            {tf('batchTitle')}
           </h1>
           <p className="text-app-muted mt-3 text-[15px]">
-            {intake?.name ?? 'Приймання без назви'}
+            {intake?.name ?? tf('untitledIntake')}
             {intake ? ' · ' : null}
-            додавайте позиції рядками.
+            {tf('batchSubtitle')}
           </p>
         </div>
 
@@ -2406,17 +2454,16 @@ function BatchPartsForm({
         >
           <div className="grid min-w-[360px] flex-[1_1_620px] gap-5">
             <section
-              aria-label="Позиції партії"
+              aria-label={tf('batchPositions')}
               className="border-app-line bg-app-raised overflow-hidden rounded-[18px] border"
             >
               <div className="flex flex-wrap items-center justify-between gap-4 px-6 pt-[18px] pb-4">
                 <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-                  Позиції партії
+                  {tf('batchPositions')}
                 </h2>
                 <div className="flex flex-wrap items-center gap-2.5">
                   <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
-                    {rows.length}{' '}
-                    {plural(rows.length, ['рядок', 'рядки', 'рядків'])}
+                    {tf('rowsCount', { count: rows.length })}
                   </span>
                   {canPlace ? (
                     <Button
@@ -2424,7 +2471,7 @@ function BatchPartsForm({
                       onClick={fillDown}
                       type="button"
                     >
-                      Заповнити комірку вниз
+                      {tf('fillCellDown')}
                     </Button>
                   ) : null}
                 </div>
@@ -2438,10 +2485,10 @@ function BatchPartsForm({
                     : 'sm:grid-cols-[2.4fr_0.8fr_1fr_44px]',
                 )}
               >
-                <span>Назва</span>
-                <span className="text-right">К-сть</span>
+                <span>{tf('columnName')}</span>
+                <span className="text-right">{tf('columnQuantity')}</span>
                 <span className="text-right">Ціна, $</span>
-                {canPlace ? <span>Комірка</span> : null}
+                {canPlace ? <span>{tf('cell')}</span> : null}
                 <span />
               </div>
               <ul className="divide-app-line border-app-line grid divide-y border-t sm:border-t-0">
@@ -2456,16 +2503,18 @@ function BatchPartsForm({
                     key={row.key}
                   >
                     <TextInput
-                      aria-label={`Назва позиції ${String(index + 1)}`}
+                      aria-label={tf('rowName', { number: index + 1 })}
                       autoComplete="off"
                       onChange={(event) =>
                         update(row.key, 'name', event.target.value)
                       }
-                      placeholder={`${String(index + 1)} · назва запчастини`}
+                      placeholder={tf('rowNamePlaceholder', {
+                        number: index + 1,
+                      })}
                       value={row.name}
                     />
                     <TextInput
-                      aria-label={`Кількість у рядку ${String(index + 1)}`}
+                      aria-label={tf('rowQuantity', { number: index + 1 })}
                       inputMode="numeric"
                       numeric
                       onChange={(event) =>
@@ -2486,14 +2535,16 @@ function BatchPartsForm({
                     />
                     {canPlace ? (
                       <SelectInput
-                        aria-label={`Комірка в рядку ${String(index + 1)}`}
+                        aria-label={tf('rowCell', { number: index + 1 })}
                         onChange={(event) =>
                           update(row.key, 'zoneId', event.target.value)
                         }
                         value={row.zoneId}
                       >
                         <option value="">
-                          {sharedZoneId === '' ? 'Без комірки' : 'Як у партії'}
+                          {sharedZoneId === ''
+                            ? tf('noCell')
+                            : tf('sameAsBatch')}
                         </option>
                         {zones.map((zone) => (
                           <option key={zone.id} value={zone.id}>
@@ -2503,7 +2554,7 @@ function BatchPartsForm({
                       </SelectInput>
                     ) : null}
                     <Button
-                      aria-label={`Прибрати рядок ${String(index + 1)}`}
+                      aria-label={tf('removeRow', { number: index + 1 })}
                       className="min-w-11 px-0"
                       disabled={rows.length <= 1}
                       onClick={() =>
@@ -2526,23 +2577,21 @@ function BatchPartsForm({
                   type="button"
                 >
                   <Plus aria-hidden />
-                  Додати рядок
+                  {tf('addRow')}
                 </Button>
                 <p className="text-app-dim text-[13px]">
-                  Порожні рядки не зберігаються
+                  {tf('emptyRowsSkipped')}
                 </p>
               </div>
             </section>
 
-            <Card title="Спільні властивості">
-              <p className="text-app-muted -mt-1 text-sm">
-                Застосуються до всіх позицій без власного значення.
-              </p>
+            <Card title={tf('sharedTitle')}>
+              <p className="text-app-muted -mt-1 text-sm">{tf('sharedHint')}</p>
               <PillGroup
                 className="mt-4 w-fit"
-                label="Стан позицій партії"
+                label={tf('sharedCondition')}
                 onChange={setCondition}
-                options={INTAKE_CONDITIONS}
+                options={conditionOptions(tf)}
                 value={condition}
               />
               {canPlace && zones.length > 0 ? (
@@ -2558,7 +2607,7 @@ function BatchPartsForm({
                     onClick={() => setSharedZoneId('')}
                     type="button"
                   >
-                    Без комірки
+                    {tf('noCell')}
                   </button>
                   {zones.map((zone) => (
                     <button
@@ -2582,24 +2631,24 @@ function BatchPartsForm({
           </div>
 
           <aside className="sticky top-24 grid min-w-[300px] flex-[0_1_320px] gap-5">
-            <Card title="Партія">
+            <Card title={tf('batchCard')}>
               <dl className="grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
                 <dt className="text-app-muted text-sm font-semibold">
-                  Позицій
+                  {tf('positions')}
                 </dt>
                 <dd className="font-mono text-[15px] text-white tabular-nums">
                   {filled.length}
                 </dd>
                 <dt className="text-app-muted text-sm font-semibold">
-                  Одиниць
+                  {tf('units')}
                 </dt>
                 <dd className="font-mono text-[15px] text-white tabular-nums">
-                  {units} шт
+                  {t('quantityWithUnit', { count: units, unit: t('pcs') })}
                 </dd>
                 {canManageFinance ? (
                   <>
                     <dt className="text-app-muted text-sm font-semibold">
-                      Сума за цінами
+                      {tf('priceSum')}
                     </dt>
                     <dd
                       className={cn(
@@ -2623,21 +2672,21 @@ function BatchPartsForm({
               </Button>
               <p className="text-app-dim mt-2.5 text-xs leading-[1.5]">
                 {busy
-                  ? `Прийнято ${String(saved)} з ${String(filled.length)} — не закривайте сторінку.`
+                  ? tf('batchProgress', { saved, total: filled.length })
                   : ready
-                    ? 'Позиції отримають QR-коди й потраплять у це приймання.'
-                    : 'Заповніть хоча б одну назву, щоб прийняти партію.'}
+                    ? tf('batchReady')
+                    : tf('batchNotReady')}
               </p>
             </Card>
 
-            <Card title="Перевірка">
+            <Card title={tf('checkTitle')}>
               <ul className="grid gap-2.5">
                 {[
                   {
                     state: ready ? 'ok' : 'idle',
                     label: ready
-                      ? `${String(filled.length)} ${plural(filled.length, ['позиція готова', 'позиції готові', 'позицій готові'])} до приймання`
-                      : 'Жодної заповненої позиції',
+                      ? tf('readyPositions', { count: filled.length })
+                      : tf('nothingFilled'),
                   },
                   ...(canPlace
                     ? [
@@ -2645,8 +2694,8 @@ function BatchPartsForm({
                           state: withoutCell === 0 && ready ? 'ok' : 'warn',
                           label:
                             withoutCell === 0 && ready
-                              ? 'Усі позиції мають комірку'
-                              : `${String(withoutCell)} ${plural(withoutCell, ['позиція', 'позиції', 'позицій'])} без комірки — розмістите пізніше`,
+                              ? tf('allHaveCell')
+                              : tf('withoutCell', { count: withoutCell }),
                         },
                       ]
                     : []),
@@ -2654,8 +2703,8 @@ function BatchPartsForm({
                     state: withoutPrice === 0 && ready ? 'ok' : 'warn',
                     label:
                       withoutPrice === 0 && ready
-                        ? 'Ціни вказані'
-                        : `${String(withoutPrice)} ${plural(withoutPrice, ['позиція', 'позиції', 'позицій'])} без ціни`,
+                        ? tf('pricesSet')
+                        : tf('withoutPrice', { count: withoutPrice }),
                   },
                 ].map((check) => (
                   <li
