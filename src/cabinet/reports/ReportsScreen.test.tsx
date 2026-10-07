@@ -737,17 +737,22 @@ it('aborts an in-flight detail poll when the screen unmounts', async () => {
 })
 
 it('renders reports in English (UK) with UK dates and file sizes', async () => {
+  const items = [
+    report('completed'),
+    {
+      ...report('processing'),
+      id: 'report-2',
+      itemsTotal: 40,
+      itemsProcessed: 18,
+    },
+    { ...report('failed'), id: 'report-3' },
+  ]
+  // Polling must not replace rows with another test's fixture.
+  vi.mocked(reportsApi.get).mockImplementation((id: string) =>
+    Promise.resolve(items.find((item) => item.id === id) ?? items[0]!),
+  )
   vi.mocked(reportsApi.list).mockResolvedValue({
-    items: [
-      report('completed'),
-      {
-        ...report('processing'),
-        id: 'report-2',
-        itemsTotal: 40,
-        itemsProcessed: 18,
-      },
-      { ...report('failed'), id: 'report-3' },
-    ],
+    items,
     page: 1,
     pageSize: 20,
     total: 3,
@@ -761,6 +766,10 @@ it('renders reports in English (UK) with UK dates and file sizes', async () => {
   )
 
   expect(await screen.findByText('Ready')).toBeVisible()
+  // "Ready" is also a filter label: wait for the list rows themselves.
+  expect(
+    await screen.findByText('45% processed · 18 of 40'),
+  ).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Reports' })).toBeVisible()
   expect(screen.getByText('Processing')).toBeVisible()
   expect(screen.getByText('45% processed · 18 of 40')).toBeInTheDocument()

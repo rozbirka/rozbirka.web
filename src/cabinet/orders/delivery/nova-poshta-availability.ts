@@ -2,10 +2,14 @@ import { isProblemCode, normalizeApiProblem } from '@/api/errors'
 import type { BusinessCountry } from '@/api/tenant-settings'
 import { useTenantSettings } from '@/auth/useTenantSettings'
 import { translate, type Locale } from '@/i18n'
+import { isPhoneCountry, phoneExample as examplePhone } from '@/lib/phone'
+import {
+  INTEGRATION_COUNTRY_UNAVAILABLE,
+  isNovaPoshtaAvailable,
+} from '../../integrations/integration-labels'
 import { deliveryMessages } from './messages'
 
-/** Core's answer when the tenant's country has no Nova Poshta. */
-export const INTEGRATION_COUNTRY_UNAVAILABLE = 'integration_country_unavailable'
+export { INTEGRATION_COUNTRY_UNAVAILABLE }
 
 /**
  * Nova Poshta serves Ukrainian businesses only; Core refuses it elsewhere with
@@ -13,17 +17,11 @@ export const INTEGRATION_COUNTRY_UNAVAILABLE = 'integration_country_unavailable'
  * country is not known yet is an older tenant — those are all Ukrainian — so
  * it keeps the pre-region behaviour.
  */
-export const novaPoshtaAvailableIn = (
-  country: BusinessCountry | null,
-): boolean => country === null || country === 'UA'
+export const novaPoshtaAvailableIn = isNovaPoshtaAvailable
 
 /** An international number a person in that country would recognise. */
 export const phoneExample = (country: BusinessCountry | null): string =>
-  country === 'GB'
-    ? '+44 7700 900123'
-    : country === 'PL'
-      ? '+48 512 345 678'
-      : '+380 67 123 45 67'
+  examplePhone(isPhoneCountry(country) ? country : 'UA')
 
 export interface NovaPoshtaAvailability {
   available: boolean

@@ -73,9 +73,12 @@ import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import {
+  customerPhoneForSave,
   newCustomerPhoneDraft,
   normalizeCustomerPhoneDraft,
 } from '../customers/customer-phone'
+import { useTenantSettings } from '@/auth/useTenantSettings'
+import { isPhoneCountry } from '@/lib/phone'
 import { OrderCustomerDrawer } from './OrderCustomerDrawer'
 import { OrderItemDrawer } from './OrderItemDrawer'
 import { OrderPaymentDrawer } from './OrderPaymentDrawer'
@@ -535,6 +538,8 @@ export function OrderForm({
 }) {
   const t = useT(orderFormMessages)
   const tc = useT(commonMessages)
+  const tenantCountry = useTenantSettings().countryCode
+  const phoneCountry = isPhoneCountry(tenantCountry) ? tenantCountry : 'UA'
   const errorMessage = useErrorMessage()
   const cabinet = useCabinet()
   const toast = useOptionalToast()
@@ -571,8 +576,8 @@ export function OrderForm({
   const customerPickerRef = useRef<HTMLDivElement>(null)
   const [newCustomerName, setNewCustomerName] = useState('')
   const [newCustomerFormOpen, setNewCustomerFormOpen] = useState(false)
-  const [newCustomerPhone, setNewCustomerPhone] = useState(
-    newCustomerPhoneDraft,
+  const [newCustomerPhone, setNewCustomerPhone] = useState(() =>
+    newCustomerPhoneDraft(phoneCountry),
   )
   const [customerConflict, setCustomerConflict] =
     useState<CustomerPhoneConflict | null>(null)
@@ -594,7 +599,7 @@ export function OrderForm({
   const closeNewCustomerForm = () => {
     setNewCustomerFormOpen(false)
     setNewCustomerName('')
-    setNewCustomerPhone(newCustomerPhoneDraft())
+    setNewCustomerPhone(newCustomerPhoneDraft(phoneCountry))
     setCustomerConflict(null)
   }
   const linkedCustomerId =
@@ -709,10 +714,7 @@ export function OrderForm({
       const result = await customersApi.create(
         {
           name: newCustomerName.trim(),
-          phone:
-            newCustomerPhone.trim() === newCustomerPhoneDraft()
-              ? null
-              : newCustomerPhone.trim() || null,
+          phone: customerPhoneForSave(newCustomerPhone, phoneCountry),
           notes: null,
         },
         { signal: scope.signal },

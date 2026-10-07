@@ -294,12 +294,13 @@ export function DeliveryOrderBody({
                       : t('npUnavailable', {
                           status: integrationStatusPresentation(
                             carrier.status,
+                            locale,
                           ).label.toLocaleLowerCase(locale),
                         })}
                   </p>
                   {carrier.errorCode === null ? null : (
                     <p className="mt-1">
-                      {integrationErrorMessage(carrier.errorCode)}
+                      {integrationErrorMessage(carrier.errorCode, locale)}
                     </p>
                   )}
                   <p className="mt-1">{t('npDownNote')}</p>
