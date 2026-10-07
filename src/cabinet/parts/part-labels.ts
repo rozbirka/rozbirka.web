@@ -1,48 +1,92 @@
 import type { StatusTone } from '@/components/app'
+import { SOURCE_LOCALE, translate, type Locale, type MessageKey } from '@/i18n'
+import { partLabelMessages } from './part-labels-messages'
 
 /**
  * Server vocabularies said the way the yard says them. Kept in one place so a
- * part reads the same on its own screen, in the scanner and in a list.
+ * part reads the same on its own screen, in the scanner and in a list. Every
+ * helper takes the interface locale (Ukrainian when omitted); screens pass
+ * `useLocale().locale`.
  */
+type LabelKey = MessageKey<typeof partLabelMessages>
+
+const label = (locale: Locale, key: LabelKey) =>
+  translate(partLabelMessages, locale, key)
+
+const PHRASE_KEYS: Readonly<Record<string, LabelKey>> = {
+  good: 'phraseGood',
+  fair: 'phraseFair',
+  scrap: 'phraseScrap',
+  new: 'conditionNew',
+  used: 'conditionUsed',
+  refurbished: 'conditionRefurbished',
+  damaged: 'conditionDamaged',
+}
+
+const CONDITION_KEYS: Readonly<Record<string, LabelKey>> = {
+  new: 'conditionNew',
+  used: 'conditionUsed',
+  good: 'conditionGood',
+  fair: 'conditionFair',
+  scrap: 'conditionScrap',
+  refurbished: 'conditionRefurbished',
+  damaged: 'conditionDamaged',
+}
+
 /**
  * The condition as a phrase, not a word with "стан" glued on: «На запчастини
  * стан» is not Ukrainian, and neither is «Вживана стан».
  */
-export const conditionPhrase = (value: string) =>
-  ({
-    good: 'Хороший стан',
-    fair: 'Задовільний стан',
-    scrap: 'На запчастини',
-    new: 'Нова',
-    used: 'Вживана',
-    refurbished: 'Відновлена',
-    damaged: 'Пошкоджена',
-  })[value.toLowerCase()] ?? conditionLabel(value)
+export const conditionPhrase = (
+  value: string,
+  locale: Locale = SOURCE_LOCALE,
+) => {
+  const key = PHRASE_KEYS[value.toLowerCase()]
+  return key ? label(locale, key) : conditionLabel(value, locale)
+}
 
-export const conditionLabel = (value: string) =>
-  ({
-    new: 'Нова',
-    used: 'Вживана',
-    good: 'Хороший',
-    fair: 'Задовільний',
-    scrap: 'На запчастини',
-    refurbished: 'Відновлена',
-    damaged: 'Пошкоджена',
-  })[value.toLowerCase()] ?? value
+export const conditionLabel = (
+  value: string,
+  locale: Locale = SOURCE_LOCALE,
+) => {
+  const key = CONDITION_KEYS[value.toLowerCase()]
+  return key ? label(locale, key) : value
+}
 
-export const sourceLabel = (value: string) =>
-  ({ car: 'Авто', batch: 'Партія' })[value.toLowerCase()] ??
-  'Джерело недоступне'
+export const sourceLabel = (value: string, locale: Locale = SOURCE_LOCALE) => {
+  const kind = value.toLowerCase()
+  return label(
+    locale,
+    kind === 'car'
+      ? 'sourceCar'
+      : kind === 'batch'
+        ? 'sourceBatch'
+        : 'sourceUnavailable',
+  )
+}
 
-export const originLabel = (id: string, name: string) =>
-  (({ car: 'З авто', batch: 'З партії' })[id.toLowerCase()] ?? name) || id
+export const originLabel = (
+  id: string,
+  name: string,
+  locale: Locale = SOURCE_LOCALE,
+) => {
+  const kind = id.toLowerCase()
+  if (kind === 'car') return label(locale, 'originCar')
+  if (kind === 'batch') return label(locale, 'originBatch')
+  return name || id
+}
 
 /**
- * A facet value said in Ukrainian. The server sends the code and its own name;
- * where we know the code, our word wins, otherwise the server's name stands.
+ * A facet value in the interface language. The server sends the code and its
+ * own name; where we know the code, our word wins, otherwise the server's name
+ * stands.
  */
-export const conditionFacetLabel = (id: string, name: string) => {
-  const known = conditionLabel(id)
+export const conditionFacetLabel = (
+  id: string,
+  name: string,
+  locale: Locale = SOURCE_LOCALE,
+) => {
+  const known = conditionLabel(id, locale)
   return known === id ? name || id : known
 }
 
@@ -53,12 +97,28 @@ export const conditionFacetLabel = (id: string, name: string) => {
  */
 export const partStatusPresentation = (
   status: string,
+  locale: Locale = SOURCE_LOCALE,
 ): { label: string; tone: StatusTone } => {
-  if (status === 'available') return { label: 'Доступна', tone: 'ok' }
-  if (status === 'reserved') return { label: 'У резерві', tone: 'warn' }
-  if (status === 'sold') return { label: 'Продана', tone: 'danger' }
+  if (status === 'available')
+    return { label: label(locale, 'statusAvailable'), tone: 'ok' }
+  if (status === 'reserved')
+    return { label: label(locale, 'statusReserved'), tone: 'warn' }
+  if (status === 'sold')
+    return { label: label(locale, 'statusSold'), tone: 'danger' }
   return { label: status, tone: 'neutral' }
 }
+
+/**
+ * The unit every part is counted in. Core stores the Ukrainian «шт», so that
+ * value (or none) reads as pieces in the interface language; any other unit
+ * the server sends is shown as it came.
+ */
+export const PIECES_UNIT = 'шт'
+
+export const unitLabel = (
+  unit: string | null | undefined,
+  locale: Locale = SOURCE_LOCALE,
+) => (!unit || unit === PIECES_UNIT ? label(locale, 'unitPieces') : unit)
 
 /** The dot that stands in for the pill in a filter row. */
 export const partStatusDot = {
@@ -67,35 +127,44 @@ export const partStatusDot = {
   sold: 'bg-state-danger',
 } as const
 
-/** Event names from the part history, in plain words. */
-export const historyLabel = (value: string) =>
-  ({
-    created: 'Створено',
-    updated: 'Змінено',
-    edited: 'Змінено',
-    reserved: 'Зарезервовано',
-    reservationcancelled: 'Резерв скасовано',
-    reservation_cancelled: 'Резерв скасовано',
-    added: 'Додано',
-    released: 'Резерв знято',
-    sold: 'Продано',
-    returned: 'Повернено',
-    moved: 'Переміщено',
-    placed: 'Розміщено',
-    unplaced: 'Знято з місця',
-    deleted: 'Видалено',
-  })[value] ?? value
+const HISTORY_KEYS: Readonly<Record<string, LabelKey>> = {
+  created: 'historyCreated',
+  updated: 'historyUpdated',
+  edited: 'historyUpdated',
+  reserved: 'historyReserved',
+  reservationcancelled: 'historyReservationCancelled',
+  reservation_cancelled: 'historyReservationCancelled',
+  added: 'historyAdded',
+  released: 'historyReleased',
+  sold: 'historySold',
+  returned: 'historyReturned',
+  moved: 'historyMoved',
+  placed: 'historyPlaced',
+  unplaced: 'historyUnplaced',
+  deleted: 'historyDeleted',
+}
 
-const historyFieldLabels: Record<string, string> = {
-  quantity: 'кількість',
-  price: 'ціна',
-  unit_price: 'ціна',
-  sale_price: 'ціна продажу',
-  status: 'статус',
-  name: 'назва',
-  condition: 'стан',
-  zone: 'зона',
-  location: 'місце',
+/** Event names from the part history, in plain words. */
+export const historyLabel = (value: string, locale: Locale = SOURCE_LOCALE) => {
+  const key = HISTORY_KEYS[value]
+  return key ? label(locale, key) : value
+}
+
+const HISTORY_FIELD_KEYS: Readonly<Record<string, LabelKey>> = {
+  quantity: 'fieldQuantity',
+  price: 'fieldPrice',
+  unit_price: 'fieldPrice',
+  sale_price: 'fieldSalePrice',
+  status: 'fieldStatus',
+  name: 'fieldName',
+  condition: 'fieldCondition',
+  zone: 'fieldZone',
+  location: 'fieldLocation',
+}
+
+const fieldLabel = (key: string, locale: Locale) => {
+  const known = HISTORY_FIELD_KEYS[key]
+  return known ? label(locale, known) : key.replaceAll('_', ' ')
 }
 
 /**
@@ -105,7 +174,10 @@ const historyFieldLabels: Record<string, string> = {
  *
  * Ids are dropped on purpose — the order is already a link on the same row.
  */
-export const historyDetails = (raw: string | null): string[] => {
+export const historyDetails = (
+  raw: string | null,
+  locale: Locale = SOURCE_LOCALE,
+): string[] => {
   const trimmed = raw?.trim()
   if (!trimmed) return []
   if (!trimmed.startsWith('{')) return [trimmed]
@@ -125,10 +197,7 @@ export const historyDetails = (raw: string | null): string[] => {
         !/(^|_)id$/.test(key) &&
         key !== 'order_number',
     )
-    .map(
-      ([key, value]) =>
-        `${historyFieldLabels[key] ?? key.replaceAll('_', ' ')} ${String(value)}`,
-    )
+    .map(([key, value]) => `${fieldLabel(key, locale)} ${String(value)}`)
 }
 
 /**

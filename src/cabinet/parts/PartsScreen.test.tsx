@@ -12,6 +12,7 @@ import {
 } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { FEATURES } from '@/api/types'
+import { LocaleProvider, type Locale } from '@/i18n'
 import { PartsScreen } from './PartsScreen'
 
 const inventoryMocks = vi.hoisted(() => ({
@@ -2927,4 +2928,188 @@ it('offers the existing import link when the tenant flag is enabled', async () =
   expect(
     await screen.findByRole('link', { name: 'Імпорт запчастин' }),
   ).toHaveAttribute('href', '/app/yard/parts/imports')
+})
+
+function renderInLocale(locale: Locale, entry: string, path: string) {
+  return render(
+    <LocaleProvider locale={locale} syncDocumentLang={false}>
+      <MemoryRouter initialEntries={[entry]}>
+        <Routes>
+          <Route
+            element={<PartsScreen definition={partsDefinition as never} />}
+            path={path}
+          />
+        </Routes>
+      </MemoryRouter>
+    </LocaleProvider>,
+  )
+}
+
+it('reads the parts directory in English (UK)', async () => {
+  partMocks.search.mockResolvedValue({
+    items: pickableRows,
+    page: 1,
+    pageSize: 30,
+    total: 2,
+    totalPages: 3,
+  })
+  renderInLocale('en-GB', '/app/yard/parts', '/app/:tenant/parts')
+
+  await screen.findByRole('link', { name: 'Фара ліва' })
+  expect(screen.getByRole('heading', { name: 'Parts', level: 1 })).toBeVisible()
+  expect(screen.getByLabelText('Search parts')).toHaveAttribute(
+    'placeholder',
+    'Search: name, OEM, QR or VIN',
+  )
+  expect(screen.getByRole('link', { name: 'Add part' })).toBeVisible()
+  expect(screen.getByRole('button', { name: /In stock/ })).toBeVisible()
+  expect(screen.getByRole('button', { name: /For parts/ })).toBeVisible()
+  expect(screen.getByRole('button', { name: /From an intake/ })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Reset filters' })).toBeDisabled()
+  expect(
+    screen.getByRole('columnheader', { name: 'Source car' }),
+  ).toBeInTheDocument()
+  expect(screen.getAllByText('Available').length).toBeGreaterThan(0)
+  expect(screen.getByText('Page 1 of 3')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Next page' })).toHaveTextContent(
+    'Next',
+  )
+  expect(screen.queryByText('Деталі')).toBeNull()
+})
+
+it('reads the new-part form in English (UK) and Polish', async () => {
+  cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
+  const user = userEvent.setup()
+  const { unmount } = renderInLocale(
+    'en-GB',
+    '/app/yard/parts/new?intake_id=intake-1',
+    '/app/:tenant/parts/new',
+  )
+
+  const drawer = await screen.findByRole('dialog', { name: 'New part' })
+  expect(within(drawer).getByText('Warehouse · Parts')).toBeVisible()
+  expect(
+    within(drawer).getByRole('button', { name: 'Create part' }),
+  ).toBeVisible()
+  expect(within(drawer).getByRole('button', { name: 'Cancel' })).toBeVisible()
+  expect(
+    await within(drawer).findByRole('option', {
+      name: 'Партія серпень · Постачальник',
+    }),
+  ).toBeInTheDocument()
+  expect(within(drawer).getByLabelText('Source intake')).toBeVisible()
+  expect(within(drawer).getByRole('radio', { name: 'For parts' })).toBeVisible()
+  expect(
+    within(drawer).getByText(
+      'Faulty or incomplete. For stripping or rebuilding.',
+    ),
+  ).toBeVisible()
+  expect(within(drawer).getByLabelText('Unit')).toHaveValue('pcs')
+  expect(within(drawer).getByLabelText('Part photos')).toBeInTheDocument()
+  expect(within(drawer).getByText(/Enter the part name/)).toBeVisible()
+
+  await user.type(within(drawer).getByLabelText('Name'), 'Hub carrier RR')
+  expect(within(drawer).getByText('You can add photos later.')).toBeVisible()
+
+  await user.click(within(drawer).getByRole('button', { name: 'Create part' }))
+  expect(await within(drawer).findByText('Part created.')).toBeVisible()
+  expect(partMocks.create).toHaveBeenCalledWith(
+    expect.objectContaining({ unit: 'шт', name: 'Hub carrier RR' }),
+    expect.anything(),
+  )
+  unmount()
+
+  renderInLocale('pl', '/app/yard/parts/new', '/app/:tenant/parts/new')
+  const polish = await screen.findByRole('dialog', { name: 'Nowa część' })
+  expect(
+    within(polish).getByRole('button', { name: 'Utwórz część' }),
+  ).toBeVisible()
+  expect(within(polish).getByLabelText('Jednostka')).toHaveValue('szt.')
+})
+
+it('reads a known source error code on create in the interface language', async () => {
+  cabinetMock.snapshot.features.add(FEATURES.IntakeManagement)
+  partMocks.create.mockRejectedValueOnce({
+    kind: 'conflict',
+    code: 'PART_SOURCE_ARCHIVED',
+    message: 'Server text',
+  })
+  const user = userEvent.setup()
+  renderInLocale(
+    'en-GB',
+    '/app/yard/parts/new?intake_id=intake-1',
+    '/app/:tenant/parts/new',
+  )
+  const drawer = await screen.findByRole('dialog', { name: 'New part' })
+  await user.type(within(drawer).getByLabelText('Name'), 'Bumper')
+  await user.click(within(drawer).getByRole('button', { name: 'Create part' }))
+
+  expect(
+    await within(drawer).findByText(
+      'The car is archived — new parts can’t be added to it. Choose another car.',
+    ),
+  ).toBeVisible()
+
+  partMocks.create.mockRejectedValueOnce({
+    kind: 'conflict',
+    code: 'SOMETHING_NEW',
+    message: 'Message from the server',
+  })
+  await user.click(within(drawer).getByRole('button', { name: 'Create part' }))
+  expect(
+    await within(drawer).findByText('Message from the server'),
+  ).toBeVisible()
+})
+
+it('reads the part page and its history in English (UK)', async () => {
+  partMocks.get.mockResolvedValue({
+    id: 'part-1',
+    name: 'Bumper',
+    condition: 'fair',
+    status: 'sold',
+    source: 'free',
+    quantityTotal: 1,
+    quantityAvailable: 0,
+    quantityReserved: 0,
+    quantitySoldTotal: 1,
+    oemCode: null,
+    unit: 'шт',
+    effectiveSalePrice: 180,
+    desiredSalePrice: 180,
+    photos: [],
+    order: null,
+    soldOrders: null,
+    reservations: null,
+    createdByName: 'Olena',
+    createdAt: '2026-08-28T12:00:00Z',
+  })
+  partMocks.history.mockResolvedValue({
+    partId: 'part-1',
+    events: [
+      {
+        id: 'e1',
+        eventType: 'sold',
+        data: '{"quantity":2}',
+        createdAt: '2026-09-19T21:48:00Z',
+        user: { id: 'u1', name: 'Oleh' },
+        order: { id: 'o-1037', number: 1037 },
+      },
+    ],
+  })
+  renderInLocale(
+    'en-GB',
+    '/app/yard/parts/part-1',
+    '/app/:tenant/parts/:partId',
+  )
+
+  const history = await screen.findByRole('region', { name: 'History' })
+  // 21:48 UTC is already the next day in Kyiv, the business time zone.
+  expect(within(history).getByText('20/09/2026')).toBeVisible()
+  expect(within(history).getByText('00:48')).toBeVisible()
+  expect(within(history).getByText('Sold')).toBeVisible()
+  expect(within(history).getByText('No. 1037')).toBeVisible()
+  expect(screen.getByText('Fair condition')).toBeVisible()
+  expect(screen.getByText('0 photos')).toBeVisible()
+  expect(screen.getByText('per 1 pcs')).toBeVisible()
+  expect(screen.getByRole('link', { name: 'Back to warehouse' })).toBeVisible()
 })
