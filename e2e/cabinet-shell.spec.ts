@@ -1628,11 +1628,27 @@ test('inventory overview remains usable at mobile and desktop widths @cabinet-sm
       page.getByRole('region', { name: 'Склади' }).getByText('Основний склад'),
     ).toBeVisible()
     await expect(page.getByText('INV-001')).toBeVisible()
+    const layout = await page.evaluate(() => ({
+      width: window.innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      fonts: document.fonts.status,
+      overflowing: [...document.querySelectorAll('body *')]
+        .map((element) => ({
+          tag: element.tagName,
+          classes: element.getAttribute('class'),
+          text: element.textContent?.slice(0, 80),
+          left: element.getBoundingClientRect().left,
+          right: element.getBoundingClientRect().right,
+        }))
+        .filter(
+          (element) =>
+            element.right > window.innerWidth + 0.5 || element.left < -0.5,
+        ),
+    }))
     expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= window.innerWidth,
-      ),
-    ).toBe(true)
+      layout.scrollWidth,
+      JSON.stringify(layout, null, 2),
+    ).toBeLessThanOrEqual(layout.width)
   }
 
   await page.goto('/app/koval/inventory/sessions/session-1')
