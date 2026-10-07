@@ -1,3 +1,5 @@
+import { apiMessage } from './api-messages'
+
 // Same vehicle catalog and make formatting as the mobile car form.
 const base = 'https://vpic.nhtsa.dot.gov/api/vehicles'
 export interface CarCatalogItem {
@@ -41,18 +43,17 @@ async function load(
     credentials: 'omit',
     referrerPolicy: 'no-referrer',
   })
-  if (!response.ok)
-    throw new Error('Не вдалося завантажити каталог автомобілів.')
+  if (!response.ok) throw new Error(apiMessage('carCatalogFailed'))
   const payload = (await response.json()) as {
     Results?: Record<string, unknown>[]
   }
   if (!Array.isArray(payload.Results))
-    throw new Error('Некоректна відповідь каталогу автомобілів.')
+    throw new Error(apiMessage('carCatalogInvalid'))
   const items = payload.Results.map((row) => {
     const id = row[kind === 'make' ? 'MakeId' : 'Model_ID']
     const name = row[kind === 'make' ? 'MakeName' : 'Model_Name']
     if (typeof id !== 'number' || typeof name !== 'string')
-      throw new Error('Некоректна відповідь каталогу автомобілів.')
+      throw new Error(apiMessage('carCatalogInvalid'))
     return { id, name: kind === 'make' ? makeName(name) : name }
   }).sort((a, b) => a.name.localeCompare(b.name))
   cache.set(path, items)
