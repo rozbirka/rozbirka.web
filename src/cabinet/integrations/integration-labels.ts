@@ -1,89 +1,130 @@
 import type { StatusTone } from '@/components/app'
 import type { ApiProblem } from '@/api/contracts'
 import type { Integration, IntegrationStatus } from '@/api/integrations'
+import type { BusinessCountry } from '@/api/tenant-settings'
+import { SOURCE_LOCALE, translate, type Locale } from '@/i18n'
+import { integrationLabelMessages } from './integration-label-messages'
+
+type LabelKey = Extract<keyof (typeof integrationLabelMessages)['uk'], string>
+
+const hasLabel = (key: string): key is LabelKey =>
+  Object.prototype.hasOwnProperty.call(integrationLabelMessages.uk, key)
+
+const label = (
+  locale: Locale,
+  key: LabelKey,
+  params?: Readonly<Record<string, string | number>>,
+) => translate(integrationLabelMessages, locale, key, params)
 
 export const NOVA_POSHTA = 'nova_poshta'
 
-const STATUS: Record<IntegrationStatus, { label: string; tone: StatusTone }> = {
-  draft: { label: 'Не налаштована', tone: 'neutral' },
-  active: { label: 'Підключена', tone: 'ok' },
-  inactive: { label: 'Вимкнена', tone: 'neutral' },
-  error: { label: 'Помилка', tone: 'danger' },
+/** Core answers 409 with this code when NP is asked for outside Ukraine. */
+export const INTEGRATION_COUNTRY_UNAVAILABLE = 'integration_country_unavailable'
+
+/**
+ * Nova Poshta serves Ukrainian businesses only (REQ-LOCALIZATION AC-18/AC-36):
+ * the business country decides, never the personal language. An unknown
+ * country keeps the pre-region behaviour and Core still has the last word.
+ */
+export function isNovaPoshtaAvailable(
+  country: BusinessCountry | null,
+): boolean {
+  return country === null || country === 'UA'
+}
+
+/** `true` when a problem is Core refusing NP for the business country. */
+export function isCountryUnavailableProblem(
+  problem: Pick<ApiProblem, 'code'>,
+): boolean {
+  return problem.code?.toLowerCase() === INTEGRATION_COUNTRY_UNAVAILABLE
+}
+
+/** Title and sentence of the "not in your country" state. */
+export function novaPoshtaUnavailableText(locale: Locale = SOURCE_LOCALE): {
+  title: string
+  message: string
+} {
+  return {
+    title: label(locale, 'unavailable.title'),
+    message: label(locale, `error.${INTEGRATION_COUNTRY_UNAVAILABLE}`),
+  }
+}
+
+/**
+ * The server's own message for a failed request, except where the code means
+ * something this cabinet explains itself (NP refused for the country).
+ */
+export function integrationProblemMessage(
+  problem: Pick<ApiProblem, 'code' | 'message'>,
+  locale: Locale = SOURCE_LOCALE,
+): string {
+  return isCountryUnavailableProblem(problem)
+    ? label(locale, `error.${INTEGRATION_COUNTRY_UNAVAILABLE}`)
+    : problem.message
+}
+
+const STATUS_TONES: Record<IntegrationStatus, StatusTone> = {
+  draft: 'neutral',
+  active: 'ok',
+  inactive: 'neutral',
+  error: 'danger',
 }
 
 /** An unknown status is shown as it came, not guessed into a colour. */
-export function integrationStatusPresentation(status: string): {
+export function integrationStatusPresentation(
+  status: string,
+  locale: Locale = SOURCE_LOCALE,
+): {
   label: string
   tone: StatusTone
 } {
-  return (
-    STATUS[status as IntegrationStatus] ?? { label: status, tone: 'neutral' }
-  )
+  const key = `status.${status}`
+  return Object.prototype.hasOwnProperty.call(STATUS_TONES, status) &&
+    hasLabel(key)
+    ? {
+        label: label(locale, key),
+        tone: STATUS_TONES[status as IntegrationStatus],
+      }
+    : { label: status, tone: 'neutral' }
 }
-
-const MARKS: Record<string, string> = { [NOVA_POSHTA]: 'НП' }
 
 /** The square badge in the list. Two letters, so a long name never wraps it. */
-export function integrationMark(code: string): string {
-  return MARKS[code] ?? code.slice(0, 2).toUpperCase()
+export function integrationMark(
+  code: string,
+  locale: Locale = SOURCE_LOCALE,
+): string {
+  const key = `mark.${code}`
+  return hasLabel(key) ? label(locale, key) : code.slice(0, 2).toUpperCase()
 }
 
-const KINDS: Record<string, string> = { [NOVA_POSHTA]: 'Доставка' }
-
-export function integrationKind(code: string): string | null {
-  return KINDS[code] ?? null
+export function integrationKind(
+  code: string,
+  locale: Locale = SOURCE_LOCALE,
+): string | null {
+  const key = `kind.${code}`
+  return hasLabel(key) ? label(locale, key) : null
 }
 
 /**
  * Codes Core returns in `lastErrorCode`. Anything unknown keeps the code
  * itself — an invented explanation would be worse than an honest one.
  */
-const ERRORS: Record<string, string> = {
-  integration_not_configured:
-    'Ключ доступу ще не збережено. Додайте його, щоб перевірити підключення.',
-  integration_settings_invalid:
-    'Збережені дані підключення не підходять. Замініть ключ доступу.',
-  integration_account_unverified:
-    'Сервіс відхилив ключ: він недійсний або відкликаний у кабінеті перевізника.',
-  integration_provider_unavailable:
-    'Сервіс не відповів на запит. Дані збережені — спробуйте перевірити ще раз за кілька хвилин.',
-  integration_verification_required:
-    'Підключення потрібно перевірити, перш ніж вмикати інтеграцію.',
-  integration_operation_in_progress:
-    'Попередня дія ще виконується. Дочекайтеся її завершення.',
-  integration_already_exists: 'Таку інтеграцію вже підключено.',
-  nova_poshta_unauthorized:
-    'Нова пошта не прийняла ключ — він недійсний або відкликаний.',
-  nova_poshta_rejected: 'Нова пошта відхилила запит.',
-  nova_poshta_ratelimited:
-    'Нова пошта обмежила частоту запитів. Спробуйте за кілька хвилин.',
-  nova_poshta_unavailable:
-    'Нова пошта зараз недоступна. Спробуйте за кілька хвилин.',
-  nova_poshta_invalidresponse:
-    'Нова пошта відповіла у незрозумілому форматі. Спробуйте ще раз.',
-  nova_poshta_notsubmitted:
-    'Запит до Нової пошти не був надісланий. Спробуйте ще раз.',
-  nova_poshta_disabled: 'Інтеграція Нової пошти вимкнена або не налаштована.',
-  dispatch_point_required:
-    'Немає точки відправлення за замовчуванням — оформити доставку буде неможливо.',
-  dispatch_point_unavailable:
-    'Відділення точки відправлення не приймає відправлень.',
-  division_not_found: 'Відділення точки відправлення більше не знайдено.',
+export function integrationErrorMessage(
+  code: string,
+  locale: Locale = SOURCE_LOCALE,
+): string {
+  const key = `error.${code.toLowerCase()}`
+  return key !== 'error.unknown' && hasLabel(key)
+    ? label(locale, key)
+    : label(locale, 'error.unknown', { code })
 }
 
-export function integrationErrorMessage(code: string): string {
-  return ERRORS[code] ?? `Сервіс повернув помилку: ${code}`
-}
-
-const CHECKS: Record<string, string> = {
-  configuration: 'Ключ доступу збережено',
-  authorization: 'Ключ приймає сервіс',
-  default_dispatch_point: 'Є точка відправлення за замовчуванням',
-  sender_division: 'Відділення відправника приймає відправлення',
-}
-
-export function diagnosticCheckLabel(code: string): string {
-  return CHECKS[code] ?? code
+export function diagnosticCheckLabel(
+  code: string,
+  locale: Locale = SOURCE_LOCALE,
+): string {
+  const key = `check.${code}`
+  return hasLabel(key) ? label(locale, key) : code
 }
 
 /** Nova Poshta is the only provider Core can back today. */
@@ -96,53 +137,15 @@ export function isSupportedIntegration(integration: Integration): boolean {
  * short enough to sit beside a heading; the sentence says what the yard should
  * expect next, because half of these states resolve on their own.
  */
-const TRACKING_STATES: Record<
-  string,
-  { label: string; tone: StatusTone; detail: string }
-> = {
-  Disabled: {
-    label: 'Не підключено',
-    tone: 'neutral',
-    detail:
-      'Автоматичні оновлення вимкнені. Статуси доставки оновлюються періодичною перевіркою.',
-  },
-  Connecting: {
-    label: 'Підключаємо',
-    tone: 'warn',
-    detail: 'Підключаємо оновлення — реєструємо підписку в Новій пошті.',
-  },
-  AwaitingVerification: {
-    label: 'Очікуємо підтвердження',
-    tone: 'warn',
-    detail:
-      'Очікуємо підтвердження від Нової пошти: перше оновлення на нашу адресу ще не надійшло.',
-  },
-  Connected: {
-    label: 'Підключено',
-    tone: 'ok',
-    detail: 'Нові накладні підключатимуться автоматично.',
-  },
-  RetryPending: {
-    label: 'Спроба не вдалася',
-    tone: 'warn',
-    detail: 'Не вдалося завершити дію. Повторимо автоматично.',
-  },
-  NeedsCredentials: {
-    label: 'Перевірте API-ключ',
-    tone: 'danger',
-    detail:
-      'Нова пошта не прийняла ключ. Введіть діючий ключ, щоб продовжити підключення.',
-  },
-  NeedsReview: {
-    label: 'Потрібна перевірка',
-    tone: 'danger',
-    detail: 'Підключення потребує перевірки.',
-  },
-  Disconnecting: {
-    label: 'Відключаємо',
-    tone: 'neutral',
-    detail: 'Відключаємо оновлення — чекаємо підтвердження від Нової пошти.',
-  },
+const TRACKING_TONES: Record<string, StatusTone> = {
+  Disabled: 'neutral',
+  Connecting: 'warn',
+  AwaitingVerification: 'warn',
+  Connected: 'ok',
+  RetryPending: 'warn',
+  NeedsCredentials: 'danger',
+  NeedsReview: 'danger',
+  Disconnecting: 'neutral',
 }
 
 /** States that change on their own, so the screen keeps asking while in one. */
@@ -153,19 +156,30 @@ const TRACKING_TRANSITIONAL = new Set([
   'RetryPending',
 ])
 
-export function trackingStatePresentation(state: string): {
+export function trackingStatePresentation(
+  state: string,
+  locale: Locale = SOURCE_LOCALE,
+): {
   label: string
   tone: StatusTone
   detail: string
 } {
-  return (
-    TRACKING_STATES[state] ?? {
-      label: 'Стан невідомий',
-      tone: 'neutral',
-      detail:
-        'Сервіс повернув стан, якого ця версія кабінету не знає. Оновіть стан — нічого не зламано.',
+  const key = `tracking.${state}`
+  const detailKey = `tracking.${state}.detail`
+  const tone = Object.prototype.hasOwnProperty.call(TRACKING_TONES, state)
+    ? TRACKING_TONES[state]
+    : undefined
+  if (tone !== undefined && hasLabel(key) && hasLabel(detailKey))
+    return {
+      label: label(locale, key),
+      tone,
+      detail: label(locale, detailKey),
     }
-  )
+  return {
+    label: label(locale, 'tracking.unknown'),
+    tone: 'neutral',
+    detail: label(locale, 'tracking.unknown.detail'),
+  }
 }
 
 export function isTrackingTransitional(state: string): boolean {
@@ -175,79 +189,52 @@ export function isTrackingTransitional(state: string): boolean {
 /**
  * Why Core stopped, in `reasonCode`. Two families arrive here: what our own
  * reconciliation found, and `provider_*` — the carrier's refusal, named after
- * its failure kind.
+ * its failure kind. Null when there is nothing to explain, so a caller can
+ * skip the line.
  */
-const TRACKING_REASONS: Record<string, string> = {
-  callback_not_received:
-    'Нова пошта не надіслала жодного оновлення на нашу адресу. Перевірте, чи ключ має доступ до підписок, і повторіть спробу.',
-  ambiguous_subscription:
-    'У кабінеті Нової пошти знайдено кілька підписок на ту саму адресу. Приберіть зайві в кабінеті перевізника, тоді повторіть.',
-  subscription_not_confirmed:
-    'Нова пошта не підтвердила створення підписки. Повторіть спробу — якщо повториться, перевірте підписки в кабінеті перевізника.',
-  integration_inactive:
-    'Інтеграція вимкнена. Увімкніть її, щоб отримувати оновлення.',
-  provider_unauthorized:
-    'Нова пошта не прийняла ключ — він недійсний або відкликаний.',
-  provider_rejected: 'Нова пошта відхилила запит на підписку.',
-  provider_notfound: 'Нова пошта не знайшла цієї підписки.',
-  provider_unavailable: 'Нова пошта не відповідає. Спробуємо ще раз.',
-  provider_ratelimited:
-    'Нова пошта обмежила частоту запитів. Спробуємо ще раз пізніше.',
-  provider_invalidresponse:
-    'Нова пошта відповіла у незрозумілому форматі. Спробуємо ще раз.',
-  provider_notsubmitted:
-    'Запит до Нової пошти не був надісланий. Нічого не створено.',
-  provider_outcomeunknown:
-    'Не вдалося підтвердити результат запиту до Нової пошти.',
-  provider_disabled: 'Інтеграцію Нової пошти вимкнено або не налаштовано.',
+export function trackingReasonMessage(
+  code: string | null,
+  locale: Locale = SOURCE_LOCALE,
+): string | null {
+  if (code === null) return null
+  const key = `reason.${code}`
+  return key !== 'reason.unknown' && hasLabel(key)
+    ? label(locale, key)
+    : label(locale, 'reason.unknown')
 }
 
-/** Null when there is nothing to explain, so a caller can skip the line. */
-export function trackingReasonMessage(code: string | null): string | null {
-  if (code === null) return null
-  return (
-    TRACKING_REASONS[code] ??
-    'Сервіс не завершив дію й не назвав причини, яку ми вміємо пояснити. Спробуйте повторити.'
-  )
+/** Carrier codes a tracking command can fail with, and their sentence. */
+const TRACKING_PROVIDER_PROBLEMS: Record<string, LabelKey> = {
+  nova_poshta_unauthorized: 'error.nova_poshta_unauthorized',
+  nova_poshta_rejected: 'reason.provider_rejected',
+  nova_poshta_ratelimited: 'error.nova_poshta_ratelimited',
+  nova_poshta_unavailable: 'error.nova_poshta_unavailable',
+  nova_poshta_disabled: 'error.nova_poshta_disabled',
+  [INTEGRATION_COUNTRY_UNAVAILABLE]: `error.${INTEGRATION_COUNTRY_UNAVAILABLE}`,
 }
 
 /**
- * A failed command, in Ukrainian. Core answers in its own words — sometimes
- * English, always about its internals — so the code decides the text and the
- * body is never shown.
+ * A failed command, in the interface language. Core answers in its own
+ * words — about its internals — so the code decides the text and the body is
+ * never shown.
  */
-export function trackingProblemMessage(problem: ApiProblem): string {
+export function trackingProblemMessage(
+  problem: ApiProblem,
+  locale: Locale = SOURCE_LOCALE,
+): string {
   const code = problem.code?.toLowerCase() ?? ''
-  const byCode: Record<string, string> = {
-    tracking_credentials_required:
-      'Потрібен API-ключ Нової пошти — збереженого ключа для підписок немає.',
-    tracking_credentials_invalid:
-      'Такий ключ не підходить. Скопіюйте ключ із кабінету Нової пошти ще раз.',
-    tracking_callback_not_configured:
-      'У цьому середовищі автоматичні оновлення ще не налаштовані.',
-    tracking_busy:
-      'Ця дія вже виконується. Стан оновлено — перевірте його за кілька секунд.',
-    tracking_manual_webhook_configured:
-      'Для цієї інтеграції вже налаштований ручний вебхук. Приберіть збережений секрет нижче — самі ми його не вимикаємо.',
-    tracking_disconnect_required:
-      'Спершу завершіть відключення попередньої підписки, тоді підключайте нову.',
-    tracking_retry_unavailable:
-      'Повторювати вже нічого: стан підписки змінився. Оновіть стан.',
-    nova_poshta_unauthorized:
-      'Нова пошта не прийняла ключ — він недійсний або відкликаний.',
-    nova_poshta_rejected: 'Нова пошта відхилила запит на підписку.',
-    nova_poshta_ratelimited:
-      'Нова пошта обмежила частоту запитів. Спробуйте за кілька хвилин.',
-    nova_poshta_unavailable:
-      'Нова пошта зараз недоступна. Спробуйте за кілька хвилин.',
-    nova_poshta_disabled: 'Інтеграція Нової пошти вимкнена або не налаштована.',
-  }
-  if (byCode[code] !== undefined) return byCode[code]
-  if (problem.kind === 'forbidden')
-    return 'Немає доступу: потрібні права на налаштування команди.'
-  if (problem.kind === 'not-found')
-    return 'Підписки для цієї інтеграції немає. Оновіть стан.'
+  const own = `problem.${code}`
+  if (code.startsWith('tracking_') && hasLabel(own)) return label(locale, own)
+  const provider = Object.prototype.hasOwnProperty.call(
+    TRACKING_PROVIDER_PROBLEMS,
+    code,
+  )
+    ? TRACKING_PROVIDER_PROBLEMS[code]
+    : undefined
+  if (provider !== undefined) return label(locale, provider)
+  if (problem.kind === 'forbidden') return label(locale, 'problem.forbidden')
+  if (problem.kind === 'not-found') return label(locale, 'problem.notFound')
   if (problem.kind === 'network' || problem.kind === 'timeout')
-    return 'Немає звʼязку з сервером. Ми не повторюємо дію самі — перевірте стан і за потреби натисніть ще раз.'
-  return 'Не вдалося виконати дію. Перевірте стан і спробуйте ще раз.'
+    return label(locale, 'problem.network')
+  return label(locale, 'problem.generic')
 }

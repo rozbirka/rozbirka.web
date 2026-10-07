@@ -5,6 +5,7 @@ import {
   type NovaPoshtaDispatchPoint,
 } from '@/api/integrations'
 import { normalizeApiProblem } from '@/api/errors'
+import { useLocale, useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
@@ -12,9 +13,8 @@ import {
   DispatchPointForm,
   type DispatchPointSubmission,
 } from './dispatch-point-form'
-
-const NO_BRANCH_NAME =
-  'Точку створили до переходу на український API Нової пошти, тож назви відділення в ній немає. Відкрийте точку й оберіть відділення ще раз.'
+import { integrationProblemMessage } from './integration-labels'
+import { npFormsMessages } from './np-forms-messages'
 
 type LoadState =
   | { kind: 'loading' }
@@ -38,6 +38,8 @@ export function DispatchPointsPanel({
   onPointsChange?: ((count: number) => void) | undefined
 }) {
   const cabinet = useCabinet()
+  const { locale } = useLocale()
+  const t = useT(npFormsMessages)
   const tenant = cabinet.targetTenant
   const generation = cabinet.snapshot?.generation
   const scopeKey = `${generation ?? ''}:${tenant?.id ?? ''}:${integrationId}`
@@ -91,11 +93,7 @@ export function DispatchPointsPanel({
   const reload = useCallback(() => setReloads((value) => value + 1), [])
 
   if (tenant === null) {
-    return (
-      <p className="text-app-muted text-sm">
-        Оберіть розбірку, щоб відкрити точки відправлення.
-      </p>
-    )
+    return <p className="text-app-muted text-sm">{t('pickBusinessPoints')}</p>
   }
 
   const guard = (): boolean => {
@@ -103,7 +101,7 @@ export function DispatchPointsPanel({
       requireLatestMutation()
       return true
     } catch {
-      setFormError('Дія недоступна: немає прав на налаштування команди.')
+      setFormError(t('noAccess'))
       return false
     }
   }
@@ -131,7 +129,10 @@ export function DispatchPointsPanel({
       setEditing(null)
       reload()
     } catch (error) {
-      if (mountedRef.current) setFormError(normalizeApiProblem(error).message)
+      if (mountedRef.current)
+        setFormError(
+          integrationProblemMessage(normalizeApiProblem(error), locale),
+        )
     } finally {
       if (mountedRef.current) setSaving(false)
     }
@@ -147,7 +148,10 @@ export function DispatchPointsPanel({
       setEditing(null)
       reload()
     } catch (error) {
-      if (mountedRef.current) setFormError(normalizeApiProblem(error).message)
+      if (mountedRef.current)
+        setFormError(
+          integrationProblemMessage(normalizeApiProblem(error), locale),
+        )
     } finally {
       if (mountedRef.current) setSaving(false)
     }
@@ -157,9 +161,7 @@ export function DispatchPointsPanel({
     <div className="grid gap-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <p className="text-app-muted max-w-[62ch] text-[14px] leading-6 text-pretty">
-          Звідки ви відправляєте посилки. Дані точки підставляються у
-          відправника накладної, точка за замовчуванням — під час оформлення
-          доставки.
+          {t('pointsIntro')}
         </p>
         <Button
           disabled={state.kind !== 'ready'}
@@ -169,19 +171,19 @@ export function DispatchPointsPanel({
           }}
           variant="primary"
         >
-          Додати точку
+          {t('addPoint')}
         </Button>
       </div>
 
       {state.kind === 'error' && (
         <Notice tone="danger">
-          Не вдалося завантажити точки. Дані точок не змінені —{' '}
+          {t('pointsLoadError')}{' '}
           <button
             className="underline underline-offset-4"
             onClick={reload}
             type="button"
           >
-            спробувати ще раз
+            {t('tryAgainLower')}
           </button>
           .
         </Notice>
@@ -191,19 +193,16 @@ export function DispatchPointsPanel({
       )}
 
       {state.kind === 'loading' && (
-        <p className="text-app-muted text-sm">
-          Завантажуємо точки відправлення…
-        </p>
+        <p className="text-app-muted text-sm">{t('pointsLoading')}</p>
       )}
 
       {state.kind === 'ready' && points.length === 0 && (
         <section className="border-app-line bg-app-raised grid justify-items-center gap-3 rounded-[20px] border px-10 py-14 text-center">
           <h2 className="text-[22px] font-extrabold tracking-[-0.02em] text-white">
-            Точок відправлення ще немає
+            {t('noPointsTitle')}
           </h2>
           <p className="text-app-muted max-w-[46ch] text-[14px] leading-6 text-pretty">
-            Додайте хоча б одну точку, щоб оформлювати доставку із замовлень.
-            Перша активна точка стане точкою за замовчуванням.
+            {t('noPointsText')}
           </p>
           <Button
             onClick={() => {
@@ -212,14 +211,14 @@ export function DispatchPointsPanel({
             }}
             variant="primary"
           >
-            Додати точку
+            {t('addPoint')}
           </Button>
         </section>
       )}
 
       {state.kind === 'ready' && points.length > 0 && (
         <section
-          aria-label="Точки відправлення"
+          aria-label={t('pointsTitle')}
           className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
         >
           <ul className="divide-app-line grid divide-y">
@@ -235,21 +234,21 @@ export function DispatchPointsPanel({
                     </span>
                     {point.isDefault && (
                       <span className="border-brand/30 text-brand rounded-full border bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-bold">
-                        За замовчуванням
+                        {t('defaultBadge')}
                       </span>
                     )}
                   </div>
                   <p className="text-app-dim mt-0.5 truncate text-xs">
-                    {point.companyName ?? 'Відправник — фізична особа'}
+                    {point.companyName ?? t('privateSender')}
                   </p>
                 </div>
                 <div className="min-w-0 flex-[1_1_180px]">
                   {point.warehouseName === null ? (
                     <p
                       className="text-app-dim text-[13px] text-pretty"
-                      title={NO_BRANCH_NAME}
+                      title={t('noBranchName')}
                     >
-                      Назва відділення недоступна
+                      {t('branchNameMissing')}
                     </p>
                   ) : (
                     <p className="text-app-ink truncate text-[14px] font-semibold">
@@ -266,7 +265,7 @@ export function DispatchPointsPanel({
                   </p>
                 </div>
                 <StatusPill tone={point.isActive ? 'ok' : 'neutral'}>
-                  {point.isActive ? 'Активна' : 'Неактивна'}
+                  {point.isActive ? t('active') : t('inactive')}
                 </StatusPill>
                 <Button
                   onClick={() => {
@@ -274,14 +273,13 @@ export function DispatchPointsPanel({
                     setEditing({ mode: 'edit', point })
                   }}
                 >
-                  Змінити
+                  {t('change')}
                 </Button>
               </li>
             ))}
           </ul>
           <p className="text-app-dim border-app-line border-t px-6 py-4 text-[13px] leading-5 text-pretty">
-            Точка за замовчуванням підставляється під час оформлення. Менеджер
-            може вибрати іншу.
+            {t('defaultFootnote')}
           </p>
         </section>
       )}

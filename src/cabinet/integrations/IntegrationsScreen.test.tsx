@@ -5,6 +5,9 @@ import { MemoryRouter } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { integrationsApi, type Integration } from '@/api/integrations'
 import type { Tenant } from '@/api/types'
+import { tenantSettings } from '@/api/tenant-settings'
+import { useTenantSettings } from '@/auth/useTenantSettings'
+import { LocaleProvider } from '@/i18n'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { IntegrationsScreen } from './IntegrationsScreen'
 
@@ -16,6 +19,7 @@ vi.mock('@/api/integrations', () => ({
   },
 }))
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
+vi.mock('@/auth/useTenantSettings', () => ({ useTenantSettings: vi.fn() }))
 
 const tenant: Tenant = {
   id: 'tenant-1',
@@ -74,6 +78,7 @@ const novaPoshta: Integration = {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(useCabinet).mockReturnValue(cabinet())
+  vi.mocked(useTenantSettings).mockReturnValue(tenantSettings(null))
   vi.mocked(integrationsApi.list).mockResolvedValue([novaPoshta])
   vi.mocked(integrationsApi.definitions).mockResolvedValue([
     { id: 'definition-np', code: 'nova_poshta', displayName: 'Нова пошта' },
@@ -141,4 +146,122 @@ it('keeps the exchange log disabled while the service stores no history', async 
   const control = await screen.findByRole('button', { name: 'Журнал обміну' })
   expect(control).toBeDisabled()
   expect(control).toHaveAccessibleDescription(/Журналу обміну немає/)
+})
+
+const asCountry = (countryCode: 'UA' | 'GB' | 'PL') =>
+  vi.mocked(useTenantSettings).mockReturnValue({
+    ...tenantSettings(null),
+    countryCode,
+  })
+
+it('speaks British English inside an en-GB locale', async () => {
+  vi.mocked(integrationsApi.list).mockResolvedValue([
+    { ...novaPoshta, status: 'error', lastErrorCode: 'nova_poshta_disabled' },
+  ])
+  vi.mocked(integrationsApi.definitions).mockResolvedValue([
+    { id: 'definition-np', code: 'nova_poshta', displayName: 'Nova Poshta' },
+    { id: 'definition-x', code: 'courier_x', displayName: 'Courier X' },
+  ])
+  asCountry('UA')
+
+  render(
+    <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+      <MemoryRouter initialEntries={['/app/koval/settings/integrations']}>
+        <IntegrationsScreen />
+      </MemoryRouter>
+    </LocaleProvider>,
+  )
+
+  const connected = await screen.findByRole('region', {
+    name: 'Connected services',
+  })
+  expect(within(connected).getByText('Error')).toBeVisible()
+  expect(within(connected).getByText('Delivery')).toBeVisible()
+  expect(
+    within(connected).getByText(
+      'The Nova Poshta integration is turned off or not set up.',
+    ),
+  ).toBeVisible()
+  expect(screen.getByText(/1 of 2 available services connected/)).toBeVisible()
+  const available = screen.getByRole('region', {
+    name: 'Available to connect',
+  })
+  expect(
+    within(available).getByRole('button', { name: 'Connect' }),
+  ).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Exchange log' })).toBeDisabled()
+  expect(screen.queryByText(/Нова пошта доступна лише/)).toBeNull()
+})
+
+it.each(['GB', 'PL'] as const)(
+  'shows Nova Poshta as unavailable for a %s business, keeping its history readable',
+  async (country) => {
+    asCountry(country)
+
+    render(
+      <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+        <MemoryRouter initialEntries={['/app/koval/settings/integrations']}>
+          <IntegrationsScreen />
+        </MemoryRouter>
+      </LocaleProvider>,
+    )
+
+    expect(
+      await screen.findByText(
+        'Nova Poshta is only available for businesses in Ukraine. Integrations for your country will come later.',
+      ),
+    ).toBeVisible()
+    const connected = screen.getByRole('region', { name: 'Connected services' })
+    // The old connection is still listed, but there is nothing to open.
+    expect(within(connected).getByText('Нова пошта')).toBeVisible()
+    expect(within(connected).queryByRole('link')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull()
+  },
+)
+
+it('never offers to connect Nova Poshta outside Ukraine, whatever the language', async () => {
+  vi.mocked(integrationsApi.list).mockResolvedValue([])
+  asCountry('PL')
+
+  render(
+    <MemoryRouter initialEntries={['/app/koval/settings/integrations']}>
+      <IntegrationsScreen />
+    </MemoryRouter>,
+  )
+
+  expect(
+    await screen.findByText(/Нова пошта доступна лише для бізнесів в Україні/),
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('region', { name: 'Доступні до підключення' }),
+  ).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Підключити' })).toBeNull()
+})
+
+it('explains a country refusal from Core instead of its raw message', async () => {
+  vi.mocked(integrationsApi.list).mockResolvedValue([])
+  vi.mocked(integrationsApi.create).mockRejectedValue({
+    kind: 'conflict',
+    status: 409,
+    code: 'integration_country_unavailable',
+    message: 'Integration is not available for tenant country.',
+  })
+  const user = userEvent.setup()
+
+  render(
+    <LocaleProvider locale="pl" syncDocumentLang={false}>
+      <MemoryRouter initialEntries={['/app/koval/settings/integrations']}>
+        <IntegrationsScreen />
+      </MemoryRouter>
+    </LocaleProvider>,
+  )
+
+  await user.click(await screen.findByRole('button', { name: 'Połącz' }))
+
+  expect(
+    await screen.findByText(
+      'Nova Poshta jest dostępna tylko dla firm na Ukrainie. Integracje dla Twojego kraju pojawią się później.',
+    ),
+  ).toBeVisible()
+  expect(screen.queryByText(/not available for tenant country/)).toBeNull()
 })

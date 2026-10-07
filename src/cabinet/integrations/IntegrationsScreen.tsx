@@ -7,19 +7,24 @@ import {
   type IntegrationDefinition,
 } from '@/api/integrations'
 import { normalizeApiProblem } from '@/api/errors'
+import { useTenantSettings } from '@/auth/useTenantSettings'
+import { useLocale, useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import { cabinetPath } from '../cabinet-paths'
 import { RedesignShell, RedesignTitle } from '../redesign-shell'
 import { Kpi, KpiStrip } from '../redesign-kpi'
+import { moduleLabel, navigationGroupLabel } from '../module-messages'
 import {
   integrationErrorMessage,
   integrationKind,
   integrationMark,
+  integrationProblemMessage,
   integrationStatusPresentation,
+  isNovaPoshtaAvailable,
+  NOVA_POSHTA,
 } from './integration-labels'
-
-const NO_EXCHANGE_LOG =
-  'Журналу обміну немає: сервіс зберігає стан підключення, а не історію кожного запиту.'
+import { integrationsMessages } from './integrations-messages'
+import { NovaPoshtaUnavailable } from './nova-poshta-unavailable'
 
 type LoadState =
   | { kind: 'loading' }
@@ -45,12 +50,13 @@ function Dead({ children, title }: { children: ReactNode; title: string }) {
 }
 
 function Mark({ code }: { code: string }) {
+  const { locale } = useLocale()
   return (
     <span
       aria-hidden
       className="border-app-line text-app-muted inline-flex size-9 shrink-0 items-center justify-center rounded-[9px] border font-mono text-[12px]"
     >
-      {integrationMark(code)}
+      {integrationMark(code, locale)}
     </span>
   )
 }
@@ -58,6 +64,10 @@ function Mark({ code }: { code: string }) {
 export function IntegrationsScreen() {
   const cabinet = useCabinet()
   const navigate = useNavigate()
+  const { locale } = useLocale()
+  const t = useT(integrationsMessages)
+  const { countryCode } = useTenantSettings()
+  const novaPoshtaAvailable = isNovaPoshtaAvailable(countryCode)
   const tenant = cabinet.targetTenant
   const generation = cabinet.snapshot?.generation
   const scopeKey = `${generation ?? ''}:${tenant?.id ?? ''}`
@@ -102,18 +112,23 @@ export function IntegrationsScreen() {
   }, [scopeKey])
 
   if (tenant === null) {
-    return (
-      <p className="text-app-muted text-sm">
-        Оберіть розбірку, щоб побачити її інтеграції.
-      </p>
-    )
+    return <p className="text-app-muted text-sm">{t('pickBusinessList')}</p>
   }
 
   const slug = tenant.slug
   const items = state.kind === 'ready' ? state.items : []
   const definitions = state.kind === 'ready' ? state.definitions : []
   const connected = new Set(items.map((item) => item.definitionId))
-  const available = definitions.filter((item) => !connected.has(item.id))
+  // Core already hides NP outside Ukraine; a stale or older catalogue must
+  // still not offer it.
+  const available = definitions.filter(
+    (item) =>
+      !connected.has(item.id) &&
+      (novaPoshtaAvailable || item.code !== NOVA_POSHTA),
+  )
+  const catalogSize = novaPoshtaAvailable
+    ? definitions.length
+    : definitions.filter((item) => item.code !== NOVA_POSHTA).length
   const failing = items.filter((item) => item.status === 'error')
   const lastVerified = items
     .map((item) => item.verifiedAt)
@@ -131,7 +146,9 @@ export function IntegrationsScreen() {
       void navigate(cabinetPath(slug, 'integrations', created.id))
     } catch (error) {
       if (mountedRef.current)
-        setConnectError(normalizeApiProblem(error).message)
+        setConnectError(
+          integrationProblemMessage(normalizeApiProblem(error), locale),
+        )
     } finally {
       if (mountedRef.current) setConnecting(null)
     }
@@ -139,52 +156,50 @@ export function IntegrationsScreen() {
 
   return (
     <RedesignShell
-      actions={<Dead title={NO_EXCHANGE_LOG}>Журнал обміну</Dead>}
-      crumb="Налаштування · Інтеграції"
+      actions={<Dead title={t('noExchangeLog')}>{t('exchangeLog')}</Dead>}
+      crumb={`${navigationGroupLabel('settings', locale) ?? ''} · ${moduleLabel('integrations', locale)}`}
     >
       <RedesignTitle
         lead={
           state.kind === 'ready'
-            ? `Підключено ${items.length} із ${definitions.length} доступних сервісів. Керує ними той, кому відкриті налаштування команди.`
-            : 'Сервіси, які працюють разом з вашою розбіркою.'
+            ? t('leadReady', {
+                connected: items.length,
+                total: Math.max(catalogSize, items.length),
+              })
+            : t('leadLoading')
         }
-        title="Інтеграції"
+        title={moduleLabel('integrations', locale)}
       />
 
       {state.kind === 'error' && (
-        <Notice tone="danger">
-          Не вдалося завантажити інтеграції. Перевірте зв’язок і оновіть
-          сторінку.
-        </Notice>
+        <Notice tone="danger">{t('loadError')}</Notice>
       )}
       {connectError !== null && <Notice tone="danger">{connectError}</Notice>}
 
       <KpiStrip>
         <Kpi
-          label="Підключено"
+          label={t('kpiConnected')}
           meta={
-            definitions.length > 0
-              ? `Сервісів у каталозі: ${definitions.length}`
-              : 'Каталог сервісів ще завантажується'
+            state.kind !== 'ready'
+              ? t('kpiCatalogLoading')
+              : t('kpiCatalog', { count: catalogSize })
           }
           value={String(items.length)}
         />
         <Kpi
-          label="Потребують уваги"
+          label={t('kpiAttention')}
           meta={
             failing.length > 0
               ? failing.map((item) => item.displayName).join(', ')
-              : 'Помилок підключення немає'
+              : t('kpiNoErrors')
           }
           tone={failing.length > 0 ? 'warn' : 'plain'}
           value={String(failing.length)}
         />
         <Kpi
-          label="Остання перевірка"
+          label={t('kpiLastCheck')}
           meta={
-            lastVerified === undefined
-              ? 'Жодне підключення ще не перевірялося'
-              : 'Найсвіжіша серед усіх підключень'
+            lastVerified === undefined ? t('kpiNeverChecked') : t('kpiFreshest')
           }
           value={
             lastVerified === undefined ? (
@@ -197,56 +212,69 @@ export function IntegrationsScreen() {
       </KpiStrip>
 
       <section
-        aria-label="Підключені сервіси"
+        aria-label={t('connectedTitle')}
         className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
       >
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 px-6 pt-5 pb-4">
           <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-            Підключені сервіси
+            {t('connectedTitle')}
           </h2>
-          <p className="text-app-dim text-[13px]">
-            Оберіть рядок, щоб відкрити налаштування
-          </p>
+          <p className="text-app-dim text-[13px]">{t('connectedHint')}</p>
         </div>
         {state.kind === 'loading' ? (
           <p className="text-app-muted border-app-line border-t px-6 py-4 text-sm">
-            Завантажуємо…
+            {t('loading')}
           </p>
         ) : items.length === 0 ? (
           <p className="text-app-muted border-app-line border-t px-6 py-4 text-sm">
-            Жодного сервісу ще не підключено.
+            {t('noneConnected')}
           </p>
         ) : (
           <ul className="divide-app-line border-app-line grid divide-y border-t">
             {items.map((item) => {
-              const status = integrationStatusPresentation(item.status)
+              const status = integrationStatusPresentation(item.status, locale)
+              // Outside Ukraine an NP connection stays readable as history,
+              // but there is nothing left to open or configure.
+              const locked = !novaPoshtaAvailable && item.code === NOVA_POSHTA
+              const rowClass =
+                'flex flex-wrap items-center gap-x-3.5 gap-y-2 px-6 py-3.5'
+              const row = (
+                <>
+                  <Mark code={item.code} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-bold tracking-[-0.01em] text-white">
+                      {item.displayName}
+                    </span>
+                    <span className="text-app-dim mt-0.5 block truncate text-xs">
+                      {integrationKind(item.code, locale) ??
+                        t('serviceFallback')}
+                    </span>
+                  </span>
+                  <StatusPill tone={status.tone}>{status.label}</StatusPill>
+                  <span className="text-app-muted min-w-[104px] text-right font-mono text-[13px]">
+                    {item.verifiedAt === null ? (
+                      <span className="text-app-dim">{t('neverChecked')}</span>
+                    ) : (
+                      <DateValue value={item.verifiedAt} withTime={false} />
+                    )}
+                  </span>
+                </>
+              )
               return (
                 <li key={item.id}>
-                  <Link
-                    className="flex flex-wrap items-center gap-x-3.5 gap-y-2 px-6 py-3.5 hover:bg-white/[0.03]"
-                    to={cabinetPath(slug, 'integrations', item.id)}
-                  >
-                    <Mark code={item.code} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] font-bold tracking-[-0.01em] text-white">
-                        {item.displayName}
-                      </span>
-                      <span className="text-app-dim mt-0.5 block truncate text-xs">
-                        {integrationKind(item.code) ?? 'Сервіс'}
-                      </span>
-                    </span>
-                    <StatusPill tone={status.tone}>{status.label}</StatusPill>
-                    <span className="text-app-muted min-w-[104px] text-right font-mono text-[13px]">
-                      {item.verifiedAt === null ? (
-                        <span className="text-app-dim">не перевірялася</span>
-                      ) : (
-                        <DateValue value={item.verifiedAt} withTime={false} />
-                      )}
-                    </span>
-                  </Link>
+                  {locked ? (
+                    <div className={rowClass}>{row}</div>
+                  ) : (
+                    <Link
+                      className={`${rowClass} hover:bg-white/[0.03]`}
+                      to={cabinetPath(slug, 'integrations', item.id)}
+                    >
+                      {row}
+                    </Link>
+                  )}
                   {item.lastErrorCode !== null && (
                     <p className="text-state-danger px-6 pb-3.5 text-[13px] leading-5 text-pretty">
-                      {integrationErrorMessage(item.lastErrorCode)}
+                      {integrationErrorMessage(item.lastErrorCode, locale)}
                     </p>
                   )}
                 </li>
@@ -256,14 +284,16 @@ export function IntegrationsScreen() {
         )}
       </section>
 
+      {!novaPoshtaAvailable && <NovaPoshtaUnavailable />}
+
       {available.length > 0 && (
         <section
-          aria-label="Доступні до підключення"
+          aria-label={t('availableTitle')}
           className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
         >
           <div className="px-6 pt-5 pb-4">
             <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-              Доступні до підключення
+              {t('availableTitle')}
             </h2>
           </div>
           <ul className="divide-app-line border-app-line grid divide-y border-t">
@@ -278,7 +308,8 @@ export function IntegrationsScreen() {
                     {definition.displayName}
                   </span>
                   <span className="text-app-dim mt-0.5 block text-xs">
-                    {integrationKind(definition.code) ?? 'Сервіс'}
+                    {integrationKind(definition.code, locale) ??
+                      t('serviceFallback')}
                   </span>
                 </span>
                 <Button
@@ -286,7 +317,9 @@ export function IntegrationsScreen() {
                   disabled={connecting !== null}
                   onClick={() => void connect(definition.id)}
                 >
-                  {connecting === definition.id ? 'Підключаємо…' : 'Підключити'}
+                  {connecting === definition.id
+                    ? t('connecting')
+                    : t('connect')}
                 </Button>
               </li>
             ))}

@@ -5,6 +5,9 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { integrationsApi, type Integration } from '@/api/integrations'
 import type { Tenant } from '@/api/types'
+import { tenantSettings } from '@/api/tenant-settings'
+import { useTenantSettings } from '@/auth/useTenantSettings'
+import { LocaleProvider } from '@/i18n'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { ToastProvider } from '@/components/app'
 import { NovaPoshtaScreen } from './NovaPoshtaScreen'
@@ -54,6 +57,7 @@ vi.mock('@/api/integrations', () => ({
   },
 }))
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
+vi.mock('@/auth/useTenantSettings', () => ({ useTenantSettings: vi.fn() }))
 
 const tenant: Tenant = {
   id: 'tenant-1',
@@ -126,6 +130,7 @@ const integration: Integration = {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(useCabinet).mockReturnValue(cabinet())
+  vi.mocked(useTenantSettings).mockReturnValue(tenantSettings(null))
   vi.mocked(integrationsApi.getById).mockResolvedValue(integration)
 })
 
@@ -323,4 +328,86 @@ it('opens the tab the link points at and counts what each one holds', async () =
   expect(within(tabs).getByRole('link', { name: /Огляд/ })).not.toHaveAttribute(
     'aria-current',
   )
+})
+
+const UNAVAILABLE_EN =
+  'Nova Poshta is only available for businesses in Ukraine. Integrations for your country will come later.'
+
+const renderInLocale = (tab = '') =>
+  render(
+    <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+      <MemoryRouter
+        initialEntries={[
+          `/app/koval/settings/integrations/integration-1${tab}`,
+        ]}
+      >
+        <ToastProvider>
+          <Routes>
+            <Route
+              element={<NovaPoshtaScreen />}
+              path="/app/:slug/settings/integrations/:integrationId"
+            />
+            <Route
+              element={<NovaPoshtaScreen />}
+              path="/app/:slug/settings/integrations/:integrationId/:tab"
+            />
+          </Routes>
+        </ToastProvider>
+      </MemoryRouter>
+    </LocaleProvider>,
+  )
+
+it('shows the overview in British English', async () => {
+  renderInLocale()
+
+  expect(await screen.findByText('The connection is working')).toBeVisible()
+  const tabs = screen.getByRole('navigation', { name: 'Integration sections' })
+  expect(within(tabs).getByRole('link', { name: 'Overview' })).toBeVisible()
+  expect(
+    within(tabs).getByRole('link', { name: /^Dispatch points/ }),
+  ).toBeVisible()
+  expect(screen.getByText('Connected')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Check again' })).toBeVisible()
+  expect(screen.getByRole('link', { name: 'Integrations' })).toHaveAttribute(
+    'href',
+    '/app/koval/settings/integrations',
+  )
+})
+
+it.each(['', '/settings', '/dispatch-points'])(
+  'shows a GB business the unavailable state instead of the forms (%s)',
+  async (tab) => {
+    vi.mocked(useTenantSettings).mockReturnValue({
+      ...tenantSettings(null),
+      countryCode: 'GB',
+    })
+
+    renderInLocale(tab)
+
+    expect(await screen.findByText(UNAVAILABLE_EN)).toBeVisible()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('switch')).toBeNull()
+    expect(screen.queryByRole('navigation')).toBeNull()
+    expect(integrationsApi.getById).not.toHaveBeenCalled()
+    expect(integrationsApi.dispatchPoints).not.toHaveBeenCalled()
+  },
+)
+
+it('turns a 409 integration_country_unavailable into the same state', async () => {
+  vi.mocked(integrationsApi.getById).mockRejectedValue({
+    kind: 'conflict',
+    status: 409,
+    code: 'integration_country_unavailable',
+    message: 'Integration is not available for tenant country.',
+  })
+
+  renderScreen('/settings')
+
+  expect(
+    await screen.findByText(
+      'Нова пошта доступна лише для бізнесів в Україні. Інтеграції для вашої країни зʼявляться пізніше.',
+    ),
+  ).toBeVisible()
+  expect(screen.queryByText(/Не вдалося відкрити інтеграцію/)).toBeNull()
+  expect(screen.queryByRole('textbox')).toBeNull()
 })
