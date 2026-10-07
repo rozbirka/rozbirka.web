@@ -12,7 +12,11 @@ import { CabinetShell } from './CabinetShell'
 import { CabinetHomeScreen } from './screens/cabinet-home'
 import cabinetStyles from '../index.css?inline'
 
-vi.mock('../auth/AuthContext', () => ({ useAuth: vi.fn() }))
+vi.mock('../auth/AuthContext', () => ({
+  useAuth: vi.fn(),
+  // Business-settings re-reads merge into auth; this shell test has none.
+  useOptionalAuth: () => null,
+}))
 vi.mock('./CabinetContext', () => ({ useCabinet: vi.fn() }))
 
 const tenant: Tenant = {
