@@ -20,7 +20,10 @@ import type { TenantAccessSnapshot } from '../access-types'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { ProfileScreen } from './profile-screen'
 
-vi.mock('@/auth/AuthContext', () => ({ useAuth: vi.fn() }))
+vi.mock('@/auth/AuthContext', () => {
+  const useAuth = vi.fn()
+  return { useAuth, useOptionalAuth: () => useAuth() as unknown }
+})
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
 vi.mock('@/api/profile', () => ({ profileApi: { deleteAccount: vi.fn() } }))
 
