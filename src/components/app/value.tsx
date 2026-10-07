@@ -1,22 +1,13 @@
 import type { ReactNode } from 'react'
+import { formatDate, formatMoney, formatNumber } from '@/i18n/format'
+import { useLocale } from '@/i18n/LocaleProvider'
 import { cn } from '@/lib/utils'
 
-const numberFormatter = new Intl.NumberFormat('uk-UA')
-const dateTimeFormatter = new Intl.DateTimeFormat('uk-UA', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  timeZone: 'Europe/Kyiv',
-})
-const dateFormatter = new Intl.DateTimeFormat('uk-UA', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-  timeZone: 'Europe/Kyiv',
-})
-
+/**
+ * Legacy suffixes kept for existing screens. Currency-aware screens pass
+ * `currencyDisplay="code"`: ISO code and per-currency precision (CAD and USD
+ * share `$`, so symbols cannot carry the new currencies).
+ */
 const currencyLabel: Record<string, string> = {
   UAH: '₴',
   USD: '$',
@@ -30,6 +21,7 @@ const currencyLabel: Record<string, string> = {
 export function Amount({
   value,
   currency,
+  currencyDisplay = 'symbol',
   className,
   fallback = '—',
 }: {
@@ -39,18 +31,30 @@ export function Amount({
    * with no symbol at all. Pass `null` when the context already states it.
    */
   currency: string | null
+  /**
+   * `code` renders `formatMoney`: ISO code and currency precision (JPY has no
+   * decimals). `symbol` keeps the legacy ₴/$/€ suffix and free precision.
+   */
+  currencyDisplay?: 'symbol' | 'code'
   className?: string
   fallback?: string
 }) {
-  const numeric = typeof value === 'string' ? Number(value) : value
-  if (numeric === null || numeric === undefined || Number.isNaN(numeric)) {
+  const { locale } = useLocale()
+  const text =
+    currencyDisplay === 'code'
+      ? formatMoney(value, currency, locale)
+      : formatNumber(value, locale)
+  if (text === null) {
     return <span className={cn('tabular-nums', className)}>{fallback}</span>
   }
 
-  const suffix = currency ? (currencyLabel[currency] ?? currency) : ''
+  const suffix =
+    currencyDisplay === 'symbol' && currency
+      ? (currencyLabel[currency] ?? currency)
+      : ''
   return (
     <span className={cn('tabular-nums whitespace-nowrap', className)}>
-      {numberFormatter.format(numeric)}
+      {text}
       {suffix ? ` ${suffix}` : ''}
     </span>
   )
@@ -68,37 +72,47 @@ export function Quantity({
   className?: string
   fallback?: string
 }) {
-  if (value === null || value === undefined) {
+  const { locale } = useLocale()
+  const text = formatNumber(value, locale)
+  if (text === null) {
     return <span className={cn('tabular-nums', className)}>{fallback}</span>
   }
 
   return (
     <span className={cn('tabular-nums whitespace-nowrap', className)}>
-      {numberFormatter.format(value)}
+      {text}
       {unit ? ` ${unit}` : ''}
     </span>
   )
 }
 
 /**
- * A moment in time, rendered in Kyiv time inside a real `<time>` element so the
- * machine-readable value survives alongside the readable one.
+ * A moment in time inside a real `<time>` element so the machine-readable
+ * value survives alongside the readable one. Rendered in the current locale
+ * and the business time zone (tenant `timeZoneId`, Kyiv when unknown).
  */
 export function DateValue({
   value,
   withTime = true,
+  timeZone,
   className,
   fallback = '—',
 }: {
   value: string | null | undefined
   withTime?: boolean
+  /** Override the business time zone from context. */
+  timeZone?: string
   className?: string
   fallback?: string
 }) {
-  if (!value) return <span className={className}>{fallback}</span>
-
-  const date = new Date(value)
-  if (Number.isNaN(date.valueOf())) {
+  const context = useLocale()
+  const text = value
+    ? formatDate(value, context.locale, {
+        timeZone: timeZone ?? context.timeZone,
+        withTime,
+      })
+    : null
+  if (!value || text === null) {
     return <span className={className}>{fallback}</span>
   }
 
@@ -107,7 +121,7 @@ export function DateValue({
       className={cn('tabular-nums whitespace-nowrap', className)}
       dateTime={value}
     >
-      {(withTime ? dateTimeFormatter : dateFormatter).format(date)}
+      {text}
     </time>
   )
 }

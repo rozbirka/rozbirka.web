@@ -1,5 +1,6 @@
 import type { ComponentProps, ReactNode } from 'react'
 import { FileWarning, ImagePlus, RotateCcw, Upload, X } from 'lucide-react'
+import { useLocale } from '@/i18n/LocaleProvider'
 import { cn } from '@/lib/utils'
 import { Button } from './button'
 import { useFieldControl } from './field-context'
@@ -93,6 +94,7 @@ export function UploadList({
   onRemove?: (item: UploadItem) => void
   emptyLabel?: ReactNode
 }) {
+  const { locale } = useLocale()
   if (items.length === 0) {
     return <p className="text-app-dim text-[13.5px]">{emptyLabel}</p>
   }
@@ -132,7 +134,7 @@ export function UploadList({
                   ? 'Завантажується…'
                   : item.size === undefined
                     ? 'Збережено'
-                    : formatFileSize(item.size)}
+                    : formatFileSize(item.size, locale)}
             </span>
           </span>
 
