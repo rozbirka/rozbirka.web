@@ -351,6 +351,7 @@ function CashRegisterDetail({
   return (
     <>
       <CashCard
+        cashHref={`/app/${cabinet.targetTenant?.slug ?? ''}/cash`}
         canManage={mutationsAllowed}
         onNewOperation={
           mutationsAllowed && register.isActive
@@ -563,7 +564,9 @@ function CashRegisterForm({
   const cabinet = useCabinet()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const mutationsAllowed = canMutate(definition, cabinet, registerId === null)
+  const location = useLocation()
   const navigate = useNavigate()
+  const cashPath = location.pathname.replace(/\/(?:new|[^/]+\/edit)$/, '')
   const [name, setName] = useState('')
   const [type, setType] = useState('cash')
   const [currencies, setCurrencies] = useState<string[]>(['UAH'])
@@ -608,14 +611,19 @@ function CashRegisterForm({
             ),
           })
       if (scope.signal.aborted) return
-      await navigate(`../${result.id}`, { replace: true })
+      await navigate(`${cashPath}/${encodeURIComponent(result.id)}`, {
+        replace: true,
+      })
     } catch (error) {
       setError(problemMessage(error))
       setBusy(false)
     }
   }
   const close = () => {
-    if (!busy) void navigate(registerId ? `../${registerId}` : '..')
+    if (!busy)
+      void navigate(
+        registerId ? `${cashPath}/${encodeURIComponent(registerId)}` : cashPath,
+      )
   }
   return (
     <Sheet

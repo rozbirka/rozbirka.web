@@ -118,3 +118,28 @@ it('restores relations Core omits rather than sends as null', async () => {
   expect(page.items[0]?.order).toBeNull()
   expect(page.items[0]?.externalCode).toBeNull()
 })
+
+it('normalizes origin facet ids returned by Core to the filter contract', async () => {
+  apiClient.defaults.adapter = (config) =>
+    Promise.resolve({
+      data: {
+        data: {
+          origins: [
+            { id: 'Car', name: 'Car', count: 953 },
+            { id: 'Batch', name: 'Batch', count: 370 },
+          ],
+        },
+      },
+      status: 200,
+      statusText: 'OK',
+      headers: new AxiosHeaders(),
+      config,
+    } satisfies AxiosResponse)
+
+  const facets = await partsApi.facets({}, ['origin'])
+
+  expect(facets.origins).toEqual([
+    { id: 'car', name: 'Car', count: 953 },
+    { id: 'batch', name: 'Batch', count: 370 },
+  ])
+})

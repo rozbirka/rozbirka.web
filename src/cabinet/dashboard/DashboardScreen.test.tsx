@@ -66,7 +66,20 @@ beforeEach(() => {
   vi.mocked(useCabinet).mockReturnValue({
     status: 'ready',
     targetTenant: tenant,
-    snapshot,
+    snapshot: {
+      ...snapshot,
+      permissions: new Set(['parts.view']),
+      entitlement: {
+        state: 'active',
+        usage: {
+          cars: { used: 5, max: 100 },
+          intakes: { used: 1, max: 100 },
+          parts: { used: 1_343, max: 10_000 },
+          users: { used: 4, max: 10 },
+          cashRegisters: { used: 5, max: 10 },
+        },
+      },
+    },
     error: null,
     retry: vi.fn(),
     switchTenant: vi.fn(),
@@ -97,6 +110,59 @@ it('does not expose scanning from the web dashboard', () => {
   renderDashboard(['/app/koval/dashboard'])
 
   expect(screen.queryByRole('link', { name: 'Сканувати' })).toBeNull()
+})
+
+it('does not render the generated today tasks block or its greeting count', () => {
+  vi.mocked(useCabinet).mockReturnValue({
+    status: 'ready',
+    targetTenant: tenant,
+    snapshot,
+    error: null,
+    retry: vi.fn(),
+    switchTenant: vi.fn(),
+  } satisfies CabinetContextValue)
+  vi.mocked(useDashboardData).mockReturnValue({
+    summary: {
+      status: 'ready',
+      data: {
+        userName: 'Дмитро',
+        role: 'owner',
+        yardName: 'Rozbirka',
+        yardCity: 'Львів',
+        isYardEmpty: false,
+        todaySalesCount: 2,
+        availablePartsCount: 10,
+        intakesCount: 1,
+        revenue: null,
+        todayNewPartsCount: 1,
+        lastActivity: null,
+        activeCarsCount: 3,
+        outOfStockPartsCount: 383,
+        customersCount: 4,
+        totalBalanceUah: 500,
+        teamMembersCount: 2,
+        totalInvested: 100,
+        totalRecouped: 50,
+        carsInWork: 3,
+        totalPartsSold: 6,
+        myPartsToday: 1,
+        lastMyActivity: null,
+      },
+      error: null,
+    },
+    analytics: { status: 'loading', data: null, error: null },
+    refreshing: false,
+    refresh: vi.fn(),
+    retrySummary: vi.fn(),
+    retryAnalytics: vi.fn(),
+  })
+
+  renderDashboard(['/app/koval/dashboard'])
+
+  expect(
+    screen.queryByRole('region', { name: 'Зробити сьогодні' }),
+  ).not.toBeInTheDocument()
+  expect(screen.queryByText(/справ.*на сьогодні/)).not.toBeInTheDocument()
 })
 
 it('keeps the ready summary mounted when analytics fails and retries analytics only', async () => {

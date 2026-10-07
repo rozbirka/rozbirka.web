@@ -12,8 +12,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PartSearchPicker, type PartPickerItem } from './PartSearchPicker'
 
 const partMocks = vi.hoisted(() => ({
+  facets: vi.fn(),
   get: vi.fn(),
   list: vi.fn(),
+  search: vi.fn(),
 }))
 
 vi.mock('@/api/parts', () => ({ partsApi: partMocks }))
@@ -23,6 +25,7 @@ const part = (id: string, overrides: Record<string, unknown> = {}) => ({
   name: `Інвертор ${id}`,
   photos: [],
   quantityTotal: 3,
+  quantity: 3,
   quantityReserved: 0,
   quantityAvailable: 3,
   quantitySoldTotal: 0,
@@ -36,6 +39,14 @@ const part = (id: string, overrides: Record<string, unknown> = {}) => ({
   },
   order: null,
   externalCode: `P-${id}`,
+  oemCode: `P-${id}`,
+  sourceType: 'car',
+  condition: 'used',
+  unit: 'pcs',
+  createdAt: '2026-10-06T10:00:00Z',
+  isInventoryLocked: false,
+  hasDiscrepancy: false,
+  thumbnailUrl: null,
   ...overrides,
 })
 
@@ -70,26 +81,46 @@ function Harness({
 describe('PartSearchPicker', () => {
   beforeEach(() => {
     vi.useRealTimers()
-    partMocks.list.mockImplementation(({ status }: { status?: string }) =>
-      Promise.resolve(
-        status === 'reserved'
-          ? page([
-              part('2', {
-                quantityAvailable: 1,
-                quantityReserved: 2,
-                status: 'reserved',
-              }),
-            ])
-          : status === 'available'
-            ? page([part('1')], 9)
-            : page(
-                [
-                  part('1'),
-                  part('2', { quantityAvailable: 0, status: 'sold' }),
-                ],
-                12,
-              ),
-      ),
+    vi.clearAllMocks()
+    partMocks.facets.mockResolvedValue({
+      statuses: [
+        { id: 'available', name: 'В наявності', count: 9 },
+        { id: 'reserved', name: 'Резерв', count: 1 },
+        { id: 'sold', name: 'Продано', count: 2 },
+      ],
+      warehouses: [],
+      zones: [],
+      conditions: [],
+      equipmentTypes: [],
+      makes: [],
+      models: [],
+      generations: [],
+      origins: [],
+      qualityFlags: [],
+      inventoryLocks: [],
+      discrepancies: [],
+    })
+    partMocks.search.mockImplementation(
+      ({ statuses }: { statuses?: string[] }) =>
+        Promise.resolve(
+          statuses?.[0] === 'reserved'
+            ? page([
+                part('2', {
+                  quantityAvailable: 1,
+                  quantityReserved: 2,
+                  status: 'reserved',
+                }),
+              ])
+            : statuses?.[0] === 'available'
+              ? page([part('1')], 9)
+              : page(
+                  [
+                    part('1'),
+                    part('2', { quantityAvailable: 0, status: 'sold' }),
+                  ],
+                  12,
+                ),
+        ),
     )
     partMocks.get.mockImplementation((id: string) =>
       Promise.resolve({
@@ -97,6 +128,38 @@ describe('PartSearchPicker', () => {
         effectiveSalePrice: id === '1' ? 0 : null,
       }),
     )
+  })
+
+  it('loads all status counts in one request instead of multiplying list searches', async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+
+    await user.type(
+      screen.getByRole('searchbox', { name: 'Пошук запчастини' }),
+      'цапфа',
+    )
+
+    await screen.findByRole('option', { name: /Інвертор 1/ })
+    await waitFor(() => expect(partMocks.facets).toHaveBeenCalledOnce())
+    expect(partMocks.search).toHaveBeenCalledTimes(1)
+    expect(partMocks.list).not.toHaveBeenCalled()
+  })
+
+  it('reuses loaded prices when repeated searches return the same parts', async () => {
+    render(<Harness />)
+    const search = screen.getByRole('searchbox', {
+      name: 'Пошук запчастини',
+    })
+
+    fireEvent.change(search, { target: { value: 'цапфа' } })
+    await screen.findByRole('option', { name: /Інвертор 1/ })
+    await waitFor(() => expect(partMocks.get).toHaveBeenCalledTimes(2))
+
+    fireEvent.change(search, { target: { value: 'цапфа задня' } })
+    await waitFor(() => expect(partMocks.search).toHaveBeenCalledTimes(2))
+    await screen.findByRole('option', { name: /Інвертор 1/ })
+
+    expect(partMocks.get).toHaveBeenCalledTimes(2)
   })
 
   it('searches, filters, loads more like mobile, renders optional prices, and selects a part', async () => {
@@ -152,8 +215,9 @@ describe('PartSearchPicker', () => {
       within(dropdown).getByRole('button', { name: 'Показати ще' }),
     )
     await waitFor(() =>
-      expect(partMocks.list).toHaveBeenCalledWith(
+      expect(partMocks.search).toHaveBeenCalledWith(
         expect.objectContaining({ page: 2, pageSize: 6 }),
+        expect.objectContaining({}),
       ),
     )
     expect(within(dropdown).queryByText('На сторінці')).not.toBeInTheDocument()
@@ -162,8 +226,13 @@ describe('PartSearchPicker', () => {
       within(dropdown).getByRole('button', { name: /Резерв\s*1/ }),
     )
     await waitFor(() =>
-      expect(partMocks.list).toHaveBeenCalledWith(
-        expect.objectContaining({ page: 1, pageSize: 6, status: 'reserved' }),
+      expect(partMocks.search).toHaveBeenCalledWith(
+        expect.objectContaining({
+          page: 1,
+          pageSize: 6,
+          statuses: ['reserved'],
+        }),
+        expect.objectContaining({}),
       ),
     )
     const reservedOption = await within(dropdown).findByRole('option', {
@@ -186,10 +255,8 @@ describe('PartSearchPicker', () => {
   })
 
   it('keeps the matching parts visible when an auxiliary count request fails', async () => {
-    partMocks.list.mockImplementation(({ status }: { status?: string }) => {
-      if (status === 'available') return Promise.reject(new Error('count down'))
-      return Promise.resolve(page([part('1')], 1))
-    })
+    partMocks.facets.mockRejectedValue(new Error('count down'))
+    partMocks.search.mockResolvedValue(page([part('1')], 1))
     const user = userEvent.setup()
     render(<Harness />)
 
@@ -207,11 +274,11 @@ describe('PartSearchPicker', () => {
   it('does not let an older response replace a newer query', async () => {
     vi.useFakeTimers()
     const pending = new Map<string, (result: ReturnType<typeof page>) => void>()
-    partMocks.list.mockImplementation(
-      ({ q, status }: { q?: string; status?: string }) =>
-        status
+    partMocks.search.mockImplementation(
+      ({ query, statuses }: { query?: string; statuses?: string[] }) =>
+        statuses?.length
           ? Promise.resolve(page([]))
-          : new Promise((resolve) => pending.set(q ?? '', resolve)),
+          : new Promise((resolve) => pending.set(query ?? '', resolve)),
     )
     render(<Harness />)
 

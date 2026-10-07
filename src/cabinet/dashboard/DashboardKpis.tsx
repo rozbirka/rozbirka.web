@@ -62,7 +62,14 @@ export function DashboardKpis({
   return (
     <dl
       aria-label="Показники"
-      className="border-app-line bg-app-line grid grid-cols-1 gap-px overflow-hidden rounded-[20px] border sm:grid-cols-2"
+      className={cn(
+        'border-app-line bg-app-line grid grid-cols-1 gap-px overflow-hidden rounded-[20px] border',
+        tiles.length === 1
+          ? 'sm:grid-cols-1'
+          : tiles.length === 3
+            ? 'sm:grid-cols-3'
+            : 'sm:grid-cols-2',
+      )}
     >
       {tiles.map((tile) => (
         <div

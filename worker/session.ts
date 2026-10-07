@@ -45,6 +45,13 @@ interface RefreshBrowserDto {
   expiresIn: number
 }
 
+const TERMINAL_REFRESH_ERROR_CODES = new Set([
+  'INVALID_TOKEN',
+  'TOKEN_EXPIRED',
+  'TOKEN_REUSE',
+  'USER_INACTIVE',
+])
+
 const SAFE_OTP_ERROR_CODES = new Set([
   'OTP_INVALID',
   'OTP_COOLDOWN',
@@ -508,7 +515,28 @@ export async function handleSessionRequest(
         : undefined,
     )
     if (!response) return identityFailure()
-    if (!response.ok) return identityFailure(response.status)
+    if (!response.ok) {
+      // Only a confirmed terminal auth error invalidates the browser credential.
+      // Network, service authorization and upstream outages must preserve it.
+      const payload = await boundedJson(response)
+      if (
+        (response.status === 400 || response.status === 401) &&
+        isRecord(payload) &&
+        isRecord(payload.error) &&
+        typeof payload.error.code === 'string' &&
+        TERMINAL_REFRESH_ERROR_CODES.has(payload.error.code)
+      ) {
+        return withCookie(
+          jsonProblem(
+            401,
+            'SESSION_EXPIRED',
+            'Session expired. Please sign in again.',
+          ),
+          refreshCookie(url, null),
+        )
+      }
+      return identityFailure(response.status)
+    }
 
     const data = await upstreamData(response)
     const validated = refreshBrowserData(data)

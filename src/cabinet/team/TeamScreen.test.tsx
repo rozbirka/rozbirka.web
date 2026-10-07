@@ -1,14 +1,8 @@
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest resolves object methods into typed mocks. */
 
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router'
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { ToastProvider } from '@/components/app'
 import {
@@ -134,6 +128,18 @@ const openMemberMenu = async (
   return within(await screen.findByRole('menu'))
 }
 
+const openInvitationMenu = async (
+  user: ReturnType<typeof userEvent.setup>,
+  code = 'INVITE-1',
+) => {
+  await user.click(
+    await screen.findByRole('button', {
+      name: `Дії із запрошенням ${code}`,
+    }),
+  )
+  return within(await screen.findByRole('menu'))
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   let reject!: (reason?: unknown) => void
@@ -175,6 +181,42 @@ beforeEach(() => {
   vi.mocked(teamApi.revokeInvitation).mockResolvedValue(undefined)
 })
 
+it('opens billing from the team seat limit link', async () => {
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant',
+        children: [
+          {
+            path: 'team',
+            element: <TeamScreen definition={cabinetModules.team} />,
+          },
+          {
+            path: 'settings/billing/overview',
+            element: <p>Екран підписки</p>,
+          },
+        ],
+      },
+    ],
+    { initialEntries: ['/app/koval/team'] },
+  )
+  const user = userEvent.setup()
+  render(
+    <ToastProvider>
+      <RouterProvider router={router} />
+    </ToastProvider>,
+  )
+
+  await user.click(await screen.findByRole('link', { name: 'Збільшити ліміт' }))
+
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe(
+      '/app/koval/settings/billing/overview',
+    ),
+  )
+  expect(screen.getByText('Екран підписки')).toBeVisible()
+})
+
 it('loads the member, role, and invitation lifecycle with tenant cancellation', async () => {
   renderScreen()
 
@@ -209,26 +251,51 @@ it('marks invitation lifecycle states and only allows revoking active invitation
     invitation({ id: 'expired', isExpired: true }),
   ])
 
+  const user = userEvent.setup()
   renderScreen()
 
-  expect(await screen.findByText('Використано')).toBeInTheDocument()
+  await user.click(
+    await screen.findByRole('button', { name: 'Історія запрошень (3)' }),
+  )
+  expect(screen.getByText('Використано')).toBeInTheDocument()
   expect(screen.getByText('Відкликано')).toBeInTheDocument()
   expect(screen.getByText('Прострочено')).toBeInTheDocument()
-  expect(screen.getAllByRole('button', { name: /^Відкликати/ })).toHaveLength(1)
+  expect(
+    screen.getAllByRole('button', { name: /^Дії із запрошенням/ }),
+  ).toHaveLength(1)
   const longCodeLabel = screen.getByText(longCode)
   expect(longCodeLabel).toHaveClass('truncate')
   expect(longCodeLabel).toHaveAttribute('title', longCode)
   expect(longCodeLabel.closest('li')).toHaveClass('max-w-full', 'min-w-0')
 })
 
-it('protects system roles while allowing custom roles to be managed', async () => {
+it('removes role management from the team screen', async () => {
   renderScreen()
 
-  expect(await screen.findByText('Системна роль')).toBeInTheDocument()
-  expect(screen.queryByRole('button', { name: 'Видалити Власник' })).toBeNull()
-  expect(
-    screen.getByRole('button', { name: 'Видалити Механік' }),
-  ).toBeInTheDocument()
+  expect(await screen.findByText('Олена')).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'Ролі й доступи' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Створити роль' })).toBeNull()
+})
+
+it('keeps completed invitations collapsed until their history is opened', async () => {
+  vi.mocked(teamApi.listInvitations).mockResolvedValue([
+    invitation({ id: 'active', code: 'ACTIVE-CODE' }),
+    invitation({ id: 'used', code: 'USED-CODE', isUsed: true }),
+    invitation({ id: 'expired', code: 'OLD-CODE', isExpired: true }),
+  ])
+  const user = userEvent.setup()
+  renderScreen()
+
+  expect(await screen.findByText('ACTIVE-CODE')).toBeVisible()
+  expect(screen.queryByText('USED-CODE')).toBeNull()
+  expect(screen.queryByText('OLD-CODE')).toBeNull()
+
+  await user.click(
+    screen.getByRole('button', { name: 'Історія запрошень (2)' }),
+  )
+
+  expect(screen.getByText('USED-CODE')).toBeVisible()
+  expect(screen.getByText('OLD-CODE')).toBeVisible()
 })
 
 it('hides every mutation control without team.manage', async () => {
@@ -246,41 +313,22 @@ it('hides every mutation control without team.manage', async () => {
   expect(screen.queryByLabelText('Назва нової ролі')).toBeNull()
 })
 
-it('revalidates team.manage immediately before member, role, permission, and invitation mutations', async () => {
+it('revalidates team.manage immediately before creating an invitation', async () => {
   const currentCabinet = cabinet()
   vi.mocked(useCabinet).mockReturnValue(currentCabinet)
   const user = userEvent.setup()
   renderScreen()
 
   await screen.findByText('Олена')
-  const changeRole = screen.getByLabelText('Роль для Олена')
-  const createRole = screen.getByRole('button', { name: 'Створити роль' })
+  await user.click(screen.getByRole('button', { name: 'Запросити' }))
   const createInvitation = screen.getByRole('button', {
     name: 'Створити запрошення',
   })
-  const revokeInvitation = screen.getByRole('button', {
-    name: 'Відкликати INVITE-1',
-  })
-  const deleteRole = screen.getByRole('button', { name: 'Видалити Механік' })
   currentCabinet.snapshot?.permissions.delete('team.manage')
 
-  await user.selectOptions(changeRole, 'role-owner')
-  await user.click(createRole)
   await user.click(createInvitation)
-  await user.click(revokeInvitation)
-  await user.click(deleteRole)
 
-  expect(teamApi.changeRole).not.toHaveBeenCalled()
-  // Losing the permission takes the whole row menu away, so the actions it
-  // holds cannot be dispatched at all.
-  expect(
-    screen.queryByRole('button', { name: 'Дії з учасником Олена' }),
-  ).toBeNull()
-  expect(teamApi.getUserPermissions).not.toHaveBeenCalled()
-  expect(teamApi.createRole).not.toHaveBeenCalled()
   expect(teamApi.createInvitation).not.toHaveBeenCalled()
-  expect(teamApi.revokeInvitation).not.toHaveBeenCalled()
-  expect(screen.queryByRole('alertdialog')).toBeNull()
 })
 
 it('confirms and completes member, role, permission, and invitation mutations', async () => {
@@ -313,7 +361,11 @@ it('confirms and completes member, role, permission, and invitation mutations', 
     { signal: tenantRequestScope.signal },
   )
 
-  await user.click(screen.getByRole('button', { name: 'Відкликати INVITE-1' }))
+  await user.click(
+    (await openInvitationMenu(user)).getByRole('menuitem', {
+      name: 'Відкликати',
+    }),
+  )
   expect(screen.getByRole('alertdialog')).toHaveTextContent(
     'Відкликати запрошення',
   )
@@ -389,38 +441,6 @@ it('refreshes authoritative cabinet access after an access-changing direct mutat
   expect(screen.getByRole('status')).toHaveTextContent(
     'Роль учасника оновлено.',
   )
-})
-
-it('blocks a second mutation while the authoritative access retry is unresolved', async () => {
-  const currentCabinet = cabinet()
-  const accessRetry = deferred<void>()
-  currentCabinet.retry = vi.fn(() => accessRetry.promise)
-  vi.mocked(useCabinet).mockReturnValue(currentCabinet)
-  const user = userEvent.setup()
-  renderScreen()
-
-  await user.click(
-    await screen.findByRole('button', { name: 'Редагувати Механік' }),
-  )
-  const roleDialog = await screen.findByRole('dialog', {
-    name: 'Роль: Механік',
-  })
-  const saveRole = within(roleDialog).getByRole('button', {
-    name: 'Зберегти роль',
-  })
-
-  await user.click(saveRole)
-  await waitFor(() => expect(teamApi.updateRole).toHaveBeenCalledOnce())
-  await waitFor(() => expect(currentCabinet.retry).toHaveBeenCalledOnce())
-
-  expect(saveRole).toBeDisabled()
-  // The drawer's footer submits the form it names.
-  const roleForm = (saveRole as HTMLButtonElement).form
-  expect(roleForm).not.toBeNull()
-  fireEvent.submit(roleForm!)
-  expect(teamApi.updateRole).toHaveBeenCalledOnce()
-
-  accessRetry.resolve(undefined)
 })
 
 it('does not read team data before an access-changing mutation retry settles', async () => {
@@ -640,43 +660,7 @@ it('denies direct permission edits when team.manage is revoked after the editor 
   )
 })
 
-it('creates and edits roles with arbitrary permissions and refreshes cabinet access', async () => {
-  const currentCabinet = cabinet()
-  vi.mocked(useCabinet).mockReturnValue(currentCabinet)
-  const user = userEvent.setup()
-  renderScreen()
-
-  await screen.findByText('Олена')
-  await user.clear(screen.getByLabelText('Назва нової ролі'))
-  await user.type(screen.getByLabelText('Назва нової ролі'), 'Диспетчер')
-  await user.click(screen.getByLabelText('team.manage'))
-  await user.click(screen.getByRole('button', { name: 'Створити роль' }))
-  await waitFor(() =>
-    expect(teamApi.createRole).toHaveBeenCalledWith(
-      { name: 'Диспетчер', permissions: ['orders.view', 'team.manage'] },
-      { signal: tenantRequestScope.signal },
-    ),
-  )
-
-  await user.click(screen.getByRole('button', { name: 'Редагувати Механік' }))
-  const roleDialog = await screen.findByRole('dialog', {
-    name: 'Роль: Механік',
-  })
-  await user.click(within(roleDialog).getByLabelText('team.manage'))
-  await user.click(
-    within(roleDialog).getByRole('button', { name: 'Зберегти роль' }),
-  )
-  await waitFor(() =>
-    expect(teamApi.updateRole).toHaveBeenCalledWith(
-      'role-mechanic',
-      { name: 'Механік', permissions: ['parts.view', 'team.manage'] },
-      { signal: tenantRequestScope.signal },
-    ),
-  )
-  expect(currentCabinet.retry).toHaveBeenCalledTimes(2)
-})
-
-it('refreshes access after member, role, and invitation confirmation mutations', async () => {
+it('refreshes access after member and invitation confirmation mutations', async () => {
   const currentCabinet = cabinet()
   vi.mocked(useCabinet).mockReturnValue(currentCabinet)
   const user = userEvent.setup()
@@ -698,15 +682,15 @@ it('refreshes access after member, role, and invitation confirmation mutations',
   await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
   await waitFor(() => expect(teamApi.deleteMember).toHaveBeenCalledOnce())
 
-  await user.click(screen.getByRole('button', { name: 'Видалити Механік' }))
-  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
-  await waitFor(() => expect(teamApi.deleteRole).toHaveBeenCalledOnce())
-
-  await user.click(screen.getByRole('button', { name: 'Відкликати INVITE-1' }))
+  await user.click(
+    (await openInvitationMenu(user)).getByRole('menuitem', {
+      name: 'Відкликати',
+    }),
+  )
   await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
   await waitFor(() => expect(teamApi.revokeInvitation).toHaveBeenCalledOnce())
 
-  expect(currentCabinet.retry).toHaveBeenCalledTimes(4)
+  expect(currentCabinet.retry).toHaveBeenCalledTimes(3)
   expect(screen.getByRole('status')).toHaveTextContent('Запрошення відкликано.')
 })
 
@@ -735,16 +719,16 @@ it('supports Escape dismissal and restores focus to the confirmation trigger', a
   const user = userEvent.setup()
   renderScreen()
 
-  const trigger = await screen.findByRole('button', {
-    name: 'Відкликати INVITE-1',
-  })
-  await user.click(trigger)
+  await user.click(
+    (await openInvitationMenu(user)).getByRole('menuitem', {
+      name: 'Відкликати',
+    }),
+  )
   expect(screen.getByRole('alertdialog')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Скасувати' })).toHaveFocus()
   await user.keyboard('{Escape}')
 
   expect(screen.queryByRole('alertdialog')).toBeNull()
-  expect(trigger).toHaveFocus()
 })
 
 it('creates an invitation and refreshes the visible invitation lifecycle', async () => {
@@ -757,8 +741,14 @@ it('creates an invitation and refreshes the visible invitation lifecycle', async
   const user = userEvent.setup()
   renderScreen()
 
+  await user.click(await screen.findByRole('button', { name: 'Запросити' }))
+  expect(
+    screen.getByRole('dialog', { name: 'Нове запрошення' }),
+  ).toBeInTheDocument()
+  expect(teamApi.createInvitation).not.toHaveBeenCalled()
+
   await user.selectOptions(
-    await screen.findByLabelText('Роль для запрошення'),
+    screen.getByLabelText('Роль для запрошення'),
     'role-mechanic',
   )
   await user.click(screen.getByRole('button', { name: 'Створити запрошення' }))
@@ -769,6 +759,8 @@ it('creates an invitation and refreshes the visible invitation lifecycle', async
     }),
   )
   expect(await screen.findByText('INVITE-NEW')).toBeInTheDocument()
+  expect(screen.queryByRole('dialog', { name: 'Нове запрошення' })).toBeNull()
+  expect(screen.getByRole('status')).toHaveTextContent('Запрошення створено.')
   expect(screen.getAllByText('Активне')).toHaveLength(2)
   expect(currentCabinet.retry).toHaveBeenCalledOnce()
 })
@@ -890,8 +882,7 @@ it('says what the team endpoints do not carry instead of inventing it', async ()
   // dressing the join date up as a login.
   expect(await screen.findByText(/Останній вхід не зберігається/)).toBeVisible()
   expect(screen.getByText('пошти й телефону не вказано')).toBeVisible()
-  // An invitation is a code, not a letter: there is nothing to resend.
-  const resend = screen.getByRole('button', { name: 'Надіслати ще' })
-  expect(resend).toBeDisabled()
-  expect(resend.title).toContain('кабінет не шле листів')
+  // An invitation is a code, not a letter: the UI does not pretend it can
+  // resend something when the backend has no delivery target.
+  expect(screen.queryByRole('button', { name: 'Надіслати ще' })).toBeNull()
 })

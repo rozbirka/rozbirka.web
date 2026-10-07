@@ -6,7 +6,7 @@ import {
   within,
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router'
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { ToastProvider } from '@/components/app'
 import { useCabinet } from '../CabinetContext'
@@ -82,6 +82,51 @@ beforeEach(() => {
     total: 0,
     totalPages: 0,
   })
+})
+
+it('returns from a customer card to the customer directory', async () => {
+  customerMocks.getById.mockResolvedValue({
+    id: 'customer-1',
+    name: 'Ірина',
+    phone: null,
+    notes: null,
+    isActive: true,
+    createdAt: '2026-08-28T00:00:00Z',
+    orders: [],
+    ordersCount: 0,
+    totalAmount: null,
+    averageAmount: null,
+    firstOrderAt: null,
+    lastOrderAt: null,
+  })
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant',
+        children: [
+          { path: 'customers', element: <p>Екран клієнтів</p> },
+          {
+            path: 'customers/:customerId',
+            element: <CustomersScreen definition={definition} />,
+          },
+        ],
+      },
+    ],
+    { initialEntries: ['/app/garage/customers/customer-1'] },
+  )
+  const user = userEvent.setup()
+  render(
+    <ToastProvider>
+      <RouterProvider router={router} />
+    </ToastProvider>,
+  )
+
+  await user.click(await screen.findByRole('link', { name: 'До клієнтів' }))
+
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe('/app/garage/customers'),
+  )
+  expect(screen.getByText('Екран клієнтів')).toBeVisible()
 })
 
 it('renders the server-returned directory result instead of deriving customer statistics locally', async () => {
@@ -530,11 +575,11 @@ it('uses access decisions and customer eligibility for order, lifecycle, and del
 
   // Lifecycle and deletion sit behind the overflow control.
   await user.click(screen.getByRole('button', { name: 'Інші дії з клієнтом' }))
-  expect(screen.getByRole('button', { name: 'Активувати' })).toBeVisible()
+  expect(screen.getByRole('menuitem', { name: 'Активувати' })).toBeVisible()
   // The customer has orders, so deletion is offered but refused with a reason.
   expect(
-    screen.getByRole('button', { name: 'Видалити клієнта' }),
-  ).toBeDisabled()
+    screen.getByRole('menuitem', { name: 'Видалити клієнта' }),
+  ).toHaveAttribute('aria-disabled', 'true')
 })
 
 it('hides finance metrics without finance.view and preserves a nullable order count', async () => {
@@ -585,7 +630,7 @@ it('contains delete-dialog focus and restores it to the trigger on close', async
 
   await screen.findByRole('heading', { name: 'Ірина' })
   await user.click(screen.getByRole('button', { name: 'Інші дії з клієнтом' }))
-  const trigger = screen.getByRole('button', { name: 'Видалити клієнта' })
+  const trigger = screen.getByRole('menuitem', { name: 'Видалити клієнта' })
   await user.click(trigger)
 
   const dialog = await screen.findByRole('dialog')
@@ -602,7 +647,7 @@ it('contains delete-dialog focus and restores it to the trigger on close', async
   // Closing hands focus back to the control that opened the question.
   await waitFor(() =>
     expect(
-      screen.getByRole('button', { name: 'Видалити клієнта' }),
+      screen.getByRole('button', { name: 'Інші дії з клієнтом' }),
     ).toHaveFocus(),
   )
 })

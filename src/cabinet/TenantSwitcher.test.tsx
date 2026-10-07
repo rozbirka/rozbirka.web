@@ -49,6 +49,8 @@ it('exposes tenant names and awaits one switch before accepting another', async 
   expect(screen.getByRole('option', { name: 'Koval Auto' })).toBeVisible()
   expect(screen.getByRole('option', { name: 'Luxe Parts' })).toBeVisible()
   expect(switcher).toHaveClass('min-h-11', 'min-w-11')
+  const context = screen.getByText('owner · pro')
+  expect(context.closest('label')).toBeNull()
 
   fireEvent.change(switcher, { target: { value: 'luxe' } })
   fireEvent.change(switcher, { target: { value: 'luxe' } })

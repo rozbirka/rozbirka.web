@@ -93,6 +93,21 @@ it('counts reserved positions only once the parts summary has arrived', () => {
   ).toHaveTextContent('14 у резерві')
 })
 
+it('uses three equal columns for three figures and a two-by-two grid for four', () => {
+  const { rerender } = render(
+    <DashboardKpis
+      analytics={analytics()}
+      data={data({ revenue: null })}
+      parts={null}
+    />,
+  )
+
+  expect(screen.getByLabelText('Показники')).toHaveClass('sm:grid-cols-3')
+
+  rerender(<DashboardKpis analytics={analytics()} data={data()} parts={null} />)
+  expect(screen.getByLabelText('Показники')).toHaveClass('sm:grid-cols-2')
+})
+
 it('leaves out a figure the account may not see rather than showing a dash', () => {
   render(
     <DashboardKpis

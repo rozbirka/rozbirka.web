@@ -12,12 +12,15 @@ import { FEATURE_FLAGS } from '@/api/feature-flags'
 import {
   Check,
   ChevronLeft,
-  MoreHorizontal,
+  PackagePlus,
   Plus,
+  Printer,
   ScanLine,
+  Trash2,
   X,
 } from 'lucide-react'
 import {
+  ActionMenu,
   Button,
   Card,
   ConfirmDialog,
@@ -654,7 +657,6 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
   const [problem, setProblem] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
   const [filter, setFilter] = useState<IntakePartFilter>('all')
   const [partsPage, setPartsPage] = useState(1)
   const canPrintStickers = allowedToView(cabinetModules.stickers, cabinet)
@@ -818,14 +820,43 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                 <Link to={`${base}/${intake.id}/parts/new`}>Додати деталь</Link>
               </Button>
             ) : null}
-            <Button
-              aria-expanded={menuOpen}
-              aria-label="Інші дії з прийманням"
-              className="min-w-11 px-0 text-base font-bold tracking-[0.1em]"
-              onClick={() => setMenuOpen((open) => !open)}
-            >
-              <MoreHorizontal aria-hidden />
-            </Button>
+            <ActionMenu
+              actions={[
+                ...(canPrintStickers
+                  ? [
+                      {
+                        key: 'stickers',
+                        label: 'Друк стікерів партії',
+                        icon: <Printer aria-hidden />,
+                        disabled: stickerHref === null,
+                        onSelect: () => {
+                          if (stickerHref !== null) void navigate(stickerHref)
+                        },
+                      },
+                    ]
+                  : []),
+                ...(partCreateDecision.kind === 'allowed'
+                  ? [
+                      {
+                        key: 'batch',
+                        label: 'Додати партією',
+                        icon: <PackagePlus aria-hidden />,
+                        onSelect: () =>
+                          void navigate(`${base}/${intake.id}/parts/batch`),
+                      },
+                    ]
+                  : []),
+                {
+                  key: 'delete',
+                  label: 'Видалити приймання',
+                  icon: <Trash2 aria-hidden />,
+                  destructive: true,
+                  disabled: busy,
+                  onSelect: () => setConfirmDelete(true),
+                },
+              ]}
+              label="Інші дії з прийманням"
+            />
           </div>
         ) : null}
       </div>
@@ -852,41 +883,6 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
             </span>
           </p>
         </div>
-
-        {menuOpen && manage ? (
-          <div
-            aria-label="Інші дії з прийманням"
-            className="border-app-line bg-app-raised flex flex-wrap items-center gap-2.5 rounded-[14px] border px-4 py-3"
-            role="group"
-          >
-            {canPrintStickers ? (
-              <Button
-                asChild={stickerHref !== null}
-                disabled={stickerHref === null}
-              >
-                {stickerHref === null ? (
-                  <>Друк стікерів партії</>
-                ) : (
-                  <Link to={stickerHref}>Друк стікерів партії</Link>
-                )}
-              </Button>
-            ) : null}
-            {partCreateDecision.kind === 'allowed' ? (
-              <Button asChild>
-                <Link to={`${base}/${intake.id}/parts/batch`}>
-                  Додати партією
-                </Link>
-              </Button>
-            ) : null}
-            <Button
-              disabled={busy}
-              onClick={() => setConfirmDelete(true)}
-              variant="danger"
-            >
-              Видалити приймання
-            </Button>
-          </div>
-        ) : null}
 
         {problem ? <Notice tone="danger">{problem}</Notice> : null}
 

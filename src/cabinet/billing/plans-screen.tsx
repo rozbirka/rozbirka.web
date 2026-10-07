@@ -13,6 +13,7 @@ import {
 import {
   billingApi,
   canStartWebCheckout,
+  isContractManagedSubscription,
   resolveProviderManagement,
   type ProviderAwareSubscriptionDto,
 } from '@/api/billing'
@@ -31,6 +32,7 @@ import {
 } from './billing-vocabulary'
 import {
   BILLING_MANAGEMENT_UNAVAILABLE,
+  BillingContractNotice,
   BillingManagementUnavailableError,
   BillingMutationGate,
   BillingUnavailableNotice,
@@ -187,6 +189,9 @@ export function PlansScreen() {
   const management = providerSubscription
     ? resolveProviderManagement(providerSubscription)
     : { kind: 'unavailable' as const }
+  const contractManaged = providerSubscription
+    ? isContractManagedSubscription(providerSubscription)
+    : false
   const canCheckout = canStartWebCheckout(providerSubscription)
   const recommendedCode = 'pro_monthly'
   const allPlans = currentPlansState.plans
@@ -240,9 +245,10 @@ export function PlansScreen() {
           налаштуваннях магазину.
         </Notice>
       )}
-      {management.kind === 'unavailable' && !canCheckout && (
-        <BillingUnavailableNotice />
-      )}
+      {contractManaged && <BillingContractNotice />}
+      {management.kind === 'unavailable' &&
+        !canCheckout &&
+        !contractManaged && <BillingUnavailableNotice />}
 
       <ul
         className="grid min-w-0 items-start gap-5 sm:grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))]"

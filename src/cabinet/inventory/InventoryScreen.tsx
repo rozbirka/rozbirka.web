@@ -11,6 +11,9 @@ import {
   Archive,
   ArrowRight,
   ChevronLeft,
+  ClipboardList,
+  Download,
+  Pause,
   Pencil,
   Plus,
   Printer,
@@ -18,6 +21,7 @@ import {
   ScanLine,
 } from 'lucide-react'
 import {
+  ActionMenu,
   Button,
   Card,
   ConfirmDialog,
@@ -781,7 +785,6 @@ function WarehouseView({ id }: { id: string }) {
   const resource = useLoad(loader, id)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [printing, setPrinting] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   /** Which write is asking for input: at most one dialog is open at a time. */
   const [editingWarehouse, setEditingWarehouse] = useState(false)
@@ -1008,14 +1011,39 @@ function WarehouseView({ id }: { id: string }) {
                     <Link to={`${base}/sessions/new`}>Нова сесія</Link>
                   </Button>
                 ) : null}
-                <Button
-                  aria-expanded={menuOpen}
-                  aria-label="Інші дії зі складом"
-                  className="min-w-11 px-0 text-base font-bold tracking-[0.1em]"
-                  onClick={() => setMenuOpen((open) => !open)}
-                >
-                  <span aria-hidden>···</span>
-                </Button>
+                <ActionMenu
+                  actions={[
+                    {
+                      key: 'print',
+                      label: printing
+                        ? 'Готуємо стікери…'
+                        : 'Друк стікерів зон',
+                      icon: <Printer aria-hidden />,
+                      disabled: printing,
+                      onSelect: () => void printZones(),
+                    },
+                    {
+                      key: 'export',
+                      label: 'Експорт залишків',
+                      icon: <Download aria-hidden />,
+                      disabled: true,
+                      title: 'Вивантажити залишки складу файлом поки не можна',
+                      onSelect: () => undefined,
+                    },
+                    ...(canManage && !warehouse.isSystemDefault
+                      ? [
+                          {
+                            key: 'archive',
+                            label: 'Архівувати склад',
+                            icon: <Archive aria-hidden />,
+                            destructive: true as const,
+                            onSelect: () => setArchivingWarehouse(true),
+                          },
+                        ]
+                      : []),
+                  ]}
+                  label="Інші дії зі складом"
+                />
               </div>
             </div>
 
@@ -1054,35 +1082,6 @@ function WarehouseView({ id }: { id: string }) {
 
               {operationError ? (
                 <Notice tone="danger">{operationError}</Notice>
-              ) : null}
-
-              {menuOpen ? (
-                <div className="border-app-line bg-app-raised flex flex-wrap items-center gap-2.5 rounded-[14px] border px-4 py-3">
-                  <Button
-                    disabled={printing}
-                    onClick={() => void printZones()}
-                    variant="ghost"
-                  >
-                    <Printer aria-hidden />
-                    {printing ? 'Готуємо стікери…' : 'Друк стікерів зон'}
-                  </Button>
-                  <Button
-                    disabled
-                    title="Вивантажити залишки складу файлом поки не можна"
-                    variant="ghost"
-                  >
-                    Експорт залишків
-                  </Button>
-                  {canManage && !warehouse.isSystemDefault ? (
-                    <Button
-                      onClick={() => setArchivingWarehouse(true)}
-                      variant="danger"
-                    >
-                      <Archive aria-hidden />
-                      Архівувати склад
-                    </Button>
-                  ) : null}
-                </div>
               ) : null}
 
               <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-px overflow-hidden rounded-[20px] border">
@@ -2236,6 +2235,7 @@ const initials = (name: string) =>
     .join('') || '?'
 
 function SessionView({ id }: { id: string }) {
+  const navigate = useNavigate()
   const base = useInventoryBase()
   const canManage = usePermission('inventory.manage')
   const canSeeTeam = usePermission('team.view')
@@ -2281,7 +2281,6 @@ function SessionView({ id }: { id: string }) {
   const resource = useLoad(loader, id)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [acting, setActing] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
   const [filter, setFilter] = useState<SessionFilter>('all')
   /** The action waiting for a confirmation, and the reason a cancel needs. */
   const [asking, setAsking] = useState<'start' | 'complete' | 'reopen' | null>(
@@ -2419,14 +2418,49 @@ function SessionView({ id }: { id: string }) {
                 >
                   Сканувати
                 </Button>
-                <Button
-                  aria-expanded={menuOpen}
-                  aria-label="Інші дії із сесією"
-                  className="min-w-11 px-0 text-base font-bold tracking-[0.1em]"
-                  onClick={() => setMenuOpen((open) => !open)}
-                >
-                  <span aria-hidden>···</span>
-                </Button>
+                <ActionMenu
+                  actions={[
+                    {
+                      key: 'audit',
+                      label: 'Аудит сесії',
+                      icon: <ClipboardList aria-hidden />,
+                      onSelect: () =>
+                        void navigate(`${base}/sessions/${id}/audit`),
+                    },
+                    {
+                      key: 'refresh',
+                      label: 'Оновити',
+                      icon: <RefreshCw aria-hidden />,
+                      onSelect: resource.reload,
+                    },
+                    {
+                      key: 'pause',
+                      label: 'Призупинити',
+                      icon: <Pause aria-hidden />,
+                      disabled: true,
+                      title:
+                        'Поставити сесію на паузу не можна — її можна лише завершити або скасувати',
+                      onSelect: () => undefined,
+                    },
+                    ...(canManage &&
+                    session.status !== 'completed' &&
+                    session.status !== 'cancelled'
+                      ? [
+                          {
+                            key: 'cancel',
+                            label: 'Скасувати сесію',
+                            icon: <Archive aria-hidden />,
+                            destructive: true as const,
+                            onSelect: () => {
+                              setReason('')
+                              setCancelling(true)
+                            },
+                          },
+                        ]
+                      : []),
+                  ]}
+                  label="Інші дії із сесією"
+                />
               </div>
             </div>
 
@@ -2456,39 +2490,6 @@ function SessionView({ id }: { id: string }) {
 
               {operationError ? (
                 <Notice tone="danger">{operationError}</Notice>
-              ) : null}
-
-              {menuOpen ? (
-                <div className="border-app-line bg-app-raised flex flex-wrap items-center gap-2.5 rounded-[14px] border px-4 py-3">
-                  <Button asChild variant="ghost">
-                    <Link to={`${base}/sessions/${id}/audit`}>Аудит сесії</Link>
-                  </Button>
-                  <Button onClick={resource.reload} variant="ghost">
-                    <RefreshCw aria-hidden />
-                    Оновити
-                  </Button>
-                  <Button
-                    disabled
-                    title="Поставити сесію на паузу не можна — її можна лише завершити або скасувати"
-                    variant="ghost"
-                  >
-                    Призупинити
-                  </Button>
-                  {canManage &&
-                  session.status !== 'completed' &&
-                  session.status !== 'cancelled' ? (
-                    <Button
-                      onClick={() => {
-                        setReason('')
-                        setCancelling(true)
-                      }}
-                      variant="danger"
-                    >
-                      <Archive aria-hidden />
-                      Скасувати сесію
-                    </Button>
-                  ) : null}
-                </div>
               ) : null}
 
               <div className="flex flex-wrap-reverse items-end gap-6">
