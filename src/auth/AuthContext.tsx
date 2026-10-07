@@ -29,6 +29,13 @@ export interface AuthContextValue {
   commitTenant: (tenantId: string) => void
   /** Update the authenticated user's display name without reloading tenant state. */
   updateName: (name: string) => Promise<void>
+  /**
+   * Take the business settings (accounting currency, region, document
+   * language and their locks) of freshly read tenants into `tenants` and
+   * `tenant`. Identity, name and slug stay as they are, so a settings
+   * re-read never moves the cabinet route. Optional for test doubles.
+   */
+  mergeTenantSettings?: (fresh: readonly Tenant[]) => void
   /** POST /session/logout and reset state. Pass `silent` to skip the network call. */
   signOut: (opts?: { silent?: boolean }) => Promise<void>
 }
@@ -188,6 +195,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const mergeTenantSettings = useCallback((fresh: readonly Tenant[]) => {
+    const merge = (current: Tenant): Tenant => {
+      const update = fresh.find((candidate) => candidate.id === current.id)
+      return update === undefined
+        ? current
+        : withBusinessSettings(current, update)
+    }
+    setTenants((list) => {
+      const next = list.map(merge)
+      return next.every((item, index) => item === list[index]) ? list : next
+    })
+    setTenantState((current) => (current === null ? current : merge(current)))
+  }, [])
+
   const updateName = useCallback<AuthContextValue['updateName']>(
     async (name) => {
       const generation = authGenerationRef.current
@@ -252,10 +273,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     hydrate,
     commitTenant,
     updateName,
+    mergeTenantSettings,
     signOut,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+const BUSINESS_SETTINGS = [
+  'countryCode',
+  'timeZoneId',
+  'documentLanguage',
+  'accountingCurrency',
+  'regionLocked',
+  'currencyLocked',
+] as const satisfies readonly (keyof Tenant)[]
+
+/** `current` with the business settings of `update`; same object if unchanged. */
+function withBusinessSettings(current: Tenant, update: Tenant): Tenant {
+  const changed = BUSINESS_SETTINGS.some(
+    (key) => (current[key] ?? null) !== (update[key] ?? null),
+  )
+  if (!changed) return current
+  const next: Tenant = { ...current }
+  for (const key of BUSINESS_SETTINGS) {
+    Object.assign(next, { [key]: update[key] ?? null })
+  }
+  return next
+}
+
+/** Auth state when a provider is mounted; `null` in isolated component tests. */
+// eslint-disable-next-line react-refresh/only-export-components -- hook colocated with provider; HMR boundary not critical here
+export function useOptionalAuth(): AuthContextValue | null {
+  return useContext(AuthContext)
 }
 
 // eslint-disable-next-line react-refresh/only-export-components -- hook colocated with provider; HMR boundary not critical here

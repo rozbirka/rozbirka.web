@@ -545,3 +545,52 @@ it('does not reset a new login when an earlier sign-out finishes', async () => {
   expect(credentials.getAccess()).toBe('B')
   expect(screen.getByTestId('status')).toHaveTextContent('authenticated')
 })
+
+function SettingsProbe({ fresh }: { fresh: Tenant[] }) {
+  const auth = useAuth()
+  return (
+    <div>
+      <span data-testid="status">{auth.status}</span>
+      <span data-testid="currency">
+        {auth.tenant?.accountingCurrency ?? 'none'}
+      </span>
+      <span data-testid="locked">{String(auth.tenant?.currencyLocked)}</span>
+      <span data-testid="slug">{auth.tenant?.slug ?? 'none'}</span>
+      <span data-testid="listed">
+        {auth.tenants.map((item) => item.accountingCurrency ?? '-').join(',')}
+      </span>
+      <button type="button" onClick={() => auth.mergeTenantSettings?.(fresh)}>
+        merge
+      </button>
+    </div>
+  )
+}
+
+it('merges re-read business settings without moving the tenant route', async () => {
+  credentials.setAccess('current-access')
+  const userEventApi = userEvent.setup()
+  render(
+    <AuthProvider>
+      <SettingsProbe
+        fresh={[
+          {
+            ...firstTenant,
+            slug: 'renamed-elsewhere',
+            accountingCurrency: 'GBP',
+            currencyLocked: true,
+          },
+        ]}
+      />
+    </AuthProvider>,
+  )
+
+  await expectStatus('authenticated')
+  expect(screen.getByTestId('currency')).toHaveTextContent('none')
+
+  await userEventApi.click(screen.getByRole('button', { name: 'merge' }))
+
+  expect(screen.getByTestId('currency')).toHaveTextContent('GBP')
+  expect(screen.getByTestId('locked')).toHaveTextContent('true')
+  expect(screen.getByTestId('slug')).toHaveTextContent(firstTenant.slug)
+  expect(screen.getByTestId('listed')).toHaveTextContent('GBP,-')
+})
