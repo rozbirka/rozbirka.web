@@ -17,7 +17,6 @@ export const paymentMessages = defineMessages({
     till: 'Каса',
     currency: 'Валюта',
     amount: 'Сума',
-    chooseCurrency: 'оберіть валюту',
     reselect: 'Каса «{till}» не приймає {code}. Оберіть валюту оплати ще раз.',
     amountKept: 'Суму {amount} не змінено й не перераховано.',
     summary: 'Каса {till} · {amount}',
@@ -46,9 +45,7 @@ export const paymentMessages = defineMessages({
     statusConfirmed: 'Підтверджено',
     statusRefunded: 'Кошти повернено',
     statusCancelled: 'Замовлення скасовано',
-    paymentsCard: 'Платежі',
     payment: 'Платіж',
-    noPaymentsYet: 'Платежів ще немає.',
     refundLabel: 'Повернути {amounts}',
     refundNothing: 'Оформити повернення',
     refundNoPayments:
@@ -80,7 +77,6 @@ export const paymentMessages = defineMessages({
     till: 'Cash desk',
     currency: 'Currency',
     amount: 'Amount',
-    chooseCurrency: 'choose a currency',
     reselect:
       '“{till}” doesn’t accept {code}. Choose the payment currency again.',
     amountKept: 'The amount {amount} is unchanged and not converted.',
@@ -108,9 +104,7 @@ export const paymentMessages = defineMessages({
     statusConfirmed: 'Confirmed',
     statusRefunded: 'Refunded',
     statusCancelled: 'Order cancelled',
-    paymentsCard: 'Payments',
     payment: 'Payment',
-    noPaymentsYet: 'No payments yet.',
     refundLabel: 'Refund {amounts}',
     refundNothing: 'Process refund',
     refundNoPayments:
@@ -138,7 +132,6 @@ export const paymentMessages = defineMessages({
     till: 'Kasa',
     currency: 'Waluta',
     amount: 'Kwota',
-    chooseCurrency: 'wybierz walutę',
     reselect:
       'Kasa „{till}” nie przyjmuje {code}. Wybierz ponownie walutę płatności.',
     amountKept: 'Kwota {amount} nie została zmieniona ani przeliczona.',
@@ -167,9 +160,7 @@ export const paymentMessages = defineMessages({
     statusConfirmed: 'Potwierdzono',
     statusRefunded: 'Zwrócono środki',
     statusCancelled: 'Zamówienie anulowane',
-    paymentsCard: 'Płatności',
     payment: 'Płatność',
-    noPaymentsYet: 'Brak płatności.',
     refundLabel: 'Zwróć {amounts}',
     refundNothing: 'Przeprowadź zwrot',
     refundNoPayments:
