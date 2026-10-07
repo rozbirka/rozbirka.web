@@ -45,6 +45,7 @@ import { orderStatusPresentation } from '../orders/order-labels'
 import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { useCabinet } from '../CabinetContext'
+import { useAccountingCurrency } from '../currency/use-accounting-currency'
 import {
   evaluateModuleAccess,
   ModuleAccessDeniedError,
@@ -203,6 +204,7 @@ const CUSTOMER_SORTS = [
 type CustomerSort = (typeof CUSTOMER_SORTS)[number]['value']
 
 function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
+  const { currency: accountingCurrency } = useAccountingCurrency()
   const cabinet = useCabinet()
   const mutationsAllowed = canAccess(definition, cabinet, 'mutation')
   const financeViewAllowed = canAccess(
@@ -502,7 +504,11 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
                         customer.totalAmount === 0 ? (
                           '—'
                         ) : (
-                          <Amount currency="USD" value={customer.totalAmount} />
+                          <Amount
+                            currency={accountingCurrency}
+                            currencyDisplay="code"
+                            value={customer.totalAmount}
+                          />
                         )}
                       </span>
                     ) : null}
@@ -534,6 +540,7 @@ function CustomerDetailScreen({
   definition,
   customerId,
 }: CabinetModuleScreenProps & { customerId: string }) {
+  const { currency: accountingCurrency } = useAccountingCurrency()
   const cabinet = useCabinet()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const mutationsAllowed = canAccess(definition, cabinet, 'mutation')
@@ -686,7 +693,11 @@ function CustomerDetailScreen({
   )
   const money = (value: number | null | undefined) =>
     typeof value === 'number' && Number.isFinite(value) ? (
-      <Amount currency="USD" value={value} />
+      <Amount
+        currency={accountingCurrency}
+        currencyDisplay="code"
+        value={value}
+      />
     ) : (
       '—'
     )
@@ -940,10 +951,11 @@ function CustomerDetailScreen({
                           </span>
                         </span>
                         <span className="font-mono text-[15px] whitespace-nowrap text-white tabular-nums">
-                          {/* The code the server sends becomes the symbol
-                              people read: USD is $, UAH is ₴, EUR is €. */}
+                          {/* The ISO code the server sends, never a symbol:
+                              CAD and USD would both read «$». */}
                           <Amount
                             currency={order.currency ?? null}
+                            currencyDisplay="code"
                             value={order.totalAmount}
                           />
                         </span>

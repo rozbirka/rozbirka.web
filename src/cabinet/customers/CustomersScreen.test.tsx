@@ -47,7 +47,12 @@ const cabinet = (
 ) =>
   ({
     status: 'ready',
-    targetTenant: { id: 'tenant-1', slug: 'garage' },
+    targetTenant: {
+      id: 'tenant-1',
+      slug: 'garage',
+      accountingCurrency: 'USD',
+      currencyLocked: true,
+    },
     snapshot: {
       userId: 'user-1',
       tenantId: 'tenant-1',
@@ -239,7 +244,9 @@ it('uses browser-native contact links and opens a new order over the customer ca
     '/app/garage/orders/order-7',
   )
   const average = screen.getByText('Середній чек').closest('div')
-  expect(within(average as HTMLElement).getByText(/1\s167\s\$/)).toBeVisible()
+  expect(
+    within(average as HTMLElement).getByText(/1\s167,00\sUSD/),
+  ).toBeVisible()
   await user.click(screen.getByRole('button', { name: 'Копіювати телефон' }))
   expect(writeText).toHaveBeenCalledWith('+380501112233')
 
