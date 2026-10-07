@@ -352,14 +352,16 @@ it('keeps intake detail visible and reports a normalized delete failure after pe
   await user.click(
     screen.getByRole('button', { name: 'Інші дії з прийманням' }),
   )
-  const remove = screen.getByRole('button', { name: 'Видалити приймання' })
+  const remove = screen.getByRole('menuitem', { name: 'Видалити приймання' })
   await user.click(remove)
   await user.click(
     within(screen.getByRole('dialog')).getByRole('button', {
       name: 'Видалити',
     }),
   )
-  expect(remove).toBeDisabled()
+  expect(
+    screen.queryByRole('menuitem', { name: 'Видалити приймання' }),
+  ).not.toBeInTheDocument()
   expect(screen.getByRole('main')).toHaveAttribute('aria-busy', 'true')
   rejectRemove({ kind: 'conflict', message: 'Приймання містить запчастини.' })
 
@@ -972,7 +974,7 @@ it('explains that an intake with parts cannot be deleted before asking the serve
   await user.click(
     screen.getByRole('button', { name: 'Інші дії з прийманням' }),
   )
-  await user.click(screen.getByRole('button', { name: 'Видалити приймання' }))
+  await user.click(screen.getByRole('menuitem', { name: 'Видалити приймання' }))
   const dialog = screen.getByRole('dialog')
   expect(dialog).toHaveTextContent('Партію не можна видалити')
   await user.click(within(dialog).getByRole('button', { name: 'Зрозуміло' }))

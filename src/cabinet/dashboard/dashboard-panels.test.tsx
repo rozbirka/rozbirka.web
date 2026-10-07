@@ -9,9 +9,7 @@ import { CarPayoffCard } from './CarPayoffCard'
 import { RecentOrdersCard } from './RecentOrdersCard'
 import { RevenueChart } from './RevenueChart'
 import { TillsCard } from './TillsCard'
-import { TodayTasks } from './TodayTasks'
 import { TopSalesCard } from './TopSalesCard'
-import type { DashboardTask } from './dashboard-tasks'
 
 const NOW = new Date('2026-09-19T09:00:00Z')
 
@@ -37,34 +35,6 @@ const car = (overrides: Partial<CarListItem> = {}): CarListItem => ({
     partsAvailable: 112,
   },
   ...overrides,
-})
-
-it('counts the day’s tasks beside the title and sends each one to its screen', () => {
-  const tasks: DashboardTask[] = [
-    {
-      id: 'intake:1',
-      tone: 'warn',
-      title: 'Приймання IN-0312 без позицій',
-      meta: 'жодної деталі не внесено',
-      action: 'Продовжити',
-      to: '/app/koval/intakes/1',
-    },
-  ]
-  routed(<TodayTasks allPath={null} tasks={tasks} />)
-
-  const card = screen.getByRole('region', { name: 'Зробити сьогодні' })
-  expect(within(card).getByText('1')).toBeVisible()
-  expect(
-    within(card).getByRole('link', { name: 'Продовжити' }),
-  ).toHaveAttribute('href', '/app/koval/intakes/1')
-})
-
-it('says the day is clear rather than drawing an empty task card', () => {
-  routed(<TodayTasks allPath={null} tasks={[]} />)
-
-  expect(
-    screen.getByRole('region', { name: 'Зробити сьогодні' }),
-  ).toHaveTextContent('Нічого не вимагає уваги')
 })
 
 it('puts a car’s payback, its age and both sums on one row', () => {

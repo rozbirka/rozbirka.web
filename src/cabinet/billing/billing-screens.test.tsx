@@ -280,6 +280,29 @@ it.each([
   },
 )
 
+it('describes a contract-managed enterprise plan without a store warning', () => {
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(undefined, {
+      ...cancellableSubscription,
+      planCode: 'enterprise_monthly',
+      planName: 'Enterprise',
+      source: null,
+      manageVia: 'web',
+    }),
+  )
+
+  renderScreen(<SubscriptionScreen />)
+
+  expect(
+    screen.getByText(
+      'Корпоративний тариф підключено за договором. Зміни узгоджуються з менеджером Rozbirka.',
+    ),
+  ).toBeVisible()
+  expect(
+    screen.queryByText(/Керування підпискою недоступне/),
+  ).not.toBeInTheDocument()
+})
+
 it('revalidates the latest provider before dispatching Mono reactivation', async () => {
   const currentCabinet = cabinet(undefined, {
     ...cancellableSubscription,

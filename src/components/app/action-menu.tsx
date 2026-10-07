@@ -12,6 +12,8 @@ export interface MenuAction {
   /** Marks an action that removes or ends something. */
   destructive?: boolean
   disabled?: boolean
+  /** Explains why an unavailable action cannot be used. */
+  title?: string
 }
 
 /**
@@ -42,6 +44,7 @@ export function ActionMenu({
         <DropdownMenu.Content
           align="end"
           className="bg-app-overlay border-app-line-2 rounded-sheet z-50 grid min-w-52 gap-1 border p-1.5 shadow-2xl"
+          collisionPadding={16}
           sideOffset={6}
         >
           {actions.map((action) => (
@@ -59,6 +62,7 @@ export function ActionMenu({
                 : { disabled: action.disabled })}
               key={action.key}
               onSelect={action.onSelect}
+              title={action.title}
             >
               {action.icon}
               {action.label}

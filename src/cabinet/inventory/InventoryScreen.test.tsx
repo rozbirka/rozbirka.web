@@ -326,7 +326,7 @@ it('asks for a reason before cancelling a session', async () => {
 
   await screen.findByRole('heading', { name: 'INV-001' })
   await user.click(screen.getByRole('button', { name: 'Інші дії із сесією' }))
-  await user.click(screen.getByRole('button', { name: 'Скасувати сесію' }))
+  await user.click(screen.getByRole('menuitem', { name: 'Скасувати сесію' }))
   const dialog = screen.getByRole('dialog')
   // The reason reaches the audit trail, so it is not optional.
   expect(
@@ -648,7 +648,7 @@ it('offers warehouse and zone management and prints actual zone QR labels', asyn
   // Printing, exporting and archiving hide behind the overflow control, the
   // way the toolbar is drawn.
   await user.click(screen.getByRole('button', { name: 'Інші дії зі складом' }))
-  await user.click(screen.getByRole('button', { name: 'Друк стікерів зон' }))
+  await user.click(screen.getByRole('menuitem', { name: 'Друк стікерів зон' }))
 
   await waitFor(() =>
     expect(api.getZones).toHaveBeenCalledWith({ warehouseId: 'wh-1' }),

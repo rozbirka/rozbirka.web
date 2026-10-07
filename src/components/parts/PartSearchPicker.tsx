@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
-import { partsApi, type PartListItem } from '@/api/parts'
+import { partsApi, type PartListItem, type PartSearchItem } from '@/api/parts'
 import { cn } from '@/lib/utils'
 
 type PartPickerFilter = 'all' | 'available' | 'reserved'
@@ -55,6 +55,23 @@ const statusPresentation = (part: PartPickerItem) => {
 const filterStatus = (filter: PartPickerFilter) =>
   filter === 'all' ? undefined : filter
 
+const fromSearchItem = (item: PartSearchItem): PartListItem => ({
+  id: item.id,
+  name: item.name,
+  photos: item.thumbnailUrl === null ? [] : [item.thumbnailUrl],
+  quantityTotal: item.quantity,
+  quantityReserved: item.quantityReserved,
+  quantityAvailable: item.quantityAvailable,
+  quantitySoldTotal: Math.max(
+    0,
+    item.quantity - item.quantityAvailable - item.quantityReserved,
+  ),
+  status: item.status,
+  car: item.car,
+  order: null,
+  externalCode: item.externalCode ?? item.oemCode,
+})
+
 export function PartSearchPicker({
   value,
   query,
@@ -67,6 +84,7 @@ export function PartSearchPicker({
   const rootRef = useRef<HTMLDivElement>(null)
   const listRequestRef = useRef(0)
   const countRequestRef = useRef(0)
+  const priceCacheRef = useRef(new Map<string, number | null>())
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState<PartPickerFilter>('all')
   const [page, setPage] = useState(1)
@@ -106,30 +124,21 @@ export function PartSearchPicker({
     const request = ++countRequestRef.current
     const controller = new AbortController()
     const timer = window.setTimeout(() => {
-      void Promise.allSettled(
-        filterOptions.map((option) => {
-          const status = filterStatus(option.value)
-          return partsApi.list({
-            q,
-            page: 1,
-            pageSize: 1,
-            ...(status ? { status } : {}),
-            signal: controller.signal,
+      void partsApi
+        .facets({ query: q }, ['status'], { signal: controller.signal })
+        .then((facets) => {
+          if (controller.signal.aborted || request !== countRequestRef.current)
+            return
+          const statuses = new Map(
+            facets.statuses.map((item) => [item.id.toLowerCase(), item.count]),
+          )
+          setCounts({
+            all: facets.statuses.reduce((sum, item) => sum + item.count, 0),
+            available: statuses.get('available') ?? 0,
+            reserved: statuses.get('reserved') ?? 0,
           })
-        }),
-      ).then((results) => {
-        if (controller.signal.aborted || request !== countRequestRef.current)
-          return
-        setCounts((current) => {
-          const next = { ...current }
-          results.forEach((result, index) => {
-            const option = filterOptions[index]
-            if (result.status === 'fulfilled' && option)
-              next[option.value] = result.value.total
-          })
-          return next
         })
-      })
+        .catch(() => undefined)
     }, 250)
     return () => {
       window.clearTimeout(timer)
@@ -147,20 +156,25 @@ export function PartSearchPicker({
       setError(null)
       const status = filterStatus(filter)
       void partsApi
-        .list({
-          q,
-          page,
-          pageSize: PAGE_SIZE,
-          ...(status ? { status } : {}),
-          signal: controller.signal,
-        })
+        .search(
+          {
+            query: q,
+            page,
+            pageSize: PAGE_SIZE,
+            ...(status ? { statuses: [status] } : {}),
+          },
+          { signal: controller.signal },
+        )
         .then(async (result) => {
           if (controller.signal.aborted || request !== listRequestRef.current)
             return
-          const baseItems = result.items.map((item) => ({
-            ...item,
-            effectiveSalePrice: null,
-          }))
+          const baseItems = result.items.map((searchItem) => {
+            const item = fromSearchItem(searchItem)
+            return {
+              ...item,
+              effectiveSalePrice: priceCacheRef.current.get(item.id) ?? null,
+            }
+          })
           setItems((current) => {
             if (page === 1) return baseItems
             const known = new Set(current.map((item) => item.id))
@@ -172,28 +186,32 @@ export function PartSearchPicker({
           setTotal(result.total)
           setTotalPages(Math.max(1, result.totalPages))
 
+          const uncached = result.items.filter(
+            (item) => !priceCacheRef.current.has(item.id),
+          )
           const details = await Promise.allSettled(
-            result.items.map((item) =>
+            uncached.map((item) =>
               partsApi.get(item.id, { signal: controller.signal }),
             ),
           )
           if (controller.signal.aborted || request !== listRequestRef.current)
             return
-          const prices = new Map(
-            baseItems.map((item, index) => {
-              const detail = details[index]
-              return [
+          uncached.forEach((item, index) => {
+            const detail = details[index]
+            if (detail?.status === 'fulfilled')
+              priceCacheRef.current.set(
                 item.id,
-                detail?.status === 'fulfilled'
-                  ? detail.value.effectiveSalePrice
-                  : null,
-              ] as const
-            }),
-          )
+                detail.value.effectiveSalePrice,
+              )
+          })
           setItems((current) =>
             current.map((item) =>
-              prices.has(item.id)
-                ? { ...item, effectiveSalePrice: prices.get(item.id) ?? null }
+              priceCacheRef.current.has(item.id)
+                ? {
+                    ...item,
+                    effectiveSalePrice:
+                      priceCacheRef.current.get(item.id) ?? null,
+                  }
                 : item,
             ),
           )

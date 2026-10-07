@@ -15,6 +15,7 @@ import {
 import {
   billingApi,
   canStartWebCheckout,
+  isContractManagedSubscription,
   resolveProviderManagement,
   type ProviderAwareSubscriptionDto,
 } from '@/api/billing'
@@ -36,6 +37,7 @@ import {
 } from './billing-vocabulary'
 import {
   BILLING_MANAGEMENT_UNAVAILABLE,
+  BillingContractNotice,
   BillingManagementUnavailableError,
   BillingMutationGate,
   BillingUnavailableNotice,
@@ -247,6 +249,7 @@ function SubscriptionPanel({
   const accessEnded = subscription.state === 'blocked'
   const providerSubscription = subscription as ProviderAwareSubscriptionDto
   const management = resolveProviderManagement(providerSubscription)
+  const contractManaged = isContractManagedSubscription(providerSubscription)
   const state = stateMeta[subscription.state]
   const planLabel = accessEnded
     ? 'Доступ закрито'
@@ -323,9 +326,10 @@ function SubscriptionPanel({
           </a>
         </Notice>
       )}
-      {management.kind === 'unavailable' && !canCheckout && (
-        <BillingUnavailableNotice />
-      )}
+      {contractManaged && <BillingContractNotice />}
+      {management.kind === 'unavailable' &&
+        !canCheckout &&
+        !contractManaged && <BillingUnavailableNotice />}
 
       <div
         className={cn(

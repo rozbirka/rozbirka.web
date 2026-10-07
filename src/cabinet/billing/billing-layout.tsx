@@ -21,6 +21,8 @@ export const BILLING_EYEBROW = 'Налаштування · Білінг'
  */
 export const BILLING_MANAGEMENT_UNAVAILABLE =
   'Керування підпискою недоступне. Оновіть сторінку — можливо, підписку перенесли в App Store або Google Play.'
+export const CONTRACT_MANAGEMENT_INFO =
+  'Корпоративний тариф підключено за договором. Зміни узгоджуються з менеджером Rozbirka.'
 
 /** Thrown when a mutation is dispatched against a non-Mono subscription. */
 // eslint-disable-next-line react-refresh/only-export-components -- failure type shared by the three billing screens.
@@ -63,6 +65,10 @@ export function BillingSection({
 
 export function BillingUnavailableNotice() {
   return <Notice tone="warn">{BILLING_MANAGEMENT_UNAVAILABLE}</Notice>
+}
+
+export function BillingContractNotice() {
+  return <Notice tone="info">{CONTRACT_MANAGEMENT_INFO}</Notice>
 }
 
 export function EmptyBillingPanel() {

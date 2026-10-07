@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { RefreshCw, Search } from 'lucide-react'
 import { Button, Skeleton } from '@/components/app'
-import { cn, plural } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { useCabinet } from '../CabinetContext'
 import { cabinetPath } from '../cabinet-paths'
 import { commandPaletteHint, openCommandPalette } from '../command-palette-open'
@@ -16,9 +16,7 @@ import { DashboardKpis } from './DashboardKpis'
 import { RecentOrdersCard } from './RecentOrdersCard'
 import { RevenueChart } from './RevenueChart'
 import { TillsCard } from './TillsCard'
-import { TodayTasks } from './TodayTasks'
 import { TopSalesCard } from './TopSalesCard'
-import { dashboardTasks } from './dashboard-tasks'
 import { readDashboardPeriod, writeDashboardPeriod } from './dashboard-period'
 import { useDashboardData } from './use-dashboard-data'
 import { getDashboardBillingPath } from './dashboard-billing-access'
@@ -26,7 +24,6 @@ import {
   useCashRegisters,
   usePartsSummary,
   usePayoffCars,
-  useRecentIntakes,
   useRecentOrders,
 } from './use-dashboard-panels'
 import type { DashboardPeriod } from '@/api/dashboard-contract'
@@ -34,7 +31,6 @@ import type { DashboardPeriod } from '@/api/dashboard-contract'
 /** How many rows each list card carries before it defers to its own screen. */
 const CARS_SHOWN = 5
 const ORDERS_SHOWN = 5
-const INTAKES_SCANNED = 10
 
 const PERIOD_LABELS: Readonly<Record<DashboardPeriod, string>> = {
   day: 'День',
@@ -79,7 +75,6 @@ export function DashboardScreen() {
 
   const cars = usePayoffCars(allowed.has('cars'), CARS_SHOWN)
   const orders = useRecentOrders(allowed.has('orders'), ORDERS_SHOWN)
-  const intakes = useRecentIntakes(allowed.has('intakes'), INTAKES_SCANNED)
   const registers = useCashRegisters(
     allowed.has('cash') && snapshot?.permissions.has('finance.view') === true,
   )
@@ -89,18 +84,6 @@ export function DashboardScreen() {
     dashboard.summary.status === 'ready' ? dashboard.summary.data : null
   const analytics =
     dashboard.analytics.status === 'ready' ? dashboard.analytics.data : null
-
-  const tasks =
-    slug === null
-      ? []
-      : dashboardTasks({
-          slug,
-          allowed,
-          cars: cars?.items ?? null,
-          intakes,
-          outOfStockPartsCount: summary?.outOfStockPartsCount ?? null,
-          now,
-        })
 
   const billingPath =
     snapshot !== null && targetTenant !== null
@@ -170,9 +153,6 @@ export function DashboardScreen() {
             </h1>
             <p className="text-app-muted mt-3 text-[15px]">
               {capitalize(dayName.format(now))}
-              {tasks.length === 0
-                ? ''
-                : ` · ${String(tasks.length)} ${plural(tasks.length, ['справа', 'справи', 'справ'])} на сьогодні`}
               {dashboard.refreshing ? ' · оновлюємо…' : ''}
             </p>
           </div>
@@ -227,9 +207,6 @@ export function DashboardScreen() {
               flow every card follows the one above it in its own column, so
               the board closes up whatever this account is allowed to see. */}
           <div className="gap-x-3.5 xl:columns-2 [&>*]:mb-3.5 [&>*]:break-inside-avoid">
-            {summary === null ? null : (
-              <TodayTasks allPath={null} tasks={tasks} />
-            )}
             {summary === null ? null : (
               <DashboardKpis
                 analytics={analytics}

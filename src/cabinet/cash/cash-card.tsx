@@ -89,6 +89,7 @@ function MoneyLines({
 }
 
 export function CashCard({
+  cashHref,
   register,
   ledger,
   ledgerTotal,
@@ -101,6 +102,7 @@ export function CashCard({
   pagination,
   children,
 }: {
+  cashHref: string
   register: CashRegister
   ledger: readonly CashTransaction[]
   ledgerTotal: number
@@ -147,7 +149,7 @@ export function CashCard({
       }
       crumb={
         <>
-          <Link className="hover:text-app-muted" to="..">
+          <Link className="hover:text-app-muted" to={cashHref}>
             Гроші · Каси
           </Link>
           <span aria-hidden> · </span>

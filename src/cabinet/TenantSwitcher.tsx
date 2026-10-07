@@ -42,10 +42,10 @@ export function TenantSwitcher({
       <Store
         aria-hidden
         className={cn(
-          'pointer-events-none absolute top-1/2 z-10 size-4 -translate-y-1/2',
+          'pointer-events-none absolute z-10 size-4 -translate-y-1/2',
           compact
-            ? 'text-brand-foreground left-1/2 -translate-x-1/2'
-            : 'text-brand left-4',
+            ? 'text-brand-foreground top-1/2 left-1/2 -translate-x-1/2'
+            : 'text-brand top-[22px] left-4',
         )}
       />
       <select
@@ -70,7 +70,7 @@ export function TenantSwitcher({
         <ChevronDown
           aria-hidden
           className={cn(
-            'text-app-dim pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2',
+            'text-app-dim pointer-events-none absolute top-[22px] right-3 size-4 -translate-y-1/2',
             isSwitching && 'opacity-40',
           )}
         />

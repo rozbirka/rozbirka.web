@@ -93,4 +93,23 @@ describe('billingApi', () => {
       manageVia: 'apple',
     })
   })
+
+  it('restores omitted nullable provider fields in a subscription response', async () => {
+    apiClient.defaults.adapter = (config) =>
+      Promise.resolve({
+        ...response(config),
+        data: {
+          data: {
+            planCode: 'enterprise_monthly',
+            manageVia: 'web',
+          },
+        },
+      })
+
+    await expect(billingApi.getSubscription()).resolves.toMatchObject({
+      planCode: 'enterprise_monthly',
+      source: null,
+      manageVia: 'web',
+    })
+  })
 })

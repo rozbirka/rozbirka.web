@@ -51,6 +51,20 @@ export function resolveProviderManagement(
   return { kind: 'unavailable' }
 }
 
+/** Contract plans are provisioned by Rozbirka rather than a payment provider. */
+export function isContractManagedSubscription(
+  subscription: Pick<
+    ProviderAwareSubscriptionDto,
+    'source' | 'manageVia' | 'planCode'
+  >,
+): boolean {
+  return (
+    subscription.source === null &&
+    subscription.manageVia === 'web' &&
+    subscription.planCode?.startsWith('enterprise_') === true
+  )
+}
+
 /** Checkout eligibility is separate from management of an existing subscription. */
 export function canStartWebCheckout(
   subscription:
@@ -117,7 +131,11 @@ export const billingApi = {
       '/billing/subscription',
       requestConfig(options),
     )
-    return resp.data
+    return {
+      ...resp.data,
+      source: resp.data.source ?? null,
+      manageVia: resp.data.manageVia ?? null,
+    }
   },
 
   /**

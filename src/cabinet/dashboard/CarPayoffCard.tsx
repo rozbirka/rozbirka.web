@@ -2,9 +2,15 @@ import { Link } from 'react-router'
 import { cn } from '@/lib/utils'
 import type { CarListItem } from '@/api/cars'
 import { CardEmpty, CardLink, CardRow, DashboardCard } from './dashboard-card'
-import { daysSince } from './dashboard-tasks'
 
 const sum = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 0 })
+const MS_PER_DAY = 86_400_000
+
+const daysSince = (iso: string, now: Date): number | null => {
+  const since = new Date(iso)
+  if (Number.isNaN(since.getTime())) return null
+  return Math.max(0, Math.floor((now.getTime() - since.getTime()) / MS_PER_DAY))
+}
 
 /**
  * Where every car on the yard stands against its own money. The bar is capped

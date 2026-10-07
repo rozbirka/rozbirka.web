@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are asserted directly. */
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router'
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { businessApi } from '@/api/business'
 import type { BillingState, Tenant } from '@/api/types'
@@ -74,6 +74,33 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(useCabinet).mockReturnValue(cabinet())
   vi.mocked(businessApi.update).mockResolvedValue(tenant)
+})
+
+it('opens inventory from the warehouse action', async () => {
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant',
+        children: [
+          {
+            path: 'settings/business',
+            element: <BusinessSettingsScreen />,
+          },
+          { path: 'inventory', element: <p>Екран інвентаризації</p> },
+        ],
+      },
+    ],
+    { initialEntries: ['/app/koval/settings/business'] },
+  )
+  const user = userEvent.setup()
+  render(<RouterProvider router={router} />)
+
+  await user.click(screen.getByRole('link', { name: 'Додати склад' }))
+
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe('/app/koval/inventory'),
+  )
+  expect(screen.getByText('Екран інвентаризації')).toBeVisible()
 })
 
 it('uses accessible secondary text on the dark business surface', () => {

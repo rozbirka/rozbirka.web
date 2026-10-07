@@ -116,6 +116,7 @@ function Note({ children }: { children: ReactNode }) {
 export function BusinessSettingsScreen() {
   const cabinet = useCabinet()
   const tenant = cabinet.targetTenant
+  const inventoryPath = `/app/${tenant?.slug ?? ''}/inventory`
   const generation = cabinet.snapshot?.generation
   const [name, setName] = useState(tenant?.name ?? '')
   const [city, setCity] = useState(tenant?.city ?? '')
@@ -354,7 +355,7 @@ export function BusinessSettingsScreen() {
           <Step
             action={
               <Button asChild>
-                <Link to="../../inventory">
+                <Link to={inventoryPath}>
                   <Plus aria-hidden />
                   Додати склад
                 </Link>
@@ -405,7 +406,7 @@ export function BusinessSettingsScreen() {
                       деталей — не рахується
                     </span>
                     <Button asChild>
-                      <Link to="../../inventory">Змінити</Link>
+                      <Link to={inventoryPath}>Змінити</Link>
                     </Button>
                   </li>
                 ))}
