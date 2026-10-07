@@ -84,13 +84,13 @@ const requestConfig = (options: RequestOptions) =>
   options.signal ? { signal: options.signal } : {}
 
 /**
- * Core omits collections that are empty, so a fresh order arrives without
- * `history` and a screen that maps over it crashes. Every response that
- * carries an order passes through here, and the type stays a promise the
- * rest of the app can trust.
+ * Core omits absent customer fields and empty collections. Normalize every
+ * order response so consumers can rely on explicit nulls and arrays.
  */
-const withCollections = (order: OrderDetail): OrderDetail => ({
+const normalizeOrder = (order: OrderDetail): OrderDetail => ({
   ...order,
+  customerId: order.customerId ?? null,
+  customerName: order.customerName ?? null,
   items: order.items ?? [],
   payments: order.payments ?? [],
   history: order.history ?? [],
@@ -112,24 +112,24 @@ export const ordersApi = {
     id: string,
     options: RequestOptions = {},
   ): Promise<OrderDetail> {
-    return withCollections(
+    return normalizeOrder(
       (await apiClient.get<OrderDetail>(endpoint(id), requestConfig(options)))
         .data,
     )
   },
   async create(input: CreateOrderInput): Promise<OrderDetail> {
-    return withCollections(
+    return normalizeOrder(
       (await apiClient.post<OrderDetail>('/orders', input)).data,
     )
   },
   async updateItems(id: string, items: OrderItemInput[]): Promise<OrderDetail> {
-    return withCollections(
+    return normalizeOrder(
       (await apiClient.put<OrderDetail>(`${endpoint(id)}/items`, { items }))
         .data,
     )
   },
   async updateNotes(id: string, notes: string | null): Promise<OrderDetail> {
-    return withCollections(
+    return normalizeOrder(
       (await apiClient.put<OrderDetail>(`${endpoint(id)}/notes`, { notes }))
         .data,
     )
@@ -138,15 +138,19 @@ export const ordersApi = {
     id: string,
     payments: ConfirmPayment[],
   ): Promise<OrderDetail> {
-    return (
-      await apiClient.put<OrderDetail>(`${endpoint(id)}/payments`, { payments })
-    ).data
+    return normalizeOrder(
+      (
+        await apiClient.put<OrderDetail>(`${endpoint(id)}/payments`, {
+          payments,
+        })
+      ).data,
+    )
   },
   async setCustomer(
     id: string,
     customerId: string | null,
   ): Promise<OrderDetail> {
-    return withCollections(
+    return normalizeOrder(
       (
         await apiClient.put<OrderDetail>(`${endpoint(id)}/customer`, {
           customerId,
@@ -159,7 +163,7 @@ export const ordersApi = {
     input: { payments: ConfirmPayment[] },
     replay: IdempotentMutation,
   ): Promise<OrderDetail> {
-    return withCollections(
+    return normalizeOrder(
       (
         await apiClient.post<OrderDetail>(
           `${endpoint(id)}/confirm`,
@@ -170,7 +174,7 @@ export const ordersApi = {
     )
   },
   async cancel(id: string): Promise<OrderDetail> {
-    return withCollections(
+    return normalizeOrder(
       (await apiClient.post<OrderDetail>(`${endpoint(id)}/cancel`)).data,
     )
   },
@@ -179,7 +183,7 @@ export const ordersApi = {
     input: { refundReason: string },
     replay: IdempotentMutation,
   ): Promise<OrderDetail> {
-    return withCollections(
+    return normalizeOrder(
       (
         await apiClient.post<OrderDetail>(
           `${endpoint(id)}/refund`,

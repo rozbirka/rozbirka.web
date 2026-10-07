@@ -85,3 +85,41 @@ it('fills in the collections Core omits when they are empty', async () => {
     expect(order.history).toEqual([])
   }
 })
+
+it.each([undefined, null, 'customer-1'])(
+  'normalizes customer identity %s on every order response',
+  async (customerId) => {
+    const data = {
+      id: 'order-1',
+      ...(customerId === undefined
+        ? {}
+        : { customerId, customerName: customerId === null ? null : 'Клієнт' }),
+    }
+    vi.spyOn(apiClient, 'get').mockResolvedValue({ data })
+    vi.spyOn(apiClient, 'post').mockResolvedValue({ data })
+    vi.spyOn(apiClient, 'put').mockResolvedValue({ data })
+    const responses = await Promise.all([
+      ordersApi.getById('order-1'),
+      ordersApi.create({ customerId: null, notes: null, items: [] }),
+      ordersApi.updateItems('order-1', []),
+      ordersApi.updateNotes('order-1', null),
+      ordersApi.updatePayments('order-1', []),
+      ordersApi.setCustomer('order-1', null),
+      ordersApi.confirm(
+        'order-1',
+        { payments: [] },
+        { idempotencyKey: 'confirm-1' },
+      ),
+      ordersApi.cancel('order-1'),
+      ordersApi.refund(
+        'order-1',
+        { refundReason: 'Повернення' },
+        { idempotencyKey: 'refund-1' },
+      ),
+    ])
+    for (const order of responses) {
+      expect(order.customerId).toBe(customerId ?? null)
+      expect(order.customerName).toBe(customerId ? 'Клієнт' : null)
+    }
+  },
+)
