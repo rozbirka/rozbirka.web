@@ -13,6 +13,7 @@ import {
 const fresh: OwnerOnboarding = {
   eligible: true,
   deferred: false,
+  dismissed: false,
   completed: false,
   settingsCompleted: false,
   currencySelected: false,
@@ -29,12 +30,8 @@ const allDone = {
 }
 
 describe('who sees the checklist (DIA-ONBOARDING-DECISION)', () => {
-  const view = (
-    isOwner: boolean,
-    facts: Partial<OwnerOnboarding>,
-    completionHidden = false,
-  ) =>
-    decideChecklistView({ isOwner, load: ready(facts), completionHidden }).kind
+  const view = (isOwner: boolean, facts: Partial<OwnerOnboarding>) =>
+    decideChecklistView({ isOwner, load: ready(facts) }).kind
 
   it('shows nothing for a tenant created before launch, owner or not (SC-7, AC-9)', () => {
     expect(view(true, { eligible: false })).toBe('hidden')
@@ -49,7 +46,6 @@ describe('who sees the checklist (DIA-ONBOARDING-DECISION)', () => {
       decideChecklistView({
         isOwner: false,
         load: { status: 'loading' },
-        completionHidden: false,
       }).kind,
     ).toBe('hidden')
   })
@@ -61,10 +57,12 @@ describe('who sees the checklist (DIA-ONBOARDING-DECISION)', () => {
     )
   })
 
-  it('shows the completion card until hidden, and completion beats deferral', () => {
+  it('shows the completion card until Core says it is dismissed, and completion beats deferral', () => {
     expect(view(true, { completed: true, ...allDone })).toBe('completed')
     expect(view(true, { completed: true, deferred: true })).toBe('completed')
-    expect(view(true, { completed: true }, true)).toBe('hidden')
+    expect(view(true, { completed: true, dismissed: true })).toBe('hidden')
+    // `dismissed` only hides the completion card, never an unfinished list.
+    expect(view(true, { dismissed: true })).toBe('expanded')
   })
 
   it('treats four saved facts as complete even before Core stamps it', () => {
@@ -86,23 +84,29 @@ describe('who sees the checklist (DIA-ONBOARDING-DECISION)', () => {
       decideChecklistView({
         isOwner: true,
         load: { status: 'loading' },
-        completionHidden: false,
       }),
     ).toEqual({ kind: 'loading' })
     expect(
       decideChecklistView({
         isOwner: true,
         load: { status: 'error', problem: null },
-        completionHidden: false,
       }),
     ).toEqual({ kind: 'error' })
     expect(
       decideChecklistView({
         isOwner: true,
         load: { status: 'unavailable' },
-        completionHidden: false,
       }).kind,
     ).toBe('hidden')
+  })
+
+  it('keeps a first read without a connection neutral, not an error', () => {
+    expect(
+      decideChecklistView({ isOwner: true, load: { status: 'offline' } }),
+    ).toEqual({ kind: 'offline' })
+    expect(
+      decideChecklistView({ isOwner: false, load: { status: 'offline' } }),
+    ).toEqual({ kind: 'hidden' })
   })
 })
 
@@ -147,7 +151,6 @@ describe('progress and the next step', () => {
     const view = decideChecklistView({
       isOwner: true,
       load: ready({ settingsCompleted: true, currencySelected: true }),
-      completionHidden: false,
     })
     expect(view).toMatchObject({ kind: 'expanded', next: 'source' })
   })

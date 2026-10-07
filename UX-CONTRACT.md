@@ -134,11 +134,18 @@ business settings, accounting currency, a car or a batch, the first part —
 with progress read from Core's onboarding facts only; opening a form or
 pressing «Продовжити» credits nothing. Steps open the existing screens
 (business settings sections by fragment, new car/intake with `return_to`, new
-part); the dashboard re-reads on mount and focus and announces credited steps
-in a status toast. «Зробити пізніше» is saved on the server and collapses the
-list into «Завершіть налаштування», which never re-expands by itself.
-Completion offers the cash desk and team as recommendations and can be hidden
-(in this browser until Core stores it). Workers, yards created before launch
-and Cores without the endpoint see nothing; a failed read shows a retry, never
-guessed progress. Verification owners: `onboarding-policy.test.ts`,
+part); the dashboard re-reads on mount, focus and reconnection and announces
+credited steps in a status toast. «Зробити пізніше» is saved on the server and
+collapses the list into «Завершіть налаштування», which never re-expands by
+itself; its «Продовжити» clears the deferral first (busy while saving) and
+opens the step only after Core confirms, otherwise it stays with an error.
+Completion offers the cash desk and team as recommendations and «Сховати»
+saves Core `dismissed` (shared with mobile; a card hidden in this browser
+before Core stored it is migrated once and the local key removed). Saving the
+first part keeps the parts screen and shows the completion notice with «До
+дашборду». Every onboarding PATCH re-reads the fact after a lost answer before
+reporting failure. Workers, yards created before launch and Cores without the
+endpoint see nothing; a first read without a connection is a neutral notice
+(eligibility unknown) that re-reads once online; any other failed read shows a
+retry, never guessed progress. Verification owners: `onboarding-policy.test.ts`,
 `OnboardingChecklist.test.tsx`, `tenant-onboarding.test.tsx`.

@@ -101,6 +101,7 @@ import { carsApi, type Car, type CarListItem } from '@/api/cars'
 import { intakesApi, type IntakeListItem } from '@/api/intakes'
 import { mediaApi } from '@/api/media'
 import { useCabinet } from '../CabinetContext'
+import { cabinetPath } from '../cabinet-paths'
 import { FeatureGate } from '../FeatureFlags'
 import { FEATURE_FLAGS } from '@/api/feature-flags'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
@@ -137,6 +138,8 @@ import {
   useFirstPriceGuard,
 } from '../currency/use-accounting-currency'
 import { usePriceSlots, type PriceSlots } from '../currency/use-price-slots'
+import { OnboardingCompletedNotice } from '../onboarding/first-part-completion'
+import { useFirstPartCompletion } from '../onboarding/use-first-part-completion'
 
 const partStatuses = new Set(['available', 'reserved', 'sold'])
 /** Every group the filter panel draws; the server counts each one for us. */
@@ -3509,6 +3512,12 @@ function PartForm({
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showErrors, setShowErrors] = useState(false)
+  // The owner's first part may finish onboarding: say so here, keep the list.
+  const firstPart = useFirstPartCompletion({
+    tenantId: cabinet.targetTenant?.id ?? null,
+    userId: cabinet.snapshot?.userId ?? null,
+    role: cabinet.snapshot?.role,
+  })
   // A car given by link but missing from the active list is most likely
   // archived; say so now rather than after the whole form is filled.
   const [archivedCarId, setArchivedCarId] = useState<string | null>(null)
@@ -3699,6 +3708,7 @@ function PartForm({
       }
       guard.afterSave(pricing)
       setStatus(t('created'))
+      firstPart.check()
     } catch (failure) {
       setError(createFailureMessage(failure, locale))
     } finally {
@@ -3804,6 +3814,11 @@ function PartForm({
           variant="plain"
         />
         {status ? <Notice tone="ok">{status}</Notice> : null}
+        {firstPart.done && cabinet.targetTenant ? (
+          <OnboardingCompletedNotice
+            dashboardPath={cabinetPath(cabinet.targetTenant.slug, 'dashboard')}
+          />
+        ) : null}
         {error ? <Notice tone="danger">{error}</Notice> : null}
       </form>
     </Sheet>

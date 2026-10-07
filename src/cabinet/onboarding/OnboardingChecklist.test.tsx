@@ -14,11 +14,11 @@ import { resetOnboardingCache } from './use-owner-onboarding'
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest resolves the API methods into typed mocks. */
 
 vi.mock('@/api/onboarding', () => ({
-  onboardingApi: { get: vi.fn(), setDeferred: vi.fn() },
+  onboardingApi: { get: vi.fn(), update: vi.fn() },
 }))
 
 const get = vi.mocked(onboardingApi.get)
-const setDeferred = vi.mocked(onboardingApi.setDeferred)
+const update = vi.mocked(onboardingApi.update)
 
 const tenant: Tenant = {
   id: 'tenant-1',
@@ -64,6 +64,7 @@ const ownerSnapshot: TenantAccessSnapshot = {
 const fresh: OwnerOnboarding = {
   eligible: true,
   deferred: false,
+  dismissed: false,
   completed: false,
   settingsCompleted: false,
   currencySelected: false,
@@ -212,7 +213,7 @@ describe('the expanded list', () => {
   })
 
   it('reports a failed read with a retry instead of progress (EC-4)', async () => {
-    get.mockRejectedValueOnce({ kind: 'network', message: 'offline' })
+    get.mockRejectedValueOnce({ kind: 'server', message: 'boom' })
     get.mockResolvedValueOnce(fresh)
     const user = userEvent.setup()
     renderChecklist()
@@ -225,6 +226,24 @@ describe('the expanded list', () => {
     await user.click(screen.getByRole('button', { name: 'Повторити' }))
     expect(await findLoaded('Перші кроки')).toBeVisible()
     expect(get).toHaveBeenCalledTimes(2)
+  })
+
+  it('stays neutral on a first launch without a connection and re-reads once online', async () => {
+    get.mockRejectedValueOnce({ kind: 'network', message: 'offline' })
+    get.mockResolvedValueOnce(fresh)
+    renderChecklist()
+
+    const offline = await screen.findByText(
+      'Немає звʼязку. Перевіримо перші кроки, щойно мережа повернеться.',
+    )
+    expect(offline.closest('[role]')).toHaveAttribute('role', 'status')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByRole('progressbar')).toBeNull()
+
+    act(() => {
+      window.dispatchEvent(new Event('online'))
+    })
+    expect(await findLoaded('Перші кроки')).toBeVisible()
   })
 
   it('opens the first incomplete step on «Продовжити», not the one after', async () => {
@@ -370,7 +389,7 @@ describe('deferral', () => {
   it('collapses to the compact block and moves focus to its «Продовжити» (SC-5)', async () => {
     get.mockResolvedValue({ ...fresh, settingsCompleted: true })
     const saving = deferred<OwnerOnboarding>()
-    setDeferred.mockReturnValue(saving.promise)
+    update.mockReturnValue(saving.promise)
     const user = userEvent.setup()
     renderChecklist()
 
@@ -380,7 +399,7 @@ describe('deferral', () => {
     const busy = screen.getByRole('button', { name: 'Зберігаємо…' })
     expect(busy).toBeDisabled()
     expect(busy).toHaveAttribute('aria-busy', 'true')
-    expect(setDeferred).toHaveBeenCalledWith('tenant-1', true)
+    expect(update).toHaveBeenCalledWith('tenant-1', { deferred: true })
 
     await act(async () => {
       saving.resolve({ ...fresh, settingsCompleted: true, deferred: true })
@@ -409,7 +428,7 @@ describe('deferral', () => {
       settingsCompleted: true,
       currencySelected: true,
     })
-    setDeferred.mockResolvedValue({
+    update.mockResolvedValue({
       ...fresh,
       settingsCompleted: true,
       currencySelected: true,
@@ -430,13 +449,71 @@ describe('deferral', () => {
       within(compact).getByRole('button', { name: 'Продовжити' }),
     )
 
-    expect(setDeferred).toHaveBeenCalledWith('tenant-1', false)
+    expect(update).toHaveBeenCalledWith('tenant-1', { deferred: false })
     expect(route()).toHaveTextContent('/app/avtosklad/cars/new')
+  })
+
+  it('opens the step only after Core clears the deferral, showing it is busy', async () => {
+    const compactFacts = { ...fresh, deferred: true, settingsCompleted: true }
+    get.mockResolvedValue(compactFacts)
+    const saving = deferred<OwnerOnboarding>()
+    update.mockReturnValue(saving.promise)
+    const user = userEvent.setup()
+    renderChecklist()
+
+    const compact = await screen.findByRole('region', {
+      name: 'Завершіть налаштування',
+    })
+    await user.click(
+      within(compact).getByRole('button', { name: 'Продовжити' }),
+    )
+    const busy = within(compact).getByRole('button', { name: 'Зберігаємо…' })
+    expect(busy).toBeDisabled()
+    expect(busy).toHaveAttribute('aria-busy', 'true')
+    expect(route()).toHaveTextContent(/^\/app\/avtosklad\/dashboard$/)
+
+    await act(async () => {
+      saving.resolve({ ...compactFacts, deferred: false })
+      await saving.promise
+    })
+    await waitFor(() =>
+      expect(route()).toHaveTextContent(
+        '/app/avtosklad/settings/business#accounting-currency',
+      ),
+    )
+  })
+
+  it('stays put and says so when clearing the deferral fails', async () => {
+    get.mockResolvedValue({ ...fresh, deferred: true })
+    update.mockRejectedValue({ kind: 'server', message: 'boom' })
+    const user = userEvent.setup()
+    renderChecklist()
+
+    await user.click(await screen.findByRole('button', { name: 'Продовжити' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Не вдалося продовжити налаштування',
+    )
+    expect(route()).toHaveTextContent(/^\/app\/avtosklad\/dashboard$/)
+    expect(screen.getByRole('button', { name: 'Продовжити' })).toBeEnabled()
+  })
+
+  it('re-reads after a lost answer and continues once the deferral is gone', async () => {
+    get.mockResolvedValueOnce({ ...fresh, deferred: true })
+    get.mockResolvedValueOnce(fresh)
+    update.mockRejectedValue({ kind: 'timeout', message: 'slow' })
+    const user = userEvent.setup()
+    renderChecklist()
+
+    await user.click(await screen.findByRole('button', { name: 'Продовжити' }))
+    await waitFor(() =>
+      expect(route()).toHaveTextContent('/app/avtosklad/settings/business'),
+    )
+    expect(update).toHaveBeenCalledTimes(1)
   })
 
   it('keeps the list and offers a retry when deferring fails (AC-5)', async () => {
     get.mockResolvedValue(fresh)
-    setDeferred.mockRejectedValue({ kind: 'server', message: 'boom' })
+    update.mockRejectedValue({ kind: 'server', message: 'boom' })
     const user = userEvent.setup()
     renderChecklist()
 
@@ -456,7 +533,7 @@ describe('deferral', () => {
     get.mockResolvedValueOnce(fresh)
     const check = deferred<OwnerOnboarding>()
     get.mockReturnValueOnce(check.promise)
-    setDeferred.mockRejectedValue({ kind: 'network', message: 'offline' })
+    update.mockRejectedValue({ kind: 'network', message: 'offline' })
     const user = userEvent.setup()
     renderChecklist()
 
@@ -474,20 +551,24 @@ describe('deferral', () => {
     expect(
       await screen.findByRole('region', { name: 'Завершіть налаштування' }),
     ).toBeVisible()
-    expect(setDeferred).toHaveBeenCalledTimes(1)
+    expect(update).toHaveBeenCalledTimes(1)
   })
 })
 
 describe('completion', () => {
-  it('shows recommended actions and hides for good (AC-8)', async () => {
-    get.mockResolvedValue({
-      ...fresh,
-      completed: true,
-      settingsCompleted: true,
-      currencySelected: true,
-      sourceCreated: true,
-      firstPartCreated: true,
-    })
+  const complete = {
+    ...fresh,
+    completed: true,
+    settingsCompleted: true,
+    currencySelected: true,
+    sourceCreated: true,
+    firstPartCreated: true,
+  }
+
+  it('shows recommended actions and hides for good through Core (AC-8)', async () => {
+    get.mockResolvedValue(complete)
+    const saving = deferred<OwnerOnboarding>()
+    update.mockReturnValue(saving.promise)
     const user = userEvent.setup()
     renderChecklist({
       snapshot: {
@@ -507,12 +588,81 @@ describe('completion', () => {
     ).toHaveAttribute('href', '/app/avtosklad/team')
 
     await user.click(within(card).getByRole('button', { name: 'Сховати' }))
+    expect(update).toHaveBeenCalledWith('tenant-1', { dismissed: true })
+    expect(
+      within(card).getByRole('button', { name: 'Зберігаємо…' }),
+    ).toBeDisabled()
+
+    await act(async () => {
+      saving.resolve({ ...complete, dismissed: true })
+      await saving.promise
+    })
     expect(
       screen.queryByRole('region', { name: 'Основне налаштування завершено' }),
     ).toBeNull()
     expect(
       localStorage.getItem('rozbirka:onboarding-done-hidden:user-1:tenant-1'),
-    ).toBe('1')
+    ).toBeNull()
+  })
+
+  it('keeps the card and offers to try again when hiding fails', async () => {
+    get.mockResolvedValue(complete)
+    update.mockRejectedValue({ kind: 'server', message: 'boom' })
+    const user = userEvent.setup()
+    renderChecklist()
+
+    const card = await screen.findByRole('region', {
+      name: 'Основне налаштування завершено',
+    })
+    await user.click(within(card).getByRole('button', { name: 'Сховати' }))
+    expect(await within(card).findByRole('alert')).toHaveTextContent(
+      'Не вдалося сховати картку',
+    )
+    expect(within(card).getByRole('button', { name: 'Сховати' })).toBeEnabled()
+  })
+
+  it('stays hidden when Core already has it dismissed', async () => {
+    get.mockResolvedValue({ ...complete, dismissed: true })
+    renderChecklist()
+    await waitFor(() => expect(get).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(screen.queryByText('Завантажуємо прогрес…')).toBeNull(),
+    )
+    expect(
+      screen.queryByRole('region', { name: 'Основне налаштування завершено' }),
+    ).toBeNull()
+  })
+
+  it('moves a card hidden in this browser to Core and forgets the local key', async () => {
+    localStorage.setItem('rozbirka:onboarding-done-hidden:user-1:tenant-1', '1')
+    get.mockResolvedValue(complete)
+    update.mockResolvedValue({ ...complete, dismissed: true })
+    renderChecklist()
+
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith('tenant-1', { dismissed: true }),
+    )
+    await waitFor(() =>
+      expect(
+        localStorage.getItem('rozbirka:onboarding-done-hidden:user-1:tenant-1'),
+      ).toBeNull(),
+    )
+    expect(
+      screen.queryByRole('region', { name: 'Основне налаштування завершено' }),
+    ).toBeNull()
+  })
+
+  it('only drops the local key when Core already has the card dismissed', async () => {
+    localStorage.setItem('rozbirka:onboarding-done-hidden:user-1:tenant-1', '1')
+    get.mockResolvedValue({ ...complete, dismissed: true })
+    renderChecklist()
+
+    await waitFor(() =>
+      expect(
+        localStorage.getItem('rozbirka:onboarding-done-hidden:user-1:tenant-1'),
+      ).toBeNull(),
+    )
+    expect(update).not.toHaveBeenCalled()
   })
 })
 

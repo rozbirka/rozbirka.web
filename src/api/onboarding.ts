@@ -2,15 +2,17 @@ import { apiClient } from './client'
 import type { RequestOptions } from './contracts'
 
 /**
- * Owner onboarding of one tenant (Core `OnboardingDto`, pending contract — see
- * contract-alignment.ts). Every flag is a server fact: a step counts only after
- * its entity or setting was saved, never because a form was opened.
+ * Owner onboarding of one tenant (Core `OnboardingDto`). Every flag is a
+ * server fact: a step counts only after its entity or setting was saved,
+ * never because a form was opened.
  */
 export interface OwnerOnboarding {
   /** Created after the feature launched; older tenants never see it. */
   eligible: boolean
   /** The owner chose «Зробити пізніше»; shared across web and mobile. */
   deferred: boolean
+  /** The owner hid the completion card; shared across web and mobile. */
+  dismissed: boolean
   /** Settings and the first part are saved. Sticky: deleting the part later
    * does not reopen onboarding. */
   completed: boolean
@@ -20,13 +22,16 @@ export interface OwnerOnboarding {
   firstPartCreated: boolean
 }
 
+/** Core `UpdateOnboardingRequest`: an omitted flag stays as it is. */
 export interface UpdateOnboardingRequest {
-  deferred: boolean
+  deferred?: boolean
+  dismissed?: boolean
 }
 
 const ONBOARDING_FLAGS = [
   'eligible',
   'deferred',
+  'dismissed',
   'completed',
   'settingsCompleted',
   'currencySelected',
@@ -79,13 +84,16 @@ export const onboardingApi = {
     return parseOwnerOnboarding(response.data)
   },
 
-  /** Setting the same value again is harmless, so a retry cannot overshoot. */
-  async setDeferred(
+  /**
+   * Set `deferred` and/or `dismissed`. Setting the same value again is
+   * harmless (the PATCH is naturally idempotent), so a retry cannot
+   * overshoot.
+   */
+  async update(
     tenantId: string,
-    deferred: boolean,
+    request: UpdateOnboardingRequest,
     options: RequestOptions = {},
   ): Promise<OwnerOnboarding> {
-    const request: UpdateOnboardingRequest = { deferred }
     const response = await apiClient.patch<unknown>(
       onboardingPath(tenantId),
       request,

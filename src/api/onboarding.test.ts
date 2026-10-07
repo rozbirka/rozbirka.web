@@ -14,6 +14,7 @@ import {
 const facts = {
   eligible: true,
   deferred: false,
+  dismissed: false,
   completed: false,
   settingsCompleted: true,
   currencySelected: false,
@@ -61,25 +62,32 @@ it('reads the onboarding facts of one tenant from the result envelope', async ()
   expect(observed?.signal?.aborted).toBe(true)
 })
 
-it('patches only the deferred flag and returns the server state', async () => {
-  let observed: InternalAxiosRequestConfig | undefined
+it('patches only the given flag and returns the server state', async () => {
+  const observed: InternalAxiosRequestConfig[] = []
   apiClient.defaults.adapter = (config) => {
-    observed = config
-    return Promise.resolve(response(config, { ...facts, deferred: true }))
+    observed.push(config)
+    return Promise.resolve(
+      response(config, { ...facts, deferred: true, dismissed: true }),
+    )
   }
 
-  await expect(onboardingApi.setDeferred('tenant-1', true)).resolves.toEqual({
-    ...facts,
-    deferred: true,
-  })
-  expect(observed?.method).toBe('patch')
-  expect(observed?.url).toBe('/tenants/tenant-1/onboarding')
-  expect(observed?.data).toBe(JSON.stringify({ deferred: true }))
+  await expect(
+    onboardingApi.update('tenant-1', { deferred: true }),
+  ).resolves.toEqual({ ...facts, deferred: true, dismissed: true })
+  await onboardingApi.update('tenant-1', { dismissed: true })
+  expect(observed.map((config) => config.method)).toEqual(['patch', 'patch'])
+  expect(observed[0]?.url).toBe('/tenants/tenant-1/onboarding')
+  expect(observed[0]?.data).toBe(JSON.stringify({ deferred: true }))
+  expect(observed[1]?.data).toBe(JSON.stringify({ dismissed: true }))
 })
 
 it('rejects a response with a missing or non-boolean flag instead of guessing', () => {
   const { sourceCreated: _missing, ...withoutSource } = facts
   expect(() => parseOwnerOnboarding(withoutSource)).toThrow(
+    OnboardingContractError,
+  )
+  const { dismissed: _dismissed, ...withoutDismissed } = facts
+  expect(() => parseOwnerOnboarding(withoutDismissed)).toThrow(
     OnboardingContractError,
   )
   expect(() => parseOwnerOnboarding({ ...facts, completed: 'false' })).toThrow(

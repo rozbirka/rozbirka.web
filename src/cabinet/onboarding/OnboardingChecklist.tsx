@@ -61,17 +61,6 @@ const RETURN_MARK = 'onboarding'
 /** What the source form adds to the return path (see `sourceReturnPath`). */
 const RETURN_LEFTOVERS = [RETURN_MARK, 'car_id', 'intake_id', 'draft']
 
-const hiddenKey = (key: string) => `rozbirka:onboarding-done-hidden:${key}`
-
-function readHidden(key: string | null): boolean {
-  if (key === null) return false
-  try {
-    return localStorage.getItem(hiddenKey(key)) === '1'
-  } catch {
-    return false
-  }
-}
-
 /**
  * The owner onboarding checklist on the dashboard (ROZ-163, board component
  * OnboardingChecklist): four required steps with progress from server facts,
@@ -116,16 +105,11 @@ export function OnboardingChecklist({
     onChange,
   })
 
-  const [hidden, setHidden] = useState<{ key: string | null; value: boolean }>(
-    () => ({ key, value: readHidden(key) }),
-  )
-  const completionHidden = hidden.key === key ? hidden.value : readHidden(key)
-
-  const view = decideChecklistView({
-    isOwner,
-    load: onboarding.load,
-    completionHidden,
-  })
+  const decided = decideChecklistView({ isOwner, load: onboarding.load })
+  const view =
+    decided.kind === 'completed' && onboarding.hiddenLocally
+      ? ({ kind: 'hidden' } as const)
+      : decided
 
   // A source form sent the owner back here: drop what it added to the URL.
   useEffect(() => {
@@ -207,6 +191,25 @@ export function OnboardingChecklist({
     if (await onboarding.defer()) focusAfterRender.current = 'compact'
   }
 
+  /** Compact «Продовжити»: the step opens only after Core un-defers. */
+  const resumeAndOpen = async (step: OnboardingStep) => {
+    if (await onboarding.resume()) openStep(step, 'continue')
+  }
+
+  const { action, status } = onboarding.mutation
+  const busyWith = (one: typeof action) =>
+    action === one && (status === 'saving' || status === 'checking')
+  const notice = (one: typeof action, failed: string) =>
+    action !== one || status === 'idle' || status === 'saving' ? null : (
+      <Notice
+        className="mt-4"
+        role={status === 'failed' ? 'alert' : 'status'}
+        tone={status === 'failed' ? 'danger' : 'info'}
+      >
+        {status === 'failed' ? failed : t('deferChecking')}
+      </Notice>
+    )
+
   // Focus after a re-render: the compact «Продовжити» after deferring, or the
   // row / «Продовжити» the owner left from when coming back to the dashboard.
   const kind = view.kind
@@ -224,21 +227,21 @@ export function OnboardingChecklist({
     else (rowRefs.current.get(wanted) ?? continueRef.current)?.focus()
   }, [key, kind])
 
-  const hide = () => {
-    if (key === null) return
-    try {
-      localStorage.setItem(hiddenKey(key), '1')
-    } catch {
-      // Without storage the card is hidden for this visit only.
-    }
-    setHidden({ key, value: true })
-  }
-
   switch (view.kind) {
     case 'hidden':
       return null
     case 'loading':
       return <ChecklistSkeleton t={t} />
+    case 'offline':
+      // Eligibility is unknown without a first read: say nothing alarming.
+      return (
+        <Notice
+          action={<Button onClick={onboarding.retry}>{t('retry')}</Button>}
+          tone="info"
+        >
+          {t('offline')}
+        </Notice>
+      )
     case 'error':
       return (
         <Notice
@@ -251,8 +254,10 @@ export function OnboardingChecklist({
     case 'completed':
       return (
         <CompletedCard
+          busy={busyWith('dismiss')}
           headingRef={doneHeadingRef}
-          onHide={hide}
+          notice={notice('dismiss', t('hideFailed'))}
+          onHide={() => void onboarding.dismiss()}
           t={t}
           targets={targets}
         />
@@ -263,17 +268,16 @@ export function OnboardingChecklist({
           aside={<Progress count={completedStepCount(view.facts)} t={t} />}
           title={t('compactTitle')}
         >
+          {notice('resume', t('resumeFailed'))}
           <div className="mt-4">
             <Button
-              disabled={!stepReachable(view.next)}
-              onClick={() => {
-                onboarding.resume()
-                openStep(view.next, 'continue')
-              }}
+              aria-busy={busyWith('resume')}
+              disabled={!stepReachable(view.next) || busyWith('resume')}
+              onClick={() => void resumeAndOpen(view.next)}
               ref={compactContinueRef}
               variant="primary"
             >
-              {t('continue')}
+              {busyWith('resume') ? t('saving') : t('continue')}
             </Button>
           </div>
           <SourceChooser
@@ -289,8 +293,7 @@ export function OnboardingChecklist({
       )
     case 'expanded': {
       const { facts, next } = view
-      const busy =
-        onboarding.deferral === 'saving' || onboarding.deferral === 'checking'
+      const busy = busyWith('defer')
       return (
         <ChecklistFrame
           aside={<Progress count={completedStepCount(facts)} t={t} />}
@@ -322,16 +325,7 @@ export function OnboardingChecklist({
               </li>
             ))}
           </ol>
-          {onboarding.deferral === 'checking' ? (
-            <Notice className="mt-4" tone="info">
-              {t('deferChecking')}
-            </Notice>
-          ) : null}
-          {onboarding.deferral === 'failed' ? (
-            <Notice className="mt-4" tone="danger">
-              {t('deferFailed')}
-            </Notice>
-          ) : null}
+          {notice('defer', t('deferFailed'))}
           <div className="mt-4 flex flex-wrap gap-2.5">
             <Button
               disabled={!stepReachable(next)}
@@ -346,7 +340,9 @@ export function OnboardingChecklist({
               disabled={busy}
               onClick={() => void later()}
             >
-              {onboarding.deferral === 'saving' ? t('saving') : t('later')}
+              {action === 'defer' && status === 'saving'
+                ? t('saving')
+                : t('later')}
             </Button>
           </div>
           <SourceChooser
@@ -604,11 +600,16 @@ function CompletedCard({
   t,
   targets,
   onHide,
+  busy,
+  notice,
   headingRef,
 }: {
   t: T
   targets: { cash: string | null; team: string | null }
+  /** Saves Core `dismissed`; the card goes once the server has it. */
   onHide: () => void
+  busy: boolean
+  notice: ReactNode
   headingRef: Ref<HTMLHeadingElement>
 }) {
   const recommendations = [
@@ -633,10 +634,17 @@ function CompletedCard({
             ))}
           </ul>
         )}
-        <Button className="ml-auto" onClick={onHide} variant="quiet">
-          {t('hide')}
+        <Button
+          aria-busy={busy}
+          className="ml-auto"
+          disabled={busy}
+          onClick={onHide}
+          variant="quiet"
+        >
+          {busy ? t('saving') : t('hide')}
         </Button>
       </div>
+      {notice}
     </ChecklistFrame>
   )
 }

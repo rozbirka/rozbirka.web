@@ -57,8 +57,8 @@ export const authApi = {
   },
 
   /**
-   * Save the personal interface language (pending Identity endpoint
-   * `PATCH /auth/me/language`; same response shape as the name update).
+   * Save the personal interface language (Core `PATCH /auth/me/language`;
+   * same response shape as the name update).
    */
   async updateLanguage(
     language: Locale | null,

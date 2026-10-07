@@ -53,11 +53,17 @@ export type OnboardingLoad =
   | { status: 'ready'; facts: OwnerOnboarding }
   /** Core answered that this user or build has no onboarding (403/404). */
   | { status: 'unavailable' }
+  /**
+   * The first read failed for lack of a connection: eligibility is unknown,
+   * so nothing — not even an error — is claimed about onboarding yet.
+   */
+  | { status: 'offline' }
   | { status: 'error'; problem: ApiProblem | null }
 
 export type ChecklistView =
   | { kind: 'hidden' }
   | { kind: 'loading' }
+  | { kind: 'offline' }
   | { kind: 'error' }
   | { kind: 'expanded'; facts: OwnerOnboarding; next: OnboardingStep }
   | { kind: 'compact'; facts: OwnerOnboarding; next: OnboardingStep }
@@ -71,30 +77,31 @@ export type ChecklistView =
  * | no       | any   | any       | nothing (SC-7, AC-9)                  |
  * | yes      | no    | any       | nothing (AC-1)                        |
  * | yes      | yes   | no        | list, or compact block when deferred  |
- * | yes      | yes   | yes       | completion card until hidden          |
+ * | yes      | yes   | yes       | completion card until `dismissed`     |
  *
  * Loading and failure are shown only to an owner, because only the owner
- * asks; failure never shows guessed progress (EC-4). Completion wins over
- * deferral (Deferred → Completed).
+ * asks; failure never shows guessed progress (EC-4). A first read without a
+ * connection is neutral (eligibility is unknown, so it is not an error of
+ * this yard). Completion wins over deferral (Deferred → Completed); hiding
+ * the completion card is Core's `dismissed`, shared with mobile.
  */
 export function decideChecklistView({
   isOwner,
   load,
-  completionHidden,
 }: {
   isOwner: boolean
   load: OnboardingLoad
-  completionHidden: boolean
 }): ChecklistView {
   if (!isOwner) return { kind: 'hidden' }
   if (load.status === 'loading') return { kind: 'loading' }
+  if (load.status === 'offline') return { kind: 'offline' }
   if (load.status === 'error') return { kind: 'error' }
   if (load.status === 'unavailable') return { kind: 'hidden' }
   const { facts } = load
   if (!facts.eligible) return { kind: 'hidden' }
   const next = firstIncompleteStep(facts)
   if (facts.completed || next === null)
-    return completionHidden ? { kind: 'hidden' } : { kind: 'completed' }
+    return facts.dismissed ? { kind: 'hidden' } : { kind: 'completed' }
   return facts.deferred
     ? { kind: 'compact', facts, next }
     : { kind: 'expanded', facts, next }
@@ -141,6 +148,10 @@ export const isUnavailableProblem = (problem: ApiProblem) =>
   problem.kind === 'not-found' ||
   problem.status === 405 ||
   problem.status === 501
+
+/** No connection (or no answer in time): nothing is known yet. */
+export const isOfflineProblem = (problem: ApiProblem) =>
+  problem.kind === 'network' || problem.kind === 'timeout'
 
 /**
  * A request that may have reached the server before the connection broke:

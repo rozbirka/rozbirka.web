@@ -12,10 +12,10 @@ export interface UpdateBusinessRequest {
   /** Omitted leaves the delivery deposit policy as it is. */
   requireDeliveryDeposit?: boolean
   /*
-   * Business settings (pending Core contract, see contract-alignment.ts).
-   * Omitted leaves the value as it is. Core rejects region/document-language
-   * changes after `regionLocked` and currency changes after `currencyLocked`
-   * with `BUSINESS_SETTINGS_LOCKED`; region needs owner rights.
+   * Business settings (Core `UpdateTenantRequest`). Omitted leaves the value
+   * as it is. Core rejects country/time-zone changes after `regionLocked` and
+   * currency changes after `currencyLocked` with `BUSINESS_SETTINGS_LOCKED`;
+   * the document language stays editable. Region needs owner rights.
    */
   countryCode?: 'UA' | 'GB' | 'PL'
   timeZoneId?: string

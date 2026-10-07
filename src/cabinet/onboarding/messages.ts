@@ -43,6 +43,10 @@ export const onboardingMessages = defineMessages({
     batchHint: 'Запчастини від постачальника, без авто',
     deferFailed: 'Не вдалося відкласти налаштування. Спробуйте ще раз.',
     deferChecking: 'Звʼязок перервався. Перевіряємо, чи збережено…',
+    resumeFailed: 'Не вдалося продовжити налаштування. Спробуйте ще раз.',
+    hideFailed: 'Не вдалося сховати картку. Спробуйте ще раз.',
+    offline: 'Немає звʼязку. Перевіримо перші кроки, щойно мережа повернеться.',
+    toDashboard: 'До дашборду',
     stepUnavailable: 'Недоступно для вашого доступу',
   },
   'en-GB': {
@@ -81,6 +85,11 @@ export const onboardingMessages = defineMessages({
     batchHint: 'Parts from a supplier, without a car',
     deferFailed: 'Couldn’t postpone setup. Please try again.',
     deferChecking: 'Connection lost. Checking whether it was saved…',
+    resumeFailed: 'Couldn’t resume setup. Please try again.',
+    hideFailed: 'Couldn’t hide this card. Please try again.',
+    offline:
+      'You’re offline. We’ll check your setup steps once you’re back online.',
+    toDashboard: 'Go to Home',
     stepUnavailable: 'Not available with your access',
   },
   pl: {
@@ -121,6 +130,11 @@ export const onboardingMessages = defineMessages({
     batchHint: 'Części od dostawcy, bez samochodu',
     deferFailed: 'Nie udało się odłożyć konfiguracji. Spróbuj ponownie.',
     deferChecking: 'Połączenie przerwane. Sprawdzamy, czy zapisano…',
+    resumeFailed: 'Nie udało się wznowić konfiguracji. Spróbuj ponownie.',
+    hideFailed: 'Nie udało się ukryć karty. Spróbuj ponownie.',
+    offline:
+      'Brak połączenia. Sprawdzimy pierwsze kroki, gdy połączenie wróci.',
+    toDashboard: 'Przejdź do strony głównej',
     stepUnavailable: 'Niedostępne przy Twoich uprawnieniach',
   },
 })

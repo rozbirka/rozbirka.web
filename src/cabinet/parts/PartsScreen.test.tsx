@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FEATURES } from '@/api/types'
 import { LocaleProvider, type Locale } from '@/i18n'
 import { PartsScreen } from './PartsScreen'
+import { resetOnboardingCache } from '../onboarding/use-owner-onboarding'
 
 const inventoryMocks = vi.hoisted(() => ({
   getPartZones: vi.fn().mockResolvedValue([
@@ -200,8 +201,24 @@ vi.mock('../CabinetContext', () => ({
 }))
 const tenantMocks = vi.hoisted(() => ({ list: vi.fn() }))
 vi.mock('@/api/tenants', () => ({ tenantsApi: tenantMocks }))
+const onboardingMocks = vi.hoisted(() => ({ get: vi.fn(), update: vi.fn() }))
+vi.mock('@/api/onboarding', () => ({ onboardingApi: onboardingMocks }))
+const onboardingFacts = {
+  eligible: true,
+  deferred: false,
+  dismissed: false,
+  completed: false,
+  settingsCompleted: true,
+  currencySelected: true,
+  sourceCreated: true,
+  firstPartCreated: false,
+}
 
 beforeEach(() => {
+  resetOnboardingCache()
+  onboardingMocks.get
+    .mockReset()
+    .mockResolvedValue({ ...onboardingFacts, eligible: false })
   cabinetMock.tenant = {
     id: 'tenant-1',
     slug: 'yard',
@@ -3203,5 +3220,62 @@ describe('asking price and the accounting currency', () => {
       expect.objectContaining({ desiredSalePrice: 0 }),
       expect.anything(),
     )
+  })
+})
+
+describe('the owner’s first part', () => {
+  const renderNewPart = () =>
+    render(
+      <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+        <Routes>
+          <Route
+            path="/app/:tenant/parts/new"
+            element={<PartsScreen definition={partsDefinition as never} />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+  const fillAndSave = async () => {
+    fireEvent.change(screen.getByLabelText('Назва'), {
+      target: { value: 'Bumper' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /З авто/ }))
+    fireEvent.change(await screen.findByLabelText('Автомобіль-джерело'), {
+      target: { value: 'car-1' },
+    })
+    await screen.findByText('CAR-01 · Ford Focus (2018)')
+    fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
+  }
+
+  it('keeps the parts screen and offers the way back to the dashboard', async () => {
+    onboardingMocks.get
+      .mockReset()
+      .mockResolvedValueOnce(onboardingFacts)
+      .mockResolvedValueOnce({
+        ...onboardingFacts,
+        completed: true,
+        firstPartCreated: true,
+      })
+    renderNewPart()
+    await fillAndSave()
+
+    expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
+    expect(
+      await screen.findByText('Основне налаштування завершено'),
+    ).toBeVisible()
+    expect(screen.getByRole('link', { name: 'До дашборду' })).toHaveAttribute(
+      'href',
+      '/app/yard/dashboard',
+    )
+    expect(onboardingMocks.get).toHaveBeenCalledTimes(2)
+  })
+
+  it('says nothing when the part does not finish onboarding', async () => {
+    onboardingMocks.get.mockReset().mockResolvedValue(onboardingFacts)
+    renderNewPart()
+    await fillAndSave()
+
+    expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'До дашборду' })).toBeNull()
   })
 })

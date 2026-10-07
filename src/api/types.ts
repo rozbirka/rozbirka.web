@@ -70,10 +70,10 @@ export interface Tenant {
    */
   requireDeliveryDeposit: boolean
   /*
-   * Business settings (Core feat/backend-localization-currency-onboarding,
-   * not pinned yet). Optional because the pinned contract and older fixtures
-   * lack them; `normalizeTenant` turns unknown values into `null`. Missing
-   * means unknown — read them through `tenantSettings()`, never guess.
+   * Business settings (Core `TenantDto`). Optional because older Cores and
+   * fixtures lack them; `normalizeTenant` turns unknown values into `null`.
+   * Missing means unknown — read them through `tenantSettings()`, never
+   * guess.
    */
   /** `UA`, `GB` or `PL`. */
   countryCode?: 'UA' | 'GB' | 'PL' | null
