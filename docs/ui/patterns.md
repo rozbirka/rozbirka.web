@@ -48,3 +48,9 @@ FileField/PhotoFileField та UploadList представляють вибір �
 ## Стани та відображення даних
 
 Обирати окремо initial loading, порожній результат, заборону доступу та помилку запиту; не показувати EmptyState замість failure. SkeletonRows, ErrorState і DeniedState мають різне призначення. Amount/Quantity/DateValue містять форматування; звірити очікувану currency/unit і null semantics у props, не підміняти ними бізнес-розрахунки.
+
+## Мова, формати й час
+
+Текст інтерфейсу не пишемо літералами в JSX: кожна ділянка має свій namespace (`defineMessages` у `messages.ts` поруч із кодом, наприклад [profile-messages](../../src/cabinet/profile/profile-messages.ts)) з ключами `uk` / `en-GB` / `pl`; спільні слова — [commonMessages](../../src/i18n/common-messages.ts). У компоненті — `useT(namespace)`, у чистих функціях — `translate(namespace, locale, key)` з `locale` параметром, а не читанням мови під час імпорту. Множину — plural-повідомленням з `{count}`, не `plural()`.
+
+Числа, дати й гроші — через `useFormat()` / форматери з [src/i18n](../../src/i18n/index.ts); час — у часовому поясі бізнесу (`useLocale().timeZone`). Жорсткий `'uk-UA'` у новому коді не використовувати. Назви мов показуються рідною мовою з `lang`. Друковані матеріали (стікери, PDF) беруть мову документів бізнесу (`useTenantSettings().documentLanguage`), а не мову інтерфейсу. Без `LocaleProvider` (ізольовані тести) рендер український і за київським часом; перевірку перекладу робити рендером у `<LocaleProvider locale="en-GB">`.

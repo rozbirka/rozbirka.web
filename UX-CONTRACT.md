@@ -66,8 +66,8 @@ filename. Resuming an unmapped upload without a filename requires entering the
 name. Mapping source changes invalidate confirmation. Legacy schema mappings
 and profiles must be reviewed before proceeding; an outdated profile explains
 itself instead of raising a confirmation conflict. Source error codes
-(`PART_SOURCE_ARCHIVED`, `IMPORT_SOURCE_*`, `SOURCE_HAS_PARTS`) read in
-Ukrainian; unknown codes fall back to the server message. `ImportConfirmStep` shows the destination
+(`PART_SOURCE_ARCHIVED`, `IMPORT_SOURCE_*`, `SOURCE_HAS_PARTS`) read in the
+interface language; unknown codes fall back to the server message. `ImportConfirmStep` shows the destination
 alongside server validation; row columns cannot override it. Source lookups use
 abort signals and localized unavailable/archive errors. The Core API remains
 authoritative for permissions, source validity, quotas and retry behavior.
@@ -75,3 +75,37 @@ authoritative for permissions, source validity, quotas and retry behavior.
 Verification owners: `PartsScreen.test.tsx`, `ImportScreen.test.tsx` and
 `import-model.test.ts` cover mandatory source, compatibility, legacy filters,
 legacy mapping review and source-wide import payloads.
+
+## Localization (ROZ-160 / ROZ-161)
+
+Interface languages are `uk` (source), `en-GB` and `pl`. The personal language
+resolves profile language → language remembered in this browser → first
+supported browser language → `en-GB`; it is chosen in Profile («Мова
+інтерфейсу», automatic or one language) and saved through Identity
+`PATCH /auth/me/language`. A failed save keeps the old language and offers a
+retry; without that endpoint the choice is kept on the device and the card says
+so. Requests carry the interface language as `Accept-Language`, so OTP SMS and
+server messages follow it. Copy lives in per-feature `defineMessages`
+namespaces; a missing key is a type error, so no technical key is ever shown.
+
+Numbers, dates and money format by the interface language; times and the
+reporting day use the business time zone (tenant `timeZoneId`, Europe/Kyiv
+while unknown). Money shows the ISO code with per-currency precision.
+
+Business country, time zone and document language live in Business → «Регіон і
+документи». Only the owner edits them; country and time zone become read-only
+after the first operation (`regionLocked`; a 409 `BUSINESS_SETTINGS_LOCKED`
+race locks the block), while the document language stays editable
+(REQ-LOCALIZATION AC-23 — the board's 3c shows it read-only; the requirement
+wins). Printed labels and documents use the document language, not the
+interface language.
+
+SMS sign-in accepts Ukrainian, British and Polish numbers in E.164 with a
+number-country choice; customer phones may be from any country and are never
+rewritten with +380. Customer address fields (country, city, street, house,
+postcode) are optional. Nova Poshta is offered to Ukrainian businesses only;
+GB/PL businesses see an unavailable state (Core enforces the same rule).
+
+Verification owners: `src/i18n/i18n.test.tsx`, `language-card.test.tsx`,
+`region-settings.test.tsx`, `login-international.test.tsx`, `src/lib/phone.test.ts`
+and the en-GB render tests next to each migrated screen.
