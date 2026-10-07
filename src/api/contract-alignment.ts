@@ -12,11 +12,21 @@
  *
  * Covers request payloads only: an unknown field sent to Core is the silent
  * failure. Add a line here when another adapter starts sending new fields.
+ *
+ * Every `Pending…` entry below was checked field by field against the
+ * committed but unpublished contracts of Core
+ * `feat/backend-localization-currency-onboarding` (5f61a46) and Identity
+ * (701b0e3): generated from them, exactly these entries flip and nothing else
+ * the web sends is missing — except `ImportMappingPlan.source`, because that
+ * Core branch predates the pinned develop contract (it also lacks the Nova
+ * Poshta shipping-preference and tracking endpoints). Re-pin only from a Core
+ * artifact published after the branch is merged with develop.
  */
 import type { components } from './generated/core'
 import type { components as identityComponents } from './generated/identity'
 import type { UpdateBusinessRequest } from './business'
 import type { CustomerInput } from './customers'
+import type { ConfirmPayment } from './orders'
 import type { ImportMapping, ImportRule } from './part-imports'
 import type { CreatePartRequest } from './parts'
 
@@ -75,6 +85,7 @@ export type ContractAlignment = [
   Check<Same<Unknown<ImportMapping, Schemas['ImportMappingPlan']>, never>>,
   Check<Same<Unknown<ImportRule, Schemas['ImportFieldRule']>, never>>,
   Check<Same<Unknown<CreatePartRequest, Schemas['CreatePartRequest']>, never>>,
+  Check<Same<Unknown<ConfirmPayment, Schemas['ConfirmPaymentRequest']>, never>>,
   Check<
     Same<
       Unknown<UpdateBusinessRequest, Schemas['UpdateTenantRequest']>,
