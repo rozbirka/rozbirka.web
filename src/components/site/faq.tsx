@@ -1,66 +1,39 @@
-import { useId, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { Minus, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Section } from '@/components/layout/section'
 import { PageContainer } from '@/components/layout/page-container'
+import { useLocale, useT } from '@/i18n'
+import { landingFaqEntries, type FaqEntry } from './faq-messages'
+import { siteMessages } from './site-messages'
 
-export interface FaqEntry {
-  question: string
-  answer: string
-}
+export type { FaqEntry }
 
+/** Ukrainian FAQ of `/`, kept for callers that render the source page. */
 // eslint-disable-next-line react-refresh/only-export-components
-export const homepageFaqEntries: readonly FaqEntry[] = [
-  {
-    question: 'Чи бачу я прибуток окремо по кожному авто?',
-    answer:
-      'Так. Кожне авто має свій профіль з усіма витратами й продажами. Бачиш ROI у відсотках і доларах у реальному часі.',
-  },
-  {
-    question: 'Як швидко я можу почати працювати після реєстрації?',
-    answer:
-      'За 10 хвилин. Створюєш перше авто, додаєш запчастини — і вже працюєш. Без довгих налаштувань і навчання.',
-  },
-  {
-    question: 'Як працює безкоштовний період?',
-    answer:
-      'Після створення робочого простору автоматично активуються 14 днів Pro-рівня — без введення картки. Після завершення нічого не списується автоматично.',
-  },
-  {
-    question: 'Скільки людей з команди можуть працювати одночасно?',
-    answer:
-      'Ліміт залежить від тарифу: Pro — 5 користувачів, Enterprise — без обмежень. Для кожного можна налаштувати окрему роль і права доступу.',
-  },
-  {
-    question: 'Чи можна продавати запчастини в доларах?',
-    answer:
-      'Так. Ціни фіксуються в USD незалежно від курсу. Оплата приймається в будь-якій валюті — гривні, доларах, на різні рахунки й каси.',
-  },
-  {
-    question: 'Чи легко користуватися застосунком?',
-    answer:
-      'Так. Будь-яка дія — максимум 3 кліки. UI зроблений під роботу однією рукою з телефону: без захованих вкладок, без зайвих кроків. Працює інтуїтивно з першого запуску.',
-  },
-]
+export const homepageFaqEntries: readonly FaqEntry[] = landingFaqEntries('uk')
 
 export function FAQ() {
   const [openIndex, setOpenIndex] = useState<number | null>(0)
+  const { locale } = useLocale()
+  const t = useT(siteMessages)
+  const entries = useMemo(() => landingFaqEntries(locale), [locale])
 
   return (
     <Section id="faq" className="py-16 lg:py-24">
       <PageContainer width="md">
         <header className="mb-12 flex flex-col items-start gap-8 lg:mb-16">
           <span className="text-brand text-[11px] font-medium tracking-[0.28em] uppercase">
-            FAQ
+            {t('faqEyebrow')}
           </span>
           <h2 className="text-[44px] leading-[0.95] font-light tracking-[-0.025em] lg:text-[72px]">
-            <span className="block">Поширені</span>
-            <span className="text-brand block">питання</span>
+            <span className="block">{t('faqTitleLine1')}</span>
+            <span className="text-brand block">{t('faqTitleLine2')}</span>
           </h2>
         </header>
 
         <ul role="list" className="flex flex-col gap-3">
-          {homepageFaqEntries.map((entry, i) => (
+          {entries.map((entry, i) => (
             <FaqRow
               key={entry.question}
               number={String(i + 1).padStart(2, '0')}

@@ -278,3 +278,100 @@ describe('assertProductDocument', () => {
     ).toThrow(`${seo.path} must contain exactly one canonical; found 2`)
   })
 })
+
+describe('language versions of the landing', () => {
+  const landingSeo = {
+    path: '/en',
+    landing: true,
+    locale: 'en-GB',
+    ogLocale: 'en_GB',
+    title: 'Software for car breakers | rozbirka',
+    description: 'English landing description',
+    canonical: 'https://rozbirka.pro/en',
+    ogImage: 'https://rozbirka.pro/og-cover.webp',
+    alternates: [
+      { hreflang: 'uk', href: 'https://rozbirka.pro/' },
+      { hreflang: 'en-GB', href: 'https://rozbirka.pro/en' },
+      { hreflang: 'pl', href: 'https://rozbirka.pro/pl' },
+      { hreflang: 'x-default', href: 'https://rozbirka.pro/' },
+    ],
+  }
+  const landingJson = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'Organization',
+        '@id': 'https://rozbirka.pro/#organization',
+      },
+      { '@type': 'WebSite', '@id': 'https://rozbirka.pro/#website' },
+      {
+        '@type': 'SoftwareApplication',
+        '@id': 'https://rozbirka.pro/en#software',
+        url: landingSeo.canonical,
+        description: landingSeo.description,
+      },
+      {
+        '@type': 'FAQPage',
+        '@id': 'https://rozbirka.pro/en#faq',
+        mainEntity: [
+          {
+            '@type': 'Question',
+            name: 'Q?',
+            acceptedAnswer: { '@type': 'Answer', text: 'A.' },
+          },
+        ],
+      },
+    ],
+  })
+  const localizedTemplate = template
+    .replace('<html>', '<html lang="uk">')
+    .replace('<head>', '<head><meta property="og:locale" content="uk_UA" />')
+  const html = injectProductDocument({
+    template: localizedTemplate,
+    renderedBody: '<main><h1>Know where every part is</h1></main>',
+    seo: landingSeo,
+    structuredDataJson: landingJson,
+  })
+
+  it('writes the document language, og:locale and hreflang alternates', () => {
+    expect(html).toContain('<html lang="en-GB">')
+    expect(html).toContain('<meta property="og:locale" content="en_GB" />')
+    expect(html).toContain(
+      '<link data-product-seo rel="canonical" href="https://rozbirka.pro/en" /><link data-product-seo rel="alternate" hreflang="uk" href="https://rozbirka.pro/" />',
+    )
+    expect(html).toContain(
+      '<link data-product-seo rel="alternate" hreflang="x-default" href="https://rozbirka.pro/" />',
+    )
+    expect(documentPathForRoute('/en')).toBe('dist/en/index.html')
+  })
+
+  it('accepts a complete language document', () => {
+    expect(() =>
+      assertProductDocument({
+        html,
+        seo: landingSeo,
+        expectedH1: 'Know where every part is',
+      }),
+    ).not.toThrow()
+  })
+
+  it('rejects a document left in the template language', () => {
+    expect(() =>
+      assertProductDocument({
+        html: html.replace('<html lang="en-GB">', '<html lang="uk">'),
+        seo: landingSeo,
+        expectedH1: 'Know where every part is',
+      }),
+    ).toThrow('/en <html lang> must be en-GB; found uk')
+  })
+
+  it('rejects a missing hreflang alternate', () => {
+    expect(() =>
+      assertProductDocument({
+        html: html.replace('hreflang="pl"', 'hreflang="de"'),
+        seo: landingSeo,
+        expectedH1: 'Know where every part is',
+      }),
+    ).toThrow('/en must contain exactly one hreflang pl alternate; found 0')
+  })
+})

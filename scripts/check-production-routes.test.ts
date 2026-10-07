@@ -7,9 +7,27 @@ import {
   validateProductionResponses,
 } from './check-production-routes.mjs'
 
+const alternates =
+  '<link rel="alternate" hreflang="uk" href="https://rozbirka.pro/" />' +
+  '<link rel="alternate" hreflang="en-GB" href="https://rozbirka.pro/en" />' +
+  '<link rel="alternate" hreflang="pl" href="https://rozbirka.pro/pl" />' +
+  '<link rel="alternate" hreflang="x-default" href="https://rozbirka.pro/" />'
+
+function landing(lang: string, canonical: string) {
+  return {
+    status: 200,
+    contentType: 'text/html',
+    body: `<html lang="${lang}"><head><link data-product-seo rel="canonical" href="${canonical}" />${alternates}</head></html>`,
+  }
+}
+
 function validResponses() {
   return {
-    home: { status: 200, contentType: 'text/html' },
+    home: landing('uk', 'https://rozbirka.pro/'),
+    landings: {
+      'landing-en': landing('en-GB', 'https://rozbirka.pro/en'),
+      'landing-pl': landing('pl', 'https://rozbirka.pro/pl'),
+    },
     unknown: { status: 404, contentType: 'text/html' },
     robots: { status: 200, contentType: 'text/plain' },
     sitemap: { status: 200, contentType: 'application/xml' },
@@ -74,6 +92,8 @@ describe('production route validation', () => {
       ),
     ).toMatchObject({
       home: 'https://rozbirka.pro/',
+      landingEn: 'https://rozbirka.pro/en',
+      landingPl: 'https://rozbirka.pro/pl',
       api: 'https://api.rozbirka.pro/api/v1/billing/plans',
       asset: 'https://rozbirka.pro/assets/app.js',
       retiredMarketplace: 'https://rozbirka.pro/marketplace',
@@ -90,6 +110,31 @@ describe('production route validation', () => {
 
   it('accepts the complete production response contract', () => {
     expect(() => validateProductionResponses(validResponses())).not.toThrow()
+  })
+
+  it('requires each landing language document with its lang and hreflang set', () => {
+    const wrongLang = validResponses()
+    wrongLang.landings['landing-en'] = landing('uk', 'https://rozbirka.pro/en')
+    expect(() => validateProductionResponses(wrongLang)).toThrow(
+      'landing-en must declare <html lang="en-GB">',
+    )
+
+    const missingAlternate = validResponses()
+    missingAlternate.landings['landing-pl'].body = missingAlternate.landings[
+      'landing-pl'
+    ].body.replace('hreflang="x-default"', 'hreflang="de"')
+    expect(() => validateProductionResponses(missingAlternate)).toThrow(
+      'landing-pl is missing the x-default hreflang alternate',
+    )
+
+    const missingPage = validResponses()
+    missingPage.landings['landing-pl'] = {
+      ...landing('pl', 'https://rozbirka.pro/pl'),
+      status: 404,
+    }
+    expect(() => validateProductionResponses(missingPage)).toThrow(
+      'landing-pl must return 200',
+    )
   })
 
   it('retries a transient post-deploy response without weakening validation', async () => {

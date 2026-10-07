@@ -286,12 +286,29 @@ export function createAppRoutes(
   includePrototypeRoutes: boolean,
 ): RouteObject[] {
   const routes: RouteObject[] = [
-    // The landing and legal pages exist in Ukrainian only: pin their locale so
-    // hydration matches the prerendered HTML and <html lang> stays truthful.
+    // Each landing URL has one fixed language (`/` uk, `/en`, `/pl`) and the
+    // privacy policy is Ukrainian only: pin their locale so hydration matches
+    // the prerendered HTML and <html lang> stays truthful.
     {
       path: '/',
       element: (
         <LocaleOverride locale="uk">
+          <App />
+        </LocaleOverride>
+      ),
+    },
+    {
+      path: '/en',
+      element: (
+        <LocaleOverride locale="en-GB">
+          <App />
+        </LocaleOverride>
+      ),
+    },
+    {
+      path: '/pl',
+      element: (
+        <LocaleOverride locale="pl">
           <App />
         </LocaleOverride>
       ),

@@ -6,12 +6,19 @@ import { BrandLogo } from '@/components/site/brand-logo'
 import { NavLinks } from '@/components/site/nav-links'
 import { AppStoreBadge, GooglePlayBadge } from '@/components/site/store-badges'
 import { useAuth } from '@/auth/AuthContext'
+import { useLocale, useT } from '@/i18n'
+import { landingLocaleForPath, landingPathFor } from '@/seo/landing-locales'
+import { LanguageMenu, LanguageSegments } from './language-switcher'
+import { siteMessages } from './site-messages'
 
 export function SiteHeader() {
   const { status, user } = useAuth()
   const { pathname } = useLocation()
+  const { locale } = useLocale()
+  const t = useT(siteMessages)
   const isAuthed = status === 'authenticated'
-  const activeNavProps = pathname === '/' ? { activeHref: '#top' } : {}
+  const activeNavProps =
+    landingLocaleForPath(pathname) !== null ? { activeHref: '#top' } : {}
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
 
@@ -30,17 +37,20 @@ export function SiteHeader() {
     <header className="bg-background px-6 py-6">
       <PageContainer>
         <nav
-          aria-label="Головна навігація"
+          aria-label={t('mainNav')}
           className="bg-surface-1 flex h-[72px] items-center justify-between rounded-full pr-3 pl-8 ring-1 ring-white/[0.06]"
         >
           <div className="flex items-center gap-6">
-            <BrandLogo />
+            <BrandLogo href={landingPathFor(locale)} />
             <NavLinks {...activeNavProps} className="hidden lg:flex" />
           </div>
 
           <div className="hidden items-center gap-2 lg:flex">
+            <LanguageMenu />
             <AppStoreBadge />
-            <GooglePlayBadge />
+            {/* Below xl the language button takes this badge's room; the
+                badge is not a link yet and stays in the menu and CTA. */}
+            <GooglePlayBadge className="hidden xl:flex" />
             {isAuthed ? (
               <Link
                 to="/account"
@@ -48,7 +58,7 @@ export function SiteHeader() {
               >
                 <span className="max-w-[160px] truncate">
                   {/* eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- empty strings should fall through */}
-                  {user?.displayName || user?.phone || 'Кабінет'}
+                  {user?.displayName || user?.phone || t('account')}
                 </span>
                 <span className="bg-brand grid size-9 place-items-center rounded-full transition-transform duration-300 group-hover:translate-x-0.5">
                   <UserIcon
@@ -62,7 +72,7 @@ export function SiteHeader() {
                 to="/login"
                 className="group flex h-12 items-center gap-3 rounded-full pr-1.5 pl-5 text-[15px] text-white ring-1 ring-white/10 transition-all duration-300 hover:bg-white/[0.06] hover:ring-white/25"
               >
-                <span>Увійти</span>
+                <span>{t('login')}</span>
                 <span className="grid size-9 place-items-center rounded-full ring-1 ring-white/15 transition-transform duration-300 group-hover:translate-x-0.5">
                   <LogIn className="size-4" aria-hidden />
                 </span>
@@ -75,7 +85,7 @@ export function SiteHeader() {
             type="button"
             aria-expanded={open}
             aria-controls="mobile-site-menu"
-            aria-label={open ? 'Закрити меню' : 'Відкрити меню'}
+            aria-label={open ? t('closeMenu') : t('openMenu')}
             onClick={() => setOpen((value) => !value)}
             className="grid size-11 place-items-center rounded-full text-white ring-1 ring-white/15 lg:hidden"
           >
@@ -89,13 +99,14 @@ export function SiteHeader() {
         {open && (
           <nav
             id="mobile-site-menu"
-            aria-label="Мобільна навігація"
+            aria-label={t('mobileNav')}
             className="bg-surface-1 mt-3 flex flex-col gap-4 rounded-[28px] p-5 ring-1 ring-white/[0.06] lg:hidden"
           >
             <NavLinks
               className="flex-col items-stretch"
               onNavigate={() => setOpen(false)}
             />
+            <LanguageSegments onNavigate={() => setOpen(false)} />
             <div className="flex flex-col gap-3 sm:flex-row">
               <AppStoreBadge onClick={() => setOpen(false)} />
               <GooglePlayBadge />
@@ -105,7 +116,7 @@ export function SiteHeader() {
               onClick={() => setOpen(false)}
               className="bg-brand text-brand-foreground inline-flex min-h-11 items-center justify-center rounded-full px-5"
             >
-              {isAuthed ? 'Кабінет' : 'Увійти'}
+              {isAuthed ? t('account') : t('login')}
             </Link>
           </nav>
         )}

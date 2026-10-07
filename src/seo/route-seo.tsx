@@ -52,6 +52,20 @@ function syncHead(entry: ProductSeoEntry, faq: readonly FaqEntry[]) {
   })
   canonical.href = entry.canonical
 
+  for (const alternate of entry.alternates) {
+    const link = upsertHeadElement(
+      `link[rel="alternate"][hreflang="${alternate.hreflang}"]`,
+      () => {
+        const element = document.createElement('link')
+        element.rel = 'alternate'
+        element.hreflang = alternate.hreflang
+        return element
+      },
+    )
+    link.href = alternate.href
+  }
+
+  setMeta('property', 'og:locale', entry.ogLocale)
   setMeta('property', 'og:title', entry.title)
   setMeta('property', 'og:description', entry.description)
   setMeta('property', 'og:url', entry.canonical)
