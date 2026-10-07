@@ -16,9 +16,12 @@ const when = new Intl.DateTimeFormat('uk-UA', {
 
 /** The last orders through the yard, newest first, as the list screen sorts them. */
 export function RecentOrdersCard({
+  accountingCurrency = null,
   base,
   orders,
 }: {
+  /** The order value's currency; `null` when unknown. */
+  accountingCurrency?: string | null
   base: string
   orders: readonly OrderListItem[]
 }) {
@@ -53,7 +56,7 @@ export function RecentOrdersCard({
                 <span className="col-start-2 font-mono text-[15px] font-medium whitespace-nowrap tabular-nums text-white sm:col-start-auto sm:text-right">
                   {order.totalAmount === null
                     ? '—'
-                    : `${sum.format(order.totalAmount)} $`}
+                    : `${sum.format(order.totalAmount)}${accountingCurrency === null ? '' : ` ${accountingCurrency}`}`}
                 </span>
               </Link>
             </CardRow>

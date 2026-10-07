@@ -18,11 +18,14 @@ const daysSince = (iso: string, now: Date): number | null => {
  * as an overflowing track, and the percentage beside it keeps the real figure.
  */
 export function CarPayoffCard({
+  accountingCurrency = null,
   base,
   cars,
   now,
   total,
 }: {
+  /** What invested/recouped are counted in; `null` when unknown. */
+  accountingCurrency?: string | null
   /** The cars module's own path, for the row links and the «Усі N» link. */
   base: string
   cars: readonly CarListItem[]
@@ -38,7 +41,13 @@ export function CarPayoffCard({
         <CardEmpty>Жодного активного авто на складі.</CardEmpty>
       ) : (
         cars.map((car) => (
-          <PayoffRow base={base} car={car} key={car.id} now={now} />
+          <PayoffRow
+            accountingCurrency={accountingCurrency}
+            base={base}
+            car={car}
+            key={car.id}
+            now={now}
+          />
         ))
       )}
     </DashboardCard>
@@ -46,10 +55,12 @@ export function CarPayoffCard({
 }
 
 function PayoffRow({
+  accountingCurrency,
   base,
   car,
   now,
 }: {
+  accountingCurrency: string | null
   base: string
   car: CarListItem
   now: Date
@@ -113,7 +124,8 @@ function PayoffRow({
           </span>
           {invested === null || recouped === null ? null : (
             <span className="whitespace-nowrap tabular-nums">
-              {sum.format(recouped)} / {sum.format(invested)} $
+              {sum.format(recouped)} / {sum.format(invested)}
+              {accountingCurrency === null ? '' : ` ${accountingCurrency}`}
             </span>
           )}
         </span>

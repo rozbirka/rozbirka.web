@@ -1,9 +1,26 @@
 import { Link } from 'react-router'
 import { plural } from '@/lib/utils'
 import type { DashboardTopPart } from '@/api/dashboard-contract'
+import { useWholeMoney } from '../currency/money'
 import { CardEmpty, CardNote, CardRow, DashboardCard } from './dashboard-card'
 
-const sum = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 0 })
+/**
+ * The part's revenue and the currency it is in. The pending contract sends
+ * `revenue` in the accounting currency; the pinned one only `revenueUsd`,
+ * which is USD by its own name — not a guess.
+ */
+const topRevenue = (
+  topPart: DashboardTopPart,
+  accountingCurrency: string | null,
+): { amount: number; currency: string | null } | null =>
+  topPart.revenue !== undefined
+    ? {
+        amount: topPart.revenue,
+        currency: topPart.accountingCurrency ?? accountingCurrency,
+      }
+    : topPart.revenueUsd === null
+      ? null
+      : { amount: topPart.revenueUsd, currency: 'USD' }
 
 /**
  * The period's best-selling part. The design ranks five; `/dashboard/analytics`
@@ -12,10 +29,12 @@ const sum = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 0 })
  * rows built from a list that does not exist.
  */
 export function TopSalesCard({
+  accountingCurrency,
   partsPath,
   periodLabel,
   topPart,
 }: {
+  accountingCurrency: string | null
   /** The part's own card, when the parts module is open to this account. */
   partsPath: string | null
   periodLabel: string
@@ -30,7 +49,11 @@ export function TopSalesCard({
         <CardEmpty>За обраний період продажів не було.</CardEmpty>
       ) : (
         <CardRow hover={partsPath !== null}>
-          <Row partsPath={partsPath} topPart={topPart} />
+          <Row
+            partsPath={partsPath}
+            revenue={topRevenue(topPart, accountingCurrency)}
+            topPart={topPart}
+          />
         </CardRow>
       )}
     </DashboardCard>
@@ -39,11 +62,14 @@ export function TopSalesCard({
 
 function Row({
   partsPath,
+  revenue,
   topPart,
 }: {
   partsPath: string | null
+  revenue: { amount: number; currency: string | null } | null
   topPart: DashboardTopPart
 }) {
+  const money = useWholeMoney(revenue?.currency ?? null)
   const body = (
     <>
       <span className="min-w-0">
@@ -57,7 +83,7 @@ function Row({
         </span>
       </span>
       <span className="font-mono text-[15px] font-medium whitespace-nowrap tabular-nums text-white">
-        {sum.format(topPart.revenueUsd)} $
+        {revenue === null ? '—' : money(revenue.amount)}
       </span>
     </>
   )

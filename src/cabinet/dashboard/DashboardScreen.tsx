@@ -17,6 +17,8 @@ import { RecentOrdersCard } from './RecentOrdersCard'
 import { RevenueChart } from './RevenueChart'
 import { TillsCard } from './TillsCard'
 import { TopSalesCard } from './TopSalesCard'
+import { OrderValueCard } from './OrderValueCard'
+import { useAccountingCurrency } from '../currency/use-accounting-currency'
 import { readDashboardPeriod, writeDashboardPeriod } from './dashboard-period'
 import { useDashboardData } from './use-dashboard-data'
 import { getDashboardBillingPath } from './dashboard-billing-access'
@@ -47,6 +49,7 @@ const dayName = new Intl.DateTimeFormat('uk-UA', {
 
 export function DashboardScreen() {
   const { targetTenant, snapshot } = useCabinet()
+  const accounting = useAccountingCurrency()
   const [searchParams, setSearchParams] = useSearchParams()
   const selection = readDashboardPeriod(searchParams)
   const dashboard = useDashboardData(selection.period)
@@ -209,9 +212,16 @@ export function DashboardScreen() {
           <div className="gap-x-3.5 xl:columns-2 [&>*]:mb-3.5 [&>*]:break-inside-avoid">
             {summary === null ? null : (
               <DashboardKpis
+                accountingCurrency={accounting.currency}
                 analytics={analytics}
                 data={summary}
                 parts={parts}
+              />
+            )}
+            {summary === null ? null : (
+              <OrderValueCard
+                settingsPath={accounting.owner ? accounting.settingsPath : null}
+                status={accounting.status}
               />
             )}
             {analytics === null ? null : (
@@ -219,6 +229,7 @@ export function DashboardScreen() {
             )}
             {cars === null || slug === null ? null : (
               <CarPayoffCard
+                accountingCurrency={accounting.currency}
                 base={cabinetPath(slug, 'cars')}
                 cars={cars.items}
                 now={now}
@@ -226,13 +237,18 @@ export function DashboardScreen() {
               />
             )}
             {orders === null || ordersPath === null ? null : (
-              <RecentOrdersCard base={ordersPath} orders={orders} />
+              <RecentOrdersCard
+                accountingCurrency={accounting.currency}
+                base={ordersPath}
+                orders={orders}
+              />
             )}
             {registers === null || cashPath === null ? null : (
               <TillsCard base={cashPath} registers={registers} />
             )}
             {analytics === null ? null : (
               <TopSalesCard
+                accountingCurrency={accounting.currency}
                 partsPath={partsPath}
                 periodLabel={periodLabel}
                 topPart={analytics.topPart}

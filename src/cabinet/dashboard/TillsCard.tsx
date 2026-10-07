@@ -1,10 +1,9 @@
 import type { CashRegister } from '@/api/cash'
+import { useT } from '@/i18n'
+import { tillCurrencies } from '../currency/catalog-order'
+import { useWholeMoney } from '../currency/money'
 import { CardEmpty, CardLink, CardRow, DashboardCard } from './dashboard-card'
-
-const sum = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 0 })
-
-/** Preferred reading order for a yard that keeps more than one currency. */
-const PREFERRED = ['USD', 'UAH']
+import { dashboardMoneyMessages } from './money-messages'
 
 interface TillLine {
   key: string
@@ -29,10 +28,14 @@ export function TillsCard({
   base: string
   registers: readonly CashRegister[]
 }) {
+  const t = useT(dashboardMoneyMessages)
   const lines = tillLines(registers)
 
   return (
-    <DashboardCard aside={<CardLink to={base}>Операції</CardLink>} title="Каси">
+    <DashboardCard
+      aside={<CardLink to={base}>Операції</CardLink>}
+      title={t('balances')}
+    >
       {lines.length === 0 ? (
         <CardEmpty>Жодної активної каси.</CardEmpty>
       ) : (
@@ -42,12 +45,7 @@ export function TillsCard({
               <p className="min-w-0 truncate text-[14px] font-bold text-white">
                 {line.name}
               </p>
-              <p className="font-mono text-[15px] font-medium whitespace-nowrap tabular-nums text-white">
-                {sum.format(line.amount)}{' '}
-                <span className="text-app-dim text-[12px]">
-                  {line.currency}
-                </span>
-              </p>
+              <TillAmount amount={line.amount} currency={line.currency} />
             </div>
           </CardRow>
         ))
@@ -56,20 +54,34 @@ export function TillsCard({
   )
 }
 
-function tillLines(registers: readonly CashRegister[]): TillLine[] {
-  return registers.flatMap((register) =>
-    Object.entries(register.balances)
-      .sort(([left], [right]) => order(left) - order(right))
-      .map(([currency, amount]) => ({
-        key: `${register.id}:${currency}`,
-        name: register.name,
-        currency,
-        amount,
-      })),
+/** One till balance: the number, then its ISO code, read with its name. */
+function TillAmount({
+  amount,
+  currency,
+}: {
+  amount: number
+  currency: string
+}) {
+  const money = useWholeMoney(null)
+  const named = useWholeMoney(currency)
+  return (
+    <p className="font-mono text-[15px] font-medium whitespace-nowrap tabular-nums text-white">
+      <span aria-hidden>
+        {money(amount)}{' '}
+        <span className="text-app-dim text-[12px]">{currency}</span>
+      </span>
+      <span className="sr-only">{named(amount)}</span>
+    </p>
   )
 }
 
-const order = (currency: string) => {
-  const index = PREFERRED.indexOf(currency)
-  return index === -1 ? PREFERRED.length : index
+function tillLines(registers: readonly CashRegister[]): TillLine[] {
+  return registers.flatMap((register) =>
+    tillCurrencies(register).map((currency) => ({
+      key: `${register.id}:${currency}`,
+      name: register.name,
+      currency,
+      amount: register.balances[currency] ?? 0,
+    })),
+  )
 }
