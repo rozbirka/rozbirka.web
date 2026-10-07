@@ -1,0 +1,33 @@
+name: Provision production server key
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: prod-server-key-provisioning
+  cancel-in-progress: false
+jobs:
+  provision:
+    if: github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify delivery guards without credentials
+        run: python3 scripts/test_provision_prod_auth_key.py
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed
+        with:
+          workload_identity_provider: projects/905241582497/locations/global/workloadIdentityPools/github-pool/providers/web-prod-auth-secret
+          service_account: auth-web-secret-prod@rozbirka-prod.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f
+      - name: Deliver the approved server-only key and verify metadata
+        env:
+          CLOUDFLARE_ACCOUNT_ID: 22a32b350711ff6b9b27d29f8a93eb6d
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_TOKEN }}
+        run: python3 scripts/provision-prod-auth-key.py
