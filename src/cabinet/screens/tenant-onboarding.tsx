@@ -13,7 +13,9 @@ import {
   useOperation,
 } from '@/components/app'
 import { BrandLogo } from '@/components/site/brand-logo'
+import { useT } from '@/i18n'
 import { cabinetPath } from '../cabinet-paths'
+import { tenantOnboardingMessages } from './tenant-onboarding-messages'
 
 /*
  * Creating the yard is the whole first-run flow. Settings, accounting
@@ -22,13 +24,8 @@ import { cabinetPath } from '../cabinet-paths'
  * exists. Core creates the main warehouse itself; the team is a recommended
  * step after onboarding, not part of it.
  */
-const TITLE = 'Розкажіть про свій бізнес'
-const SUBTITLE =
-  'Назву бачить ваша команда й клієнти в документах. Змінити її можна будь-коли в налаштуваннях.'
-
-const nameTooShort = 'Вкажіть назву розбірки — щонайменше 2 символи'
-
 export function TenantOnboardingScreen() {
+  const t = useT(tenantOnboardingMessages)
   const auth = useAuth()
   const navigate = useNavigate()
   const [name, setName] = useState('')
@@ -121,11 +118,11 @@ export function TenantOnboardingScreen() {
     }, [auth, city, name]),
     {
       errorMessage: (failure) =>
-        `Не вдалося створити розбірку. ${normalizeApiProblem(failure).message}`,
+        t('createFailed', { reason: normalizeApiProblem(failure).message }),
     },
   )
 
-  const nameIssue = name.trim().length < 2 ? nameTooShort : null
+  const nameIssue = name.trim().length < 2 ? t('nameTooShort') : null
 
   const attemptCreate = () => {
     setTouched(true)
@@ -151,11 +148,11 @@ export function TenantOnboardingScreen() {
             className="text-app-muted hover:text-app-ink text-[13px] transition-colors"
             to="/account/security"
           >
-            Особистий акаунт
+            {t('account')}
           </Link>
           <Button onClick={() => void handleLogout()} variant="quiet">
             <LogOut aria-hidden />
-            Вийти
+            {t('signOut')}
           </Button>
         </div>
       </header>
@@ -164,10 +161,10 @@ export function TenantOnboardingScreen() {
         <div className="grid w-full max-w-[600px] content-start gap-6">
           <div>
             <h1 className="text-[32px] leading-[1.04] font-extrabold tracking-[-0.03em] text-white sm:text-[40px]">
-              {TITLE}
+              {t('title')}
             </h1>
             <p className="text-app-muted mt-3 max-w-[56ch] text-[14.5px] leading-6 text-pretty">
-              {SUBTITLE}
+              {t('subtitle')}
             </p>
           </div>
 
@@ -179,8 +176,8 @@ export function TenantOnboardingScreen() {
           >
             <Field
               error={touched ? nameIssue : null}
-              hint="Наприклад: CarDubliany"
-              label="Назва розбірки"
+              hint={t('nameHint')}
+              label={t('nameLabel')}
               required
             >
               <TextInput
@@ -192,14 +189,11 @@ export function TenantOnboardingScreen() {
                 value={name}
               />
             </Field>
-            <Field
-              hint="Показуємо в картках запчастин, щоб покупці бачили, звідки доставка."
-              label="Місто (необовʼязково)"
-            >
+            <Field hint={t('cityHint')} label={t('cityLabel')}>
               <TextInput
                 autoComplete="address-level2"
                 onChange={(event) => setCity(event.target.value)}
-                placeholder="Львів"
+                placeholder={t('cityPlaceholder')}
                 value={city}
               />
             </Field>
@@ -208,7 +202,7 @@ export function TenantOnboardingScreen() {
               <Notice
                 action={
                   <Button onClick={attemptCreate} {...create.triggerProps}>
-                    Спробувати ще раз
+                    {t('retry')}
                   </Button>
                 }
                 tone="danger"
@@ -218,9 +212,7 @@ export function TenantOnboardingScreen() {
             )}
 
             <div className="border-app-line flex flex-wrap items-center justify-between gap-3 border-t pt-5">
-              <span className="text-app-dim text-[13px]">
-                14 днів безкоштовно, картка не потрібна
-              </span>
+              <span className="text-app-dim text-[13px]">{t('trial')}</span>
               <Button
                 {...create.triggerProps}
                 size="touch"
@@ -230,11 +222,11 @@ export function TenantOnboardingScreen() {
                 {create.pending ? (
                   <>
                     <Loader2 aria-hidden className="motion-safe:animate-spin" />
-                    Створюємо…
+                    {t('creating')}
                   </>
                 ) : (
                   <>
-                    Створити розбірку
+                    {t('create')}
                     <ArrowRight aria-hidden />
                   </>
                 )}

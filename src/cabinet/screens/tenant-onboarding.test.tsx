@@ -5,6 +5,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { tenantsApi } from '@/api/tenants'
 import { tenantPreference } from '@/api/tenant-preference'
 import { useAuth, type AuthContextValue } from '@/auth/AuthContext'
+import { LocaleProvider } from '@/i18n'
 import { TenantOnboardingScreen } from './tenant-onboarding'
 
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest resolves the API method into a typed mock. */
@@ -218,4 +219,28 @@ it('leaves the protected route before waiting for logout', async () => {
 
   expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(/^\/$/)
   finishLogout()
+})
+
+it('asks for the business in Polish and says why the name is refused', async () => {
+  const user = userEvent.setup()
+  render(
+    <LocaleProvider locale="pl" syncDocumentLang={false}>
+      <MemoryRouter initialEntries={['/account']}>
+        <Routes>
+          <Route path="/account" element={<TenantOnboardingScreen />} />
+        </Routes>
+      </MemoryRouter>
+    </LocaleProvider>,
+  )
+
+  expect(
+    screen.getByRole('heading', { name: 'Opowiedz nam o swojej firmie' }),
+  ).toBeVisible()
+  expect(screen.getByText('14 dni za darmo, bez karty')).toBeVisible()
+  await user.click(screen.getByRole('button', { name: 'Utwórz firmę' }))
+  expect(
+    screen.getByText('Podaj nazwę firmy — co najmniej 2 znaki'),
+  ).toBeVisible()
+  expect(create).not.toHaveBeenCalled()
+  expect(screen.queryByText(/[А-Яа-яЇїІіЄєҐґ]/)).toBeNull()
 })
