@@ -24,9 +24,12 @@ import { ModuleAccessDeniedError } from '../policy'
 import { tenantRequestScope } from '../tenant-request-scope'
 import { Kpi, KpiStrip } from '../redesign-kpi'
 import { BillingCard, BillingDead, BillingShell } from './billing-shell'
+import { commonMessages, translate, useLocale, useT, type Locale } from '@/i18n'
 import { paymentStatusMeta, paymentTypeLabel } from './billing-vocabulary'
+import { billingMessages } from './messages'
+import { paymentsMessages } from './payments-messages'
 import {
-  BILLING_MANAGEMENT_UNAVAILABLE,
+  billingManagementUnavailable,
   BillingManagementUnavailableError,
   BillingMutationGate,
   useBillingMutation,
@@ -45,30 +48,18 @@ type PaymentsState =
       kind: 'error'
       generation: number | undefined
       attempt: number
-      message: string
+      error: unknown
     }
 
 /** A result that arrived for a tenant we have already left changes nothing. */
 type MutationOutcome = 'applied' | 'stale'
 
 const PAYMENT_SEGMENTS = [
-  { key: 'all', label: 'Усі' },
-  { key: 'success', label: 'Оплачені' },
-  { key: 'pending', label: 'Очікують' },
-  { key: 'failed', label: 'Невдалі' },
+  { key: 'all', message: 'segmentAll' },
+  { key: 'success', message: 'segmentSuccess' },
+  { key: 'pending', message: 'segmentPending' },
+  { key: 'failed', message: 'segmentFailed' },
 ] as const
-
-/** What the billing endpoints do not carry, said where the design asks for it. */
-const NO_RECEIPT_FILE =
-  'Чек як файл кабінет не видає — у платежі є лише номер рахунку провайдера.'
-const NO_STATUS_FILTER =
-  'Платежі не фільтруються за статусом: сегменти впорядковують завантажену сторінку, і лічильники рахують її ж.'
-const NO_CARD_LIST =
-  'Підписка тримає одну картку — бренд і чотири цифри. Ні додати другу, ні зробити основною, ні видалити тут не можна.'
-const NO_PAYMENTS_EXPORT =
-  'Вивантаження платежів у файл поки немає — є тільки перелік по сторінках.'
-const NO_INVOICE_DETAILS =
-  'Реквізитів для чеків — назви платника, коду й адреси — у білінгу немає, і змінювати їх нема де. Чеки формує Mono за даними картки.'
 
 type PaymentSubscription = Readonly<
   Pick<SubscriptionDto, 'cardBrand' | 'cardLast4'>
@@ -76,6 +67,10 @@ type PaymentSubscription = Readonly<
   Partial<Pick<ProviderAwareSubscriptionDto, 'source' | 'manageVia'>>
 
 export function PaymentsScreen() {
+  const { locale } = useLocale()
+  const t = useT(paymentsMessages)
+  const tb = useT(billingMessages)
+  const tc = useT(commonMessages)
   const toast = useToast()
   const { cabinet, controlDecision, requireLatestMutation } =
     useBillingMutation('payments')
@@ -87,7 +82,7 @@ export function PaymentsScreen() {
   })
   const [guardError, setGuardError] = useState<{
     generation: number | undefined
-    message: string
+    reason: 'expired' | 'unavailable'
   } | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [loadAttempt, setLoadAttempt] = useState(0)
@@ -116,7 +111,7 @@ export function PaymentsScreen() {
           kind: 'error',
           generation,
           attempt: loadAttempt,
-          message: paymentsFailureMessage(error),
+          error,
         })
       })
     return () => {
@@ -157,12 +152,12 @@ export function PaymentsScreen() {
     {
       errorMessage: (error) =>
         cancelStageRef.current === 'reload'
-          ? 'Платіж скасовано, але не вдалося оновити список. Оновіть сторінку, щоб побачити актуальні платежі.'
-          : paymentCancellationFailureMessage(error),
+          ? translate(paymentsMessages, locale, 'cancelledButReloadFailed')
+          : paymentCancellationFailureMessage(error, locale),
       onSuccess: (outcome) => {
         setCancellingId(null)
         if (outcome === 'applied') {
-          toast.show({ message: 'Платіж скасовано.', tone: 'ok' })
+          toast.show({ message: t('cancelled'), tone: 'ok' })
         }
       },
       onError: () => setCancellingId(null),
@@ -197,14 +192,16 @@ export function PaymentsScreen() {
   )
   const mutationError =
     (guardError !== null && guardError.generation === generation
-      ? guardError.message
+      ? guardError.reason === 'expired'
+        ? t('checkoutExpired')
+        : billingManagementUnavailable(locale)
       : null) ?? cancelPayment.error
 
   if (currentPaymentsState.kind === 'loading') {
     return (
       <PaymentsFrame>
         {paymentMethod}
-        <SkeletonRows columns={4} label="Завантажуємо платежі…" rows={3} />
+        <SkeletonRows columns={4} label={tb('loadingPayments')} rows={3} />
       </PaymentsFrame>
     )
   }
@@ -214,9 +211,12 @@ export function PaymentsScreen() {
       <PaymentsFrame>
         {paymentMethod}
         <ErrorState
-          description={currentPaymentsState.message}
+          description={paymentsFailureMessage(
+            currentPaymentsState.error,
+            locale,
+          )}
           onRetry={() => setLoadAttempt((attempt) => attempt + 1)}
-          title="Платежі не завантажилися"
+          title={t('loadFailedTitle')}
         />
       </PaymentsFrame>
     )
@@ -236,8 +236,7 @@ export function PaymentsScreen() {
       event.preventDefault()
       setGuardError({
         generation,
-        message:
-          'Строк оплати рахунку минув. Оберіть тариф, щоб створити новий рахунок.',
+        reason: 'expired',
       })
       return
     }
@@ -246,7 +245,7 @@ export function PaymentsScreen() {
       if (!canStartWebCheckout(latestSnapshotRef.current?.subscription)) {
         event.preventDefault()
         resetCancel()
-        setGuardError({ generation, message: BILLING_MANAGEMENT_UNAVAILABLE })
+        setGuardError({ generation, reason: 'unavailable' })
       }
     } catch {
       event.preventDefault()
@@ -289,21 +288,17 @@ export function PaymentsScreen() {
 
       <KpiStrip>
         <Kpi
-          label="Платежів усього"
+          label={t('kpiTotal')}
           meta={
             total === items.length
-              ? 'усі, що є в кабінеті'
-              : `показано ${String(items.length)} найновіших`
+              ? t('kpiTotalAll')
+              : t('kpiTotalNewest', { count: items.length })
           }
           value={String(total)}
         />
         <Kpi
-          label="Сплачено на сторінці"
-          meta={
-            mixedCurrency
-              ? 'на сторінці кілька валют — сума не складається'
-              : 'сума успішних платежів цієї сторінки'
-          }
+          label={t('kpiPaid')}
+          meta={mixedCurrency ? t('kpiPaidMixed') : t('kpiPaidMeta')}
           value={
             mixedCurrency || paidCurrency === undefined ? (
               '—'
@@ -313,11 +308,9 @@ export function PaymentsScreen() {
           }
         />
         <Kpi
-          label="Очікують оплати"
+          label={t('kpiPending')}
           meta={
-            counts.pending === 0
-              ? 'незавершених рахунків немає'
-              : 'рахунок можна доплатити або скасувати'
+            counts.pending === 0 ? t('kpiPendingNone') : t('kpiPendingSome')
           }
           tone={counts.pending === 0 ? 'plain' : 'warn'}
           value={String(counts.pending)}
@@ -326,13 +319,13 @@ export function PaymentsScreen() {
 
       <div className="grid min-w-0 items-start gap-5 lg:grid-cols-2">
         <PaymentMethod subscription={cabinet.snapshot?.subscription ?? null} />
-        <BillingCard title="Реквізити для чеків">
+        <BillingCard title={t('invoiceDetails')}>
           <p className="text-app-muted text-[13.5px] leading-5 text-pretty">
-            {NO_INVOICE_DETAILS}
+            {t('noInvoiceDetails')}
           </p>
           <div className="mt-3.5">
-            <BillingDead title={NO_INVOICE_DETAILS}>
-              Змінити реквізити
+            <BillingDead title={t('noInvoiceDetails')}>
+              {t('changeInvoiceDetails')}
             </BillingDead>
           </div>
         </BillingCard>
@@ -340,10 +333,10 @@ export function PaymentsScreen() {
 
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
         <div
-          aria-label="Статус платежу"
+          aria-label={t('paymentStatus')}
           className="border-app-line bg-app-raised flex min-w-0 flex-wrap gap-1 rounded-[14px] border p-1"
           role="group"
-          title={NO_STATUS_FILTER}
+          title={t('noStatusFilter')}
         >
           {PAYMENT_SEGMENTS.map((one) => (
             <button
@@ -358,7 +351,7 @@ export function PaymentsScreen() {
               onClick={() => setSegment(one.key)}
               type="button"
             >
-              {one.label}
+              {t(one.message)}
               <span className="text-app-dim font-mono text-[12px]">
                 {counts[one.key]}
               </span>
@@ -366,43 +359,48 @@ export function PaymentsScreen() {
           ))}
         </div>
         <p className="text-app-dim text-[13px]">
-          Показано {shown.length} з {items.length} на цій сторінці
+          {t('shownOnPage', { shown: shown.length, total: items.length })}
         </p>
       </div>
 
       <section
-        aria-label="Історія платежів"
+        aria-label={t('history')}
         className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
       >
         {shown.length === 0 ? (
           <p className="text-app-muted px-5.5 py-8 text-[14px]">
-            {items.length === 0
-              ? 'Платежів ще не було.'
-              : 'Платежів за цим фільтром на цій сторінці немає.'}
+            {items.length === 0 ? tb('noPayments') : t('noneForFilter')}
           </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[14px]">
-              <caption className="sr-only">Історія платежів</caption>
+              <caption className="sr-only">{t('history')}</caption>
               <thead>
                 <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
-                  <th className="px-5.5 py-2.5 text-left">Дата</th>
-                  <th className="px-3 py-2.5 text-left">Опис</th>
-                  <th className="px-3 py-2.5 text-right">Сума</th>
-                  <th className="px-3 py-2.5 text-left">Статус</th>
-                  <th className="px-3 py-2.5 text-left" title={NO_RECEIPT_FILE}>
-                    Чек
+                  <th className="px-5.5 py-2.5 text-left">{t('columnDate')}</th>
+                  <th className="px-3 py-2.5 text-left">
+                    {t('columnDescription')}
+                  </th>
+                  <th className="px-3 py-2.5 text-right">
+                    {t('columnAmount')}
+                  </th>
+                  <th className="px-3 py-2.5 text-left">{t('columnStatus')}</th>
+                  <th
+                    className="px-3 py-2.5 text-left"
+                    title={t('noReceiptFile')}
+                  >
+                    {t('columnReceipt')}
                   </th>
                   {actionable && (
                     <th className="relative px-5.5 py-2.5 text-right">
-                      <span className="sr-only">Дії</span>
+                      <span className="sr-only">{tc('actions')}</span>
                     </th>
                   )}
                 </tr>
               </thead>
               <tbody>
                 {shown.map((item) => {
-                  const status = paymentStatusMeta[item.status]
+                  const status = paymentStatusMeta(item.status, locale)
                   return (
                     <tr className="border-app-line border-b" key={item.id}>
                       <td className="text-app-dim px-5.5 py-3.5 font-mono text-[13px] whitespace-nowrap">
@@ -410,11 +408,10 @@ export function PaymentsScreen() {
                       </td>
                       <td className="px-3 py-3.5">
                         <span className="text-app-ink block font-medium">
-                          {paymentTypeLabel(item.type)}
+                          {paymentTypeLabel(item.type, locale)}
                         </span>
                         <span className="text-app-dim mt-0.5 block text-[12.5px]">
-                          {item.providerInvoiceId ??
-                            'номер рахунку не повернувся'}
+                          {item.providerInvoiceId ?? tb('noInvoiceNumber')}
                         </span>
                       </td>
                       <td className="text-app-ink px-3 py-3.5 text-right font-mono tabular-nums">
@@ -428,7 +425,7 @@ export function PaymentsScreen() {
                       <td className="px-3 py-3.5">
                         <span
                           className="text-app-dim text-[13px]"
-                          title={NO_RECEIPT_FILE}
+                          title={t('noReceiptFile')}
                         >
                           —
                         </span>
@@ -449,7 +446,7 @@ export function PaymentsScreen() {
                                       rel="noopener noreferrer"
                                       target="_blank"
                                     >
-                                      Продовжити оплату
+                                      {t('continuePayment')}
                                     </a>
                                   </Button>
                                 </BillingMutationGate>
@@ -461,7 +458,7 @@ export function PaymentsScreen() {
                                   onClick={() => startCancel(item.id)}
                                   variant="danger"
                                 >
-                                  Скасувати
+                                  {tc('cancel')}
                                 </Button>
                               </BillingMutationGate>
                             </span>
@@ -476,7 +473,7 @@ export function PaymentsScreen() {
           </div>
         )}
         <p className="text-app-dim border-app-line border-t px-5.5 py-3.5 text-[13px] leading-5 text-pretty">
-          {NO_RECEIPT_FILE} {NO_STATUS_FILTER}
+          {t('noReceiptFile')} {t('noStatusFilter')}
         </p>
       </section>
     </PaymentsFrame>
@@ -490,12 +487,13 @@ function PaymentsFrame({
   actions?: ReactNode
   children: ReactNode
 }) {
+  const t = useT(paymentsMessages)
   return (
     <BillingShell
       actions={actions}
-      crumb="Налаштування · Підписка · Платежі"
-      lead="Оплати за підписку, їх стан і спосіб оплати."
-      title="Платежі"
+      crumb={t('crumb')}
+      lead={t('lead')}
+      title={t('title')}
     >
       {children}
     </BillingShell>
@@ -512,35 +510,38 @@ function paymentsStateFrom(
     : { kind: 'empty', generation, attempt }
 }
 
-function paymentsFailureMessage(error: unknown): string {
+function paymentsFailureMessage(error: unknown, locale: Locale): string {
   const problem = normalizeApiProblem(error)
   if (problem.kind === 'network' || problem.kind === 'timeout') {
-    return 'Не вдалося завантажити платежі: немає з’єднання з мережею. Перевірте інтернет і спробуйте ще раз.'
+    return translate(paymentsMessages, locale, 'loadNetwork')
   }
   if (problem.kind === 'forbidden') {
-    return 'У вас немає доступу до платежів цієї розбірки. Попросіть власника надати доступ до білінгу.'
+    return translate(paymentsMessages, locale, 'loadForbidden')
   }
-  return 'Не вдалося завантажити платежі. Спробуйте ще раз.'
+  return translate(paymentsMessages, locale, 'loadFailed')
 }
 
-function paymentCancellationFailureMessage(error: unknown): string {
+function paymentCancellationFailureMessage(
+  error: unknown,
+  locale: Locale,
+): string {
   if (error instanceof BillingManagementUnavailableError) {
-    return BILLING_MANAGEMENT_UNAVAILABLE
+    return billingManagementUnavailable(locale)
   }
   if (error instanceof ModuleAccessDeniedError) {
-    return 'Дія більше недоступна: права або стан підписки змінилися. Оновіть сторінку.'
+    return translate(billingMessages, locale, 'actionUnavailable')
   }
   const problem = normalizeApiProblem(error)
   if (problem.kind === 'forbidden') {
-    return 'У вас більше немає права скасувати цей платіж. Попросіть власника розбірки надати доступ до білінгу.'
+    return translate(paymentsMessages, locale, 'cancelForbidden')
   }
   if (problem.kind === 'conflict') {
-    return 'Статус платежу вже змінився. Оновіть список платежів.'
+    return translate(paymentsMessages, locale, 'cancelConflict')
   }
   if (problem.kind === 'network' || problem.kind === 'timeout') {
-    return 'Не вдалося скасувати платіж: немає з’єднання з мережею. Перевірте інтернет і спробуйте ще раз.'
+    return translate(paymentsMessages, locale, 'cancelNetwork')
   }
-  return 'Не вдалося скасувати платіж. Спробуйте ще раз.'
+  return translate(paymentsMessages, locale, 'cancelFailed')
 }
 
 function isCurrentScope(
@@ -570,18 +571,16 @@ function PaymentMethod({
       )
     : { kind: 'unavailable' as const }
   const hasCard = Boolean(subscription?.cardLast4)
+  const t = useT(paymentsMessages)
 
   return (
-    <BillingCard title="Спосіб оплати">
+    <BillingCard title={t('paymentMethod')}>
       {management.kind === 'provider' ? (
         <p className="text-app-muted text-sm">
-          Спосіб оплати керується {management.label}. Змініть картку в
-          налаштуваннях магазину.
+          {t('methodByProvider', { provider: management.label })}
         </p>
       ) : management.kind === 'unavailable' ? (
-        <p className="text-app-muted text-sm">
-          Інформація про спосіб оплати наразі недоступна. Оновіть сторінку.
-        </p>
+        <p className="text-app-muted text-sm">{t('methodUnavailable')}</p>
       ) : hasCard ? (
         <div className="flex items-center gap-3">
           <span className="bg-brand/[0.12] text-brand grid size-11 shrink-0 place-items-center rounded-xl">
@@ -593,22 +592,23 @@ function PaymentMethod({
               {subscription?.cardLast4}
             </span>
             <span className="text-app-dim text-[13.5px]">
-              Авторизована для регулярних списань
+              {t('cardAuthorised')}
             </span>
           </span>
         </div>
       ) : (
-        <p className="text-app-muted text-sm">
-          Картка ще не привʼязана. Активуйте підписку — і карту запитає Monobank
-          під час оплати.
-        </p>
+        <p className="text-app-muted text-sm">{t('noCard')}</p>
       )}
       <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-        {NO_CARD_LIST}
+        {t('noCardList')}
       </p>
       <div className="mt-3.5 flex flex-wrap gap-2.5">
-        <BillingDead title={NO_CARD_LIST}>Додати спосіб оплати</BillingDead>
-        <BillingDead title={NO_PAYMENTS_EXPORT}>Експорт CSV</BillingDead>
+        <BillingDead title={t('noCardList')}>
+          {t('addPaymentMethod')}
+        </BillingDead>
+        <BillingDead title={t('noPaymentsExport')}>
+          {t('exportCsv')}
+        </BillingDead>
       </div>
     </BillingCard>
   )
