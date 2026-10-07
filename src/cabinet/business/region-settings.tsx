@@ -406,6 +406,8 @@ export function RegionSettings({
       aria-busy={pending || undefined}
       aria-labelledby={titleId}
       className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-5"
+      // Deep-link target: onboarding opens /settings/business#region.
+      id="region"
     >
       <div className="flex items-center gap-3">
         <span className="border-app-line text-app-dim inline-flex size-7 shrink-0 items-center justify-center rounded-full border font-mono text-[11px]">

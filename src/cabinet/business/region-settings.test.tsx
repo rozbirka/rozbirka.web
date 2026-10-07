@@ -202,3 +202,10 @@ it('says when the server does not provide region settings yet', () => {
   )
   expect(screen.getByText('Налаштування регіону недоступні')).toBeVisible()
 })
+
+it('is the #region deep-link target of the business settings page', () => {
+  renderRegion()
+  expect(
+    screen.getByRole('region', { name: 'Region and documents' }),
+  ).toHaveAttribute('id', 'region')
+})
