@@ -3,109 +3,69 @@ import type {
   ImportField,
   ImportMapping,
 } from '@/api/part-imports'
-export const fieldLabels: Record<string, string> = {
-  Name: 'Назва',
-  Quantity: 'Кількість',
-  DesiredSalePrice: 'Ціна за одиницю',
-  ExternalCode: 'Артикул',
-  OemCode: 'OEM-код',
-  PartType: 'Тип деталі',
-  Unit: 'Одиниця виміру',
-  Notes: 'Примітка',
-  Condition: 'Стан',
-  SourceType: 'Походження',
-  CarId: 'Автомобіль',
-  IntakeId: 'Партія',
-  InventoryZoneId: 'Складська зона',
-  EquipmentTypeId: 'Тип техніки',
-  MakeId: 'Марка',
-  ModelId: 'Модель',
-  GenerationId: 'Покоління',
-  YearFrom: 'Рік від',
-  YearTo: 'Рік до',
-  CarBrand: 'Марка (текст)',
-  CarModel: 'Модель (текст)',
-  Strategy: 'Сценарій',
-  CustomerId: 'Клієнт',
-  ReserveQuantity: 'Кількість у резерві',
-  ReservePrice: 'Ціна резерву',
-  OrderNotes: 'Примітка замовлення',
-  OrderGroupKey: 'Група замовлення',
-  PhotoKeys: 'Підготовлені фото',
-}
-export const valueLabels: Record<string, string> = {
-  Available: 'Доступні',
-  Reserved: 'Резерв',
-  car: 'З автомобіля',
-  batch: 'З партії',
-  good: 'Добрий',
-  fair: 'Задовільний',
-  scrap: 'На утилізацію',
-  new: 'Новий',
-  refurbished: 'Відновлений',
-}
-export const statusLabels: Record<string, string> = {
-  Uploading: 'Завантаження',
-  Uploaded: 'Аналіз',
-  Analyzing: 'Аналіз',
-  NeedsReview: 'Підготовка',
-  Ready: 'Готовий до запуску',
-  Queued: 'У черзі',
-  Running: 'Виконується',
-  CancelRequested: 'Зупиняється',
-  Cancelled: 'Скасовано',
-  Completed: 'Завершено',
-  CompletedWithErrors: 'Частково завершено',
-  Failed: 'Помилка',
-  Expired: 'Строк минув',
-}
-export const issueLabels: Record<string, string> = {
-  SHEET_SELECTION: 'Оберіть аркуш і прочитайте файл ще раз.',
-  HIDDEN_ROWS:
-    'Файл містить приховані рядки. Перевірте, чи потрібно їх імпортувати.',
-  HIDDEN_COLUMNS:
-    'Файл містить приховані колонки. Перевірте, чи потрібно їх імпортувати.',
-  HEADER_UNUSABLE:
-    'Рядок заголовків містить формули або помилки. Оберіть інший рядок.',
-  INTEGER: 'Потрібне ціле число',
-  DECIMAL: 'Вкажіть точну числову ціну',
-  ENUM: 'Оберіть допустиме значення',
-  UNACCOUNTED_COLUMN: 'Зіставте або виключіть колонку',
-  COMPATIBILITY_REQUIRED: 'Вкажіть сумісність',
-  REQUIRED: 'Обов’язкове поле',
-  INVALID_INTEGER: 'Кількість має бути цілим числом',
-  INVALID_NUMBER: 'Некоректне число',
-  DUPLICATE_DECISION_REQUIRED: 'Можливий дублікат',
-  REFERENCE_NOT_FOUND: 'Значення недоступне',
-  FORBIDDEN: 'Недостатньо прав',
-  STALE_REVISION: 'Дані змінилися. Оновіть імпорт і повторіть перевірку.',
-  CONFIRMATION_STALE: 'Підтвердження застаріло. Перевірте дані ще раз.',
-  STALE_PREVIEW: 'Перегляд застарів. Оновіть імпорт.',
-  FEATURE_DISABLED:
-    'Імпорт зараз недоступний для цієї розбірки. Історія та результати збережені.',
-  IMPORT_DISABLED: 'Імпорт поки недоступний.',
-  EXPIRED: 'Строк зберігання минув.',
-  FILE_LIMIT: 'Файл перевищує дозволений розмір.',
-  IMPORT_SOURCE_UNAVAILABLE: 'Вихідний файл недоступний для завантаження.',
-  IMPORT_EXPIRED: 'Строк зберігання файлу минув.',
-  SCHEMA_CHANGED:
-    'Правила імпорту змінилися. Перевірте налаштування й збережіть їх повторно.',
-  PROFILE_SCHEMA_CHANGED:
-    'Профіль збережено до зміни правил джерела. Зіставте колонки вручну та збережіть профіль заново.',
-  PART_SOURCE_ARCHIVED:
-    'Автомобіль в архіві — нові деталі до нього не додаються. Уже створені деталі збережено.',
-  IMPORT_SOURCE_REQUIRED:
-    'Не вибрано джерело імпорту. Оберіть автомобіль, партію або назву нової партії.',
-  IMPORT_SOURCE_OVERRIDE:
-    'Рядки файлу вказують інше джерело. Усі деталі імпорту мають належати одному джерелу — перевірте налаштування.',
-  INVALID_PART_SOURCE_TYPE:
-    'Деталь без автомобіля чи партії створити не можна. Перевірте джерело імпорту.',
-  SOURCE_HAS_PARTS:
-    'Джерело не можна видалити, доки до нього прив’язані деталі.',
+import {
+  formatNumber,
+  translate,
+  type Locale,
+  type Message,
+  type MessageCatalog,
+  type MessageParams,
+} from '@/i18n'
+import {
+  importFieldMessages,
+  importIssueMessages,
+  importModelMessages,
+  importStatusMessages,
+  importValueMessages,
+} from './import-model-messages'
+type Catalog<K extends string> = Readonly<Record<K, unknown>>
+const has = <K extends string>(catalog: Catalog<K>, key: string): key is K =>
+  Object.hasOwn(catalog, key)
+
+/**
+ * Text that ends up inside a sentence keeps grouping spaces as plain spaces:
+ * uk/pl group thousands with U+00A0, which wraps the same and keeps tests and
+ * copy free of invisible characters.
+ */
+const plainSpaces = (text: string) => text.replace(/\u00a0/g, ' ')
+
+/** Whole number in the locale format, grouping with a plain space. */
+export const formatCount = (
+  value: number,
+  locale: Locale,
+  options?: Intl.NumberFormatOptions,
+) => plainSpaces(formatNumber(value, locale, options) ?? String(value))
+
+/** `translate` for the import screens, with plain grouping spaces. */
+export function importText<M extends Readonly<Record<string, Message>>>(
+  catalog: MessageCatalog<M>,
+  locale: Locale,
+  key: keyof M & string,
+  params?: MessageParams,
+) {
+  return plainSpaces(translate(catalog, locale, key, params))
 }
 
-/** Known codes read as Ukrainian; an unknown one falls back to the server text. */
-export const knownIssue = (code: string) => code in issueLabels
+/** Field id as a person reads it; an unknown id is shown as is. */
+export const fieldLabel = (id: string, locale: Locale) =>
+  has(importFieldMessages.uk, id)
+    ? translate(importFieldMessages, locale, id)
+    : id
+
+/** Label of an allowed value, or `null` when the value has none. */
+export const valueLabel = (value: string, locale: Locale) =>
+  has(importValueMessages.uk, value)
+    ? translate(importValueMessages, locale, value)
+    : null
+
+/** Import status as a person reads it; an unknown status is shown as is. */
+export const statusLabel = (status: string, locale: Locale) =>
+  has(importStatusMessages.uk, status)
+    ? translate(importStatusMessages, locale, status)
+    : status
+
+/** Known codes read in the interface language; an unknown one falls back to the server text. */
+export const knownIssue = (code: string) => has(importIssueMessages.uk, code)
 export function createMapping(
   schemaVersion: number,
   version: number,
@@ -168,8 +128,10 @@ export const isActiveImport = (status: string) =>
     'Running',
     'CancelRequested',
   ].includes(status)
-export const issueText = (code: string) =>
-  issueLabels[code] ?? `Потребує перевірки (${code})`
+export const issueText = (code: string, locale: Locale) =>
+  has(importIssueMessages.uk, code)
+    ? translate(importIssueMessages, locale, code)
+    : translate(importModelMessages, locale, 'unknownIssue', { code })
 
 /**
  * Cyrillic text saved as Windows-1251 and then read as UTF-8 does not fail —
@@ -200,13 +162,13 @@ export function looksMisdecoded(values: readonly (string | null)[]) {
 }
 
 /** Use a display filename only; no upload/storage path becomes an intake name. */
-export function batchNameFromFile(name: string) {
+export function batchNameFromFile(name: string, locale: Locale) {
   const stem = name
     .split(/[\\/]/)
     .at(-1)
     ?.replace(/\.(csv|xlsx)$/i, '')
     .trim()
-  if (!stem) return 'Імпорт запчастин'
+  if (!stem) return translate(importModelMessages, locale, 'defaultBatchName')
   return stem.slice(0, 200)
 }
 

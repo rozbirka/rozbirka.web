@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  fieldLabel,
+  formatCount,
   looksMisdecoded,
   issueText,
   knownIssue,
+  statusLabel,
+  valueLabel,
   recallDestination,
   rememberDestination,
 } from './import-model'
@@ -36,10 +40,12 @@ it('needs more than one bad cell to call a column broken', () => {
 
 it('uses a bounded display filename as the automatic batch name', async () => {
   const { batchNameFromFile } = await import('./import-model')
-  expect(batchNameFromFile('C:\\uploads\\Залишки.xlsx')).toBe('Залишки')
-  expect(batchNameFromFile('/tmp/деталі.CSV')).toBe('деталі')
-  expect(batchNameFromFile('a'.repeat(250) + '.xlsx')).toHaveLength(200)
-  expect(batchNameFromFile('.xlsx')).toBe('Імпорт запчастин')
+  expect(batchNameFromFile('C:\\uploads\\Залишки.xlsx', 'uk')).toBe('Залишки')
+  expect(batchNameFromFile('/tmp/деталі.CSV', 'uk')).toBe('деталі')
+  expect(batchNameFromFile('a'.repeat(250) + '.xlsx', 'uk')).toHaveLength(200)
+  expect(batchNameFromFile('.xlsx', 'uk')).toBe('Імпорт запчастин')
+  expect(batchNameFromFile('.xlsx', 'en-GB')).toBe('Parts import')
+  expect(batchNameFromFile('stock.xlsx', 'en-GB')).toBe('stock')
 })
 
 it('requires reviewing legacy source mappings and never carries row source overrides', async () => {
@@ -95,7 +101,38 @@ describe('import destination memory', () => {
       'PROFILE_SCHEMA_CHANGED',
     ]) {
       expect(knownIssue(code)).toBe(true)
-      expect(issueText(code)).not.toContain(code)
+      expect(issueText(code, 'uk')).not.toContain(code)
+      expect(issueText(code, 'en-GB')).not.toContain(code)
+      expect(issueText(code, 'pl')).not.toContain(code)
     }
+  })
+})
+
+describe('localized model text', () => {
+  it('reads codes in the requested locale and keeps unknown ones visible', () => {
+    expect(fieldLabel('DesiredSalePrice', 'uk')).toBe('Ціна за одиницю')
+    expect(fieldLabel('DesiredSalePrice', 'en-GB')).toBe('Unit price')
+    expect(fieldLabel('DesiredSalePrice', 'pl')).toBe('Cena jednostkowa')
+    expect(fieldLabel('SomethingNew', 'en-GB')).toBe('SomethingNew')
+    expect(valueLabel('Reserved', 'en-GB')).toBe('Reserved')
+    expect(valueLabel('scrap', 'pl')).toBe('Do utylizacji')
+    expect(valueLabel('whatever', 'uk')).toBeNull()
+    expect(statusLabel('CompletedWithErrors', 'en-GB')).toBe('Partly completed')
+    expect(statusLabel('Mystery', 'pl')).toBe('Mystery')
+    expect(issueText('FILE_LIMIT', 'en-GB')).toBe(
+      'The file is larger than allowed.',
+    )
+    expect(issueText('NEW_CODE', 'uk')).toBe('Потребує перевірки (NEW_CODE)')
+    expect(issueText('NEW_CODE', 'en-GB')).toBe('Needs checking (NEW_CODE)')
+    // Unknown codes still count as unknown, whatever the locale.
+    expect(knownIssue('NEW_CODE')).toBe(false)
+    expect(knownIssue('toString')).toBe(false)
+  })
+
+  it('groups counts with a plain space and the locale separator', () => {
+    expect(formatCount(10000, 'uk')).toBe('10 000')
+    expect(formatCount(10000, 'en-GB')).toBe('10,000')
+    expect(formatCount(10000, 'pl')).toBe('10 000')
+    expect(formatCount(1.5, 'uk', { minimumFractionDigits: 1 })).toBe('1,5')
   })
 })

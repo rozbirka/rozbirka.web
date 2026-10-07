@@ -1,34 +1,39 @@
 import { Button } from '@/components/app'
-import { cn, plural } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { useLocale, type Locale } from '@/i18n'
 import type {
   ImportMapping,
   ImportStatus,
   ImportValidation,
 } from '@/api/part-imports'
-import { fieldLabels, valueLabels } from './import-model'
-
-const count = (value: number) =>
-  value.toLocaleString('uk-UA').replace(/ /g, ' ')
-
-const label = (id: string) => fieldLabels[id] ?? id
+import { importConfirmMessages } from './import-confirm-messages'
+import { fieldLabel, importText, valueLabel } from './import-model'
+import { useImportT } from './use-import-text'
 
 /** How one rule reads to a person: a column name, a value, or nothing. */
 function saidAs(
   mapping: ImportMapping | null,
   target: string,
   columns: ImportStatus['source'],
+  locale: Locale,
 ) {
+  const text = (
+    key: 'notMapped' | 'fromColumn' | 'rawValue',
+    params?: Record<string, string>,
+  ) => importText(importConfirmMessages, locale, key, params)
   const rule = mapping?.rules.find((one) => one.target === target)
-  if (rule === undefined) return 'не зіставлено'
+  if (rule === undefined) return text('notMapped')
   if (rule.sources.length > 0) {
     const column = columns?.fields?.find((one) => one.id === rule.sources[0])
-    return `з колонки «${column?.header ?? rule.sources[0] ?? '—'}»`
+    return text('fromColumn', {
+      column: column?.header ?? rule.sources[0] ?? '—',
+    })
   }
   const constant = rule.constant ?? ''
-  if (constant === '') return 'не зіставлено'
+  if (constant === '') return text('notMapped')
   // An unknown constant is shown as the raw value in quotes rather than
   // dressed up as a label we do not actually have.
-  return valueLabels[constant] ?? `значення «${constant}»`
+  return valueLabel(constant, locale) ?? text('rawValue', { value: constant })
 }
 
 /**
@@ -57,6 +62,8 @@ export function ImportConflict({
   onSettings: () => void
   busy: boolean
 }) {
+  const { locale } = useLocale()
+  const t = useImportT(importConfirmMessages)
   const targets = [
     ...new Set([
       ...(mine?.rules ?? []).map((rule) => rule.target),
@@ -66,8 +73,8 @@ export function ImportConflict({
   const diffs = targets
     .map((target) => ({
       target,
-      was: saidAs(mine, target, status.source),
-      now: saidAs(theirs, target, status.source),
+      was: saidAs(mine, target, status.source, locale),
+      now: saidAs(theirs, target, status.source, locale),
     }))
     .filter((diff) => diff.was !== diff.now)
 
@@ -85,47 +92,41 @@ export function ImportConflict({
         </span>
         <div className="min-w-0 flex-[1_1_320px]">
           <p className="text-state-warn text-[15px] font-bold">
-            Дані імпорту змінилися — перевірте їх ще раз перед запуском
+            {t('conflictTitle')}
           </p>
           <p className="text-app-muted mt-1.5 text-[14px] leading-6 text-pretty">
-            Поки ви були на цій сторінці, налаштування імпорту змінилися.
-            Підтвердження, яке ви бачите, розраховане за старими налаштуваннями,
-            тому запуск заблокований. Хто саме змінив — невідомо.
+            {t('conflictBody')}
           </p>
         </div>
       </div>
 
       <section
-        aria-label="Що змінилося"
+        aria-label={t('whatChanged')}
         className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
       >
         <h2 className="text-app-ink border-app-line border-b px-5.5 py-4 text-[15px] font-bold">
-          Що змінилося
+          {t('whatChanged')}
         </h2>
         {diffs.length === 0 ? (
           <p className="text-app-muted px-5.5 py-4 text-[14px] leading-6 text-pretty">
-            Зіставлення колонок не змінилося — розійшлася ревізія імпорту. Це
-            буває, коли файл прочитали заново або хтось відкрив цей імпорт
-            паралельно.
+            {t('revisionOnly')}
           </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[14px]">
-              <caption className="sr-only">
-                Різниця між вашим переглядом і поточними налаштуваннями
-              </caption>
+              <caption className="sr-only">{t('diffCaption')}</caption>
               <thead>
                 <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
-                  <th className="px-5.5 py-2.5 text-left">Налаштування</th>
-                  <th className="px-3 py-2.5 text-left">Ваш перегляд</th>
-                  <th className="px-3 py-2.5 text-left">Поточне значення</th>
+                  <th className="px-5.5 py-2.5 text-left">{t('setting')}</th>
+                  <th className="px-3 py-2.5 text-left">{t('yourView')}</th>
+                  <th className="px-3 py-2.5 text-left">{t('currentValue')}</th>
                 </tr>
               </thead>
               <tbody>
                 {diffs.map((diff) => (
                   <tr className="border-app-line border-b" key={diff.target}>
                     <td className="text-app-ink px-5.5 py-3.5 text-[14.5px] font-bold">
-                      {label(diff.target)}
+                      {fieldLabel(diff.target, locale)}
                     </td>
                     <td className="text-app-dim px-3 py-3.5 line-through">
                       {diff.was}
@@ -140,8 +141,7 @@ export function ImportConflict({
           </div>
         )}
         <p className="text-app-dim border-app-line border-t px-5.5 py-3.5 text-[13px] leading-5 text-pretty">
-          Нічого не створено. Налаштування збережені — повторна перевірка займе
-          кілька секунд і поверне вас на це саме місце.
+          {t('nothingCreatedRecheck')}
         </p>
       </section>
 
@@ -154,19 +154,19 @@ export function ImportConflict({
             )}
           >
             {lastValidation === null
-              ? 'Попереднього розрахунку немає'
-              : `Попередній розрахунок: ${count(lastValidation.plannedParts)} ${plural(lastValidation.plannedParts, ['запчастина', 'запчастини', 'запчастин'])}`}
+              ? t('noPreviousEstimate')
+              : t('previousEstimate', { count: lastValidation.plannedParts })}
           </p>
           <p className="text-app-muted mt-1 text-[13.5px] leading-5 text-pretty">
-            Після повторної перевірки кількість може змінитися.
+            {t('mayChange')}
           </p>
         </div>
         <div className="flex flex-wrap gap-2.5">
           <Button disabled={busy} onClick={onSettings}>
-            До налаштувань
+            {t('toSettings')}
           </Button>
           <Button disabled={busy} onClick={onRecheck} variant="primary">
-            Перевірити повторно
+            {t('recheck')}
           </Button>
         </div>
       </div>

@@ -8,6 +8,7 @@ import {
   Notice,
   SkeletonRows,
 } from '@/components/app'
+import { commonMessages, useLocale, useT } from '@/i18n'
 import {
   partImportsApi as api,
   type ImportCapabilities,
@@ -44,40 +45,43 @@ import {
   isActiveImport,
   mayConfirm,
 } from './import-model'
+import { importScreenMessages } from './messages'
+import { useImportT } from './use-import-text'
 import './imports.css'
 
 const steps = [
-  'Історія',
-  'Файл',
-  'Налаштування',
-  'Перевірка',
-  'Підтвердження',
-  'Виконання',
-]
+  'stepHistory',
+  'stepFile',
+  'stepSettings',
+  'stepReview',
+  'stepConfirm',
+  'stepRun',
+] as const
 const titles = [
-  'Імпорт запчастин',
-  'Завантаження файлу',
-  'Налаштування імпорту',
-  'Перевірка даних',
-  'Підтвердження',
-  'Деталі імпорту',
-]
+  'titleHistory',
+  'titleFile',
+  'titleSettings',
+  'titleReview',
+  'titleConfirm',
+  'titleRun',
+] as const
 const descriptions = [
-  'Перенесення залишків із власної таблиці CSV або XLSX.',
-  'CSV або XLSX до 10 MiB. Перевірте, що система прочитала таблицю правильно.',
-  'Зіставте колонки файлу з полями Розбірки. Спільні значення застосовуються до всіх рядків.',
-  'Виберіть рядки для імпорту та вирішіть проблеми. Один рядок із кількістю 5 створює одну позицію з п’ятьма одиницями товару.',
-  'Це те, що буде створено. Після запуску зміни виконуються у фоні.',
-  'Стан роботи та результати рядків цього імпорту.',
-]
+  'descriptionHistory',
+  'descriptionFile',
+  'descriptionSettings',
+  'descriptionReview',
+  'descriptionConfirm',
+  'descriptionRun',
+] as const
 const draftStates = ['Uploaded', 'NeedsReview', 'Ready']
 export function ImportScreen(props: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
   const { importId } = useParams()
+  const t = useImportT(importScreenMessages)
   if (cabinet.status !== 'ready' || !cabinet.snapshot)
-    return <SkeletonRows label="Перевіряємо доступ…" />
+    return <SkeletonRows label={t('checkingAccess')} />
   if (!cabinet.snapshot.permissions.has('parts.manage'))
-    return <Notice tone="warn">Недостатньо прав для імпорту</Notice>
+    return <Notice tone="warn">{t('noAccess')}</Notice>
   return (
     <ImportWorkspace
       key={`${cabinet.snapshot.tenantId}:${cabinet.snapshot.userId}:${cabinet.snapshot.generation}:${importId ?? 'history'}`}
@@ -88,6 +92,9 @@ export function ImportScreen(props: CabinetModuleScreenProps) {
 function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
   const navigate = useNavigate()
+  const { locale } = useLocale()
+  const t = useImportT(importScreenMessages)
+  const tc = useT(commonMessages)
   const location = useLocation()
   const { importId } = useParams<{ importId: string }>()
   // Leaving a finished import for a new one changes the route key and remounts
@@ -111,7 +118,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
           ? { type: 'batch', intakeId: params.get('intake_id')! }
           : {
               type: 'newBatch',
-              batchName: fileName ? batchNameFromFile(fileName) : '',
+              batchName: fileName ? batchNameFromFile(fileName, locale) : '',
             })
     )
   })
@@ -149,15 +156,14 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
               label: `${car.code} · ${car.brand} ${car.model}`,
               ...(car.status === 'archived'
                 ? {
-                    error:
-                      'До архівного автомобіля не можна імпортувати деталі.',
+                    error: t('archivedCar'),
                   }
                 : {}),
             }))
         : intakesApi
             .get(destination.intakeId, { signal: controller.signal })
             .then((intake) => ({
-              label: intake.name ?? intake.supplier ?? 'Партія',
+              label: intake.name ?? intake.supplier ?? t('batchFallback'),
             }))
     void request.then(
       (info) => {
@@ -169,20 +175,19 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
           setDestinationInfo({
             key: destinationKey,
             label: '',
-            error:
-              'Не вдалося завантажити джерело. Перевірте доступ і спробуйте ще раз.',
+            error: t('sourceLoadFailed'),
             retryable: true,
           })
       },
     )
     return () => controller.abort()
-  }, [destination, destinationKey, destinationAttempt])
+  }, [destination, destinationKey, destinationAttempt, t])
   const destinationLabel =
     destination.type === 'newBatch'
-      ? `Нова партія: ${destination.batchName}`
+      ? t('newBatchLabel', { name: destination.batchName })
       : destinationInfo?.key === destinationKey
         ? destinationInfo.label
-        : 'Завантажуємо джерело…'
+        : t('loadingSource')
   const fresh = (location.state as { fresh?: boolean } | null)?.fresh === true
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const base = cabinetPath(cabinet.targetTenant!.slug, 'parts', 'imports')
@@ -286,7 +291,9 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
         ? e.message
         : '')
     setError(
-      code && (knownIssue(code) || !p.message) ? issueText(code) : p.message,
+      code && (knownIssue(code) || !p.message)
+        ? issueText(code, locale)
+        : p.message,
     )
     if (/STALE|SCHEMA|CONFLICT/.test(code)) {
       // Keep what the confirmation was computed against: the conflict screen
@@ -317,6 +324,9 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
   }
   const effectFailure = useEffectEvent(failure)
   const loadImport = useEffectEvent(refresh)
+  const reportSourceRulesChanged = useEffectEvent(() =>
+    setError(t('sourceRulesChanged')),
+  )
   useEffect(() => {
     const c = new AbortController()
     void api.capabilities({ signal: c.signal }).then((v) => {
@@ -346,10 +356,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
           setDestination(s.mapping.source)
           setDestinationUnknown(false)
         }
-        if (needsSourceReview(s.mapping))
-          setError(
-            'Правила джерела змінилися. Перевірте одне джерело для всього імпорту та збережіть налаштування повторно.',
-          )
+        if (needsSourceReview(s.mapping)) reportSourceRulesChanged()
         setSelection(
           s.source?.selection ?? {
             delimiter: ',',
@@ -478,16 +485,14 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
       (!destination.batchName.trim() ||
         destination.batchName.trim().length > 200)
     ) {
-      setError('Вкажіть назву партії від 1 до 200 символів.')
+      setError(t('batchNameLength'))
       return
     }
     if (
       destination.type !== 'newBatch' &&
       (destinationInfo?.key !== destinationKey || destinationInfo.error)
     ) {
-      setError(
-        destinationInfo?.error ?? 'Зачекайте, поки завантажиться джерело.',
-      )
+      setError(destinationInfo?.error ?? t('waitForSource'))
       return
     }
     next.source =
@@ -527,17 +532,20 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
   function chooseFile(f: File | undefined) {
     if (!f) return
     if (caps && f.size > caps.limits.maxBytes) {
-      setError(issueText('FILE_LIMIT'))
+      setError(issueText('FILE_LIMIT', locale))
       return
     }
     if (!/\.(csv|xlsx)$/i.test(f.name)) {
-      setError('Оберіть файл CSV або XLSX.')
+      setError(t('wrongFileType'))
       return
     }
     setError(null)
     setFile(f)
     if (destination.type === 'newBatch')
-      setDestination({ type: 'newBatch', batchName: batchNameFromFile(f.name) })
+      setDestination({
+        type: 'newBatch',
+        batchName: batchNameFromFile(f.name, locale),
+      })
     uploadKey.current = crypto.randomUUID()
     changed()
   }
@@ -554,18 +562,18 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
     })
   const primary =
     step === 0
-      ? 'Новий імпорт'
+      ? t('newImport')
       : step === 1
         ? status?.source
-          ? 'Налаштувати імпорт'
-          : 'Завантажити файл'
+          ? t('configureImport')
+          : t('uploadFile')
         : step === 2
-          ? 'Перевірити дані'
+          ? t('checkData')
           : step === 3
-            ? 'До підтвердження'
+            ? t('toConfirmation')
             : step === 4
-              ? 'Почати імпорт'
-              : 'До історії'
+              ? t('startImport')
+              : t('toHistory')
   const startOver = () => {
     void navigate(base, { state: { fresh: true, source: destination } })
     setStatus(null)
@@ -631,7 +639,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
           // changed, and that is only possible with the record as it is now —
           // so re-read it before handing over.
           setConflict({ mapping, validation })
-          setError(issueText(code))
+          setError(issueText(code, locale))
           setValidation(null)
           setValidated([])
           await refresh(status.id, signal)
@@ -649,7 +657,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
     return error ? (
       <Notice tone="danger">{error}</Notice>
     ) : (
-      <SkeletonRows label="Завантажуємо налаштування імпорту…" />
+      <SkeletonRows label={t('loadingSettings')} />
     )
   return (
     <div className="type-redesign import-workspace">
@@ -657,10 +665,10 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
         <Button asChild>
           <Link to={cabinetPath(cabinet.targetTenant!.slug, 'parts')}>
             <ArrowLeft aria-hidden />
-            До деталей
+            {t('toParts')}
           </Link>
         </Button>
-        <span className="import-caption">Склад · Імпорт запчастин</span>
+        <span className="import-caption">{t('caption')}</span>
         <div className="grow" />
         {step > 0 && step < 5 ? (
           <Button
@@ -670,7 +678,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
               setStep(0)
             }}
           >
-            До історії
+            {t('toHistory')}
           </Button>
         ) : null}
         {step === 3 || step === 4 ? null : (
@@ -692,7 +700,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
       </header>
       <div className="import-body">
         {step === 0 ? null : (
-          <nav aria-label="Кроки імпорту" className="import-steps">
+          <nav aria-label={t('stepsLabel')} className="import-steps">
             {steps.slice(1).map((label, index) => {
               // The rail is the flow only: history is where the flow starts
               // from, not a step inside it, so it is numbered 1 through 5.
@@ -720,7 +728,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
                     type="button"
                   >
                     <span>{i}</span>
-                    {label}
+                    {t(label)}
                   </button>
                   {i < steps.length - 1 ? (
                     <span aria-hidden className="import-steps__arrow">
@@ -732,16 +740,16 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
             })}
           </nav>
         )}
-        <h1>{titles[step]}</h1>
+        <h1>{t(titles[step] ?? 'titleHistory')}</h1>
         {step === 2 ? null : (
           <p className="import-description">
             {step === 1 && status?.status === 'Failed'
-              ? 'Файл прочитати не вдалося. Нижче — що саме сталося й що можна зробити.'
+              ? t('descriptionFailed')
               : step === 1 && transfer !== null
                 ? transfer.loaded < transfer.total
-                  ? 'Файл передається на сервер. Не закривайте вкладку до кінця передавання.'
-                  : 'Файл на сервері. Читаємо структуру таблиці — це кілька секунд.'
-                : descriptions[step]}
+                  ? t('descriptionSending')
+                  : t('descriptionReading')
+                : t(descriptions[step] ?? 'descriptionHistory')}
           </p>
         )}
         {error && !(step === 4 && conflict) ? (
@@ -757,7 +765,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
                     })
                   }
                 >
-                  Оновити
+                  {tc('refresh')}
                 </Button>
               ) : undefined
             }
@@ -815,27 +823,23 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
         {step === 2 && status?.source ? (
           <div className="grid gap-4">
             <section
-              aria-label="Джерело всього імпорту"
+              aria-label={t('sourceRegion')}
               className="border-app-line bg-app-raised grid gap-3 rounded-[20px] border p-5"
             >
               <h2 className="text-app-ink text-[15px] font-bold">
-                Одне джерело для всіх деталей
+                {t('sourceHeading')}
               </h2>
               {destinationUnknown && destination.type === 'newBatch' ? (
-                <Notice tone="warn">
-                  Джерело цього імпорту не збережено. Якщо файл мав потрапити до
-                  автомобіля чи партії, почніть імпорт з їхньої картки. Інакше
-                  вкажіть назву нової партії.
-                </Notice>
+                <Notice tone="warn">{t('sourceUnknown')}</Notice>
               ) : null}
               {destination.type === 'newBatch' ? (
                 <Field
-                  label="Назва нової партії"
-                  hint="Партія буде створена разом із першою деталлю. Постачальник і закупівельна вартість залишаться незаповненими."
+                  label={t('newBatchName')}
+                  hint={t('newBatchHint')}
                   required
                 >
                   <TextInput
-                    aria-label="Назва нової партії"
+                    aria-label={t('newBatchName')}
                     maxLength={200}
                     disabled={busy || !editable}
                     value={destination.batchName}
@@ -850,7 +854,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
                 </Field>
               ) : (
                 <p className="text-app-muted">
-                  {destinationLabel}. Нове джерело не створюватиметься.
+                  {t('existingSource', { label: destinationLabel })}
                 </p>
               )}
             </section>
@@ -866,7 +870,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
                       }}
                       type="button"
                     >
-                      Повторити
+                      {t('retry')}
                     </Button>
                   ) : undefined
                 }
@@ -898,7 +902,7 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
                     match.conflicts.includes('SCHEMA_CHANGED') ||
                     (match.plan && needsSourceReview(match.plan))
                   ) {
-                    setError(issueText('PROFILE_SCHEMA_CHANGED'))
+                    setError(issueText('PROFILE_SCHEMA_CHANGED', locale))
                     return
                   }
                   if (match.conflicts.length)

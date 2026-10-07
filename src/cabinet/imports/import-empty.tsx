@@ -1,34 +1,18 @@
 import { Button } from '@/components/app'
 import type { ImportCapabilities } from '@/api/part-imports'
-import { fieldLabels } from './import-model'
+import { useLocale, type Locale } from '@/i18n'
+import { importHistoryMessages } from './import-history-messages'
+import { fieldLabel } from './import-model'
+import { useCount, useImportT } from './use-import-text'
 
 const STEPS = [
-  {
-    num: '1',
-    title: 'Завантажте файл',
-    hint: 'Ми прочитаємо рядки й покажемо перші з них.',
-  },
-  {
-    num: '2',
-    title: 'Зіставте колонки',
-    hint: 'Вкажіть, де назва, кількість і ціна. Решту можна задати спільним значенням.',
-  },
-  {
-    num: '3',
-    title: 'Перевірте рядки',
-    hint: 'Виключіть проблемні або виправте налаштування. Нічого не створюється, поки не підтвердите.',
-  },
-  {
-    num: '4',
-    title: 'Запустіть імпорт',
-    hint: 'Робота йде у фоні — сторінку можна закрити й повернутися до результату.',
-  },
+  { num: '1', title: 'stepUploadTitle', hint: 'stepUploadHint' },
+  { num: '2', title: 'stepMapTitle', hint: 'stepMapHint' },
+  { num: '3', title: 'stepReviewTitle', hint: 'stepReviewHint' },
+  { num: '4', title: 'stepRunTitle', hint: 'stepRunHint' },
 ] as const
 
 const mib = (bytes: number) => Math.round(bytes / (1024 * 1024))
-
-const count = (value: number) =>
-  value.toLocaleString('uk-UA').replace(/\u00a0/g, ' ')
 
 /**
  * A header row named after the fields this server actually declares, required
@@ -36,16 +20,16 @@ const count = (value: number) =>
  * columns would go stale the moment the import schema gains a field — this one
  * cannot, because it is built from /capabilities.
  */
-function templateCsv(capabilities: ImportCapabilities) {
+function templateCsv(capabilities: ImportCapabilities, locale: Locale) {
   const named = capabilities.fields.map((field) => ({
     ...field,
-    label: fieldLabels[field.id] ?? field.id,
+    label: fieldLabel(field.id, locale),
   }))
   const ordered = [
     ...named.filter((field) => field.required),
     ...named.filter((field) => !field.required),
   ]
-  // A leading BOM so Excel opens a Ukrainian header row as UTF-8 rather than
+  // A leading BOM so Excel opens a non-Latin header row as UTF-8 rather than
   // as the local codepage.
   return `\ufeff${ordered.map((field) => field.label).join(',')}\n`
 }
@@ -116,12 +100,15 @@ export function ImportEmpty({
   capabilities: ImportCapabilities
   onNew: () => void
 }) {
+  const { locale } = useLocale()
+  const t = useImportT(importHistoryMessages)
+  const count = useCount()
   const formats = capabilities.formats.join(', ').toUpperCase()
   const columns = capabilities.limits.maxColumns
   const perPart = capabilities.maxPhotosPerEntity
 
   const downloadTemplate = () => {
-    const blob = new Blob([templateCsv(capabilities)], {
+    const blob = new Blob([templateCsv(capabilities, locale)], {
       type: 'text/csv;charset=utf-8',
     })
     const url = URL.createObjectURL(blob)
@@ -135,63 +122,75 @@ export function ImportEmpty({
   return (
     <div className="min-w-0">
       <section
-        aria-label="Як працює імпорт"
+        aria-label={t('howItWorks')}
         className="border-app-line bg-app-raised rounded-[20px] border px-6 py-12 sm:px-8 md:px-12 md:py-14"
       >
         <div className="max-w-[560px]">
           <p className="text-app-dim font-mono text-[11px] tracking-[0.16em] uppercase">
-            Імпортів ще не було
+            {t('noImportsYet')}
           </p>
           <h2 className="mt-4.5 text-[26px] leading-[1.12] font-extrabold tracking-[-0.025em] text-pretty text-white sm:text-[30px]">
-            Завантажте таблицю — і склад наповниться за кілька хвилин
+            {t('emptyHeadline')}
           </h2>
           <p className="text-app-muted mt-3.5 text-[15px] leading-[1.6] text-pretty">
-            Підійде будь-який файл {formats} з назвами деталей і кількістю. Ви
-            самі пояснюєте, що означає кожна колонка, і бачите повний перелік
-            майбутніх записів до того, як щось буде створено.
+            {t('emptyLede', { formats })}
           </p>
           <ol className="mt-7 grid gap-3.5">
             {STEPS.map((step) => (
               <Step
                 hint={
                   step.num === '1'
-                    ? `${formats} до ${String(mib(capabilities.limits.maxBytes))} MiB. ${step.hint}`
-                    : step.hint
+                    ? t('stepUploadHintLimits', {
+                        formats,
+                        size: String(mib(capabilities.limits.maxBytes)),
+                      })
+                    : t(step.hint)
                 }
                 key={step.num}
                 num={step.num}
-                title={step.title}
+                title={t(step.title)}
               />
             ))}
           </ol>
           <div className="mt-8 flex flex-wrap gap-2.5">
             <Button onClick={onNew} variant="primary">
-              Завантажити файл
+              {t('uploadFile')}
             </Button>
-            <Button onClick={downloadTemplate}>Завантажити шаблон CSV</Button>
+            <Button onClick={downloadTemplate}>{t('downloadTemplate')}</Button>
           </div>
         </div>
       </section>
 
       <div className="mt-3.5 grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-3.5">
         <Limit
-          label="Формати"
-          meta={`до ${String(mib(capabilities.limits.maxBytes))} MiB, до ${count(capabilities.limits.maxRows)} рядків${columns === undefined ? '' : ` і ${count(columns)} колонок`}`}
+          label={t('formats')}
+          meta={
+            columns === undefined
+              ? t('formatsMeta', {
+                  size: String(mib(capabilities.limits.maxBytes)),
+                  rows: count(capabilities.limits.maxRows),
+                })
+              : t('formatsMetaColumns', {
+                  size: String(mib(capabilities.limits.maxBytes)),
+                  rows: count(capabilities.limits.maxRows),
+                  columns: count(columns),
+                })
+          }
           value={formats}
         />
         <Limit
-          label="Фото"
+          label={t('photos')}
           meta={
             perPart === undefined
-              ? 'Ліміт фото для цього середовища невідомий.'
-              : `Посилання з вашої таблиці · до ${String(perPart)} фото на позицію`
+              ? t('photoLimitUnknown')
+              : t('photoLimit', { count: String(perPart) })
           }
-          value="За посиланням"
+          value={t('byLink')}
         />
         <Limit
-          label="Що не робимо"
-          meta="Схожі позиції не зливаються автоматично — рішення за вами"
-          value="Не обʼєднуємо"
+          label={t('whatWeDont')}
+          meta={t('noMergeMeta')}
+          value={t('noMerge')}
         />
       </div>
     </div>

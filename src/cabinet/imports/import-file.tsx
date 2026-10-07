@@ -1,6 +1,13 @@
 import { Upload } from 'lucide-react'
 import { Button, Field, Notice, SelectInput, TextInput } from '@/components/app'
-import { cn, plural } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import {
+  commonMessages,
+  formatDateTime,
+  useLocale,
+  useT,
+  type Locale,
+} from '@/i18n'
 import type { ReactNode } from 'react'
 import type {
   ImportCapabilities,
@@ -8,24 +15,26 @@ import type {
   ImportSelection,
   ImportStatus,
 } from '@/api/part-imports'
-import { issueText, looksMisdecoded } from './import-model'
+import { importFileMessages } from './import-file-messages'
+import { formatCount, issueText, looksMisdecoded } from './import-model'
+import { useImportT } from './use-import-text'
 
 const DELIMITERS = [
-  { value: ',', label: 'Кома' },
-  { value: ';', label: 'Крапка з комою' },
-  { value: '\t', label: 'Табуляція' },
-  { value: '|', label: 'Вертикальна риска' },
+  { value: ',', label: 'delimiterComma' },
+  { value: ';', label: 'delimiterSemicolon' },
+  { value: '\t', label: 'delimiterTab' },
+  { value: '|', label: 'delimiterPipe' },
 ] as const
 
-const count = (value: number) =>
-  value.toLocaleString('uk-UA').replace(/\u00a0/g, ' ')
+const oneDecimal = { minimumFractionDigits: 1, maximumFractionDigits: 1 }
 
-const fileSize = (bytes: number) =>
+/** Binary units, as the server limits are stated; the decimal follows the locale. */
+const fileSize = (bytes: number, locale: Locale) =>
   bytes < 1024
     ? `${String(bytes)} B`
     : bytes < 1024 * 1024
-      ? `${(bytes / 1024).toFixed(1)} KiB`
-      : `${(bytes / (1024 * 1024)).toFixed(1)} MiB`
+      ? `${formatCount(bytes / 1024, locale, oneDecimal)} KiB`
+      : `${formatCount(bytes / (1024 * 1024), locale, oneDecimal)} MiB`
 
 /** One of the pill choices in "Як читати файл". */
 function Pick({
@@ -110,6 +119,15 @@ export function ImportFileStep({
   /** Bytes on the wire, while the file is being sent. */
   transfer?: { loaded: number; total: number } | null
 }) {
+  const { locale, timeZone } = useLocale()
+  const t = useImportT(importFileMessages)
+  const tc = useT(commonMessages)
+  const count = (value: number) => formatCount(value, locale)
+  const size = (bytes: number) => fileSize(bytes, locale)
+  const delimiterLabel = (value: string) => {
+    const option = DELIMITERS.find((one) => one.value === value)
+    return option === undefined ? null : t(option.label)
+  }
   const source = status === null ? null : status.source
   // Empty collections come back missing, not empty, so every one of them is
   // read through a default before anything maps over it.
@@ -149,23 +167,36 @@ export function ImportFileStep({
   } | null = failed
     ? {
         tone: 'danger',
-        title: 'Файл прочитати не вдалося',
+        title: t('readFailedTitle'),
         body:
           status.errorCode === null
-            ? 'Не вдалося прочитати цю таблицю. Спробуйте інші налаштування читання або інший файл.'
-            : issueText(status.errorCode),
+            ? t('readFailedBody')
+            : issueText(status.errorCode, locale),
         fix: null,
       }
     : brokenColumns.length > 0
       ? {
           tone: 'warn',
-          title: 'Кодування не розпізнано — назви нечитабельні',
-          body: `Файл прочитано як ${selection.encoding.toUpperCase()}, але текст у ${brokenColumns.length === 1 ? `колонці «${brokenColumns[0]!.header}»` : `колонках ${brokenColumns.map((column) => `«${column.header}»`).join(', ')}`} пошкоджений. Схоже, таблиця збережена в іншому кодуванні.`,
+          title: t('encodingTitle'),
+          body:
+            brokenColumns.length === 1
+              ? t('encodingBodyOne', {
+                  encoding: selection.encoding.toUpperCase(),
+                  column: brokenColumns[0]!.header,
+                })
+              : t('encodingBodyMany', {
+                  encoding: selection.encoding.toUpperCase(),
+                  columns: brokenColumns
+                    .map((column) => t('quotedColumn', { name: column.header }))
+                    .join(', '),
+                }),
           fix:
             otherEncoding === undefined || !editable
               ? null
               : {
-                  label: `Прочитати як ${otherEncoding.toUpperCase()}`,
+                  label: t('readAs', {
+                    encoding: otherEncoding.toUpperCase(),
+                  }),
                   run: () => {
                     const next = { ...selection, encoding: otherEncoding }
                     onSelection(() => next)
@@ -188,16 +219,16 @@ export function ImportFileStep({
   // Each is a state the screen is already in, not a guess at the server.
   const transferSteps = [
     {
-      label: 'Передавання файлу',
+      label: t('transferStep'),
       state: sending ? 'running' : 'done',
-      note: sending ? `${String(transferPercent)}%` : 'готово',
+      note: sending ? `${String(transferPercent)}%` : t('done'),
     },
     {
-      label: 'Читання структури',
+      label: t('structureStep'),
       state: sending ? 'waiting' : 'running',
-      note: sending ? 'очікує' : 'триває',
+      note: sending ? t('waiting') : t('inProgress'),
     },
-    { label: 'Перегляд перших рядків', state: 'waiting', note: 'очікує' },
+    { label: t('previewStep'), state: 'waiting', note: t('waiting') },
   ] as const
 
   if (transfer != null)
@@ -213,21 +244,21 @@ export function ImportFileStep({
             </span>
             <div className="min-w-0 flex-[1_1_200px]">
               <p className="text-app-ink text-[16px] font-bold tracking-[-0.01em]">
-                {file?.name ?? 'Файл імпорту'}
+                {file?.name ?? t('importFile')}
               </p>
               <p className="text-app-muted mt-1 text-[13px]">
-                {fileSize(transfer.total)} ·{' '}
+                {size(transfer.total)} ·{' '}
                 {transfer.loaded < transfer.total
-                  ? `передано ${fileSize(transfer.loaded)}`
-                  : 'передано повністю'}
+                  ? t('transferred', { size: size(transfer.loaded) })
+                  : t('transferredFully')}
               </p>
             </div>
             {onCancelTransfer === undefined ? null : (
-              <Button onClick={onCancelTransfer}>Скасувати</Button>
+              <Button onClick={onCancelTransfer}>{tc('cancel')}</Button>
             )}
           </div>
           <div
-            aria-label="Передавання файлу"
+            aria-label={t('transferStep')}
             aria-valuemax={100}
             aria-valuemin={0}
             aria-valuenow={transferPercent}
@@ -270,12 +301,12 @@ export function ImportFileStep({
         </div>
         <section className="border-app-line bg-app-raised min-w-0 rounded-[18px] border px-5 py-4.5">
           <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-            Поки триває
+            {t('meanwhile')}
           </h2>
           <p className="text-app-muted mt-3 text-[13.5px] leading-6 text-pretty">
             {transfer.loaded < transfer.total
-              ? 'Передавання не відновлюється після закриття вкладки. Читання структури почнеться автоматично.'
-              : 'Визначаємо рядок заголовків, типи колонок і кількість рядків. Вкладку можна закрити — результат буде в історії.'}
+              ? t('meanwhileSending')
+              : t('meanwhileReading')}
           </p>
         </section>
       </div>
@@ -306,25 +337,32 @@ export function ImportFileStep({
             </span>
             <strong className="text-app-ink text-[16px] font-bold tracking-[-0.01em]">
               {/* Only the formats are shouted; the word between them is not. */}
-              Перетягніть файл{' '}
-              {capabilities.formats
-                .map((one) => one.toUpperCase())
-                .join(' або ')}
+              {t('dropFile', {
+                formats: capabilities.formats
+                  .map((one) => one.toUpperCase())
+                  .join(t('formatsOr')),
+              })}
             </strong>
             <span className="text-app-muted text-[13.5px]">
-              до {maxMiB} MiB · до {count(capabilities.limits.maxRows)} рядків
               {maxColumns === undefined
-                ? ''
-                : ` і ${count(maxColumns)} колонок`}
+                ? t('dropLimits', {
+                    size: maxMiB,
+                    rows: count(capabilities.limits.maxRows),
+                  })
+                : t('dropLimitsColumns', {
+                    size: maxMiB,
+                    rows: count(capabilities.limits.maxRows),
+                    columns: count(maxColumns),
+                  })}
             </span>
             <span className="bg-brand text-brand-foreground mt-1 inline-flex min-h-11 items-center rounded-[12px] px-5 text-[14px] font-bold">
-              {file === null ? 'Вибрати файл' : 'Вибрати інший файл'}
+              {file === null ? t('chooseFile') : t('chooseAnotherFile')}
             </span>
             {/* The real control covers the whole zone: invisible, but focusable
               and a target the size of the drop area rather than of a word. */}
             <input
               accept={capabilities.formats.map((one) => `.${one}`).join(',')}
-              aria-label="Файл імпорту"
+              aria-label={t('importFile')}
               className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-not-allowed"
               disabled={busy}
               onChange={(event) => onChooseFile(event.target.files?.[0])}
@@ -333,18 +371,17 @@ export function ImportFileStep({
           </label>
           {file === null ? null : (
             <p className="text-app-muted text-sm">
-              Обрано {file.name} · {fileSize(file.size)}. Натисніть «Завантажити
-              файл», щоб почати читання.
+              {t('picked', { name: file.name, size: size(file.size) })}
             </p>
           )}
         </div>
         <section className="border-app-line bg-app-raised min-w-0 rounded-[18px] border px-5 py-4.5">
           <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-            Обмеження
+            {t('limits')}
           </h2>
           <dl className="mt-3.5 grid gap-2.5 text-[13.5px]">
             <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-app-muted">Формати</dt>
+              <dt className="text-app-muted">{t('formats')}</dt>
               <dd className="text-app-ink font-mono">
                 {capabilities.formats
                   .map((one) => one.toUpperCase())
@@ -352,12 +389,14 @@ export function ImportFileStep({
               </dd>
             </div>
             <div className="flex items-baseline justify-between gap-4">
-              <dt className="text-app-muted">Розмір</dt>
-              <dd className="text-app-ink font-mono">до {maxMiB} MiB</dd>
+              <dt className="text-app-muted">{t('size')}</dt>
+              <dd className="text-app-ink font-mono">
+                {t('upToMiB', { size: maxMiB })}
+              </dd>
             </div>
             <div className="flex items-baseline justify-between gap-4">
               <dt className="text-app-muted">
-                {maxColumns === undefined ? 'Рядків' : 'Рядків і колонок'}
+                {maxColumns === undefined ? t('rows') : t('rowsAndColumns')}
               </dt>
               <dd className="text-app-ink font-mono tabular-nums">
                 {count(capabilities.limits.maxRows)}
@@ -380,28 +419,22 @@ export function ImportFileStep({
         </span>
         <div className="min-w-0 flex-[1_1_260px] sm:min-w-[200px]">
           <p className="text-app-ink text-[16px] font-bold tracking-[-0.01em]">
-            {file?.name ?? 'Файл імпорту'}
+            {file?.name ?? t('importFile')}
           </p>
           <p className="text-app-muted mt-1 text-[13px]">
             {file === null
-              ? 'Назва файлу відома лише в сеансі, де його обрали, і після перезавантаження не показується.'
-              : `${fileSize(file.size)} · передано й прочитано`}
+              ? t('nameUnknown')
+              : t('readDone', { size: size(file.size) })}
             {' · '}
-            {new Date(status.createdAt).toLocaleString('uk-UA', {
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
+            {formatDateTime(status.createdAt, locale, timeZone)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-5">
-          <Figure label="Рядків даних" value={count(status.rowCount)} />
-          <Figure label="Колонок" value={count(columns.length)} />
+          <Figure label={t('dataRows')} value={count(status.rowCount)} />
+          <Figure label={t('columns')} value={count(columns.length)} />
           {editable ? (
             <Button disabled={busy} onClick={() => onChooseFile(undefined)}>
-              Інший файл
+              {t('otherFile')}
             </Button>
           ) : null}
         </div>
@@ -453,11 +486,13 @@ export function ImportFileStep({
 
       <div className="flex flex-wrap items-start gap-4">
         <section
-          aria-label="Що прочитано"
+          aria-label={t('whatWasRead')}
           className="border-app-line bg-app-raised min-w-0 flex-[1_1_420px] overflow-hidden rounded-[20px] border"
         >
           <div className="border-app-line flex flex-wrap items-baseline justify-between gap-3 border-b px-5.5 py-4">
-            <h2 className="text-app-ink text-[15px] font-bold">Що прочитано</h2>
+            <h2 className="text-app-ink text-[15px] font-bold">
+              {t('whatWasRead')}
+            </h2>
             <p
               className={cn(
                 'text-[13px]',
@@ -465,19 +500,22 @@ export function ImportFileStep({
               )}
             >
               {brokenColumns.length > 0
-                ? `${String(brokenColumns.length)} з ${String(columns.length)} ${plural(columns.length, ['колонки', 'колонок', 'колонок'])} нечитабельні`
+                ? t('unreadableColumns', {
+                    count: columns.length,
+                    broken: count(brokenColumns.length),
+                  })
                 : selection.headerRow == null
-                  ? 'Заголовків немає — колонки названо за номерами'
-                  : `Рядок ${String(selection.headerRow)} використано як заголовки`}
+                  ? t('noHeaders')
+                  : t('headerRowUsed', { row: String(selection.headerRow) })}
             </p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[14px]">
-              <caption className="sr-only">Перші рядки файлу</caption>
+              <caption className="sr-only">{t('firstRowsCaption')}</caption>
               <thead>
                 <tr>
                   <th className="text-app-muted border-app-line w-12 border-b px-5.5 py-2.5 text-left font-mono text-[10px] tracking-[0.14em] uppercase">
-                    №
+                    {t('rowNumber')}
                   </th>
                   {columns.map((column) => (
                     <th
@@ -513,16 +551,19 @@ export function ImportFileStep({
           <p className="text-app-dim px-5.5 py-3.5 text-[13px]">
             {brokenColumns.length > 0 &&
             brokenColumns.length < textColumns.length + 1
-              ? 'Числові колонки прочитані правильно — проблема тільки в текстових.'
+              ? t('numbersFine')
               : status.rowCount <= preview.length
-                ? `Показано всі ${count(status.rowCount)} рядки файлу`
-                : `Показано перші ${count(preview.length)} з ${count(status.rowCount)} рядків`}
+                ? t('shownAll', { count: count(status.rowCount) })
+                : t('shownFirst', {
+                    shown: count(preview.length),
+                    count: count(status.rowCount),
+                  })}
           </p>
         </section>
 
         <div className="grid min-w-0 flex-[0_1_340px] gap-4 sm:min-w-[260px]">
           <section
-            aria-label="Як читати файл"
+            aria-label={t('howToRead')}
             className="border-app-line bg-app-raised rounded-[18px] border px-5 py-4.5"
           >
             <button
@@ -532,28 +573,40 @@ export function ImportFileStep({
               type="button"
             >
               <span className="text-app-ink text-[15px] font-bold">
-                Як читати файл
+                {t('howToRead')}
               </span>
               <span className="text-brand text-[13px] font-bold">
-                {settingsOpen ? 'Згорнути' : 'Змінити'}
+                {settingsOpen ? t('collapse') : t('change')}
               </span>
             </button>
             <p className="text-app-muted mt-1.5 text-[13px] leading-5 text-pretty">
               {settingsOpen
-                ? 'Після зміни налаштувань файл читається заново — зіставлення колонок доведеться перевірити.'
-                : `Роздільник ${DELIMITERS.find((one) => one.value === selection.delimiter)?.label.toLowerCase() ?? selection.delimiter}, кодування ${selection.encoding}, ${selection.headerRow == null ? 'без заголовків' : `заголовки в рядку ${String(selection.headerRow)}`}. Змініть, якщо дані виглядають не так.`}
+                ? t('rereadWarning')
+                : t('readSummary', {
+                    delimiter:
+                      delimiterLabel(selection.delimiter)?.toLocaleLowerCase(
+                        locale,
+                      ) ?? selection.delimiter,
+                    encoding: selection.encoding,
+                    headers:
+                      selection.headerRow == null
+                        ? t('withoutHeaders')
+                        : t('headersInRow', {
+                            row: String(selection.headerRow),
+                          }),
+                  })}
             </p>
 
             {warnings.map((warning) => (
               <Notice className="mt-3" key={warning} tone="warn">
-                {issueText(warning)}
+                {issueText(warning, locale)}
               </Notice>
             ))}
 
             {settingsOpen ? (
               <div className="mt-4 grid gap-3.5">
                 {tables.length > 0 ? (
-                  <Field label="Аркуш">
+                  <Field label={t('sheet')}>
                     <SelectInput
                       onChange={(event) =>
                         onSelection((current) => ({
@@ -563,7 +616,7 @@ export function ImportFileStep({
                       }
                       value={selection.sheet ?? ''}
                     >
-                      <option value="">Оберіть аркуш</option>
+                      <option value="">{t('chooseSheet')}</option>
                       {tables.map((table) => (
                         <option key={table.id} value={table.id}>
                           {table.name}
@@ -575,14 +628,14 @@ export function ImportFileStep({
 
                 <div>
                   <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                    Роздільник
+                    {t('delimiter')}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {DELIMITERS.map((option) => (
                       <Pick
                         active={selection.delimiter === option.value}
                         key={option.value}
-                        label={`Роздільник: ${option.label}`}
+                        label={t('delimiterOption', { label: t(option.label) })}
                         onPick={() =>
                           onSelection((current) => ({
                             ...current,
@@ -590,7 +643,7 @@ export function ImportFileStep({
                           }))
                         }
                       >
-                        {option.label}
+                        {t(option.label)}
                       </Pick>
                     ))}
                   </div>
@@ -598,14 +651,14 @@ export function ImportFileStep({
 
                 <div>
                   <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                    Кодування
+                    {t('encoding')}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {capabilities.encodings.map((encoding) => (
                       <Pick
                         active={selection.encoding === encoding}
                         key={encoding}
-                        label={`Кодування: ${encoding}`}
+                        label={t('encodingOption', { encoding })}
                         onPick={() =>
                           onSelection((current) => ({ ...current, encoding }))
                         }
@@ -616,15 +669,12 @@ export function ImportFileStep({
                   </div>
                 </div>
 
-                <Field
-                  hint="Вкажіть номер рядка. Дані читаються з наступного. Залиште порожнім, якщо заголовків немає."
-                  label="Рядок заголовків"
-                >
+                <Field hint={t('headerRowHint')} label={t('headerRow')}>
                   <TextInput
                     type="number"
                     min={1}
                     step={1}
-                    placeholder="Немає заголовків"
+                    placeholder={t('noHeaderRow')}
                     onChange={(event) => {
                       const value = event.target.value
                       const headerRow = value === '' ? null : Number(value)
@@ -656,7 +706,7 @@ export function ImportFileStep({
                       }
                       type="checkbox"
                     />
-                    Підтверджую включення прихованих рядків
+                    {t('acceptHiddenRows')}
                   </label>
                 ) : null}
                 {warnings.includes('HIDDEN_COLUMNS') ? (
@@ -672,13 +722,13 @@ export function ImportFileStep({
                       }
                       type="checkbox"
                     />
-                    Підтверджую включення прихованих колонок
+                    {t('acceptHiddenColumns')}
                   </label>
                 ) : null}
 
                 {editable ? (
                   <Button disabled={busy} onClick={() => onReanalyze()}>
-                    Прочитати заново
+                    {t('reread')}
                   </Button>
                 ) : null}
               </div>
@@ -687,28 +737,30 @@ export function ImportFileStep({
 
           {trouble === null ? null : (
             <section
-              aria-label="Спробуйте"
+              aria-label={t('tryThis')}
               className="border-app-line bg-app-raised rounded-[18px] border px-5 py-4.5"
             >
               <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                Спробуйте
+                {t('tryThis')}
               </h2>
               <ul className="mt-3.5 grid gap-3.5">
                 {[
                   {
                     title:
                       otherEncoding === undefined
-                        ? 'Інше кодування'
-                        : `Кодування ${otherEncoding.toUpperCase()}`,
-                    hint: 'Windows-1251 — найчастіша причина для таблиць з Excel українською.',
+                        ? t('otherEncoding')
+                        : t('encodingNamed', {
+                            encoding: otherEncoding.toUpperCase(),
+                          }),
+                    hint: t('encodingHint'),
                   },
                   {
-                    title: 'Зберегти як CSV UTF-8',
-                    hint: 'В Excel: Файл → Зберегти як → CSV UTF-8 (з комами).',
+                    title: t('saveAsCsv'),
+                    hint: t('saveAsCsvHint'),
                   },
                   {
-                    title: 'Завантажити XLSX',
-                    hint: 'XLSX не має проблем з кодуванням — можна завантажити оригінал таблиці.',
+                    title: t('uploadXlsx'),
+                    hint: t('uploadXlsxHint'),
                   },
                 ].map((fix) => (
                   <li key={fix.title}>
@@ -724,42 +776,41 @@ export function ImportFileStep({
               <div className="mt-4 flex flex-wrap gap-2.5">
                 {editable ? (
                   <Button disabled={busy} onClick={onToggleSettings}>
-                    Змінити налаштування читання
+                    {t('changeReadSettings')}
                   </Button>
                 ) : null}
                 <Button disabled={busy} onClick={() => onChooseFile(undefined)}>
-                  Вибрати інший файл
+                  {t('chooseAnotherFile')}
                 </Button>
               </div>
               <p className="text-app-dim mt-4 text-[13px] leading-5 text-pretty">
-                Нічого не створено. Цей імпорт залишиться в історії — його можна
-                продовжити пізніше або почати новий.
+                {t('nothingCreated')}
               </p>
             </section>
           )}
 
           <section
-            aria-label="Обмеження"
+            aria-label={t('limits')}
             className="border-app-line bg-app-raised rounded-[18px] border px-5 py-4.5"
           >
             <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-              Обмеження
+              {t('limits')}
             </h2>
             <dl className="mt-3 grid gap-2.5">
               {[
                 {
-                  label: 'Розмір файлу',
+                  label: t('fileSize'),
                   value:
                     file === null
-                      ? `до ${String(Math.round(capabilities.limits.maxBytes / (1024 * 1024)))} MiB`
-                      : `${fileSize(file.size)} / ${String(Math.round(capabilities.limits.maxBytes / (1024 * 1024)))} MiB`,
+                      ? t('upToMiB', { size: maxMiB })
+                      : t('ofMiB', { size: size(file.size), max: maxMiB }),
                 },
                 {
-                  label: 'Рядків',
+                  label: t('rows'),
                   value: `${count(status.rowCount)} / ${count(capabilities.limits.maxRows)}`,
                 },
                 {
-                  label: 'Колонок',
+                  label: t('columns'),
                   value:
                     capabilities.limits.maxColumns === undefined
                       ? count(columns.length)
@@ -785,11 +836,10 @@ export function ImportFileStep({
               onClick={onContinue}
               variant="primary"
             >
-              Налаштувати імпорт
+              {t('configureImport')}
             </Button>
             <p className="text-app-dim text-[13px] leading-5 text-pretty">
-              На наступному кроці ви вкажете, що означає кожна колонка. Дані ще
-              не створюються.
+              {t('nextStepHint')}
             </p>
           </div>
         </div>
