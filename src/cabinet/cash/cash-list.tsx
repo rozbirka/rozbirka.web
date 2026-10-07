@@ -2,25 +2,19 @@ import { Fragment, useState } from 'react'
 import { Link } from 'react-router'
 import { Plus, Search } from 'lucide-react'
 import { Button } from '@/components/app'
-import { cn, plural } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { useT } from '@/i18n'
 import type { CashDailySummary, CashRegister } from '@/api/cash'
-import {
-  count,
-  money,
-  moment,
-  movementText,
-  registerTypeHints,
-  registerTypeLabels,
-  signedMoney,
-} from './cash-labels'
+import { useCashText } from './cash-labels'
+import { cashMessages } from './cash-messages'
 import type { CashFeedEntry } from './cash-feed'
 import { Kpi, KpiStrip } from '../redesign-kpi'
 import { RedesignShell, RedesignTitle } from '../redesign-shell'
 
 const SEGMENTS = [
-  { key: 'all', label: 'Усі' },
-  { key: 'active', label: 'Активні' },
-  { key: 'bank', label: 'Безготівкові' },
+  { key: 'all', label: 'segAll' },
+  { key: 'active', label: 'segActive' },
+  { key: 'bank', label: 'segBank' },
 ] as const
 
 /**
@@ -49,6 +43,16 @@ export function CashList({
   canTransfer: boolean
   onTransfer: () => void
 }) {
+  const t = useT(cashMessages)
+  const {
+    count,
+    money,
+    moment,
+    movementText,
+    registerHint,
+    registerType,
+    signedMoney,
+  } = useCashText()
   const [segment, setSegment] =
     useState<(typeof SEGMENTS)[number]['key']>('all')
   const [query, setQuery] = useState('')
@@ -92,15 +96,15 @@ export function CashList({
           <span className="border-app-line bg-app-raised focus-within:border-app-line-2 flex h-10 w-full min-w-0 items-center gap-2.5 rounded-[10px] border px-3 sm:w-[260px]">
             <Search aria-hidden className="text-app-dim size-4 shrink-0" />
             <input
-              aria-label="Пошук кас"
+              aria-label={t('searchLabel')}
               className="text-app-ink placeholder:text-app-dim min-w-0 flex-1 bg-transparent text-[14px] outline-none"
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Назва каси"
+              placeholder={t('tillName')}
               value={query}
             />
           </span>
           {canTransfer ? (
-            <Button onClick={onTransfer}>Переказ між касами</Button>
+            <Button onClick={onTransfer}>{t('transfer')}</Button>
           ) : null}
           {canCreate ? (
             <Button
@@ -110,35 +114,32 @@ export function CashList({
             >
               <Link to="new">
                 <Plus aria-hidden />
-                Нова каса
+                {t('newTill')}
               </Link>
             </Button>
           ) : null}
         </>
       }
-      crumb="Гроші · Каси"
+      crumb={t('crumb')}
     >
-      <RedesignTitle
-        lead="Залишки по кожній касі окремо, без конвертації валют."
-        title="Каси"
-      />
+      <RedesignTitle lead={t('lead')} title={t('title')} />
 
       <KpiStrip>
         <Kpi
-          label="Кас"
+          label={t('kpiTills')}
           meta={
             closed === 0
-              ? `${count(active)} ${plural(active, ['активна', 'активні', 'активних'])}`
-              : `${count(active)} ${plural(active, ['активна', 'активні', 'активних'])} · ${count(closed)} ${plural(closed, ['закрита', 'закриті', 'закритих'])}`
+              ? t('activeCount', { count: active })
+              : `${t('activeCount', { count: active })} · ${t('closedCount', { count: closed })}`
           }
           value={count(registers.length)}
         />
         <Kpi
-          label="Операцій за день"
+          label={t('kpiDayOperations')}
           meta={
             summary === null
-              ? 'зріз за день ще не прийшов'
-              : `${date} · ${count(income)} ${plural(income, ['каса з надходженням', 'каси з надходженнями', 'кас із надходженнями'])}`
+              ? t('daySummaryPending')
+              : `${date} · ${t('tillsWithIncome', { count: income })}`
           }
           value={count(operations)}
         />
@@ -146,7 +147,7 @@ export function CashList({
 
       <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
         <div
-          aria-label="Фільтр кас"
+          aria-label={t('filterLabel')}
           className="border-app-line bg-app-raised flex min-w-0 flex-wrap gap-1 rounded-[14px] border p-1"
           role="group"
         >
@@ -163,7 +164,7 @@ export function CashList({
               onClick={() => setSegment(one.key)}
               type="button"
             >
-              {one.label}
+              {t(one.label)}
               <span className="text-app-dim font-mono text-[12px]">
                 {count(counts[one.key])}
               </span>
@@ -171,14 +172,13 @@ export function CashList({
           ))}
         </div>
         <p className="text-app-dim text-[13px]">
-          Показано {count(shown.length)} з {count(registers.length)}{' '}
-          {plural(registers.length, ['каси', 'кас', 'кас'])}
+          {t('shownTills', { shown: shown.length, count: registers.length })}
         </p>
       </div>
 
       {shown.length === 0 ? (
         <p className="border-app-line bg-app-raised text-app-muted rounded-[20px] border px-6 py-10 text-center text-[14.5px]">
-          Кас за цим фільтром немає.
+          {t('noTillsFiltered')}
         </p>
       ) : (
         <ul className="grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))]">
@@ -201,10 +201,10 @@ export function CashList({
                         {register.name}
                       </p>
                       <p className="text-app-muted mt-1 text-[13px]">
-                        {registerTypeLabels[register.type] ?? register.type}
-                        {registerTypeHints[register.type]
-                          ? ` · ${registerTypeHints[register.type]}`
-                          : ''}
+                        {registerType(register.type)}
+                        {registerHint(register.type) === null
+                          ? ''
+                          : ` · ${registerHint(register.type)}`}
                       </p>
                     </div>
                     <span
@@ -222,14 +222,14 @@ export function CashList({
                           register.isActive ? 'bg-state-ok' : 'bg-app-dim',
                         )}
                       />
-                      {register.isActive ? 'Активна' : 'Неактивна'}
+                      {register.isActive ? t('active') : t('inactive')}
                     </span>
                   </div>
 
                   <dl className="mt-4.5 grid grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-2.5">
                     {currencies.length === 0 ? (
                       <dd className="text-app-dim col-span-2 text-[13.5px]">
-                        Валют ще немає
+                        {t('noCurrencies')}
                       </dd>
                     ) : (
                       currencies.map(([currency, balance]) => (
@@ -255,8 +255,8 @@ export function CashList({
                   <div className="border-app-line mt-4.5 border-t pt-3.5 text-[13px]">
                     <span className="text-app-dim">
                       {summary === null
-                        ? 'День ще рахується'
-                        : `${count(operationCount)} ${plural(operationCount, ['операція', 'операції', 'операцій'])}`}
+                        ? t('dayCounting')
+                        : t('operationsCount', { count: operationCount })}
                     </span>
                   </div>
                 </Link>
@@ -267,29 +267,27 @@ export function CashList({
       )}
 
       <section
-        aria-label="Останні операції"
+        aria-label={t('recent')}
         className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
       >
         <h2 className="text-app-ink border-app-line border-b px-5.5 py-4 text-[15px] font-bold">
-          Останні операції
+          {t('recent')}
         </h2>
         {feed.length === 0 ? (
           <p className="text-app-muted px-5.5 py-6 text-[14px]">
-            Операцій ще немає.
+            {t('noOperations')}
           </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-[14px]">
-              <caption className="sr-only">
-                Останні операції по всіх касах
-              </caption>
+              <caption className="sr-only">{t('recentCaption')}</caption>
               <thead>
                 <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
-                  <th className="px-5.5 py-2.5 text-left">Дата</th>
-                  <th className="px-3 py-2.5 text-left">Призначення</th>
-                  <th className="px-3 py-2.5 text-left">Каса</th>
-                  <th className="px-3 py-2.5 text-right">Сума</th>
-                  <th className="px-3 py-2.5 text-left">Тип</th>
+                  <th className="px-5.5 py-2.5 text-left">{t('colDate')}</th>
+                  <th className="px-3 py-2.5 text-left">{t('colPurpose')}</th>
+                  <th className="px-3 py-2.5 text-left">{t('colTill')}</th>
+                  <th className="px-3 py-2.5 text-right">{t('colAmount')}</th>
+                  <th className="px-3 py-2.5 text-left">{t('colType')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -334,9 +332,7 @@ export function CashList({
           </div>
         )}
         <p className="text-app-dim border-app-line border-t px-5.5 py-3.5 text-[13px] leading-5 text-pretty">
-          Це останні рухи кожної каси, зведені разом
-          {feedTruncated ? ' по перших касах списку' : ''}. Повний журнал — на
-          картці каси.
+          {feedTruncated ? t('feedNoteTruncated') : t('feedNote')}
         </p>
       </section>
     </RedesignShell>

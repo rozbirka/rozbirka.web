@@ -9,7 +9,9 @@ import {
   Sheet,
   TextInput,
 } from '@/components/app'
+import { commonMessages, useT } from '@/i18n'
 import { tillCurrencies } from '../currency/catalog-order'
+import { cashMessages } from './cash-messages'
 
 const eyebrowClass =
   'text-app-dim font-mono text-[11.5px] tracking-[0.12em] uppercase'
@@ -41,6 +43,8 @@ function OpenCashTransferDrawer({
   open,
   registers,
 }: CashTransferDrawerProps) {
+  const t = useT(cashMessages)
+  const tc = useT(commonMessages)
   const activeRegisters = useMemo(
     () => registers.filter((register) => register.isActive),
     [registers],
@@ -82,17 +86,17 @@ function OpenCashTransferDrawer({
     amountOut !== '' &&
     Number.isFinite(amountOutNumber) &&
     amountOutNumber > (source.balances[fromCurrency] ?? 0)
-      ? 'У касі-відправнику недостатньо коштів для цього переказу.'
+      ? t('errSourceInsufficient')
       : fromCurrency !== '' && !sourceSupportsCurrency
-        ? 'Обрана валюта недоступна в касі-відправнику.'
+        ? t('errSourceCurrency')
         : toCurrency !== '' && !destinationSupportsCurrency
-          ? 'Обрана валюта недоступна в касі-отримувачі.'
+          ? t('errDestinationCurrency')
           : fromCurrency !== '' &&
               fromCurrency === toCurrency &&
               amountOut !== '' &&
               amountIn !== '' &&
               amountOutNumber !== amountInNumber
-            ? 'Для переказу без конвертації суми списання і зарахування мають збігатися.'
+            ? t('errSameCurrency')
             : null
   const invalid =
     busy ||
@@ -126,8 +130,8 @@ function OpenCashTransferDrawer({
 
   return (
     <Sheet
-      description="Вкажіть, звідки списати кошти та куди їх зарахувати."
-      eyebrow="Гроші · Каси"
+      description={t('transferDescription')}
+      eyebrow={t('crumb')}
       footer={
         <>
           <Button
@@ -135,7 +139,7 @@ function OpenCashTransferDrawer({
             onClick={() => onOpenChange(false)}
             type="button"
           >
-            Скасувати
+            {tc('cancel')}
           </Button>
           <Button
             aria-busy={busy}
@@ -144,7 +148,7 @@ function OpenCashTransferDrawer({
             type="submit"
             variant="primary"
           >
-            {busy ? 'Переказуємо…' : 'Переказати кошти'}
+            {busy ? t('transferring') : t('transferSubmit')}
           </Button>
         </>
       }
@@ -153,7 +157,7 @@ function OpenCashTransferDrawer({
         onOpenChange(next)
       }}
       open={open}
-      title="Переказ між касами"
+      title={t('transfer')}
     >
       <form
         aria-busy={busy}
@@ -163,17 +167,16 @@ function OpenCashTransferDrawer({
       >
         {activeRegisters.length < 2 ? (
           <Notice role="status" tone="info">
-            Переказ потребує ще однієї активної каси. Створіть другу касу або
-            активуйте наявну.
+            {t('needSecondTill')}
           </Notice>
         ) : (
           <>
             <section className="border-app-line bg-app-raised rounded-[16px] grid gap-4 border p-4">
-              <p className={eyebrowClass}>Звідки</p>
-              <Field label="Каса-відправник">
+              <p className={eyebrowClass}>{t('fromHeading')}</p>
+              <Field label={t('sourceTill')}>
                 <Segmented
                   className="w-fit max-w-full border-0 bg-transparent p-0 [&>label]:min-h-10 [&>label]:flex-none [&>label]:border [&>label]:border-app-line-2 [&>label]:bg-app-input [&>label]:px-3.5"
-                  label="Каса-відправник"
+                  label={t('sourceTill')}
                   name="transfer-from-register"
                   onChange={(registerId) => {
                     setFromRegisterId(registerId)
@@ -183,14 +186,14 @@ function OpenCashTransferDrawer({
                   }}
                   options={activeRegisters.map((register) => ({
                     label: register.name,
-                    srLabel: 'каса-відправник',
+                    srLabel: t('sourceTillSr'),
                     value: register.id,
                   }))}
                   selectionTone="brand"
                   value={selectedFromId}
                 />
               </Field>
-              <Field label="Сума списання">
+              <Field label={t('amountOut')}>
                 <div className="grid gap-2">
                   <TextInput
                     className="h-11 min-h-11 rounded-[10px] px-3.5 font-mono text-[17px] font-semibold tabular-nums"
@@ -206,7 +209,7 @@ function OpenCashTransferDrawer({
                   />
                   <Segmented
                     className="w-fit max-w-full flex-wrap rounded-[10px] p-1 [&>label]:min-h-9 [&>label]:min-w-14 [&>label]:flex-none [&>label]:rounded-[7px] [&>label]:px-2 [&>label]:font-mono"
-                    label="Валюта списання"
+                    label={t('currencyOut')}
                     name="transfer-from-currency"
                     onChange={setFromCurrency}
                     options={currencyOptions(source)}
@@ -217,8 +220,9 @@ function OpenCashTransferDrawer({
               </Field>
               {source && fromCurrency ? (
                 <p className="text-app-dim text-[12.5px] tabular-nums">
-                  Доступно в цій касі: {source.balances[fromCurrency] ?? '—'}{' '}
-                  {fromCurrency}
+                  {t('availableHere', {
+                    amount: `${source.balances[fromCurrency] ?? '—'} ${fromCurrency}`,
+                  })}
                 </p>
               ) : null}
             </section>
@@ -230,11 +234,11 @@ function OpenCashTransferDrawer({
             </div>
 
             <section className="border-app-line bg-app-raised rounded-[16px] grid gap-4 border p-4">
-              <p className={eyebrowClass}>Куди</p>
-              <Field label="Каса-отримувач">
+              <p className={eyebrowClass}>{t('toHeading')}</p>
+              <Field label={t('destinationTill')}>
                 <Segmented
                   className="w-fit max-w-full border-0 bg-transparent p-0 [&>label]:min-h-10 [&>label]:flex-none [&>label]:border [&>label]:border-app-line-2 [&>label]:bg-app-input [&>label]:px-3.5"
-                  label="Каса-отримувач"
+                  label={t('destinationTill')}
                   name="transfer-to-register"
                   onChange={(registerId) => {
                     setToRegisterId(registerId)
@@ -242,14 +246,14 @@ function OpenCashTransferDrawer({
                   }}
                   options={destinations.map((register) => ({
                     label: register.name,
-                    srLabel: 'каса-отримувач',
+                    srLabel: t('destinationTillSr'),
                     value: register.id,
                   }))}
                   selectionTone="brand"
                   value={toRegisterId}
                 />
               </Field>
-              <Field label="Сума зарахування">
+              <Field label={t('amountIn')}>
                 <div className="grid gap-2">
                   <TextInput
                     className="h-11 min-h-11 rounded-[10px] px-3.5 font-mono text-[17px] font-semibold tabular-nums"
@@ -265,7 +269,7 @@ function OpenCashTransferDrawer({
                   />
                   <Segmented
                     className="w-fit max-w-full flex-wrap rounded-[10px] p-1 [&>label]:min-h-9 [&>label]:min-w-14 [&>label]:flex-none [&>label]:rounded-[7px] [&>label]:px-2 [&>label]:font-mono"
-                    label="Валюта зарахування"
+                    label={t('currencyIn')}
                     name="transfer-to-currency"
                     onChange={setToCurrency}
                     options={currencyOptions(destination)}
@@ -276,13 +280,14 @@ function OpenCashTransferDrawer({
               </Field>
               {destination && toCurrency ? (
                 <p className="text-app-dim text-[12.5px] tabular-nums">
-                  Баланс каси-отримувача:{' '}
-                  {destination.balances[toCurrency] ?? '—'} {toCurrency}
+                  {t('destinationBalance', {
+                    amount: `${destination.balances[toCurrency] ?? '—'} ${toCurrency}`,
+                  })}
                 </p>
               ) : null}
             </section>
 
-            <Field hint="Необовʼязково" label="Нотатка переказу">
+            <Field hint={t('optional')} label={t('transferNote')}>
               <TextInput
                 onChange={(event) => setNote(event.target.value)}
                 value={note}

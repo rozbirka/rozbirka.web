@@ -9,6 +9,8 @@ import {
   TextInput,
 } from '@/components/app'
 import { cn } from '@/lib/utils'
+import { commonMessages, useT } from '@/i18n'
+import { cashMessages } from './cash-messages'
 import { tillCurrencies } from '../currency/catalog-order'
 
 type MovementType = CashTransactionInput['type']
@@ -35,6 +37,8 @@ function OpenCashMovementDrawer({
   open,
   register,
 }: CashMovementDrawerProps) {
+  const t = useT(cashMessages)
+  const tc = useT(commonMessages)
   const currencies = tillCurrencies(register)
   const [type, setType] = useState<MovementType>('manual_in')
   const [amount, setAmount] = useState('')
@@ -73,8 +77,8 @@ function OpenCashMovementDrawer({
 
   return (
     <Sheet
-      description="Запис у журнал цієї каси без переказу та документа."
-      eyebrow={`Гроші · ${register.name}`}
+      description={t('movementDescription')}
+      eyebrow={t('eyebrowTill', { name: register.name })}
       footer={
         <>
           <Button
@@ -82,7 +86,7 @@ function OpenCashMovementDrawer({
             onClick={() => onOpenChange(false)}
             type="button"
           >
-            Скасувати
+            {tc('cancel')}
           </Button>
           <Button
             aria-busy={busy}
@@ -91,7 +95,7 @@ function OpenCashMovementDrawer({
             type="submit"
             variant="primary"
           >
-            {busy ? 'Зберігаємо…' : 'Записати операцію'}
+            {busy ? tc('saving') : t('recordMovement')}
           </Button>
         </>
       }
@@ -100,7 +104,7 @@ function OpenCashMovementDrawer({
         onOpenChange(next)
       }}
       open={open}
-      title="Нова операція"
+      title={t('newOperation')}
     >
       <form
         aria-busy={busy}
@@ -108,9 +112,9 @@ function OpenCashMovementDrawer({
         id={CASH_MOVEMENT_FORM}
         onSubmit={submit}
       >
-        <Field label="Тип операції">
+        <Field label={t('movementType')}>
           <div
-            aria-label="Тип операції"
+            aria-label={t('movementType')}
             className="grid grid-cols-2 gap-2"
             role="group"
           >
@@ -125,7 +129,7 @@ function OpenCashMovementDrawer({
               onClick={() => setType('manual_in')}
               type="button"
             >
-              Надходження
+              {t('mvIncome')}
             </button>
             <button
               aria-pressed={type === 'manual_out'}
@@ -138,12 +142,12 @@ function OpenCashMovementDrawer({
               onClick={() => setType('manual_out')}
               type="button"
             >
-              Витрата
+              {t('mvExpense')}
             </button>
           </div>
         </Field>
 
-        <Field label="Сума">
+        <Field label={t('colAmount')}>
           <div
             className={cn(
               'grid items-stretch gap-2',
@@ -172,7 +176,7 @@ function OpenCashMovementDrawer({
                   ? 'h-11 flex-nowrap [&>label]:h-full [&>label]:min-h-0 [&>label]:min-w-0'
                   : 'w-fit max-w-full flex-wrap [&>label]:min-h-9 [&>label]:min-w-14 [&>label]:flex-none',
               )}
-              label="Валюта операції"
+              label={t('movementCurrency')}
               name="movement-currency"
               onChange={setCurrency}
               options={currencies.map((one) => ({
@@ -196,8 +200,8 @@ function OpenCashMovementDrawer({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-app-muted text-[13.5px]">
                 {type === 'manual_in'
-                  ? `Надходження до каси «${register.name}»`
-                  : `Витрата з каси «${register.name}»`}
+                  ? t('incomeTo', { name: register.name })
+                  : t('expenseFrom', { name: register.name })}
               </span>
               <span
                 className={cn(
@@ -212,16 +216,14 @@ function OpenCashMovementDrawer({
           </div>
         ) : null}
 
-        <Field hint="Необовʼязково" label="Нотатка">
+        <Field hint={t('optional')} label={t('note')}>
           <TextInput
             onChange={(event) => setNote(event.target.value)}
             value={note}
           />
         </Field>
         {insufficientBalance ? (
-          <Notice tone="warn">
-            У касі недостатньо коштів для цієї витрати.
-          </Notice>
+          <Notice tone="warn">{t('insufficient')}</Notice>
         ) : null}
         {error ? <Notice tone="danger">{error}</Notice> : null}
       </form>
