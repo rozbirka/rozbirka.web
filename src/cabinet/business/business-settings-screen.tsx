@@ -14,6 +14,7 @@ import { inventoryApi, type Warehouse } from '@/api/inventory'
 import { useCabinet } from '../CabinetContext'
 import { RedesignShell, RedesignTitle } from '../redesign-shell'
 import { cabinetModules } from '../module-registry'
+import { useHashTarget } from '../use-hash-target'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 
 type SaveState = 'idle' | 'pending' | 'success' | 'error' | 'denied'
@@ -114,6 +115,8 @@ function Note({ children }: { children: ReactNode }) {
 }
 
 export function BusinessSettingsScreen() {
+  // `#region` / `#accounting-currency` open that section (business-anchors).
+  useHashTarget()
   const cabinet = useCabinet()
   const tenant = cabinet.targetTenant
   const inventoryPath = `/app/${tenant?.slug ?? ''}/inventory`
