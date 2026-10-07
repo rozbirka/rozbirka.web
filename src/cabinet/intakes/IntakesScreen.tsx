@@ -1,4 +1,11 @@
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import {
   Link,
   useLocation,
@@ -64,6 +71,14 @@ import type { ModuleAccessDecision } from '../policy'
 import type { CabinetModuleDefinition } from '../module-registry'
 import type { Permission } from '../access-types'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import type { SupportedCurrency } from '@/i18n'
+import { useWholeMoney } from '../currency/money'
+import { MoneyInput } from '../currency/price-currency'
+import {
+  useAccountingCurrency,
+  useFirstPriceGuard,
+} from '../currency/use-accounting-currency'
+import { usePriceSlots } from '../currency/use-price-slots'
 
 const defaultPageSize = 20
 const positiveInteger = (value: string | null, fallback: number) => {
@@ -75,18 +90,10 @@ const pageSizeParam = (value: string | null, fallback: number) => {
   return number <= 100 ? number : fallback
 }
 /**
- * Intakes are bought in dollars, like the cars and the parts they become. A
- * round sum drops its cents; real cents are kept.
+ * Intakes are bought in the accounting currency, like the cars and the parts
+ * they become: each screen formats sums with `useWholeMoney` (ISO code, a
+ * round sum without cents).
  */
-const money = (amount: number) =>
-  new Intl.NumberFormat('uk-UA', {
-    style: 'currency',
-    currency: 'USD',
-    currencyDisplay: 'narrowSymbol',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-    trailingZeroDisplay: 'stripIfInteger',
-  }).format(amount)
 
 /** Dates arrive as ISO strings; anything unparsable is shown as it came. */
 const day = (value: string) => {
@@ -294,6 +301,7 @@ const intakeSaleState = (
         : { label: 'Розпродано', tone: 'neutral' }
 
 function IntakesList({ base }: { base: string }) {
+  const money = useWholeMoney(useAccountingCurrency().currency)
   const { createDecision, financeView } = useIntakeAccess()
   const [searchParams, setSearchParams] = useSearchParams()
   const selection = useMemo<IntakeListParams>(
@@ -644,6 +652,7 @@ function IntakeStat({
 }
 
 function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
+  const money = useWholeMoney(useAccountingCurrency().currency)
   const {
     cabinet,
     manage,
@@ -1238,6 +1247,12 @@ function IntakeForm({
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.intakes,
   )
+  const guard = useFirstPriceGuard()
+  const money = useWholeMoney(guard.currency)
+  const price = usePriceSlots(guard, {
+    values: canManageFinance ? [values.totalCost] : [],
+    onAccept: (accepted) => void save(undefined, accepted),
+  })
   const update =
     (key: keyof typeof values) =>
     (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -1274,10 +1289,16 @@ function IntakeForm({
     intake?.parts.reduce((total, part) => total + part.quantity, 0) ?? 0
   const named = values.name.trim().length > 0
 
-  const save = async (event: React.FormEvent) => {
-    event.preventDefault()
+  const save = async (
+    event?: React.FormEvent,
+    accepted?: SupportedCurrency | null,
+  ) => {
+    event?.preventDefault()
     if (busy) return
     const amount = values.totalCost === '' ? null : Number(values.totalCost)
+    // Without an accounting currency the batch saves without its cost.
+    const sendCost = canManageFinance && !price.disabled
+    const pricing = sendCost && price.hasPrice
     if (
       canManageFinance &&
       amount !== null &&
@@ -1292,11 +1313,18 @@ function IntakeForm({
     setFieldErrors({})
     setBusy(true)
     try {
+      if (
+        guard.needsCheck(pricing) &&
+        !(await guard.beforeSave(pricing, accepted))
+      ) {
+        setBusy(false)
+        return
+      }
       const request = {
         name: values.name.trim() || null,
         supplier: null,
         purchasedAt: values.purchasedAt || null,
-        ...(canManageFinance ? { totalCost: amount } : {}),
+        ...(sendCost ? { totalCost: amount } : {}),
         notes: values.notes.trim() || null,
       }
       const scope = requireLatestMutation({ quota: intakeId === undefined })
@@ -1311,6 +1339,7 @@ function IntakeForm({
           : { ...request, photoKeys: media.map((item) => item.storageKey) },
         scope.signal,
       )
+      guard.afterSave(pricing)
       void navigate(
         (intakeId === undefined
           ? sourceReturnPath(searchParams, cabinetRoot, { intakeId: saved.id })
@@ -1493,11 +1522,17 @@ function IntakeForm({
                 <div className="grid gap-4">
                   <Field
                     error={fieldErrors.totalCost}
-                    hint="Скільки заплачено за всю партію, у доларах"
+                    hint={
+                      price.hint === undefined
+                        ? 'Скільки заплачено за всю партію'
+                        : `Скільки заплачено за всю партію. ${price.hint}`
+                    }
                     label="Загальна вартість"
                   >
-                    <TextInput
+                    <MoneyInput
                       className="font-mono"
+                      currency={price.currency}
+                      disabled={price.disabled}
                       inputMode="decimal"
                       name="totalCost"
                       onChange={update('totalCost')}
@@ -1505,6 +1540,7 @@ function IntakeForm({
                       value={values.totalCost}
                     />
                   </Field>
+                  {price.note}
                 </div>
               ) : null}
               <Field
@@ -1612,6 +1648,9 @@ function IntakeForm({
                   </li>
                 ))}
               </ul>
+              {canManageFinance ? (
+                <div className="mt-5 empty:hidden">{price.saveNotes}</div>
+              ) : null}
               <Button
                 aria-busy={busy}
                 className="mt-5 min-h-12 w-full text-[16px] font-bold"
@@ -1714,6 +1753,9 @@ function PartForm({
   const [busy, setBusy] = useState(false)
   const intakeMutation = useLatestMutationGuard(cabinetModules.intakes)
   const partMutation = useLatestMutationGuard(cabinetModules.parts)
+  const guard = useFirstPriceGuard()
+  const money = useWholeMoney(guard.currency)
+  const lastAnother = useRef(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -1763,10 +1805,21 @@ function PartForm({
       : null
   const named = values.name.trim().length > 0
   const zone = zones.find((item) => item.id === values.zoneId) ?? null
+  // Only a positive price is sent, so only that one can lock the currency.
+  const priceSlots = usePriceSlots(guard, {
+    values: hasPrice ? [values.price] : [],
+    onAccept: (accepted) => void save(undefined, lastAnother.current, accepted),
+  })
+  const pricing = hasPrice && !priceSlots.disabled
 
-  const save = async (event: React.FormEvent, andAnother = false) => {
-    event.preventDefault()
+  const save = async (
+    event: React.FormEvent | undefined,
+    andAnother = false,
+    accepted?: SupportedCurrency | null,
+  ) => {
+    event?.preventDefault()
     if (busy) return
+    lastAnother.current = andAnother
     if (!named) {
       setFieldErrors({
         name: 'Вкажіть назву деталі, як її шукатимуть на складі — наприклад, «Бампер передній».',
@@ -1786,6 +1839,13 @@ function PartForm({
     }
     setBusy(true)
     try {
+      if (
+        guard.needsCheck(pricing) &&
+        !(await guard.beforeSave(pricing, accepted))
+      ) {
+        setBusy(false)
+        return
+      }
       const intakeScope = intakeMutation.requireLatestMutation({ quota: false })
       partMutation.requireLatestMutation({ permission: 'parts.view' })
       const created = await intakesApi.addPart(intakeId, request, {
@@ -1793,7 +1853,7 @@ function PartForm({
       })
       // The intake endpoint carries no price, so the asking price is set on the
       // part it just created — one call, right after, before anyone sees it.
-      if (hasPrice) {
+      if (pricing) {
         const priceScope = partMutation.requireLatestMutation({
           permission: 'parts.manage',
           quota: false,
@@ -1803,6 +1863,7 @@ function PartForm({
           { desiredSalePrice: { isSet: true, value: price } },
           { signal: priceScope.signal },
         )
+        guard.afterSave(true)
       }
       if (!andAnother) {
         void navigate(`${base}/${intakeId}`)
@@ -1993,8 +2054,13 @@ function PartForm({
                     value="шт"
                   />
                 </Field>
-                <Field hint="Бажана ціна, у доларах" label="Ціна продажу">
-                  <TextInput
+                <Field
+                  hint={priceSlots.hint ?? 'Бажана ціна'}
+                  label="Ціна продажу"
+                >
+                  <MoneyInput
+                    currency={priceSlots.currency}
+                    disabled={priceSlots.disabled}
                     inputMode="decimal"
                     name="price"
                     onChange={(event) => update('price', event.target.value)}
@@ -2003,6 +2069,7 @@ function PartForm({
                   />
                 </Field>
               </div>
+              {priceSlots.note}
             </FormCard>
 
             {canPlace ? (
@@ -2121,6 +2188,7 @@ function PartForm({
                   {margin === null ? '—' : `${String(margin)}%`}
                 </dd>
               </dl>
+              <div className="mt-5 empty:hidden">{priceSlots.saveNotes}</div>
               <Button
                 aria-busy={busy}
                 className="mt-5 min-h-12 w-full text-[16px] font-bold"
@@ -2230,6 +2298,8 @@ function BatchPartsForm({
   const [busy, setBusy] = useState(false)
   const intakeMutation = useLatestMutationGuard(cabinetModules.intakes)
   const partMutation = useLatestMutationGuard(cabinetModules.parts)
+  const guard = useFirstPriceGuard()
+  const money = useWholeMoney(guard.currency)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -2279,6 +2349,14 @@ function BatchPartsForm({
   const withoutPrice = filled.filter(
     (row) => batchNumber(row.price) === 0,
   ).length
+  // Only positive prices are sent, so only those can lock the currency.
+  const priceSlots = usePriceSlots(guard, {
+    values: filled
+      .filter((row) => batchNumber(row.price) > 0)
+      .map((row) => row.price),
+    onAccept: (accepted) => void save(undefined, accepted),
+  })
+  const pricing = priceSlots.hasPrice && !priceSlots.disabled
   const fillDown = () =>
     setRows((current) => {
       const source = current.find((row) => row.zoneId !== '')
@@ -2290,12 +2368,22 @@ function BatchPartsForm({
       )
     })
 
-  const save = async (event: React.FormEvent) => {
-    event.preventDefault()
+  const save = async (
+    event?: React.FormEvent,
+    accepted?: SupportedCurrency | null,
+  ) => {
+    event?.preventDefault()
     if (busy || filled.length === 0) return
     setProblem(null)
     setSaved(0)
     setBusy(true)
+    if (
+      guard.needsCheck(pricing) &&
+      !(await guard.beforeSave(pricing, accepted))
+    ) {
+      setBusy(false)
+      return
+    }
     for (const [index, row] of filled.entries()) {
       const zoneId = row.zoneId || sharedZoneId
       const price = batchNumber(row.price)
@@ -2315,7 +2403,7 @@ function BatchPartsForm({
         const created = await intakesApi.addPart(intakeId, request, {
           signal: scope.signal,
         })
-        if (price > 0) {
+        if (price > 0 && !priceSlots.disabled) {
           const priceScope = partMutation.requireLatestMutation({
             permission: 'parts.manage',
             quota: false,
@@ -2325,6 +2413,7 @@ function BatchPartsForm({
             { desiredSalePrice: { isSet: true, value: price } },
             { signal: priceScope.signal },
           )
+          guard.afterSave(true)
         }
         setSaved(index + 1)
       } catch (error: unknown) {
@@ -2440,7 +2529,9 @@ function BatchPartsForm({
               >
                 <span>Назва</span>
                 <span className="text-right">К-сть</span>
-                <span className="text-right">Ціна, $</span>
+                <span className="text-right">
+                  {guard.currency === null ? 'Ціна' : `Ціна, ${guard.currency}`}
+                </span>
                 {canPlace ? <span>Комірка</span> : null}
                 <span />
               </div>
@@ -2474,8 +2565,9 @@ function BatchPartsForm({
                       value={row.quantity}
                     />
                     <TextInput
-                      aria-label={`Ціна в рядку ${String(index + 1)}`}
+                      aria-label={`Ціна в рядку ${String(index + 1)}${guard.currency === null ? '' : `, ${guard.currency}`}`}
                       className="font-mono"
+                      disabled={priceSlots.disabled}
                       inputMode="decimal"
                       numeric
                       onChange={(event) =>
@@ -2612,6 +2704,10 @@ function BatchPartsForm({
                   </>
                 ) : null}
               </dl>
+              <div className="mt-5 grid gap-2 empty:hidden">
+                {priceSlots.note}
+                {priceSlots.saveNotes}
+              </div>
               <Button
                 aria-busy={busy}
                 className="mt-5 min-h-11 w-full text-sm font-bold"
