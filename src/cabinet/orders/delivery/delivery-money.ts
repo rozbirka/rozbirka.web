@@ -1,15 +1,18 @@
 import type { DeliveryOrder } from '@/api/delivery'
 import type { CashTransaction } from '@/api/cash'
+import { formatMoney, type Locale } from '@/i18n'
 
-const hryvniaFormat = new Intl.NumberFormat('uk-UA', {
-  style: 'currency',
-  currency: 'UAH',
-  currencyDisplay: 'narrowSymbol',
-  maximumFractionDigits: 2,
-})
+/**
+ * Delivery money is hryvnia only — Core refuses any other currency here — but
+ * it reads in the interface language like every other amount: the shared
+ * money formatter with the ISO code (`1 250,00 UAH`, `1,250.00 UAH`).
+ */
+export const uah = (value: number, locale: Locale): string =>
+  formatMoney(value, 'UAH', locale) ?? '—'
 
-/** Delivery money is hryvnia only — Core refuses any other currency here. */
-export const uah = (value: number): string => hryvniaFormat.format(value)
+/** A hryvnia sum without decimals, for estimates (quotes, return costs). */
+export const wholeUah = (value: number, locale: Locale): string =>
+  formatMoney(value, 'UAH', locale, { fractionDigits: 0 }) ?? '—'
 
 /**
  * A hryvnia figure the way the cabinet is typed: a comma is a decimal

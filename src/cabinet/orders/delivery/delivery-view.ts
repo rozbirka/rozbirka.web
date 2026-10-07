@@ -204,7 +204,7 @@ export function shipmentFacts(
     {
       key: 'cod',
       label: tr(locale, 'factCod'),
-      value: shipment?.codUah == null ? '—' : uah(shipment.codUah),
+      value: shipment?.codUah == null ? '—' : uah(shipment.codUah, locale),
       note: !created
         ? ''
         : codMatches
@@ -238,7 +238,7 @@ export function shipmentFacts(
       value:
         delivery.requiredDepositUah <= 0
           ? '—'
-          : uah(delivery.requiredDepositUah),
+          : uah(delivery.requiredDepositUah, locale),
       note: !delivery.depositRequired
         ? tr(locale, 'depositNotRequired')
         : delivery.depositWaived
@@ -248,7 +248,7 @@ export function shipmentFacts(
             : delivery.depositSatisfied
               ? tr(locale, 'depositPaid')
               : tr(locale, 'depositShort', {
-                  amount: uah(delivery.depositShortfallUah),
+                  amount: uah(delivery.depositShortfallUah, locale),
                 }),
       tone: !delivery.depositRequired
         ? 'dim'
@@ -311,7 +311,7 @@ export function primaryAction(
       hint:
         delivery.outstandingUah > 0
           ? tr(locale, 'createHintCod', {
-              amount: uah(delivery.outstandingUah),
+              amount: uah(delivery.outstandingUah, locale),
             })
           : tr(locale, 'createHintPaid'),
     }
@@ -376,7 +376,7 @@ export function readiness(
         delivery.outstandingUah > 0
           ? tr(locale, 'checkOutstandingCod')
           : tr(locale, 'checkOutstandingNone'),
-      state: uah(delivery.outstandingUah),
+      state: uah(delivery.outstandingUah, locale),
       ok: true,
     },
     {
@@ -393,9 +393,9 @@ export function readiness(
           : delivery.requiredDepositUah <= 0
             ? tr(locale, 'depositAfterQuote')
             : delivery.depositSatisfied
-              ? uah(delivery.requiredDepositUah)
+              ? uah(delivery.requiredDepositUah, locale)
               : tr(locale, 'depositShort', {
-                  amount: uah(delivery.depositShortfallUah),
+                  amount: uah(delivery.depositShortfallUah, locale),
                 }),
       ok:
         !delivery.depositRequired ||

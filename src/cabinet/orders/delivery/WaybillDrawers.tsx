@@ -178,6 +178,7 @@ export function WaybillDataDrawer({
   const t = useT(deliveryDrawerMessages)
   const tc = useT(commonMessages)
   const format = useFormat()
+  const { locale } = useLocale()
   const eyebrow = useEyebrow()
   const when = (value: string | null) =>
     value === null ? '—' : (format.dateTime(value) ?? value)
@@ -205,17 +206,17 @@ export function WaybillDataDrawer({
     },
     {
       label: t('rowCod'),
-      value: shipment.codUah == null ? '—' : uah(shipment.codUah),
+      value: shipment.codUah == null ? '—' : uah(shipment.codUah, locale),
       ...(codMatches ? { tone: 'ok' as const } : { tone: 'danger' as const }),
     },
     {
       label: t('rowBalance'),
-      value: uah(delivery.outstandingUah),
+      value: uah(delivery.outstandingUah, locale),
       ...(codMatches ? { tone: 'ok' as const } : { tone: 'danger' as const }),
     },
     {
       label: t('rowDeclared'),
-      value: uah(shipment.draft.declaredValueUah),
+      value: uah(shipment.draft.declaredValueUah, locale),
     },
     {
       label: t('rowParcel'),
@@ -373,7 +374,9 @@ export function WaybillAttachDrawer({
         <ul className="mt-1.5 grid gap-1">
           <li>
             {t('attachCodEquals')}{' '}
-            <span className="font-mono">{uah(delivery.outstandingUah)}</span>
+            <span className="font-mono">
+              {uah(delivery.outstandingUah, locale)}
+            </span>
           </li>
           <li>{t('attachSamePoint')}</li>
           <li>{t('attachNotLinked')}</li>

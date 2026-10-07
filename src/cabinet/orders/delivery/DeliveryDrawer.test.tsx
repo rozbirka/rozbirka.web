@@ -201,7 +201,7 @@ it('shows the prepayment as both legs the carrier priced', async () => {
 
   expect(await screen.findByText('Розрахунок отримано')).toBeVisible()
   expect(screen.getByText('Необхідна передоплата')).toBeVisible()
-  expect(screen.getByText('360 ₴')).toBeVisible()
+  expect(screen.getByText(/^360\sUAH$/)).toBeVisible()
   expect(screen.getByRole('button', { name: 'Створити ТТН' })).toBeEnabled()
 })
 

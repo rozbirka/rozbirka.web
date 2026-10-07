@@ -98,7 +98,7 @@ export function DeliveryTabs({
       meta:
         delivery.outstandingUah === 0
           ? t('tabPaid')
-          : t('tabBalance', { amount: uah(delivery.outstandingUah) }),
+          : t('tabBalance', { amount: uah(delivery.outstandingUah, locale) }),
     },
     { key: 'shipping', label: t('tabShipping'), meta: parcel.label },
   ]
@@ -288,12 +288,12 @@ export function DeliveryPaymentsCard({
                   {tillName(payment.accountId) ?? t('till')} ·{' '}
                   {format.dateTime(payment.createdAt) ?? payment.createdAt}
                   {payment.feeUah > 0
-                    ? t('fee', { amount: uah(payment.feeUah) })
+                    ? t('fee', { amount: uah(payment.feeUah, locale) })
                     : ''}
                 </span>
               </span>
               <span className="ml-auto font-mono text-[15px] font-medium whitespace-nowrap text-white tabular-nums">
-                {uah(payment.amountUah)}
+                {uah(payment.amountUah, locale)}
               </span>
             </li>
           ))}
@@ -362,7 +362,7 @@ export function DeliveryDueCard({
         </p>
       </div>
       <p className="mt-3 text-[38px] leading-none font-extrabold tracking-[-0.03em] text-white tabular-nums">
-        {uah(delivery.outstandingUah)}
+        {uah(delivery.outstandingUah, locale)}
       </p>
       <span aria-hidden className="mt-4.5 flex gap-0.5">
         <span
@@ -377,11 +377,11 @@ export function DeliveryDueCard({
       <dl className="mt-4 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
         <dt className="text-app-muted text-[14px]">{t('agreed')}</dt>
         <dd className="font-mono text-[14px] text-white tabular-nums">
-          {uah(delivery.agreedTotalUah)}
+          {uah(delivery.agreedTotalUah, locale)}
         </dd>
         <dt className="text-app-muted text-[14px]">{t('paid')}</dt>
         <dd className="text-state-ok font-mono text-[14px] tabular-nums">
-          {uah(delivery.appliedUah)}
+          {uah(delivery.appliedUah, locale)}
         </dd>
       </dl>
       {action.kind === null ? null : (
@@ -519,6 +519,7 @@ export function DeliveryGateCard({
   delivery: NonNullable<DeliveryOrderState['money']>
 }) {
   const t = useT(deliveryMessages)
+  const { locale } = useLocale()
   const blocked = delivery.outstandingUah > 0
   return (
     <Notice tone={blocked ? 'warn' : 'ok'}>
@@ -527,7 +528,7 @@ export function DeliveryGateCard({
       </p>
       <p className="mt-1">
         {blocked
-          ? t('gateCodNote', { amount: uah(delivery.outstandingUah) })
+          ? t('gateCodNote', { amount: uah(delivery.outstandingUah, locale) })
           : t('createHintPaid')}
       </p>
     </Notice>

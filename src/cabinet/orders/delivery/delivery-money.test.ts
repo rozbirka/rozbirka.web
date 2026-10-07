@@ -7,6 +7,8 @@ import {
   linkableTransactions,
   linkedGross,
   paymentOutcome,
+  uah,
+  wholeUah,
 } from './delivery-money'
 
 const delivery = (over: Partial<DeliveryOrder> = {}): DeliveryOrder => ({
@@ -87,4 +89,14 @@ it('takes a hryvnia figure the way the cabinet is typed', () => {
   expect(hryvnia('0')).toBeNull()
   expect(hryvnia('0', { allowZero: true })).toBe(0)
   expect(hryvnia('12,345')).toBeNull()
+})
+
+it('formats hryvnia in the interface language with the ISO code', () => {
+  const plain = (text: string) => text.replace(/[\u00a0\u202f]/g, ' ')
+  expect(plain(uah(1250.5, 'uk'))).toBe('1 250,50 UAH')
+  expect(plain(uah(1250.5, 'en-GB'))).toBe('1,250.50 UAH')
+  expect(plain(uah(1250.5, 'pl'))).toBe('1250,50 UAH')
+  expect(plain(wholeUah(360, 'en-GB'))).toBe('360 UAH')
+  for (const locale of ['uk', 'en-GB', 'pl'] as const)
+    expect(uah(10, locale)).not.toContain('₴')
 })

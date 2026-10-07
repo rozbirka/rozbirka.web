@@ -107,7 +107,7 @@ export function DeliveryStepDrawer({
           <div className="flex items-baseline justify-between gap-4">
             <dt className="text-app-muted text-[13px]">{t('orderTotal')}</dt>
             <dd className="text-app-ink font-mono text-[13.5px]">
-              {uah(delivery.agreedTotalUah)}
+              {uah(delivery.agreedTotalUah, locale)}
             </dd>
           </div>
           <div className="flex items-baseline justify-between gap-4">
@@ -119,7 +119,7 @@ export function DeliveryStepDrawer({
                   : 'text-state-warn'
               }`}
             >
-              {uah(delivery.outstandingUah)}
+              {uah(delivery.outstandingUah, locale)}
             </dd>
           </div>
         </dl>

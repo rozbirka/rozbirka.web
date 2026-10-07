@@ -24,7 +24,7 @@ import {
   type ShipmentDraft,
 } from '@/api/shipping'
 import type { BusinessCountry } from '@/api/tenant-settings'
-import { commonMessages, useFormat, useLocale, useT } from '@/i18n'
+import { commonMessages, formatMoney, useFormat, useLocale, useT } from '@/i18n'
 import { SettlementPicker } from '../../integrations/settlement-picker'
 import {
   prepayment,
@@ -34,17 +34,11 @@ import {
   type QuoteState,
 } from './delivery-labels'
 import { deliveryDrawerMessages } from './drawer-messages'
+import { uah, wholeUah } from './delivery-money'
 import {
   deliveryProblemMessage,
   phoneExample,
 } from './nova-poshta-availability'
-
-const uah = new Intl.NumberFormat('uk-UA', {
-  style: 'currency',
-  currency: 'UAH',
-  currencyDisplay: 'narrowSymbol',
-  maximumFractionDigits: 0,
-})
 
 const PHONE = /^\+?[1-9]\d{7,14}$/
 
@@ -651,11 +645,7 @@ export function DeliveryDrawer({
           <Notice tone="info">
             {t('alreadyPaidBefore')}{' '}
             <span className="font-mono">
-              {paid.amount.toLocaleString('uk-UA', {
-                style: 'currency',
-                currency: paid.currency,
-                currencyDisplay: 'narrowSymbol',
-              })}
+              {formatMoney(paid.amount, paid.currency, locale)}
             </span>
             {t('alreadyPaidAfter')}
           </Notice>
@@ -681,7 +671,7 @@ export function DeliveryDrawer({
         <dl className="border-app-line bg-app-raised grid grid-cols-[1fr_auto] items-baseline gap-y-2 rounded-[12px] border px-4 py-3.5 text-[13px]">
           <dt className="text-app-muted">{t('alreadyPaid')}</dt>
           <dd className="text-right font-mono tabular-nums">
-            {uah.format(delivery.appliedUah)}
+            {uah(delivery.appliedUah, locale)}
           </dd>
           <dt className="font-semibold">{t('codOnWaybill')}</dt>
           <dd
@@ -690,7 +680,7 @@ export function DeliveryDrawer({
               codUah === null || codUah === 0 ? 'text-app-muted' : 'text-white',
             )}
           >
-            {codUah === null ? '—' : uah.format(codUah)}
+            {codUah === null ? '—' : uah(codUah, locale)}
           </dd>
           <p className="text-app-dim col-span-2 -mt-0.5 text-[12px] text-pretty">
             {codUah === 0 ? t('codNothing') : t('codNote')}
@@ -706,13 +696,13 @@ export function DeliveryDrawer({
             <div className="flex items-baseline justify-between gap-4">
               <dt className="text-app-muted">{t('deliveryThere')}</dt>
               <dd className="text-app-ink font-mono">
-                {uah.format(shipment.quoteUah)}
+                {wholeUah(shipment.quoteUah, locale)}
               </dd>
             </div>
             <div className="flex items-baseline justify-between gap-4">
               <dt className="text-app-muted">{t('deliveryBack')}</dt>
               <dd className="text-app-ink font-mono">
-                {uah.format(shipment.returnEstimateUah)}
+                {wholeUah(shipment.returnEstimateUah, locale)}
               </dd>
             </div>
             <div className="border-app-line flex items-baseline justify-between gap-4 border-t pt-2.5">
@@ -720,7 +710,7 @@ export function DeliveryDrawer({
                 {t('prepaymentNeeded')}
               </dt>
               <dd className="text-brand font-mono text-[16px] font-bold">
-                {total === null ? '—' : uah.format(total)}
+                {total === null ? '—' : wholeUah(total, locale)}
               </dd>
             </div>
           </dl>

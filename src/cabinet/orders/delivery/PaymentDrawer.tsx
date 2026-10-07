@@ -7,7 +7,7 @@ import type {
   LinkDeliveryPayment,
   RecordDeliveryPayment,
 } from '@/api/delivery'
-import { commonMessages, useFormat, useLocale, useT } from '@/i18n'
+import { commonMessages, useFormat, useLocale, useT, type Locale } from '@/i18n'
 import {
   hryvnia,
   linkableTransactions,
@@ -32,15 +32,18 @@ const stampOptions: Intl.DateTimeFormatOptions = {
   minute: '2-digit',
 }
 
-const balances = new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 2 })
-
-/** How a sum is offered for editing: Ukrainian decimals use a comma. */
-const editable = (value: number) => value.toFixed(2).replace('.', ',')
+/**
+ * How a sum is offered for editing: two decimals with the interface
+ * language's separator (a comma in Ukrainian and Polish). `hryvnia()` reads
+ * either separator back.
+ */
+const editable = (value: number, locale: Locale) =>
+  value.toFixed(2).replace('.', locale === 'en-GB' ? '.' : ',')
 
 /** The hryvnia a till holds, or nothing when the module never named one. */
-const held = (register: CashRegister): string => {
+const held = (register: CashRegister, locale: Locale): string => {
   const value = register.balances['UAH']
-  return value === undefined ? '—' : `${balances.format(value)} ₴`
+  return value === undefined ? '—' : uah(value, locale)
 }
 
 /**
@@ -319,7 +322,7 @@ export function PaymentDrawer({
                     {register.name}
                   </span>
                   <span className="text-app-muted font-mono text-[12px] whitespace-nowrap tabular-nums">
-                    {held(register)}
+                    {held(register, locale)}
                   </span>
                 </label>
               )
@@ -344,10 +347,14 @@ export function PaymentDrawer({
 
             {suggested === null ? null : (
               <div className="-mt-3 flex flex-wrap gap-1.5">
-                <Preset onPick={() => setAmountDraft(editable(suggested))}>
-                  {t('wholeBalance', { amount: uah(suggested) })}
+                <Preset
+                  onPick={() => setAmountDraft(editable(suggested, locale))}
+                >
+                  {t('wholeBalance', { amount: uah(suggested, locale) })}
                 </Preset>
-                <Preset onPick={() => setAmountDraft(editable(suggested / 2))}>
+                <Preset
+                  onPick={() => setAmountDraft(editable(suggested / 2, locale))}
+                >
                   {t('half')}
                 </Preset>
               </div>
@@ -356,7 +363,7 @@ export function PaymentDrawer({
             <Field
               hint={
                 fee !== null && fee > 0 && amount !== null && fee < amount
-                  ? t('tillReceives', { amount: uah(amount - fee) })
+                  ? t('tillReceives', { amount: uah(amount - fee, locale) })
                   : t('noFee')
               }
               label={t('tillFee')}
@@ -406,7 +413,7 @@ export function PaymentDrawer({
                         </span>
                       </span>
                       <span className="text-app-ink font-mono text-[14px] whitespace-nowrap tabular-nums">
-                        {uah(item.amount)}
+                        {uah(item.amount, locale)}
                       </span>
                     </button>
                   )
@@ -421,7 +428,7 @@ export function PaymentDrawer({
               hint={
                 receipt === null
                   ? t('linkHint')
-                  : t('linkCredited', { amount: uah(gross) })
+                  : t('linkCredited', { amount: uah(gross, locale) })
               }
               label={t('transactionFee')}
             >
@@ -440,11 +447,11 @@ export function PaymentDrawer({
         <dl className="border-app-line bg-app-raised grid grid-cols-[1fr_auto] items-baseline gap-y-2.5 rounded-[14px] border px-[18px] py-4 text-[14px]">
           <dt className="text-app-muted">{t('agreed')}</dt>
           <dd className="text-right font-mono tabular-nums">
-            {uah(delivery.agreedTotalUah)}
+            {uah(delivery.agreedTotalUah, locale)}
           </dd>
           <dt className="text-app-muted">{t('due')}</dt>
           <dd className="text-right font-mono tabular-nums">
-            {uah(delivery.outstandingUah)}
+            {uah(delivery.outstandingUah, locale)}
           </dd>
           <dt className="text-app-muted">{t('thisPayment')}</dt>
           <dd
@@ -453,7 +460,7 @@ export function PaymentDrawer({
               gross > 0 ? 'text-state-ok' : 'text-app-dim',
             )}
           >
-            {gross > 0 ? uah(gross) : '—'}
+            {gross > 0 ? uah(gross, locale) : '—'}
           </dd>
           <span aria-hidden className="bg-app-line col-span-2 h-px" />
           <dt className="font-bold">
@@ -472,8 +479,8 @@ export function PaymentDrawer({
             )}
           >
             {outcome.over
-              ? uah(gross - delivery.outstandingUah)
-              : uah(outcome.remaining)}
+              ? uah(gross - delivery.outstandingUah, locale)
+              : uah(outcome.remaining, locale)}
           </dd>
           <p className="col-span-2 -mt-1 grid gap-0.5 text-[12px] text-pretty">
             <span
