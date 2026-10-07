@@ -1913,12 +1913,8 @@ test('released Team dialogs and Reports actions keep 44px targets', async ({
         Math.round(width) >= 44 && Math.round(height) >= 44,
     ),
   ).toBe(true)
-  await permissions.getByRole('button', { name: 'Скасувати' }).click()
-
-  await page.getByRole('button', { name: 'Редагувати Менеджер' }).click()
-  const roleDialog = page.getByRole('dialog', { name: 'Роль: Менеджер' })
-  await expect(roleDialog).toBeVisible()
-  const roleActions = roleDialog.getByRole('button')
+  // Roles are assigned inline; the permissions sheet is the Team dialog.
+  const roleActions = permissions.getByRole('button')
   for (let index = 0; index < (await roleActions.count()); index += 1) {
     const action = roleActions.nth(index)
     // Sheet's close icon is visually 34px, with a pseudo-element extending
@@ -1939,13 +1935,13 @@ test('released Team dialogs and Reports actions keep 44px targets', async ({
       (await action.getAttribute('aria-label')) ?? (await action.innerText()),
     ).toBe(true)
   }
-  const closeBox = await roleDialog
+  const closeBox = await permissions
     .getByRole('button', { name: 'Закрити', exact: true })
     .boundingBox()
   expect(closeBox).not.toBeNull()
   // Click inside the extended target, outside the visible 34px square.
   await page.mouse.click(closeBox!.x - 4, closeBox!.y + closeBox!.height / 2)
-  await expect(roleDialog).not.toBeVisible()
+  await expect(permissions).not.toBeVisible()
 
   await expectReleasedScreenSettled(page, '/app/koval/reports')
   const reportActions = page
