@@ -76,7 +76,12 @@ const cabinet = (
 ) =>
   ({
     status: 'ready',
-    targetTenant: { id: 'tenant-1', slug: 'garage' },
+    targetTenant: {
+      id: 'tenant-1',
+      slug: 'garage',
+      accountingCurrency: 'USD',
+      currencyLocked: true,
+    },
     snapshot: {
       userId: 'user-1',
       tenantId: 'tenant-1',
@@ -469,7 +474,7 @@ it('blocks add-item replacement when parts.view is revoked after render', async 
 
   const { drawer, rows } = await pickDrawerPart(['part-2'])
   await user.click(rows[0]!)
-  await user.type(within(drawer).getByLabelText('Ціна за шт, $'), '75')
+  await user.type(within(drawer).getByLabelText('Ціна за шт'), '75')
   const submit = within(drawer).getByRole('button', {
     name: 'Додати в замовлення',
   })
@@ -897,8 +902,8 @@ it('builds a multi-part order and shows its total in dollars', async () => {
 
   const items = screen.getByLabelText('Позиції замовлення')
   expect(within(items).getByText('Ліхтар')).toBeVisible()
-  expect(within(items).getByText('2 × $50')).toBeVisible()
-  expect(within(items).getByText('$100')).toBeVisible()
+  expect(within(items).getByText('2 × 50,00 USD')).toBeVisible()
+  expect(within(items).getByText('100,00 USD')).toBeVisible()
 
   await user.type(search, 'Двер')
   await user.click(
@@ -911,7 +916,7 @@ it('builds a multi-part order and shows its total in dollars', async () => {
   const summary = screen.getByLabelText('Підсумок замовлення')
   expect(within(summary).getByText('Разом за замовлення')).toBeVisible()
   expect(within(summary).getByText('2 позиції')).toBeVisible()
-  expect(within(summary).getByText('$175')).toBeVisible()
+  expect(within(summary).getByText('175,00 USD')).toBeVisible()
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
 
   expect(orderMocks.create).toHaveBeenCalledWith({
@@ -970,7 +975,7 @@ it('appends an item to the full Core item list when the replacement endpoint is 
   const { drawer, rows } = await pickDrawerPart(['part-3'])
   await user.click(rows[0]!)
   await user.click(within(drawer).getByRole('button', { name: 'Більше' }))
-  await user.type(within(drawer).getByLabelText('Ціна за шт, $'), '75')
+  await user.type(within(drawer).getByLabelText('Ціна за шт'), '75')
   await user.click(
     within(drawer).getByRole('button', { name: 'Додати в замовлення' }),
   )
@@ -1139,10 +1144,13 @@ it('persists a payment before confirming a pending order separately', async () =
   })
   expect(cashMocks.list).toHaveBeenCalledWith(true, expect.any(Object))
   await user.click(within(dialog).getByRole('radio', { name: /Сейф.*USD/ }))
-  await user.clear(within(dialog).getByLabelText('Сума, USD'))
-  await user.type(within(dialog).getByLabelText('Сума, USD'), '250')
   await user.click(
-    within(dialog).getByRole('button', { name: 'Зберегти платіж' }),
+    within(dialog).getByRole('button', { name: 'USD (Долар США)' }),
+  )
+  await user.clear(within(dialog).getByLabelText('Сума'))
+  await user.type(within(dialog).getByLabelText('Сума'), '250')
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Записати оплату' }),
   )
 
   expect(orderMocks.updatePayments).toHaveBeenCalledWith('order-1', [
@@ -1150,10 +1158,10 @@ it('persists a payment before confirming a pending order separately', async () =
   ])
   expect(orderMocks.confirm).not.toHaveBeenCalled()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  expect(screen.getByText('Платіж збережено.')).toBeVisible()
+  expect(screen.getByText('Оплату записано.')).toBeVisible()
   const payments = screen.getByRole('list', { name: 'Платежі замовлення' })
   expect(within(payments).getByText('Сейф · USD')).toBeVisible()
-  expect(within(payments).getByText('250,00 $')).toBeVisible()
+  expect(within(payments).getByText('250,00 USD')).toBeVisible()
 
   view.unmount()
   render(
@@ -1166,7 +1174,7 @@ it('persists a payment before confirming a pending order separately', async () =
     name: 'Платежі замовлення',
   })
   expect(within(persistedPayments).getByText('Сейф · USD')).toBeVisible()
-  expect(within(persistedPayments).getByText('250,00 $')).toBeVisible()
+  expect(within(persistedPayments).getByText('250,00 USD')).toBeVisible()
 
   await user.click(
     screen.getByRole('button', { name: 'Підтвердити замовлення' }),
@@ -1223,13 +1231,14 @@ it('reuses a confirmation key after an ambiguous failure and rotates it when the
   let dialog = await screen.findByRole('dialog', {
     name: 'Додати платіж',
   })
-  // Currency comes first: it decides which tills can take the money.
-  await user.click(within(dialog).getByRole('button', { name: 'UAH' }))
-  await user.click(within(dialog).getByRole('radio', { name: /Сейф.*UAH/ }))
-  await user.clear(within(dialog).getByLabelText('Сума, UAH'))
-  await user.type(within(dialog).getByLabelText('Сума, UAH'), '250')
+  await user.click(within(dialog).getByRole('radio', { name: /Сейф/ }))
   await user.click(
-    within(dialog).getByRole('button', { name: 'Зберегти платіж' }),
+    within(dialog).getByRole('button', { name: 'UAH (Українська гривня)' }),
+  )
+  await user.clear(within(dialog).getByLabelText('Сума'))
+  await user.type(within(dialog).getByLabelText('Сума'), '250')
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Записати оплату' }),
   )
   const submit = screen.getByRole('button', {
     name: 'Підтвердити замовлення',
@@ -1264,13 +1273,14 @@ it('reuses a confirmation key after an ambiguous failure and rotates it when the
 
   await user.click(screen.getByRole('button', { name: 'Додати платіж' }))
   dialog = await screen.findByRole('dialog', { name: 'Додати платіж' })
-  // Currency comes first: it decides which tills can take the money.
-  await user.click(within(dialog).getByRole('button', { name: 'UAH' }))
-  await user.click(within(dialog).getByRole('radio', { name: /Сейф.*UAH/ }))
-  await user.clear(within(dialog).getByLabelText('Сума, UAH'))
-  await user.type(within(dialog).getByLabelText('Сума, UAH'), '200')
+  await user.click(within(dialog).getByRole('radio', { name: /Сейф/ }))
   await user.click(
-    within(dialog).getByRole('button', { name: 'Зберегти платіж' }),
+    within(dialog).getByRole('button', { name: 'UAH (Українська гривня)' }),
+  )
+  await user.clear(within(dialog).getByLabelText('Сума'))
+  await user.type(within(dialog).getByLabelText('Сума'), '200')
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Записати оплату' }),
   )
   await user.click(submit)
 
@@ -1330,13 +1340,14 @@ it('rotates a confirmation key when client-side navigation changes the order res
   let dialog = await screen.findByRole('dialog', {
     name: 'Додати платіж',
   })
-  // Currency comes first: it decides which tills can take the money.
-  await user.click(within(dialog).getByRole('button', { name: 'UAH' }))
-  await user.click(within(dialog).getByRole('radio', { name: /Сейф.*UAH/ }))
-  await user.clear(within(dialog).getByLabelText('Сума, UAH'))
-  await user.type(within(dialog).getByLabelText('Сума, UAH'), '250')
+  await user.click(within(dialog).getByRole('radio', { name: /Сейф/ }))
   await user.click(
-    within(dialog).getByRole('button', { name: 'Зберегти платіж' }),
+    within(dialog).getByRole('button', { name: 'UAH (Українська гривня)' }),
+  )
+  await user.clear(within(dialog).getByLabelText('Сума'))
+  await user.type(within(dialog).getByLabelText('Сума'), '250')
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Записати оплату' }),
   )
   await user.click(
     screen.getByRole('button', { name: 'Підтвердити замовлення' }),
@@ -1351,13 +1362,14 @@ it('rotates a confirmation key when client-side navigation changes the order res
   dialog = await screen.findByRole('dialog', {
     name: 'Додати платіж',
   })
-  // Currency comes first: it decides which tills can take the money.
-  await user.click(within(dialog).getByRole('button', { name: 'UAH' }))
-  await user.click(within(dialog).getByRole('radio', { name: /Сейф.*UAH/ }))
-  await user.clear(within(dialog).getByLabelText('Сума, UAH'))
-  await user.type(within(dialog).getByLabelText('Сума, UAH'), '250')
+  await user.click(within(dialog).getByRole('radio', { name: /Сейф/ }))
   await user.click(
-    within(dialog).getByRole('button', { name: 'Зберегти платіж' }),
+    within(dialog).getByRole('button', { name: 'UAH (Українська гривня)' }),
+  )
+  await user.clear(within(dialog).getByLabelText('Сума'))
+  await user.type(within(dialog).getByLabelText('Сума'), '250')
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Записати оплату' }),
   )
   await user.click(
     screen.getByRole('button', { name: 'Підтвердити замовлення' }),
@@ -1399,6 +1411,15 @@ it('preserves a refund key only for ambiguous retries and rotates after definiti
     createdAt: '2026-08-28T00:00:00Z',
     createdByName: 'Олена',
   }
+  order.payments = [
+    {
+      id: 'payment-1',
+      accountId: 'cash-1',
+      accountName: 'Сейф',
+      amount: 250,
+      currency: 'UAH',
+    },
+  ] as never
   orderMocks.getById.mockResolvedValue(order)
   orderMocks.refund
     .mockRejectedValueOnce({
@@ -1634,16 +1655,15 @@ it('shows authoritative detail and lets orders.manage edit pending fields and ca
       ),
   ).toEqual(['Позиції', 'Платежі', 'Нотатки'])
   const summaryTerms = screen.getAllByRole('term').map((t) => t.textContent)
-  expect(summaryTerms).toEqual(
-    expect.arrayContaining(['Сума замовлення', 'Сплачено']),
-  )
-  const summaryValues = screen
-    .getAllByRole('definition')
-    .map((d) => d.textContent?.replace(/\s+/g, ' ').trim())
-  expect(summaryValues).toEqual(expect.arrayContaining(['250,00 $']))
+  expect(summaryTerms).toEqual(expect.arrayContaining(['Фактичні оплати']))
+  const valueCard = screen
+    .getByRole('heading', { name: 'Вартість замовлення' })
+    .closest('section')
+  expect(valueCard).toHaveTextContent(/250,00\sUSD/)
+  expect(valueCard).toHaveTextContent(/100,00\sUAH/)
   const payments = screen.getByRole('list', { name: 'Платежі замовлення' })
   expect(within(payments).getByText('Основна каса · UAH')).toBeVisible()
-  expect(within(payments).getByText('100,00 ₴')).toBeVisible()
+  expect(within(payments).getByText('100,00 UAH')).toBeVisible()
   expect(within(payments).queryByText('Завдаток')).not.toBeInTheDocument()
   expect(within(payments).queryByText('Доплата')).not.toBeInTheDocument()
   expect(
@@ -1653,7 +1673,7 @@ it('shows authoritative detail and lets orders.manage edit pending fields and ca
     .getByRole('heading', { name: 'Платежі' })
     .closest('section')
   const paymentSummary = screen
-    .getByRole('heading', { name: 'До сплати' })
+    .getByRole('heading', { name: 'Вартість замовлення' })
     .closest('section')
   expect(
     within(paymentsCard!).queryByRole('button', {
@@ -1745,15 +1765,23 @@ it('adds one payment at a time and keeps the ones the order already holds', asyn
   const dialog = await screen.findByRole('dialog', { name: 'Додати платіж' })
   expect(dialog).toHaveClass('sm:right-0')
 
-  // The drawer opens on the outstanding sum, not the whole order.
-  const due = within(dialog).getByText('До сплати').parentElement
-  expect(due).toHaveTextContent(/100(?:,00)?\s\$/)
-  expect(within(dialog).getByLabelText('Сума, USD')).toHaveValue('100,00')
-
-  await user.click(within(dialog).getByRole('button', { name: 'Завдаток 50%' }))
-  expect(within(dialog).getByLabelText('Сума, USD')).toHaveValue('50,00')
+  // The order's value stands on its own, in the accounting currency; the
+  // amount starts empty — nothing is derived from a remaining sum.
+  const value = within(dialog)
+    .getByRole('heading', { name: 'Вартість замовлення' })
+    .closest('section')
+  expect(value).toHaveTextContent(/300,00\sUSD/)
+  expect(value).toHaveTextContent('У валюті обліку')
+  expect(
+    within(dialog).queryByText(/Залишиться|Переплата|До сплати/),
+  ).toBeNull()
   await user.click(
-    within(dialog).getByRole('button', { name: 'Зберегти платіж' }),
+    within(dialog).getByRole('button', { name: 'USD (Долар США)' }),
+  )
+  expect(within(dialog).getByLabelText('Сума')).toHaveValue('')
+  await user.type(within(dialog).getByLabelText('Сума'), '50')
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Записати оплату' }),
   )
 
   // What the order already holds is sent back with the new line: the endpoint
@@ -1795,35 +1823,31 @@ it('records a payment in a till currency the order total cannot be compared with
   await user.click(screen.getByRole('button', { name: 'Додати платіж' }))
   const dialog = await screen.findByRole('dialog', { name: 'Додати платіж' })
 
-  // Currency comes first: it decides which tills can take the money.
-  await user.click(within(dialog).getByRole('button', { name: 'UAH' }))
-  await user.click(within(dialog).getByRole('radio', { name: /Сейф.*UAH/ }))
-  // No rate exists anywhere in the cabinet, so hryvnia gets no suggested sum
-  // and no presets.
-  expect(within(dialog).getByLabelText('Сума, UAH')).toHaveValue('')
+  await user.click(within(dialog).getByRole('radio', { name: /Сейф/ }))
+  await user.click(
+    within(dialog).getByRole('button', { name: 'UAH (Українська гривня)' }),
+  )
+  // No rate, no converted sum, no balance: the till gets exactly the
+  // hryvnia typed, next to a dollar order value it is not compared with.
+  expect(within(dialog).getByLabelText('Сума')).toHaveValue('')
   expect(
     within(dialog).queryByRole('button', { name: /Уся сума/ }),
   ).not.toBeInTheDocument()
+  expect(within(dialog).queryByText(/курс|зарахувати/i)).toBeNull()
 
-  // The equivalent the design asks for has nowhere to be stored, so the field
-  // is shown and disabled rather than taking a number that would be dropped.
-  const equivalent = within(dialog).getByLabelText(
-    'Скільки зарахувати в замовлення, $',
-  )
-  expect(equivalent).toBeDisabled()
+  await user.type(within(dialog).getByLabelText('Сума'), '4100')
+  expect(within(dialog).getByText(/^Каса Сейф · 4\s100,00\sUAH$/)).toBeVisible()
 
-  await user.type(within(dialog).getByLabelText('Сума, UAH'), '4100')
-  // The till gets the hryvnia; the dollar balance is untouched and says so.
-  const summary = within(dialog).getByText('До сплати').closest('dl')
-  expect(summary).toHaveTextContent('не зараховується')
-  expect(summary).toHaveTextContent(
-    'залишок за замовленням не зміниться: курсу в кабінеті немає',
-  )
-  const remainder = within(dialog).getByText('Залишиться').parentElement
-  expect(remainder).toHaveTextContent(/300(?:,00)?\s\$/)
+  // A till that does not keep UAH resets the currency and says why; the
+  // typed amount stays as typed.
+  await user.click(within(dialog).getByRole('radio', { name: /ФОП Mono/ }))
+  expect(within(dialog).getByLabelText('Сума')).toHaveValue('4100')
+  // ФОП Mono keeps only UAH, so the currency stays and nothing is reset.
+  expect(within(dialog).queryByText(/не приймає/)).toBeNull()
+  await user.click(within(dialog).getByRole('radio', { name: /Сейф/ }))
 
   await user.click(
-    within(dialog).getByRole('button', { name: 'Зберегти платіж' }),
+    within(dialog).getByRole('button', { name: 'Записати оплату' }),
   )
   expect(orderMocks.updatePayments).toHaveBeenCalledWith('order-1', [
     { accountId: 'cash-1', amount: 4100, currency: 'UAH' },
@@ -1919,7 +1943,7 @@ it('replaces the full pending item set when quantity, price, or removal changes'
 
   await screen.findByRole('heading', { name: 'Замовлення #1' })
   expect(screen.queryByLabelText('Кількість Ліхтар')).not.toBeInTheDocument()
-  expect(screen.queryByLabelText('Ціна Ліхтар')).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Ціна Ліхтар, USD')).not.toBeInTheDocument()
   expect(
     screen.getByRole('button', { name: 'Редагувати позиції' }),
   ).toBeVisible()
@@ -1928,8 +1952,8 @@ it('replaces the full pending item set when quantity, price, or removal changes'
   await user.click(screen.getByRole('button', { name: 'Редагувати позиції' }))
   await user.clear(screen.getByLabelText('Кількість Ліхтар'))
   await user.type(screen.getByLabelText('Кількість Ліхтар'), '2')
-  await user.clear(screen.getByLabelText('Ціна Ліхтар'))
-  await user.type(screen.getByLabelText('Ціна Ліхтар'), '125')
+  await user.clear(screen.getByLabelText('Ціна Ліхтар, USD'))
+  await user.type(screen.getByLabelText('Ціна Ліхтар, USD'), '125')
   await user.click(screen.getByRole('button', { name: 'Зберегти позиції' }))
 
   expect(orderMocks.updateItems).toHaveBeenNthCalledWith(1, 'order-1', [
@@ -2218,11 +2242,22 @@ it('shows a pending order with a missing paid total as awaiting payment', async 
 
   await screen.findByRole('heading', { name: 'Замовлення #358' })
   const paymentSummary = screen
-    .getByRole('heading', { name: 'До сплати' })
+    .getByRole('heading', { name: 'Вартість замовлення' })
     .closest('section')
-  expect(within(paymentSummary!).getByText('Очікує оплати')).toBeVisible()
-  expect(within(paymentSummary!).getAllByText('150,00 $')).toHaveLength(2)
-  expect(screen.queryByText('Оплачено повністю')).not.toBeInTheDocument()
+  expect(
+    within(paymentSummary!).getByText('Очікує підтвердження'),
+  ).toBeVisible()
+  expect(within(paymentSummary!).getByText('150,00 USD')).toBeVisible()
+  expect(within(paymentSummary!).getByText('Оплат ще немає')).toBeVisible()
+  // Confirming does not wait for a payment and says what it means (AC-12).
+  expect(
+    screen.getByRole('button', { name: 'Підтвердити замовлення' }),
+  ).toBeEnabled()
+  expect(
+    screen.getByText(
+      'Підтверджуючи замовлення, ви визнаєте його повністю оплаченим.',
+    ),
+  ).toBeVisible()
 })
 
 it('keeps order prices in USD and renders mixed-currency payments independently', async () => {
@@ -2278,8 +2313,8 @@ it('keeps order prices in USD and renders mixed-currency payments independently'
   const payments = screen.getByRole('list', { name: 'Платежі замовлення' })
   expect(within(payments).getByText('ФОП Privat24 · UAH')).toBeVisible()
   expect(within(payments).getByText('Готівка · USD')).toBeVisible()
-  expect(within(payments).getByText('1 500,00 ₴')).toBeVisible()
-  expect(within(payments).getByText('120,00 $')).toBeVisible()
+  expect(within(payments).getByText('1 500,00 UAH')).toBeVisible()
+  expect(within(payments).getByText('120,00 USD')).toBeVisible()
   expect(within(payments).queryByText('Завдаток')).not.toBeInTheDocument()
   expect(within(payments).queryByText('Доплата')).not.toBeInTheDocument()
 
@@ -2287,22 +2322,93 @@ it('keeps order prices in USD and renders mixed-currency payments independently'
     .getByRole('heading', { name: 'Позиції' })
     .closest('section')
   // The line's own sum and the order total; the unit price rides along with
-  // the quantity as «1 × 150,00 $».
-  expect(within(positions!).getAllByText('150,00 $')).toHaveLength(2)
-  expect(within(positions!).getByText('1 × 150,00 $')).toBeVisible()
-  expect(within(positions!).queryByText(/₴/)).not.toBeInTheDocument()
+  // the quantity as «1 × 150,00 USD».
+  expect(within(positions!).getAllByText('150,00 USD')).toHaveLength(2)
+  expect(within(positions!).getByText('1 × 150,00 USD')).toBeVisible()
+  expect(within(positions!).queryByText(/UAH/)).not.toBeInTheDocument()
 
   const paymentSummary = screen
-    .getByRole('heading', { name: 'До сплати' })
+    .getByRole('heading', { name: 'Вартість замовлення' })
     .closest('section')
-  expect(within(paymentSummary!).getByText('Оплачено повністю')).toBeVisible()
+  expect(within(paymentSummary!).getByText('Підтверджено')).toBeVisible()
   expect(
     within(paymentSummary!).queryByText('Оплату підтверджено'),
   ).not.toBeInTheDocument()
-  expect(within(paymentSummary!).getAllByText('150,00 $')).toHaveLength(2)
-  // Two currencies cannot be added, so the card reports no paid figure at all
-  // rather than a dollar total that silently drops the hryvnia.
-  expect(within(paymentSummary!).getByText('—')).toBeVisible()
+  // The order value in the accounting currency, and each currency's actual
+  // payments on its own line: never added up, never compared (AC-13).
+  expect(within(paymentSummary!).getByText('150,00 USD')).toBeVisible()
+  expect(within(paymentSummary!).getByText('1 500,00 UAH')).toBeVisible()
+  expect(within(paymentSummary!).getByText('120,00 USD')).toBeVisible()
   expect(within(paymentSummary!).queryByText('Залишок')).not.toBeInTheDocument()
-  expect(within(paymentSummary!).queryByText(/₴/)).not.toBeInTheDocument()
+})
+
+it('re-reads the order after an unknown payment result instead of writing twice', async () => {
+  const order = {
+    id: 'order-1',
+    number: 1,
+    status: 'pending',
+    customerId: null,
+    customerName: null,
+    notes: null,
+    items: [],
+    payments: [],
+    history: [],
+    totalAmount: 100,
+    itemsTotalUsd: 100,
+    totalPaid: 0,
+    paymentCurrency: null,
+    createdAt: '2026-08-28T00:00:00Z',
+    createdByName: 'Олена',
+  }
+  orderMocks.getById.mockResolvedValue(order)
+  orderMocks.updatePayments.mockRejectedValue({
+    kind: 'network',
+    message: 'Немає з’єднання з мережею.',
+  })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/orders/order-1']}>
+      <OrdersScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await screen.findByRole('heading', { name: 'Замовлення #1' })
+  await user.click(screen.getByRole('button', { name: 'Додати платіж' }))
+  const dialog = await screen.findByRole('dialog', { name: 'Додати платіж' })
+  await user.click(within(dialog).getByRole('radio', { name: /ФОП Mono/ }))
+  await user.type(within(dialog).getByLabelText('Сума'), '4200')
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Записати оплату' }),
+  )
+
+  // Nothing landed: the order still has no payment, so a retry is offered.
+  expect(
+    await within(dialog).findByText(
+      'Оплати в замовленні немає — її не записано. Можна записати ще раз.',
+    ),
+  ).toBeVisible()
+  expect(orderMocks.getById).toHaveBeenCalledTimes(2)
+  expect(orderMocks.updatePayments).toHaveBeenCalledTimes(1)
+
+  // The second attempt landed although the reply was lost: the re-read finds
+  // it, and the drawer closes without a second write.
+  orderMocks.getById.mockResolvedValue({
+    ...order,
+    payments: [
+      {
+        id: 'payment-1',
+        accountId: 'bank-1',
+        accountName: 'ФОП Mono',
+        amount: 4200,
+        currency: 'UAH',
+      },
+    ],
+  })
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Записати оплату' }),
+  )
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  )
+  expect(orderMocks.updatePayments).toHaveBeenCalledTimes(2)
 })

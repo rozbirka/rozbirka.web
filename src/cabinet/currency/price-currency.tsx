@@ -18,7 +18,8 @@ export function MoneyInput({
   className,
   ...props
 }: ComponentProps<typeof TextInput> & {
-  currency: SupportedCurrency | null | 'none'
+  /** ISO code, `null` (a dash: no currency yet) or `'none'` (no suffix). */
+  currency: string | null
 }) {
   return (
     <div className="relative">
@@ -59,13 +60,37 @@ export function PriceCurrencyNote({
   onLeave?: () => void
   className?: string
 }) {
+  if (gate.kind !== 'blocked') return null
+  return (
+    <BlockedPriceNote
+      className={className}
+      draftKept={draftKept}
+      onLeave={onLeave}
+      reason={gate.reason}
+      settingsPath={settingsPath}
+    />
+  )
+}
+
+function BlockedPriceNote({
+  reason,
+  settingsPath,
+  draftKept,
+  onLeave,
+  className,
+}: {
+  reason: 'choose' | 'ask-owner'
+  settingsPath: string | null
+  draftKept: boolean
+  onLeave: (() => void) | undefined
+  className: string | undefined
+}) {
   const t = useT(currencyMessages)
   const location = useLocation()
-  if (gate.kind !== 'blocked') return null
   return (
     <Notice block className={className ?? ''} tone="warn">
       <p className="font-semibold">{t('needCurrency')}</p>
-      {gate.reason === 'choose' && settingsPath !== null ? (
+      {reason === 'choose' && settingsPath !== null ? (
         <>
           <Link
             className="text-brand mt-1.5 inline-flex min-h-11 items-center font-semibold underline-offset-4 hover:underline"
