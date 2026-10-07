@@ -183,7 +183,9 @@ export function LanguageCard() {
                   {row.name}
                 </span>
                 {row.sub && (
-                  <span className="text-app-dim text-[12.5px]">{row.sub}</span>
+                  <span className="text-app-muted text-[12.5px]">
+                    {row.sub}
+                  </span>
                 )}
               </span>
             </label>

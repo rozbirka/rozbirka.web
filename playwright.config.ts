@@ -7,7 +7,9 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  use: { baseURL: 'http://127.0.0.1:4173' },
+  // The app picks its language from the browser; the suite asserts Ukrainian
+  // copy, so pin the browser locale instead of inheriting en-US.
+  use: { baseURL: 'http://127.0.0.1:4173', locale: 'uk-UA' },
   webServer: [
     {
       command: 'node scripts/auth-e2e-upstream.mjs',
