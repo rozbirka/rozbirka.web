@@ -617,26 +617,26 @@ function CompletedCard({
   ].filter((one): one is { href: string; label: string } => one.href !== null)
   return (
     <ChecklistFrame
-      aside={
-        <Button onClick={onHide} variant="quiet">
-          {t('hide')}
-        </Button>
-      }
       headingRef={headingRef}
       subtitle={t('doneSubtitle')}
       title={t('doneTitle')}
     >
-      {recommendations.length === 0 ? null : (
-        <ul className="mt-4 flex flex-wrap gap-2.5">
-          {recommendations.map((one) => (
-            <li key={one.href}>
-              <Button asChild>
-                <Link to={one.href}>{one.label}</Link>
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="mt-4 flex flex-wrap items-center gap-2.5">
+        {recommendations.length === 0 ? null : (
+          <ul className="flex flex-wrap gap-2.5">
+            {recommendations.map((one) => (
+              <li key={one.href}>
+                <Button asChild>
+                  <Link to={one.href}>{one.label}</Link>
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <Button className="ml-auto" onClick={onHide} variant="quiet">
+          {t('hide')}
+        </Button>
+      </div>
     </ChecklistFrame>
   )
 }
