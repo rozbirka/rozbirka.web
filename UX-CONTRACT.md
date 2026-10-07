@@ -100,6 +100,10 @@ race locks the block), while the document language stays editable
 wins). Printed labels and documents use the document language, not the
 interface language.
 
+Business settings read top to bottom as 01 «Реквізити», 02 «Регіон і
+документи», 03 «Валюта обліку», 04 «Склади», 05 «Облік»; `#region` and
+`#accounting-currency` (`BUSINESS_SECTION_IDS`) open the two settings blocks.
+
 SMS sign-in accepts Ukrainian, British and Polish numbers in E.164 with a
 number-country choice; customer phones may be from any country and are never
 rewritten with +380. Customer address fields (country, city, street, house,
