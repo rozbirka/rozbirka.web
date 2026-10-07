@@ -36,6 +36,12 @@ interface VerifyBrowserDto {
     id: string
     phone: string
     displayName: string
+    /**
+     * Core `VerifyUserDto.language`: the saved personal interface language,
+     * `null` = automatic. Passed through so the cabinet opens in it at once;
+     * absent when Core does not send it (the browser validates the value).
+     */
+    language?: string | null
   }
   isNewUser: boolean
 }
@@ -236,6 +242,13 @@ export function verifyBrowserData(data: unknown): {
         id: data.user.id,
         phone: data.user.phone,
         displayName: data.user.displayName,
+        // Only a short language tag or `null`; anything else is dropped,
+        // never a reason to fail the sign-in.
+        ...(data.user.language === null ||
+        (typeof data.user.language === 'string' &&
+          /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$/.test(data.user.language))
+          ? { language: data.user.language }
+          : {}),
       },
       isNewUser: data.isNewUser,
     },

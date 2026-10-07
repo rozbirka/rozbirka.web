@@ -301,6 +301,66 @@ describe('session BFF', () => {
     })
   })
 
+  it.each([
+    ['a saved language', 'en-GB', { language: 'en-GB' }],
+    ['automatic selection', null, { language: null }],
+    ['no language field', undefined, {}],
+    ['a malformed value', 'en-GB<script>', {}],
+    ['a non-string value', 42, {}],
+  ])(
+    'passes the user’s personal language through on verify: %s',
+    async (_name, language, expected) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() =>
+          Promise.resolve(
+            Response.json({
+              data: {
+                accessToken: 'access',
+                refreshToken: 'refresh-secret',
+                user: {
+                  id: 'u1',
+                  phone: '+380501112233',
+                  displayName: 'Vlad',
+                  ...(language === undefined ? {} : { language }),
+                },
+                isNewUser: false,
+              },
+            }),
+          ),
+        ),
+      )
+
+      const response = await handleSessionRequest(
+        new Request('https://rozbirka.pro/session/otp/verify', {
+          method: 'POST',
+          headers: {
+            origin: 'https://rozbirka.pro',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            phone: '+380501112233',
+            challengeId: 'test-challenge',
+            code: '123456',
+          }),
+        }),
+        env,
+      )
+
+      expect(response!.status).toBe(200)
+      expect(await response!.json()).toEqual({
+        accessToken: 'access',
+        user: {
+          id: 'u1',
+          phone: '+380501112233',
+          displayName: 'Vlad',
+          ...expected,
+        },
+        isNewUser: false,
+      })
+    },
+  )
+
   it('rotates the refresh cookie and returns only the access token', async () => {
     let upstreamRequest: Request | undefined
     vi.stubGlobal(
