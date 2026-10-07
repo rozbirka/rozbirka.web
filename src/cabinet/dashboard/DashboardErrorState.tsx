@@ -1,23 +1,27 @@
 import { Link } from 'react-router'
 import { Button, Panel } from '@/components/app'
 import type { ApiProblem } from '@/api/contracts'
+import { commonMessages, useT, type MessageKey } from '@/i18n'
+import { dashboardMessages } from './dashboard-messages'
+
+type DashboardKey = MessageKey<typeof dashboardMessages>
 
 interface ErrorGuidance {
-  title: string
-  message: string
+  title: DashboardKey
+  message: DashboardKey
 }
 
 const BILLING_GUIDANCE: ErrorGuidance = {
-  title: 'Підписка потребує уваги',
-  message: 'Перевірте стан підписки в налаштуваннях білінгу.',
+  title: 'billingErrorTitle',
+  message: 'billingErrorMessage',
 }
 const QUOTA_GUIDANCE: ErrorGuidance = {
-  title: 'Ліміт вичерпано',
-  message: 'Змініть тариф або звільніть місце, щоб продовжити.',
+  title: 'quotaErrorTitle',
+  message: 'quotaErrorMessage',
 }
 const FEATURE_GUIDANCE: ErrorGuidance = {
-  title: 'Функція недоступна на вашому тарифі',
-  message: 'Оберіть інший тариф, щоб отримати доступ.',
+  title: 'featureErrorTitle',
+  message: 'featureErrorMessage',
 }
 
 export function DashboardErrorState({
@@ -33,6 +37,8 @@ export function DashboardErrorState({
   problem: ApiProblem
   retry: () => Promise<void>
 }) {
+  const t = useT(dashboardMessages)
+  const tc = useT(commonMessages)
   const guidance = dashboardErrorGuidance(problem)
 
   return (
@@ -41,17 +47,19 @@ export function DashboardErrorState({
         <p className="text-app-muted text-sm">{genericMessage}</p>
       ) : (
         <>
-          <h2 className="text-sm font-medium text-white">{guidance.title}</h2>
-          <p className="text-app-muted mt-1 text-sm">{guidance.message}</p>
+          <h2 className="text-sm font-medium text-white">
+            {t(guidance.title)}
+          </h2>
+          <p className="text-app-muted mt-1 text-sm">{t(guidance.message)}</p>
           {billingPath === null ? null : (
             <Button asChild className="mt-3" variant="primary">
-              <Link to={billingPath}>Перейти до підписки</Link>
+              <Link to={billingPath}>{t('goToSubscription')}</Link>
             </Button>
           )}
         </>
       )}
       <div className="mt-3">
-        <Button onClick={() => void retry()}>Спробувати ще раз</Button>
+        <Button onClick={() => void retry()}>{tc('retry')}</Button>
       </div>
     </Panel>
   )

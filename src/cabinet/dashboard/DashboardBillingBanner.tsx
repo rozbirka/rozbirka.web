@@ -1,8 +1,16 @@
 import { Link } from 'react-router'
 import { Button, Notice, type NoticeTone } from '@/components/app'
 import type { Tenant } from '@/api/types'
+import {
+  translate,
+  useLocale,
+  useT,
+  type Locale,
+  type MessageKey,
+} from '@/i18n'
 import type { TenantAccessSnapshot } from '../access-types'
 import { getDashboardBillingPath } from './dashboard-billing-access'
+import { dashboardMessages } from './dashboard-messages'
 
 interface BillingGuidance {
   title: string
@@ -22,7 +30,9 @@ export function DashboardBillingBanner({
   snapshot: TenantAccessSnapshot
   tenant: Pick<Tenant, 'slug'>
 }) {
-  const guidance = getBillingGuidance(snapshot)
+  const { locale } = useLocale()
+  const t = useT(dashboardMessages)
+  const guidance = getBillingGuidance(snapshot, locale)
   if (guidance === null) return null
 
   const billingPath = getDashboardBillingPath(snapshot, tenant)
@@ -32,7 +42,7 @@ export function DashboardBillingBanner({
       action={
         billingPath === null ? undefined : (
           <Button asChild variant={guidance.urgent ? 'primary' : 'ghost'}>
-            <Link to={billingPath}>Перейти до підписки</Link>
+            <Link to={billingPath}>{t('goToSubscription')}</Link>
           </Button>
         )
       }
@@ -46,79 +56,83 @@ export function DashboardBillingBanner({
   )
 }
 
+type DashboardKey = MessageKey<typeof dashboardMessages>
+
+const QUOTA_TITLES: Readonly<Record<string, DashboardKey>> = {
+  cars: 'quota.cars',
+  intakes: 'quota.intakes',
+  parts: 'quota.parts',
+  users: 'quota.users',
+  cashRegisters: 'quota.cashRegisters',
+}
+
 function getBillingGuidance(
   snapshot: TenantAccessSnapshot,
+  locale: Locale,
 ): BillingGuidance | null {
+  const say = (key: DashboardKey, params?: Record<string, string | number>) =>
+    translate(dashboardMessages, locale, key, params)
   const state = snapshot.entitlement?.state ?? snapshot.subscription?.state
   if (state === undefined) return null
 
   switch (state) {
-    case 'trial':
+    case 'trial': {
+      const days = snapshot.subscription?.trialDaysRemaining
       return {
-        title: 'Пробний період',
-        message: trialMessage(snapshot),
+        title: say('trialTitle'),
+        message:
+          days === null || days === undefined
+            ? say('trialNoDays')
+            : say('trialDays', { count: days }),
         tone: 'info',
         urgent: false,
       }
+    }
     case 'pastDue':
       return {
-        title: 'Потрібна оплата',
-        message: 'Оновіть спосіб оплати, щоб зберегти доступ до розбірки.',
+        title: say('pastDueTitle'),
+        message: say('pastDueMessage'),
         tone: 'danger',
         urgent: true,
       }
     case 'cancelled':
       return {
-        title: 'Підписку скасовано',
-        message: 'Оберіть тариф, щоб продовжити користуватися сервісом.',
+        title: say('cancelledTitle'),
+        message: say('cancelledMessage'),
         tone: 'warn',
         urgent: true,
       }
     case 'blocked':
       return {
-        title: 'Доступ призупинено',
-        message: 'Оновіть підписку, щоб відновити доступ до розбірки.',
+        title: say('blockedTitle'),
+        message: say('blockedMessage'),
         tone: 'danger',
         urgent: true,
       }
     default:
-      return quotaGuidance(snapshot)
+      return quotaGuidance(snapshot, say)
   }
 }
 
-function trialMessage(snapshot: TenantAccessSnapshot): string {
-  const days = snapshot.subscription?.trialDaysRemaining
-  return days === null || days === undefined
-    ? 'Керуйте тарифом до завершення пробного періоду.'
-    : `Пробний період триває ще ${String(days)} ${dayWord(days)}. Оберіть тариф, щоб не втратити доступ.`
-}
-
-function dayWord(days: number): string {
-  const tens = days % 100
-  const units = days % 10
-  if (tens >= 11 && tens <= 14) return 'днів'
-  if (units === 1) return 'день'
-  if (units >= 2 && units <= 4) return 'дні'
-  return 'днів'
-}
-
-function quotaGuidance(snapshot: TenantAccessSnapshot): BillingGuidance | null {
+function quotaGuidance(
+  snapshot: TenantAccessSnapshot,
+  say: (key: DashboardKey, params?: Record<string, string | number>) => string,
+): BillingGuidance | null {
   const exhausted = Object.entries(snapshot.entitlement?.usage ?? {}).find(
     ([, usage]) => usage.max != null && usage.used >= usage.max,
   )
   if (exhausted === undefined) return null
 
   const [resource, usage] = exhausted
-  const labels: Record<string, string> = {
-    cars: 'авто',
-    intakes: 'приймань',
-    parts: 'запчастин',
-    users: 'користувачів',
-    cashRegisters: 'кас',
-  }
+  const title = Object.prototype.hasOwnProperty.call(QUOTA_TITLES, resource)
+    ? QUOTA_TITLES[resource]
+    : undefined
   return {
-    title: `Ліміт ${labels[resource] ?? 'ресурсу'} вичерпано`,
-    message: `Використано ${String(usage.used)} із ${String(usage.max)}. Оберіть тариф із більшим лімітом, щоб продовжити роботу.`,
+    title: say(title ?? 'quota.other'),
+    message: say('quotaMessage', {
+      used: String(usage.used),
+      max: String(usage.max),
+    }),
     tone: 'warn',
     urgent: true,
   }

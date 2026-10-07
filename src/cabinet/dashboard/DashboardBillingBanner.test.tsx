@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { expect, it } from 'vitest'
 import type { SubscriptionDto, Tenant } from '@/api/types'
+import { LocaleProvider, type Locale } from '@/i18n'
 import type { TenantAccessSnapshot } from '../access-types'
 import { DashboardBillingBanner } from './DashboardBillingBanner'
 
@@ -126,4 +127,41 @@ it('does not expose a billing link when policy denies billing view', () => {
 
   expect(screen.getByText('Потрібна оплата')).toBeInTheDocument()
   expect(screen.queryByRole('link')).not.toBeInTheDocument()
+})
+
+function renderBannerIn(locale: Locale, access: TenantAccessSnapshot) {
+  render(
+    <LocaleProvider locale={locale} syncDocumentLang={false}>
+      <MemoryRouter>
+        <DashboardBillingBanner snapshot={access} tenant={tenant} />
+      </MemoryRouter>
+    </LocaleProvider>,
+  )
+}
+
+it('guides a trial in British English with a plural day count', () => {
+  renderBannerIn('en-GB', snapshot('trial'))
+
+  const banner = screen.getByRole('status')
+  expect(banner).toHaveTextContent('Trial period')
+  expect(banner).toHaveTextContent(
+    'Your trial has 4 days left. Choose a plan to keep access.',
+  )
+  expect(
+    screen.getByRole('link', { name: 'Go to subscription' }),
+  ).toHaveAttribute('href', '/app/koval/settings/billing/overview')
+})
+
+it('names an exhausted quota in English and Polish', () => {
+  renderBannerIn('en-GB', snapshot('active', ['billing.view'], true))
+  expect(screen.getByRole('alert')).toHaveTextContent('Car limit reached')
+  expect(screen.getByRole('alert')).toHaveTextContent('Used 10 of 10.')
+})
+
+it('asks for payment in Polish', () => {
+  renderBannerIn('pl', snapshot('pastDue'))
+  expect(screen.getByRole('alert')).toHaveTextContent('Wymagana płatność')
+  expect(
+    screen.getByRole('link', { name: 'Przejdź do subskrypcji' }),
+  ).toBeVisible()
 })
