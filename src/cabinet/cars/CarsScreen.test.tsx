@@ -1148,3 +1148,43 @@ it('opens the gallery viewer and pages through the shots', async () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
   )
 })
+
+it('brings back the car typed before leaving to choose the currency', async () => {
+  sessionStorage.setItem(
+    'rozbirka:currency-draft:car-form:new',
+    JSON.stringify({
+      root: '/app/demo',
+      values: {
+        values: {
+          code: 'BMW-07',
+          brand: 'BMW',
+          model: 'X5',
+          year: '2014',
+          color: '',
+          vin: '',
+          acquiredAt: '',
+          purchasePrice: '4200',
+          notes: 'Після ДТП',
+        },
+        expenses: [{ id: 1, name: 'Евакуатор', amount: '150' }],
+        makeId: 452,
+      },
+    }),
+  )
+  render(
+    <MemoryRouter initialEntries={['/app/demo/cars/new?draft=1']}>
+      <Routes>
+        <Route path="/app/:tenant/cars/new" element={<CarsScreen />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByDisplayValue('BMW-07')).toBeVisible()
+  expect(screen.getByDisplayValue('4200')).toBeVisible()
+  expect(screen.getByDisplayValue('Після ДТП')).toBeVisible()
+  expect(screen.getByDisplayValue('Евакуатор')).toBeVisible()
+  // Read once: the next visit starts clean.
+  expect(
+    sessionStorage.getItem('rozbirka:currency-draft:car-form:new'),
+  ).toBeNull()
+})

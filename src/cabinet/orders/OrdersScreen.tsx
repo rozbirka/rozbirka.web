@@ -46,6 +46,7 @@ import {
   useFirstPriceGuard,
 } from '../currency/use-accounting-currency'
 import { usePriceSlots } from '../currency/use-price-slots'
+import { useCurrencyDraft } from '../currency/form-draft'
 import { amountPrecisionError } from '../currency/amount-precision'
 import { orderSteps } from './order-steps'
 import {
@@ -97,7 +98,7 @@ import {
 import { useTenantSettings } from '@/auth/useTenantSettings'
 import { isPhoneCountry } from '@/lib/phone'
 import { OrderCustomerDrawer } from './OrderCustomerDrawer'
-import { OrderItemDrawer } from './OrderItemDrawer'
+import { OrderItemDrawer, type OrderItemDraft } from './OrderItemDrawer'
 import { OrderPaymentDrawer, type PaymentOutcome } from './OrderPaymentDrawer'
 
 const idFromPath = (path: string) => /\/orders\/([^/]+)/.exec(path)?.[1] ?? null
@@ -555,6 +556,20 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
   )
 }
 
+/** What the order form keeps across the trip to the currency setting. */
+interface OrderFormDraft {
+  partId: string
+  partQuery: string
+  customerId: string
+  customerQuery: string
+  selectedCustomerName: string
+  quantity: string
+  unitPrice: string
+  notes: string
+  draftItems: { part: PartPickerItem; quantity: number; unitPrice: number }[]
+  selectedPartDraft: PartPickerItem | null
+}
+
 export function OrderForm({
   createContext,
   definition,
@@ -587,16 +602,25 @@ export function OrderForm({
     'customers.manage',
   )
   const dependenciesAllowed = partSearchAllowed && customerSearchAllowed
-  const [partId, setPartId] = useState('')
-  const [partQuery, setPartQuery] = useState('')
+  // The order typed before leaving for the currency setting comes back.
+  const draft = useCurrencyDraft<OrderFormDraft>(
+    `order-form:${createContext?.customer.id ?? 'new'}`,
+  )
+  const restored = draft.initial
+  const [partId, setPartId] = useState(() => restored?.partId ?? '')
+  const [partQuery, setPartQuery] = useState(() => restored?.partQuery ?? '')
   const [customerId, setCustomerId] = useState(
-    createContext?.customer.id ?? params.get('customerId') ?? '',
+    () =>
+      restored?.customerId ??
+      createContext?.customer.id ??
+      params.get('customerId') ??
+      '',
   )
   const [customerQuery, setCustomerQuery] = useState(
-    createContext?.customer.name ?? '',
+    () => restored?.customerQuery ?? createContext?.customer.name ?? '',
   )
   const [selectedCustomerName, setSelectedCustomerName] = useState(
-    createContext?.customer.name ?? '',
+    () => restored?.selectedCustomerName ?? createContext?.customer.name ?? '',
   )
   const [customerResults, setCustomerResults] = useState<CustomerSearchItem[]>(
     [],
@@ -611,25 +635,35 @@ export function OrderForm({
   const [customerConflict, setCustomerConflict] =
     useState<CustomerPhoneConflict | null>(null)
   const [customerBusy, setCustomerBusy] = useState(false)
-  const [quantity, setQuantity] = useState('')
-  const [unitPrice, setUnitPrice] = useState('')
-  const [notes, setNotes] = useState('')
+  const [quantity, setQuantity] = useState(() => restored?.quantity ?? '')
+  const [unitPrice, setUnitPrice] = useState(() => restored?.unitPrice ?? '')
+  const [notes, setNotes] = useState(() => restored?.notes ?? '')
   const guard = useFirstPriceGuard()
   const { locale } = useLocale()
-  const [draftItems, setDraftItems] = useState<
-    {
-      part: PartPickerItem
-      quantity: number
-      unitPrice: number
-    }[]
-  >([])
+  const [draftItems, setDraftItems] = useState<OrderFormDraft['draftItems']>(
+    () => restored?.draftItems ?? [],
+  )
   const [selectedPartDraft, setSelectedPartDraft] =
-    useState<PartPickerItem | null>(null)
+    useState<PartPickerItem | null>(() => restored?.selectedPartDraft ?? null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const itemPrices = usePriceSlots(guard, {
     values: [unitPrice, ...draftItems.map((item) => item.unitPrice)],
     onAccept: (accepted) => void submit(undefined, accepted),
+    draftKept: true,
+    onLeave: () =>
+      draft.keep({
+        partId,
+        partQuery,
+        customerId,
+        customerQuery,
+        selectedCustomerName,
+        quantity,
+        unitPrice,
+        notes,
+        draftItems,
+        selectedPartDraft,
+      }),
   })
   const closeNewCustomerForm = () => {
     setNewCustomerFormOpen(false)
@@ -1284,6 +1318,8 @@ function OrderDetailScreen({
   const guard = useFirstPriceGuard()
   const currency = guard.currency
   const tp = useT(paymentMessages)
+  // An item typed in the add-item drawer survives the currency setting.
+  const itemDraft = useCurrencyDraft<OrderItemDraft>(`order-item:${orderId}`)
   const itemPrices = usePriceSlots(guard, {
     values: itemDrafts.map((item) => item.unitPrice),
     onAccept: (accepted) => saveItemDrafts(accepted),
@@ -2039,8 +2075,10 @@ function OrderDetailScreen({
 
         <OrderItemDrawer
           busy={busy}
+          draft={itemDraft.initial}
           error={addingItem ? error : null}
           guard={guard}
+          onKeepDraft={itemDraft.keep}
           onOpenChange={(next) => {
             if (!next) void navigate(`${ordersPath}/${order.id}`)
           }}

@@ -139,6 +139,25 @@ Verification owners: `src/i18n/i18n.test.tsx`, `language-card.test.tsx`,
 `region-settings.test.tsx`, `login-international.test.tsx`, `src/lib/phone.test.ts`
 and the en-GB render tests next to each migrated screen.
 
+## Accounting currency in price forms (ROZ-162)
+
+Every price form — part, car and its expenses, batch, batch position and
+batch rows, order and order item — keeps what was typed (except photos) when
+the owner follows «Обрати валюту обліку» to the setting and comes back
+(`src/cabinet/currency/form-draft.ts`, the part form keeps its own
+`source-return.ts` draft). The draft is session-scoped to the tenant's
+cabinet, offered back only on the `draft=1` return path, and removed from
+storage once read.
+
+Amounts keep to Core's precision, mirrored in
+`src/cabinet/currency/amount-precision.ts`: Core never rounds and refuses
+(`INVALID_CURRENCY_PRECISION`) more than two decimals, or any decimals for
+JPY, and magnitudes of 10^10 and above (10^16 for a batch cost). Each money
+form — prices, car expenses, batch cost, order items, order payments, till
+movements and transfers — says so in the interface language before saving.
+Currency choices list the catalog order (`catalog-order.ts`), never a
+«popular» shortlist, and transfers show no computed rate.
+
 ## Owner onboarding
 
 Creating the first yard asks only for name and city, then opens the dashboard.

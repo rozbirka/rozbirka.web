@@ -268,3 +268,46 @@ it('starts with an empty search after it is closed and opened again', async () =
   expect(screen.getByText('Введіть назву або OEM-код')).toBeVisible()
   expect(partsApi.list).toHaveBeenCalledTimes(1)
 })
+
+it('comes back with the item typed before choosing the currency', async () => {
+  partsApi.list.mockResolvedValue({
+    items: [
+      {
+        id: 'part-1',
+        name: 'Фара ліва',
+        photos: [],
+        quantityTotal: 2,
+        quantityReserved: 0,
+        quantityAvailable: 2,
+        quantitySoldTotal: 0,
+        status: 'available',
+        car: null,
+        order: null,
+        externalCode: null,
+      },
+    ],
+    page: 1,
+    pageSize: 8,
+    total: 1,
+    totalPages: 1,
+  })
+  partsApi.get.mockResolvedValue({ effectiveSalePrice: 40 })
+  render(
+    <OrderItemDrawer
+      busy={false}
+      draft={{ query: 'Фара', pickedId: 'part-1', quantity: 2, price: '55' }}
+      error={null}
+      guard={guardFixture()}
+      onOpenChange={vi.fn()}
+      onSubmit={vi.fn()}
+      open
+      orderNumber={1}
+      orderTotal={0}
+      takenPartIds={[]}
+    />,
+  )
+  expect(screen.getByRole('textbox', { name: 'Пошук запчастини' })).toHaveValue(
+    'Фара',
+  )
+  expect(await screen.findByDisplayValue('55')).toBeVisible()
+})

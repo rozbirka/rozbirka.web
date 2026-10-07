@@ -83,6 +83,7 @@ import {
   useFirstPriceGuard,
 } from '../currency/use-accounting-currency'
 import { usePriceSlots } from '../currency/use-price-slots'
+import { useCurrencyDraft } from '../currency/form-draft'
 import {
   amountPrecisionError,
   BATCH_COST_LIMIT,
@@ -1274,12 +1275,22 @@ function IntakeForm({
   const [searchParams] = useSearchParams()
   const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
   const cabinetRoot = base.replace(/\/intakes$/, '')
-  const [values, setValues] = useState({
-    name: '',
-    purchasedAt: '',
-    totalCost: '',
-    notes: '',
-  })
+  // What was typed survives the trip to the accounting-currency setting.
+  const draft = useCurrencyDraft<{
+    name: string
+    purchasedAt: string
+    totalCost: string
+    notes: string
+  }>(`intake-form:${intakeId ?? 'new'}`)
+  const [values, setValues] = useState(
+    () =>
+      draft.initial ?? {
+        name: '',
+        purchasedAt: '',
+        totalCost: '',
+        notes: '',
+      },
+  )
   const [media, setMedia] = useState<MediaUploadResult[]>([])
   const [intake, setIntake] = useState<Intake | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
@@ -1295,7 +1306,10 @@ function IntakeForm({
   const price = usePriceSlots(guard, {
     values: canManageFinance ? [values.totalCost] : [],
     onAccept: (accepted) => void save(undefined, accepted),
+    draftKept: true,
+    onLeave: () => draft.keep(values),
   })
+  const restoredDraft = draft.initial !== null
   const update =
     (key: keyof typeof values) =>
     (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -1308,15 +1322,17 @@ function IntakeForm({
     void intakesApi.get(intakeId, { signal: controller.signal }).then(
       (next) => {
         setIntake(next)
-        setValues({
-          name: next.name ?? '',
-          purchasedAt: next.purchasedAt ?? '',
-          totalCost:
-            canManageFinance && next.totalCost !== null
-              ? String(next.totalCost)
-              : '',
-          notes: next.notes ?? '',
-        })
+        // A draft brought back from the currency setting wins.
+        if (!restoredDraft)
+          setValues({
+            name: next.name ?? '',
+            purchasedAt: next.purchasedAt ?? '',
+            totalCost:
+              canManageFinance && next.totalCost !== null
+                ? String(next.totalCost)
+                : '',
+            notes: next.notes ?? '',
+          })
       },
       (error: unknown) => {
         if (!controller.signal.aborted)
@@ -1324,7 +1340,7 @@ function IntakeForm({
       },
     )
     return () => controller.abort()
-  }, [canManageFinance, intakeId])
+  }, [canManageFinance, intakeId, restoredDraft])
   const cost = values.totalCost === '' ? null : Number(values.totalCost)
   const hasCost = cost !== null && Number.isFinite(cost) && cost > 0
   const positions = intake?.partsCount ?? 0
@@ -1787,7 +1803,7 @@ function PartForm({
   const params = useParams<{ tenant: string }>()
   const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
   const canPlace = allowedToView(cabinetModules.inventory, cabinet)
-  const [values, setValues] = useState({
+  const emptyPosition = {
     name: '',
     partType: '',
     oemCode: '',
@@ -1797,7 +1813,12 @@ function PartForm({
     price: '',
     zoneId: '',
     notes: '',
-  })
+  }
+  // The position typed before leaving for the currency setting comes back.
+  const draft = useCurrencyDraft<typeof emptyPosition>(
+    `intake-position:${intakeId}`,
+  )
+  const [values, setValues] = useState(() => draft.initial ?? emptyPosition)
   const [media, setMedia] = useState<MediaUploadResult[]>([])
   const [problem, setProblem] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<{ name?: string }>({})
@@ -1864,6 +1885,8 @@ function PartForm({
   const priceSlots = usePriceSlots(guard, {
     values: hasPrice ? [values.price] : [],
     onAccept: (accepted) => void save(undefined, lastAnother.current, accepted),
+    draftKept: true,
+    onLeave: () => draft.keep(values),
   })
   const pricing = hasPrice && !priceSlots.disabled
 
@@ -2354,14 +2377,31 @@ function BatchPartsForm({
   const params = useParams<{ tenant: string }>()
   const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
   const canPlace = allowedToView(cabinetModules.inventory, cabinet)
-  const [rows, setRows] = useState<BatchRow[]>(() => [
-    emptyBatchRow(),
-    emptyBatchRow(),
-    emptyBatchRow(),
-    emptyBatchRow(),
-  ])
-  const [condition, setCondition] = useState('good')
-  const [sharedZoneId, setSharedZoneId] = useState('')
+  // The rows typed before leaving for the currency setting come back.
+  const draft = useCurrencyDraft<{
+    rows: BatchRow[]
+    condition: string
+    sharedZoneId: string
+  }>(`intake-batch:${intakeId}`)
+  const [rows, setRows] = useState<BatchRow[]>(
+    () =>
+      // Fresh keys: the stored ones may clash with rows made after a reload.
+      draft.initial?.rows.map((row) => ({
+        ...row,
+        key: emptyBatchRow().key,
+      })) ?? [
+        emptyBatchRow(),
+        emptyBatchRow(),
+        emptyBatchRow(),
+        emptyBatchRow(),
+      ],
+  )
+  const [condition, setCondition] = useState(
+    () => draft.initial?.condition ?? 'good',
+  )
+  const [sharedZoneId, setSharedZoneId] = useState(
+    () => draft.initial?.sharedZoneId ?? '',
+  )
   const [intake, setIntake] = useState<Intake | null>(null)
   const [zones, setZones] = useState<InventoryZone[]>([])
   const [problem, setProblem] = useState<string | null>(null)
@@ -2427,6 +2467,8 @@ function BatchPartsForm({
       .filter((row) => batchNumber(row.price) > 0)
       .map((row) => row.price),
     onAccept: (accepted) => void save(undefined, accepted),
+    draftKept: true,
+    onLeave: () => draft.keep({ rows, condition, sharedZoneId }),
   })
   const pricing = priceSlots.hasPrice && !priceSlots.disabled
   const fillDown = () =>

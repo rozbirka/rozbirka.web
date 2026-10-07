@@ -99,6 +99,7 @@ import {
   useFirstPriceGuard,
 } from '../currency/use-accounting-currency'
 import { usePriceSlots, type PriceSlots } from '../currency/use-price-slots'
+import { useCurrencyDraft } from '../currency/form-draft'
 import { amountPrecisionError } from '../currency/amount-precision'
 
 /**
@@ -967,10 +968,21 @@ function Expenses({
   const { locale } = useLocale()
   const day = useDay()
   const toast = useOptionalToast()
-  const [name, setName] = useState('')
-  const [amount, setAmount] = useState('')
-  const [editing, setEditing] = useState<CarExpense | null>(null)
-  const [formOpen, setFormOpen] = useState(false)
+  // An expense typed before leaving for the currency setting reopens here.
+  const draft = useCurrencyDraft<{
+    name: string
+    amount: string
+    editingId: string | null
+  }>(`car-expense:${car.id}`)
+  const [name, setName] = useState(() => draft.initial?.name ?? '')
+  const [amount, setAmount] = useState(() => draft.initial?.amount ?? '')
+  const [editing, setEditing] = useState<CarExpense | null>(
+    () =>
+      (car.expenses ?? []).find(
+        (expense) => expense.id === draft.initial?.editingId,
+      ) ?? null,
+  )
+  const [formOpen, setFormOpen] = useState(() => draft.initial !== null)
   const [pendingRemoval, setPendingRemoval] = useState<CarExpense | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -979,6 +991,8 @@ function Expenses({
   const price = usePriceSlots(guard, {
     values: [amount],
     onAccept: (accepted) => void create(undefined, accepted),
+    draftKept: true,
+    onLeave: () => draft.keep({ name, amount, editingId: editing?.id ?? null }),
   })
   const create = async (
     event?: FormEvent,
@@ -1213,6 +1227,24 @@ function Expenses({
   )
 }
 
+interface CarFormValues {
+  code: string
+  brand: string
+  model: string
+  year: string
+  color: string
+  vin: string
+  acquiredAt: string
+  purchasePrice: string
+  notes: string
+}
+
+interface CarExpenseDraft {
+  id: number
+  name: string
+  amount: string
+}
+
 function CarForm({ carId, title }: { carId?: string; title: string }) {
   const { tenant } = useParams<{ tenant: string }>()
   const { cabinet, financeManage } = useAccess()
@@ -1225,23 +1257,34 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
   const [searchParams] = useSearchParams()
   const base = `/app/${tenant ?? cabinet.targetTenant?.slug ?? ''}/cars`
   const cabinetRoot = base.replace(/\/cars$/, '')
-  const [values, setValues] = useState({
-    code: '',
-    brand: '',
-    model: '',
-    year: '',
-    color: '',
-    vin: '',
-    acquiredAt: '',
-    purchasePrice: '',
-    notes: '',
-  })
+  // What was typed survives the trip to the accounting-currency setting.
+  const draft = useCurrencyDraft<{
+    values: CarFormValues
+    expenses: CarExpenseDraft[]
+    makeId: number | null
+  }>(`car-form:${carId ?? 'new'}`)
+  const [values, setValues] = useState<CarFormValues>(
+    () =>
+      draft.initial?.values ?? {
+        code: '',
+        brand: '',
+        model: '',
+        year: '',
+        color: '',
+        vin: '',
+        acquiredAt: '',
+        purchasePrice: '',
+        notes: '',
+      },
+  )
   const [media, setMedia] = useState<MediaUploadResult[]>([])
   const [pendingMedia, setPendingMedia] = useState<PendingMedia[]>([])
-  const [makeId, setMakeId] = useState<number | null>(null)
-  const [expenses, setExpenses] = useState<
-    { id: number; name: string; amount: string }[]
-  >([])
+  const [makeId, setMakeId] = useState<number | null>(
+    () => draft.initial?.makeId ?? null,
+  )
+  const [expenses, setExpenses] = useState<CarExpenseDraft[]>(
+    () => draft.initial?.expenses ?? [],
+  )
   const [createdCarId, setCreatedCarId] = useState<string | null>(null)
   /** The car as the server last sent it — for its expenses, parts and dates. */
   const [loaded, setLoaded] = useState<Car | null>(null)
@@ -1270,24 +1313,30 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
         ]
       : [],
     onAccept: (accepted) => void submit(undefined, accepted),
+    draftKept: true,
+    onLeave: () => draft.keep({ values, expenses, makeId }),
   })
+  const restoredDraft = draft.initial !== null
   useEffect(() => {
     if (!carId) return
     void carsApi.get(carId).then(
       (car) => {
         setLoading(false)
         setLoaded(car)
-        setValues({
-          code: car.code,
-          brand: car.brand,
-          model: car.model,
-          year: String(car.year),
-          color: car.color ?? '',
-          vin: car.vin ?? '',
-          acquiredAt: car.acquiredAt,
-          purchasePrice: String(car.purchasePrice),
-          notes: car.notes ?? '',
-        })
+        // A draft brought back from the currency setting wins over the
+        // server copy it was typed on top of.
+        if (!restoredDraft)
+          setValues({
+            code: car.code,
+            brand: car.brand,
+            model: car.model,
+            year: String(car.year),
+            color: car.color ?? '',
+            vin: car.vin ?? '',
+            acquiredAt: car.acquiredAt,
+            purchasePrice: String(car.purchasePrice),
+            notes: car.notes ?? '',
+          })
         setMedia(
           car.photos.map((photo) => ({
             storageKey: photo.storageKey,
@@ -1300,7 +1349,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
         setProblem(normalizeApiProblem(error).message)
       },
     )
-  }, [carId])
+  }, [carId, restoredDraft])
   const submit = async (
     event?: FormEvent,
     accepted?: SupportedCurrency | null,

@@ -63,7 +63,19 @@ const placeOf = (zones: PartInventoryZone[]): string | null => {
  * remains readable while a part is chosen. That list is also what greys out a
  * part already on the order instead of letting it be added twice.
  */
+/** What the drawer keeps across the trip to the currency setting. */
+export interface OrderItemDraft {
+  query: string
+  pickedId: string | null
+  quantity: number
+  price: string | null
+}
+
 interface OrderItemDrawerProps {
+  /** Restored after choosing the accounting currency (see `form-draft.ts`). */
+  draft?: OrderItemDraft | null
+  /** Store the typed item right before leaving for the currency setting. */
+  onKeepDraft?: (draft: OrderItemDraft) => void
   busy: boolean
   error: string | null
   onOpenChange: (open: boolean) => void
@@ -100,16 +112,20 @@ function OpenOrderItemDrawer({
   orderNumber,
   orderTotal,
   takenPartIds,
+  draft = null,
+  onKeepDraft,
 }: OrderItemDrawerProps) {
   const t = useT(orderCardMessages)
   const tc = useT(commonMessages)
   const listId = useId()
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(() => draft?.query ?? '')
   const [items, setItems] = useState<Candidate[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [pickedId, setPickedId] = useState<string | null>(null)
-  const [quantity, setQuantity] = useState(1)
-  const [price, setPrice] = useState<string | null>(null)
+  const [pickedId, setPickedId] = useState<string | null>(
+    () => draft?.pickedId ?? null,
+  )
+  const [quantity, setQuantity] = useState(() => draft?.quantity ?? 1)
+  const [price, setPrice] = useState<string | null>(() => draft?.price ?? null)
   const [attempt, setAttempt] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const requestRef = useRef<AbortController | null>(null)
@@ -220,6 +236,12 @@ function OpenOrderItemDrawer({
   const priceSlots = usePriceSlots(guard, {
     values: picked === null ? [] : [unitPrice],
     onAccept: (accepted) => submit(accepted),
+    ...(onKeepDraft
+      ? {
+          draftKept: true,
+          onLeave: () => onKeepDraft({ query, pickedId, quantity, price }),
+        }
+      : {}),
   })
 
   const reset = () => {
