@@ -15,6 +15,16 @@ import {
   type PriceGate,
 } from './accounting-currency'
 
+function businessSettingsPath(slug: string | null): string | null {
+  if (slug === null || !CABINET_SLUG_PATTERN.test(slug)) return null
+  try {
+    return cabinetPath(slug, 'business')
+  } catch {
+    // A registry without the business module (partial test doubles).
+    return null
+  }
+}
+
 export interface AccountingCurrency {
   status: AccountingCurrencyStatus
   /** The accounting currency when chosen; never a default. */
@@ -62,10 +72,7 @@ export function useAccountingCurrency(): AccountingCurrency {
     currency: statusCurrency(status),
     owner,
     gate: priceGate(status, owner),
-    settingsPath:
-      slug !== null && CABINET_SLUG_PATTERN.test(slug)
-        ? cabinetPath(slug, 'business')
-        : null,
+    settingsPath: businessSettingsPath(slug),
     refresh,
   }
 }

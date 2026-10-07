@@ -17,6 +17,7 @@ const profit = (over: Partial<CarProfitability> = {}): CarProfitability => ({
 const renderCard = (over: Partial<CarProfitability> = {}, expensesTotal = 0) =>
   render(
     <CarProfitabilityCard
+      currency="USD"
       expensesTotal={expensesTotal}
       profit={profit(over)}
       purchasePrice={13760}
@@ -26,7 +27,7 @@ const renderCard = (over: Partial<CarProfitability> = {}, expensesTotal = 0) =>
 it('names what the invested figure is made of', () => {
   renderCard({}, 420)
 
-  expect(screen.getByText(/авто 13 760 \$ \+ витрати 420 \$/)).toBeVisible()
+  expect(screen.getByText(/авто 13 760 USD \+ витрати 420 USD/)).toBeVisible()
 })
 
 it('says plainly when a car cost nothing beyond its price', () => {
@@ -69,7 +70,7 @@ it('does not call a car with no sales anything but that', () => {
 it('writes break-even on the bar so the marker is not colour alone', () => {
   renderCard()
 
-  expect(screen.getByText(/беззбитковість 13 760 \$/)).toBeVisible()
+  expect(screen.getByText(/беззбитковість 13 760 USD/)).toBeVisible()
 })
 
 it('leaves the payback bar out when nothing went in and nothing came back', () => {

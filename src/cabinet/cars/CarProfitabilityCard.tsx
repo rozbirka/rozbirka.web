@@ -1,7 +1,7 @@
 import { Card, StatusPill } from '@/components/app'
 import type { CarProfitability } from '@/api/cars'
 import { cn, plural } from '@/lib/utils'
-import { money } from './car-money'
+import { useCarMoney } from './car-money'
 import {
   PAYOFF_LABEL,
   payoffKind,
@@ -17,15 +17,19 @@ import {
  * merely broke even.
  */
 export function CarProfitabilityCard({
+  currency,
   expensesTotal,
   profit,
   purchasePrice,
 }: {
+  /** The accounting currency every figure here is kept in; `null` if unknown. */
+  currency: string | null
   /** Named so the invested figure is not a number to take on trust. */
   expensesTotal: number
   profit: CarProfitability
   purchasePrice: number
 }) {
+  const money = useCarMoney(currency)
   const kind = payoffKind(profit)
   const paid = kind === 'paid'
   const result = payoffResult(profit)

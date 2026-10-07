@@ -1,6 +1,8 @@
 import type { FormEvent } from 'react'
 import { Button, Field, Notice, Sheet, TextInput } from '@/components/app'
 import type { CarExpense } from '@/api/cars'
+import { MoneyInput } from '../currency/price-currency'
+import type { PriceSlots } from '../currency/use-price-slots'
 
 export function CarExpenseDrawer({
   amount,
@@ -13,6 +15,7 @@ export function CarExpenseDrawer({
   onOpenChange,
   onSubmit,
   open,
+  price,
 }: {
   amount: string
   busy: boolean
@@ -24,6 +27,8 @@ export function CarExpenseDrawer({
   onOpenChange: (open: boolean) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   open: boolean
+  /** Accounting currency of the amount: suffix, notes and lock warning. */
+  price: PriceSlots
 }) {
   const title = editing ? 'Редагувати витрату' : 'Додати витрату'
 
@@ -37,6 +42,7 @@ export function CarExpenseDrawer({
       eyebrow="Автомобілі · Витрати"
       footer={
         <>
+          <div className="basis-full empty:hidden">{price.saveNotes}</div>
           <Button
             disabled={busy}
             onClick={() => onOpenChange(false)}
@@ -46,7 +52,7 @@ export function CarExpenseDrawer({
           </Button>
           <Button
             aria-busy={busy}
-            disabled={busy}
+            disabled={busy || price.disabled}
             form={CAR_EXPENSE_FORM}
             type="submit"
             variant="primary"
@@ -83,8 +89,10 @@ export function CarExpenseDrawer({
             value={name}
           />
         </Field>
-        <Field hint="У доларах" label="Сума витрати">
-          <TextInput
+        <Field hint={price.hint} label="Сума витрати">
+          <MoneyInput
+            currency={price.currency}
+            disabled={price.disabled}
             inputMode="decimal"
             min="0"
             numeric
@@ -95,6 +103,7 @@ export function CarExpenseDrawer({
             value={amount}
           />
         </Field>
+        {price.note}
       </form>
     </Sheet>
   )
