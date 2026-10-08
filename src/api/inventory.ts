@@ -5,6 +5,17 @@ import type { components } from './generated/core'
 export type Warehouse = components['schemas']['WarehouseDto']
 export type WarehouseDetail = components['schemas']['WarehouseDetailDto']
 export type InventoryZone = components['schemas']['InventoryZoneDto']
+export interface InventoryShelf {
+  id: string
+  zoneId: string
+  zoneName: string
+  warehouseId: string
+  warehouseName: string
+  name: string
+  code: string
+  qrCode: string
+  isActive: boolean
+}
 export type InventorySession = components['schemas']['InventorySessionDto']
 export type InventorySessionResults =
   components['schemas']['InventorySessionResultsDto']
@@ -15,7 +26,12 @@ export type InventoryAuditEvent =
 export type InventoryScan = components['schemas']['InventoryScanDto']
 export type InventoryAdjustment =
   components['schemas']['InventoryAdjustmentDto']
-export type PartInventoryZone = components['schemas']['PartInventoryZoneDto']
+export type PartInventoryZone =
+  components['schemas']['PartInventoryZoneDto'] & {
+    shelfId?: string | null
+    shelfName?: string | null
+    shelfCode?: string | null
+  }
 
 export interface WarehouseInput {
   name: string
@@ -144,6 +160,48 @@ export const inventoryApi = {
   ): Promise<void> {
     await apiClient.delete(`/inventory/zones/${id(zoneId)}`, config(options))
   },
+  async getShelves(
+    zoneId?: string,
+    options: RequestOptions = {},
+  ): Promise<InventoryShelf[]> {
+    return (
+      await apiClient.get<InventoryShelf[]>('/inventory/shelves', {
+        ...config(options),
+        params: zoneId ? { zoneId } : undefined,
+      })
+    ).data
+  },
+  async createShelf(
+    input: { zoneId: string; name: string; code: string },
+    options: RequestOptions = {},
+  ): Promise<InventoryShelf> {
+    return (
+      await apiClient.post<InventoryShelf>(
+        '/inventory/shelves',
+        input,
+        config(options),
+      )
+    ).data
+  },
+  async updateShelf(
+    shelfId: string,
+    input: { name: string; code: string; isActive: boolean },
+    options: RequestOptions = {},
+  ): Promise<InventoryShelf> {
+    return (
+      await apiClient.put<InventoryShelf>(
+        `/inventory/shelves/${id(shelfId)}`,
+        input,
+        config(options),
+      )
+    ).data
+  },
+  async archiveShelf(
+    shelfId: string,
+    options: RequestOptions = {},
+  ): Promise<void> {
+    await apiClient.delete(`/inventory/shelves/${id(shelfId)}`, config(options))
+  },
   async getPartZones(
     partId: string,
     options: RequestOptions = {},
@@ -159,11 +217,12 @@ export const inventoryApi = {
     partId: string,
     zoneIds: string[],
     options: RequestOptions = {},
+    shelfId?: string,
   ): Promise<PartInventoryZone[]> {
     return (
       await apiClient.put<PartInventoryZone[]>(
         `/parts/${id(partId)}/inventory-zones`,
-        { zoneIds },
+        { zoneIds, ...(shelfId ? { shelfId } : {}) },
         config(options),
       )
     ).data

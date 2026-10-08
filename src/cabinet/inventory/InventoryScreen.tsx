@@ -44,6 +44,7 @@ import {
   type InventorySession,
   type InventorySessionResults,
   type InventoryZone,
+  type InventoryShelf,
   type PartInventoryZone,
   type Warehouse,
   type WarehouseDetail,
@@ -1286,6 +1287,8 @@ function WarehouseView({ id }: { id: string }) {
                   </ul>
                 </Card>
 
+                <WarehouseShelves zones={real} warehouseId={id} />
+
                 <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-5">
                   <section
                     aria-label={t('activeSession')}
@@ -1548,6 +1551,253 @@ function WarehouseView({ id }: { id: string }) {
         )
       }}
     </Resource>
+  )
+}
+
+function WarehouseShelves({
+  zones,
+  warehouseId,
+}: {
+  zones: WarehouseZone[]
+  warehouseId: string
+}) {
+  const t = useT(warehouseMessages)
+  const tc = useT(commonMessages)
+  const canManage = usePermission('inventory.zones.manage')
+  const { requireLatestMutation } = useLatestMutationGuard(
+    cabinetModules.inventory,
+  )
+  const documentLocale = useTenantSettings().documentLanguage ?? 'uk'
+  const loader = useCallback(
+    (signal: AbortSignal) =>
+      inventoryApi
+        .getShelves(undefined, { signal })
+        .then((items) =>
+          items.filter((item) => item.warehouseId === warehouseId),
+        ),
+    [warehouseId],
+  )
+  const resource = useLoad(loader, warehouseId)
+  const [addingTo, setAddingTo] = useState<WarehouseZone | null>(null)
+  const [editing, setEditing] = useState<InventoryShelf | null>(null)
+  const [archiving, setArchiving] = useState<InventoryShelf | null>(null)
+  const [draft, setDraft] = useState({ name: '', code: '' })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const loadedShelves =
+    resource.state.kind === 'ready' ? resource.state.data : []
+
+  const write = async (action: (signal: AbortSignal) => Promise<unknown>) => {
+    setBusy(true)
+    setError(null)
+    try {
+      const scope = requireLatestMutation({
+        permission: 'inventory.zones.manage',
+        quota: false,
+      })
+      await action(scope.signal)
+      resource.reload()
+      return true
+    } catch (cause) {
+      setError(normalizeApiProblem(cause).message)
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const save = async () => {
+    const name = draft.name.trim()
+    const code = draft.code.trim()
+    if (!name || !code) return
+    const ok = addingTo
+      ? await write((signal) =>
+          inventoryApi.createShelf(
+            { zoneId: addingTo.id, name, code },
+            { signal },
+          ),
+        )
+      : editing
+        ? await write((signal) =>
+            inventoryApi.updateShelf(
+              editing.id,
+              { name, code, isActive: editing.isActive },
+              { signal },
+            ),
+          )
+        : false
+    if (ok) {
+      setAddingTo(null)
+      setEditing(null)
+    }
+  }
+
+  const printShelf = async (shelf: InventoryShelf) => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      setError(t('printBlocked'))
+      return
+    }
+    printWindow.opener = null
+    try {
+      const html = await buildZoneLabelHtml(
+        [
+          {
+            id: shelf.id,
+            qrCode: shelf.qrCode,
+            zoneName: shelf.name,
+            zoneCode: shelf.code,
+            warehouseName: `${shelf.zoneName} · ${shelf.warehouseName}`,
+          },
+        ],
+        documentLocale,
+      )
+      printWindow.document.write(html)
+      printWindow.document.close()
+      printWindow.focus()
+      printWindow.print()
+    } catch {
+      printWindow.close()
+      setError(t('printFailed'))
+    }
+  }
+
+  return (
+    <Card
+      title={t('shelvesTitle')}
+      className="min-w-0 flex-[1_1_20rem]"
+      bodyClassName="px-6 pb-6"
+    >
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+      {resource.state.kind === 'loading' ? <SkeletonRows rows={3} /> : null}
+      {resource.state.kind === 'error' ? (
+        <Button onClick={resource.reload} variant="ghost">
+          {tc('retry')}
+        </Button>
+      ) : null}
+      {resource.state.kind === 'ready' ? (
+        <div className="grid gap-5">
+          {zones
+            .filter((zone) => !zone.isSystemUnassigned && zone.isActive)
+            .map((zone) => {
+              const shelves = loadedShelves.filter(
+                (shelf) => shelf.zoneId === zone.id,
+              )
+              return (
+                <section
+                  className="border-app-line border-b pb-4 last:border-0"
+                  key={zone.id}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-semibold text-white">{zone.name}</h3>
+                    {canManage ? (
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          setDraft({ name: '', code: '' })
+                          setAddingTo(zone)
+                        }}
+                      >
+                        <Plus aria-hidden />
+                        {t('addShelf')}
+                      </Button>
+                    ) : null}
+                  </div>
+                  {shelves.length === 0 ? (
+                    <p className="text-app-muted mt-2 text-sm">
+                      {t('noShelves')}
+                    </p>
+                  ) : null}
+                  <ul className="mt-2 grid gap-2">
+                    {shelves.map((shelf) => (
+                      <li
+                        className="flex items-center justify-between gap-3"
+                        key={shelf.id}
+                      >
+                        <span className="min-w-0 truncate text-sm text-white">
+                          {shelf.name}{' '}
+                          <span className="text-app-muted">· {shelf.code}</span>
+                        </span>
+                        <div className="flex shrink-0 gap-1">
+                          <Button
+                            variant="ghost"
+                            aria-label={t('printShelf')}
+                            onClick={() => void printShelf(shelf)}
+                          >
+                            <Printer aria-hidden />
+                          </Button>
+                          {canManage ? (
+                            <>
+                              <Button
+                                variant="ghost"
+                                aria-label={t('editShelf')}
+                                onClick={() => {
+                                  setDraft({
+                                    name: shelf.name,
+                                    code: shelf.code,
+                                  })
+                                  setEditing(shelf)
+                                }}
+                              >
+                                <Pencil aria-hidden />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                aria-label={t('archiveShelf')}
+                                onClick={() => setArchiving(shelf)}
+                              >
+                                <Archive aria-hidden />
+                              </Button>
+                            </>
+                          ) : null}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )
+            })}
+        </div>
+      ) : null}
+      <FormDialog
+        open={addingTo !== null || editing !== null}
+        title={addingTo ? t('newShelfTitle') : t('editShelf')}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAddingTo(null)
+            setEditing(null)
+          }
+        }}
+        onSubmit={(event) => {
+          event.preventDefault()
+          void save()
+        }}
+        pending={busy}
+        submitDisabled={!draft.name.trim() || !draft.code.trim()}
+        submitLabel={tc('save')}
+      >
+        <NameAndCode draft={draft} onChange={setDraft} />
+      </FormDialog>
+      <ConfirmDialog
+        open={archiving !== null}
+        title={t('archiveShelf')}
+        confirmLabel={t('archiveShelf')}
+        consequence={t('archiveShelfHint')}
+        destructive
+        pending={busy}
+        onOpenChange={(open) => {
+          if (!open) setArchiving(null)
+        }}
+        onConfirm={() => {
+          if (archiving)
+            void write((signal) =>
+              inventoryApi.archiveShelf(archiving.id, { signal }),
+            ).then((ok) => {
+              if (ok) setArchiving(null)
+            })
+        }}
+      />
+    </Card>
   )
 }
 
@@ -4414,6 +4664,7 @@ const PLACEMENT_EVENTS = new Set(['placed', 'unplaced', 'moved'])
 
 interface PlacementData {
   zones: InventoryZone[]
+  shelves: InventoryShelf[]
   placement: PartInventoryZone[]
   part: PartDetail | null
   history: PartHistory | null
@@ -4433,35 +4684,40 @@ function PartPlacementView({ partId }: { partId: string }) {
   )
   const loader = useCallback(
     async (signal: AbortSignal): Promise<PlacementData> => {
-      const [zones, placement, part, history, byZone] = await Promise.all([
-        inventoryApi.getZones({ signal }),
-        inventoryApi.getPartZones(partId, { signal }),
-        canSeeParts
-          ? partsApi.get(partId, { signal }).then(
-              (data) => data,
-              () => null,
-            )
-          : Promise.resolve(null),
-        canSeeParts
-          ? partsApi.history(partId, { signal }).then(
-              (data) => data,
-              () => null,
-            )
-          : Promise.resolve(null),
-        canSeeParts
-          ? partsApi.facets({}, ['zone'], { signal }).then(
-              (facets) =>
-                new Map(facets.zones.map((zone) => [zone.id, zone.count])),
-              () => null,
-            )
-          : Promise.resolve(null),
-      ])
-      return { zones, placement, part, history, byZone }
+      const [zones, shelves, placement, part, history, byZone] =
+        await Promise.all([
+          inventoryApi.getZones({ signal }),
+          inventoryApi.getShelves(undefined, { signal }),
+          inventoryApi.getPartZones(partId, { signal }),
+          canSeeParts
+            ? partsApi.get(partId, { signal }).then(
+                (data) => data,
+                () => null,
+              )
+            : Promise.resolve(null),
+          canSeeParts
+            ? partsApi.history(partId, { signal }).then(
+                (data) => data,
+                () => null,
+              )
+            : Promise.resolve(null),
+          canSeeParts
+            ? partsApi.facets({}, ['zone'], { signal }).then(
+                (facets) =>
+                  new Map(facets.zones.map((zone) => [zone.id, zone.count])),
+                () => null,
+              )
+            : Promise.resolve(null),
+        ])
+      return { zones, shelves, placement, part, history, byZone }
     },
     [canSeeParts, partId],
   )
   const resource = useLoad(loader, partId)
   const [selection, setSelection] = useState<string[] | null>(null)
+  const [shelfSelection, setShelfSelection] = useState<
+    string | null | undefined
+  >(undefined)
   const [warehouseId, setWarehouseId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [saving, setSaving] = useState(false)
@@ -4486,10 +4742,22 @@ function PartPlacementView({ partId }: { partId: string }) {
         permission: 'inventory.zones.manage',
         quota: false,
       })
-      await inventoryApi.replacePartZones(partId, selected, {
-        signal: scope.signal,
-      })
+      const currentShelfId =
+        resource.state.kind === 'ready'
+          ? resource.state.data.placement.find(
+              (zone) => zone.shelfId && selected.includes(zone.zoneId),
+            )?.shelfId
+          : undefined
+      await inventoryApi.replacePartZones(
+        partId,
+        selected,
+        { signal: scope.signal },
+        shelfSelection === undefined
+          ? (currentShelfId ?? undefined)
+          : (shelfSelection ?? undefined),
+      )
       setSelection(null)
+      setShelfSelection(undefined)
       setSaved(true)
       resource.reload()
     } catch (error) {
@@ -4505,7 +4773,14 @@ function PartPlacementView({ partId }: { partId: string }) {
 
   return (
     <Resource retry={resource.reload} state={resource.state}>
-      {({ zones, placement, part, history, byZone }: PlacementData) => {
+      {({
+        zones,
+        shelves,
+        placement,
+        part,
+        history,
+        byZone,
+      }: PlacementData) => {
         const real = zones.filter(
           (zone) => zone.isActive && !zone.isSystemUnassigned,
         )
@@ -4534,15 +4809,25 @@ function PartPlacementView({ partId }: { partId: string }) {
           ...inHouse.map((zone) => partsIn(zone.id) ?? 0),
         )
         const before = placement.map((zone) => zone.zoneId)
+        const selectedShelfId =
+          shelfSelection === undefined
+            ? (placement.find((zone) => zone.shelfId)?.shelfId ?? null)
+            : shelfSelection
         const changed =
           selected.length !== before.length ||
-          selected.some((id) => !before.includes(id))
+          selected.some((id) => !before.includes(id)) ||
+          selectedShelfId !==
+            (placement.find((zone) => zone.shelfId)?.shelfId ?? null)
         const chosen = real.filter((zone) => selected.includes(zone.id))
+        const availableShelves = shelves.filter(
+          (shelf) => shelf.isActive && selected.includes(shelf.zoneId),
+        )
         const moves = (history?.events ?? []).filter((event) =>
           PLACEMENT_EVENTS.has(event.eventType),
         )
         const toggle = (zoneId: string) => {
           setSaved(false)
+          setShelfSelection(null)
           setSelection((value) => {
             const current = value ?? selected
             return current.includes(zoneId)
@@ -4799,9 +5084,39 @@ function PartPlacementView({ partId }: { partId: string }) {
                     )}
                   </Step>
 
+                  <Step number="03" title={t('shelf')} hint={t('shelfHint')}>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <label className="border-app-line flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm">
+                        <input
+                          type="radio"
+                          name="placement-shelf"
+                          disabled={!canManage}
+                          checked={!selectedShelfId}
+                          onChange={() => setShelfSelection(null)}
+                        />
+                        {t('noShelf')}
+                      </label>
+                      {availableShelves.map((shelf) => (
+                        <label
+                          className="border-app-line flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm"
+                          key={shelf.id}
+                        >
+                          <input
+                            type="radio"
+                            name="placement-shelf"
+                            disabled={!canManage}
+                            checked={selectedShelfId === shelf.id}
+                            onChange={() => setShelfSelection(shelf.id)}
+                          />
+                          {shelf.zoneName} · {shelf.name}
+                        </label>
+                      ))}
+                    </div>
+                  </Step>
+
                   <Step
                     hint={t('quantityHint')}
-                    number="03"
+                    number="04"
                     title={t('quantity')}
                   >
                     <div className="flex flex-wrap items-center gap-4.5">

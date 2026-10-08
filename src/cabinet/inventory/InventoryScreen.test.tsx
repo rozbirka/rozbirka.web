@@ -23,10 +23,14 @@ const api = vi.hoisted(() => ({
   getScans: vi.fn(),
   getPartZones: vi.fn(),
   replacePartZones: vi.fn(),
+  getShelves: vi.fn().mockResolvedValue([]),
   applyAdjustment: vi.fn(),
   updateWarehouse: vi.fn(),
   archiveWarehouse: vi.fn(),
   createZone: vi.fn(),
+  createShelf: vi.fn(),
+  updateShelf: vi.fn(),
+  archiveShelf: vi.fn(),
   updateZone: vi.fn(),
   archiveZone: vi.fn(),
   startSession: vi.fn(),
@@ -216,6 +220,10 @@ beforeEach(() => {
   api.updateWarehouse.mockResolvedValue(undefined)
   api.archiveWarehouse.mockResolvedValue(undefined)
   api.createZone.mockResolvedValue(undefined)
+  api.getShelves.mockResolvedValue([])
+  api.createShelf.mockResolvedValue(undefined)
+  api.updateShelf.mockResolvedValue(undefined)
+  api.archiveShelf.mockResolvedValue(undefined)
   api.updateZone.mockResolvedValue(undefined)
   api.archiveZone.mockResolvedValue(undefined)
   api.startSession.mockResolvedValue(session)
@@ -584,6 +592,49 @@ it('manages part placement without exposing counting actions', async () => {
   expect(screen.queryByText(/камера/i)).not.toBeInTheDocument()
 })
 
+it('saves a shelf only within the selected zone', async () => {
+  const user = userEvent.setup()
+  api.getPartZones.mockResolvedValue([
+    {
+      zoneId: 'zone-1',
+      warehouseId: 'wh-1',
+      warehouseName: 'Основний склад',
+      zoneName: 'Стелаж A1',
+      zoneCode: 'A1',
+      zoneQrCode: 'ZONE-1',
+      isSystemUnassigned: false,
+      shelfId: null,
+    },
+  ])
+  api.getShelves.mockResolvedValue([
+    {
+      id: 'shelf-1',
+      zoneId: 'zone-1',
+      zoneName: 'Стелаж A1',
+      warehouseId: 'wh-1',
+      warehouseName: 'Основний склад',
+      name: 'Полиця 1',
+      code: 'P1',
+      qrCode: 'inventory-shelf:shelf-1',
+      isActive: true,
+    },
+  ])
+  renderAt('/app/yard/parts/part-1/inventory')
+
+  await user.click(
+    await screen.findByRole('radio', { name: /Стелаж A1 · Полиця 1/ }),
+  )
+  await user.click(screen.getByRole('button', { name: 'Зберегти розміщення' }))
+  await waitFor(() =>
+    expect(api.replacePartZones).toHaveBeenCalledWith(
+      'part-1',
+      ['zone-1'],
+      expect.any(Object),
+      'shelf-1',
+    ),
+  )
+})
+
 it('allows a long part QR code to wrap on a narrow placement screen', async () => {
   const qrCode =
     '3870f3f5ecb1dbab378027dd9299c57988085d4d7b80054a7a8156cf523e87db'
@@ -709,6 +760,45 @@ it('offers warehouse and zone management and prints actual zone QR labels', asyn
     'uk',
   )
   expect(write).toHaveBeenCalledWith('<html>zones</html>')
+  expect(print).toHaveBeenCalled()
+})
+
+it('shows shelves under their zone and prints the shelf QR', async () => {
+  const user = userEvent.setup()
+  const print = vi.fn()
+  vi.spyOn(window, 'open').mockReturnValue({
+    document: { write: vi.fn(), close: vi.fn() },
+    focus: vi.fn(),
+    print,
+    opener: null,
+  } as never)
+  api.getShelves.mockResolvedValue([
+    {
+      id: 'shelf-1',
+      zoneId: 'zone-1',
+      zoneName: 'Стелаж A1',
+      warehouseId: 'wh-1',
+      warehouseName: 'Основний склад',
+      name: 'Полиця 1',
+      code: 'P1',
+      qrCode: 'inventory-shelf:shelf-1',
+      isActive: true,
+    },
+  ])
+
+  renderAt('/app/yard/inventory/warehouses/wh-1')
+
+  expect(await screen.findByText(/Полиця 1/)).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Друк QR полиці' }))
+  expect(printable.buildZoneLabelHtml).toHaveBeenCalledWith(
+    [
+      expect.objectContaining({
+        qrCode: 'inventory-shelf:shelf-1',
+        zoneName: 'Полиця 1',
+      }),
+    ],
+    'uk',
+  )
   expect(print).toHaveBeenCalled()
 })
 
