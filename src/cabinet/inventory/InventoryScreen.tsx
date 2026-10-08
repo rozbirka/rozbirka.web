@@ -31,6 +31,7 @@ import {
   FormDialog,
   Notice,
   SearchInput,
+  Sheet,
   SkeletonRows,
   StatusPill,
   TextArea,
@@ -1563,6 +1564,7 @@ function WarehouseShelves({
 }) {
   const t = useT(warehouseMessages)
   const tc = useT(commonMessages)
+  const formId = useId()
   const canManage = usePermission('inventory.zones.manage')
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.inventory,
@@ -1694,6 +1696,7 @@ function WarehouseShelves({
                       <Button
                         variant="ghost"
                         onClick={() => {
+                          setError(null)
                           setDraft({ name: '', code: '' })
                           setAddingTo(zone)
                         }}
@@ -1732,6 +1735,7 @@ function WarehouseShelves({
                                 variant="ghost"
                                 aria-label={t('editShelf')}
                                 onClick={() => {
+                                  setError(null)
                                   setDraft({
                                     name: shelf.name,
                                     code: shelf.code,
@@ -1759,25 +1763,52 @@ function WarehouseShelves({
             })}
         </div>
       ) : null}
-      <FormDialog
+      <Sheet
         open={addingTo !== null || editing !== null}
         title={addingTo ? t('newShelfTitle') : t('editShelf')}
+        eyebrow={addingTo?.name ?? editing?.zoneName}
         onOpenChange={(open) => {
-          if (!open) {
+          if (!open && !busy) {
             setAddingTo(null)
             setEditing(null)
           }
         }}
-        onSubmit={(event) => {
-          event.preventDefault()
-          void save()
-        }}
-        pending={busy}
-        submitDisabled={!draft.name.trim() || !draft.code.trim()}
-        submitLabel={tc('save')}
+        footer={
+          <>
+            <Button
+              disabled={busy}
+              onClick={() => {
+                setAddingTo(null)
+                setEditing(null)
+              }}
+              type="button"
+            >
+              {tc('cancel')}
+            </Button>
+            <Button
+              aria-busy={busy}
+              disabled={busy || !draft.name.trim() || !draft.code.trim()}
+              form={formId}
+              type="submit"
+              variant="primary"
+            >
+              {tc('save')}
+            </Button>
+          </>
+        }
       >
-        <NameAndCode draft={draft} onChange={setDraft} />
-      </FormDialog>
+        <form
+          className="grid content-start gap-5"
+          id={formId}
+          onSubmit={(event) => {
+            event.preventDefault()
+            void save()
+          }}
+        >
+          {error ? <Notice tone="danger">{error}</Notice> : null}
+          <NameAndCode draft={draft} onChange={setDraft} />
+        </form>
+      </Sheet>
       <ConfirmDialog
         open={archiving !== null}
         title={t('archiveShelf')}

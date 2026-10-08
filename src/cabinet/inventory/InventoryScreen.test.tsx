@@ -802,6 +802,30 @@ it('shows shelves under their zone and prints the shelf QR', async () => {
   expect(print).toHaveBeenCalled()
 })
 
+it('creates a shelf in a side drawer for its zone', async () => {
+  const user = userEvent.setup()
+  renderAt('/app/yard/inventory/warehouses/wh-1')
+
+  await user.click(await screen.findByRole('button', { name: 'Додати полицю' }))
+  const drawer = screen.getByRole('dialog', { name: 'Нова полиця' })
+  expect(drawer).toHaveClass('sm:right-0')
+  expect(within(drawer).getByText('Стелаж A1')).toBeInTheDocument()
+
+  await user.type(
+    within(drawer).getByRole('textbox', { name: 'Назва' }),
+    'Полиця 2',
+  )
+  await user.type(within(drawer).getByRole('textbox', { name: 'Код' }), 'P2')
+  await user.click(within(drawer).getByRole('button', { name: 'Зберегти' }))
+
+  await waitFor(() =>
+    expect(api.createShelf).toHaveBeenCalledWith(
+      { zoneId: 'zone-1', name: 'Полиця 2', code: 'P2' },
+      expect.anything(),
+    ),
+  )
+})
+
 it('counts the warehouse stock from the parts module', async () => {
   renderAt('/app/yard/inventory/warehouses/wh-1')
 
