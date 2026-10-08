@@ -110,3 +110,25 @@ it('renders first-tenant onboarding for an authenticated user with no tenants', 
   expect(screen.getByLabelText('Назва розбірки')).toBeInTheDocument()
   expect(screen.queryByLabelText('Поточний маршрут')).toBeNull()
 })
+
+it('sends a returning owner with a phone placeholder name to the name step before business setup', async () => {
+  const current = vi.mocked(useAuth)()
+  vi.mocked(useAuth).mockReturnValue({
+    ...current,
+    user: {
+      id: 'user-1',
+      phone: '+380971110000',
+      displayName: '+380971110000',
+      effectiveLanguage: 'uk',
+    },
+    tenant: null,
+    tenants: [],
+  })
+
+  renderAccount()
+
+  expect(await screen.findByLabelText('Поточний маршрут')).toHaveTextContent(
+    '/login',
+  )
+  expect(screen.queryByLabelText('Назва розбірки')).toBeNull()
+})

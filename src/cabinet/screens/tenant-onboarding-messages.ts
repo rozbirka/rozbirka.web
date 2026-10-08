@@ -12,7 +12,7 @@ export const tenantOnboardingMessages = defineMessages({
     account: 'Особистий акаунт',
     signOut: 'Вийти',
     nameLabel: 'Назва розбірки',
-    nameHint: 'Наприклад: CarDubliany',
+    nameHint: 'Наприклад: Auto Parts Yard',
     cityLabel: 'Місто (необовʼязково)',
     cityHint:
       'Показуємо в картках запчастин, щоб покупці бачили, звідки доставка.',
@@ -32,7 +32,7 @@ export const tenantOnboardingMessages = defineMessages({
     account: 'Personal account',
     signOut: 'Sign out',
     nameLabel: 'Business name',
-    nameHint: 'For example: Smith Auto Parts',
+    nameHint: 'For example: Auto Parts Yard',
     cityLabel: 'City (optional)',
     cityHint: 'Shown on part cards so buyers can see where it ships from.',
     cityPlaceholder: 'Manchester',
@@ -51,7 +51,7 @@ export const tenantOnboardingMessages = defineMessages({
     account: 'Konto osobiste',
     signOut: 'Wyloguj się',
     nameLabel: 'Nazwa firmy',
-    nameHint: 'Na przykład: Auto Części Kowalski',
+    nameHint: 'Na przykład: Auto Parts Yard',
     cityLabel: 'Miasto (opcjonalnie)',
     cityHint:
       'Pokazujemy je na kartach części, aby kupujący widzieli, skąd jest wysyłka.',
