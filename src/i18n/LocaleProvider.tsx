@@ -31,7 +31,10 @@ export interface LocaleContextValue {
   /** Remember a choice in this browser (`null` returns to automatic). */
   setDevicePreference: (locale: Locale | null) => void
   /** @internal used by `LocaleOverride` to keep `<html lang>` truthful. */
-  registerDocumentLocale: (locale: Locale) => () => void
+  registerDocumentLocale: (
+    locale: Locale,
+    syncRequestLocale?: boolean,
+  ) => () => void
 }
 
 const sourceResolution: LocaleResolution = {
@@ -105,19 +108,25 @@ export function LocaleProvider({
   }, [])
 
   const [overrides, setOverrides] = useState<
-    readonly { id: number; locale: Locale }[]
+    readonly { id: number; locale: Locale; syncRequestLocale: boolean }[]
   >([])
   const nextOverrideId = useRef(0)
-  const registerDocumentLocale = useCallback((locale: Locale) => {
-    const id = nextOverrideId.current++
-    setOverrides((list) => [...list, { id, locale }])
-    return () => setOverrides((list) => list.filter((item) => item.id !== id))
-  }, [])
+  const registerDocumentLocale = useCallback(
+    (locale: Locale, syncRequestLocale = false) => {
+      const id = nextOverrideId.current++
+      setOverrides((list) => [...list, { id, locale, syncRequestLocale }])
+      return () => setOverrides((list) => list.filter((item) => item.id !== id))
+    },
+    [],
+  )
 
+  const apiLocale =
+    overrides.findLast((item) => item.syncRequestLocale)?.locale ??
+    resolution.locale
   useEffect(() => {
     if (!syncDocumentLang) return
-    requestLocale.set(resolution.locale)
-  }, [resolution.locale, syncDocumentLang])
+    requestLocale.set(apiLocale)
+  }, [apiLocale, syncDocumentLang])
 
   const documentLocale = overrides.at(-1)?.locale ?? resolution.locale
   useEffect(() => {
@@ -158,15 +167,18 @@ export function LocaleProvider({
 export function LocaleOverride({
   locale,
   children,
+  syncRequestLocale = false,
 }: {
   locale: Locale
   children: ReactNode
+  /** Auth screens also use their public language for SMS and API errors. */
+  syncRequestLocale?: boolean
 }) {
   const parent = useContext(LocaleContext)
   const { registerDocumentLocale } = parent
   useEffect(
-    () => registerDocumentLocale(locale),
-    [locale, registerDocumentLocale],
+    () => registerDocumentLocale(locale, syncRequestLocale),
+    [locale, registerDocumentLocale, syncRequestLocale],
   )
   const value = useMemo(() => ({ ...parent, locale }), [locale, parent])
   return (
