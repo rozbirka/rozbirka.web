@@ -826,6 +826,53 @@ it('creates a shelf in a side drawer for its zone', async () => {
   )
 })
 
+it('creates a zone in a side drawer for its warehouse', async () => {
+  const user = userEvent.setup()
+  renderAt('/app/yard/inventory/warehouses/wh-1')
+
+  await user.click(await screen.findByRole('button', { name: 'Додати зону' }))
+  const drawer = screen.getByRole('dialog', { name: 'Нова зона' })
+  expect(drawer).toHaveClass('sm:right-0')
+  expect(within(drawer).getByText('Основний склад')).toBeInTheDocument()
+
+  await user.type(
+    within(drawer).getByRole('textbox', { name: 'Назва' }),
+    'Стелаж B2',
+  )
+  await user.type(within(drawer).getByRole('textbox', { name: 'Код' }), 'B2')
+  await user.click(within(drawer).getByRole('button', { name: 'Додати зону' }))
+
+  await waitFor(() =>
+    expect(api.createZone).toHaveBeenCalledWith(
+      { warehouseId: 'wh-1', name: 'Стелаж B2', code: 'B2' },
+      expect.anything(),
+    ),
+  )
+})
+
+it('edits a zone in the same side drawer', async () => {
+  const user = userEvent.setup()
+  renderAt('/app/yard/inventory/warehouses/wh-1')
+
+  await user.click(
+    await screen.findByRole('button', { name: 'Редагувати зону Стелаж A1' }),
+  )
+  const drawer = screen.getByRole('dialog', { name: 'Редагувати зону' })
+  expect(drawer).toHaveClass('sm:right-0')
+  const name = within(drawer).getByRole('textbox', { name: 'Назва' })
+  await user.clear(name)
+  await user.type(name, 'Стелаж A2')
+  await user.click(within(drawer).getByRole('button', { name: 'Зберегти' }))
+
+  await waitFor(() =>
+    expect(api.updateZone).toHaveBeenCalledWith(
+      'zone-1',
+      { name: 'Стелаж A2', code: 'A1', isActive: true },
+      expect.anything(),
+    ),
+  )
+})
+
 it('counts the warehouse stock from the parts module', async () => {
   renderAt('/app/yard/inventory/warehouses/wh-1')
 

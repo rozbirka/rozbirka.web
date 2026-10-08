@@ -741,6 +741,7 @@ function WarehouseView({ id }: { id: string }) {
   const t = useT(warehouseMessages)
   const ti = useT(inventoryMessages)
   const tc = useT(commonMessages)
+  const zoneFormId = useId()
   const { date, day } = useInventoryFormat()
   // Printed labels follow the tenant document language, not the UI locale.
   const documentLocale = useTenantSettings().documentLanguage ?? 'uk'
@@ -1133,6 +1134,7 @@ function WarehouseView({ id }: { id: string }) {
                       <Button
                         className="text-[13px] font-semibold"
                         onClick={() => {
+                          setOperationError(null)
                           setDraft({ name: '', code: '' })
                           setAddingZone(true)
                         }}
@@ -1249,6 +1251,7 @@ function WarehouseView({ id }: { id: string }) {
                                 className="min-w-11 px-0"
                                 disabled={zone.isSystemUnassigned}
                                 onClick={() => {
+                                  setOperationError(null)
                                   setDraft({
                                     name: zone.name,
                                     code: zone.code,
@@ -1468,52 +1471,65 @@ function WarehouseView({ id }: { id: string }) {
               <NameAndCode draft={draft} onChange={setDraft} />
             </FormDialog>
 
-            <FormDialog
-              description={t('newZoneHint')}
-              onOpenChange={(next) => {
-                if (!next) setAddingZone(false)
-              }}
-              onSubmit={(event) => {
-                event.preventDefault()
-                void createZone()
-              }}
-              open={addingZone}
-              pending={busy}
-              submitDisabled={
-                draft.name.trim() === '' || draft.code.trim() === ''
-              }
-              submitLabel={t('addZone')}
-              title={t('newZoneTitle')}
-            >
-              <NameAndCode draft={draft} onChange={setDraft} />
-            </FormDialog>
-
-            <FormDialog
+            <Sheet
               description={
-                editingZone === null
-                  ? undefined
-                  : t('editZoneHint', {
-                      zone: editingZone.name,
-                      warehouse: warehouse.name,
-                    })
+                addingZone
+                  ? t('newZoneHint')
+                  : editingZone === null
+                    ? undefined
+                    : t('editZoneHint', {
+                        zone: editingZone.name,
+                        warehouse: warehouse.name,
+                      })
               }
+              eyebrow={warehouse.name}
               onOpenChange={(next) => {
-                if (!next) setEditingZone(null)
+                if (!next && !busy) {
+                  setAddingZone(false)
+                  setEditingZone(null)
+                }
               }}
-              onSubmit={(event) => {
-                event.preventDefault()
-                if (editingZone !== null) void saveZone(editingZone)
-              }}
-              open={editingZone !== null}
-              pending={busy}
-              submitDisabled={
-                draft.name.trim() === '' || draft.code.trim() === ''
+              open={addingZone || editingZone !== null}
+              title={addingZone ? t('newZoneTitle') : t('editZoneTitle')}
+              footer={
+                <>
+                  <Button
+                    disabled={busy}
+                    onClick={() => {
+                      setAddingZone(false)
+                      setEditingZone(null)
+                    }}
+                    type="button"
+                  >
+                    {tc('cancel')}
+                  </Button>
+                  <Button
+                    aria-busy={busy}
+                    disabled={busy || !draft.name.trim() || !draft.code.trim()}
+                    form={zoneFormId}
+                    type="submit"
+                    variant="primary"
+                  >
+                    {addingZone ? t('addZone') : tc('save')}
+                  </Button>
+                </>
               }
-              submitLabel={tc('save')}
-              title={t('editZoneTitle')}
             >
-              <NameAndCode draft={draft} onChange={setDraft} />
-            </FormDialog>
+              <form
+                className="grid content-start gap-5"
+                id={zoneFormId}
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  if (addingZone) void createZone()
+                  else if (editingZone !== null) void saveZone(editingZone)
+                }}
+              >
+                {operationError ? (
+                  <Notice tone="danger">{operationError}</Notice>
+                ) : null}
+                <NameAndCode draft={draft} onChange={setDraft} />
+              </form>
+            </Sheet>
 
             <ConfirmDialog
               confirmLabel={t('archiveWarehouse')}
