@@ -161,30 +161,25 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}-${{ matrix.browser }}
 
-      # Installing system deps goes through apt and has hung on the runner;
-      # bound each attempt so a stuck mirror costs seconds, not the whole job.
+      # System packages come from the runner's apt mirror, which can crawl
+      # (WebKit needs ~126 MB). Retrying apt only races the previous run for
+      # the dpkg lock, so install them once with a long bound; only the
+      # browser download itself is retried.
       - if: inputs.run_build
         name: Install ${{ matrix.browser }}
         shell: bash
         run: |
           set -euo pipefail
           # The runner's own background apt run can hold the dpkg lock for a
-          # while; make apt wait for it (inside the attempt bound) instead of
-          # failing at once with "Could not get lock".
+          # while; make apt wait for it instead of failing at once.
           echo 'DPkg::Lock::Timeout "180";' | sudo tee /etc/apt/apt.conf.d/99-dpkg-lock-timeout >/dev/null
+          timeout 900 npx playwright install-deps ${{ matrix.browser }}
           for attempt in 1 2 3; do
-            if timeout 300 npx playwright install --with-deps ${{ matrix.browser }}; then
+            if timeout 300 npx playwright install ${{ matrix.browser }}; then
               exit 0
             fi
-            echo "playwright install attempt ${attempt} failed or timed out; retrying"
-            # `timeout` stops npx but not the root apt-get it started, which
-            # keeps downloading and holds the dpkg lock; let it finish (its
-            # packages then make the retry fast) instead of racing it.
-            for _ in $(seq 1 60); do
-              pgrep -x apt-get >/dev/null || pgrep -x dpkg >/dev/null || break
-              sleep 5
-            done
-            sleep 5
+            echo "playwright browser download attempt ${attempt} failed or timed out; retrying"
+            sleep 10
           done
           exit 1
 
