@@ -2361,6 +2361,34 @@ it('starts a part from a car page with that car already chosen', async () => {
   ).toHaveValue('car-1')
 })
 
+it('hides the create-car action after choosing a source car and restores it when cleared', async () => {
+  cabinetMock.snapshot.permissions.add('cars.manage')
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/new"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  expect(
+    screen.getByRole('link', { name: 'Створити автомобіль' }),
+  ).toBeVisible()
+  const source = await screen.findByRole('combobox', {
+    name: 'Автомобіль-джерело',
+  })
+  fireEvent.change(source, { target: { value: 'car-1' } })
+  expect(screen.queryByRole('link', { name: 'Створити автомобіль' })).toBeNull()
+
+  fireEvent.change(source, { target: { value: '' } })
+  expect(
+    screen.getByRole('link', { name: 'Створити автомобіль' }),
+  ).toBeVisible()
+})
+
 it('adds and removes vehicles in the compatibility list', async () => {
   const user = userEvent.setup()
 

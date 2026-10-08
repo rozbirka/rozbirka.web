@@ -3180,7 +3180,8 @@ function PartFields({
             </Field>
           ) : null}
         </div>
-        {sourceCreateLink ? (
+        {sourceCreateLink &&
+        (sourceCreateLink !== 'cars' || !values.sourceId) ? (
           <div className="grid gap-1.5">
             <div className="flex flex-wrap gap-2">
               <Button asChild>
