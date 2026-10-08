@@ -26,7 +26,8 @@ import { useAuth } from '@/auth/AuthContext'
 import { resolvePostLoginDestination } from '@/auth/post-login'
 import type { SendOtpResponse } from '@/api/types'
 import { useT } from '@/i18n/hooks'
-import { useLocale } from '@/i18n/LocaleProvider'
+import { LocaleOverride, useLocale } from '@/i18n/LocaleProvider'
+import { siteLocalePreference } from '@/i18n/locale-preference'
 import type { Translate } from '@/i18n/messages'
 import { Segmented } from '@/components/app/segmented'
 import {
@@ -145,7 +146,18 @@ interface VerifyOutcome {
   next: 'name' | 'success'
 }
 
+/** Keep the public language for the whole auth flow without changing the profile. */
 export function LoginScreen() {
+  const { locale } = useLocale()
+  const [language] = useState(() => siteLocalePreference.get() ?? locale)
+  return (
+    <LocaleOverride locale={language} syncRequestLocale>
+      <LoginFlow />
+    </LocaleOverride>
+  )
+}
+
+function LoginFlow() {
   const navigate = useNavigate()
   const location = useLocation()
   const auth = useAuth()

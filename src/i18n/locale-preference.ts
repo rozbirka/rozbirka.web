@@ -39,8 +39,8 @@ function storedLocale(key: string) {
 export const localePreference = storedLocale(LOCALE_KEY)
 
 /**
- * Public-site language chosen with the landing switcher. Read only by public
- * pages without a language of their own (the privacy policy); it never
+ * Public-site language chosen with the landing switcher. Read by auth screens
+ * and public pages without their own language (the privacy policy); it never
  * changes the cabinet language, and the cabinet never changes it.
  */
 export const siteLocalePreference = storedLocale(SITE_LOCALE_KEY)
