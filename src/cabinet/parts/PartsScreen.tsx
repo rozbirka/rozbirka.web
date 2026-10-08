@@ -4336,13 +4336,13 @@ function PartEdit({
               </Card>
 
               <Card title={t('deletion')}>
-                <p className="text-app-muted text-sm">
+                <p className="text-app-muted text-sm leading-5">
                   {detail && detail.quantityReserved > 0
                     ? t('deleteBlocked')
                     : t('deleteAllowed')}
                 </p>
                 <Button
-                  className="w-full text-sm font-semibold"
+                  className="mt-5 w-full text-sm font-semibold"
                   onClick={() => setConfirmingDelete(true)}
                   type="button"
                   variant="danger"
