@@ -14,6 +14,9 @@ describe('billing vocabulary', () => {
     expect(featureLabel('bulk_export')).toBe('Масовий експорт')
     expect(featureLabel('bulk_export', 'en-GB')).toBe('Bulk export')
     expect(featureLabel('bulk_export', 'pl')).toBe('Eksport masowy')
+    expect(featureLabel('qr_codes')).toBe('QR-коди')
+    expect(featureLabel('qr_codes', 'en-GB')).toBe('QR codes')
+    expect(featureLabel('qr_codes', 'pl')).toBe('Kody QR')
     expect(featureLabel('future_feature', 'en-GB')).toBe('future_feature')
   })
 
