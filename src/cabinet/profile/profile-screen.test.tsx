@@ -399,6 +399,16 @@ it('groups personal details and access, with compact account actions', () => {
   expect(
     within(personal).getByRole('button', { name: 'Скасувати зміни' }),
   ).toBeVisible()
+  const save = within(personal).getByRole('button', { name: 'Зберегти' })
+  const cancel = within(personal).getByRole('button', {
+    name: 'Скасувати зміни',
+  })
+  const signOutButton = within(personal).getByRole('button', {
+    name: 'Вийти з системи',
+  })
+  expect(signOutButton.parentElement).toBe(cancel.parentElement)
+  expect(signOutButton.parentElement).toBe(save.parentElement)
+  expect(save).toHaveAttribute('form', 'profile-form')
   expect(screen.getByLabelText('Телефон')).toBeDisabled()
   expect(within(personal).getByText('Доступ')).toBeVisible()
   expect(within(personal).getByText('QA Switch Test')).toBeVisible()

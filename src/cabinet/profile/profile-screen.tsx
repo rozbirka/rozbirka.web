@@ -140,7 +140,7 @@ export function ProfileScreen() {
           </div>
 
           <form
-            className="mt-5 grid gap-4"
+            className="mt-5"
             id={FORM_ID}
             onSubmit={(event) => void handleSubmit(event)}
           >
@@ -163,26 +163,9 @@ export function ProfileScreen() {
                 />
               </Field>
             </div>
-            <div className="border-app-line flex flex-wrap justify-end gap-2 border-t pt-4">
-              <Button
-                disabled={busy || normalizedName === savedName}
-                onClick={() => handleNameChange(savedName)}
-                type="button"
-              >
-                {t('cancelChanges')}
-              </Button>
-              <Button
-                className="px-5 text-sm font-bold"
-                disabled={!canSave}
-                type="submit"
-                variant="primary"
-              >
-                {busy ? t('saving') : t('save')}
-              </Button>
-            </div>
           </form>
 
-          <div className="border-app-line mt-6 border-t pt-5">
+          <div className="mt-6">
             <h3 className="text-app-ink text-[15px] font-bold">
               {t('access')}
             </h3>
@@ -200,12 +183,32 @@ export function ProfileScreen() {
                 </dd>
               </div>
             </dl>
+          </div>
+
+          <div className="border-app-line mt-5 grid grid-cols-2 gap-2 border-t pt-4 sm:flex sm:flex-wrap sm:items-center">
             <Button
-              className="mt-4 w-full justify-center sm:w-auto"
+              className="col-span-2 w-full justify-center sm:mr-auto sm:w-auto"
               onClick={() => void auth.signOut()}
             >
               <LogOut aria-hidden />
               {t('signOut')}
+            </Button>
+            <Button
+              className="justify-center"
+              disabled={busy || normalizedName === savedName}
+              onClick={() => handleNameChange(savedName)}
+              type="button"
+            >
+              {t('cancelChanges')}
+            </Button>
+            <Button
+              className="justify-center px-5 text-sm font-bold"
+              disabled={!canSave}
+              form={FORM_ID}
+              type="submit"
+              variant="primary"
+            >
+              {busy ? t('saving') : t('save')}
             </Button>
           </div>
         </Card>
