@@ -25,12 +25,38 @@ import { normalizeApiProblem } from '@/api/errors'
 import { useAuth } from '@/auth/AuthContext'
 import { resolvePostLoginDestination } from '@/auth/post-login'
 import type { SendOtpResponse } from '@/api/types'
+import { useT } from '@/i18n/hooks'
+import { useLocale } from '@/i18n/LocaleProvider'
+import type { Translate } from '@/i18n/messages'
+import { Segmented } from '@/components/app/segmented'
+import {
+  formatPhone,
+  isValidSignInPhone,
+  normalizePhone,
+  phoneCountry,
+  phoneCountryForLocale,
+  phoneDialCode,
+  PHONE_COUNTRIES,
+  type PhoneCountry,
+} from '@/lib/phone'
+import { loginMessages } from './login-messages'
 
 type Step = 'phone' | 'otp' | 'name' | 'success'
 
+type LoginT = Translate<(typeof loginMessages)['uk']>
+
 const OTP_LENGTH = 6
-const PHONE_DIGITS = 12
-const PHONE_HINT = 'Формат: +380 XX XXX XX XX'
+const PHONE_PATTERN: Record<PhoneCountry, string> = {
+  UA: '+380 XX XXX XX XX',
+  GB: '+44 XXXX XXXXXX',
+  PL: '+48 XXX XXX XXX',
+}
+const COUNTRY_KEY = {
+  UA: 'countryUA',
+  GB: 'countryGB',
+  PL: 'countryPL',
+} as const
+const MAX_PHONE_DIGITS = 15
 const OTP_FLOW_STORAGE_KEY = 'rozbirka.loginOtpFlow'
 
 interface StoredOtpFlow {
@@ -72,28 +98,27 @@ function clearStoredOtpFlow() {
     window.sessionStorage.removeItem(OTP_FLOW_STORAGE_KEY)
 }
 
-const errorMessages: Record<string, string> = {
-  OTP_COOLDOWN: 'Код уже надіслано. Дочекайтеся відліку й спробуйте ще раз',
-  OTP_RATE_LIMITED: 'Забагато спроб. Спробуйте пізніше',
-  PHONE_NOT_FOUND: 'Номер не знайдено. Перевірте його або введіть інший',
-  // Пінується e2e-перевіркою помилки коду — текст має лишатися рівно таким.
-  OTP_INVALID: 'Невірний код',
-  OTP_EXPIRED: 'Код вже не дійсний — запитайте новий',
-  REGISTRATION_SESSION_EXPIRED:
-    'Сеанс реєстрації завершився. Почніть реєстрацію ще раз',
-  RATE_LIMIT_EXCEEDED: 'Забагато спроб. Спробуйте пізніше',
-  OTP_UNAVAILABLE: 'Надсилання SMS тимчасово недоступне. Спробуйте пізніше',
-  REGISTRATION_UNAVAILABLE:
-    'Реєстрація тимчасово недоступна. Спробуйте пізніше',
-  OTP_MAX_ATTEMPTS: 'Забагато невірних спроб. Запитайте новий код',
-}
+const MAPPED_CODES = new Set([
+  'OTP_COOLDOWN',
+  'OTP_RATE_LIMITED',
+  'PHONE_NOT_FOUND',
+  'OTP_INVALID',
+  'OTP_EXPIRED',
+  'REGISTRATION_SESSION_EXPIRED',
+  'RATE_LIMIT_EXCEEDED',
+  'OTP_UNAVAILABLE',
+  'REGISTRATION_UNAVAILABLE',
+  'OTP_MAX_ATTEMPTS',
+  'PHONE_INVALID',
+] as const)
+type MappedCode = typeof MAPPED_CODES extends Set<infer C> ? C : never
 
-function extractError(err: unknown, fallback: string): string {
+function extractError(err: unknown, fallback: string, t: LoginT): string {
   const problem = normalizeApiProblem(err)
-  const mappedMessage = problem.code ? errorMessages[problem.code] : undefined
-  if (mappedMessage) return mappedMessage
-  if (problem.kind === 'network') return 'Немає з’єднання з мережею.'
-  if (problem.kind === 'timeout') return 'Час очікування запиту минув.'
+  if (problem.code && MAPPED_CODES.has(problem.code as MappedCode))
+    return t(problem.code as MappedCode)
+  if (problem.kind === 'network') return t('networkError')
+  if (problem.kind === 'timeout') return t('timeoutError')
   if (problem.kind === 'unknown' || problem.kind === 'cancelled')
     return fallback
   return problem.message || fallback
@@ -104,19 +129,15 @@ const cooldownFrom = (response: SendOtpResponse): number =>
 
 const toE164 = (formatted: string) => '+' + formatted.replace(/\D/g, '')
 
-function formatUkrainianPhone(raw: string): string {
-  let digits = raw.replace(/\D/g, '')
-  if (digits.startsWith('380')) digits = digits.slice(3)
-  else if (digits.startsWith('80')) digits = digits.slice(2)
-  else if (digits.startsWith('0')) digits = digits.slice(1)
-  digits = digits.slice(0, 9)
-
-  let formatted = '+380'
-  if (digits.length > 0) formatted += ' ' + digits.slice(0, 2)
-  if (digits.length > 2) formatted += ' ' + digits.slice(2, 5)
-  if (digits.length > 5) formatted += ' ' + digits.slice(5, 7)
-  if (digits.length > 7) formatted += ' ' + digits.slice(7, 9)
-  return formatted
+/** What the phone field shows: the typed number as grouped E.164. */
+function phoneDisplay(raw: string, country: PhoneCountry): string {
+  const typed = raw.trim()
+  if (!typed) return ''
+  const normalized = typed.startsWith('+')
+    ? `+${typed.replace(/\D/g, '')}`
+    : normalizePhone(typed, country)
+  const digits = normalized.replace(/\D/g, '').slice(0, MAX_PHONE_DIGITS)
+  return digits ? formatPhone(`+${digits}`) : '+'
 }
 
 interface VerifyOutcome {
@@ -128,6 +149,8 @@ export function LoginScreen() {
   const navigate = useNavigate()
   const location = useLocation()
   const auth = useAuth()
+  const t = useT(loginMessages)
+  const { locale } = useLocale()
   const fallbackReturnTo = (location.state as { from?: string } | null)?.from
   const returnTo = resolvePostLoginDestination(
     location.search,
@@ -145,6 +168,9 @@ export function LoginScreen() {
   const requestControllerRef = useRef<AbortController | null>(null)
   const cancellationRef = useRef<Promise<void> | null>(null)
   const [phone, setPhone] = useState('')
+  const [country, setCountry] = useState<PhoneCountry>(() =>
+    phoneCountryForLocale(locale),
+  )
   const [otp, setOtp] = useState('')
   const [name, setName] = useState('')
   const [phoneError, setPhoneError] = useState<string | null>(null)
@@ -180,6 +206,7 @@ export function LoginScreen() {
       setPurpose(stored.purpose)
       setChallenge(stored.challenge)
       setPhone(stored.phone)
+      setCountry((current) => phoneCountry(stored.phone) ?? current)
       resendDeadlineRef.current = Date.parse(stored.challenge.resendAt)
       setResendIn(cooldownFrom(stored.challenge))
       setStep('otp')
@@ -248,8 +275,7 @@ export function LoginScreen() {
   }, [phone, purpose])
 
   const sendOtp = useOperation<SendOtpResponse | null>(requestOtp, {
-    errorMessage: (error) =>
-      extractError(error, 'Не вдалося надіслати код. Спробуйте ще раз'),
+    errorMessage: (error) => extractError(error, t('sendFailed'), t),
     onSuccess: (response) => {
       if (!response) return
       storeOtpFlow({ purpose, phone, challenge: response })
@@ -274,7 +300,7 @@ export function LoginScreen() {
     useCallback(async () => {
       const generation = beginNavigationOperation()
       if (!challenge || Date.parse(challenge.expiresAt) <= Date.now())
-        throw Object.assign(new Error(errorMessages['OTP_EXPIRED']), {
+        throw Object.assign(new Error(t('OTP_EXPIRED')), {
           kind: 'validation',
           code: 'OTP_EXPIRED',
         })
@@ -305,9 +331,10 @@ export function LoginScreen() {
       phone,
       purpose,
       challenge,
+      t,
     ]),
     {
-      errorMessage: (error) => extractError(error, 'Невірний код'),
+      errorMessage: (error) => extractError(error, t('OTP_INVALID'), t),
       onSuccess: (outcome) => {
         if (outcome === null) return
         if (outcome.next === 'name') {
@@ -321,8 +348,7 @@ export function LoginScreen() {
   )
 
   const resendOtp = useOperation<SendOtpResponse | null>(requestOtp, {
-    errorMessage: (error) =>
-      extractError(error, 'Не вдалося надіслати код. Спробуйте ще раз'),
+    errorMessage: (error) => extractError(error, t('sendFailed'), t),
     onSuccess: (response) => {
       if (!response) return
       storeOtpFlow({ purpose, phone, challenge: response })
@@ -360,8 +386,7 @@ export function LoginScreen() {
       return generation
     }, [auth, beginNavigationOperation, isCurrentNavigationOperation, name]),
     {
-      errorMessage: (error) =>
-        extractError(error, 'Не вдалося зберегти ім’я. Спробуйте ще раз'),
+      errorMessage: (error) => extractError(error, t('nameFailed'), t),
       onSuccess: (generation) => {
         if (generation === null) return
         setStep('success')
@@ -379,8 +404,18 @@ export function LoginScreen() {
   const handlePhoneSubmit = (event: FormEvent) => {
     event.preventDefault()
     if (busy) return
-    if (phone.replace(/\D/g, '').length !== PHONE_DIGITS) {
-      setPhoneError(`Введіть номер повністю. ${PHONE_HINT}`)
+    const e164 = toE164(phone)
+    if (!isValidSignInPhone(e164)) {
+      const detected = phoneCountry(e164)
+      setPhoneError(
+        detected === null && e164.length > 4
+          ? t('phoneUnsupported')
+          : t('phoneIncomplete', {
+              hint: t('phoneHint', {
+                pattern: PHONE_PATTERN[detected ?? country],
+              }),
+            }),
+      )
       return
     }
     setPhoneError(null)
@@ -391,7 +426,7 @@ export function LoginScreen() {
     event.preventDefault()
     if (busy) return
     if (otp.length < OTP_LENGTH) {
-      setCodeError(`Введіть усі ${OTP_LENGTH} цифр коду з SMS`)
+      setCodeError(t('codeIncomplete', { count: OTP_LENGTH }))
       return
     }
     setCodeError(null)
@@ -410,7 +445,7 @@ export function LoginScreen() {
     event.preventDefault()
     if (busy) return
     if (name.trim().length < 2) {
-      setNameError('Введіть ім’я — щонайменше дві літери')
+      setNameError(t('nameTooShort'))
       return
     }
     setNameError(null)
@@ -444,7 +479,7 @@ export function LoginScreen() {
           to="/"
         >
           <ArrowLeft className="size-4 transition-transform group-hover:-translate-x-0.5" />
-          <span>На головну</span>
+          <span>{t('home')}</span>
         </Link>
       </header>
 
@@ -469,10 +504,28 @@ export function LoginScreen() {
                     .catch(() => undefined)
                 setPurpose(purpose === 'login' ? 'registration' : 'login')
               }}
+              country={country}
               error={sendOtp.error}
               fieldError={phoneError}
               onChange={(value) => {
-                setPhone(value)
+                const display = phoneDisplay(value, country)
+                setPhone(display)
+                const detected = phoneCountry(display)
+                if (detected) setCountry(detected)
+                if (phoneError) setPhoneError(null)
+              }}
+              onCountryChange={(next) => {
+                setCountry(next)
+                const e164 = toE164(phone)
+                const current = phoneCountry(e164)
+                const national = current
+                  ? e164.slice(phoneDialCode(current).length)
+                  : ''
+                setPhone(
+                  national
+                    ? formatPhone(`${phoneDialCode(next)}${national}`)
+                    : '',
+                )
                 if (phoneError) setPhoneError(null)
               }}
               onSubmit={handlePhoneSubmit}
@@ -552,6 +605,8 @@ function PhoneStep({
   purpose,
   onPurposeChange,
   phone,
+  country,
+  onCountryChange,
   onChange,
   onSubmit,
   pending,
@@ -562,49 +617,66 @@ function PhoneStep({
   purpose: 'login' | 'registration'
   onPurposeChange: () => void
   phone: string
+  country: PhoneCountry
+  onCountryChange: (country: PhoneCountry) => void
   onChange: (v: string) => void
   onSubmit: (e: FormEvent) => void
   pending: boolean
   error: string | null
   fieldError: string | null
 }) {
+  const t = useT(loginMessages)
   return (
     <div className="anim-fade-up flex flex-col gap-6">
       <StepHeader
-        eyebrow={purpose === 'login' ? 'Вхід' : 'Реєстрація'}
-        title={
-          purpose === 'login'
-            ? 'Вхід за номером телефону'
-            : 'Створіть обліковий запис'
+        eyebrow={
+          purpose === 'login' ? t('eyebrowLogin') : t('eyebrowRegistration')
         }
+        title={purpose === 'login' ? t('titleLogin') : t('titleRegistration')}
       >
         <p className="text-app-muted text-[13.5px] leading-[1.5]">
-          {purpose === 'login'
-            ? 'Увійдіть до наявного облікового запису за кодом з SMS.'
-            : 'Підтвердьте номер, щоб створити обліковий запис. Якщо вас запросили до команди, після реєстрації повернемося до запрошення.'}
+          {purpose === 'login' ? t('leadLogin') : t('leadRegistration')}
         </p>
       </StepHeader>
 
       <form className="flex flex-col gap-4" noValidate onSubmit={onSubmit}>
         {error !== null && <Notice tone="danger">{error}</Notice>}
 
+        <div className="flex flex-col gap-1.5">
+          <span className="text-app-muted text-[12.5px]">
+            {t('phoneCountry')}
+          </span>
+          <Segmented
+            label={t('phoneCountry')}
+            name="login-phone-country"
+            onChange={onCountryChange}
+            options={PHONE_COUNTRIES.map((code) => ({
+              value: code,
+              label: `${code} ${phoneDialCode(code)}`,
+              srLabel: `${t(COUNTRY_KEY[code])} ${phoneDialCode(code)}`,
+              disabled: pending,
+            }))}
+            value={country}
+          />
+        </div>
+
         <Field
           error={fieldError ?? undefined}
-          hint={PHONE_HINT}
-          label="Номер телефону"
+          hint={t('phoneHint', { pattern: PHONE_PATTERN[country] })}
+          label={t('phoneLabel')}
         >
           <TextInput
             autoComplete="tel"
             autoFocus
             disabled={pending}
             className="min-h-12 px-4 text-[16px] tracking-[0.02em] tabular-nums"
-            inputMode="numeric"
-            maxLength={19}
-            onChange={(e) => onChange(formatUkrainianPhone(e.target.value))}
+            inputMode="tel"
+            maxLength={22}
+            onChange={(e) => onChange(e.target.value)}
             onFocus={() => {
-              if (!phone) onChange('+380 ')
+              if (!phone) onChange(`${phoneDialCode(country)} `)
             }}
-            placeholder="+380 50 000 00 00"
+            placeholder={PHONE_PATTERN[country].replace(/X/g, '0')}
             type="tel"
             value={phone}
           />
@@ -618,13 +690,13 @@ function PhoneStep({
           type="submit"
           variant="primary"
         >
-          {pending ? 'Надсилаємо код…' : 'Отримати код'}
+          {pending ? t('sending') : t('getCode')}
           {!pending && <ArrowRight />}
         </Button>
 
         {resendIn > 0 && (
           <p className="text-app-dim text-center text-[12px]" role="status">
-            Спробуйте ще раз через {resendIn} с
+            {t('tryAgainIn', { seconds: resendIn })}
           </p>
         )}
 
@@ -635,16 +707,14 @@ function PhoneStep({
             onClick={onPurposeChange}
             variant="quiet"
           >
-            {purpose === 'login'
-              ? 'Немає облікового запису? Зареєструватися'
-              : 'Вже маєте обліковий запис? Увійти'}
+            {purpose === 'login' ? t('toRegistration') : t('toLogin')}
           </Button>
         </div>
 
         <p className="text-app-dim text-center text-[12px] leading-[1.5]">
-          Продовжуючи, ви погоджуєтесь з{' '}
+          {t('termsLead')}{' '}
           <a className="text-app-muted hover:text-white" href="#offer">
-            умовами використання
+            {t('termsLink')}
           </a>
         </p>
       </form>
@@ -682,13 +752,14 @@ function OtpStep({
   const hintId = `${groupId}-hint`
   const waitId = `${groupId}-wait`
   const waiting = resendIn > 0
+  const t = useT(loginMessages)
 
   return (
     <div className="anim-fade-up flex flex-col gap-6">
-      <StepHeader eyebrow="Підтвердження" title="Введіть код з SMS">
+      <StepHeader eyebrow={t('eyebrowConfirm')} title={t('otpTitle')}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <p className="text-app-muted text-[13.5px] leading-[1.5]">
-            Надіслали на{' '}
+            {t('sentTo')}{' '}
             <span className="text-app-ink tabular-nums">{phone}</span>
           </p>
           <Button
@@ -698,7 +769,7 @@ function OtpStep({
             variant="quiet"
           >
             <ArrowLeft />
-            Змінити номер
+            {t('changeNumber')}
           </Button>
         </div>
       </StepHeader>
@@ -713,7 +784,7 @@ function OtpStep({
           role="group"
         >
           <span className="text-app-muted text-[12.5px]" id={labelId}>
-            Код з SMS
+            {t('codeLabel')}
           </span>
           <OtpInput
             autoFocus
@@ -724,7 +795,7 @@ function OtpStep({
             value={otp}
           />
           <p className="text-app-dim text-[11.5px]" id={hintId}>
-            Шість цифр з повідомлення. Не прийшло — надішліть код ще раз.
+            {t('codeHint')}
           </p>
         </div>
 
@@ -736,7 +807,7 @@ function OtpStep({
           type="submit"
           variant="primary"
         >
-          {pending ? 'Перевіряємо код…' : 'Підтвердити'}
+          {pending ? t('verifying') : t('confirm')}
           {!pending && <Check />}
         </Button>
 
@@ -749,11 +820,11 @@ function OtpStep({
             size="wide"
             variant="quiet"
           >
-            {resending ? 'Надсилаємо код…' : 'Надіслати код ще раз'}
+            {resending ? t('sending') : t('resend')}
           </Button>
           {waiting && (
             <p className="text-app-dim text-center text-[12px]" id={waitId}>
-              {`Надіслати код ще раз можна через ${String(resendIn)}\u00A0с`}
+              {t('resendIn', { seconds: resendIn })}
             </p>
           )}
         </div>
@@ -779,11 +850,12 @@ function NameStep({
   error: string | null
   fieldError: string | null
 }) {
+  const t = useT(loginMessages)
   return (
     <div className="anim-fade-up flex flex-col gap-6">
-      <StepHeader eyebrow="Майже все" title="Як вас називати?">
+      <StepHeader eyebrow={t('eyebrowName')} title={t('nameTitle')}>
         <p className="text-app-muted text-[13.5px] leading-[1.5]">
-          Це ім’я побачать ваші колеги в команді.
+          {t('nameLead')}
         </p>
       </StepHeader>
 
@@ -792,8 +864,8 @@ function NameStep({
 
         <Field
           error={fieldError ?? undefined}
-          hint="Імені та прізвища достатньо."
-          label="Ім’я"
+          hint={t('nameHint')}
+          label={t('nameLabel')}
         >
           <TextInput
             autoComplete="name"
@@ -802,7 +874,7 @@ function NameStep({
             inputMode="text"
             maxLength={64}
             onChange={(e) => onChange(e.target.value)}
-            placeholder="Іван Петренко"
+            placeholder={t('namePlaceholder')}
             type="text"
             value={name}
           />
@@ -816,7 +888,7 @@ function NameStep({
           type="submit"
           variant="primary"
         >
-          {pending ? 'Зберігаємо ім’я…' : 'Продовжити'}
+          {pending ? t('savingName') : t('continue')}
           {!pending && <ArrowRight />}
         </Button>
       </form>
@@ -825,6 +897,7 @@ function NameStep({
 }
 
 function SuccessStep({ returnTo }: { returnTo: string }) {
+  const t = useT(loginMessages)
   return (
     <div className="anim-fade-up flex flex-col items-center gap-6 text-center">
       <div className="bg-state-ok-soft border-state-ok/30 grid size-16 place-items-center rounded-full border">
@@ -832,10 +905,10 @@ function SuccessStep({ returnTo }: { returnTo: string }) {
       </div>
       <div className="flex flex-col gap-2">
         <h1 className="text-[30px] leading-[1.05] font-light tracking-[-0.02em] sm:text-[36px]">
-          Ви увійшли
+          {t('signedIn')}
         </h1>
         <p className="text-app-muted text-[13.5px]" role="status">
-          Зараз перенаправимо у застосунок
+          {t('redirecting')}
         </p>
       </div>
       <Button
@@ -844,7 +917,7 @@ function SuccessStep({ returnTo }: { returnTo: string }) {
         size="wide"
         variant="primary"
       >
-        <Link to={returnTo}>Продовжити</Link>
+        <Link to={returnTo}>{t('continue')}</Link>
       </Button>
     </div>
   )
@@ -866,6 +939,7 @@ function OtpInput({
   describedBy: string
 }) {
   const inputsRef = useRef<(HTMLInputElement | null)[]>([])
+  const t = useT(loginMessages)
 
   useEffect(() => {
     if (autoFocus) inputsRef.current[0]?.focus()
@@ -925,7 +999,7 @@ function OtpInput({
           className="bg-app-input border-app-line-2 rounded-control text-app-ink aria-[invalid=true]:border-state-danger focus-visible:border-brand min-h-12 w-full min-w-0 border text-center text-[20px] font-medium tabular-nums transition-colors outline-none hover:border-white/20"
           inputMode="numeric"
           key={i}
-          aria-label={`Цифра ${i + 1}`}
+          aria-label={t('digit', { index: i + 1 })}
           maxLength={1}
           onChange={(e) => handleInput(i, e)}
           onKeyDown={(e) => handleKeyDown(i, e)}

@@ -1,10 +1,21 @@
 import { useMemo, useState } from 'react'
 import { Button, DataTable, EmptyState, StatusPill } from '@/components/app'
 import { cn } from '@/lib/utils'
+import {
+  commonMessages,
+  formatDate,
+  formatTime,
+  useLocale,
+  useT,
+  type Locale,
+  type MessageKey,
+} from '@/i18n'
 import type { StatusTone } from '@/components/app'
 import type { ImportCapabilities, ImportStatus } from '@/api/part-imports'
 import { ImportEmpty } from './import-empty'
-import { issueText, statusLabels } from './import-model'
+import { importHistoryMessages } from './import-history-messages'
+import { importText, issueText, statusLabel } from './import-model'
+import { useCount, useImportT } from './use-import-text'
 
 /** The seven states the history chip can take, and the tone each one reads in. */
 const TONES: Record<string, StatusTone> = {
@@ -26,10 +37,10 @@ const TONES: Record<string, StatusTone> = {
 const UNFINISHED = new Set(['Uploaded', 'Analyzing', 'NeedsReview', 'Ready'])
 
 const SEGMENTS = [
-  { key: 'all', label: 'Усі', match: () => true },
+  { key: 'all', label: 'segmentAll', match: () => true },
   {
     key: 'attention',
-    label: 'Потребують дії',
+    label: 'segmentAttention',
     match: (row: ImportStatus) =>
       UNFINISHED.has(row.status) ||
       row.status === 'CompletedWithErrors' ||
@@ -37,34 +48,37 @@ const SEGMENTS = [
   },
   {
     key: 'done',
-    label: 'Завершені',
+    label: 'segmentDone',
     match: (row: ImportStatus) => row.status === 'Completed',
   },
   {
     key: 'stopped',
-    label: 'Скасовані',
+    label: 'segmentStopped',
     match: (row: ImportStatus) =>
       row.status === 'Cancelled' || row.status === 'Expired',
   },
 ] as const
 
-const day = (value: string) =>
-  new Date(value).toLocaleDateString('uk-UA', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
+interface Zone {
+  locale: Locale
+  timeZone: string
+}
+
+const text = (
+  { locale }: Zone,
+  key: MessageKey<typeof importHistoryMessages>,
+  params?: Record<string, string>,
+) => importText(importHistoryMessages, locale, key, params)
+
+/** Dates in the business time zone. */
+const day = (value: string, { locale, timeZone }: Zone) =>
+  formatDate(value, locale, { timeZone }) ?? value
+
+const dayAndTime = (value: string, zone: Zone) =>
+  text(zone, 'dayAndTime', {
+    day: day(value, zone),
+    time: formatTime(value, zone.locale, zone.timeZone) ?? '',
   })
-
-const dayAndTime = (value: string) =>
-  `${day(value)} · ${new Date(value).toLocaleTimeString('uk-UA', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })}`
-
-const count = (value: number) =>
-  // uk-UA groups thousands with a non-breaking space; a plain one wraps the
-  // same and keeps the source free of invisible characters.
-  value.toLocaleString('uk-UA').replace(/\u00a0/g, ' ')
 
 /**
  * The second line of the identity column: what this import is waiting for, or
@@ -72,34 +86,38 @@ const count = (value: number) =>
  * deliberately returns no author and no filename, so the line carries the
  * state instead of a name we would have to invent.
  */
-function line(row: ImportStatus) {
+function line(row: ImportStatus, zone: Zone) {
   const stage =
     row.status === 'Failed'
       ? row.errorCode
-        ? issueText(row.errorCode)
-        : 'файл не прочитано'
+        ? issueText(row.errorCode, zone.locale)
+        : text(zone, 'fileNotRead')
       : row.status === 'Expired'
-        ? 'строк доступності минув'
+        ? text(zone, 'retentionEnded')
         : row.status === 'Cancelled'
-          ? 'зупинено'
+          ? text(zone, 'stopped')
           : row.status === 'NeedsReview'
-            ? 'колонки зіставлені, дані не перевірені'
+            ? text(zone, 'mappedNotChecked')
             : row.status === 'Ready'
-              ? 'готовий до запуску'
-              : (statusLabels[row.status] ?? row.status).toLowerCase()
+              ? text(zone, 'readyToRun')
+              : statusLabel(row.status, zone.locale).toLocaleLowerCase(
+                  zone.locale,
+                )
   const until =
     row.retentionExpiresAt !== null && row.status !== 'Expired'
-      ? ` · доступний до ${day(row.retentionExpiresAt)}`
+      ? text(zone, 'availableUntil', {
+          date: day(row.retentionExpiresAt, zone),
+        })
       : ''
   return `${stage}${until}`
 }
 
-const actionLabel = (row: ImportStatus) =>
+const actionLabel = (row: ImportStatus, zone: Zone) =>
   UNFINISHED.has(row.status)
-    ? 'Продовжити'
+    ? text(zone, 'continue')
     : row.status === 'Failed' || row.status === 'Expired'
-      ? 'Деталі'
-      : 'Результат'
+      ? text(zone, 'details')
+      : text(zone, 'result')
 
 function Kpi({
   label,
@@ -169,6 +187,11 @@ export function ImportHistory({
   onOpen: (id: string) => void
   onNew: () => void
 }) {
+  const { locale, timeZone } = useLocale()
+  const zone: Zone = { locale, timeZone }
+  const t = useImportT(importHistoryMessages)
+  const tc = useT(commonMessages)
+  const count = useCount()
   const [segment, setSegment] = useState<string>('all')
   const active = SEGMENTS.find((s) => s.key === segment) ?? SEGMENTS[0]
   const rows = useMemo(
@@ -192,8 +215,7 @@ export function ImportHistory({
   // carries only the import's own state. So the two figures that count created
   // parts and failed rows have nothing to add up, and say so instead of
   // showing a zero that would read as "nothing went wrong".
-  const noExecution =
-    'Список імпортів не повертає підсумків виконання — вони на екрані самого імпорту.'
+  const noExecution = t('noExecution')
 
   // Nothing imported yet is not an empty table — it is a different screen, and
   // the design treats it as one: no figures to show, no groups to filter.
@@ -204,30 +226,33 @@ export function ImportHistory({
     <div className="min-w-0">
       <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,190px),1fr))] gap-px overflow-hidden rounded-[20px] border">
         <Kpi
-          label="Імпортів цього місяця"
+          label={t('importsThisMonth')}
           meta={
             unfinished === undefined
-              ? `${count(total)} за весь час`
-              : 'один у підготовці'
+              ? t('allTime', { count: count(total) })
+              : t('onePreparing')
           }
           value={count(thisMonth)}
         />
         <Kpi
-          label="Створено запчастин"
+          label={t('partsCreated')}
           meta=""
           unavailable={noExecution}
           value="—"
         />
         <Kpi
-          label="Рядків з помилками"
+          label={t('rowsWithErrors')}
           meta=""
           tone="warn"
           unavailable={noExecution}
           value="—"
         />
         <Kpi
-          label="Ліміт файлу"
-          meta={`до ${count(capabilities.limits.maxRows)} рядків · ${capabilities.formats.join(', ').toUpperCase()}`}
+          label={t('fileLimit')}
+          meta={t('fileLimitMeta', {
+            rows: count(capabilities.limits.maxRows),
+            formats: capabilities.formats.join(', ').toUpperCase(),
+          })}
           unit="MiB"
           value={String(
             Math.round(capabilities.limits.maxBytes / (1024 * 1024)),
@@ -244,22 +269,25 @@ export function ImportHistory({
                 className="bg-state-warn size-1.75 rounded-full"
               />
               <span className="text-state-warn text-[15px] font-bold">
-                Один імпорт незавершений
+                {t('unfinishedTitle')}
               </span>
             </p>
             <p className="text-app-muted mt-1.5 text-[14px] leading-6 text-pretty">
-              {unfinished.id.slice(0, 8)} — {line(unfinished)}.
+              {t('unfinishedLine', {
+                id: unfinished.id.slice(0, 8),
+                line: line(unfinished, zone),
+              })}
             </p>
           </div>
           <Button onClick={() => onOpen(unfinished.id)} variant="primary">
-            Продовжити підготовку
+            {t('continuePreparing')}
           </Button>
         </div>
       )}
 
       <div className="mt-9 flex flex-wrap items-center justify-between gap-5">
         <div
-          aria-label="Групи імпортів"
+          aria-label={t('importGroups')}
           className="border-app-line bg-app-raised flex max-w-full flex-wrap gap-1 rounded-[12px] border p-1"
           role="group"
         >
@@ -279,7 +307,7 @@ export function ImportHistory({
                 onClick={() => setSegment(option.key)}
                 type="button"
               >
-                {option.label}{' '}
+                {t(option.label)}{' '}
                 <span
                   className={cn(
                     'font-mono text-[11px] font-medium',
@@ -293,18 +321,23 @@ export function ImportHistory({
           })}
         </div>
         <p className="text-app-dim text-[13px]">
-          Показано {rows.length} з {imports.length} на цій сторінці
-          {total > imports.length ? ` · ${count(total)} усього` : ''}
+          {t('shownOnPage', {
+            shown: count(rows.length),
+            total: count(imports.length),
+          })}
+          {total > imports.length
+            ? t('totalCount', { count: count(total) })
+            : ''}
         </p>
       </div>
 
       <div className="mt-4.5">
         <DataTable
-          caption="Історія імпортів"
+          caption={t('caption')}
           columns={[
             {
               key: 'id',
-              label: 'Номер',
+              label: t('number'),
               variant: 'primary',
               cell: (row) => (
                 <span className="text-app-muted font-mono text-[14px]">
@@ -314,21 +347,21 @@ export function ImportHistory({
             },
             {
               key: 'when',
-              label: 'Дата й стан',
+              label: t('dateAndState'),
               cell: (row) => (
                 <span className="grid min-w-0 gap-0.5">
                   <span className="text-app-ink truncate text-[15px] font-bold tracking-[-0.01em]">
-                    {dayAndTime(row.createdAt)}
+                    {dayAndTime(row.createdAt, zone)}
                   </span>
                   <span className="text-app-muted truncate text-[13px]">
-                    {line(row)}
+                    {line(row, zone)}
                   </span>
                 </span>
               ),
             },
             {
               key: 'rows',
-              label: 'Рядків',
+              label: t('rows'),
               align: 'end',
               cell: (row) => (
                 <span className="font-mono text-[14px]">
@@ -338,7 +371,7 @@ export function ImportHistory({
             },
             {
               key: 'created',
-              label: 'Створено',
+              label: t('created'),
               align: 'end',
               cell: () => (
                 <span
@@ -351,7 +384,7 @@ export function ImportHistory({
             },
             {
               key: 'failed',
-              label: 'Помилки',
+              label: t('errors'),
               align: 'end',
               cell: () => (
                 <span
@@ -364,21 +397,21 @@ export function ImportHistory({
             },
             {
               key: 'status',
-              label: 'Статус',
+              label: t('status'),
               align: 'end',
               cell: (row) => (
                 <StatusPill tone={TONES[row.status] ?? 'neutral'}>
-                  {statusLabels[row.status] ?? row.status}
+                  {statusLabel(row.status, locale)}
                 </StatusPill>
               ),
             },
             {
               key: 'action',
-              label: 'Дія',
+              label: t('action'),
               align: 'end',
               cell: (row) => (
                 <Button onClick={() => onOpen(row.id)}>
-                  {actionLabel(row)}
+                  {actionLabel(row, zone)}
                 </Button>
               ),
             },
@@ -387,23 +420,20 @@ export function ImportHistory({
             <EmptyState
               description={
                 imports.length === 0
-                  ? 'Завантажте таблицю CSV або XLSX — і залишки з неї стануть позиціями складу.'
-                  : 'У цій групі порожньо. Виберіть іншу або подивіться всі.'
+                  ? t('emptyDescription')
+                  : t('groupEmptyDescription')
               }
               title={
-                imports.length === 0 ? 'Імпортів ще немає' : 'Тут поки порожньо'
+                imports.length === 0 ? t('emptyTitle') : t('groupEmptyTitle')
               }
             />
           }
           footer={
             <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-t px-6 py-4">
-              <p className="text-app-dim text-[13px]">
-                Деталі й вихідний файл доступні, поки не мине строк зберігання
-                імпорту
-              </p>
+              <p className="text-app-dim text-[13px]">{t('retentionNote')}</p>
               <span className="flex items-center gap-2.5">
                 <Button disabled={page === 1} onClick={() => onPage(page - 1)}>
-                  Назад
+                  {tc('back')}
                 </Button>
                 <span className="text-app-muted font-mono text-[13px] tabular-nums">
                   {page}
@@ -412,7 +442,7 @@ export function ImportHistory({
                   disabled={page * 50 >= total}
                   onClick={() => onPage(page + 1)}
                 >
-                  Показати ще
+                  {t('showMore')}
                 </Button>
               </span>
             </div>
@@ -423,9 +453,7 @@ export function ImportHistory({
       </div>
 
       <p className="text-app-dim mt-3 text-[13px] leading-6">
-        Колонки «Створено» і «Помилки» порожні не випадково: список імпортів
-        навмисно не віддає ні підсумків виконання, ні автора, ні назви файлу. Ці
-        числа є на екрані самого імпорту.
+        {t('blankColumnsNote')}
       </p>
     </div>
   )

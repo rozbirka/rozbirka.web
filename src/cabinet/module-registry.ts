@@ -56,6 +56,10 @@ export type CabinetNavigationGroup =
   | 'settings'
 
 export interface CabinetNavigationItem {
+  /**
+   * Ukrainian source name, kept for existing callers. Screens show
+   * `moduleLabel(key, locale)` from `./module-messages`, which is localized.
+   */
   label: string
   icon: LucideIcon
   placement: 'primary' | 'account'

@@ -20,8 +20,12 @@ const spaPaths = [
 const prototypePath = /^\/screens(?:\/|$)/
 const staticPath =
   /^\/(?:robots\.txt|sitemap\.xml|favicon\.png|og-cover\.webp|fonts\/[^/]+\.(?:woff2|css))$/
+// Prerendered landing documents: `/` is Ukrainian, `/en` and `/pl` are its
+// language versions (scripts/prerender.mjs writes dist/<slug>/index.html).
 const productDocumentPath: Record<string, string> = {
   '/': '/index.html',
+  '/en': '/en/index.html',
+  '/pl': '/pl/index.html',
 }
 
 const appShellMetadata = {

@@ -1,4 +1,6 @@
 import { WifiOff } from 'lucide-react'
+import { useT } from '@/i18n'
+import { shellMessages } from './shell-messages'
 import { useOnline } from './use-online'
 
 /**
@@ -15,6 +17,7 @@ import { useOnline } from './use-online'
  */
 export function ConnectionNotice() {
   const online = useOnline()
+  const t = useT(shellMessages)
   if (online) return null
 
   return (
@@ -24,11 +27,8 @@ export function ConnectionNotice() {
         role="status"
       >
         <WifiOff aria-hidden className="text-state-warn size-4 shrink-0" />
-        <span className="font-semibold">Немає звʼязку</span>
-        <span className="text-app-muted">
-          Уже відкрите лишається на екрані, а введене — у формі. Надсилання не
-          пройде, доки мережа не повернеться.
-        </span>
+        <span className="font-semibold">{t('offline.title')}</span>
+        <span className="text-app-muted">{t('offline.body')}</span>
       </div>
       <div aria-hidden className="h-6 md:h-8 lg:h-10" />
     </div>

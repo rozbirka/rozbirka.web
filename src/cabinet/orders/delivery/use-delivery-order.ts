@@ -6,8 +6,10 @@ import {
 import { shippingApi, type Shipment } from '@/api/shipping'
 import { deliveryApi, type DeliveryOrder } from '@/api/delivery'
 import { customersApi } from '@/api/customers'
-import { isProblemCode, normalizeApiProblem } from '@/api/errors'
+import { isProblemCode } from '@/api/errors'
+import { useLocale } from '@/i18n'
 import { NOVA_POSHTA } from '../../integrations/integration-labels'
+import { deliveryProblemMessage } from './nova-poshta-availability'
 
 export interface CarrierState {
   /** The integration's own status, or `missing` when there is none at all. */
@@ -47,11 +49,17 @@ export interface DeliveryOrderLoad {
  * answers it, and the carrier's availability has nothing to do with it. The
  * waybill, the dispatch points and the customer's phone need Nova Poshta, and
  * are simply absent while it is unreachable.
+ *
+ * Outside Ukraine Core has no Nova Poshta at all, so the carrier is not even
+ * asked: the money record of an existing delivery order stays readable, and
+ * nothing that talks to the carrier is loaded.
  */
 export function useDeliveryOrder(
   orderId: string,
   customerId: string | null,
+  novaPoshtaAvailable = true,
 ): DeliveryOrderLoad {
+  const { locale } = useLocale()
   const [state, setState] = useState<DeliveryOrderState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reloads, setReloads] = useState(0)
@@ -68,8 +76,19 @@ export function useDeliveryOrder(
             if (!isProblemCode(problem, 'ORDER_INVALID_STATUS')) throw problem
             return null
           }),
-        integrationsApi.list({ signal: controller.signal }),
+        novaPoshtaAvailable
+          ? integrationsApi.list({ signal: controller.signal })
+          : Promise.resolve([]),
       ])
+      if (!novaPoshtaAvailable)
+        return {
+          money,
+          shipment: null,
+          integrationId: null,
+          carrier: null,
+          points: [],
+          customerPhone: null,
+        }
       const nova = integrations.find((item) => item.code === NOVA_POSHTA)
       const usable = nova?.status === 'active' ? nova : undefined
 
@@ -121,11 +140,11 @@ export function useDeliveryOrder(
       },
       (problem: unknown) => {
         if (!controller.signal.aborted)
-          setError(normalizeApiProblem(problem).message)
+          setError(deliveryProblemMessage(problem, locale))
       },
     )
     return () => controller.abort()
-  }, [customerId, orderId, reloads])
+  }, [customerId, locale, novaPoshtaAvailable, orderId, reloads])
 
   const setMoney = useCallback((money: DeliveryOrder) => {
     setState((current) => (current === null ? current : { ...current, money }))

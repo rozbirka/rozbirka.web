@@ -1,5 +1,7 @@
 import { equipmentApi } from '@/api/equipment'
 import type { PartCompatibilityInput } from '@/api/parts'
+import { SOURCE_LOCALE, translate, type Locale } from '@/i18n'
+import { compatibilityMessages } from './compatibility-messages'
 
 /** The equipment type a car yard writes compatibility against. */
 export const PASSENGER_CAR = 'passenger_car'
@@ -41,17 +43,28 @@ const year = (value: string): number | null => {
 }
 
 /** What is wrong with a row. A row nobody touched is not a row yet. */
-export function rowProblem(row: CompatibilityRow): string | null {
+export function rowProblem(
+  row: CompatibilityRow,
+  locale: Locale = SOURCE_LOCALE,
+): string | null {
   if (isBlankRow(row)) return null
-  if (row.brand === '') return 'Оберіть марку.'
+  if (row.brand === '')
+    return translate(compatibilityMessages, locale, 'chooseMake')
   if (row.year.trim() !== '' && year(row.year) === null)
-    return `Рік — чотири цифри від ${String(YEAR_MIN)} до ${String(YEAR_MAX)}.`
+    // Years are not grouped: «1 950» would read as a quantity.
+    return translate(compatibilityMessages, locale, 'yearRange', {
+      min: String(YEAR_MIN),
+      max: String(YEAR_MAX),
+    })
   return null
 }
 
-export function rowsProblem(rows: CompatibilityRow[]): string | null {
+export function rowsProblem(
+  rows: CompatibilityRow[],
+  locale: Locale = SOURCE_LOCALE,
+): string | null {
   for (const row of rows) {
-    const problem = rowProblem(row)
+    const problem = rowProblem(row, locale)
     if (problem !== null) return problem
   }
   return null
@@ -119,5 +132,11 @@ export async function resolveCompatibility(
     : { kind: 'ready', items }
 }
 
-export const unknownBrandsMessage = (brands: string[]): string =>
-  `У довіднику розбірки немає ${brands.length === 1 ? 'марки' : 'марок'}: ${brands.join(', ')}. Сумісність за ${brands.length === 1 ? 'нею' : 'ними'} не збережеться — приберіть ${brands.length === 1 ? 'цей рядок' : 'ці рядки'} або оберіть іншу марку.`
+export const unknownBrandsMessage = (
+  brands: string[],
+  locale: Locale = SOURCE_LOCALE,
+): string =>
+  translate(compatibilityMessages, locale, 'unknownBrands', {
+    count: brands.length,
+    brands: brands.join(', '),
+  })

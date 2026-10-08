@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { reportsApi, type ReportJob } from '@/api/reports'
+import { LocaleProvider } from '@/i18n'
 import { ReportsScreen } from './ReportsScreen'
 
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
@@ -733,4 +734,69 @@ it('aborts an in-flight detail poll when the screen unmounts', async () => {
   view.unmount()
 
   expect(signal?.aborted).toBe(true)
+})
+
+it('renders reports in English (UK) with UK dates and file sizes', async () => {
+  const items = [
+    report('completed'),
+    {
+      ...report('processing'),
+      id: 'report-2',
+      itemsTotal: 40,
+      itemsProcessed: 18,
+    },
+    { ...report('failed'), id: 'report-3' },
+  ]
+  // Polling must not replace rows with another test's fixture.
+  vi.mocked(reportsApi.get).mockImplementation((id: string) =>
+    Promise.resolve(items.find((item) => item.id === id) ?? items[0]!),
+  )
+  vi.mocked(reportsApi.list).mockResolvedValue({
+    items,
+    page: 1,
+    pageSize: 20,
+    total: 3,
+    totalPages: 1,
+  })
+
+  render(
+    <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+      <ReportsScreen {...screenProps} />
+    </LocaleProvider>,
+  )
+
+  expect(await screen.findByText('Ready')).toBeVisible()
+  // "Ready" is also a filter label: wait for the list rows themselves.
+  expect(
+    await screen.findByText('45% processed · 18 of 40'),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Reports' })).toBeVisible()
+  expect(screen.getByText('Processing')).toBeVisible()
+  expect(screen.getByText('45% processed · 18 of 40')).toBeInTheDocument()
+  expect(screen.getByText(/PDF · 1.2 KB · available until/)).toBeInTheDocument()
+  // Requested at 08:00 UTC is 11:00 in Kyiv, the business time zone.
+  expect(screen.getAllByText('28/08/2026, 11:00').length).toBeGreaterThan(0)
+  // The server's reason stays as received.
+  expect(
+    screen.getByText(/Reason: Service unavailable\. Create a replacement/),
+  ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Download PDF' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Create report' })).toBeVisible()
+  expect(screen.getByText('Period start')).toBeInTheDocument()
+})
+
+it('explains an invalid period in Polish', async () => {
+  render(
+    <LocaleProvider locale="pl" syncDocumentLang={false}>
+      <ReportsScreen {...screenProps} />
+    </LocaleProvider>,
+  )
+
+  expect(await screen.findByText('Nie ma jeszcze raportów')).toBeVisible()
+  fireEvent.change(screen.getByLabelText(/Koniec okresu/), {
+    target: { value: '2000-01-01' },
+  })
+  expect(
+    screen.getByText('Koniec okresu nie może być wcześniej niż początek'),
+  ).toBeInTheDocument()
 })

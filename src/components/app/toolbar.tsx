@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useT } from '@/i18n/hooks'
+import { appMessages } from './app-messages'
 
 /** Filter row above a list. Filters apply as they change — no Apply button. */
 export function Toolbar({
@@ -43,6 +45,7 @@ export function ActiveFilters({
   filters: readonly ActiveFilter[]
   onReset?: () => void
 }) {
+  const t = useT(appMessages)
   if (filters.length === 0) return null
 
   return (
@@ -56,7 +59,7 @@ export function ActiveFilters({
         >
           {filter.label}
           <X aria-hidden className="size-3.5 opacity-70" />
-          <span className="sr-only">Прибрати фільтр</span>
+          <span className="sr-only">{t('clearFilter')}</span>
         </button>
       ))}
       {onReset === undefined ? null : (
@@ -65,7 +68,7 @@ export function ActiveFilters({
           onClick={onReset}
           type="button"
         >
-          Скинути
+          {t('reset')}
         </button>
       )}
     </div>

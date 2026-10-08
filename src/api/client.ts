@@ -15,6 +15,7 @@ import {
 } from './refresh-coordinator'
 import { sessionApi } from './session'
 import { tenantPreference } from './tenant-preference'
+import { requestLocale } from '../i18n/request-locale'
 
 // The deployed landing and API gateway use separate hosts
 // (rozbirka.pro → api.rozbirka.pro, qa.rozbirka.pro → qaapi.rozbirka.pro).
@@ -97,9 +98,20 @@ apiClient.interceptors.request.use((config) => {
   return config
 })
 
+const attachLanguage = (config: InternalAxiosRequestConfig) => {
+  const locale = requestLocale.get()
+  if (locale && !config.headers.has('Accept-Language')) {
+    config.headers.set('Accept-Language', locale)
+  }
+  return config
+}
+
 identityClient.interceptors.request.use(attachIdempotency)
 apiClient.interceptors.request.use(attachIdempotency)
 publicApiClient.interceptors.request.use(attachIdempotency)
+identityClient.interceptors.request.use(attachLanguage)
+apiClient.interceptors.request.use(attachLanguage)
+publicApiClient.interceptors.request.use(attachLanguage)
 
 // Unwrap { data: { data: T } } → T
 const unwrap = (response: AxiosResponse): AxiosResponse => {

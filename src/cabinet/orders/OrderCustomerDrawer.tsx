@@ -8,7 +8,7 @@ import {
   SkeletonRows,
   TextInput,
 } from '@/components/app'
-import { cn, plural } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import {
   customersApi,
   readCustomerPhoneConflict,
@@ -16,10 +16,17 @@ import {
   type CustomerSearchItem,
 } from '@/api/customers'
 import { normalizeApiProblem } from '@/api/errors'
+import { useTenantSettings } from '@/auth/useTenantSettings'
+import { commonMessages, useT } from '@/i18n'
+import { isValidContactPhone, phoneExample } from '@/lib/phone'
 import {
+  customerPhoneForSave,
+  displayCustomerPhone,
   newCustomerPhoneDraft,
   normalizeCustomerPhoneDraft,
 } from '../customers/customer-phone'
+import { customerFormMessages } from '../customers/customer-form-messages'
+import { orderCustomerMessages } from './order-customer-messages'
 
 const SEARCH_DEBOUNCE_MS = 250
 
@@ -69,6 +76,11 @@ function OpenOrderCustomerDrawer({
   open,
   orderNumber,
 }: OrderCustomerDrawerProps) {
+  const t = useT(orderCustomerMessages)
+  const tf = useT(customerFormMessages)
+  const tc = useT(commonMessages)
+  /** A national number is read in the business country; any country is fine. */
+  const country = useTenantSettings().countryCode ?? 'UA'
   const listId = useId()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<CustomerSearchItem[] | null>(null)
@@ -76,7 +88,8 @@ function OpenOrderCustomerDrawer({
   const [picked, setPicked] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
-  const [phone, setPhone] = useState(newCustomerPhoneDraft())
+  const [phone, setPhone] = useState(() => newCustomerPhoneDraft(country))
+  const [phoneTouched, setPhoneTouched] = useState(false)
   const [conflict, setConflict] = useState<CustomerPhoneConflict | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -107,7 +120,8 @@ function OpenOrderCustomerDrawer({
   }, [open, query])
 
   const nameValid = name.trim().length > 1
-  const phoneValid = normalizeCustomerPhoneDraft(phone).length > 6
+  const phoneE164 = customerPhoneForSave(phone, country)
+  const phoneValid = phoneE164 !== null && isValidContactPhone(phoneE164)
   const canAssign = creating
     ? nameValid && phoneValid
     : picked !== null && picked !== currentId
@@ -129,12 +143,13 @@ function OpenOrderCustomerDrawer({
     setCreateError(null)
     setConflict(null)
     void customersApi
-      .create({ name: name.trim(), phone: normalizeCustomerPhoneDraft(phone) })
+      .create({ name: name.trim(), phone: phoneE164 })
       .then(({ customer }) => {
         onAssign(customer.id)
         setCreating(false)
         setName('')
-        setPhone(newCustomerPhoneDraft())
+        setPhone(newCustomerPhoneDraft(country))
+        setPhoneTouched(false)
       })
       .catch((reason: unknown) => {
         const duplicate = readCustomerPhoneConflict(reason)
@@ -146,16 +161,16 @@ function OpenOrderCustomerDrawer({
 
   return (
     <Sheet
-      eyebrow={`Замовлення #${String(orderNumber)} · клієнт`}
+      eyebrow={t('eyebrow', { number: String(orderNumber) })}
       footer={
         <>
           <p className="text-app-muted min-w-0 flex-1 truncate text-[13px]">
             {currentName === null
-              ? 'Клієнта не вказано'
-              : `Зараз: ${currentName}`}
+              ? t('noCustomer')
+              : t('current', { name: currentName })}
           </p>
           <Button disabled={busy || saving} onClick={() => onOpenChange(false)}>
-            Скасувати
+            {tc('cancel')}
           </Button>
           <Button
             aria-busy={busy || saving}
@@ -163,7 +178,7 @@ function OpenOrderCustomerDrawer({
             onClick={submit}
             variant="primary"
           >
-            {creating ? 'Створити й призначити' : 'Призначити клієнта'}
+            {creating ? t('createAndAssign') : t('assign')}
           </Button>
         </>
       }
@@ -172,11 +187,11 @@ function OpenOrderCustomerDrawer({
         onOpenChange(next)
       }}
       open={open}
-      title={currentId === null ? 'Додати клієнта' : 'Змінити клієнта'}
+      title={currentId === null ? t('titleAdd') : t('titleChange')}
     >
       {error === null ? null : <Notice tone="danger">{error}</Notice>}
 
-      <Field hiddenLabel label="Пошук клієнта">
+      <Field hiddenLabel label={t('searchLabel')}>
         <span className="relative block">
           <Search
             aria-hidden
@@ -187,7 +202,7 @@ function OpenOrderCustomerDrawer({
             autoComplete="off"
             className="h-[46px] rounded-[11px] pl-10"
             onChange={(event) => changeQuery(event.target.value)}
-            placeholder="Ім’я або телефон"
+            placeholder={t('searchPlaceholder')}
             value={query}
           />
         </span>
@@ -203,14 +218,14 @@ function OpenOrderCustomerDrawer({
       >
         {results === null ? (
           <div className="p-4">
-            <SkeletonRows label="Шукаємо клієнтів…" rows={3} />
+            <SkeletonRows label={t('searching')} rows={3} />
           </div>
         ) : results.length === 0 ? (
           <p className="text-app-muted px-4 py-5 text-center text-[13px]">
-            Клієнта не знайдено
+            {t('notFound')}
           </p>
         ) : (
-          <ul aria-label="Знайдені клієнти">
+          <ul aria-label={t('foundLabel')}>
             {results.map((customer) => {
               const active = !creating && customer.id === picked
               const current = customer.id === currentId
@@ -237,13 +252,10 @@ function OpenOrderCustomerDrawer({
                         {customer.name}
                       </span>
                       <span className="text-app-muted mt-[3px] block font-mono text-[12px]">
-                        {customer.phone ?? 'без телефону'} ·{' '}
-                        {String(customer.ordersCount)}{' '}
-                        {plural(customer.ordersCount, [
-                          'замовлення',
-                          'замовлення',
-                          'замовлень',
-                        ])}
+                        {customer.phone === null
+                          ? t('noPhone')
+                          : displayCustomerPhone(customer.phone)}{' '}
+                        · {t('ordersCount', { count: customer.ordersCount })}
                       </span>
                     </span>
                     {current || active ? (
@@ -253,7 +265,7 @@ function OpenOrderCustomerDrawer({
                           current ? 'text-app-muted' : 'text-brand',
                         )}
                       >
-                        {current ? 'поточний' : 'вибрано'}
+                        {current ? t('currentTag') : t('pickedTag')}
                       </span>
                     ) : null}
                   </button>
@@ -279,27 +291,40 @@ function OpenOrderCustomerDrawer({
           <span className="border-brand/50 grid size-9 shrink-0 place-items-center rounded-full border border-dashed">
             <Plus aria-hidden className="size-4" />
           </span>
-          Новий клієнт
+          {t('newCustomer')}
         </button>
       </div>
 
       {creating ? (
         <div className="border-app-line bg-app-raised grid gap-3 rounded-[14px] border px-[18px] py-4">
-          <Field label="Ім’я або назва компанії">
+          <Field label={t('name')}>
             <TextInput
               autoComplete="off"
               onChange={(event) => setName(event.target.value)}
               value={name}
             />
           </Field>
-          <Field label="Телефон">
+          <Field
+            error={
+              phoneTouched && !phoneValid
+                ? tf('phoneInvalid', { example: phoneExample(country) })
+                : null
+            }
+            label={t('phone')}
+          >
             <TextInput
               autoComplete="off"
               className="font-mono"
               inputMode="tel"
+              onBlur={() => {
+                setPhoneTouched(true)
+                if (phoneValid && phoneE164 !== null) setPhone(phoneE164)
+              }}
               onChange={(event) =>
                 setPhone(normalizeCustomerPhoneDraft(event.target.value))
               }
+              placeholder={phoneExample(country)}
+              type="tel"
               value={phone}
             />
           </Field>

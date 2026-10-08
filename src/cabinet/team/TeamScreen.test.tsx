@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { ToastProvider } from '@/components/app'
+import { LocaleProvider } from '@/i18n'
 import {
   teamApi,
   type InvitationDto,
@@ -14,6 +15,7 @@ import {
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { cabinetModules } from '../module-registry'
 import { tenantRequestScope } from '../tenant-request-scope'
+import { roleLabel } from './messages'
 import { TeamScreen } from './TeamScreen'
 
 vi.mock('@/api/team', () => ({
@@ -885,4 +887,64 @@ it('says what the team endpoints do not carry instead of inventing it', async ()
   // An invitation is a code, not a letter: the UI does not pretend it can
   // resend something when the backend has no delivery target.
   expect(screen.queryByRole('button', { name: 'Надіслати ще' })).toBeNull()
+})
+
+it('translates fixed system roles and keeps custom role names', () => {
+  const owner = { name: 'Owner', isSystem: true }
+  expect(roleLabel(owner, 'uk')).toBe('Власник')
+  expect(roleLabel(owner, 'en-GB')).toBe('Owner')
+  expect(roleLabel({ name: 'Master', isSystem: true }, 'en-GB')).toBe(
+    'Mechanic',
+  )
+  expect(roleLabel({ name: 'manager', isSystem: true }, 'pl')).toBe('Menedżer')
+  // A business-made role named like a system one is still the business's.
+  expect(roleLabel({ name: 'Owner', isSystem: false }, 'uk')).toBe('Owner')
+  expect(roleLabel({ name: 'Механік', isSystem: false }, 'en-GB')).toBe(
+    'Механік',
+  )
+})
+
+it('renders the team in English (UK)', async () => {
+  const systemOwner: RoleDto = { ...ownerRole, name: 'Owner' }
+  vi.mocked(teamApi.listRoles).mockResolvedValue([systemOwner, mechanicRole])
+  vi.mocked(teamApi.listMembers).mockResolvedValue([
+    member,
+    {
+      ...member,
+      id: 'member-2',
+      userId: 'user-owner',
+      name: 'Ivan',
+      role: systemOwner,
+    },
+  ])
+
+  render(
+    <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+      {teamScreen()}
+    </LocaleProvider>,
+  )
+
+  expect(await screen.findByRole('heading', { name: 'Team' })).toBeVisible()
+  expect(await screen.findByText('Олена')).toBeInTheDocument()
+  expect(screen.getByText('2 active')).toBeInTheDocument()
+  expect(screen.getByText('Showing 2 of 2 members')).toBeInTheDocument()
+  expect(screen.getByText('you')).toBeInTheDocument()
+  // System role translated, custom role name as the business gave it.
+  expect(
+    screen.getAllByRole('option', { name: 'Owner' }).length,
+  ).toBeGreaterThan(0)
+  expect(
+    screen.getAllByRole('option', { name: 'Механік' }).length,
+  ).toBeGreaterThan(0)
+  expect(screen.getAllByText(/in the team since/)[0]).toHaveTextContent(
+    '01/08/2026',
+  )
+  expect(screen.getByText('1 active')).toBeInTheDocument()
+  expect(screen.getByText(/Механік · valid until/)).toHaveTextContent(
+    '01/09/2026',
+  )
+  expect(
+    screen.getByRole('button', { name: 'Actions for Олена' }),
+  ).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Invite' })).toBeVisible()
 })

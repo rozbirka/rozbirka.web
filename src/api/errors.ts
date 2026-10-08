@@ -1,23 +1,11 @@
 import axios from 'axios'
+import { apiMessage } from './api-messages'
 import type { ApiProblem, ApiProblemKind } from './contracts'
 
 interface ErrorBody {
   error?: string | { code?: string; message?: string }
   message?: string
   errors?: Record<string, unknown>
-}
-
-const fallbackMessages: Record<ApiProblemKind, string> = {
-  cancelled: 'Запит скасовано.',
-  network: 'Немає з’єднання з мережею.',
-  timeout: 'Час очікування запиту минув.',
-  'session-expired': 'Сеанс завершився. Увійдіть знову.',
-  forbidden: 'У вас немає доступу до цієї дії.',
-  'not-found': 'Ресурс не знайдено.',
-  validation: 'Перевірте правильність введених даних.',
-  conflict: 'Не вдалося виконати дію через конфлікт даних.',
-  server: 'Сталася помилка сервера. Спробуйте пізніше.',
-  unknown: 'Сталася непередбачена помилка. Спробуйте ще раз.',
 }
 
 const kindForStatus = (status: number | undefined): ApiProblemKind => {
@@ -89,21 +77,21 @@ export const normalizeApiProblem = (error: unknown): ApiProblem => {
   if (axios.isCancel(error)) {
     return {
       kind: 'cancelled',
-      message: fallbackMessages.cancelled,
+      message: apiMessage('cancelled'),
       cause: error,
     }
   }
 
   if (!axios.isAxiosError(error)) {
-    return { kind: 'unknown', message: fallbackMessages.unknown, cause: error }
+    return { kind: 'unknown', message: apiMessage('unknown'), cause: error }
   }
 
   if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
-    return { kind: 'timeout', message: fallbackMessages.timeout, cause: error }
+    return { kind: 'timeout', message: apiMessage('timeout'), cause: error }
   }
 
   if (error.code === 'ERR_NETWORK') {
-    return { kind: 'network', message: fallbackMessages.network, cause: error }
+    return { kind: 'network', message: apiMessage('network'), cause: error }
   }
 
   const status = error.response?.status
@@ -123,7 +111,7 @@ export const normalizeApiProblem = (error: unknown): ApiProblem => {
       ? nestedError.message
       : typeof body?.message === 'string'
         ? body.message
-        : fallbackMessages[kind]
+        : apiMessage(kind)
   const fieldErrors = readFieldErrors(body?.errors)
   const retryAfterSeconds = readRetryAfter(error.response?.headers)
 

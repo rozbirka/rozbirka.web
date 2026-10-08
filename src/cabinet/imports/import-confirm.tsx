@@ -1,20 +1,16 @@
 import { Button } from '@/components/app'
-import { cn, plural } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { useLocale } from '@/i18n'
 import type {
   ImportMapping,
   ImportRow,
   ImportValidation,
 } from '@/api/part-imports'
-import { issueText, valueLabels } from './import-model'
+import { importConfirmMessages } from './import-confirm-messages'
+import { issueText, valueLabel } from './import-model'
+import { useCount, useImportT } from './use-import-text'
 
-const count = (value: number) =>
-  value.toLocaleString('uk-UA').replace(/ /g, ' ')
-
-const NOTES = [
-  'Схожі позиції не обʼєднуються: для рядка з можливим дублікатом буде створена окрема запчастина.',
-  'Зупинка імпорту не видаляє вже створені дані.',
-  'Після запуску сторінку можна закрити й повернутися до результату через історію.',
-] as const
+const NOTES = ['noteDuplicates', 'noteStop', 'noteLeave'] as const
 
 function Entity({
   value,
@@ -25,6 +21,7 @@ function Entity({
   label: string
   meta: string
 }) {
+  const count = useCount()
   return (
     <div className="bg-app-raised px-5 pt-4.5 pb-5">
       <p
@@ -74,6 +71,9 @@ export function ImportConfirmStep({
   onCommit: () => void
   busy: boolean
 }) {
+  const { locale } = useLocale()
+  const t = useImportT(importConfirmMessages)
+  const count = useCount()
   const picked = new Set(selected)
   const units = rows
     .filter((row) => picked.has(row.rowId))
@@ -92,122 +92,118 @@ export function ImportConfirmStep({
       ? whenColumn
       : constant(target) === null
         ? null
-        : (valueLabels[constant(target)!] ?? constant(target)!)
+        : (valueLabel(constant(target)!, locale) ?? constant(target)!)
 
   // What was left behind, grouped by the reason it was left behind.
   const excluded = new Map<string, number>()
   for (const row of rows) {
     if (picked.has(row.rowId)) continue
     const first = row.draft?.issues[0]
-    const reason = first === undefined ? 'Знято вручну' : issueText(first.code)
+    const reason =
+      first === undefined ? t('removedManually') : issueText(first.code, locale)
     excluded.set(reason, (excluded.get(reason) ?? 0) + 1)
   }
 
   const facts = [
     {
-      label: 'Походження',
+      label: t('origin'),
       value:
         sourceLabel ??
         (mapping?.source?.type === 'newBatch'
-          ? `Нова партія: ${mapping.source.batchName}`
+          ? t('newBatch', { name: mapping.source.batchName })
           : mapping?.source?.type === 'car'
-            ? `Автомобіль: ${mapping.source.carId}`
+            ? t('car', { id: mapping.source.carId })
             : mapping?.source?.type === 'batch'
-              ? `Партія: ${mapping.source.intakeId}`
-              : 'Джерело потрібно перевірити'),
+              ? t('batch', { id: mapping.source.intakeId })
+              : t('sourceNeedsCheck')),
     },
     {
-      label: 'Складська зона',
-      value: said('InventoryZoneId', 'З колонки файлу'),
+      label: t('zone'),
+      value: said('InventoryZoneId', t('fromFileColumn')),
     },
     {
-      label: 'Стан',
-      value: said('Condition', 'З колонки файлу'),
+      label: t('condition'),
+      value: said('Condition', t('fromFileColumn')),
     },
     {
-      label: 'Сценарій',
+      label: t('scenario'),
       value:
         constant('Strategy') === 'Reserved'
-          ? `Резерв із замовленням${validation.orderGrouping === 'one-order-per-reserved-row' ? ' · одне замовлення на рядок' : ''}`
-          : 'В наявності, доступні для продажу',
+          ? validation.orderGrouping === 'one-order-per-reserved-row'
+            ? t('scenarioReservedPerRow')
+            : t('scenarioReserved')
+          : t('scenarioAvailable'),
     },
     {
-      label: 'Фото',
+      label: t('photos'),
       value:
         validation.plannedPhotos === 0
-          ? 'Не додаються'
-          : `${count(validation.plannedPhotos)} ${plural(validation.plannedPhotos, ['фото', 'фото', 'фото'])} за посиланням`,
+          ? t('photosNone')
+          : t('photosByLink', { count: validation.plannedPhotos }),
     },
   ]
 
   return (
     <div className="flex min-w-0 flex-col gap-3.5">
       <section
-        aria-label="Буде створено"
+        aria-label={t('willBeCreated')}
         className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
       >
         <div className="px-6 pt-6 pb-5 sm:px-8">
           <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-            Буде створено
+            {t('willBeCreated')}
           </p>
           <p className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span className="text-[44px] leading-none font-extrabold tracking-[-0.03em] text-white">
               {count(validation.plannedParts)}
             </span>
             <span className="text-app-muted text-[17px] font-bold">
-              {plural(validation.plannedParts, [
-                'запчастина',
-                'запчастини',
-                'запчастин',
-              ])}
+              {t('parts', { count: validation.plannedParts })}
             </span>
             <span className="text-app-dim text-[14px]">
-              {count(units)}{' '}
-              {plural(units, [
-                'одиниця товару',
-                'одиниці товару',
-                'одиниць товару',
-              ])}
+              {t('units', { count: units })}
             </span>
           </p>
         </div>
 
         <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,170px),1fr))] gap-px border-y">
           <Entity
-            label="Надходжень"
+            label={t('intakes')}
             meta={
               validation.plannedIntakes === 0
-                ? 'нове надходження не створюється'
-                : 'нове надходження для цієї партії'
+                ? t('noNewIntake')
+                : t('newIntake')
             }
             value={validation.plannedIntakes}
           />
           <Entity
-            label="Складських зон"
+            label={t('zones')}
             meta={
               validation.plannedZones === 0
-                ? 'усі зони вже існують'
-                : 'зони з файлу, яких ще немає'
+                ? t('zonesExist')
+                : t('zonesFromFile')
             }
             value={validation.plannedZones}
           />
           <Entity
-            label="Замовлень"
+            label={t('orders')}
             meta={
               constant('Strategy') === 'Reserved'
                 ? validation.maxOrderGroupSize === undefined
-                  ? 'сценарій «Резерв із замовленням»'
-                  : `до ${count(validation.maxOrderGroupSize)} позицій у кожному`
-                : 'сценарій «Доступні запчастини»'
+                  ? t('reservedScenario')
+                  : t('perOrder', {
+                      size: count(validation.maxOrderGroupSize),
+                    })
+                : t('availableScenario')
             }
             value={validation.plannedOrders}
           />
           <Entity
-            label="Клієнтів"
+            label={t('customers')}
             meta={
               validation.plannedCustomers === 0
-                ? 'нових клієнтів немає'
-                : 'клієнти з файлу, яких ще немає'
+                ? t('noNewCustomers')
+                : t('customersFromFile')
             }
             value={validation.plannedCustomers}
           />
@@ -226,7 +222,7 @@ export function ImportConfirmStep({
                   fact.value === null ? 'text-app-dim' : 'text-app-ink',
                 )}
               >
-                {fact.value ?? 'не задано'}
+                {fact.value ?? t('notSet')}
               </dd>
             </div>
           ))}
@@ -235,15 +231,15 @@ export function ImportConfirmStep({
 
       <div className="flex flex-wrap items-start gap-3.5">
         <section
-          aria-label="Виключено з імпорту"
+          aria-label={t('excludedTitle')}
           className="border-app-line bg-app-raised min-w-0 flex-[1_1_320px] rounded-[18px] border px-5.5 py-5"
         >
           <h2 className="text-app-ink text-[15px] font-bold">
-            Виключено з імпорту
+            {t('excludedTitle')}
           </h2>
           {excluded.size === 0 ? (
             <p className="text-app-muted mt-3 text-[14px]">
-              Нічого не виключено — усі рядки сторінки йдуть в імпорт.
+              {t('nothingExcluded')}
             </p>
           ) : (
             <dl className="mt-3.5 grid gap-2.5">
@@ -256,31 +252,31 @@ export function ImportConfirmStep({
                     {reason}
                   </dt>
                   <dd className="text-app-ink font-mono text-[13px] tabular-nums">
-                    {count(howMany)}{' '}
-                    {plural(howMany, ['рядок', 'рядки', 'рядків'])}
+                    {t('rows', { count: howMany })}
                   </dd>
                 </div>
               ))}
             </dl>
           )}
           <p className="text-app-dim mt-4 text-[13px] leading-5 text-pretty">
-            Виключені рядки залишаються у файлі — їх можна імпортувати окремо
-            після виправлення.
+            {t('excludedNote')}
           </p>
         </section>
 
         <section
-          aria-label="Що варто знати"
+          aria-label={t('goodToKnow')}
           className="border-app-line bg-app-raised min-w-0 flex-[1_1_320px] rounded-[18px] border px-5.5 py-5"
         >
-          <h2 className="text-app-ink text-[15px] font-bold">Що варто знати</h2>
+          <h2 className="text-app-ink text-[15px] font-bold">
+            {t('goodToKnow')}
+          </h2>
           <ul className="mt-3.5 grid gap-2.5">
             {NOTES.map((note) => (
               <li
                 className="text-app-muted text-[13.5px] leading-6 text-pretty"
                 key={note}
               >
-                {note}
+                {t(note)}
               </li>
             ))}
           </ul>
@@ -289,19 +285,17 @@ export function ImportConfirmStep({
 
       <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
         <Button disabled={busy} onClick={onBack}>
-          Назад до перевірки
+          {t('backToReview')}
         </Button>
         <div className="flex flex-wrap items-center gap-4">
-          <p className="text-app-dim text-[13px]">
-            Робота піде у фоні — сторінку можна закрити
-          </p>
+          <p className="text-app-dim text-[13px]">{t('runsInBackground')}</p>
           <Button
             className="h-11.5 px-6 text-[15px] font-bold"
             disabled={busy}
             onClick={onCommit}
             variant="primary"
           >
-            Почати імпорт
+            {t('startImport')}
           </Button>
         </div>
       </div>

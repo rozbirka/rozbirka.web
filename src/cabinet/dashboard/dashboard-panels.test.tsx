@@ -40,6 +40,7 @@ const car = (overrides: Partial<CarListItem> = {}): CarListItem => ({
 it('puts a car’s payback, its age and both sums on one row', () => {
   routed(
     <CarPayoffCard
+      accountingCurrency="USD"
       base="/app/koval/cars"
       cars={[car()]}
       now={NOW}
@@ -56,7 +57,7 @@ it('puts a car’s payback, its age and both sums on one row', () => {
   expect(row).toHaveAttribute('href', '/app/koval/cars/car-1')
   expect(row).toHaveTextContent('62%')
   expect(row).toHaveTextContent('BC 9102 TX · 8/120 продано · 62 дн')
-  expect(row).toHaveTextContent('9 120 / 14 600 $')
+  expect(row).toHaveTextContent('9 120 / 14 600 USD')
 })
 
 it('shows a dash for a car whose money the account may not see', () => {
@@ -90,13 +91,19 @@ const order = (overrides: Partial<OrderListItem> = {}): OrderListItem => ({
 })
 
 it('names an order, its state and its sum, and links the row', () => {
-  routed(<RecentOrdersCard base="/app/koval/orders" orders={[order()]} />)
+  routed(
+    <RecentOrdersCard
+      accountingCurrency="USD"
+      base="/app/koval/orders"
+      orders={[order()]}
+    />,
+  )
 
   const row = screen.getByRole('link', { name: /Ірина Олійник/ })
   expect(row).toHaveAttribute('href', '/app/koval/orders/order-1')
   expect(row).toHaveTextContent('#286')
   expect(row).toHaveTextContent('Оплачено')
-  expect(row).toHaveTextContent('103 $')
+  expect(row).toHaveTextContent('103 USD')
 })
 
 it('says an order has no customer instead of leaving the row blank', () => {
@@ -123,16 +130,16 @@ const register = (overrides: Partial<CashRegister> = {}): CashRegister => ({
 it('keeps every till currency on its own line and never adds them up', () => {
   routed(<TillsCard base="/app/koval/cash" registers={[register()]} />)
 
-  const card = screen.getByRole('region', { name: 'Каси' })
+  const card = screen.getByRole('region', { name: 'Залишки кас' })
   expect(within(card).getAllByText('Основна каса')).toHaveLength(2)
   expect(card).toHaveTextContent('9 801')
   expect(card).toHaveTextContent('125 498')
-  // Dollars are read first, whatever order the server listed them in.
+  // Catalog order, not a «preferred» currency first; each with its code.
   expect(
     within(card)
       .getAllByText(/^(USD|UAH)$/)
       .map((node) => node.textContent),
-  ).toEqual(['USD', 'UAH'])
+  ).toEqual(['UAH', 'USD'])
 })
 
 it('draws the period’s takings with today in the accent and its axis under it', () => {
@@ -154,13 +161,41 @@ it('draws the period’s takings with today in the accent and its axis under it'
     />,
   )
 
-  const card = screen.getByRole('region', { name: 'Виручка за період' })
-  expect(card).toHaveTextContent('Виручка · Тиждень')
-  expect(card).toHaveTextContent('900 USD')
-  expect(card).toHaveTextContent('сер. 300 USD/день')
+  const card = screen.getByRole('region', { name: 'Фактичні надходження' })
+  expect(card).toHaveTextContent('Фактичні надходження · Тиждень')
+  expect(card).toHaveTextContent(/900\sUSD/)
+  expect(card).toHaveTextContent(/сер\. 300\sUSD\/день/)
   expect(card).toHaveTextContent('13.09')
   expect(card).toHaveTextContent('15.09')
   expect(within(card).getByTitle('15.09 · 500 USD')).toBeInTheDocument()
+})
+
+it('lists receipts per currency and never sums them (AC-13)', () => {
+  render(
+    <RevenueChart
+      data={{
+        period: 'month',
+        labels: ['1', '2'],
+        revenue: {
+          totals: { USD: 9120, UAH: 186400, EUR: 30, PLN: 0 },
+          trendPercent: 0,
+          series: [1, 2],
+        },
+        partsSold: { total: 0, delta: 0, series: [0, 0] },
+        activeOrders: { total: 0, delta: 0, series: [0, 0] },
+        topPart: null,
+      }}
+      periodLabel="Місяць"
+    />,
+  )
+  const list = screen.getByRole('list', { name: 'Окремо за валютами' })
+  expect(
+    within(list)
+      .getAllByRole('listitem')
+      .map((item) => item.textContent?.replace(/\s/g, ' ')),
+  ).toEqual(['186 400 UAH', '9 120 USD', '30 EUR'])
+  // Several currencies and no series currency from the server: no average.
+  expect(screen.queryByText(/\/день/)).toBeNull()
 })
 
 it('says there were no sales rather than drawing an empty chart', () => {
@@ -179,13 +214,14 @@ it('says there were no sales rather than drawing an empty chart', () => {
   )
 
   expect(
-    screen.getByRole('region', { name: 'Виручка за період' }),
-  ).toHaveTextContent('За обраний період продажів не було.')
+    screen.getByRole('region', { name: 'Фактичні надходження' }),
+  ).toHaveTextContent('За обраний період надходжень не було.')
 })
 
 it('links the best-selling part to its own card when parts are open', () => {
   routed(
     <TopSalesCard
+      accountingCurrency={null}
       partsPath="/app/koval/parts"
       periodLabel="Тиждень"
       topPart={{
@@ -202,7 +238,8 @@ it('links the best-selling part to its own card when parts are open', () => {
   const row = screen.getByRole('link', { name: /Фара ліва LED/ })
   expect(row).toHaveAttribute('href', '/app/koval/parts/part-1')
   expect(row).toHaveTextContent('3 продажі за період')
-  expect(row).toHaveTextContent('1 140 $')
+  // The pinned contract's revenueUsd is dollars by name, not a guess.
+  expect(row).toHaveTextContent(/1 140\sUSD/)
 })
 
 it('carries the two activity events the payload has and nothing more', () => {

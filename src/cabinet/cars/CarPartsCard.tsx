@@ -1,7 +1,8 @@
 import { Link } from 'react-router'
 import { Card } from '@/components/app'
 import type { CarProfitability } from '@/api/cars'
-import { plural } from '@/lib/utils'
+import { useT } from '@/i18n'
+import { carCardMessages } from './car-card-messages'
 
 const share = (part: number, total: number) =>
   total <= 0 ? 0 : Math.round((part / total) * 100)
@@ -19,6 +20,7 @@ export function CarPartsCard({
   partsHref: string | null
   profit: CarProfitability
 }) {
+  const t = useT(carCardMessages)
   const { partsSold, partsAvailable, partsTotal } = profit
 
   return (
@@ -29,15 +31,15 @@ export function CarPartsCard({
             className="text-brand text-[13px] font-bold whitespace-nowrap underline-offset-4 hover:underline"
             to={partsHref}
           >
-            Усі {partsTotal} →
+            {t('partsAll', { count: partsTotal })}
           </Link>
         )
       }
-      title="Запчастини з авто"
+      title={t('partsTitle')}
     >
       {partsTotal === 0 ? (
         <p className="text-app-muted text-[13px] leading-5 text-pretty">
-          З цього авто ще не розібрано жодної позиції.
+          {t('partsNone')}
         </p>
       ) : (
         <>
@@ -62,7 +64,7 @@ export function CarPartsCard({
                   {partsSold}
                 </span>
                 <span className="text-app-muted font-mono text-[12px]">
-                  {share(partsSold, partsTotal)} %
+                  {t('share', { percent: share(partsSold, partsTotal) })}
                 </span>
               </dd>
               <dt className="text-app-muted mt-0.5 flex items-center gap-[7px] text-[13px] font-semibold">
@@ -70,20 +72,20 @@ export function CarPartsCard({
                   aria-hidden
                   className="bg-app-ink size-1.5 rounded-full"
                 />
-                продано
+                {t('partsSold')}
               </dt>
             </div>
             <div className="min-w-0 text-right">
               <dd className="flex items-baseline justify-end gap-2">
                 <span className="text-app-muted font-mono text-[12px]">
-                  {share(partsAvailable, partsTotal)} %
+                  {t('share', { percent: share(partsAvailable, partsTotal) })}
                 </span>
                 <span className="text-[22px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
                   {partsAvailable}
                 </span>
               </dd>
               <dt className="text-app-muted mt-0.5 flex items-center justify-end gap-[7px] text-[13px] font-semibold">
-                на складі
+                {t('partsInStock')}
                 <span
                   aria-hidden
                   className="size-1.5 rounded-full bg-white/25"
@@ -92,11 +94,7 @@ export function CarPartsCard({
             </div>
           </dl>
 
-          <p className="sr-only">
-            {partsTotal}{' '}
-            {plural(partsTotal, ['запчастина', 'запчастини', 'запчастин'])} з
-            цього авто
-          </p>
+          <p className="sr-only">{t('partsFromCar', { count: partsTotal })}</p>
         </>
       )}
     </Card>

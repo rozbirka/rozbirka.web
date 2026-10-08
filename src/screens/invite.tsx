@@ -16,6 +16,8 @@ import { tenantPreference } from '@/api/tenant-preference'
 import { useAuth, type AuthContextValue } from '@/auth/AuthContext'
 import { cabinetPath } from '@/cabinet/cabinet-paths'
 import { BrandLogo } from '@/components/site/brand-logo'
+import { commonMessages, useT, type MessageKey } from '@/i18n'
+import { inviteMessages } from './invite-messages'
 import {
   Button,
   DateValue,
@@ -64,69 +66,49 @@ type AcceptOutcome = 'accepted' | 'stale'
 const stateContent: Record<
   InvitationState,
   {
-    title: string
-    description: string
     tone: StateTone
     icon: ReactNode
     resolution: Resolution
   }
 > = {
   expired: {
-    title: 'Посилання прострочене',
-    description:
-      'Термін дії запрошення минув. Попросіть власника розбірки надіслати нове посилання.',
     tone: 'warn',
     icon: <Clock aria-hidden />,
     resolution: 'home',
   },
   used: {
-    title: 'Запрошення вже використано',
-    description:
-      'За цим посиланням уже приєдналися. Якщо це були ви — увійдіть за своїм номером телефону.',
     tone: 'neutral',
     icon: <CheckCircle2 aria-hidden />,
     resolution: 'login',
   },
   revoked: {
-    title: 'Запрошення скасовано',
-    description:
-      'Власник розбірки скасував це запрошення. Попросіть надіслати нове.',
     tone: 'warn',
     icon: <Ban aria-hidden />,
     resolution: 'home',
   },
   'not-found': {
-    title: 'Недійсне посилання',
-    description:
-      'Такого запрошення не існує. Перевірте, чи посилання скопійовано повністю.',
     tone: 'neutral',
     icon: <SearchX aria-hidden />,
     resolution: 'home',
   },
   invalid: {
-    title: 'Запрошення недійсне',
-    description:
-      'Це запрошення більше не діє. Попросіть власника розбірки надіслати нове.',
     tone: 'warn',
     icon: <ShieldAlert aria-hidden />,
     resolution: 'home',
   },
   'wrong-account': {
-    title: 'Запрошення для іншого номера',
-    description:
-      'Це запрошення надіслали на інший номер телефону. Увійдіть за номером, на який воно надійшло.',
     tone: 'neutral',
     icon: <ShieldAlert aria-hidden />,
     resolution: 'login',
   },
   unknown: {
-    title: 'Не вдалося завантажити запрошення',
-    description: 'Зв’язок із сервером перервався. Спробуйте ще раз.',
     tone: 'danger',
     icon: <RefreshCw aria-hidden />,
     resolution: 'retry',
   },
 }
+
+type InviteKey = MessageKey<typeof inviteMessages>
 
 function invitationState(error: unknown): InvitationState {
   const problem = normalizeApiProblem(error)
@@ -157,6 +139,7 @@ export function InviteScreen() {
   const { code = '' } = useParams<{ code: string }>()
   const auth = useAuth()
   const navigate = useNavigate()
+  const t = useT(inviteMessages)
   const activeAcceptRef = useRef<AcceptAttempt | null>(null)
   const [load, setLoad] = useState<InvitationLoad | null>(null)
   const [reloadToken, setReloadToken] = useState(0)
@@ -280,7 +263,7 @@ export function InviteScreen() {
           to="/"
         >
           <ArrowLeft aria-hidden className="size-4" />
-          На головну
+          {t('toHome')}
         </Link>
       </header>
 
@@ -288,18 +271,14 @@ export function InviteScreen() {
         <div className="w-full max-w-[480px] min-w-0">
           {loading && (
             <>
-              <h1 className="sr-only">Запрошення до розбірки</h1>
-              <SkeletonRows
-                columns={2}
-                label="Завантажуємо запрошення…"
-                rows={4}
-              />
+              <h1 className="sr-only">{t('heading')}</h1>
+              <SkeletonRows columns={2} label={t('loading')} rows={4} />
             </>
           )}
 
           {!loading && errorState && (
             <>
-              <h1 className="sr-only">Запрошення до розбірки</h1>
+              <h1 className="sr-only">{t('heading')}</h1>
               <InvitationOutcome
                 loginHref={loginHref}
                 onRetry={reloadInvitation}
@@ -349,26 +328,26 @@ function InvitationCard({
   })
   const accepted = accepting.succeeded && accepting.result === 'accepted'
   const failed = accepting.status === 'failed'
+  const t = useT(inviteMessages)
+  const tc = useT(commonMessages)
 
   return (
     <section className="border-app-line rounded-sheet bg-app-raised border p-5 sm:p-7">
       <p className="text-app-dim font-mono text-[10.5px] tracking-[0.12em] uppercase">
-        Запрошення
+        {t('eyebrow')}
       </p>
       <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em] break-words text-white">
         {info.tenantName}
       </h1>
-      <p className="text-app-muted mt-2 text-[13.5px] leading-6">
-        Вас запрошують приєднатися до кабінету цієї розбірки.
-      </p>
+      <p className="text-app-muted mt-2 text-[13.5px] leading-6">{t('lead')}</p>
 
       <div className="border-app-line rounded-panel bg-app-canvas/60 mt-5 border p-4">
         <FactList columns={2}>
-          <Fact label="Роль у кабінеті">
+          <Fact label={t('role')}>
             <StatusPill tone="info">{info.roleName}</StatusPill>
           </Fact>
-          <Fact label="Запросив">{info.createdByName}</Fact>
-          <Fact label="Запрошення діє до">
+          <Fact label={t('invitedBy')}>{info.createdByName}</Fact>
+          <Fact label={t('validUntil')}>
             <DateValue value={info.expiresAt} />
           </Fact>
         </FactList>
@@ -377,8 +356,7 @@ function InvitationCard({
       {authStatus === 'guest' ? (
         <>
           <Notice className="mt-5" tone="info">
-            Щоб приєднатися, спершу увійдіть за номером телефону, на який
-            надійшло запрошення.
+            {t('signInFirst')}
           </Notice>
           <Button
             asChild
@@ -387,7 +365,7 @@ function InvitationCard({
             variant="primary"
           >
             <Link to={loginHref}>
-              Прийняти запрошення
+              {t('accept')}
               <ArrowRight aria-hidden />
             </Link>
           </Button>
@@ -395,7 +373,7 @@ function InvitationCard({
       ) : accepted ? (
         <>
           <Notice className="mt-5" tone="ok">
-            Запрошення прийнято. Відкриваємо кабінет розбірки.
+            {t('accepted')}
           </Notice>
           <Button
             asChild
@@ -404,7 +382,7 @@ function InvitationCard({
             variant="primary"
           >
             <Link to="/account">
-              Перейти до кабінету
+              {t('toCabinet')}
               <ArrowRight aria-hidden />
             </Link>
           </Button>
@@ -414,10 +392,7 @@ function InvitationCard({
           {failed && accepting.error !== null && (
             <Notice block className="mt-5" tone="danger">
               <p>{accepting.error}</p>
-              <p className="text-app-muted mt-1">
-                Спробуйте ще раз. Якщо не вдається — попросіть власника розбірки
-                надіслати нове запрошення.
-              </p>
+              <p className="text-app-muted mt-1">{t('acceptFailedHint')}</p>
             </Notice>
           )}
           <Button
@@ -429,14 +404,14 @@ function InvitationCard({
             disabled={accepting.pending || busy || authStatus === 'loading'}
           >
             {accepting.pending ? (
-              'Приєднуємо…'
+              t('joining')
             ) : failed ? (
               <>
                 <RefreshCw aria-hidden />
-                Спробувати ще раз
+                {tc('retry')}
               </>
             ) : (
-              'Прийняти запрошення'
+              t('accept')
             )}
           </Button>
         </>
@@ -454,15 +429,18 @@ function InvitationOutcome({
   loginHref: string
   onRetry: () => void
 }) {
+  const t = useT(inviteMessages)
   const content = stateContent[state]
+  const title = t(`${state}.title` satisfies InviteKey)
+  const description = t(`${state}.body` satisfies InviteKey)
 
   if (content.resolution === 'retry') {
     return (
       <ErrorState
-        description={content.description}
-        label="Стан запрошення"
+        description={description}
+        label={t('state')}
         onRetry={onRetry}
-        title={content.title}
+        title={title}
       />
     )
   }
@@ -471,14 +449,12 @@ function InvitationOutcome({
     content.resolution === 'login' ? (
       <Button asChild variant="primary">
         <Link to={loginHref}>
-          {state === 'wrong-account'
-            ? 'Увійти іншим номером'
-            : 'Увійти за номером телефону'}
+          {state === 'wrong-account' ? t('signInOther') : t('signInPhone')}
         </Link>
       </Button>
     ) : (
       <Button asChild>
-        <Link to="/">Повернутися на головну</Link>
+        <Link to="/">{t('backHome')}</Link>
       </Button>
     )
 
@@ -486,9 +462,9 @@ function InvitationOutcome({
     return (
       <DeniedState
         actions={action}
-        description={content.description}
-        label="Стан запрошення"
-        title={content.title}
+        description={description}
+        label={t('state')}
+        title={title}
       />
     )
   }
@@ -496,10 +472,10 @@ function InvitationOutcome({
   return (
     <StateScreen
       actions={action}
-      description={content.description}
+      description={description}
       icon={content.icon}
-      label="Стан запрошення"
-      title={content.title}
+      label={t('state')}
+      title={title}
       tone={content.tone}
     />
   )

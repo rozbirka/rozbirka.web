@@ -3,9 +3,13 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
+import { AxiosError } from 'axios'
 import { businessApi } from '@/api/business'
+import { tenantsApi } from '@/api/tenants'
 import type { BillingState, Tenant } from '@/api/types'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
+import { LocaleProvider } from '@/i18n'
+import { BUSINESS_SECTION_IDS } from './business-anchors'
 import { BusinessSettingsScreen } from './business-settings-screen'
 
 vi.mock('@/api/business', () => ({ businessApi: { update: vi.fn() } }))
@@ -13,6 +17,17 @@ vi.mock('@/api/inventory', () => ({
   inventoryApi: { getWarehouses: vi.fn(() => Promise.resolve([])) },
 }))
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
+// The accounting currency block re-reads the tenant; here it is locked, so it
+// renders as text and adds no controls or alerts to these scenarios.
+vi.mock('@/api/tenants', () => ({
+  tenantsApi: {
+    list: vi.fn(() =>
+      Promise.resolve([
+        { id: 'tenant-1', accountingCurrency: 'USD', currencyLocked: true },
+      ]),
+    ),
+  },
+}))
 
 const tenant: Tenant = {
   id: 'tenant-1',
@@ -143,9 +158,12 @@ it('round-trips trimmed business settings through the active tenant', async () =
     requireDeliveryDeposit: true,
   })
   expect(updateCall?.[2]?.signal).toBeInstanceOf(AbortSignal)
-  expect(await screen.findByRole('status')).toHaveTextContent(
-    'Налаштування бізнесу збережено.',
-  )
+  // The region block adds its own static notice, so find the save status by text.
+  expect(
+    (await screen.findByText('Налаштування бізнесу збережено.')).closest(
+      '[role="status"]',
+    ),
+  ).not.toBeNull()
   expect(screen.getByLabelText('Назва бізнесу')).toHaveValue('Koval Parts LLC')
   expect(screen.getByLabelText('Місто')).toHaveValue('Буча')
   expect(currentCabinet.switchTenant).toHaveBeenCalledWith('tenant-1')
@@ -209,8 +227,11 @@ it('shows the business fields the tenant record cannot hold as disabled', async 
   // `PATCH /tenants/{id}` takes a name, a city and a logo — nothing else.
   for (const label of ['ЄДРПОУ / ІПН', 'Телефон', 'Адреса'])
     expect(await screen.findByLabelText(label)).toBeDisabled()
-  for (const label of ['ФОП', 'USD', 'Експорт усіх даних', 'Видалити кабінет'])
+  for (const label of ['ФОП', 'Експорт усіх даних', 'Видалити кабінет'])
     expect(screen.getByRole('button', { name: label })).toBeDisabled()
+  // The accounting currency is a real setting now, not a dead control.
+  expect(screen.queryByRole('button', { name: 'USD' })).toBeNull()
+  expect(await screen.findByText('Зафіксовано')).toBeVisible()
   expect(
     screen.getByRole('button', { name: 'Видалити кабінет' }).title,
   ).toContain('Видалити розбірку з кабінету не можна')
@@ -241,4 +262,61 @@ it('saves the delivery deposit policy the yard actually keeps', async () => {
   )
   // Turning it off is a real change, so the form offers to save it.
   expect(await screen.findByText(/Відправляєте без передоплати/)).toBeVisible()
+})
+
+it('numbers the sections and anchors region and accounting currency', async () => {
+  const view = render(
+    <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+      <MemoryRouter initialEntries={['/app/koval/settings/business']}>
+        <BusinessSettingsScreen />
+      </MemoryRouter>
+    </LocaleProvider>,
+  )
+
+  const region = view.container.querySelector(`#${BUSINESS_SECTION_IDS.region}`)
+  const currency = await waitFor(() => {
+    const found = view.container.querySelector(
+      `#${BUSINESS_SECTION_IDS.accountingCurrency}`,
+    )
+    expect(found).not.toBeNull()
+    return found
+  })
+  expect(region).toHaveTextContent('02')
+  expect(currency).toHaveTextContent('03')
+  expect(screen.getByRole('heading', { name: 'Warehouses' })).toBeVisible()
+  expect(screen.getByRole('heading', { name: 'Accounting' })).toBeVisible()
+  expect(screen.getByText('Require a delivery deposit')).toBeVisible()
+  expect(screen.queryByText('Валюти й облік')).toBeNull()
+})
+
+it('reads the business back after a lost answer before saying it was not saved', async () => {
+  vi.mocked(businessApi.update).mockRejectedValue(
+    new AxiosError('timeout', 'ECONNABORTED'),
+  )
+  vi.mocked(tenantsApi.list).mockResolvedValue([
+    {
+      ...tenant,
+      name: 'Koval Parts',
+      accountingCurrency: 'USD',
+      currencyLocked: true,
+    },
+  ])
+  const currentCabinet = cabinet()
+  vi.mocked(useCabinet).mockReturnValue(currentCabinet)
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/koval/settings/business']}>
+      <BusinessSettingsScreen />
+    </MemoryRouter>,
+  )
+
+  await user.clear(screen.getByLabelText('Назва бізнесу'))
+  await user.type(screen.getByLabelText('Назва бізнесу'), 'Koval Parts')
+  await user.click(screen.getAllByRole('button', { name: 'Зберегти' })[0]!)
+
+  expect(
+    await screen.findByText('Налаштування бізнесу збережено.'),
+  ).toBeVisible()
+  expect(businessApi.update).toHaveBeenCalledTimes(1)
+  expect(currentCabinet.switchTenant).toHaveBeenCalledWith('tenant-1')
 })

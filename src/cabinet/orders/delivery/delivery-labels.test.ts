@@ -51,13 +51,13 @@ it('offers a waybill only on a quote that still answers the form', () => {
   const fresh = quoteState({ ...base, shipment: shipment() })
 
   expect(fresh.kind).toBe('ready')
-  expect(quotePresentation(fresh).canCreate).toBe(true)
+  expect(quotePresentation(fresh, 'uk').canCreate).toBe(true)
 })
 
 it('blocks the waybill once the carrier quote is a day old', () => {
   const old = new Date(Date.now() - QUOTE_TTL_MS - 60_000).toISOString()
   const state = quoteState({ ...base, shipment: shipment({ quoteAt: old }) })
-  const view = quotePresentation(state)
+  const view = quotePresentation(state, 'uk')
 
   expect(state.kind).toBe('stale')
   expect(view.canCreate).toBe(false)
@@ -67,7 +67,7 @@ it('blocks the waybill once the carrier quote is a day old', () => {
 
 it('blocks the waybill while the form no longer matches the quote', () => {
   const state = quoteState({ ...base, dirty: true, shipment: shipment() })
-  const view = quotePresentation(state)
+  const view = quotePresentation(state, 'uk')
 
   expect(state.kind).toBe('dirty')
   expect(view.canCreate).toBe(false)

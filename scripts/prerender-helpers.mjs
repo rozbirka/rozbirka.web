@@ -25,6 +25,20 @@ function replaceMeta(html, attribute, key, content) {
   )
 }
 
+const htmlLangPattern = /<html\b([^>]*?)\slang="[^"]*"([^>]*)>/
+const ogLocalePattern = /<meta\s+property="og:locale"\s+content="[^"]*"\s*\/?>/
+const canonicalPattern =
+  /<link\s+data-product-seo\s+rel="canonical"\s+href="[^"]*"\s*\/?>/
+
+function alternateLinks(alternates) {
+  return alternates
+    .map(
+      ({ hreflang, href }) =>
+        `<link data-product-seo rel="alternate" hreflang="${escapeAttribute(hreflang)}" href="${escapeAttribute(href)}" />`,
+    )
+    .join('')
+}
+
 export function documentPathForRoute(pathname) {
   if (pathname === '/') return join('dist', 'index.html')
   const slug = pathname.replace(/^\/|\/$/g, '')
@@ -43,8 +57,8 @@ export function injectProductDocument({
       `<title data-product-seo>${escapeHtmlText(seo.title)}</title>`,
     )
     .replace(
-      /<link\s+data-product-seo\s+rel="canonical"\s+href="[^"]*"\s*\/?>/,
-      `<link data-product-seo rel="canonical" href="${escapeAttribute(seo.canonical)}" />`,
+      canonicalPattern,
+      `<link data-product-seo rel="canonical" href="${escapeAttribute(seo.canonical)}" />${alternateLinks(seo.alternates ?? [])}`,
     )
     .replace(
       /<script\s+data-product-seo\s+data-product-json-ld\s+type="application\/ld\+json">[\s\S]*?<\/script>/,
@@ -52,6 +66,19 @@ export function injectProductDocument({
     )
     .replace('<div id="root"></div>', `<div id="root">${renderedBody}</div>`)
 
+  if (seo.locale) {
+    html = html.replace(
+      htmlLangPattern,
+      (_match, before, after) =>
+        `<html${before} lang="${escapeAttribute(seo.locale)}"${after}>`,
+    )
+  }
+  if (seo.ogLocale) {
+    html = html.replace(
+      ogLocalePattern,
+      `<meta property="og:locale" content="${escapeAttribute(seo.ogLocale)}" />`,
+    )
+  }
   html = replaceMeta(html, 'name', 'description', seo.description)
   html = replaceMeta(html, 'property', 'og:title', seo.title)
   html = replaceMeta(html, 'property', 'og:description', seo.description)
@@ -188,7 +215,7 @@ function assertStructuredData(html, seo) {
     ? structuredData['@graph']
     : []
 
-  if (seo.path === '/') {
+  if (seo.landing) {
     assertGraphEntity(
       graph,
       'Organization',
@@ -199,7 +226,7 @@ function assertStructuredData(html, seo) {
     const software = assertGraphEntity(
       graph,
       'SoftwareApplication',
-      'https://rozbirka.pro/#software',
+      `${seo.canonical}#software`,
       seo,
     )
     if (
@@ -260,12 +287,45 @@ function assertStructuredData(html, seo) {
   )
 }
 
+function assertLanguage(html, seo) {
+  if (seo.locale) {
+    const lang = html.match(/<html\b[^>]*\slang="([^"]*)"/)?.[1]
+    if (lang !== seo.locale) {
+      throw new Error(
+        `${seo.path} <html lang> must be ${seo.locale}; found ${lang ?? 'none'}`,
+      )
+    }
+  }
+  if (seo.ogLocale) {
+    assertSingleMatch(
+      html,
+      /<meta(?=[^>]*\sproperty="og:locale")(?=[^>]*\scontent="([^"]*)")[^>]*>/g,
+      'OG locale',
+      escapeAttribute(seo.ogLocale),
+      seo,
+    )
+  }
+  for (const { hreflang, href } of seo.alternates ?? []) {
+    assertSingleMatch(
+      html,
+      new RegExp(
+        `<link(?=[^>]*\\srel="alternate")(?=[^>]*\\shreflang="${hreflang}")(?=[^>]*\\shref="([^"]*)")[^>]*>`,
+        'g',
+      ),
+      `hreflang ${hreflang} alternate`,
+      escapeAttribute(href),
+      seo,
+    )
+  }
+}
+
 export function assertProductDocument({ html, seo, expectedH1 }) {
   const h1Count = html.match(/<h1(?:\s|>)/g)?.length ?? 0
   if (h1Count !== 1) {
     throw new Error(`${seo.path} must contain exactly one H1; found ${h1Count}`)
   }
   assertMetadata(html, seo)
+  assertLanguage(html, seo)
   const visibleText = html
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')

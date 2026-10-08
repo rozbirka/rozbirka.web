@@ -49,38 +49,35 @@ import {
   type WarehouseDetail,
 } from '@/api/inventory'
 import { partsApi, type PartDetail, type PartHistory } from '@/api/parts'
-import { historyDetails, historyLabel } from '../parts/part-labels'
+import { historyDetails, historyLabel, unitLabel } from '../parts/part-labels'
 import { teamApi } from '@/api/team'
 import { normalizeApiProblem } from '@/api/errors'
-import { cn, plural } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { cabinetPath } from '../cabinet-paths'
 import { useCabinet } from '../CabinetContext'
+import { useAccountingCurrency } from '../currency/use-accounting-currency'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
+import { useTenantSettings } from '@/auth/useTenantSettings'
+import { commonMessages, formatNumber, useT } from '@/i18n'
+import { auditChange, auditTitle, type AuditKey } from './audit-labels'
+import { auditMessages } from './audit-messages'
+import { useInventoryFormat } from './inventory-format'
+import { journalMessages } from './journal-messages'
+import { inventoryMessages } from './messages'
+import { newSessionMessages } from './new-session-messages'
+import { overviewMessages } from './overview-messages'
+import { placementMessages } from './placement-messages'
+import { resultsMessages } from './results-messages'
+import { sessionMessages } from './session-messages'
+import { warehouseMessages } from './warehouse-messages'
 import { buildZoneLabelHtml } from './zone-label-output'
 
 type LoadState<T> =
   | { kind: 'loading' }
   | { kind: 'error' }
   | { kind: 'ready'; data: T }
-
-const date = (value?: string | null) =>
-  value
-    ? new Intl.DateTimeFormat('uk-UA', {
-        dateStyle: 'short',
-        timeStyle: 'short',
-      }).format(new Date(value))
-    : '—'
-
-const sessionStatus = (status: InventorySession['status']) =>
-  ({
-    draft: ['Чернетка', 'neutral'],
-    inProgress: ['Триває', 'warn'],
-    review: ['Перевірка', 'info'],
-    completed: ['Завершено', 'ok'],
-    cancelled: ['Скасовано', 'danger'],
-  })[status] as [string, 'neutral' | 'warn' | 'info' | 'ok' | 'danger']
 
 /** How many journal rows to show before the reader asks for more. */
 const JOURNAL_PAGE = 25
@@ -113,14 +110,14 @@ function Resource<T>({
   retry: () => void
   children: (data: T) => ReactNode
 }) {
-  if (state.kind === 'loading')
-    return <SkeletonRows label="Завантажуємо інвентаризацію…" />
+  const t = useT(inventoryMessages)
+  if (state.kind === 'loading') return <SkeletonRows label={t('loading')} />
   if (state.kind === 'error') {
     return (
       <Notice tone="danger">
-        Не вдалося завантажити дані.{' '}
+        {t('loadFailed')}{' '}
         <button className="underline" onClick={retry} type="button">
-          Повторити
+          {t('retry')}
         </button>
       </Notice>
     )
@@ -163,9 +160,9 @@ function usePermission(permission: string) {
 
 /** Which sessions the overview is showing. */
 const OVERVIEW_SEGMENTS = [
-  { value: 'active' as const, label: 'Активні' },
-  { value: 'done' as const, label: 'Завершені' },
-  { value: 'draft' as const, label: 'Чернетки' },
+  { value: 'active' as const, label: 'segmentActive' as const },
+  { value: 'done' as const, label: 'segmentDone' as const },
+  { value: 'draft' as const, label: 'segmentDraft' as const },
 ]
 
 type OverviewSegment = (typeof OVERVIEW_SEGMENTS)[number]['value']
@@ -191,6 +188,9 @@ interface OverviewData {
 }
 
 function Overview() {
+  const t = useT(overviewMessages)
+  const ti = useT(inventoryMessages)
+  const { date, day, sessionStatus, locale } = useInventoryFormat()
   const base = useInventoryBase()
   const canManage = usePermission('inventory.manage')
   const canZones = usePermission('inventory.zones.manage')
@@ -321,13 +321,13 @@ function Overview() {
               item.zones.some((zone) => zone.warehouseId === warehouseId),
             )
           )
-            return 'Перевірка триває'
+            return t('checkRunning')
           const done = completedSessions.find((item) =>
             item.zones.some((zone) => zone.warehouseId === warehouseId),
           )
           return done === undefined
-            ? 'Ще не перевіряли'
-            : `Перевірено ${day(done.completedAt)}`
+            ? t('neverChecked')
+            : t('checkedOn', { date: day(done.completedAt) })
         }
         const stock = byWarehouse
         const stockTotal =
@@ -339,18 +339,18 @@ function Overview() {
           <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
             <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
               <p className="text-app-dim flex items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase">
-                <span>Склад</span>
+                <span>{ti('crumbWarehouse')}</span>
                 <span aria-hidden className="text-white/20">
                   /
                 </span>
-                <span className="text-app-muted">Інвентаризація</span>
+                <span className="text-app-muted">{ti('crumbInventory')}</span>
               </p>
               <div className="flex flex-1 flex-wrap items-center justify-end gap-2.5">
                 <div className="min-w-[12rem] flex-[0_1_20rem]">
                   <SearchInput
-                    aria-label="Пошук сесії"
+                    aria-label={t('searchLabel')}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Сесія, склад або зона"
+                    placeholder={t('searchPlaceholder')}
                     value={query}
                   />
                 </div>
@@ -360,7 +360,7 @@ function Overview() {
                     className="px-5 text-sm font-bold"
                     variant="primary"
                   >
-                    <Link to={`${base}/sessions/new`}>Нова сесія</Link>
+                    <Link to={`${base}/sessions/new`}>{ti('newSession')}</Link>
                   </Button>
                 ) : null}
               </div>
@@ -369,12 +369,15 @@ function Overview() {
             <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                  Інвентаризація
+                  {ti('crumbInventory')}
                 </h1>
                 <p className="text-app-muted mt-3 text-[15px]">
                   {last === null
-                    ? 'Завершених перевірок ще не було — підрахунок ведеться в мобільному застосунку.'
-                    : `Остання завершена перевірка — ${day(last.completedAt)} · розходжень ${String(last.preview.conflictingPartCount)}`}
+                    ? t('noCompletedYet')
+                    : t('lastCompleted', {
+                        date: day(last.completedAt),
+                        count: last.preview.conflictingPartCount,
+                      })}
                 </p>
               </div>
 
@@ -384,10 +387,10 @@ function Overview() {
 
               <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-px overflow-hidden rounded-[20px] border">
                 <WarehouseStat
-                  label="Активних сесій"
+                  label={t('statActive')}
                   meta={
                     running.length === 0
-                      ? 'зараз ніхто не рахує'
+                      ? t('nobodyCounting')
                       : [...new Set(running.map((item) => houseOf(item)))].join(
                           ', ',
                         )
@@ -397,40 +400,44 @@ function Overview() {
                   value={String(running.length)}
                 />
                 <WarehouseStat
-                  label="Перевірено зон"
-                  meta={`за останні ${String(RECENT_DAYS)} днів`}
+                  label={t('statZones')}
+                  meta={t('lastDays', { count: RECENT_DAYS })}
                   unit={
                     countable.length === 0
-                      ? 'зон'
-                      : `з ${String(countable.length)}`
+                      ? t('zonesUnit')
+                      : t('ofTotal', { count: countable.length })
                   }
                   value={String(checkedZones)}
                 />
                 <WarehouseStat
-                  label="Розходження"
-                  meta="у сесіях, що тривають"
+                  label={ti('discrepancies')}
+                  meta={t('inRunning')}
                   tone={openDiffs > 0 ? 'danger' : 'plain'}
-                  unit="позицій"
+                  unit={ti('positionsUnit')}
                   value={String(openDiffs)}
                 />
                 <WarehouseStat
-                  label="Точність"
+                  label={t('statAccuracy')}
                   meta={
                     last === null
-                      ? 'завершених перевірок ще не було'
-                      : `остання завершена сесія ${last.number}`
+                      ? t('noCompletedShort')
+                      : t('lastSession', { number: last.number })
                   }
                   tone={accuracy === null ? 'plain' : 'ok'}
                   unit="%"
                   value={
-                    accuracy === null ? '—' : String(accuracy).replace('.', ',')
+                    accuracy === null
+                      ? '—'
+                      : (formatNumber(accuracy, locale, {
+                          maximumFractionDigits: 1,
+                        }) ?? '—')
                   }
                 />
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div
-                  aria-label="Які сесії показувати"
+                  aria-label={t('segmentsLabel')}
                   className="border-app-line bg-app-raised flex flex-wrap gap-1 rounded-xl border p-1"
                   role="radiogroup"
                 >
@@ -450,7 +457,7 @@ function Overview() {
                         role="radio"
                         type="button"
                       >
-                        {option.label}{' '}
+                        {t(option.label)}{' '}
                         <span className="text-app-dim font-mono text-[11px] font-medium">
                           {counts[option.value]}
                         </span>
@@ -459,31 +466,27 @@ function Overview() {
                   })}
                 </div>
                 <p className="text-app-muted text-[13px]">
-                  {rows.length}{' '}
-                  {plural(rows.length, ['сесія', 'сесії', 'сесій'])} · спочатку
-                  найновіші
+                  {t('rowsSummary', { count: rows.length })}
                 </p>
               </div>
 
               <section
-                aria-label="Сесії інвентаризації"
+                aria-label={t('sessionsLabel')}
                 className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
               >
                 <div
                   aria-hidden
                   className="border-app-line text-app-muted hidden gap-4 border-b px-6 py-3 font-mono text-[10px] tracking-[0.14em] uppercase md:grid md:grid-cols-[1.6fr_1fr_9.5rem_7rem_6rem]"
                 >
-                  <span>Сесія</span>
-                  <span>Склад і зони</span>
-                  <span>Прогрес</span>
-                  <span>Розходження</span>
-                  <span className="text-right">Статус</span>
+                  <span>{t('colSession')}</span>
+                  <span>{t('colWarehouseZones')}</span>
+                  <span>{t('colProgress')}</span>
+                  <span>{ti('discrepancies')}</span>
+                  <span className="text-right">{t('colStatus')}</span>
                 </div>
                 {rows.length === 0 ? (
                   <p className="text-app-muted px-6 py-8 text-center text-sm">
-                    {sessions.length === 0
-                      ? 'Інвентаризацій ще немає — створіть сесію, і працівники порахують склад у застосунку.'
-                      : 'За цим фільтром сесій немає.'}
+                    {sessions.length === 0 ? t('noSessions') : t('noFiltered')}
                   </p>
                 ) : (
                   <ul className="grid">
@@ -507,7 +510,7 @@ function Overview() {
                                 {item.number}
                               </span>
                               <span className="text-app-muted mt-0.5 block text-[13px]">
-                                Створено {date(item.createdAt)}
+                                {ti('created', { date: date(item.createdAt) })}
                               </span>
                             </span>
                             <span className="text-app-muted min-w-0 text-[14px]">
@@ -534,8 +537,7 @@ function Overview() {
                                 />
                               </span>
                               <span className="text-app-muted mt-1.5 block font-mono text-[12px]">
-                                {done} / {total}{' '}
-                                {plural(total, ['зона', 'зони', 'зон'])}
+                                {ti('zonesProgress', { done, count: total })}
                               </span>
                             </span>
                             <span
@@ -549,7 +551,7 @@ function Overview() {
                               )}
                             >
                               <span className="text-app-muted mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
-                                Розходження
+                                {ti('discrepancies')}
                               </span>
                               {item.status === 'draft'
                                 ? '—'
@@ -566,10 +568,10 @@ function Overview() {
                 )}
               </section>
 
-              <section aria-label="Склади" className="grid gap-4.5">
+              <section aria-label={t('warehouses')} className="grid gap-4.5">
                 <div className="flex flex-wrap items-baseline gap-3.5">
                   <h2 className="text-app-muted font-mono text-[11px] tracking-[0.16em] uppercase">
-                    Склади
+                    {t('warehouses')}
                   </h2>
                   <span aria-hidden className="bg-app-line h-px flex-1" />
                   {canZones ? (
@@ -582,14 +584,14 @@ function Overview() {
                       variant="ghost"
                     >
                       <Plus aria-hidden />
-                      Додати склад
+                      {t('addWarehouse')}
                     </Button>
                   ) : null}
                 </div>
                 {warehouses.length === 0 ? (
                   <EmptyState
-                    description="Створіть перший склад, щоб розкласти запчастини по зонах."
-                    title="Складів ще немає"
+                    description={t('noWarehousesHint')}
+                    title={t('noWarehousesTitle')}
                   />
                 ) : (
                   <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-4">
@@ -610,20 +612,17 @@ function Overview() {
                                 {item.name}
                               </span>
                               <span className="text-app-muted font-mono text-[13px]">
-                                {item.zoneCount}{' '}
-                                {plural(item.zoneCount, [
-                                  'зона',
-                                  'зони',
-                                  'зон',
-                                ])}
+                                {ti('zones', { count: item.zoneCount })}
                               </span>
                             </span>
                             <span className="text-app-muted mt-1 block text-[13px]">
-                              код {item.code}
-                              {item.isSystemDefault
-                                ? ' · за замовчуванням'
-                                : ''}
-                              {item.isActive ? '' : ' · архівний'}
+                              {[
+                                t('warehouseCode', { code: item.code }),
+                                item.isSystemDefault ? t('defaultTag') : null,
+                                item.isActive ? null : t('archivedTag'),
+                              ]
+                                .filter(Boolean)
+                                .join(' · ')}
                             </span>
                             <span
                               aria-hidden
@@ -637,11 +636,13 @@ function Overview() {
                             <span className="text-app-muted mt-2.5 flex items-baseline justify-between gap-3 text-[13px]">
                               <span>
                                 {parts === null
-                                  ? 'залишки недоступні'
-                                  : `${String(share)}% складу розбірки`}
+                                  ? ti('stockUnavailable')
+                                  : t('shareOfYard', { share })}
                               </span>
                               <span className="font-mono">
-                                {parts === null ? '—' : `${String(parts)} поз.`}
+                                {parts === null
+                                  ? '—'
+                                  : t('positionsShort', { count: parts })}
                               </span>
                             </span>
                             <span className="border-app-line text-app-dim mt-3.5 block border-t pt-3.5 text-[13px]">
@@ -657,7 +658,7 @@ function Overview() {
             </div>
 
             <FormDialog
-              description="Склад — це приміщення; зони додаються вже всередині нього."
+              description={t('newWarehouseHint')}
               onOpenChange={(next) => {
                 if (!next) setAdding(false)
               }}
@@ -670,8 +671,8 @@ function Overview() {
               submitDisabled={
                 draft.name.trim() === '' || draft.code.trim() === ''
               }
-              submitLabel="Додати склад"
-              title="Новий склад"
+              submitLabel={t('addWarehouse')}
+              title={t('newWarehouseTitle')}
             >
               <NameAndCode draft={draft} onChange={setDraft} />
             </FormDialog>
@@ -706,14 +707,6 @@ const EMPTY_STOCK: WarehouseStock = {
   differing: null,
 }
 
-/** The day alone — a check is remembered by its date, not by its minute. */
-const day = (value?: string | null) =>
-  value
-    ? new Intl.DateTimeFormat('uk-UA', { dateStyle: 'short' }).format(
-        new Date(value),
-      )
-    : '—'
-
 /**
  * How much of the yard sits in this warehouse. The parts module owns these
  * numbers, so a viewer without `parts.view` simply sees none of them rather
@@ -743,6 +736,13 @@ async function loadWarehouseStock(
 }
 
 function WarehouseView({ id }: { id: string }) {
+  const t = useT(warehouseMessages)
+  const ti = useT(inventoryMessages)
+  const tc = useT(commonMessages)
+  const { date, day } = useInventoryFormat()
+  // Printed labels follow the tenant document language, not the UI locale.
+  const documentLocale = useTenantSettings().documentLanguage ?? 'uk'
+  const { currency: inventoryCurrency } = useAccountingCurrency()
   const base = useInventoryBase()
   const { targetTenant } = useCabinet()
   const navigate = useNavigate()
@@ -878,7 +878,7 @@ function WarehouseView({ id }: { id: string }) {
   const printZones = async () => {
     const printWindow = window.open('', '_blank')
     if (!printWindow) {
-      setOperationError('Браузер заблокував вікно друку.')
+      setOperationError(t('printBlocked'))
       return
     }
     printWindow.opener = null
@@ -896,6 +896,7 @@ function WarehouseView({ id }: { id: string }) {
           zoneCode: zone.code,
           warehouseName: zone.warehouseName,
         })),
+        documentLocale,
       )
       printWindow.document.write(html)
       printWindow.document.close()
@@ -903,7 +904,7 @@ function WarehouseView({ id }: { id: string }) {
       printWindow.print()
     } catch {
       printWindow.close()
-      setOperationError('Не вдалося підготувати QR-етикетки.')
+      setOperationError(t('printFailed'))
     } finally {
       setPrinting(false)
     }
@@ -947,14 +948,14 @@ function WarehouseView({ id }: { id: string }) {
         /** When this zone was last counted, or that a count is running now. */
         const checkOf = (zoneId: string) => {
           if (active?.zones.some((zone) => zone.zoneId === zoneId) === true)
-            return { label: 'триває', tone: 'text-state-warn' }
+            return { label: t('zoneRunning'), tone: 'text-state-warn' }
           const last = history.find(
             (item) =>
               item.status === 'completed' &&
               item.zones.some((zone) => zone.zoneId === zoneId),
           )
           return last === undefined
-            ? { label: 'не перевіряли', tone: 'text-app-dim' }
+            ? { label: t('zoneNeverChecked'), tone: 'text-app-dim' }
             : { label: day(last.completedAt), tone: 'text-app-muted' }
         }
         const zonesOf = (item: InventorySession) =>
@@ -973,14 +974,14 @@ function WarehouseView({ id }: { id: string }) {
                   to={base}
                 >
                   <ChevronLeft aria-hidden className="size-3.5" />
-                  До інвентаризації
+                  {ti('backToInventory')}
                 </Link>
                 <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-                  <span>Склад</span>
+                  <span>{ti('crumbWarehouse')}</span>
                   <span aria-hidden className="text-white/20">
                     /
                   </span>
-                  <span>Склади</span>
+                  <span>{ti('crumbWarehouses')}</span>
                   <span aria-hidden className="text-white/20">
                     /
                   </span>
@@ -999,7 +1000,7 @@ function WarehouseView({ id }: { id: string }) {
                     }}
                   >
                     <Pencil aria-hidden />
-                    Редагувати
+                    {t('edit')}
                   </Button>
                 ) : null}
                 {canSession ? (
@@ -1008,33 +1009,31 @@ function WarehouseView({ id }: { id: string }) {
                     className="px-5 text-sm font-bold"
                     variant="primary"
                   >
-                    <Link to={`${base}/sessions/new`}>Нова сесія</Link>
+                    <Link to={`${base}/sessions/new`}>{ti('newSession')}</Link>
                   </Button>
                 ) : null}
                 <ActionMenu
                   actions={[
                     {
                       key: 'print',
-                      label: printing
-                        ? 'Готуємо стікери…'
-                        : 'Друк стікерів зон',
+                      label: printing ? t('printing') : t('printZones'),
                       icon: <Printer aria-hidden />,
                       disabled: printing,
                       onSelect: () => void printZones(),
                     },
                     {
                       key: 'export',
-                      label: 'Експорт залишків',
+                      label: t('exportStock'),
                       icon: <Download aria-hidden />,
                       disabled: true,
-                      title: 'Вивантажити залишки складу файлом поки не можна',
+                      title: t('exportUnavailable'),
                       onSelect: () => undefined,
                     },
                     ...(canManage && !warehouse.isSystemDefault
                       ? [
                           {
                             key: 'archive',
-                            label: 'Архівувати склад',
+                            label: t('archiveWarehouse'),
                             icon: <Archive aria-hidden />,
                             destructive: true as const,
                             onSelect: () => setArchivingWarehouse(true),
@@ -1042,7 +1041,7 @@ function WarehouseView({ id }: { id: string }) {
                         ]
                       : []),
                   ]}
-                  label="Інші дії зі складом"
+                  label={t('moreActions')}
                 />
               </div>
             </div>
@@ -1059,21 +1058,21 @@ function WarehouseView({ id }: { id: string }) {
                         aria-hidden
                         className="bg-state-ok size-1.5 rounded-full"
                       />
-                      Активний
+                      {t('active')}
                     </span>
                   ) : (
-                    <StatusPill tone="neutral">Архівний</StatusPill>
+                    <StatusPill tone="neutral">{t('archived')}</StatusPill>
                   )}
                 </div>
                 <p className="text-app-muted mt-3 text-[15px]">
                   {[
-                    `код ${warehouse.code}`,
-                    `${String(real.length)} ${plural(real.length, ['зона', 'зони', 'зон'])}`,
+                    t('code', { code: warehouse.code }),
+                    ti('zones', { count: real.length }),
                     stock.total === null
                       ? null
-                      : `${String(stock.total)} ${plural(stock.total, ['позиція', 'позиції', 'позицій'])}`,
-                    `${String(warehouse.unassignedPartCount)} без зони`,
-                    warehouse.isSystemDefault ? 'склад за замовчуванням' : null,
+                      : ti('positions', { count: stock.total }),
+                    t('unassigned', { count: warehouse.unassignedPartCount }),
+                    warehouse.isSystemDefault ? t('defaultWarehouse') : null,
                   ]
                     .filter(Boolean)
                     .join(' · ')}
@@ -1086,17 +1085,17 @@ function WarehouseView({ id }: { id: string }) {
 
               <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-px overflow-hidden rounded-[20px] border">
                 <WarehouseStat
-                  label="Позицій на складі"
-                  meta={`${String(real.length)} ${plural(real.length, ['зона', 'зони', 'зон'])} · ${String(warehouse.unassignedPartCount)} без зони`}
-                  unit="позицій"
+                  label={t('statPositions')}
+                  meta={`${ti('zones', { count: real.length })} · ${t('unassigned', { count: warehouse.unassignedPartCount })}`}
+                  unit={ti('positionsUnit')}
                   value={stock.total === null ? '—' : String(stock.total)}
                 />
                 <WarehouseStat
-                  label="Заповнені зони"
+                  label={t('statFilled')}
                   meta={
                     occupancy === null
-                      ? 'потрібне право «parts.view»'
-                      : `${String(filled)} з ${String(real.length)} ${plural(real.length, ['зони', 'зон', 'зон'])} мають залишок`
+                      ? t('needsPartsView')
+                      : t('filledMeta', { filled, count: real.length })
                   }
                   tone={
                     occupancy !== null && occupancy >= 80 ? 'warn' : 'plain'
@@ -1105,20 +1104,20 @@ function WarehouseView({ id }: { id: string }) {
                   value={occupancy === null ? '—' : String(occupancy)}
                 />
                 <WarehouseStat
-                  label="Вартість залишку"
-                  meta="вартість складу не рахується"
-                  unit="USD"
+                  label={t('statValue')}
+                  meta={t('valueNotCounted')}
+                  unit={inventoryCurrency ?? ''}
                   value="—"
                 />
                 <WarehouseStat
-                  label="Розходження"
-                  meta="позиції з незакритою різницею"
+                  label={ti('discrepancies')}
+                  meta={t('openDiffs')}
                   tone={
                     stock.differing !== null && stock.differing > 0
                       ? 'danger'
                       : 'plain'
                   }
-                  unit="позицій"
+                  unit={ti('positionsUnit')}
                   value={
                     stock.differing === null ? '—' : String(stock.differing)
                   }
@@ -1138,18 +1137,17 @@ function WarehouseView({ id }: { id: string }) {
                         variant="ghost"
                       >
                         <Plus aria-hidden />
-                        Додати зону
+                        {t('addZone')}
                       </Button>
                     ) : (
                       <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
-                        {real.length}{' '}
-                        {plural(real.length, ['зона', 'зони', 'зон'])}
+                        {ti('zones', { count: real.length })}
                       </span>
                     )
                   }
                   bodyClassName="p-0 pt-4"
                   className="min-w-0 flex-[2_1_34rem]"
-                  title="Зони"
+                  title={t('zonesTitle')}
                 >
                   <div
                     aria-hidden
@@ -1160,17 +1158,18 @@ function WarehouseView({ id }: { id: string }) {
                         : 'grid-cols-[minmax(0,1fr)_4.5rem_10rem_6.5rem]',
                     )}
                   >
-                    <span>Зона</span>
-                    <span className="text-right">Позицій</span>
-                    <span>Заповнення</span>
-                    <span className="text-right">Перевірено</span>
-                    {canManage ? <span className="text-right">Дії</span> : null}
+                    <span>{t('colZone')}</span>
+                    <span className="text-right">{t('colPositions')}</span>
+                    <span>{t('colFill')}</span>
+                    <span className="text-right">{t('colChecked')}</span>
+                    {canManage ? (
+                      <span className="text-right">{t('colActions')}</span>
+                    ) : null}
                   </div>
                   <ul className="grid">
                     {zones.length === 0 ? (
                       <li className="text-app-muted px-6 py-6 text-sm">
-                        Зон ще немає — додайте першу, щоб розкладати запчастини
-                        по місцях.
+                        {t('noZones')}
                       </li>
                     ) : null}
                     {zones.map((zone) => {
@@ -1207,8 +1206,8 @@ function WarehouseView({ id }: { id: string }) {
                             <p className="text-app-muted mt-0.5 text-[13px]">
                               {[
                                 zone.code,
-                                zone.isSystemUnassigned ? 'системна' : null,
-                                zone.isActive ? null : 'архівна',
+                                zone.isSystemUnassigned ? t('systemTag') : null,
+                                zone.isActive ? null : t('archivedZoneTag'),
                               ]
                                 .filter(Boolean)
                                 .join(' · ')}
@@ -1229,8 +1228,8 @@ function WarehouseView({ id }: { id: string }) {
                             </span>
                             <p className="text-app-muted mt-2 font-mono text-[12px]">
                               {stock.total === null
-                                ? 'залишки недоступні'
-                                : `${String(share)}% складу`}
+                                ? ti('stockUnavailable')
+                                : t('shareOfWarehouse', { share })}
                             </p>
                           </div>
                           <p
@@ -1244,7 +1243,7 @@ function WarehouseView({ id }: { id: string }) {
                           {canManage ? (
                             <div className="flex gap-1.5 md:justify-end">
                               <Button
-                                aria-label={`Редагувати зону ${zone.name}`}
+                                aria-label={t('editZone', { name: zone.name })}
                                 className="min-w-11 px-0"
                                 disabled={zone.isSystemUnassigned}
                                 onClick={() => {
@@ -1256,7 +1255,7 @@ function WarehouseView({ id }: { id: string }) {
                                 }}
                                 title={
                                   zone.isSystemUnassigned
-                                    ? 'Системну зону не можна змінювати'
+                                    ? t('systemNoEdit')
                                     : undefined
                                 }
                                 variant="ghost"
@@ -1264,13 +1263,15 @@ function WarehouseView({ id }: { id: string }) {
                                 <Pencil aria-hidden />
                               </Button>
                               <Button
-                                aria-label={`Архівувати зону ${zone.name}`}
+                                aria-label={t('archiveZoneLabel', {
+                                  name: zone.name,
+                                })}
                                 className="min-w-11 px-0"
                                 disabled={zone.isSystemUnassigned}
                                 onClick={() => setArchivingZone(zone)}
                                 title={
                                   zone.isSystemUnassigned
-                                    ? 'Системну зону не можна архівувати'
+                                    ? t('systemNoArchive')
                                     : undefined
                                 }
                                 variant="ghost"
@@ -1287,23 +1288,24 @@ function WarehouseView({ id }: { id: string }) {
 
                 <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-5">
                   <section
-                    aria-label="Активна сесія"
+                    aria-label={t('activeSession')}
                     className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
                   >
                     <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                      Активна сесія
+                      {t('activeSession')}
                     </h2>
                     {active === null ? (
                       <>
                         <p className="mt-3 text-[19px] font-bold tracking-[-0.015em] text-white">
-                          Перевірка не йде
+                          {t('noCheck')}
                         </p>
                         <p className="text-app-muted mt-1 text-[13px]">
-                          Останній підрахунок:{' '}
-                          {history[0] === undefined
-                            ? 'ще не було'
-                            : day(closedAt(history[0]))}
-                          .
+                          {t('lastCount', {
+                            date:
+                              history[0] === undefined
+                                ? t('lastCountNever')
+                                : day(closedAt(history[0])),
+                          })}
                         </p>
                         {canSession ? (
                           <Button
@@ -1312,7 +1314,7 @@ function WarehouseView({ id }: { id: string }) {
                             variant="primary"
                           >
                             <Link to={`${base}/sessions/new`}>
-                              Почати сесію
+                              {t('startSession')}
                             </Link>
                           </Button>
                         ) : null}
@@ -1324,8 +1326,8 @@ function WarehouseView({ id }: { id: string }) {
                         </p>
                         <p className="text-app-muted mt-1 text-[13px]">
                           {active.startedAt == null
-                            ? `Створено ${date(active.createdAt)}`
-                            : `Розпочато ${date(active.startedAt)}`}
+                            ? ti('created', { date: date(active.createdAt) })
+                            : ti('started', { date: date(active.startedAt) })}
                           {nameOf(active.startedBy ?? active.createdBy) === null
                             ? null
                             : ` · ${String(nameOf(active.startedBy ?? active.createdBy))}`}
@@ -1350,20 +1352,15 @@ function WarehouseView({ id }: { id: string }) {
                         </span>
                         <p className="text-app-muted mt-2.5 flex justify-between gap-3 font-mono text-[12px]">
                           <span>
-                            {countedZones} / {active.zones.length}{' '}
-                            {plural(active.zones.length, [
-                              'зона',
-                              'зони',
-                              'зон',
-                            ])}
+                            {ti('zonesProgress', {
+                              done: countedZones,
+                              count: active.zones.length,
+                            })}
                           </span>
                           <span>
-                            {active.preview.conflictingPartCount}{' '}
-                            {plural(active.preview.conflictingPartCount, [
-                              'розходження',
-                              'розходження',
-                              'розходжень',
-                            ])}
+                            {ti('conflicts', {
+                              count: active.preview.conflictingPartCount,
+                            })}
                           </span>
                         </p>
                         <Button
@@ -1372,7 +1369,7 @@ function WarehouseView({ id }: { id: string }) {
                           variant="primary"
                         >
                           <Link to={`${base}/sessions/${active.id}`}>
-                            Продовжити сесію
+                            {t('continueSession')}
                           </Link>
                         </Button>
                       </>
@@ -1385,15 +1382,15 @@ function WarehouseView({ id }: { id: string }) {
                         className="text-brand text-[13px] font-semibold hover:underline"
                         to={base}
                       >
-                        Усі
+                        {t('all')}
                       </Link>
                     }
                     bodyClassName="p-0"
-                    title="Історія перевірок"
+                    title={t('historyTitle')}
                   >
                     {history.length === 0 ? (
                       <p className="text-app-muted px-6 pt-4 pb-6 text-sm">
-                        Завершених перевірок цього складу ще немає.
+                        {t('noHistory')}
                       </p>
                     ) : (
                       <ul className="grid">
@@ -1416,7 +1413,7 @@ function WarehouseView({ id }: { id: string }) {
                                     day(closedAt(item)),
                                     nameOf(item.completedBy ?? item.createdBy),
                                     item.status === 'cancelled'
-                                      ? 'скасована'
+                                      ? t('cancelledTag')
                                       : null,
                                   ]
                                     .filter(Boolean)
@@ -1434,11 +1431,7 @@ function WarehouseView({ id }: { id: string }) {
                                 {conflicts}
                                 <span className="sr-only">
                                   {' '}
-                                  {plural(conflicts, [
-                                    'розходження',
-                                    'розходження',
-                                    'розходжень',
-                                  ])}
+                                  {ti('conflictsWord', { count: conflicts })}
                                 </span>
                               </p>
                             </li>
@@ -1452,7 +1445,7 @@ function WarehouseView({ id }: { id: string }) {
             </div>
 
             <FormDialog
-              description="Назва і код видно всюди, де зустрічається цей склад."
+              description={t('editWarehouseHint')}
               onOpenChange={(next) => {
                 if (!next) setEditingWarehouse(false)
               }}
@@ -1465,14 +1458,14 @@ function WarehouseView({ id }: { id: string }) {
               submitDisabled={
                 draft.name.trim() === '' || draft.code.trim() === ''
               }
-              submitLabel="Зберегти"
-              title="Редагувати склад"
+              submitLabel={tc('save')}
+              title={t('editWarehouseTitle')}
             >
               <NameAndCode draft={draft} onChange={setDraft} />
             </FormDialog>
 
             <FormDialog
-              description="Зона — це місце, куди кладуть запчастину і де її потім рахують."
+              description={t('newZoneHint')}
               onOpenChange={(next) => {
                 if (!next) setAddingZone(false)
               }}
@@ -1485,8 +1478,8 @@ function WarehouseView({ id }: { id: string }) {
               submitDisabled={
                 draft.name.trim() === '' || draft.code.trim() === ''
               }
-              submitLabel="Додати зону"
-              title="Нова зона"
+              submitLabel={t('addZone')}
+              title={t('newZoneTitle')}
             >
               <NameAndCode draft={draft} onChange={setDraft} />
             </FormDialog>
@@ -1495,7 +1488,10 @@ function WarehouseView({ id }: { id: string }) {
               description={
                 editingZone === null
                   ? undefined
-                  : `Зона «${editingZone.name}» складу «${warehouse.name}».`
+                  : t('editZoneHint', {
+                      zone: editingZone.name,
+                      warehouse: warehouse.name,
+                    })
               }
               onOpenChange={(next) => {
                 if (!next) setEditingZone(null)
@@ -1509,15 +1505,17 @@ function WarehouseView({ id }: { id: string }) {
               submitDisabled={
                 draft.name.trim() === '' || draft.code.trim() === ''
               }
-              submitLabel="Зберегти"
-              title="Редагувати зону"
+              submitLabel={tc('save')}
+              title={t('editZoneTitle')}
             >
               <NameAndCode draft={draft} onChange={setDraft} />
             </FormDialog>
 
             <ConfirmDialog
-              confirmLabel="Архівувати склад"
-              consequence={`Склад «${warehouse.name}» зникне зі списків і з фільтрів. Запчастини залишаться на своїх зонах.`}
+              confirmLabel={t('archiveWarehouse')}
+              consequence={t('archiveWarehouseConsequence', {
+                name: warehouse.name,
+              })}
               destructive
               onConfirm={() => void archiveWarehouse()}
               onOpenChange={(next) => {
@@ -1525,15 +1523,15 @@ function WarehouseView({ id }: { id: string }) {
               }}
               open={archivingWarehouse}
               pending={busy}
-              title="Архівувати склад?"
+              title={t('archiveWarehouseTitle')}
             />
 
             <ConfirmDialog
-              confirmLabel="Архівувати зону"
+              confirmLabel={t('archiveZone')}
               consequence={
                 archivingZone === null
                   ? ''
-                  : `Зона «${archivingZone.name}» більше не зʼявиться у виборі місця. Запчастини, що в ній лежать, доведеться перекласти вручну.`
+                  : t('archiveZoneConsequence', { name: archivingZone.name })
               }
               destructive
               onConfirm={() => {
@@ -1544,7 +1542,7 @@ function WarehouseView({ id }: { id: string }) {
               }}
               open={archivingZone !== null}
               pending={busy}
-              title="Архівувати зону?"
+              title={t('archiveZoneTitle')}
             />
           </div>
         )
@@ -1561,19 +1559,16 @@ function NameAndCode({
   draft: { name: string; code: string }
   onChange: (draft: { name: string; code: string }) => void
 }) {
+  const t = useT(warehouseMessages)
   return (
     <>
-      <Field label="Назва" required>
+      <Field label={t('name')} required>
         <TextInput
           onChange={(event) => onChange({ ...draft, name: event.target.value })}
           value={draft.name}
         />
       </Field>
-      <Field
-        hint="Короткий код для етикеток і пошуку — наприклад A1."
-        label="Код"
-        required
-      >
+      <Field hint={t('codeHint')} label={t('codeLabel')} required>
         <TextInput
           onChange={(event) => onChange({ ...draft, code: event.target.value })}
           value={draft.code}
@@ -1630,20 +1625,20 @@ function WarehouseStat({
 const SESSION_TYPES = [
   {
     value: 'full' as const,
-    label: 'Повна',
-    hint: 'Усі активні зони вибраного складу',
+    label: 'typeFull' as const,
+    hint: 'typeFullHint' as const,
     available: true,
   },
   {
     value: 'zones' as const,
-    label: 'По зонах',
-    hint: 'Вибрані зони повністю',
+    label: 'typeZones' as const,
+    hint: 'typeZonesHint' as const,
     available: true,
   },
   {
     value: 'sample' as const,
-    label: 'Вибіркова',
-    hint: 'Окремі позиції або група деталей',
+    label: 'typeSample' as const,
+    hint: 'typeSampleHint' as const,
     available: false,
   },
 ]
@@ -1659,6 +1654,8 @@ interface NewSessionData {
 }
 
 function NewSessionView() {
+  const t = useT(newSessionMessages)
+  const ti = useT(inventoryMessages)
   const base = useInventoryBase()
   const navigate = useNavigate()
   const canManage = usePermission('inventory.manage')
@@ -1752,8 +1749,9 @@ function NewSessionView() {
           0,
         )
         const houseName =
-          houses.find((item) => item.id === house)?.name ?? 'Склад'
-        const typeName = type === 'full' ? 'повна' : 'по зонах'
+          houses.find((item) => item.id === house)?.name ??
+          t('fallbackWarehouse')
+        const typeName = type === 'full' ? t('summaryFull') : t('summaryZones')
         const ready = selected.length > 0 && canManage
 
         return (
@@ -1765,14 +1763,14 @@ function NewSessionView() {
                   to={base}
                 >
                   <ChevronLeft aria-hidden className="size-3.5" />
-                  До інвентаризації
+                  {ti('backToInventory')}
                 </Link>
                 <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-                  <span>Склад</span>
+                  <span>{ti('crumbWarehouse')}</span>
                   <span aria-hidden className="text-white/20">
                     /
                   </span>
-                  <span className="text-app-muted">Інвентаризація</span>
+                  <span className="text-app-muted">{ti('crumbInventory')}</span>
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2.5">
@@ -1781,7 +1779,7 @@ function NewSessionView() {
                   disabled={!ready || busy !== null}
                   onClick={() => void create(selected, false)}
                 >
-                  {busy === 'draft' ? 'Зберігаємо…' : 'Зберегти чернетку'}
+                  {busy === 'draft' ? t('saving') : t('saveDraft')}
                 </Button>
                 <Button
                   className="px-5 text-sm font-bold"
@@ -1789,7 +1787,7 @@ function NewSessionView() {
                   onClick={() => void create(selected, true)}
                   variant="primary"
                 >
-                  {busy === 'start' ? 'Запускаємо…' : 'Розпочати сесію'}
+                  {busy === 'start' ? t('starting') : t('start')}
                 </Button>
               </div>
             </div>
@@ -1797,18 +1795,13 @@ function NewSessionView() {
             <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                  Нова сесія інвентаризації
+                  {t('title')}
                 </h1>
-                <p className="text-app-muted mt-3 text-[15px]">
-                  Поки сесія активна, позиції в її зонах не можна редагувати
-                  вручну. Рахують у мобільному застосунку.
-                </p>
+                <p className="text-app-muted mt-3 text-[15px]">{t('intro')}</p>
               </div>
 
               {!canManage ? (
-                <Notice tone="danger">
-                  Для створення інвентаризації потрібен дозвіл керування.
-                </Notice>
+                <Notice tone="danger">{t('noPermission')}</Notice>
               ) : null}
               {operationError ? (
                 <Notice tone="danger">{operationError}</Notice>
@@ -1816,13 +1809,9 @@ function NewSessionView() {
 
               <div className="flex flex-wrap items-start gap-6">
                 <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-5">
-                  <Step
-                    hint="Визначає, які зони входять у сесію."
-                    number="01"
-                    title="Тип перевірки"
-                  >
+                  <Step hint={t('typeHint')} number="01" title={t('typeTitle')}>
                     <div
-                      aria-label="Тип перевірки"
+                      aria-label={t('typeTitle')}
                       className="flex flex-wrap gap-2"
                       role="radiogroup"
                     >
@@ -1847,7 +1836,7 @@ function NewSessionView() {
                             title={
                               option.available
                                 ? undefined
-                                : 'Сесія створюється з переліку зон — окремі позиції вибрати не можна'
+                                : t('sampleUnavailable')
                             }
                             type="button"
                           >
@@ -1857,10 +1846,10 @@ function NewSessionView() {
                                 active ? 'text-app-ink' : 'text-app-muted',
                               )}
                             >
-                              {option.label}
+                              {t(option.label)}
                             </span>
                             <span className="text-app-muted mt-1.5 block text-[12px] leading-[1.4] font-medium">
-                              {option.hint}
+                              {t(option.hint)}
                             </span>
                           </button>
                         )
@@ -1870,16 +1859,14 @@ function NewSessionView() {
 
                   <Step
                     hint={
-                      type === 'full'
-                        ? 'Повна перевірка охоплює всі активні зони вибраного складу.'
-                        : 'Виберіть зони, які входять у сесію.'
+                      type === 'full' ? t('zonesHintFull') : t('zonesHintPick')
                     }
                     number="02"
-                    title="Склад і зони"
+                    title={t('zonesTitle')}
                   >
                     {houses.length > 1 ? (
                       <div
-                        aria-label="Склад"
+                        aria-label={t('warehouse')}
                         className="flex flex-wrap gap-1.5"
                         role="radiogroup"
                       >
@@ -1911,7 +1898,7 @@ function NewSessionView() {
                     <ul className="mt-4 grid gap-2">
                       {inHouse.length === 0 ? (
                         <li className="text-app-muted text-sm">
-                          На цьому складі немає активних зон.
+                          {t('noActiveZones')}
                         </li>
                       ) : null}
                       {inHouse.map((zone) => {
@@ -1963,7 +1950,7 @@ function NewSessionView() {
                               <span className="text-app-muted w-full pl-8.5 font-mono text-[13px] tabular-nums sm:w-auto sm:pl-0">
                                 {count === null
                                   ? '—'
-                                  : `${String(count)} ${plural(count, ['позиція', 'позиції', 'позицій'])}`}
+                                  : ti('positions', { count })}
                               </span>
                             </label>
                           </li>
@@ -1973,15 +1960,13 @@ function NewSessionView() {
                   </Step>
 
                   <Step
-                    hint="Сканувати може будь-хто з правом на інвентаризацію — сесія не закріплюється за людьми."
+                    hint={t('peopleHint')}
                     number="03"
-                    title="Виконавці"
+                    title={t('peopleTitle')}
                   >
                     {people.length === 0 ? (
                       <p className="text-app-muted text-sm">
-                        {canSeeTeam
-                          ? 'У команді ще нікого немає.'
-                          : 'Список команди видно тим, хто має право «team.view».'}
+                        {canSeeTeam ? t('noPeople') : t('teamHidden')}
                       </p>
                     ) : (
                       <ul className="flex flex-wrap gap-2">
@@ -1989,7 +1974,7 @@ function NewSessionView() {
                           <li key={person.userId}>
                             <span
                               className="border-app-line text-app-muted flex min-h-11 items-center gap-2.5 rounded-full border py-0 pr-4 pl-2 text-[14px] font-semibold"
-                              title="Сесія не закріплюється за виконавцями — кожне сканування записується на того, хто його зробив"
+                              title={t('personHint')}
                             >
                               <span
                                 aria-hidden
@@ -2005,36 +1990,33 @@ function NewSessionView() {
                     )}
                   </Step>
 
-                  <Step number="04" title="Правила">
+                  <Step number="04" title={t('rulesTitle')}>
                     <ul className="grid gap-2.5">
                       <Toggle
-                        hint="Продаж і переміщення в цих зонах недоступні, поки сесія не закриється."
-                        label="Блокувати рух позицій"
+                        hint={t('lockHint')}
+                        label={t('lockLabel')}
                         on
-                        why="Так працює інвентаризація завжди — вимкнути не можна"
+                        why={t('lockWhy')}
                       />
                       <Toggle
-                        hint="Виконавець не бачить очікувану кількість під час сканування."
-                        label="Сліпий підрахунок"
+                        hint={t('blindHint')}
+                        label={t('blindLabel')}
                         on={false}
-                        why="Налаштування сліпого підрахунку в системі немає"
+                        why={t('blindWhy')}
                       />
                       <Toggle
-                        hint="Якщо кількість не збігається, потрібно додати фото."
-                        label="Фото при розходженні"
+                        hint={t('photoHint')}
+                        label={t('photoLabel')}
                         on={false}
-                        why="Вимоги фото при розходженні в системі немає"
+                        why={t('photoWhy')}
                       />
                     </ul>
                     <div className="mt-4">
-                      <Field
-                        hint="Коментар до сесії не зберігається — причину можна написати при скасуванні або в коригуванні."
-                        label="Коментар до сесії"
-                      >
+                      <Field hint={t('commentHint')} label={t('commentLabel')}>
                         <TextArea
                           disabled
                           name="comment"
-                          placeholder="Наприклад: перевірка після переміщення стелажів"
+                          placeholder={t('commentPlaceholder')}
                           rows={2}
                         />
                       </Field>
@@ -2043,11 +2025,11 @@ function NewSessionView() {
                 </div>
 
                 <section
-                  aria-label="Обсяг сесії"
+                  aria-label={t('scopeTitle')}
                   className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-[18px] border px-5.5 pt-[22px] pb-6"
                 >
                   <h2 className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
-                    Обсяг сесії
+                    {t('scopeTitle')}
                   </h2>
                   <div className="border-app-line bg-app-canvas mt-4 rounded-[14px] border p-4">
                     <p className="text-[17px] font-bold tracking-[-0.015em] text-white">
@@ -2055,7 +2037,7 @@ function NewSessionView() {
                     </p>
                     <p className="text-app-muted mt-1 text-[14px]">
                       {selected.length === 0
-                        ? 'Зони не вибрані'
+                        ? t('noZonesPicked')
                         : inHouse
                             .filter((zone) => selected.includes(zone.id))
                             .map((zone) => zone.name)
@@ -2064,13 +2046,13 @@ function NewSessionView() {
                   </div>
                   <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
                     <dt className="text-app-muted text-[14px] font-semibold">
-                      Зон
+                      {t('zonesCount')}
                     </dt>
                     <dd className="font-mono text-[15px] text-white tabular-nums">
                       {selected.length === 0 ? '—' : selected.length}
                     </dd>
                     <dt className="text-app-muted text-[14px] font-semibold">
-                      Позицій
+                      {t('positionsCount')}
                     </dt>
                     <dd className="font-mono text-[15px] text-white tabular-nums">
                       {byZone === null || selected.length === 0
@@ -2079,9 +2061,9 @@ function NewSessionView() {
                     </dd>
                     <dt
                       className="text-app-muted text-[14px] font-semibold"
-                      title="Сесія не закріплюється за виконавцями"
+                      title={t('peopleNotAssigned')}
                     >
-                      Виконавців
+                      {t('peopleCount')}
                     </dt>
                     <dd className="text-app-dim font-mono text-[15px]">—</dd>
                     <dd
@@ -2090,9 +2072,9 @@ function NewSessionView() {
                     />
                     <dt
                       className="text-[15px] font-bold text-white"
-                      title="Тривалість підрахунку не оцінюється"
+                      title={t('durationNotEstimated')}
                     >
-                      Орієнтовно
+                      {t('estimate')}
                     </dt>
                     <dd className="text-app-dim font-mono text-[20px]">—</dd>
                   </dl>
@@ -2102,12 +2084,10 @@ function NewSessionView() {
                     onClick={() => void create(selected, true)}
                     variant="primary"
                   >
-                    {busy === 'start' ? 'Запускаємо…' : 'Розпочати сесію'}
+                    {busy === 'start' ? t('starting') : t('start')}
                   </Button>
                   <p className="text-app-dim mt-3 text-[12px] leading-[1.5]">
-                    {selected.length === 0
-                      ? 'Виберіть хоча б одну зону.'
-                      : 'Після старту зони блокуються для ручних змін. «Зберегти чернетку» створює сесію, не запускаючи підрахунок.'}
+                    {selected.length === 0 ? t('pickOne') : t('afterStart')}
                   </p>
                 </section>
               </div>
@@ -2177,6 +2157,7 @@ function Toggle({
   on: boolean
   why: string
 }) {
+  const t = useT(newSessionMessages)
   return (
     <li
       className="border-app-line bg-app-canvas flex items-center gap-3.5 rounded-xl border px-4 py-3.5"
@@ -2202,16 +2183,16 @@ function Toggle({
           )}
         />
       </span>
-      <span className="sr-only">{on ? 'увімкнено' : 'вимкнено'}</span>
+      <span className="sr-only">{on ? t('toggleOn') : t('toggleOff')}</span>
     </li>
   )
 }
 
 /** Which side of the count the session table is showing. */
 const SESSION_FILTERS = [
-  { value: 'all', label: 'Усі' },
-  { value: 'diff', label: 'Розходження' },
-  { value: 'same', label: 'Збіглося' },
+  { value: 'all', label: 'filterAll' },
+  { value: 'diff', label: 'filterDiff' },
+  { value: 'same', label: 'filterSame' },
 ] as const
 
 type SessionFilter = (typeof SESSION_FILTERS)[number]['value']
@@ -2235,6 +2216,9 @@ const initials = (name: string) =>
     .join('') || '?'
 
 function SessionView({ id }: { id: string }) {
+  const t = useT(sessionMessages)
+  const ti = useT(inventoryMessages)
+  const { date, sessionStatus, timeOfDay } = useInventoryFormat()
   const navigate = useNavigate()
   const base = useInventoryBase()
   const canManage = usePermission('inventory.manage')
@@ -2387,10 +2371,10 @@ function SessionView({ id }: { id: string }) {
                   to={base}
                 >
                   <ChevronLeft aria-hidden className="size-3.5" />
-                  До інвентаризації
+                  {ti('backToInventory')}
                 </Link>
                 <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-                  <span>Інвентаризація</span>
+                  <span>{ti('crumbInventory')}</span>
                   <span aria-hidden className="text-white/20">
                     /
                   </span>
@@ -2405,7 +2389,7 @@ function SessionView({ id }: { id: string }) {
                     variant="quiet"
                   >
                     <Link to={`${base}/sessions/${id}/results`}>
-                      Результати
+                      {t('results')}
                     </Link>
                   </Button>
                 )}
@@ -2413,33 +2397,32 @@ function SessionView({ id }: { id: string }) {
                 <Button
                   className="px-5 text-sm font-bold"
                   disabled
-                  title="Підрахунок ведеться в мобільному застосунку — кабінет показує його наживо"
+                  title={t('scanUnavailable')}
                   variant="primary"
                 >
-                  Сканувати
+                  {t('scan')}
                 </Button>
                 <ActionMenu
                   actions={[
                     {
                       key: 'audit',
-                      label: 'Аудит сесії',
+                      label: t('audit'),
                       icon: <ClipboardList aria-hidden />,
                       onSelect: () =>
                         void navigate(`${base}/sessions/${id}/audit`),
                     },
                     {
                       key: 'refresh',
-                      label: 'Оновити',
+                      label: t('refresh'),
                       icon: <RefreshCw aria-hidden />,
                       onSelect: resource.reload,
                     },
                     {
                       key: 'pause',
-                      label: 'Призупинити',
+                      label: t('pause'),
                       icon: <Pause aria-hidden />,
                       disabled: true,
-                      title:
-                        'Поставити сесію на паузу не можна — її можна лише завершити або скасувати',
+                      title: t('pauseUnavailable'),
                       onSelect: () => undefined,
                     },
                     ...(canManage &&
@@ -2448,7 +2431,7 @@ function SessionView({ id }: { id: string }) {
                       ? [
                           {
                             key: 'cancel',
-                            label: 'Скасувати сесію',
+                            label: t('cancelSession'),
                             icon: <Archive aria-hidden />,
                             destructive: true as const,
                             onSelect: () => {
@@ -2459,7 +2442,7 @@ function SessionView({ id }: { id: string }) {
                         ]
                       : []),
                   ]}
-                  label="Інші дії із сесією"
+                  label={t('moreActions')}
                 />
               </div>
             </div>
@@ -2477,10 +2460,10 @@ function SessionView({ id }: { id: string }) {
                     session.zones[0]?.warehouseName ?? null,
                     session.zones.length === 0
                       ? null
-                      : `${String(session.zones.length)} ${plural(session.zones.length, ['зона', 'зони', 'зон'])}`,
+                      : ti('zones', { count: session.zones.length }),
                     session.startedAt == null
-                      ? `створено ${date(session.createdAt)}`
-                      : `розпочато ${date(session.startedAt)}`,
+                      ? t('createdLower', { date: date(session.createdAt) })
+                      : t('startedLower', { date: date(session.startedAt) }),
                     counters.length > 0 ? counters.join(', ') : null,
                   ]
                     .filter(Boolean)
@@ -2497,7 +2480,7 @@ function SessionView({ id }: { id: string }) {
                   <Card
                     aside={
                       <div
-                        aria-label="Які позиції показувати"
+                        aria-label={t('filterLabel')}
                         className="border-app-line bg-app-canvas flex flex-wrap gap-1 rounded-[10px] border p-[3px]"
                         role="radiogroup"
                       >
@@ -2517,7 +2500,7 @@ function SessionView({ id }: { id: string }) {
                               role="radio"
                               type="button"
                             >
-                              {option.label}{' '}
+                              {t(option.label)}{' '}
                               <span className="text-app-dim font-mono text-[11px] font-medium">
                                 {counts[option.value]}
                               </span>
@@ -2528,25 +2511,25 @@ function SessionView({ id }: { id: string }) {
                     }
                     bodyClassName="p-0 pt-4"
                     className="min-w-0"
-                    title="Позиції"
+                    title={t('positionsTitle')}
                   >
                     <div
                       aria-hidden
                       className="border-app-line text-app-muted hidden gap-3 border-y px-6 py-3 font-mono text-[10px] tracking-[0.14em] uppercase md:grid md:grid-cols-[7rem_minmax(0,1fr)_5.5rem_5.5rem_6rem]"
                     >
-                      <span>Код</span>
-                      <span>Позиція</span>
-                      <span className="text-right">Очікується</span>
-                      <span className="text-right">Факт</span>
-                      <span className="text-right">Різниця</span>
+                      <span>{t('colCode')}</span>
+                      <span>{t('colPosition')}</span>
+                      <span className="text-right">{t('colExpected')}</span>
+                      <span className="text-right">{t('colActual')}</span>
+                      <span className="text-right">{t('colDelta')}</span>
                     </div>
                     {rows.length === 0 ? (
                       <p className="text-app-muted px-6 py-6 text-sm">
                         {results === null
-                          ? 'Сесія ще не запущена — рахувати нічого.'
+                          ? t('notStarted')
                           : parts.length === 0
-                            ? 'У зрізі сесії немає позицій.'
-                            : 'За цим фільтром позицій немає.'}
+                            ? t('noPositions')
+                            : t('noFiltered')}
                       </p>
                     ) : (
                       <ul className="grid">
@@ -2564,7 +2547,7 @@ function SessionView({ id }: { id: string }) {
                               </span>
                               {part.hasCoverageWarning ? (
                                 <span className="text-state-warn mt-0.5 block text-[12px]">
-                                  Позиція лежить і поза зрізом сесії
+                                  {t('coverageWarning')}
                                 </span>
                               ) : null}
                             </span>
@@ -2572,7 +2555,7 @@ function SessionView({ id }: { id: string }) {
                               {/* Stacked rows lose the header row, so each
                                   number carries its own name below md. */}
                               <span className="mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
-                                Очікується
+                                {t('colExpected')}
                               </span>
                               {part.expectedQuantity}
                             </span>
@@ -2587,7 +2570,7 @@ function SessionView({ id }: { id: string }) {
                               )}
                             >
                               <span className="text-app-muted mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
-                                Факт
+                                {t('colActual')}
                               </span>
                               {part.actualQuantity}
                             </span>
@@ -2615,11 +2598,11 @@ function SessionView({ id }: { id: string }) {
                   <Card
                     bodyClassName="p-0"
                     className="min-w-0"
-                    title="Останні сканування"
+                    title={t('recentScans')}
                   >
                     {scans.length === 0 ? (
                       <p className="text-app-muted px-6 pt-4 pb-6 text-sm">
-                        Сканувань ще не було.
+                        {t('noScans')}
                       </p>
                     ) : (
                       <ul className="grid">
@@ -2666,19 +2649,21 @@ function SessionView({ id }: { id: string }) {
 
                 <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-5">
                   <section
-                    aria-label="Прогрес"
+                    aria-label={t('progress')}
                     className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
                   >
                     <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                      Прогрес
+                      {t('progress')}
                     </h2>
                     <p className="mt-3 flex items-baseline gap-2.5">
                       <span className="text-[34px] leading-none font-extrabold tracking-[-0.03em] tabular-nums text-white">
                         {percent}%
                       </span>
                       <span className="text-app-muted font-mono text-[14px]">
-                        {done} / {session.zones.length}{' '}
-                        {plural(session.zones.length, ['зона', 'зони', 'зон'])}
+                        {ti('zonesProgress', {
+                          done,
+                          count: session.zones.length,
+                        })}
                       </span>
                     </p>
                     <span
@@ -2695,19 +2680,19 @@ function SessionView({ id }: { id: string }) {
                     </span>
                     <dl className="border-app-line mt-4.5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5 border-t pt-4">
                       <dt className="text-app-muted text-[14px] font-semibold">
-                        Збіглося позицій
+                        {t('matched')}
                       </dt>
                       <dd className="text-state-ok font-mono text-[15px] tabular-nums">
                         {results === null ? '—' : matched}
                       </dd>
                       <dt className="text-app-muted text-[14px] font-semibold">
-                        Розходжень
+                        {t('differing')}
                       </dt>
                       <dd className="text-state-danger font-mono text-[15px] tabular-nums">
                         {results === null ? '—' : differing}
                       </dd>
                       <dt className="text-app-muted text-[14px] font-semibold">
-                        Зон лишилось
+                        {t('zonesLeft')}
                       </dt>
                       <dd className="font-mono text-[15px] text-white tabular-nums">
                         {session.zones.length - done}
@@ -2722,17 +2707,17 @@ function SessionView({ id }: { id: string }) {
                             onClick={() => setAsking('start')}
                             variant="primary"
                           >
-                            Запустити
+                            {t('start')}
                           </Button>
                         ) : null}
                         {session.status === 'inProgress' ? (
                           <Button
                             className="min-h-11 w-full text-sm font-bold"
                             disabled
-                            title="Підрахунок ведеться в мобільному застосунку"
+                            title={t('countingInApp')}
                             variant="primary"
                           >
-                            Продовжити сканування
+                            {t('continueScanning')}
                           </Button>
                         ) : null}
                         {session.status === 'review' ? (
@@ -2742,7 +2727,7 @@ function SessionView({ id }: { id: string }) {
                             onClick={() => setAsking('complete')}
                             variant="primary"
                           >
-                            Завершити
+                            {t('complete')}
                           </Button>
                         ) : null}
                         {session.status === 'review' ? (
@@ -2751,23 +2736,23 @@ function SessionView({ id }: { id: string }) {
                             disabled={acting}
                             onClick={() => setAsking('reopen')}
                           >
-                            Відкрити повторно
+                            {t('reopen')}
                           </Button>
                         ) : null}
                       </div>
                     ) : null}
                     <p className="text-app-dim mt-3 text-[12px] leading-[1.5]">
                       {session.status === 'review'
-                        ? 'Завершити можна й раніше — неперевірені зони залишаться з попередніми даними.'
+                        ? t('hintReview')
                         : session.status === 'inProgress'
-                          ? 'Сесія переходить у перевірку, коли всі зони порахують у застосунку.'
+                          ? t('hintInProgress')
                           : session.status === 'draft'
-                            ? 'Поки сесія не запущена, залишки рухаються як завжди.'
-                            : 'Сесія закрита — залишки вже зафіксовані.'}
+                            ? t('hintDraft')
+                            : t('hintClosed')}
                     </p>
                   </section>
 
-                  <Card bodyClassName="p-0 pt-2" title="Зони">
+                  <Card bodyClassName="p-0 pt-2" title={t('zones')}>
                     <ul className="grid">
                       {session.zones.map((zone) => (
                         <li
@@ -2783,11 +2768,16 @@ function SessionView({ id }: { id: string }) {
                             </p>
                             {zone.leaseOwnerUserId ? (
                               <p className="text-state-warn mt-1.5 text-[12px]">
-                                Зона зайнята користувачем
                                 {nameOf(zone.leaseOwnerUserId) === null
-                                  ? ''
-                                  : ` ${String(nameOf(zone.leaseOwnerUserId))}`}{' '}
-                                до {date(zone.leaseExpiresAt)}
+                                  ? t('leased', {
+                                      date: date(zone.leaseExpiresAt),
+                                    })
+                                  : t('leasedBy', {
+                                      name: String(
+                                        nameOf(zone.leaseOwnerUserId),
+                                      ),
+                                      date: date(zone.leaseExpiresAt),
+                                    })}
                               </p>
                             ) : null}
                           </div>
@@ -2796,7 +2786,7 @@ function SessionView({ id }: { id: string }) {
                               <Link
                                 to={`${base}/sessions/${id}/journal/${zone.zoneId}`}
                               >
-                                Журнал
+                                {t('journal')}
                               </Link>
                             </Button>
                             <StatusPill
@@ -2809,10 +2799,10 @@ function SessionView({ id }: { id: string }) {
                               }
                             >
                               {zone.status === 'completed'
-                                ? 'Завершено'
+                                ? t('zoneCompleted')
                                 : zone.status === 'counting'
-                                  ? 'Підрахунок триває'
-                                  : 'Очікує'}
+                                  ? t('zoneCounting')
+                                  : t('zoneWaiting')}
                             </StatusPill>
                           </div>
                         </li>
@@ -2822,11 +2812,11 @@ function SessionView({ id }: { id: string }) {
 
                   {workers.length === 0 ? null : (
                     <section
-                      aria-label="Виконавці"
+                      aria-label={t('workers')}
                       className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
                     >
                       <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                        Виконавці
+                        {t('workers')}
                       </h2>
                       <ul className="mt-4 grid gap-3.5">
                         {workers.map(([userId, stat]) => {
@@ -2844,10 +2834,10 @@ function SessionView({ id }: { id: string }) {
                               </span>
                               <span className="min-w-0 flex-1">
                                 <span className="block text-[15px] font-semibold text-white">
-                                  {who ?? 'Імʼя приховано'}
+                                  {who ?? t('nameHidden')}
                                 </span>
                                 <span className="text-app-muted mt-0.5 block text-[12px]">
-                                  з {timeOfDay(stat.since)}
+                                  {t('since', { time: timeOfDay(stat.since) })}
                                 </span>
                               </span>
                               <span className="text-app-muted font-mono text-[14px] tabular-nums">
@@ -2859,18 +2849,18 @@ function SessionView({ id }: { id: string }) {
                       </ul>
                       {people.length === 0 ? (
                         <p className="text-app-muted mt-3.5 text-[12px] leading-[1.5]">
-                          Імена видно тим, хто має право «team.view».
+                          {t('namesHidden')}
                         </p>
                       ) : null}
                     </section>
                   )}
 
                   <section
-                    aria-label="Правила"
+                    aria-label={t('rules')}
                     className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
                   >
                     <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                      Правила
+                      {t('rules')}
                     </h2>
                     <ul className="mt-3.5 grid gap-2.5">
                       {/* The slice stays locked until the session closes —
@@ -2881,19 +2871,13 @@ function SessionView({ id }: { id: string }) {
                           session.status === 'review'
                         }
                       >
-                        Рух позицій заблоковано
+                        {t('ruleLocked')}
                       </Rule>
-                      <Rule
-                        on={null}
-                        why="Сліпий підрахунок налаштовується в мобільному застосунку — кабінет про нього не знає"
-                      >
-                        Сліпий підрахунок
+                      <Rule on={null} why={t('ruleBlindWhy')}>
+                        {t('ruleBlind')}
                       </Rule>
-                      <Rule
-                        on={null}
-                        why="Вимоги фото при розходженні в системі немає"
-                      >
-                        Фото при розходженні
+                      <Rule on={null} why={t('rulePhotoWhy')}>
+                        {t('rulePhoto')}
                       </Rule>
                     </ul>
                   </section>
@@ -2904,17 +2888,17 @@ function SessionView({ id }: { id: string }) {
             <ConfirmDialog
               confirmLabel={
                 asking === 'start'
-                  ? 'Запустити'
+                  ? t('start')
                   : asking === 'complete'
-                    ? 'Завершити'
-                    : 'Відкрити повторно'
+                    ? t('complete')
+                    : t('reopen')
               }
               consequence={
                 asking === 'start'
-                  ? `Сесія ${session.number} піде в роботу: позиції зрізу заблокуються для продажу, поки її не закриють.`
+                  ? t('startConsequence', { number: session.number })
                   : asking === 'complete'
-                    ? 'Залишки зафіксуються за прийнятими рішеннями. Неперевірені зони залишаться з попередніми даними.'
-                    : 'Сесія повернеться в підрахунок, і зони знову можна буде рахувати.'
+                    ? t('completeConsequence')
+                    : t('reopenConsequence')
               }
               onConfirm={() => {
                 if (asking !== null) void act(asking)
@@ -2926,15 +2910,15 @@ function SessionView({ id }: { id: string }) {
               pending={acting}
               title={
                 asking === 'start'
-                  ? 'Запустити сесію?'
+                  ? t('startTitle')
                   : asking === 'complete'
-                    ? 'Завершити сесію?'
-                    : 'Відкрити сесію повторно?'
+                    ? t('completeTitle')
+                    : t('reopenTitle')
               }
             />
 
             <FormDialog
-              description="Причина потрапить у журнал аудиту сесії."
+              description={t('cancelHint')}
               onOpenChange={(next) => {
                 if (!next) setCancelling(false)
               }}
@@ -2945,14 +2929,10 @@ function SessionView({ id }: { id: string }) {
               open={cancelling}
               pending={acting}
               submitDisabled={reason.trim() === ''}
-              submitLabel="Скасувати сесію"
-              title="Скасувати сесію?"
+              submitLabel={t('cancelSession')}
+              title={t('cancelTitle')}
             >
-              <Field
-                hint="Скасовану сесію не можна відкрити знову — залишки лишаться такими, як були."
-                label="Причина"
-                required
-              >
+              <Field hint={t('reasonHint')} label={t('reason')} required>
                 <TextArea
                   name="reason"
                   onChange={(event) => setReason(event.target.value)}
@@ -2982,6 +2962,7 @@ function Rule({
   on: boolean | null
   why?: string
 }) {
+  const t = useT(sessionMessages)
   return (
     <li
       className={cn(
@@ -3000,16 +2981,16 @@ function Rule({
         {on === true ? '✓' : on === false ? '' : '?'}
       </span>
       {children}
-      {on === null ? <span className="sr-only"> — невідомо</span> : null}
+      {on === null ? <span className="sr-only">{t('ruleUnknown')}</span> : null}
     </li>
   )
 }
 
 /** Which side of the count the reader is looking at. */
 const RESULT_FILTERS = [
-  { value: 'diff', label: 'Розходження' },
-  { value: 'all', label: 'Усі позиції' },
-  { value: 'same', label: 'Збіглося' },
+  { value: 'diff', label: 'filterDiff' },
+  { value: 'all', label: 'filterAll' },
+  { value: 'same', label: 'filterSame' },
 ] as const
 
 type ResultFilter = (typeof RESULT_FILTERS)[number]['value']
@@ -3022,6 +3003,9 @@ interface ResultsData {
 }
 
 function ResultsView({ id }: { id: string }) {
+  const t = useT(resultsMessages)
+  const ti = useT(inventoryMessages)
+  const { date, sessionStatus, locale } = useInventoryFormat()
   const base = useInventoryBase()
   const canAdjust = usePermission('inventory.adjust')
   const canSeeTeam = usePermission('team.view')
@@ -3075,7 +3059,11 @@ function ResultsView({ id }: { id: string }) {
         setOperationError(
           parts.length === 1
             ? normalizeApiProblem(error).message
-            : `${normalizeApiProblem(error).message} Застосовано ${String(index)} з ${String(parts.length)} — решта лишилася без рішення.`,
+            : t('applyFailedPartial', {
+                error: normalizeApiProblem(error).message,
+                applied: index,
+                total: parts.length,
+              }),
         )
         setBusy(false)
         setAsking(null)
@@ -3154,10 +3142,10 @@ function ResultsView({ id }: { id: string }) {
                   to={`${base}/sessions/${id}`}
                 >
                   <ChevronLeft aria-hidden className="size-3.5" />
-                  До сесії
+                  {t('backToSession')}
                 </Link>
                 <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-                  <span>Інвентаризація</span>
+                  <span>{ti('crumbInventory')}</span>
                   <span aria-hidden className="text-white/20">
                     /
                   </span>
@@ -3165,18 +3153,15 @@ function ResultsView({ id }: { id: string }) {
                   <span aria-hidden className="text-white/20">
                     /
                   </span>
-                  <span className="text-app-muted">Результати</span>
+                  <span className="text-app-muted">{t('crumbResults')}</span>
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2.5">
                 <Button asChild className="px-[18px] text-sm font-semibold">
-                  <Link to={`${base}/sessions/${id}/audit`}>Аудит</Link>
+                  <Link to={`${base}/sessions/${id}/audit`}>{t('audit')}</Link>
                 </Button>
-                <Button
-                  disabled
-                  title="Вивантажити результати сесії файлом поки не можна"
-                >
-                  Експорт
+                <Button disabled title={t('exportUnavailable')}>
+                  {t('export')}
                 </Button>
               </div>
             </div>
@@ -3185,14 +3170,14 @@ function ResultsView({ id }: { id: string }) {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-4">
                   <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                    Результати сесії
+                    {t('title')}
                   </h1>
                   <StatusPill tone={statusTone}>{statusLabel}</StatusPill>
                 </div>
                 <p className="text-app-muted mt-3 text-[15px]">
                   {[
                     session.zones[0]?.warehouseName,
-                    zones === '' ? null : `зони ${zones}`,
+                    zones === '' ? null : t('zonesList', { zones }),
                     session.startedAt == null ? null : date(session.startedAt),
                     session.completedAt == null
                       ? null
@@ -3210,34 +3195,47 @@ function ResultsView({ id }: { id: string }) {
 
               <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-px overflow-hidden rounded-[20px] border">
                 <JournalStat
-                  label="Позицій у сесії"
-                  meta={`${String(session.zones.length)} ${plural(session.zones.length, ['зона', 'зони', 'зон'])}`}
+                  label={t('statPositions')}
+                  meta={ti('zones', { count: session.zones.length })}
                   value={String(parts.length)}
                 />
                 <JournalStat
-                  label="Точність"
-                  meta={`${String(parts.length - differing.length)} з ${String(parts.length)} збіглися`}
+                  label={t('statAccuracy')}
+                  meta={t('accuracyMeta', {
+                    matched: parts.length - differing.length,
+                    total: parts.length,
+                  })}
                   unit="%"
-                  value={accuracy === null ? '—' : String(accuracy)}
+                  value={
+                    accuracy === null
+                      ? '—'
+                      : (formatNumber(accuracy, locale, {
+                          maximumFractionDigits: 1,
+                        }) ?? '—')
+                  }
                 />
                 <JournalStat
-                  label="Недостача"
-                  meta={`${String(differing.filter((part) => part.delta < 0).length)} ${plural(differing.filter((part) => part.delta < 0).length, ['позиція', 'позиції', 'позицій'])}`}
+                  label={t('statShortage')}
+                  meta={ti('positions', {
+                    count: differing.filter((part) => part.delta < 0).length,
+                  })}
                   tone={shortage < 0 ? 'danger' : undefined}
-                  unit="шт"
+                  unit={t('pcs')}
                   value={String(Math.abs(shortage))}
                 />
                 <JournalStat
-                  label="Лишки"
-                  meta={`${String(differing.filter((part) => part.delta > 0).length)} ${plural(differing.filter((part) => part.delta > 0).length, ['позиція', 'позиції', 'позицій'])}`}
-                  unit="шт"
+                  label={t('statSurplus')}
+                  meta={ti('positions', {
+                    count: differing.filter((part) => part.delta > 0).length,
+                  })}
+                  unit={t('pcs')}
                   value={String(surplus)}
                 />
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div
-                  aria-label="Які позиції показувати"
+                  aria-label={t('filterLabel')}
                   className="border-app-line bg-app-raised flex flex-wrap gap-1 rounded-xl border p-1"
                   role="radiogroup"
                 >
@@ -3257,7 +3255,7 @@ function ResultsView({ id }: { id: string }) {
                         role="radio"
                         type="button"
                       >
-                        {option.label}{' '}
+                        {t(option.label)}{' '}
                         <span className="text-app-dim font-mono text-[11px] font-medium">
                           {counts[option.value]}
                         </span>
@@ -3268,8 +3266,13 @@ function ResultsView({ id }: { id: string }) {
                 <div className="flex flex-wrap items-center gap-3">
                   <p className="text-app-dim text-[13px]">
                     {differing.length === 0
-                      ? 'Розходжень немає'
-                      : `${String(differing.filter((part) => adjusted.has(part.partId)).length)} з ${String(differing.length)} рішень прийнято`}
+                      ? t('noDiffs')
+                      : t('decisionsMade', {
+                          done: differing.filter((part) =>
+                            adjusted.has(part.partId),
+                          ).length,
+                          total: differing.length,
+                        })}
                   </p>
                   {decidable.length > 0 ? (
                     <Button
@@ -3279,22 +3282,22 @@ function ResultsView({ id }: { id: string }) {
                         setAsking(decidable)
                       }}
                     >
-                      Прийняти факт для всіх
+                      {t('acceptAll')}
                     </Button>
                   ) : null}
                 </div>
               </div>
 
               <section
-                aria-label="Результати підрахунку"
+                aria-label={t('tableLabel')}
                 className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
               >
                 <DataTable
-                  caption="Позиції сесії"
+                  caption={t('caption')}
                   columns={[
                     {
                       key: 'code',
-                      label: 'Код',
+                      label: t('colCode'),
                       cell: (part) => (
                         <span className="text-app-muted font-mono text-[13px]">
                           {part.partQrCode}
@@ -3303,7 +3306,7 @@ function ResultsView({ id }: { id: string }) {
                     },
                     {
                       key: 'part',
-                      label: 'Позиція',
+                      label: t('colPosition'),
                       variant: 'primary',
                       cell: (part) => (
                         <span className="grid gap-0.5">
@@ -3312,7 +3315,7 @@ function ResultsView({ id }: { id: string }) {
                           </span>
                           {part.hasCoverageWarning ? (
                             <span className="text-state-warn text-[12px]">
-                              Порахована не в усіх зонах
+                              {t('notAllZones')}
                             </span>
                           ) : null}
                         </span>
@@ -3320,7 +3323,7 @@ function ResultsView({ id }: { id: string }) {
                     },
                     {
                       key: 'expected',
-                      label: 'Облік',
+                      label: t('colExpected'),
                       align: 'end',
                       cell: (part) => (
                         <span className="text-app-muted font-mono tabular-nums">
@@ -3330,7 +3333,7 @@ function ResultsView({ id }: { id: string }) {
                     },
                     {
                       key: 'actual',
-                      label: 'Факт',
+                      label: t('colActual'),
                       align: 'end',
                       cell: (part) => (
                         <span
@@ -3349,7 +3352,7 @@ function ResultsView({ id }: { id: string }) {
                     },
                     {
                       key: 'delta',
-                      label: 'Різниця',
+                      label: t('colDelta'),
                       align: 'end',
                       cell: (part) =>
                         part.delta === 0 ? (
@@ -3366,7 +3369,7 @@ function ResultsView({ id }: { id: string }) {
                     },
                     {
                       key: 'decision',
-                      label: 'Рішення',
+                      label: t('colDecision'),
                       align: 'end',
                       cell: (part) => (
                         <ResultDecision
@@ -3388,13 +3391,13 @@ function ResultsView({ id }: { id: string }) {
                     <EmptyState
                       description={
                         parts.length === 0
-                          ? 'Підсумки зʼявляться, коли сесію буде перераховано.'
-                          : 'Спробуйте інший фільтр.'
+                          ? t('noResultsHint')
+                          : t('tryOtherFilter')
                       }
                       title={
                         parts.length === 0
-                          ? 'Підсумків ще немає'
-                          : 'У цьому фільтрі позицій немає'
+                          ? t('noResultsTitle')
+                          : t('noFilteredTitle')
                       }
                     />
                   }
@@ -3406,24 +3409,28 @@ function ResultsView({ id }: { id: string }) {
               <div className="flex flex-wrap items-start gap-5">
                 <Card
                   className="min-w-[320px] flex-[1_1_420px]"
-                  title="Вплив на облік"
+                  title={t('impactTitle')}
                 >
                   <dl className="grid grid-cols-[1fr_auto] items-baseline gap-y-3">
                     <dt className="text-app-muted text-sm font-semibold">
-                      Списати недостачу
+                      {t('writeOff')}
                     </dt>
                     <dd className="text-state-danger font-mono text-[15px] tabular-nums">
-                      {shortage === 0 ? '—' : `${String(shortage)} шт`}
+                      {shortage === 0
+                        ? '—'
+                        : t('quantity', { count: String(shortage) })}
                     </dd>
                     <dt className="text-app-muted text-sm font-semibold">
-                      Додати лишки
+                      {t('addSurplus')}
                     </dt>
                     <dd className="text-state-ok font-mono text-[15px] tabular-nums">
-                      {surplus === 0 ? '—' : `+${String(surplus)} шт`}
+                      {surplus === 0
+                        ? '—'
+                        : t('quantity', { count: `+${String(surplus)}` })}
                     </dd>
                     <div className="bg-app-line col-span-2 my-0.5 h-px" />
                     <dt className="text-[15px] font-bold text-white">
-                      Зміна кількості
+                      {t('quantityChange')}
                     </dt>
                     <dd
                       className={cn(
@@ -3435,38 +3442,37 @@ function ResultsView({ id }: { id: string }) {
                             : 'text-state-danger',
                       )}
                     >
-                      {shortage + surplus > 0
-                        ? `+${String(shortage + surplus)}`
-                        : String(shortage + surplus)}{' '}
-                      шт
+                      {t('quantity', {
+                        count:
+                          shortage + surplus > 0
+                            ? `+${String(shortage + surplus)}`
+                            : String(shortage + surplus),
+                      })}
                     </dd>
                   </dl>
                   <p
                     className="text-app-dim mt-4 text-[13px] leading-[1.5]"
-                    title="Підсумки сесії не несуть собівартості позицій"
+                    title={t('noCostTitle')}
                   >
-                    Вартість списаного й оприбуткованого в підсумках не повертає
-                    — тут лише кількість.
+                    {t('noCost')}
                   </p>
                 </Card>
 
                 <Card
                   className="min-w-[280px] flex-[1_1_300px]"
-                  title="Після застосування"
+                  title={t('afterTitle')}
                 >
                   <ul className="text-app-ink grid gap-3 text-sm leading-[1.5]">
-                    {[
-                      'Залишок позиції стане таким, як порахували в зонах сесії.',
-                      'Кожне коригування потрапить у журнал аудиту сесії.',
-                      'Скасувати застосоване коригування з вебу не можна.',
-                    ].map((line) => (
-                      <li className="flex gap-2.5" key={line}>
-                        <span aria-hidden className="text-app-dim">
-                          —
-                        </span>
-                        {line}
-                      </li>
-                    ))}
+                    {[t('afterStock'), t('afterAudit'), t('afterUndo')].map(
+                      (line) => (
+                        <li className="flex gap-2.5" key={line}>
+                          <span aria-hidden className="text-app-dim">
+                            —
+                          </span>
+                          {line}
+                        </li>
+                      ),
+                    )}
                   </ul>
                   {decidable.length > 0 ? (
                     <Button
@@ -3477,22 +3483,17 @@ function ResultsView({ id }: { id: string }) {
                       }}
                       variant="primary"
                     >
-                      Застосувати {decidable.length}{' '}
-                      {plural(decidable.length, [
-                        'рішення',
-                        'рішення',
-                        'рішень',
-                      ])}
+                      {t('applyDecisions', { count: decidable.length })}
                     </Button>
                   ) : (
                     <p className="text-app-dim mt-5 text-[13px] leading-[1.5]">
                       {differing.length === 0
-                        ? 'Розходжень немає — застосовувати нічого.'
+                        ? t('nothingToApply')
                         : session.status === 'review'
                           ? canAdjust
-                            ? 'Усі розходження вже мають рішення.'
-                            : 'Застосування коригувань потребує права «inventory.adjust».'
-                          : 'Коригування застосовуються, коли сесія в статусі «Перевірка».'}
+                            ? t('allDecided')
+                            : t('needsAdjust')
+                          : t('onlyInReview')}
                     </p>
                   )}
                 </Card>
@@ -3504,8 +3505,11 @@ function ResultsView({ id }: { id: string }) {
                 asking === null
                   ? undefined
                   : asking.length === 1
-                    ? `Залишок «${asking[0]?.partName ?? ''}» стане ${String(asking[0]?.actualQuantity ?? 0)} шт.`
-                    : `Факт буде прийнято для ${String(asking.length)} ${plural(asking.length, ['позиції', 'позицій', 'позицій'])}.`
+                    ? t('oneConsequence', {
+                        name: asking[0]?.partName ?? '',
+                        count: String(asking[0]?.actualQuantity ?? 0),
+                      })
+                    : t('manyConsequence', { count: asking.length })
               }
               onOpenChange={(next) => {
                 if (!next) setAsking(null)
@@ -3519,16 +3523,12 @@ function ResultsView({ id }: { id: string }) {
               submitDisabled={reason.trim() === ''}
               submitLabel={
                 busy && asking !== null && asking.length > 1
-                  ? `Застосовуємо ${String(applied)} з ${String(asking.length)}…`
-                  : 'Застосувати'
+                  ? t('applying', { applied, total: asking.length })
+                  : t('apply')
               }
-              title="Причина коригування"
+              title={t('reasonTitle')}
             >
-              <Field
-                hint="Потрапить у журнал аудиту сесії — напишіть, звідки взялася різниця."
-                label="Причина"
-                required
-              >
+              <Field hint={t('reasonHint')} label={t('reason')} required>
                 <TextArea
                   name="reason"
                   onChange={(event) => setReason(event.target.value)}
@@ -3563,32 +3563,33 @@ function ResultDecision({
   busy: boolean
   onAsk: () => void
 }) {
+  const t = useT(resultsMessages)
   if (part.delta === 0) return <span className="text-app-dim font-mono">—</span>
-  if (adjusted) return <StatusPill tone="ok">Застосовано</StatusPill>
+  if (adjusted) return <StatusPill tone="ok">{t('applied')}</StatusPill>
   if (part.hasCoverageWarning)
     return (
       <span
         className="text-app-dim text-[12px]"
-        title="Позиція лежить і в зонах поза цією сесією, тож факт не можна вважати повним"
+        title={t('partialCoverageWhy')}
       >
-        Неповне покриття
+        {t('partialCoverage')}
       </span>
     )
   if (!canAdjust)
     return (
-      <span className="text-app-dim text-[12px]">
-        Немає права на коригування
-      </span>
+      <span className="text-app-dim text-[12px]">{t('noAdjustRight')}</span>
     )
   if (status !== 'review')
-    return <span className="text-app-dim text-[12px]">Чекає на перевірку</span>
+    return (
+      <span className="text-app-dim text-[12px]">{t('awaitingReview')}</span>
+    )
   return (
     <Button
       className="min-h-9 px-3 text-xs font-bold"
       disabled={busy}
       onClick={onAsk}
     >
-      Прийняти факт
+      {t('accept')}
     </Button>
   )
 }
@@ -3607,80 +3608,20 @@ const auditKind = (event: InventoryAuditEvent): AuditKind => {
 
 type AuditKind = 'decision' | 'scan' | 'session'
 
-const AUDIT_KINDS: Record<AuditKind, { label: string; dot: string }> = {
-  decision: { label: 'Рішення', dot: 'bg-brand' },
-  scan: { label: 'Сканування', dot: 'bg-state-info' },
-  session: { label: 'Сесія', dot: 'bg-state-ok' },
+const AUDIT_KINDS: Record<AuditKind, { label: AuditKey; dot: string }> = {
+  decision: { label: 'kindDecision', dot: 'bg-brand' },
+  scan: { label: 'kindScan', dot: 'bg-state-info' },
+  session: { label: 'kindSession', dot: 'bg-state-ok' },
 }
 
 const AUDIT_FILTERS = [
-  { value: 'all', label: 'Усі' },
-  { value: 'decision', label: 'Рішення' },
-  { value: 'scan', label: 'Сканування' },
-  { value: 'session', label: 'Сесія' },
+  { value: 'all', label: 'filterAll' },
+  { value: 'decision', label: 'kindDecision' },
+  { value: 'scan', label: 'kindScan' },
+  { value: 'session', label: 'kindSession' },
 ] as const
 
 type AuditFilter = (typeof AUDIT_FILTERS)[number]['value']
-
-/**
- * What the server calls each event, said in Ukrainian. An action the vocabulary
- * does not know is shown as it came rather than guessed at.
- */
-const AUDIT_ACTIONS: Record<string, string> = {
-  'session.created': 'Сесію створено',
-  'session.started': 'Сесію розпочато',
-  'session.reopened': 'Сесію повернуто в роботу',
-  'session.completed': 'Сесію завершено',
-  'session.cancelled': 'Сесію скасовано',
-  'zone.started': 'Зону взято в підрахунок',
-  'zone.completed': 'Зону перераховано',
-  'scan.recorded': 'Позицію відскановано',
-  'scan.voided': 'Сканування скасовано',
-  'adjustment.applied': 'Коригування застосовано',
-}
-
-const auditTitle = (action: string) => AUDIT_ACTIONS[action] ?? action
-
-/** The pairs of keys an audit payload uses when it records a change. */
-const CHANGE_KEYS: [string, string][] = [
-  ['expectedQuantity', 'actualQuantity'],
-  ['expected', 'fact'],
-  ['expected', 'actual'],
-  ['oldValue', 'newValue'],
-  ['from', 'to'],
-]
-
-/**
- * A before and after, but only when the payload really carries one. Nothing is
- * inferred: an event whose details name no such pair simply has no change row.
- */
-const auditChange = (
-  detailsJson: string | null | undefined,
-): { from: string; to: string } | null => {
-  if (detailsJson == null || detailsJson === '') return null
-  let payload: unknown
-  try {
-    payload = JSON.parse(detailsJson)
-  } catch {
-    return null
-  }
-  if (payload === null || typeof payload !== 'object') return null
-  const record = payload as Record<string, unknown>
-  const shown = (value: unknown) =>
-    typeof value === 'string' || typeof value === 'number'
-      ? String(value)
-      : typeof value === 'boolean'
-        ? value
-          ? 'увімкнено'
-          : 'вимкнено'
-        : null
-  for (const [fromKey, toKey] of CHANGE_KEYS) {
-    const from = shown(record[fromKey])
-    const to = shown(record[toKey])
-    if (from !== null && to !== null) return { from, to }
-  }
-  return null
-}
 
 /** How many audit events to show before the reader asks for more. */
 const AUDIT_PAGE = 20
@@ -3692,6 +3633,9 @@ interface AuditData {
 }
 
 function AuditView({ id }: { id: string }) {
+  const t = useT(auditMessages)
+  const ti = useT(inventoryMessages)
+  const { date, locale } = useInventoryFormat()
   const base = useInventoryBase()
   const canSeeTeam = usePermission('team.view')
   const [filter, setFilter] = useState<AuditFilter>('all')
@@ -3738,7 +3682,7 @@ function AuditView({ id }: { id: string }) {
           if (filter !== 'all' && auditKind(event) !== filter) return false
           if (needle === '') return true
           const haystack =
-            `${auditTitle(event.action)} ${nameOf(event.actorUserId) ?? ''}`.toLowerCase()
+            `${auditTitle(event.action, locale)} ${nameOf(event.actorUserId) ?? ''}`.toLowerCase()
           return haystack.includes(needle)
         })
         const visible = rows.slice(0, shown)
@@ -3756,10 +3700,10 @@ function AuditView({ id }: { id: string }) {
                   to={`${base}/sessions/${id}`}
                 >
                   <ChevronLeft aria-hidden className="size-3.5" />
-                  До сесії
+                  {t('backToSession')}
                 </Link>
                 <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-                  <span>Інвентаризація</span>
+                  <span>{ti('crumbInventory')}</span>
                   <span aria-hidden className="text-white/20">
                     /
                   </span>
@@ -3767,7 +3711,7 @@ function AuditView({ id }: { id: string }) {
                   <span aria-hidden className="text-white/20">
                     /
                   </span>
-                  <span className="text-app-muted">Аудит</span>
+                  <span className="text-app-muted">{t('crumbAudit')}</span>
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2.5">
@@ -3776,13 +3720,10 @@ function AuditView({ id }: { id: string }) {
                   className="px-4 text-sm font-semibold"
                   onClick={() => setRaw((value) => !value)}
                 >
-                  {raw ? 'Сховати дані' : 'Технічні дані'}
+                  {raw ? t('hideRaw') : t('showRaw')}
                 </Button>
-                <Button
-                  disabled
-                  title="Вивантажити журнал аудиту файлом поки не можна"
-                >
-                  Експорт журналу
+                <Button disabled title={t('exportUnavailable')}>
+                  {t('export')}
                 </Button>
               </div>
             </div>
@@ -3790,15 +3731,15 @@ function AuditView({ id }: { id: string }) {
             <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                  Аудит сесії
+                  {t('title')}
                 </h1>
                 <p className="text-app-muted mt-3 text-[15px]">
                   {[
                     warehouse,
-                    zones === '' ? null : `зони ${zones}`,
+                    zones === '' ? null : t('zonesList', { zones }),
                     date(session.createdAt),
-                    `${String(events.length)} ${plural(events.length, ['подія', 'події', 'подій'])}`,
-                    'журнал не редагується',
+                    t('events', { count: events.length }),
+                    t('readOnly'),
                   ]
                     .filter(Boolean)
                     .join(' · ')}
@@ -3807,7 +3748,7 @@ function AuditView({ id }: { id: string }) {
 
               <div className="flex flex-wrap items-center gap-3">
                 <div
-                  aria-label="Які події показувати"
+                  aria-label={t('filterLabel')}
                   className="border-app-line bg-app-raised flex flex-wrap gap-1 rounded-xl border p-1"
                   role="radiogroup"
                 >
@@ -3830,7 +3771,7 @@ function AuditView({ id }: { id: string }) {
                         role="radio"
                         type="button"
                       >
-                        {option.label}{' '}
+                        {t(option.label)}{' '}
                         <span className="text-app-dim font-mono text-[11px] font-medium">
                           {counts[option.value]}
                         </span>
@@ -3840,32 +3781,30 @@ function AuditView({ id }: { id: string }) {
                 </div>
                 <div className="min-w-[200px] flex-[1_1_220px]">
                   <SearchInput
-                    aria-label="Пошук в аудиті"
+                    aria-label={t('searchLabel')}
                     onChange={(event) => {
                       setQuery(event.target.value)
                       setShown(AUDIT_PAGE)
                     }}
-                    placeholder="Подія або виконавець"
+                    placeholder={t('searchPlaceholder')}
                     value={query}
                   />
                 </div>
               </div>
 
               <section
-                aria-label="Журнал аудиту"
+                aria-label={t('logLabel')}
                 className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-6 pb-2"
               >
                 {visible.length === 0 ? (
                   <p className="text-app-muted py-6 text-center text-sm">
-                    {events.length === 0
-                      ? 'Подій аудиту ще немає — дії із сесією зʼявляться тут автоматично.'
-                      : 'За цим фільтром подій немає.'}
+                    {events.length === 0 ? t('noEvents') : t('noFiltered')}
                   </p>
                 ) : (
                   <ol className="grid">
                     {visible.map((event, index) => {
                       const kind = auditKind(event)
-                      const change = auditChange(event.detailsJson)
+                      const change = auditChange(event.detailsJson, locale)
                       return (
                         <li className="flex gap-4" key={event.id}>
                           <span
@@ -3885,18 +3824,17 @@ function AuditView({ id }: { id: string }) {
                           <span className="min-w-0 flex-1 pb-5.5">
                             <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                               <span className="text-[15px] font-bold text-white">
-                                {auditTitle(event.action)}
+                                {auditTitle(event.action, locale)}
                               </span>
                               <span className="border-app-line-2 text-app-muted inline-flex h-[22px] items-center rounded-full border bg-white/[0.05] px-2.5 text-[11px] font-bold">
-                                {AUDIT_KINDS[kind].label}
+                                {t(AUDIT_KINDS[kind].label)}
                               </span>
                               <span className="text-app-dim font-mono text-[12px]">
                                 {date(event.createdAt)}
                               </span>
                             </span>
                             <span className="text-app-muted mt-1 block text-[13px]">
-                              {nameOf(event.actorUserId) ??
-                                'виконавець невідомий'}
+                              {nameOf(event.actorUserId) ?? t('actorUnknown')}
                             </span>
                             {change === null ? null : (
                               <span className="border-app-line bg-app-input mt-2.5 inline-flex items-center gap-3 rounded-[10px] border px-3.5 py-2 font-mono text-[13px]">
@@ -3926,16 +3864,22 @@ function AuditView({ id }: { id: string }) {
               {rows.length > 0 ? (
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <p className="text-app-dim text-[13px]">
-                    Показано {visible.length} з {rows.length}{' '}
-                    {plural(rows.length, ['події', 'подій', 'подій'])}
+                    {t('shown', {
+                      visible: visible.length,
+                      count: rows.length,
+                    })}
                   </p>
                   {visible.length < rows.length ? (
                     <Button
                       className="min-h-10 px-4 text-[13px] font-bold"
                       onClick={() => setShown((value) => value + AUDIT_PAGE)}
                     >
-                      Показати ще{' '}
-                      {Math.min(AUDIT_PAGE, rows.length - visible.length)}
+                      {t('showMore', {
+                        count: Math.min(
+                          AUDIT_PAGE,
+                          rows.length - visible.length,
+                        ),
+                      })}
                     </Button>
                   ) : null}
                 </div>
@@ -3950,22 +3894,12 @@ function AuditView({ id }: { id: string }) {
 
 /** What the journal is being read for: everything, the gaps, or the matches. */
 const JOURNAL_FILTERS = [
-  { value: 'all', label: 'Усі' },
-  { value: 'diff', label: 'Розходження' },
-  { value: 'same', label: 'Збіглося' },
+  { value: 'all', label: 'filterAll' },
+  { value: 'diff', label: 'filterDiff' },
+  { value: 'same', label: 'filterSame' },
 ] as const
 
 type JournalFilter = (typeof JOURNAL_FILTERS)[number]['value']
-
-const timeOfDay = (value: string) => {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime())
-    ? value
-    : new Intl.DateTimeFormat('uk-UA', {
-        hour: '2-digit',
-        minute: '2-digit',
-      }).format(parsed)
-}
 
 /**
  * Counting pace, in scans per hour. Under a quarter of an hour of counting the
@@ -3989,6 +3923,9 @@ interface JournalData {
 }
 
 function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
+  const t = useT(journalMessages)
+  const ti = useT(inventoryMessages)
+  const { date, timeOfDay } = useInventoryFormat()
   const base = useInventoryBase()
   const canSeeTeam = usePermission('team.view')
   const [filter, setFilter] = useState<JournalFilter>('all')
@@ -4083,10 +4020,10 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                   to={backTo}
                 >
                   <ChevronLeft aria-hidden className="size-3.5" />
-                  До сесії
+                  {t('backToSession')}
                 </Link>
                 <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-                  <span>Сесія {session.number}</span>
+                  <span>{t('crumbSession', { number: session.number })}</span>
                   {zone ? (
                     <>
                       <span aria-hidden className="text-white/20">
@@ -4099,7 +4036,9 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
               </div>
               <div className="flex flex-wrap items-center gap-2.5">
                 <Button asChild className="px-[18px] text-sm font-semibold">
-                  <Link to={`${base}/sessions/${id}/results`}>Результати</Link>
+                  <Link to={`${base}/sessions/${id}/results`}>
+                    {t('results')}
+                  </Link>
                 </Button>
               </div>
             </div>
@@ -4107,59 +4046,56 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
             <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                  Журнал сканувань{zone ? ` · ${zone.zoneCode}` : null}
+                  {zone ? t('titleZone', { zone: zone.zoneCode }) : t('title')}
                 </h1>
                 <p className="text-app-muted mt-3 text-[15px]">
                   {[
                     zone?.warehouseName,
                     zone?.zoneName,
                     session.startedAt == null
-                      ? 'сесію ще не розпочато'
-                      : `сесія триває з ${date(session.startedAt)}`,
+                      ? t('notStarted')
+                      : t('runningSince', { date: date(session.startedAt) }),
                   ]
                     .filter(Boolean)
                     .join(' · ')}
                 </p>
               </div>
 
-              <Notice tone="info">
-                Підрахунок ведеться в Mobile. Тут журнал доступний лише для
-                перегляду.
-              </Notice>
+              <Notice tone="info">{t('readOnly')}</Notice>
 
               <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-px overflow-hidden rounded-[20px] border">
                 <JournalStat
-                  label="Сканувань"
-                  meta={`${String(new Set(live.map((scan) => scan.partId)).size)} позицій`}
+                  label={t('statScans')}
+                  meta={ti('positions', {
+                    count: new Set(live.map((scan) => scan.partId)).size,
+                  })}
                   unit={
                     scans.length === live.length
                       ? undefined
-                      : `з ${String(scans.length)}`
+                      : t('ofTotal', { count: scans.length })
                   }
                   value={String(live.length)}
                 />
                 <JournalStat
-                  label="Розходжень"
+                  label={t('statDiffs')}
                   meta={
-                    results.length === 0
-                      ? 'підсумки з’являться після підрахунку'
-                      : 'потребують рішення'
+                    results.length === 0 ? t('totalsLater') : t('needDecision')
                   }
                   tone={counts.diff > 0 ? 'danger' : undefined}
-                  unit="позицій"
+                  unit={ti('positionsUnit')}
                   value={String(counts.diff)}
                 />
                 <JournalStat
-                  label="Темп"
-                  meta={`${String(scanners.length)} ${plural(scanners.length, ['виконавець', 'виконавці', 'виконавців'])}`}
-                  unit={speed === null ? undefined : 'сканувань/год'}
+                  label={t('statPace')}
+                  meta={t('scanners', { count: scanners.length })}
+                  unit={speed === null ? undefined : t('perHour')}
                   value={speed === null ? '—' : String(speed)}
                 />
                 <JournalStat
-                  label="Останній скан"
+                  label={t('statLast')}
                   meta={
                     last === null
-                      ? 'сканувань ще немає'
+                      ? t('noScansYet')
                       : [nameOf(last.scannedBy), zone?.zoneCode]
                           .filter(Boolean)
                           .join(' · ')
@@ -4170,7 +4106,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
 
               <div className="flex flex-wrap items-center gap-3">
                 <div
-                  aria-label="Які сканування показувати"
+                  aria-label={t('filterLabel')}
                   className="border-app-line bg-app-raised flex gap-1 rounded-xl border p-1"
                   role="radiogroup"
                 >
@@ -4194,14 +4130,10 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                           setShown(JOURNAL_PAGE)
                         }}
                         role="radio"
-                        title={
-                          locked
-                            ? 'Порівняння з обліком з’явиться, коли підсумки сесії будуть готові'
-                            : undefined
-                        }
+                        title={locked ? t('compareLater') : undefined}
                         type="button"
                       >
-                        {option.label}{' '}
+                        {t(option.label)}{' '}
                         <span className="text-app-dim font-mono text-[11px] font-medium">
                           {counts[option.value]}
                         </span>
@@ -4211,15 +4143,15 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                 </div>
                 {people.length > 0 && scanners.length > 1 ? (
                   <div
-                    aria-label="Чиї сканування показувати"
+                    aria-label={t('whoLabel')}
                     className="flex flex-wrap gap-1.5"
                     role="radiogroup"
                   >
                     {[
-                      { id: 'all', label: 'Усі' },
+                      { id: 'all', label: t('filterAll') },
                       ...scanners.map((userId) => ({
                         id: userId,
-                        label: nameOf(userId) ?? 'Без імені',
+                        label: nameOf(userId) ?? t('nameless'),
                       })),
                     ].map((person) => (
                       <button
@@ -4245,27 +4177,27 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                 ) : null}
                 <div className="min-w-[180px] flex-[1_1_200px]">
                   <SearchInput
-                    aria-label="Пошук у журналі"
+                    aria-label={t('searchLabel')}
                     onChange={(event) => {
                       setQuery(event.target.value)
                       setShown(JOURNAL_PAGE)
                     }}
-                    placeholder="Позиція або код"
+                    placeholder={t('searchPlaceholder')}
                     value={query}
                   />
                 </div>
               </div>
 
               <section
-                aria-label="Журнал сканувань"
+                aria-label={t('title')}
                 className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
               >
                 <DataTable
-                  caption="Сканування зони"
+                  caption={t('caption')}
                   columns={[
                     {
                       key: 'time',
-                      label: 'Час',
+                      label: t('colTime'),
                       cell: (scan) => (
                         <span className="text-app-dim font-mono text-[13px]">
                           {timeOfDay(scan.scannedAt)}
@@ -4274,7 +4206,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                     },
                     {
                       key: 'part',
-                      label: 'Позиція',
+                      label: t('colPosition'),
                       variant: 'primary',
                       cell: (scan) => (
                         <span className="grid gap-0.5">
@@ -4293,7 +4225,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                           )}
                           {scan.unexpected && scan.voidedAt == null ? (
                             <span className="text-state-warn text-[12px]">
-                              Несподівана
+                              {t('unexpected')}
                             </span>
                           ) : null}
                         </span>
@@ -4303,7 +4235,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                       ? [
                           {
                             key: 'who',
-                            label: 'Хто',
+                            label: t('colWho'),
                             cell: (scan: InventoryScan) =>
                               nameOf(scan.scannedBy) ?? '—',
                           },
@@ -4311,7 +4243,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                       : []),
                     {
                       key: 'expected',
-                      label: 'Облік',
+                      label: t('colExpected'),
                       align: 'end',
                       cell: (scan) => (
                         <span className="text-app-muted font-mono tabular-nums">
@@ -4321,7 +4253,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                     },
                     {
                       key: 'actual',
-                      label: 'Скан',
+                      label: t('colScan'),
                       align: 'end',
                       cell: (scan) => (
                         <span className="font-mono text-white tabular-nums">
@@ -4332,12 +4264,12 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                     },
                     {
                       key: 'delta',
-                      label: 'Різниця',
+                      label: t('colDelta'),
                       align: 'end',
                       cell: (scan) => {
                         if (scan.voidedAt != null)
                           return (
-                            <StatusPill tone="danger">Скасовано</StatusPill>
+                            <StatusPill tone="danger">{t('voided')}</StatusPill>
                           )
                         const part = resultOf(scan.partId)
                         if (part === null)
@@ -4366,14 +4298,12 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                   empty={
                     <EmptyState
                       description={
-                        scans.length === 0
-                          ? 'Записи зʼявляться після підрахунку в Mobile.'
-                          : 'Спробуйте зняти фільтр або очистити пошук.'
+                        scans.length === 0 ? t('emptyHint') : t('filteredHint')
                       }
                       title={
                         scans.length === 0
-                          ? 'Сканувань ще немає'
-                          : 'Сканувань за цим фільтром немає'
+                          ? t('emptyTitle')
+                          : t('filteredTitle')
                       }
                     />
                   }
@@ -4383,12 +4313,10 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                 {rows.length > 0 ? (
                   <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-t px-6 py-4">
                     <p className="text-app-dim text-[13px]">
-                      Показано {visible.length} з {rows.length}{' '}
-                      {plural(rows.length, [
-                        'сканування',
-                        'сканування',
-                        'сканувань',
-                      ])}
+                      {t('shown', {
+                        visible: visible.length,
+                        count: rows.length,
+                      })}
                     </p>
                     {visible.length < rows.length ? (
                       <Button
@@ -4397,7 +4325,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                           setShown((value) => value + JOURNAL_PAGE)
                         }
                       >
-                        Показати ще
+                        {t('showMore')}
                       </Button>
                     ) : null}
                   </div>
@@ -4406,17 +4334,16 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
 
               {pending.length > 0 ? (
                 <section
-                  aria-label="Неперевірені зони"
+                  aria-label={t('pendingZones')}
                   className="grid gap-4.5"
                 >
                   <div className="flex items-baseline gap-3.5">
                     <h2 className="text-app-muted font-mono text-[11px] tracking-[0.16em] uppercase">
-                      Неперевірені зони
+                      {t('pendingZones')}
                     </h2>
                     <span aria-hidden className="bg-app-line h-px flex-1" />
                     <span className="text-app-dim text-[13px]">
-                      {pending.length}{' '}
-                      {plural(pending.length, ['зона', 'зони', 'зон'])}
+                      {ti('zones', { count: pending.length })}
                     </span>
                   </div>
                   <ul className="grid grid-cols-[repeat(auto-fill,minmax(96px,1fr))] gap-2">
@@ -4495,6 +4422,9 @@ interface PlacementData {
 }
 
 function PartPlacementView({ partId }: { partId: string }) {
+  const t = useT(placementMessages)
+  const ti = useT(inventoryMessages)
+  const { date, locale } = useInventoryFormat()
   const { targetTenant } = useCabinet()
   const canManage = usePermission('inventory.zones.manage')
   const canSeeParts = usePermission('parts.view')
@@ -4630,14 +4560,14 @@ function PartPlacementView({ partId }: { partId: string }) {
                   to={back}
                 >
                   <ChevronLeft aria-hidden className="size-3.5" />
-                  До деталі
+                  {t('backToPart')}
                 </Link>
                 <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-                  <span>Склад</span>
+                  <span>{ti('crumbWarehouse')}</span>
                   <span aria-hidden className="text-white/20">
                     /
                   </span>
-                  <span>Запчастини</span>
+                  <span>{t('crumbParts')}</span>
                   {part === null ? null : (
                     <>
                       <span aria-hidden className="text-white/20">
@@ -4649,12 +4579,9 @@ function PartPlacementView({ partId }: { partId: string }) {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2.5">
-                <Button
-                  disabled
-                  title="Зону сканують у мобільному застосунку — кабінет вибирає її зі списку"
-                >
+                <Button disabled title={t('scanUnavailable')}>
                   <ScanLine aria-hidden />
-                  Сканувати зону
+                  {t('scanZone')}
                 </Button>
                 {canManage ? (
                   <Button
@@ -4664,7 +4591,7 @@ function PartPlacementView({ partId }: { partId: string }) {
                     onClick={() => void save()}
                     variant="primary"
                   >
-                    {saving ? 'Зберігаємо…' : 'Розмістити'}
+                    {saving ? t('saving') : t('place')}
                   </Button>
                 ) : null}
               </div>
@@ -4673,13 +4600,11 @@ function PartPlacementView({ partId }: { partId: string }) {
             <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
               <div className="min-w-0">
                 <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                  Розміщення на складі
+                  {t('title')}
                 </h1>
                 <p className="text-app-muted mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px]">
                   {part === null ? (
-                    <span>
-                      Картку запчастини видно тим, хто має право «parts.view».
-                    </span>
+                    <span>{t('partHidden')}</span>
                   ) : (
                     <>
                       <span className="text-app-ink font-semibold">
@@ -4695,7 +4620,10 @@ function PartPlacementView({ partId }: { partId: string }) {
                         ·
                       </span>
                       <span>
-                        {part.quantityTotal} {part.unit} на складі
+                        {t('inStock', {
+                          count: part.quantityTotal,
+                          unit: unitLabel(part.unit, locale),
+                        })}
                       </span>
                     </>
                   )}
@@ -4705,17 +4633,17 @@ function PartPlacementView({ partId }: { partId: string }) {
               {operationError ? (
                 <Notice tone="danger">{operationError}</Notice>
               ) : null}
-              {saved ? <Notice tone="ok">Розміщення збережено</Notice> : null}
+              {saved ? <Notice tone="ok">{t('saved')}</Notice> : null}
 
               <div className="flex flex-wrap items-start gap-6">
                 <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-5">
                   <Step
-                    hint="Фізичне приміщення, де лежить запчастина."
+                    hint={t('warehouseHint')}
                     number="01"
-                    title="Склад"
+                    title={t('warehouse')}
                   >
                     <div
-                      aria-label="Склад"
+                      aria-label={t('warehouse')}
                       className="flex flex-wrap gap-2"
                       role="radiogroup"
                     >
@@ -4750,7 +4678,7 @@ function PartPlacementView({ partId }: { partId: string }) {
                               {item.name}
                             </span>
                             <span className="text-app-muted mt-1 block text-[12px] font-medium">
-                              {count} {plural(count, ['зона', 'зони', 'зон'])}
+                              {ti('zones', { count })}
                             </span>
                           </button>
                         )
@@ -4766,39 +4694,39 @@ function PartPlacementView({ partId }: { partId: string }) {
                             aria-hidden
                             className="size-2 rounded-[3px] bg-white/15"
                           />
-                          порожня
+                          {t('legendEmpty')}
                         </span>
                         <span className="flex items-center gap-1.5">
                           <span
                             aria-hidden
                             className="bg-state-warn/50 size-2 rounded-[3px]"
                           />
-                          є позиції
+                          {t('legendFilled')}
                         </span>
                         <span className="flex items-center gap-1.5">
                           <span
                             aria-hidden
                             className="bg-state-danger/50 size-2 rounded-[3px]"
                           />
-                          найзавантаженіша
+                          {t('legendBusiest')}
                         </span>
                       </p>
                     }
-                    hint="Зона — найдрібніше місце в нашій системі: саме її і сканують. Можна вибрати кілька."
+                    hint={t('zoneHint')}
                     number="02"
-                    title="Зона"
+                    title={t('zone')}
                   >
                     <SearchInput
-                      aria-label="Пошук зони"
+                      aria-label={t('zoneSearch')}
                       onChange={(event) => setQuery(event.target.value)}
-                      placeholder="Назва або код зони, наприклад A1"
+                      placeholder={t('zoneSearchPlaceholder')}
                       value={query}
                     />
                     {shown.length === 0 ? (
                       <p className="border-app-line-2 text-app-muted mt-3.5 rounded-xl border border-dashed bg-white/[0.02] p-4.5 text-sm">
                         {inHouse.length === 0
-                          ? 'На цьому складі немає активних зон.'
-                          : 'Зон за запитом не знайдено. Перевірте код або виберіть інший склад.'}
+                          ? t('noActiveZones')
+                          : t('noZonesFound')}
                       </p>
                     ) : (
                       <ul className="mt-3.5 grid grid-cols-[repeat(auto-fill,minmax(min(100%,8rem),1fr))] gap-2">
@@ -4860,8 +4788,8 @@ function PartPlacementView({ partId }: { partId: string }) {
                                 </span>
                                 <span className="text-app-muted mt-1.5 block text-[11px] font-semibold">
                                   {count === null
-                                    ? 'залишки недоступні'
-                                    : `${String(count)} ${plural(count, ['позиція', 'позиції', 'позицій'])}`}
+                                    ? ti('stockUnavailable')
+                                    : ti('positions', { count })}
                                 </span>
                               </label>
                             </li>
@@ -4872,14 +4800,14 @@ function PartPlacementView({ partId }: { partId: string }) {
                   </Step>
 
                   <Step
-                    hint="Скільки одиниць кладемо у вибрану зону."
+                    hint={t('quantityHint')}
                     number="03"
-                    title="Кількість"
+                    title={t('quantity')}
                   >
                     <div className="flex flex-wrap items-center gap-4.5">
                       <span
                         className="border-app-line bg-app-canvas text-app-muted flex items-center gap-1 rounded-xl border p-[3px]"
-                        title="Залишок між зонами не ділиться — запчастина лежить у зоні цілком"
+                        title={t('notSplitTitle')}
                       >
                         <span
                           aria-hidden
@@ -4898,9 +4826,7 @@ function PartPlacementView({ partId }: { partId: string }) {
                         </span>
                       </span>
                       <p className="text-app-muted min-w-[12rem] flex-1 text-[14px]">
-                        Залишок між зонами не ділиться: запчастина лежить у
-                        вибраних зонах цілком, тому кількість тут не
-                        редагується.
+                        {t('notSplit')}
                       </p>
                     </div>
                   </Step>
@@ -4908,19 +4834,18 @@ function PartPlacementView({ partId }: { partId: string }) {
                   <Card
                     aside={
                       <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
-                        {moves.length}{' '}
-                        {plural(moves.length, ['запис', 'записи', 'записів'])}
+                        {t('records', { count: moves.length })}
                       </span>
                     }
                     bodyClassName="p-0"
                     className="min-w-0"
-                    title="Історія розміщень"
+                    title={t('historyTitle')}
                   >
                     {moves.length === 0 ? (
                       <p className="text-app-muted px-6 pt-4 pb-6 text-sm">
                         {history === null
-                          ? 'Історію видно тим, хто має право «parts.view».'
-                          : 'Запчастину ще не переміщували.'}
+                          ? t('historyHidden')
+                          : t('neverMoved')}
                       </p>
                     ) : (
                       <ul className="grid">
@@ -4930,10 +4855,10 @@ function PartPlacementView({ partId }: { partId: string }) {
                             key={event.id}
                           >
                             <span className="text-app-ink w-28 shrink-0 text-[14px] font-semibold">
-                              {historyLabel(event.eventType)}
+                              {historyLabel(event.eventType, locale)}
                             </span>
                             <span className="text-app-muted min-w-0 flex-1 text-[13px]">
-                              {historyDetails(event.data).join(' · ')}
+                              {historyDetails(event.data, locale).join(' · ')}
                             </span>
                             <span className="text-app-dim font-mono text-[13px] whitespace-nowrap">
                               {date(event.createdAt)}
@@ -4946,11 +4871,11 @@ function PartPlacementView({ partId }: { partId: string }) {
                 </div>
 
                 <section
-                  aria-label="Нове розміщення"
+                  aria-label={t('newPlacement')}
                   className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-[18px] border px-5.5 pt-[22px] pb-6"
                 >
                   <h2 className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
-                    Нове розміщення
+                    {t('newPlacement')}
                   </h2>
                   <div className="border-app-line bg-app-canvas mt-4 rounded-[14px] border p-4">
                     <p
@@ -4968,7 +4893,7 @@ function PartPlacementView({ partId }: { partId: string }) {
                     </p>
                     <p className="text-app-muted mt-2 text-[13px]">
                       {chosen.length === 0
-                        ? 'Зони не вибрані'
+                        ? t('noZonesPicked')
                         : chosen
                             .map(
                               (zone) => `${zone.warehouseName} · ${zone.name}`,
@@ -4978,13 +4903,13 @@ function PartPlacementView({ partId }: { partId: string }) {
                   </div>
                   <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
                     <dt className="text-app-muted text-[14px] font-semibold">
-                      Зон вибрано
+                      {t('zonesPicked')}
                     </dt>
                     <dd className="font-mono text-[15px] text-white tabular-nums">
                       {chosen.length}
                     </dd>
                     <dt className="text-app-muted text-[14px] font-semibold">
-                      Було
+                      {t('before')}
                     </dt>
                     <dd className="font-mono text-[15px] text-white tabular-nums">
                       {placement.length}
@@ -4995,9 +4920,9 @@ function PartPlacementView({ partId }: { partId: string }) {
                     />
                     <dt
                       className="text-app-muted text-[14px] font-semibold"
-                      title="Місткість зони не рахується"
+                      title={t('capacityNotCounted')}
                     >
-                      Місткість зони
+                      {t('capacity')}
                     </dt>
                     <dd className="text-app-dim font-mono text-[15px]">—</dd>
                   </dl>
@@ -5009,15 +4934,15 @@ function PartPlacementView({ partId }: { partId: string }) {
                       onClick={() => void save()}
                       variant="primary"
                     >
-                      {saving ? 'Зберігаємо…' : 'Зберегти розміщення'}
+                      {saving ? t('saving') : t('savePlacement')}
                     </Button>
                   ) : null}
                   <p className="text-app-dim mt-3 text-[12px] leading-[1.5]">
                     {selected.length === 0
-                      ? 'Виберіть хоча б одну зону — запчастина не може лишитися без місця.'
+                      ? t('pickOne')
                       : changed
-                        ? 'Збереження замінить увесь набір зон цієї запчастини, а не тільки вибраний склад.'
-                        : 'Нічого не змінилося — набір зон уже такий.'}
+                        ? t('replacesAll')
+                        : t('unchanged')}
                   </p>
                 </section>
               </div>

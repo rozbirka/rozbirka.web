@@ -161,7 +161,7 @@ it('renders Core daily figures without calculating them in the browser', async (
 
   // The balance comes from the register itself and the operation count from
   // the day's summary — the browser adds nothing up.
-  expect(await screen.findByText('1 800,00 ₴')).toBeVisible()
+  expect(await screen.findByText('1 800,00 UAH')).toBeVisible()
   expect(screen.getByText('4 операції')).toBeVisible()
 })
 
@@ -551,21 +551,27 @@ it('reuses a transfer key after an ambiguous failure and rotates it when the pay
     await screen.findByRole('button', { name: 'Переказ між касами' }),
   )
   await screen.findByRole('dialog', { name: 'Переказ між касами' })
-  const destinationCurrency = screen.getByRole('group', {
-    name: 'Валюта зарахування',
-  })
+  // No receiving till yet, so no currency is offered for it: a transfer only
+  // ever offers the currencies the chosen till actually keeps.
   expect(
-    within(destinationCurrency).getByRole('radio', { name: 'UAH' }),
-  ).toBeVisible()
-  expect(
-    within(destinationCurrency).getByRole('radio', { name: 'USD' }),
-  ).toBeVisible()
+    within(
+      screen.getByRole('group', { name: 'Валюта зарахування' }),
+    ).queryAllByRole('radio'),
+  ).toHaveLength(0)
   await user.click(
     within(screen.getByRole('group', { name: 'Каса-отримувач' })).getByRole(
       'radio',
       { name: /Валютна каса/ },
     ),
   )
+  const destinationCurrency = screen.getByRole('group', {
+    name: 'Валюта зарахування',
+  })
+  expect(
+    within(destinationCurrency)
+      .getAllByRole('radio')
+      .map((item) => item.getAttribute('value')),
+  ).toEqual(['USD'])
   await user.click(
     within(screen.getByRole('group', { name: 'Валюта списання' })).getByRole(
       'radio',
@@ -1326,6 +1332,16 @@ it('describes register form controls and offers a way out of the form', () => {
   )
   expect(screen.getByRole('button', { name: 'Скасувати' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Зберегти' })).toBeVisible()
+  // Every supported currency, by ISO code and readable name, not ₴/$/€.
+  const currencies = within(screen.getByRole('group', { name: 'Валюти' }))
+  expect(currencies.getAllByRole('button')).toHaveLength(10)
+  expect(
+    currencies.getByRole('button', { name: 'CAD (Канадський долар)' }),
+  ).toHaveAttribute('aria-pressed', 'false')
+  expect(
+    currencies.getByRole('button', { name: 'UAH (Українська гривня)' }),
+  ).toHaveAttribute('aria-pressed', 'true')
+  expect(currencies.queryByText('$')).toBeNull()
 })
 
 it('returns from the new-register drawer to the cash screen', async () => {
@@ -1471,7 +1487,7 @@ it('keeps only real till data and renders expenses in red', async () => {
   await screen.findByRole('heading', { name: 'Основна каса', level: 1 })
   expect(screen.getByRole('heading', { name: 'Операції' })).toBeVisible()
   expect(screen.getByText(/84 операції усього/)).toBeVisible()
-  expect(screen.getByText('−990,00 $')).toHaveClass('text-state-danger')
+  expect(screen.getByText('−990,00 USD')).toHaveClass('text-state-danger')
   expect(cashMocks.transactions).toHaveBeenCalledWith(
     'cash-1',
     { page: 1, pageSize: 1 },

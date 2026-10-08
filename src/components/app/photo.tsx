@@ -3,6 +3,8 @@ import { ChevronLeft, ChevronRight, ImageOff, X } from 'lucide-react'
 import { Dialog, Slot } from 'radix-ui'
 import { cn } from '@/lib/utils'
 import { Button } from './button'
+import { useT } from '@/i18n/hooks'
+import { appMessages } from './app-messages'
 
 export interface Photo {
   id: string
@@ -36,6 +38,7 @@ export function Thumbnail({
    */
   size?: 'thumbnail' | 'full'
 }) {
+  const t = useT(appMessages)
   const source = size === 'full' ? photo.url : (photo.thumbnailUrl ?? photo.url)
   // Load state belongs to one file: a new src starts over, and the reset
   // happens during render rather than in an effect, so nothing renders twice
@@ -68,7 +71,7 @@ export function Thumbnail({
       {failed ? (
         <span className="text-app-dim grid h-full place-items-center gap-1 p-2 text-center text-[12px]">
           <ImageOff aria-hidden className="size-4" />
-          Фото недоступне
+          {t('photoUnavailable')}
         </span>
       ) : (
         <>
@@ -122,6 +125,7 @@ function Lightbox({
   onIndex: (next: number) => void
   onClose: () => void
 }) {
+  const t = useT(appMessages)
   const total = photos.length
   const step = useCallback(
     (delta: number) => onIndex((index + delta + total) % total),
@@ -151,10 +155,13 @@ function Lightbox({
           <Dialog.Description className="sr-only">{alt}</Dialog.Description>
           <header className="flex items-center justify-between gap-3">
             <p className="text-app-muted font-mono text-[12.5px] tabular-nums">
-              {index + 1} з {total}
+              {t('photoPosition', {
+                index: String(index + 1),
+                total: String(total),
+              })}
             </p>
             <Dialog.Close asChild>
-              <Button aria-label="Закрити фото" size="icon" variant="quiet">
+              <Button aria-label={t('closePhoto')} size="icon" variant="quiet">
                 <X aria-hidden />
               </Button>
             </Dialog.Close>
@@ -175,7 +182,7 @@ function Lightbox({
           >
             {total > 1 ? (
               <Button
-                aria-label="Попереднє фото"
+                aria-label={t('previousPhoto')}
                 onClick={() => step(-1)}
                 size="icon"
                 variant="quiet"
@@ -192,7 +199,7 @@ function Lightbox({
             />
             {total > 1 ? (
               <Button
-                aria-label="Наступне фото"
+                aria-label={t('nextPhoto')}
                 onClick={() => step(1)}
                 size="icon"
                 variant="quiet"
@@ -210,7 +217,9 @@ function Lightbox({
                 <li key={item.id}>
                   <button
                     aria-current={position === index ? 'true' : undefined}
-                    aria-label={`Фото ${String(position + 1)}`}
+                    aria-label={t('photoNumber', {
+                      number: String(position + 1),
+                    })}
                     className={cn(
                       'focus-visible:outline-brand block size-12 shrink-0 overflow-hidden rounded-md border',
                       position === index
@@ -246,7 +255,7 @@ function Lightbox({
 export function PhotoGrid({
   photos,
   label,
-  emptyLabel = 'Фото ще не додано',
+  emptyLabel,
   className,
 }: {
   photos: readonly Photo[]
@@ -255,12 +264,13 @@ export function PhotoGrid({
   emptyLabel?: string
   className?: string
 }) {
+  const t = useT(appMessages)
   const [openIndex, setOpenIndex] = useState<number | null>(null)
 
   if (photos.length === 0) {
     return (
       <p className={cn('text-app-dim text-[13.5px]', className)}>
-        {emptyLabel}
+        {emptyLabel ?? t('noPhotos')}
       </p>
     )
   }
@@ -312,7 +322,7 @@ export function PhotoGrid({
 export function Gallery({
   photos,
   label,
-  emptyLabel = 'Фото ще не додано',
+  emptyLabel,
   ratio = 'wide',
   variant = 'panel',
   className,
@@ -330,6 +340,7 @@ export function Gallery({
   variant?: 'panel' | 'framed'
   className?: string
 }) {
+  const t = useT(appMessages)
   const [current, setCurrent] = useState(0)
   const [openIndex, setOpenIndex] = useState<number | null>(null)
   const shown = photos[Math.min(current, photos.length - 1)]
@@ -355,7 +366,7 @@ export function Gallery({
           className,
         )}
       >
-        {emptyLabel}
+        {emptyLabel ?? t('noPhotos')}
       </p>
     )
   }
@@ -370,7 +381,7 @@ export function Gallery({
     <div className={cn('grid', framed ? 'gap-0' : 'gap-2', className)}>
       <div className={cn('relative', framed && 'border-app-line border-y')}>
         <button
-          aria-label={`${nameOf(shown, current)} — відкрити на весь екран`}
+          aria-label={t('openFullScreen', { name: nameOf(shown, current) })}
           className="focus-visible:outline-brand block w-full cursor-zoom-in"
           onClick={() => setOpenIndex(current)}
           type="button"
@@ -406,7 +417,7 @@ export function Gallery({
             <li key={photo.id}>
               <button
                 aria-current={index === current ? 'true' : undefined}
-                aria-label={`Показати ${nameOf(photo, index)}`}
+                aria-label={t('showPhoto', { name: nameOf(photo, index) })}
                 className={cn(
                   'focus-visible:outline-brand block w-full cursor-pointer overflow-hidden transition-opacity',
                   framed

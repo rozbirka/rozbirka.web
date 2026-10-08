@@ -1,5 +1,8 @@
 import { cn } from '@/lib/utils'
-import { navItems } from '@/components/site/nav-items'
+import { navDestination, navItems } from '@/components/site/nav-items'
+import { useLocale, useT } from '@/i18n'
+import { landingPathFor } from '@/seo/landing-locales'
+import { siteMessages } from './site-messages'
 
 interface NavLinksProps {
   activeHref?: string
@@ -8,6 +11,9 @@ interface NavLinksProps {
 }
 
 export function NavLinks({ activeHref, className, onNavigate }: NavLinksProps) {
+  const { locale } = useLocale()
+  const t = useT(siteMessages)
+  const landingPath = landingPathFor(locale)
   return (
     <ul
       role="list"
@@ -16,9 +22,9 @@ export function NavLinks({ activeHref, className, onNavigate }: NavLinksProps) {
       {navItems.map((item) => {
         const isActive = activeHref === item.href
         return (
-          <li key={item.label}>
+          <li key={item.href}>
             <a
-              href={item.destination}
+              href={navDestination(item, landingPath)}
               aria-current={isActive ? 'page' : undefined}
               onClick={onNavigate}
               className={cn(
@@ -28,7 +34,7 @@ export function NavLinks({ activeHref, className, onNavigate }: NavLinksProps) {
                   : 'text-neutral-400 hover:text-white',
               )}
             >
-              {item.label}
+              {t(item.label)}
             </a>
           </li>
         )

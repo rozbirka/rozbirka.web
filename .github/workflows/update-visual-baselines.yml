@@ -58,11 +58,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Same approach as the E2E gate: system packages once with a long
+          # bound (retrying apt only races the dpkg lock), then the browser
+          # download with retries.
+          echo 'DPkg::Lock::Timeout "180";' | sudo tee /etc/apt/apt.conf.d/99-dpkg-lock-timeout >/dev/null
+          timeout 900 npx playwright install-deps chromium
           for attempt in 1 2 3; do
-            if timeout 300 npx playwright install --with-deps chromium; then
+            if timeout 300 npx playwright install chromium; then
               exit 0
             fi
-            echo "playwright install attempt ${attempt} failed or timed out; retrying"
+            echo "playwright browser download attempt ${attempt} failed or timed out; retrying"
             sleep 10
           done
           exit 1

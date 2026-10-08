@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { expect, it, vi } from 'vitest'
+import { LocaleProvider } from '@/i18n'
 import type { SubscriptionDto, Tenant } from '../api/types'
 import type { TenantAccessSnapshot } from './access-types'
 import { CabinetNavigation } from './CabinetNavigation'
@@ -277,4 +278,39 @@ it('folds the desktop menu away and back from the seam between it and the page',
     'aria-expanded',
     'true',
   )
+})
+
+it('names sections, groups and controls in English (UK)', () => {
+  render(
+    <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+      <MemoryRouter initialEntries={['/app/koval/dashboard']}>
+        <CabinetNavigation
+          tenant={activeTenant}
+          tenants={[activeTenant, otherTenant]}
+          snapshot={snapshot(['parts.view', 'orders.view', 'billing.view'])}
+          onSwitchTenant={vi.fn()}
+          onLogout={vi.fn()}
+        />
+      </MemoryRouter>
+    </LocaleProvider>,
+  )
+
+  const desktop = screen.getByRole('navigation', {
+    name: 'Cabinet navigation',
+  })
+  expect(within(desktop).getByRole('link', { name: 'Home' })).toBeVisible()
+  expect(within(desktop).getByRole('link', { name: 'Parts' })).toBeVisible()
+  expect(
+    within(desktop).getByRole('link', { name: 'Subscription' }),
+  ).toBeVisible()
+  expect(within(desktop).getByText('Stock')).toBeVisible()
+  expect(within(desktop).getByText('Sales')).toBeVisible()
+  expect(within(desktop).getByText('Settings')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Hide menu' })).toBeInTheDocument()
+  expect(
+    screen.getAllByRole('combobox', { name: 'Switch business' }).length,
+  ).toBeGreaterThan(0)
+  expect(
+    screen.getByRole('navigation', { name: 'Mobile navigation' }),
+  ).toHaveTextContent('More')
 })

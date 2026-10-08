@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { tenantResetRegistry } from '../tenant-reset-registry'
+import { LocaleProvider } from '@/i18n'
 import { StickersScreen } from './StickersScreen'
 
 const stickerMocks = vi.hoisted(() => ({ getBatchData: vi.fn() }))
@@ -385,4 +386,21 @@ it('discards an expired persisted queue', async () => {
   expect(screen.queryByRole('checkbox', { name: 'Bumper' })).toBeNull()
   expect(screen.getByRole('button', { name: 'Підготувати 0' })).toBeDisabled()
   expect(localStorage.getItem(key)).toBeNull()
+})
+
+it('renders the sticker workspace in British English', async () => {
+  render(
+    <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+      <MemoryRouter>
+        <StickersScreen definition={stickersDefinition as never} />
+      </MemoryRouter>
+    </LocaleProvider>,
+  )
+  expect(screen.getByRole('heading', { name: 'Stickers' })).toBeVisible()
+  expect(screen.getByRole('searchbox', { name: 'Search parts' })).toBeVisible()
+  fireEvent.click(await screen.findByRole('listitem', { name: 'Part Bumper' }))
+  expect(screen.getByText('Available: 2 pcs')).toBeVisible()
+  expect(screen.getByRole('region', { name: 'Sticker sheet' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Prepare 1' })).toBeEnabled()
+  expect(screen.getByText('Selected: 1 · Stickers: 1')).toBeVisible()
 })

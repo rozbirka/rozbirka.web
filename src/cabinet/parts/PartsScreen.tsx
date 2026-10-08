@@ -58,7 +58,20 @@ import {
   TextInput,
   type StatusTone,
 } from '@/components/app'
-import { cn, plural } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { formatFileSize } from '@/components/app/format'
+import {
+  commonMessages,
+  translate,
+  useFormat,
+  useLocale,
+  useT,
+  type Locale,
+  type Translate,
+} from '@/i18n'
+import { partsListMessages } from './parts-list-messages'
+import { partDetailMessages } from './part-detail-messages'
+import { partFormMessages } from './part-form-messages'
 import {
   conditionLabel,
   conditionPhrase,
@@ -68,7 +81,9 @@ import {
   type HistoryKind,
   historyLabel,
   originLabel,
+  PIECES_UNIT,
   sourceLabel,
+  unitLabel,
 } from './part-labels'
 import {
   partsApi,
@@ -86,6 +101,7 @@ import { carsApi, type Car, type CarListItem } from '@/api/cars'
 import { intakesApi, type IntakeListItem } from '@/api/intakes'
 import { mediaApi } from '@/api/media'
 import { useCabinet } from '../CabinetContext'
+import { cabinetPath } from '../cabinet-paths'
 import { FeatureGate } from '../FeatureFlags'
 import { FEATURE_FLAGS } from '@/api/feature-flags'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
@@ -115,6 +131,17 @@ import {
   savePartDraft,
   sourceCreateHref,
 } from './source-return'
+import type { SupportedCurrency } from '@/i18n'
+import { MoneyInput } from '../currency/price-currency'
+import {
+  useAccountingCurrency,
+  useFirstPriceGuard,
+} from '../currency/use-accounting-currency'
+import { usePriceSlots, type PriceSlots } from '../currency/use-price-slots'
+import { amountPrecisionError } from '../currency/amount-precision'
+import { isLostResponse, lostResponseMessages } from '../lost-response'
+import { OnboardingCompletedNotice } from '../onboarding/first-part-completion'
+import { useFirstPartCompletion } from '../onboarding/use-first-part-completion'
 
 const partStatuses = new Set(['available', 'reserved', 'sold'])
 /** Every group the filter panel draws; the server counts each one for us. */
@@ -137,10 +164,15 @@ const pageSizeParam = (value: string | null, fallback: number) => {
 }
 const statusPresentation = (
   status: string,
+  locale: Locale,
 ): { label: string; tone: StatusTone } => {
-  if (status === 'available') return { label: 'Доступно', tone: 'ok' }
-  if (status === 'reserved') return { label: 'У резерві', tone: 'warn' }
-  if (status === 'sold') return { label: 'Продано', tone: 'danger' }
+  const label = (key: 'statusAvailable' | 'statusReserved' | 'statusSold') =>
+    translate(partsListMessages, locale, key)
+  if (status === 'available')
+    return { label: label('statusAvailable'), tone: 'ok' }
+  if (status === 'reserved')
+    return { label: label('statusReserved'), tone: 'warn' }
+  if (status === 'sold') return { label: label('statusSold'), tone: 'danger' }
   return { label: status, tone: 'neutral' }
 }
 
@@ -224,8 +256,8 @@ function useSourceOptions(
 
 const carLabel = (car: CarListItem) =>
   `${car.code} · ${car.brand} ${car.model} (${car.year})`
-const intakeLabel = (intake: IntakeListItem) =>
-  `${intake.name ?? 'Без назви'} · ${intake.supplier ?? 'Постачальника не вказано'}`
+const intakeLabel = (intake: IntakeListItem, locale: Locale) =>
+  `${intake.name ?? translate(partFormMessages, locale, 'intakeNoName')} · ${intake.supplier ?? translate(partFormMessages, locale, 'intakeNoSupplier')}`
 
 const accessState = (cabinet: ReturnType<typeof useCabinet>) =>
   cabinet.status === 'ready' && cabinet.snapshot
@@ -240,16 +272,17 @@ const withoutQuota = (definition: CabinetModuleDefinition) => {
 }
 
 function AccessDenied({ decision }: { decision: ModuleAccessDecision }) {
+  const t = useT(partsListMessages)
   const message =
     decision.kind === 'quota-exhausted'
-      ? 'Ліміт деталей вичерпано.'
+      ? t('accessQuota')
       : decision.kind === 'subscription-blocked'
-        ? 'Поточна підписка не дозволяє цю дію.'
+        ? t('accessSubscription')
         : decision.kind === 'access-loading'
-          ? 'Перевіряємо доступ…'
+          ? t('accessLoading')
           : decision.kind === 'access-error'
-            ? 'Не вдалося перевірити доступ.'
-            : 'Недостатньо прав.'
+            ? t('accessError')
+            : t('accessDenied')
   return (
     <Notice role="alert" tone="warn">
       {message}
@@ -266,6 +299,9 @@ const allowedToView = (
 
 export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const cabinet = useCabinet()
+  const t = useT(partsListMessages)
+  const tc = useT(commonMessages)
+  const { locale } = useLocale()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const { partId } = useParams<{ partId: string }>()
   const location = useLocation()
@@ -536,7 +572,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         canViewCars={links.cars}
         canViewIntakes={links.intakes}
         requireLatestMutation={requireLatestMutation}
-        title="Нова деталь"
+        title={translate(partFormMessages, locale, 'newPart')}
       />
     )
   if (isEdit && partId)
@@ -641,7 +677,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       setReloadToken((value) => value + 1)
       return null
     } catch {
-      return 'Не вдалося зберегти. Спробуйте ще раз.'
+      return t('rowSaveFailed')
     }
   }
 
@@ -649,25 +685,22 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
       <div className="mx-auto grid w-full max-w-[1360px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         {removedOrigin ? (
-          <Notice tone="info">
-            Фільтр «Вільні запчастини» скинуто: кожна деталь має автомобіль або
-            партію.
-          </Notice>
+          <Notice tone="info">{t('removedOrigin')}</Notice>
         ) : null}
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
           <div className="min-w-0">
             <p className="text-app-dim font-mono text-[12px] tracking-[0.14em] uppercase">
-              Склад
+              {t('eyebrow')}
             </p>
             <h1 className="mt-1.5 text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
-              Деталі
+              {t('title')}
             </h1>
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2.5">
             {manageDecision.kind === 'allowed' ? (
               <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
                 <Button asChild>
-                  <Link to="imports">Імпорт запчастин</Link>
+                  <Link to="imports">{t('importParts')}</Link>
                 </Button>
               </FeatureGate>
             ) : null}
@@ -679,7 +712,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
               >
                 <Link to="new">
                   <Plus aria-hidden />
-                  Додати деталь
+                  {t('addPart')}
                 </Link>
               </Button>
             ) : null}
@@ -689,33 +722,41 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         <span className="border-app-line bg-app-raised focus-within:border-app-line-2 flex h-13 items-center gap-3 rounded-[14px] border px-4">
           <Search aria-hidden className="text-app-dim size-4 shrink-0" />
           <input
-            aria-label="Пошук деталей"
+            aria-label={t('searchLabel')}
             className="text-app-ink placeholder:text-app-dim min-w-0 flex-1 bg-transparent text-sm outline-none"
             name="q"
             onChange={(event) => updateFilter('q', event.target.value)}
-            placeholder="Пошук: назва, OEM, QR або VIN"
+            placeholder={t('searchPlaceholder')}
             value={filters.q ?? ''}
           />
         </span>
 
         <div className="flex flex-wrap items-start gap-6">
           <aside className="border-app-line bg-app-raised grid min-w-0 flex-[0_1_320px] gap-6 rounded-[20px] border p-5 sm:min-w-[260px]">
-            <FilterGroup label="Статус">
+            <FilterGroup label={t('filterStatus')}>
               <FilterRow
                 active={filters.status === ''}
                 count={statusTotal}
                 dot="bg-app-dim"
-                label="Усі"
+                label={t('all')}
                 onSelect={() => updateFilter('status', '')}
               />
               {[
                 {
                   value: 'available',
-                  label: 'В наявності',
+                  label: t('statusInStock'),
                   dot: 'bg-state-ok',
                 },
-                { value: 'reserved', label: 'У резерві', dot: 'bg-state-warn' },
-                { value: 'sold', label: 'Продано', dot: 'bg-state-danger' },
+                {
+                  value: 'reserved',
+                  label: t('statusReserved'),
+                  dot: 'bg-state-warn',
+                },
+                {
+                  value: 'sold',
+                  label: t('statusSold'),
+                  dot: 'bg-state-danger',
+                },
               ].map((option) => (
                 <FilterRow
                   active={filters.status === option.value}
@@ -728,9 +769,9 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
               ))}
             </FilterGroup>
 
-            <FilterGroup label="Сумісність">
+            <FilterGroup label={t('filterCompatibility')}>
               <SelectInput
-                aria-label="Марка"
+                aria-label={t('make')}
                 name="make"
                 onChange={(event) => {
                   const next = new URLSearchParams(searchParams)
@@ -742,30 +783,26 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                 }}
                 value={filters.makeId}
               >
-                <option value="">Марка: будь-яка</option>
+                <option value="">{t('makeAny')}</option>
                 {facetOptions('makes')}
               </SelectInput>
               <SelectInput
-                aria-label="Модель"
+                aria-label={t('model')}
                 className={filters.makeId ? undefined : 'opacity-55'}
                 disabled={!filters.makeId}
                 name="model"
                 onChange={(event) => updateFilter('model', event.target.value)}
-                title={
-                  filters.makeId
-                    ? undefined
-                    : 'Спершу оберіть марку автомобіля.'
-                }
+                title={filters.makeId ? undefined : t('chooseMakeFirst')}
                 value={filters.modelId}
               >
-                <option value="">└ Модель: будь-яка</option>
+                <option value="">{t('modelAny')}</option>
                 {facetOptions('models')}
               </SelectInput>
             </FilterGroup>
 
-            <FilterGroup label="Розміщення">
+            <FilterGroup label={t('filterPlacement')}>
               <SelectInput
-                aria-label="Склад"
+                aria-label={t('warehouse')}
                 name="warehouse"
                 onChange={(event) => {
                   const next = new URLSearchParams(searchParams)
@@ -778,31 +815,31 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                 }}
                 value={filters.warehouseId}
               >
-                <option value="">Склад: усі</option>
+                <option value="">{t('warehouseAll')}</option>
                 {facetOptions('warehouses')}
               </SelectInput>
               <SelectInput
-                aria-label="Зона"
+                aria-label={t('zone')}
                 className={filters.warehouseId ? undefined : 'opacity-55'}
                 disabled={!filters.warehouseId}
                 name="zone"
                 onChange={(event) => updateFilter('zone', event.target.value)}
                 title={
-                  filters.warehouseId ? undefined : 'Спершу оберіть склад.'
+                  filters.warehouseId ? undefined : t('chooseWarehouseFirst')
                 }
                 value={filters.zoneId}
               >
-                <option value="">└ Зона: усі</option>
+                <option value="">{t('zoneAll')}</option>
                 {facetOptions('zones')}
               </SelectInput>
             </FilterGroup>
 
-            <FilterGroup label="Стан деталі">
+            <FilterGroup label={t('filterCondition')}>
               <FilterRow
                 active={filters.condition === ''}
                 count={facetTotal('conditions')}
                 dot="bg-transparent"
-                label="Усі"
+                label={t('all')}
                 onSelect={() => updateFilter('condition', '')}
               />
               {(facets?.conditions ?? []).map((value) => (
@@ -811,18 +848,18 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                   count={value.count}
                   dot="bg-transparent"
                   key={value.id}
-                  label={conditionLabel(value.id)}
+                  label={conditionLabel(value.id, locale)}
                   onSelect={() => updateFilter('condition', value.id)}
                 />
               ))}
             </FilterGroup>
 
-            <FilterGroup label="Походження">
+            <FilterGroup label={t('filterOrigin')}>
               <FilterRow
                 active={filters.origin === ''}
                 count={facetTotal('origins')}
                 dot="bg-transparent"
-                label="Усі"
+                label={t('all')}
                 onSelect={() => updateFilter('origin', '')}
               />
               {(facets?.origins ?? [])
@@ -833,7 +870,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                     count={value.count}
                     dot="bg-transparent"
                     key={value.id}
-                    label={originLabel(value.id, value.name)}
+                    label={originLabel(value.id, value.name, locale)}
                     onSelect={() => updateFilter('origin', value.id)}
                   />
                 ))}
@@ -844,7 +881,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
               disabled={activeFilters.length === 0}
               onClick={() => setSearchParams(new URLSearchParams())}
             >
-              Скинути фільтри
+              {t('resetFilters')}
             </Button>
           </aside>
 
@@ -855,33 +892,33 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                   <span className="text-[22px] font-bold text-white tabular-nums">
                     {statusTotal ?? 0}
                   </span>
-                  усього
+                  {t('totalAll')}
                 </span>
                 <span className="text-app-muted flex items-baseline gap-2 text-sm">
                   <span className="text-state-ok text-[22px] font-bold tabular-nums">
                     {facetCount('statuses', 'available') ?? 0}
                   </span>
-                  доступно
+                  {t('totalAvailable')}
                 </span>
                 <span className="text-app-muted flex items-baseline gap-2 text-sm">
                   <span className="text-state-warn text-[22px] font-bold tabular-nums">
                     {facetCount('statuses', 'reserved') ?? 0}
                   </span>
-                  у резерві
+                  {t('totalReserved')}
                 </span>
                 <span className="text-app-muted flex items-baseline gap-2 text-sm">
                   <span className="text-state-danger text-[22px] font-bold tabular-nums">
                     {facetCount('statuses', 'sold') ?? 0}
                   </span>
-                  продано
+                  {t('totalSold')}
                 </span>
               </p>
               <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
                 <span className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
-                  Розмір сторінки
+                  {t('pageSize')}
                 </span>
                 <PillGroup
-                  label="Кількість деталей на сторінці"
+                  label={t('pageSizeLabel')}
                   onChange={(next) => updateFilter('per_page', next)}
                   options={[
                     { value: '30', label: '30' },
@@ -897,27 +934,27 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
               <ErrorState
                 description={
                   error.kind === 'network' || error.kind === 'timeout'
-                    ? 'Немає звʼязку з сервером. Фільтри лишилися на місці — повторіть, коли мережа повернеться.'
-                    : 'Не вдалося завантажити склад. Дані на місці — потрібно лише повторити запит.'
+                    ? t('networkDescription')
+                    : t('serverDescription')
                 }
                 onRetry={() =>
                   setSearchParams(new URLSearchParams(searchParams))
                 }
                 title={
                   error.kind === 'network' || error.kind === 'timeout'
-                    ? 'Склад не відповідає'
-                    : 'Склад не завантажився'
+                    ? t('networkTitle')
+                    : t('serverTitle')
                 }
               />
             ) : (
               <>
                 <div className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border">
                   <DataTable
-                    caption="Деталі на складі"
+                    caption={t('tableCaption')}
                     columns={[
                       {
                         key: 'name',
-                        label: 'Деталь',
+                        label: t('colPart'),
                         variant: 'primary',
                         cell: (part) => (
                           <Link
@@ -930,7 +967,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                       },
                       {
                         key: 'car',
-                        label: 'Авто-джерело',
+                        label: t('colCar'),
                         cell: (part) =>
                           part.car
                             ? `${part.car.make} ${part.car.model} · ${String(part.car.year)}`
@@ -938,10 +975,11 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                       },
                       {
                         key: 'status',
-                        label: 'Стан',
+                        label: t('colStatus'),
                         cell: (part) => {
                           const presentation = statusPresentation(
                             part.status ?? '',
+                            locale,
                           )
                           return presentation.label === '' ? (
                             '—'
@@ -954,31 +992,30 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                       },
                       {
                         key: 'quantity',
-                        label: 'Всього',
+                        label: t('colTotal'),
                         align: 'end',
                         cell: (part) => (
                           <InlineEdit
                             inputMode="numeric"
-                            label={`Кількість — ${part.name}`}
+                            label={t('quantityLabel', { name: part.name })}
                             onCommit={(next) =>
                               rewritePart(part.id, (current) => {
                                 const quantity = Number(next.trim())
                                 return Number.isInteger(quantity) &&
                                   quantity >= 0
                                   ? { ...current, quantity }
-                                  : 'Кількість — ціле число від нуля.'
+                                  : t('quantityInvalid')
                               })
                             }
                             value={String(part.quantity)}
                             {...(canManage
                               ? {}
                               : {
-                                  unavailable: 'Немає права змінювати деталі.',
+                                  unavailable: t('noManageRight'),
                                 })}
                             {...(part.isInventoryLocked
                               ? {
-                                  unavailable:
-                                    'Деталь у відкритій інвентаризації — кількість рахує сесія.',
+                                  unavailable: t('inventoryLocked'),
                                 }
                               : {})}
                           >
@@ -988,13 +1025,13 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                       },
                       {
                         key: 'available',
-                        label: 'Доступно',
+                        label: t('colAvailable'),
                         align: 'end',
                         cell: (part) => part.quantityAvailable,
                       },
                       {
                         key: 'reserved',
-                        label: 'Резерв',
+                        label: t('colReserved'),
                         align: 'end',
                         cell: (part) => part.quantityReserved,
                       },
@@ -1003,42 +1040,45 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                       <EmptyState
                         description={
                           activeFilters.length > 0
-                            ? 'За цими фільтрами нічого немає. Спробуйте прибрати частину умов.'
-                            : 'Додайте першу деталь або розберіть авто — позиції з’являться тут.'
+                            ? t('emptyFilteredDescription')
+                            : t('emptyDescription')
                         }
                         title={
                           activeFilters.length > 0
-                            ? 'Нічого не знайдено'
-                            : 'Тут поки порожньо'
+                            ? t('emptyFilteredTitle')
+                            : t('emptyTitle')
                         }
                       />
                     }
                     footer={
                       pageMeta ? (
                         <nav
-                          aria-label="Пагінація деталей"
+                          aria-label={t('pagination')}
                           className="border-app-line flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4"
                         >
                           <p className="text-app-dim text-[14px]">
-                            Сторінка {pageMeta.page} з {pageMeta.totalPages}
+                            {t('pageOf', {
+                              page: pageMeta.page,
+                              total: pageMeta.totalPages,
+                            })}
                           </p>
                           <span className="flex items-center gap-2.5">
                             <Button
-                              aria-label="Попередня сторінка"
+                              aria-label={t('previousPage')}
                               className="px-4 text-sm font-semibold"
                               disabled={pageMeta.page <= 1}
                               onClick={() => updatePage(pageMeta.page - 1)}
                             >
                               <ChevronLeft aria-hidden />
-                              Назад
+                              {tc('back')}
                             </Button>
                             <Button
-                              aria-label="Наступна сторінка"
+                              aria-label={t('nextPage')}
                               className="px-4 text-sm font-semibold"
                               disabled={pageMeta.page >= pageMeta.totalPages}
                               onClick={() => updatePage(pageMeta.page + 1)}
                             >
-                              Далі
+                              {tc('next')}
                               <ChevronRight aria-hidden />
                             </Button>
                           </span>
@@ -1141,14 +1181,15 @@ function FilterRow({
  * Parts are priced in dollars, like the cars they are pulled off: the contract
  * sends bare numbers, so the currency is stated here until it carries one.
  */
-const PART_CURRENCY = 'USD'
 
 /** The conditions the yard sorts by, in the server's own vocabulary. */
-const PART_CONDITIONS = [
-  { value: 'good', label: 'Хороший' },
-  { value: 'fair', label: 'Задовільний' },
-  { value: 'scrap', label: 'На запчастини' },
-] as const
+const PART_CONDITION_VALUES = ['good', 'fair', 'scrap'] as const
+
+const partConditions = (locale: Locale) =>
+  PART_CONDITION_VALUES.map((value) => ({
+    value,
+    label: conditionLabel(value, locale),
+  }))
 
 /** Two letters standing in for a person where a photo would be. */
 const initials = (name: string) =>
@@ -1186,10 +1227,17 @@ function PartDetailScreen({
   tenantSlug: string
 }) {
   const navigate = useNavigate()
+  const t = useT(partDetailMessages)
+  const tc = useT(commonMessages)
+  const { locale } = useLocale()
+  const format = useFormat()
+  const { currency: partCurrency } = useAccountingCurrency()
   const [deleting, setDeleting] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
-  const [copied, setCopied] = useState<string | null>(null)
+  const [copied, setCopied] = useState<{ ok: boolean; text: string } | null>(
+    null,
+  )
   const remove = async () => {
     if (deleting) return
     setDeleting(true)
@@ -1209,11 +1257,7 @@ function PartDetailScreen({
         'status' in failure.response
           ? failure.response.status
           : undefined
-      setDeleteError(
-        status === 409
-          ? 'Не вдалося видалити деталь через конфлікт.'
-          : 'Не вдалося видалити деталь.',
-      )
+      setDeleteError(status === 409 ? t('deleteConflict') : t('deleteFailed'))
     } finally {
       setDeleting(false)
     }
@@ -1273,7 +1317,7 @@ function PartDetailScreen({
   const historyGroups = shownHistory.reduce<
     { date: string; items: typeof shownHistory; last: boolean }[]
   >((groups, event) => {
-    const date = day(event.createdAt)
+    const date = format.date(event.createdAt) ?? event.createdAt
     const current = groups.at(-1)
     if (current?.date === date) current.items.push(event)
     else groups.push({ date, items: [event], last: false })
@@ -1335,9 +1379,9 @@ function PartDetailScreen({
       if (!navigator.clipboard?.writeText)
         throw new Error('Clipboard unavailable')
       await navigator.clipboard.writeText(code)
-      setCopied('Код скопійовано.')
+      setCopied({ ok: true, text: t('copied') })
     } catch {
-      setCopied('Не вдалося скопіювати код.')
+      setCopied({ ok: false, text: t('copyFailed') })
     }
   }
 
@@ -1350,46 +1394,42 @@ function PartDetailScreen({
             to={base}
           >
             <ChevronLeft aria-hidden className="size-3.5" />
-            До складу
+            {t('backToWarehouse')}
           </Link>
           <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>Склад</span>
+            <span>{t('breadcrumbWarehouse')}</span>
             <span aria-hidden className="text-white/20">
               /
             </span>
-            <span>Деталі</span>
+            <span>{t('breadcrumbParts')}</span>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           <Button asChild className="px-4 text-sm font-semibold">
             <Link to={`/app/${tenantSlug}/stickers?part=${partId ?? ''}`}>
-              Друк стікера
+              {t('printSticker')}
             </Link>
           </Button>
           {canManage ? (
             <>
               <Button asChild className="px-4 text-sm font-semibold">
-                <Link to={`${base}/${partId}/edit`}>Редагувати</Link>
+                <Link to={`${base}/${partId}/edit`}>{tc('edit')}</Link>
               </Button>
-              <Button
-                disabled
-                title="Додавання деталі в замовлення з її картки ще не підключене — відкрийте замовлення й додайте позицію там."
-                variant="primary"
-              >
-                Додати в замовлення
+              <Button disabled title={t('addToOrderHint')} variant="primary">
+                {t('addToOrder')}
               </Button>
               <ActionMenu
                 actions={[
                   {
                     key: 'delete',
-                    label: 'Видалити деталь',
+                    label: t('deletePart'),
                     icon: <Trash2 aria-hidden className="size-4" />,
                     destructive: true,
                     disabled: deleting,
                     onSelect: () => setConfirmingDelete(true),
                   },
                 ]}
-                label="Інші дії з деталлю"
+                label={t('moreActions')}
               />
             </>
           ) : null}
@@ -1401,20 +1441,18 @@ function PartDetailScreen({
           <Notice tone="danger">{deleteError}</Notice>
         ) : null}
         {copied === null ? null : (
-          <Notice tone={copied.startsWith('Не') ? 'danger' : 'ok'}>
-            {copied}
-          </Notice>
+          <Notice tone={copied.ok ? 'ok' : 'danger'}>{copied.text}</Notice>
         )}
 
         <div className="min-w-0">
           {detail === null ? null : (
             <div className="flex flex-wrap items-center gap-3">
-              <StatusPill tone={statusPresentation(detail.status).tone}>
-                {statusPresentation(detail.status).label}
+              <StatusPill tone={statusPresentation(detail.status, locale).tone}>
+                {statusPresentation(detail.status, locale).label}
               </StatusPill>
               {detail.quantityReserved > 0 && detail.quantityAvailable > 0 ? (
                 <StatusPill tone="warn">
-                  {detail.quantityReserved} у резерві
+                  {t('reservedCount', { count: detail.quantityReserved })}
                 </StatusPill>
               ) : null}
               <span className="text-app-ink flex items-center gap-[7px] text-[13px] font-semibold">
@@ -1425,19 +1463,19 @@ function PartDetailScreen({
                     CONDITION_DOT[detail.condition] ?? 'bg-app-dim',
                   )}
                 />
-                {conditionPhrase(detail.condition)}
+                {conditionPhrase(detail.condition, locale)}
               </span>
             </div>
           )}
           <h1 className="mt-3.5 text-[38px] leading-[1.04] font-extrabold tracking-[-0.03em] text-balance text-white sm:text-[46px] lg:text-[48px]">
-            {detail === null ? 'Деталь' : detail.name}
+            {detail === null ? t('titleFallback') : detail.name}
           </h1>
           {detail === null ? null : (
             <div className="mt-3.5 flex flex-wrap items-center gap-2.5">
               {detail.qrCode ? (
                 <CodeChip
                   code={detail.qrCode}
-                  label="Копіювати код"
+                  label={t('copyCode')}
                   onCopy={() => {
                     void copyCode(detail.qrCode)
                   }}
@@ -1445,7 +1483,7 @@ function PartDetailScreen({
               ) : null}
               {detail.oemCode ? (
                 <span className="text-app-muted font-mono text-[13px]">
-                  OEM {detail.oemCode}
+                  {t('oem', { code: detail.oemCode })}
                 </span>
               ) : null}
               {detail.partType ? (
@@ -1470,10 +1508,10 @@ function PartDetailScreen({
                     ? [detail.carBrand, detail.carModel, detail.carYear]
                         .filter(Boolean)
                         .join(' ') ||
-                      (detail.carCode ?? 'авто')
+                      (detail.carCode ?? t('sourceCarFallback'))
                     : detail.intakeId
-                      ? 'приймання'
-                      : 'без прив’язки'
+                      ? t('sourceIntake')
+                      : t('sourceNone')
                 }
               />
             </div>
@@ -1482,11 +1520,11 @@ function PartDetailScreen({
 
         {error ? (
           <ErrorState
-            description="Деталь не вдалося завантажити. Спробуйте ще раз."
-            title="Не вдалося завантажити деталь"
+            description={t('loadErrorDescription')}
+            title={t('loadErrorTitle')}
           />
         ) : detail === null ? (
-          <SkeletonRows columns={2} label="Завантажуємо деталь…" rows={4} />
+          <SkeletonRows columns={2} label={t('loading')} rows={4} />
         ) : (
           <>
             <div className="mt-4 flex flex-wrap items-start gap-6">
@@ -1494,29 +1532,27 @@ function PartDetailScreen({
                 <Card
                   aside={
                     <span className="text-app-dim font-mono text-[12px] tracking-[0.1em] uppercase">
-                      {detail.photos.length}{' '}
-                      {plural(detail.photos.length, [
-                        'знімок',
-                        'знімки',
-                        'знімків',
-                      ])}
+                      {t('photosCount', { count: detail.photos.length })}
                     </span>
                   }
                   bodyClassName="p-0"
                   className="min-w-[320px] flex-[1_1_620px]"
                   headerClassName="pb-4"
-                  title="Фото"
+                  title={t('photos')}
                 >
                   <Gallery
-                    emptyLabel="Фото цієї деталі ще немає — їх додають під час редагування."
-                    label={`Фото деталі ${detail.name}`}
+                    emptyLabel={t('galleryEmpty')}
+                    label={t('galleryLabel', { name: detail.name })}
                     photos={detail.photos.map((photo, index) => ({
                       id: photo.id,
                       url: photo.url,
                       ...(photo.thumbnailUrl
                         ? { thumbnailUrl: photo.thumbnailUrl }
                         : {}),
-                      alt: `Фото деталі ${detail.name} ${String(index + 1)}`,
+                      alt: t('photoAlt', {
+                        name: detail.name,
+                        index: index + 1,
+                      }),
                     }))}
                     variant="framed"
                   />
@@ -1530,26 +1566,26 @@ function PartDetailScreen({
                         asChild
                         className="min-h-8 px-3 text-[12px] font-bold"
                       >
-                        <Link to={`${base}/${partId}/edit`}>Змінити</Link>
+                        <Link to={`${base}/${partId}/edit`}>{t('change')}</Link>
                       </Button>
                     ) : null
                   }
-                  title="Ціна продажу"
+                  title={t('salePrice')}
                 >
                   {detail.effectiveSalePrice === null ? (
                     <div className="border-state-warn/25 bg-state-warn/[0.07] flex flex-wrap items-center justify-between gap-4 rounded-[12px] border px-4 py-3.5">
                       <div className="min-w-0">
                         <p className="text-state-warn text-[14px] font-bold">
-                          Ціни ще немає
+                          {t('noPriceTitle')}
                         </p>
                         <p className="text-app-muted mt-1 text-[13px] leading-[1.45] text-pretty">
-                          Без ціни деталь не можна додати в замовлення.
+                          {t('noPriceBody')}
                         </p>
                       </div>
                       {canManage ? (
                         <Button asChild variant="primary">
                           <Link to={`${base}/${partId}/edit`}>
-                            Вказати ціну
+                            {t('setPrice')}
                           </Link>
                         </Button>
                       ) : null}
@@ -1559,40 +1595,51 @@ function PartDetailScreen({
                       <p className="flex items-baseline gap-2.5">
                         <Amount
                           className="font-mono text-[30px] font-medium tracking-[-0.01em] text-white"
-                          currency={PART_CURRENCY}
+                          currency={partCurrency}
+                          currencyDisplay="code"
                           value={detail.effectiveSalePrice}
                         />
                         <span className="text-app-muted text-[13px]">
-                          за 1 {detail.unit || 'шт'}
+                          {t('perUnit', {
+                            unit: unitLabel(detail.unit, locale),
+                          })}
                         </span>
                       </p>
                       <p className="text-app-muted mt-1.5 text-[13px]">
                         {detail.quantityAvailable > 0 ? (
                           <>
-                            Вільний залишок на{' '}
+                            {t('freeStockWorth')}{' '}
                             <Amount
-                              currency={PART_CURRENCY}
+                              currency={partCurrency}
+                              currencyDisplay="code"
                               value={
                                 detail.effectiveSalePrice *
                                 detail.quantityAvailable
                               }
                             />
                             {detail.quantityReserved > 0
-                              ? ` · ще ${String(detail.quantityReserved)} ${detail.unit || 'шт'} у резерві`
+                              ? t('moreReserved', {
+                                  count: detail.quantityReserved,
+                                  unit: unitLabel(detail.unit, locale),
+                                })
                               : ''}
                           </>
                         ) : detail.quantityReserved > 0 ? (
-                          `Вільних одиниць немає, ${String(detail.quantityReserved)} ${detail.unit || 'шт'} у резерві`
+                          t('noneFreeReserved', {
+                            count: detail.quantityReserved,
+                            unit: unitLabel(detail.unit, locale),
+                          })
                         ) : (
-                          'Усі одиниці продано'
+                          t('allSold')
                         )}
                       </p>
                       {detail.desiredSalePrice !== null &&
                       detail.desiredSalePrice !== detail.effectiveSalePrice ? (
                         <p className="text-app-dim mt-1 text-[12.5px]">
-                          бажана{' '}
+                          {t('desired')}{' '}
                           <Amount
-                            currency={PART_CURRENCY}
+                            currency={partCurrency}
+                            currencyDisplay="code"
                             value={detail.desiredSalePrice}
                           />
                         </p>
@@ -1603,38 +1650,41 @@ function PartDetailScreen({
                 <Card
                   aside={
                     <span className="text-app-muted text-[13px] font-semibold">
-                      прийнято {detail.quantityTotal} {detail.unit || 'шт'}
+                      {t('received', {
+                        count: detail.quantityTotal,
+                        unit: unitLabel(detail.unit, locale),
+                      })}
                     </span>
                   }
-                  title="Наявність"
+                  title={t('stock')}
                 >
                   <dl className="grid gap-2 sm:grid-cols-3">
                     <StockTile
-                      label="Доступно"
+                      label={t('tileAvailable')}
                       sub={
                         detail.quantityAvailable > 0
-                          ? 'можна продати'
-                          : 'немає вільних'
+                          ? t('canSell')
+                          : t('noneFree')
                       }
                       tone="ok"
                       value={detail.quantityAvailable}
                     />
                     <StockTile
-                      label="У резерві"
+                      label={t('tileReserved')}
                       sub={
                         detail.quantityReserved > 0
-                          ? `${String(reservations.length)} ${plural(reservations.length, ['замовлення', 'замовлення', 'замовлень'])}`
-                          : 'немає'
+                          ? t('ordersCount', { count: reservations.length })
+                          : t('none')
                       }
                       tone="warn"
                       value={detail.quantityReserved}
                     />
                     <StockTile
-                      label="Продано"
+                      label={t('tileSold')}
                       sub={
                         detail.quantitySoldTotal > 0
-                          ? `${String(soldOrders.length)} ${plural(soldOrders.length, ['замовлення', 'замовлення', 'замовлень'])}`
-                          : 'ще не продавалась'
+                          ? t('ordersCount', { count: soldOrders.length })
+                          : t('neverSold')
                       }
                       tone="plain"
                       value={detail.quantitySoldTotal}
@@ -1643,25 +1693,31 @@ function PartDetailScreen({
 
                   {detail.quantityAvailable === 1 ? (
                     <p className="text-app-muted mt-3 text-[13px]">
-                      Остання одиниця.
+                      {t('lastUnit')}
                     </p>
                   ) : detail.quantityAvailable === 0 &&
                     detail.quantityReserved > 0 ? (
                     <p className="text-state-warn mt-3 text-[13px] text-pretty">
-                      Усі фізично на складі, але зарезервовані.
+                      {t('allReserved')}
                     </p>
                   ) : null}
 
                   <div className="border-app-line mt-[18px] flex flex-wrap items-center justify-between gap-4 border-t pt-4">
                     <div className="min-w-0">
                       <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                        Місце на складі
+                        {t('placement')}
                       </p>
                       <p className="text-app-ink mt-1.5 text-[15px] font-semibold text-pretty">
                         {detail.quantityAvailable + detail.quantityReserved ===
                         0
-                          ? `На складі немає. Останнє місце: ${placementLabel(zones, links.inventory).toLowerCase()}`
-                          : placementLabel(zones, links.inventory)}
+                          ? t('notInStock', {
+                              place: placementLabel(
+                                zones,
+                                links.inventory,
+                                t,
+                              ).toLocaleLowerCase(locale),
+                            })
+                          : placementLabel(zones, links.inventory, t)}
                       </p>
                     </div>
                     {links.inventory ? (
@@ -1670,7 +1726,7 @@ function PartDetailScreen({
                         className="min-h-9 px-3 text-[12px] font-bold"
                       >
                         <Link to={`${base}/${partId}/inventory`}>
-                          Перемістити
+                          {t('move')}
                         </Link>
                       </Button>
                     ) : null}
@@ -1684,41 +1740,53 @@ function PartDetailScreen({
                 aside={
                   <dl className="flex flex-wrap items-baseline gap-x-7 gap-y-2">
                     <div className="flex items-baseline gap-2.5">
-                      <dt className="text-app-muted text-[13px]">Виручка</dt>
+                      <dt className="text-app-muted text-[13px]">
+                        {t('revenue')}
+                      </dt>
                       <dd className="font-mono text-[17px] font-medium text-white">
-                        <Amount currency={PART_CURRENCY} value={soldRevenue} />
+                        <Amount
+                          currency={partCurrency}
+                          currencyDisplay="code"
+                          value={soldRevenue}
+                        />
                       </dd>
                     </div>
                     <div className="flex items-baseline gap-2.5">
                       <dt className="text-app-muted text-[13px]">
-                        У резерві на
+                        {t('reservedWorth')}
                       </dt>
                       <dd
                         className="text-app-dim font-mono text-[17px] font-medium"
-                        title={RESERVE_HAS_NO_PRICE}
+                        title={t('reserveNoPrice')}
                       >
                         —
                       </dd>
                     </div>
                     <div className="flex items-baseline gap-2.5">
-                      <dt className="text-app-muted text-[13px]">Знижки</dt>
+                      <dt className="text-app-muted text-[13px]">
+                        {t('discounts')}
+                      </dt>
                       <dd
                         className={cn(
                           'font-mono text-[17px] font-medium',
                           soldDiscount > 0 ? 'text-state-warn' : 'text-app-dim',
                         )}
                       >
-                        <Amount currency={PART_CURRENCY} value={soldDiscount} />
+                        <Amount
+                          currency={partCurrency}
+                          currencyDisplay="code"
+                          value={soldDiscount}
+                        />
                       </dd>
                     </div>
                   </dl>
                 }
                 bodyClassName="p-0"
                 headerClassName="pb-0"
-                title="Продажі"
+                title={t('sales')}
               >
                 <div
-                  aria-label="Що показати в продажах"
+                  aria-label={t('salesTabs')}
                   className="border-app-line flex flex-wrap gap-6 border-b px-6"
                   role="tablist"
                 >
@@ -1744,7 +1812,7 @@ function PartDetailScreen({
                         role="tab"
                         type="button"
                       >
-                        {tab.label}
+                        {t(tab.label)}
                         <span
                           className={cn(
                             'rounded-full px-1.5 font-mono text-[11px]',
@@ -1763,35 +1831,35 @@ function PartDetailScreen({
                 {salesRows.length === 0 ? (
                   <p className="text-app-muted px-6 py-6 text-[13px]">
                     {salesTab === 'reserved'
-                      ? 'Зараз немає резервів на цю деталь.'
-                      : 'Деталь ще не продавалась.'}
+                      ? t('noReserves')
+                      : t('notSoldYet')}
                   </p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[720px] text-left">
-                      <caption className="sr-only">
-                        Замовлення, у яких стоїть ця деталь
-                      </caption>
+                      <caption className="sr-only">{t('salesCaption')}</caption>
                       <thead>
                         <tr className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
                           <th className="px-6 pt-4 pb-3 font-normal">
-                            Замовлення
+                            {t('colOrder')}
                           </th>
                           <th className="px-3 pt-4 pb-3 font-normal">
-                            Клієнт і доставка
+                            {t('colCustomer')}
                           </th>
-                          <th className="px-3 pt-4 pb-3 font-normal">Статус</th>
-                          <th className="px-3 pt-4 pb-3 text-right font-normal">
-                            К-сть
-                          </th>
-                          <th className="px-3 pt-4 pb-3 text-right font-normal">
-                            Ціна
+                          <th className="px-3 pt-4 pb-3 font-normal">
+                            {t('colStatus')}
                           </th>
                           <th className="px-3 pt-4 pb-3 text-right font-normal">
-                            Сума
+                            {t('colQuantity')}
+                          </th>
+                          <th className="px-3 pt-4 pb-3 text-right font-normal">
+                            {t('colPrice')}
+                          </th>
+                          <th className="px-3 pt-4 pb-3 text-right font-normal">
+                            {t('colSum')}
                           </th>
                           <th className="px-6 pt-4 pb-3 font-normal">
-                            <span className="sr-only">Дії</span>
+                            <span className="sr-only">{tc('actions')}</span>
                           </th>
                         </tr>
                       </thead>
@@ -1804,14 +1872,18 @@ function PartDetailScreen({
                             <td className="px-6 py-4">
                               {orderHref(row.orderId) === null ? (
                                 <span className="text-app-ink font-mono text-[15px]">
-                                  № {row.orderNumber}
+                                  {t('orderNumber', {
+                                    number: String(row.orderNumber),
+                                  })}
                                 </span>
                               ) : (
                                 <Link
                                   className="text-brand font-mono text-[15px] underline-offset-4 hover:underline"
                                   to={orderHref(row.orderId) ?? '#'}
                                 >
-                                  № {row.orderNumber}
+                                  {t('orderNumber', {
+                                    number: String(row.orderNumber),
+                                  })}
                                 </Link>
                               )}
                               <span className="text-app-dim mt-1 block font-mono text-[12px]">
@@ -1827,32 +1899,34 @@ function PartDetailScreen({
                             </td>
                             <td className="px-3 py-4">
                               <span className="text-app-ink block text-[15px] font-semibold">
-                                {row.customerName ?? 'без клієнта'}
+                                {row.customerName ?? t('noCustomer')}
                               </span>
                               <span
                                 className="text-app-dim mt-1 block text-[13px]"
-                                title={DELIVERY_NOT_ON_PART}
+                                title={t('deliveryNotOnPart')}
                               >
-                                спосіб доставки не показуємо тут
+                                {t('deliveryHidden')}
                               </span>
                             </td>
                             <td className="px-3 py-4">
                               <StatusPill
                                 tone={row.kind === 'reserved' ? 'warn' : 'ok'}
                               >
-                                {row.kind === 'reserved' ? 'Резерв' : 'Продано'}
+                                {row.kind === 'reserved'
+                                  ? t('reserve')
+                                  : t('sold')}
                               </StatusPill>
                               <span
                                 className="text-app-dim mt-1.5 block text-[13px] text-pretty"
                                 title={
                                   row.kind === 'reserved'
-                                    ? RESERVE_HAS_NO_TERM
+                                    ? t('reserveNoTerm')
                                     : undefined
                                 }
                               >
                                 {row.kind === 'reserved'
-                                  ? 'тримається, доки стоїть у замовленні'
-                                  : 'позиція закрита продажем'}
+                                  ? t('reserveHolds')
+                                  : t('saleClosed')}
                               </span>
                             </td>
                             <td className="text-app-ink px-3 py-4 text-right font-mono text-[15px]">
@@ -1861,10 +1935,11 @@ function PartDetailScreen({
                             <td className="px-3 py-4 text-right">
                               <span className="text-app-ink block font-mono text-[15px]">
                                 {row.unitPrice === null ? (
-                                  <span title={RESERVE_HAS_NO_PRICE}>—</span>
+                                  <span title={t('reserveNoPrice')}>—</span>
                                 ) : (
                                   <Amount
-                                    currency={PART_CURRENCY}
+                                    currency={partCurrency}
+                                    currencyDisplay="code"
                                     value={row.unitPrice}
                                   />
                                 )}
@@ -1873,7 +1948,8 @@ function PartDetailScreen({
                                 <span className="text-state-warn mt-1 block font-mono text-[12px]">
                                   −
                                   <Amount
-                                    currency={PART_CURRENCY}
+                                    currency={partCurrency}
+                                    currencyDisplay="code"
                                     value={row.discount}
                                   />
                                 </span>
@@ -1883,13 +1959,14 @@ function PartDetailScreen({
                               {row.unitPrice === null ? (
                                 <span
                                   className="text-app-dim"
-                                  title={RESERVE_HAS_NO_PRICE}
+                                  title={t('reserveNoPrice')}
                                 >
                                   —
                                 </span>
                               ) : (
                                 <Amount
-                                  currency={PART_CURRENCY}
+                                  currency={partCurrency}
+                                  currencyDisplay="code"
                                   value={row.unitPrice * row.quantity}
                                 />
                               )}
@@ -1900,13 +1977,13 @@ function PartDetailScreen({
                                 disabled
                                 title={
                                   row.kind === 'reserved'
-                                    ? RESERVE_HAS_NO_TERM
-                                    : RETURN_NOT_FROM_PART
+                                    ? t('reserveNoTerm')
+                                    : t('returnNotFromPart')
                                 }
                               >
                                 {row.kind === 'reserved'
-                                  ? 'Продовжити'
-                                  : 'Повернення'}
+                                  ? t('extend')
+                                  : t('return')}
                               </Button>
                             </td>
                           </tr>
@@ -1919,20 +1996,21 @@ function PartDetailScreen({
                             colSpan={5}
                           >
                             {salesTab === 'reserved'
-                              ? 'Разом у резерві'
-                              : 'Разом продано'}
+                              ? t('totalReserved')
+                              : t('totalSold')}
                           </td>
                           <td className="px-3 py-4 text-right font-mono text-[17px] font-medium text-white">
                             {salesTab === 'reserved' ? (
                               <span
                                 className="text-app-dim"
-                                title={RESERVE_HAS_NO_PRICE}
+                                title={t('reserveNoPrice')}
                               >
                                 —
                               </span>
                             ) : (
                               <Amount
-                                currency={PART_CURRENCY}
+                                currency={partCurrency}
+                                currencyDisplay="code"
                                 value={salesRows.reduce(
                                   (sum, row) =>
                                     sum + (row.unitPrice ?? 0) * row.quantity,
@@ -1956,23 +2034,21 @@ function PartDetailScreen({
                   aside={
                     compat === null ? null : (
                       <span className="text-app-muted text-[13px] font-semibold">
-                        {compat.items.length}{' '}
-                        {plural(compat.items.length, ['авто', 'авто', 'авто'])}
+                        {t('carsCount', { count: compat.items.length })}
                       </span>
                     )
                   }
                   bodyClassName="p-0"
                   headerClassName="pb-3.5"
-                  title="Сумісність"
+                  title={t('compatibility')}
                 >
                   {compat === null ? (
                     <p className="text-app-muted px-6 pb-5 text-[13px]">
-                      Завантажуємо…
+                      {t('loadingShort')}
                     </p>
                   ) : compat.items.length === 0 ? (
                     <p className="text-app-muted px-6 pb-5 text-[13px] leading-5 text-pretty">
-                      Сумісність не вказана. Її задають під час створення
-                      деталі.
+                      {t('compatEmpty')}
                     </p>
                   ) : (
                     <ul className="grid">
@@ -1989,28 +2065,28 @@ function PartDetailScreen({
                             </span>
                             <span className="text-app-dim mt-0.5 block text-[12px]">
                               {item.evidenceType === 'DonorObservation'
-                                ? 'авто-джерело, не редагується'
+                                ? t('donorReadonly')
                                 : item.modelName === null
-                                  ? 'будь-яка модель'
+                                  ? t('anyModel')
                                   : ''}
                             </span>
                           </span>
                           <span className="text-app-ink font-mono text-[13px] whitespace-nowrap">
-                            {yearSpan(item.yearFrom, item.yearTo)}
+                            {yearSpan(item.yearFrom, item.yearTo, t)}
                           </span>
                         </li>
                       ))}
                     </ul>
                   )}
                 </Card>
-                <Card title="Нотатки">
+                <Card title={t('notes')}>
                   {detail.notes ? (
                     <p className="text-app-ink text-[15px] leading-[1.55] whitespace-pre-line text-pretty">
                       {detail.notes}
                     </p>
                   ) : (
                     <p className="text-app-muted text-[14px]">
-                      Нотаток немає. Їх можна додати в редагуванні деталі.
+                      {t('notesEmpty')}
                     </p>
                   )}
                   {detail.createdByName ? (
@@ -2022,7 +2098,7 @@ function PartDetailScreen({
                         {initials(detail.createdByName)}
                       </span>
                       <span>
-                        Створено{' '}
+                        {t('createdBy')}{' '}
                         <span className="text-app-ink font-semibold">
                           {detail.createdByName}
                         </span>{' '}
@@ -2037,7 +2113,7 @@ function PartDetailScreen({
                   aside={
                     history === null || history.events.length === 0 ? null : (
                       <div
-                        aria-label="Що показати в історії"
+                        aria-label={t('historyFilters')}
                         className="border-app-line flex gap-0.5 rounded-[9px] border bg-white/[0.04] p-[3px]"
                         role="group"
                       >
@@ -2062,7 +2138,7 @@ function PartDetailScreen({
                               }}
                               type="button"
                             >
-                              {filter.label}
+                              {t(filter.label)}
                             </button>
                           )
                         })}
@@ -2071,21 +2147,21 @@ function PartDetailScreen({
                   }
                   bodyClassName="p-0"
                   headerClassName="pb-3"
-                  title="Історія"
+                  title={t('history')}
                 >
                   {history === null ? (
                     <div className="px-6 pb-6">
                       <SkeletonRows
                         columns={1}
-                        label="Завантажуємо історію…"
+                        label={t('loadingHistory')}
                         rows={3}
                       />
                     </div>
                   ) : shownHistory.length === 0 ? (
                     <p className="text-app-muted px-6 pb-5 text-[13px] text-pretty">
                       {history.events.length === 0
-                        ? 'Подій ще немає — вони зʼявляться після першої зміни.'
-                        : 'У цій добірці подій немає.'}
+                        ? t('historyEmpty')
+                        : t('historyFilteredEmpty')}
                     </p>
                   ) : (
                     <div className="px-6 pb-2">
@@ -2101,7 +2177,7 @@ function PartDetailScreen({
                                 event.data,
                               )
                               const change = historyChange(event.data)
-                              const facts = historyDetails(event.data)
+                              const facts = historyDetails(event.data, locale)
                               const last =
                                 group.last && index === group.items.length - 1
                               return (
@@ -2128,12 +2204,16 @@ function PartDetailScreen({
                                   </span>
                                   <span className="min-w-0 pt-1 pb-4">
                                     <span className="text-app-ink block text-[14px] font-semibold text-pretty">
-                                      {historyLabel(event.eventType)}
+                                      {historyLabel(event.eventType, locale)}
                                       {event.order ? (
                                         <>
                                           {' '}
                                           <span className="text-brand font-mono text-[13px]">
-                                            № {event.order.number}
+                                            {t('orderNumber', {
+                                              number: String(
+                                                event.order.number,
+                                              ),
+                                            })}
                                           </span>
                                         </>
                                       ) : null}
@@ -2166,7 +2246,7 @@ function PartDetailScreen({
                                     </span>
                                   </span>
                                   <span className="text-app-muted pt-1.5 font-mono text-[12px] whitespace-nowrap">
-                                    {clock(event.createdAt)}
+                                    {format.time(event.createdAt) ?? ''}
                                   </span>
                                 </li>
                               )
@@ -2182,8 +2262,8 @@ function PartDetailScreen({
                       onClick={() => setHistoryAll((value) => !value)}
                     >
                       {historyAll
-                        ? 'Згорнути'
-                        : `Показати всі · ${String(filteredHistory.length)}`}
+                        ? t('collapse')
+                        : t('showAll', { count: filteredHistory.length })}
                     </Button>
                   ) : null}
                 </Card>
@@ -2194,14 +2274,14 @@ function PartDetailScreen({
       </div>
 
       <ConfirmDialog
-        confirmLabel="Видалити"
-        consequence="Історія продажів, резерви та фото цієї деталі зникнуть назавжди. Сервер відхилить видалення, якщо деталь уже в замовленні."
+        confirmLabel={tc('delete')}
+        consequence={t('deleteConsequence')}
         error={deleteError}
         onConfirm={() => void remove()}
         onOpenChange={setConfirmingDelete}
         open={confirmingDelete}
         pending={deleting}
-        title="Видалити деталь?"
+        title={t('deleteTitle')}
       />
     </div>
   )
@@ -2225,7 +2305,7 @@ const emptyPartForm: PartFormValues = {
   sourceId: '',
   name: '',
   quantity: '1',
-  unit: 'шт',
+  unit: PIECES_UNIT,
   condition: 'good',
   notes: '',
   oemCode: '',
@@ -2271,14 +2351,10 @@ const safeMediaUrl = (value: string | undefined) => {
   }
 }
 
-const fileSizeLabel = (size: number) => {
-  if (size < 1024) return `${String(size)} Б`
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} КБ`
-  return `${(size / (1024 * 1024)).toFixed(1)} МБ`
-}
-
-const mediaMetaLabel = (item: PartMediaItem) =>
-  item.file ? fileSizeLabel(item.file.size) : 'Збережене фото'
+const mediaMetaLabel = (item: PartMediaItem, locale: Locale) =>
+  item.file
+    ? formatFileSize(item.file.size, locale)
+    : translate(partFormMessages, locale, 'savedPhoto')
 
 /** Section of a form: one heading, one purpose, one surface. */
 function PartMediaFields({
@@ -2286,7 +2362,7 @@ function PartMediaFields({
   items,
   requireLatestMutation,
   setItems,
-  title = 'Фото',
+  title,
   variant = 'panel',
 }: {
   deferUploads?: boolean
@@ -2298,6 +2374,8 @@ function PartMediaFields({
   title?: ReactNode
   variant?: 'panel' | 'plain'
 }) {
+  const t = useT(partFormMessages)
+  const { locale } = useLocale()
   const sequenceRef = useRef(0)
   const mountedRef = useRef(true)
   const itemsRef = useRef(items)
@@ -2375,12 +2453,12 @@ function PartMediaFields({
     }
   }
   const statusLabel = (item: PartMediaItem) => {
-    if (item.status === 'selected') return 'Вибрано'
-    if (item.status === 'uploading') return 'Завантаження…'
-    if (item.status === 'uploaded') return 'Завантажено'
-    if (item.status === 'upload-error') return 'Помилка завантаження'
-    if (item.status === 'removing') return 'Видалення…'
-    return 'Помилка видалення'
+    if (item.status === 'selected') return t('mediaSelected')
+    if (item.status === 'uploading') return t('mediaUploading')
+    if (item.status === 'uploaded') return t('mediaUploaded')
+    if (item.status === 'upload-error') return t('mediaUploadError')
+    if (item.status === 'removing') return t('mediaRemoving')
+    return t('mediaRemoveError')
   }
   const failed = items.some(
     (item) => item.status === 'upload-error' || item.status === 'remove-error',
@@ -2388,19 +2466,14 @@ function PartMediaFields({
   return (
     <SectionPanel
       description={
-        deferUploads
-          ? 'Виберіть фото та перевірте перелік. Файли завантажаться разом зі створенням деталі.'
-          : 'Додайте або приберіть фото деталі.'
+        deferUploads ? t('mediaDeferDescription') : t('mediaDescription')
       }
-      title={title}
+      title={title ?? t('photos')}
       variant={variant}
     >
-      <Field
-        hint="Формати зображень, кілька файлів за раз."
-        label="Фото деталі"
-      >
+      <Field hint={t('photoHint')} label={t('photoLabel')}>
         <PhotoFileField
-          aria-label="Фото деталі"
+          aria-label={t('photoLabel')}
           multiple
           onChange={(event) => {
             addFiles(event.currentTarget.files)
@@ -2410,12 +2483,11 @@ function PartMediaFields({
       </Field>
       {failed ? (
         <Notice role="status" tone="warn">
-          Частина фото не завантажилася. Повторіть завантаження або приберіть ці
-          файли, щоб зберегти деталь.
+          {t('mediaFailed')}
         </Notice>
       ) : null}
       {items.length ? (
-        <ul aria-label="Вибрані фото" className="grid gap-2">
+        <ul aria-label={t('selectedPhotos')} className="grid gap-2">
           {items.map((item) => {
             const previewUrl = safeMediaUrl(item.previewUrl ?? item.url)
             const url = safeMediaUrl(item.url)
@@ -2426,7 +2498,7 @@ function PartMediaFields({
               >
                 {previewUrl ? (
                   <img
-                    alt={`Попередній перегляд ${item.name}`}
+                    alt={t('previewAlt', { name: item.name })}
                     className="size-14 shrink-0 rounded-control object-cover"
                     src={previewUrl}
                   />
@@ -2436,7 +2508,7 @@ function PartMediaFields({
                     {item.name} · {statusLabel(item)}
                   </p>
                   <p className="text-app-dim text-[12.5px]">
-                    {mediaMetaLabel(item)}
+                    {mediaMetaLabel(item, locale)}
                   </p>
                 </div>
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -2450,27 +2522,27 @@ function PartMediaFields({
                   ) : null}
                   {item.status === 'upload-error' ? (
                     <Button
-                      aria-label={`Повторити ${item.name}`}
+                      aria-label={t('retryName', { name: item.name })}
                       onClick={() => void upload(item)}
                     >
-                      Повторити
+                      {t('retry')}
                     </Button>
                   ) : null}
                   {item.status === 'remove-error' ? (
                     <Button
-                      aria-label={`Повторити видалення ${item.name}`}
+                      aria-label={t('retryRemoveName', { name: item.name })}
                       onClick={() => void remove(item)}
                     >
-                      Повторити видалення
+                      {t('retryRemove')}
                     </Button>
                   ) : null}
                   {item.status !== 'uploading' && item.status !== 'removing' ? (
                     <Button
-                      aria-label={`Прибрати ${item.name}`}
+                      aria-label={t('removeName', { name: item.name })}
                       onClick={() => void remove(item)}
                       variant="danger"
                     >
-                      Прибрати
+                      {t('remove')}
                     </Button>
                   ) : null}
                 </div>
@@ -2479,10 +2551,7 @@ function PartMediaFields({
           })}
         </ul>
       ) : (
-        <p className="text-app-dim text-[13.5px]">
-          Фото ще не вибрано. Додайте знімки — покупці бачать їх у картці
-          деталі.
-        </p>
+        <p className="text-app-dim text-[13.5px]">{t('noPhotos')}</p>
       )}
     </SectionPanel>
   )
@@ -2494,23 +2563,40 @@ type PartFieldErrors = Partial<
 
 function partFieldErrors(
   values: PartFormValues,
-  { requireSource }: { requireSource: boolean },
+  {
+    requireSource,
+    locale,
+    currency = null,
+  }: {
+    requireSource: boolean
+    locale: Locale
+    /** Accounting currency: the price keeps to its precision, as in Core. */
+    currency?: string | null
+  },
 ): PartFieldErrors {
+  const t = (
+    key:
+      | 'nameRequired'
+      | 'quantityInvalid'
+      | 'priceInvalid'
+      | 'chooseCar'
+      | 'chooseIntake',
+  ) => translate(partFormMessages, locale, key)
   const errors: PartFieldErrors = {}
-  if (!values.name.trim())
-    errors.name = 'Введіть назву деталі — за нею її знаходять на складі.'
+  if (!values.name.trim()) errors.name = t('nameRequired')
   const quantity = Number(values.quantity)
   if (!Number.isInteger(quantity) || quantity <= 0)
-    errors.quantity = 'Вкажіть ціле число від 1, наприклад 3.'
+    errors.quantity = t('quantityInvalid')
   const price = optionalNumber(values.desiredSalePrice)
   if (price !== undefined && (!Number.isFinite(price) || price < 0))
-    errors.desiredSalePrice =
-      'Вкажіть число від 0, наприклад 1250.50, або залиште поле порожнім.'
+    errors.desiredSalePrice = t('priceInvalid')
+  else if (price !== undefined) {
+    const precision = amountPrecisionError(price, currency, locale)
+    if (precision !== null) errors.desiredSalePrice = precision
+  }
   if (requireSource && !values.sourceId.trim())
     errors.sourceId =
-      values.sourceType === 'car'
-        ? 'Оберіть автомобіль зі списку.'
-        : 'Оберіть партію зі списку.'
+      values.sourceType === 'car' ? t('chooseCar') : t('chooseIntake')
   return errors
 }
 
@@ -2528,8 +2614,10 @@ function CompatibilityRowCard({
 }) {
   // The picker keeps the make's own id so it can list that make's models.
   const [makeId, setMakeId] = useState<number | null>(null)
-  const problem = rowProblem(row)
-  const title = `Авто ${String(index + 1)}`
+  const t = useT(partFormMessages)
+  const { locale } = useLocale()
+  const problem = rowProblem(row, locale)
+  const title = t('vehicleN', { n: index + 1 })
 
   return (
     <section
@@ -2548,7 +2636,7 @@ function CompatibilityRowCard({
             variant="quiet"
           >
             <X aria-hidden className="size-3" />
-            Прибрати
+            {t('remove')}
           </Button>
         )}
       </div>
@@ -2556,7 +2644,7 @@ function CompatibilityRowCard({
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
         <VehicleCatalogPicker
           disabled={false}
-          label="Марка"
+          label={t('make')}
           onSelect={(option) => {
             setMakeId(option.id)
             onChange({ brand: option.name, model: '' })
@@ -2566,7 +2654,7 @@ function CompatibilityRowCard({
         />
         <VehicleCatalogPicker
           disabled={row.brand === ''}
-          label="Модель"
+          label={t('model')}
           makeId={makeId}
           makeName={row.brand}
           onSelect={(option) => {
@@ -2575,7 +2663,7 @@ function CompatibilityRowCard({
           type="model"
           value={row.model}
         />
-        <Field label="Рік">
+        <Field label={t('year')}>
           <TextInput
             inputMode="numeric"
             onChange={(event) => {
@@ -2607,10 +2695,16 @@ function SourceChip({
   meta: string
   name: string
 }) {
+  const t = useT(partDetailMessages)
   const Icon =
     kind === 'car' ? CarIcon : kind === 'batch' ? Package : CircleMinus
-  const label =
-    kind === 'car' ? 'З авто' : kind === 'batch' ? 'Партія' : 'Джерело'
+  const label = t(
+    kind === 'car'
+      ? 'sourceFromCar'
+      : kind === 'batch'
+        ? 'sourceBatch'
+        : 'sourceUnknown',
+  )
   const body = (
     <>
       <Icon aria-hidden className="text-app-muted size-[15px] shrink-0" />
@@ -2645,34 +2739,25 @@ function SourceChip({
   )
 }
 
-/**
- * What the sales table cannot promise. A reservation is a line in an order,
- * not a document of its own: it carries no price until the order is confirmed,
- * and the yard keeps no clock on it.
+/*
+ * What the sales table cannot promise (reserveNoPrice, reserveNoTerm, …): a
+ * reservation is a line in an order, not a document of its own: it carries no
+ * price until the order is confirmed, and the yard keeps no clock on it.
  */
-const RESERVE_HAS_NO_PRICE =
-  'Ціна фіксується під час продажу — у резерві її ще немає.'
-const RESERVE_HAS_NO_TERM =
-  'Строку резерву розбірка не веде: позиція тримається, доки стоїть у замовленні. Щоб звільнити деталь, приберіть її із замовлення.'
-const DELIVERY_NOT_ON_PART =
-  'Спосіб доставки й номер накладної живуть у самому замовленні — відкрийте його за номером.'
-const RETURN_NOT_FROM_PART =
-  'Повернення оформлюється в замовленні, з картки деталі такої дії немає.'
-
 const SALES_TABS = [
-  { value: 'all', label: 'Усі' },
-  { value: 'reserved', label: 'У резерві' },
-  { value: 'sold', label: 'Продано' },
+  { value: 'all', label: 'tabAll' },
+  { value: 'reserved', label: 'tabReserved' },
+  { value: 'sold', label: 'tabSold' },
 ] as const
 
 /** How many events the history shows before it has to be asked for more. */
 const HISTORY_LIMIT = 5
 
 const HISTORY_FILTERS = [
-  { value: 'all', label: 'Усе' },
-  { value: 'sale', label: 'Продажі' },
-  { value: 'price', label: 'Ціна' },
-  { value: 'stock', label: 'Склад' },
+  { value: 'all', label: 'filterAll' },
+  { value: 'sale', label: 'filterSales' },
+  { value: 'price', label: 'filterPrice' },
+  { value: 'stock', label: 'filterStock' },
 ] as const
 
 /** A colour and a glyph per kind, so a long history can be skimmed. */
@@ -2691,34 +2776,25 @@ const HISTORY_ICON: Record<HistoryKind, { icon: ReactNode; tint: string }> = {
   },
 }
 
-/** The clock reading of an event, next to the day it belongs to. */
-const clock = (value: string) => {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime())
-    ? ''
-    : parsed.toLocaleTimeString('uk-UA', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-}
+type DetailT = Translate<(typeof partDetailMessages)['uk']>
 
-const day = (value: string) => {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime())
-    ? value
-    : parsed.toLocaleDateString('uk-UA', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-      })
-}
-
-/** A compatibility's years, as one span: a single year stays a single year. */
-const yearSpan = (from: number | null, to: number | null): string => {
-  if (from === null && to === null) return 'будь-який рік'
+/**
+ * A compatibility's years, as one span: a single year stays a single year.
+ * Years go in as strings so no locale groups them like quantities.
+ */
+const yearSpan = (
+  from: number | null,
+  to: number | null,
+  t: DetailT,
+): string => {
+  if (from === null && to === null) return t('anyYear')
   if (from !== null && to !== null)
-    return from === to ? String(from) : `${String(from)} – ${String(to)}`
-  return from !== null ? `з ${String(from)}` : `до ${String(to ?? 0)}`
+    return from === to
+      ? String(from)
+      : t('yearRange', { from: String(from), to: String(to) })
+  return from !== null
+    ? t('yearFrom', { year: String(from) })
+    : t('yearTo', { year: String(to ?? 0) })
 }
 
 /**
@@ -2729,11 +2805,12 @@ const yearSpan = (from: number | null, to: number | null): string => {
 const placementLabel = (
   zones: PartInventoryZone[] | null,
   allowed: boolean,
+  t: DetailT,
 ): string => {
-  if (!allowed) return 'Розміщення доступне зі складським модулем'
-  if (zones === null) return 'Завантажуємо…'
+  if (!allowed) return t('placementNeedsModule')
+  if (zones === null) return t('loadingShort')
   const placed = zones.filter((zone) => !zone.isSystemUnassigned)
-  if (placed.length === 0) return 'Не розміщена'
+  if (placed.length === 0) return t('notPlaced')
   return placed
     .map((zone) => `${zone.warehouseName} · ${zone.zoneName}`)
     .join(', ')
@@ -2809,16 +2886,8 @@ function StockTile({
 
 /** A part belongs to one car or intake. */
 const SOURCE_KINDS = [
-  {
-    value: 'car',
-    label: 'З авто',
-    hint: 'Розібране авто зі складу',
-  },
-  {
-    value: 'batch',
-    label: 'З партії',
-    hint: 'Закупівля в постачальника',
-  },
+  { value: 'car', label: 'kindCarLabel', hint: 'kindCarHint' },
+  { value: 'batch', label: 'kindBatchLabel', hint: 'kindBatchHint' },
 ] as const
 
 /**
@@ -2826,19 +2895,13 @@ const SOURCE_KINDS = [
  * under it is what stops "задовільний" and "на запчастини" being used
  * interchangeably.
  */
-const CONDITION_HINTS: Record<string, { hint: string; tone: string }> = {
-  good: {
-    hint: 'Справна, без суттєвих дефектів. Можна ставити без підготовки.',
-    tone: 'border-state-ok bg-state-ok',
-  },
-  fair: {
-    hint: 'Справна, є сліди використання або дрібні косметичні дефекти.',
-    tone: 'border-state-warn bg-state-warn',
-  },
-  scrap: {
-    hint: 'Несправна або некомплектна. Для розбору чи відновлення.',
-    tone: 'border-state-danger bg-state-danger',
-  },
+const CONDITION_HINTS: Record<
+  string,
+  { hint: 'hintGood' | 'hintFair' | 'hintScrap'; tone: string }
+> = {
+  good: { hint: 'hintGood', tone: 'border-state-ok bg-state-ok' },
+  fair: { hint: 'hintFair', tone: 'border-state-warn bg-state-warn' },
+  scrap: { hint: 'hintScrap', tone: 'border-state-danger bg-state-danger' },
 }
 
 function ConditionTile({
@@ -2852,6 +2915,7 @@ function ConditionTile({
   picked: boolean
   value: string
 }) {
+  const t = useT(partFormMessages)
   const meaning = CONDITION_HINTS[value]
   const hintId = useId()
   return (
@@ -2897,7 +2961,7 @@ function ConditionTile({
         className="text-app-dim text-[12px] leading-[1.4] text-pretty"
         id={hintId}
       >
-        {meaning?.hint}
+        {meaning ? t(meaning.hint) : null}
       </span>
     </button>
   )
@@ -2912,6 +2976,7 @@ function SourceTile({
   onPick: () => void
   picked: boolean
 }) {
+  const t = useT(partFormMessages)
   return (
     <button
       aria-pressed={picked}
@@ -2924,9 +2989,9 @@ function SourceTile({
       onClick={onPick}
       type="button"
     >
-      <span className="block text-[14px] font-bold">{kind.label}</span>
+      <span className="block text-[14px] font-bold">{t(kind.label)}</span>
       <span className="text-app-dim mt-1 block text-[12px] leading-[1.35] text-pretty">
-        {kind.hint}
+        {t(kind.hint)}
       </span>
     </button>
   )
@@ -2941,8 +3006,11 @@ function PartFields({
   compatibility,
   errors,
   edit,
+  price,
   variant = 'panel',
 }: {
+  /** Accounting currency of the asking price: suffix, gate and notes. */
+  price: PriceSlots
   /** The vehicles this part fits. Absent on the edit screen, which hides them. */
   compatibility?:
     | { rows: CompatibilityRow[]; setRows: (rows: CompatibilityRow[]) => void }
@@ -2959,6 +3027,8 @@ function PartFields({
 }) {
   const cabinet = useCabinet()
   const location = useLocation()
+  const t = useT(partFormMessages)
+  const { locale } = useLocale()
   const cabinetRoot = `/app/${cabinet.targetTenant!.slug}`
   const sourceCreateKind =
     values.sourceType === 'car'
@@ -3001,14 +3071,14 @@ function PartFields({
   return (
     <>
       <SectionPanel
-        description="Звідки походить деталь. Після створення джерело не змінюється."
-        title={step('01', 'Джерело')}
+        description={t('sourceDescription')}
+        title={step('01', t('sourceStep'))}
         variant={variant}
       >
         <div className="grid gap-3 sm:grid-cols-2">
           {variant === 'plain' && !edit ? (
             <fieldset className="col-span-full grid gap-2 sm:grid-cols-2">
-              <legend className="sr-only">Тип джерела</legend>
+              <legend className="sr-only">{t('sourceType')}</legend>
               {SOURCE_KINDS.filter(
                 (kind) =>
                   (kind.value !== 'car' || canViewCars) &&
@@ -3030,15 +3100,11 @@ function PartFields({
             </fieldset>
           ) : (
             <Field
-              hint={
-                edit
-                  ? 'Тип джерела задається під час створення деталі.'
-                  : 'Оберіть автомобіль або партію перед створенням деталі.'
-              }
-              label="Тип джерела"
+              hint={edit ? t('sourceTypeEditHint') : t('sourceTypeCreateHint')}
+              label={t('sourceType')}
             >
               <SelectInput
-                aria-label="Тип джерела"
+                aria-label={t('sourceType')}
                 disabled={edit}
                 onChange={(event) =>
                   setValues({
@@ -3050,10 +3116,10 @@ function PartFields({
                 value={values.sourceType}
               >
                 {canViewCars || values.sourceType === 'car' ? (
-                  <option value="car">Автомобіль</option>
+                  <option value="car">{t('optionCar')}</option>
                 ) : null}
                 {canViewIntakes || values.sourceType === 'batch' ? (
-                  <option value="batch">Партія</option>
+                  <option value="batch">{t('optionBatch')}</option>
                 ) : null}
               </SelectInput>
             </Field>
@@ -3061,21 +3127,17 @@ function PartFields({
           {values.sourceType === 'car' && canViewCars ? (
             <Field
               error={errors.sourceId}
-              hint={
-                edit
-                  ? 'Автомобіль-джерело змінити не можна.'
-                  : 'Деталь буде прив’язана до цього авто.'
-              }
-              label="Автомобіль-джерело"
+              hint={edit ? t('carEditHint') : t('carCreateHint')}
+              label={t('sourceCar')}
               required={!edit}
             >
               <SelectInput
-                aria-label="Автомобіль-джерело"
+                aria-label={t('sourceCar')}
                 disabled={(edit ?? false) || sourceOptions.carsUnavailable}
                 onChange={field('sourceId')}
                 value={values.sourceId}
               >
-                <option value="">Оберіть автомобіль</option>
+                <option value="">{t('chooseCarOption')}</option>
                 {sourceOptions.cars.map((car) => (
                   <option key={car.id} value={car.id}>
                     {carLabel(car)}
@@ -3085,42 +3147,34 @@ function PartFields({
                 !sourceOptions.cars.some(
                   (car) => car.id === values.sourceId,
                 ) ? (
-                  <option value={values.sourceId}>
-                    Автомобіль недоступний у поточній вибірці
-                  </option>
+                  <option value={values.sourceId}>{t('carOutside')}</option>
                 ) : null}
               </SelectInput>
             </Field>
           ) : values.sourceType === 'batch' && canViewIntakes ? (
             <Field
               error={errors.sourceId}
-              hint={
-                edit
-                  ? 'Партію-джерело змінити не можна.'
-                  : 'Деталь буде прив’язана до цієї партії.'
-              }
-              label="Партія-джерело"
+              hint={edit ? t('batchEditHint') : t('batchCreateHint')}
+              label={t('sourceBatch')}
               required={!edit}
             >
               <SelectInput
-                aria-label="Партія-джерело"
+                aria-label={t('sourceBatch')}
                 disabled={(edit ?? false) || sourceOptions.intakesUnavailable}
                 onChange={field('sourceId')}
                 value={values.sourceId}
               >
-                <option value="">Оберіть партію</option>
+                <option value="">{t('chooseBatchOption')}</option>
                 {sourceOptions.intakes.map((intake) => (
                   <option key={intake.id} value={intake.id}>
-                    {intakeLabel(intake)}
+                    {intakeLabel(intake, locale)}
                   </option>
                 ))}
                 {values.sourceId &&
                 !sourceOptions.intakes.some(
                   (intake) => intake.id === values.sourceId,
                 ) ? (
-                  <option value={values.sourceId}>
-                    Партія недоступна у поточній вибірці
-                  </option>
+                  <option value={values.sourceId}>{t('batchOutside')}</option>
                 ) : null}
               </SelectInput>
             </Field>
@@ -3146,88 +3200,74 @@ function PartFields({
                 >
                   <Plus aria-hidden />
                   {sourceCreateLink === 'cars'
-                    ? 'Створити автомобіль'
-                    : 'Створити партію'}
+                    ? t('createCar')
+                    : t('createBatch')}
                 </Link>
               </Button>
             </div>
             <p className="text-app-dim text-[12px] leading-5 text-pretty">
-              Після створення повернетеся сюди з новим джерелом. Введені дані
-              збережуться, фото потрібно буде додати ще раз.
+              {t('createReturnHint')}
             </p>
           </div>
         ) : null}
         {values.sourceType === 'car' && !canViewCars ? (
           <Notice role="status" tone="warn">
-            Вибір автомобіля недоступний без права перегляду автомобілів.
-            Попросіть власника кабінету відкрити доступ до автомобілів або
-            оберіть інший тип джерела.
+            {t('carNoPermission')}
           </Notice>
         ) : null}
         {values.sourceType === 'batch' && !canViewIntakes ? (
           <Notice role="status" tone="warn">
-            Вибір партії недоступний без права перегляду приймань. Попросіть
-            власника кабінету відкрити доступ до приймань або оберіть інший тип
-            джерела.
+            {t('batchNoPermission')}
           </Notice>
         ) : null}
         {values.sourceType === 'car' &&
         canViewCars &&
         sourceOptions.carsUnavailable ? (
           <Notice role="status" tone="warn">
-            Вибір автомобіля недоступний: список не завантажено. Оновіть
-            сторінку, щоб повторити запит.
+            {t('carsUnavailable')}
           </Notice>
         ) : null}
         {values.sourceType === 'batch' &&
         canViewIntakes &&
         sourceOptions.intakesUnavailable ? (
           <Notice role="status" tone="warn">
-            Вибір партії недоступний: список не завантажено. Оновіть сторінку,
-            щоб повторити запит.
+            {t('batchesUnavailable')}
           </Notice>
         ) : null}
       </SectionPanel>
       <SectionPanel
-        description="Як деталь виглядає у списку складу та в пошуку."
-        title={step('02', 'Опис деталі')}
+        description={t('describeDescription')}
+        title={step('02', t('describeStep'))}
         variant={variant}
       >
-        <Field error={errors.name} label="Назва" required>
+        <Field error={errors.name} label={t('name')} required>
           <TextInput
-            aria-label="Назва"
+            aria-label={t('name')}
             onChange={field('name')}
             value={values.name}
           />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field hint="Наприклад: кузов, оптика, двигун" label="Тип деталі">
+          <Field hint={t('partTypeHint')} label={t('partType')}>
             <TextInput
-              aria-label="Тип деталі"
+              aria-label={t('partType')}
               onChange={field('partType')}
               value={values.partType}
             />
           </Field>
-          <Field
-            hint={
-              edit
-                ? 'OEM-код не змінюється після створення.'
-                : 'Каталожний номер виробника'
-            }
-            label="OEM-код"
-          >
+          <Field hint={edit ? t('oemEditHint') : t('oemHint')} label={t('oem')}>
             <TextInput
-              aria-label="OEM-код"
+              aria-label={t('oem')}
               disabled={edit}
               onChange={field('oemCode')}
               value={values.oemCode}
             />
           </Field>
         </div>
-        <Field hint="Дефекти, комплектність, місце зберігання" label="Нотатки">
+        <Field hint={t('notesHint')} label={t('notes')}>
           <TextArea
             className="resize-none"
-            aria-label="Нотатки"
+            aria-label={t('notes')}
             onChange={field('notes')}
             rows={3}
             value={values.notes}
@@ -3235,18 +3275,18 @@ function PartFields({
         </Field>
       </SectionPanel>
       <SectionPanel
-        description="Оберіть один із трьох сталих станів деталі."
-        title={step('03', 'Стан деталі')}
+        description={t('conditionDescription')}
+        title={step('03', t('conditionStep'))}
         variant={variant}
       >
         {variant === 'plain' ? (
           <>
             <div
-              aria-label="Стан деталі"
+              aria-label={t('conditionStep')}
               className="grid gap-2 sm:grid-cols-3"
               role="radiogroup"
             >
-              {PART_CONDITIONS.map((option) => (
+              {partConditions(locale).map((option) => (
                 <ConditionTile
                   key={option.value}
                   label={option.label}
@@ -3259,29 +3299,28 @@ function PartFields({
               ))}
             </div>
             <p className="text-app-dim text-[12px] leading-5 text-pretty">
-              Стан бачать покупці у картці деталі й у пошуку. Його можна змінити
-              пізніше.
+              {t('conditionVisible')}
             </p>
           </>
         ) : (
           <PillGroup
             className="flex-wrap"
-            label="Стан деталі"
+            label={t('conditionStep')}
             onChange={(condition) => setValues({ ...values, condition })}
-            options={PART_CONDITIONS}
+            options={partConditions(locale)}
             value={values.condition}
           />
         )}
       </SectionPanel>
       <SectionPanel
-        description="Скільки одиниць на складі та за скільки їх продавати."
-        title={step('04', 'Кількість і ціна')}
+        description={t('quantityDescription')}
+        title={step('04', t('quantityStep'))}
         variant={variant}
       >
         <div className="grid items-start gap-3 sm:grid-cols-3">
-          <Field error={errors.quantity} label="Кількість" required>
+          <Field error={errors.quantity} label={t('quantity')} required>
             <TextInput
-              aria-label="Кількість"
+              aria-label={t('quantity')}
               inputMode="numeric"
               min="1"
               onChange={field('quantity')}
@@ -3289,16 +3328,22 @@ function PartFields({
               value={values.quantity}
             />
           </Field>
-          <Field hint="Фіксована одиниця обліку" label="Одиниця">
-            <TextInput aria-label="Одиниця" readOnly value="шт" />
+          <Field hint={t('unitHint')} label={t('unit')}>
+            <TextInput
+              aria-label={t('unit')}
+              readOnly
+              value={unitLabel(PIECES_UNIT, locale)}
+            />
           </Field>
           <Field
             error={errors.desiredSalePrice}
-            hint="У гривнях, можна залишити порожнім"
-            label="Бажана ціна"
+            hint={price.hint ?? t('priceOptional')}
+            label={t('desiredPrice')}
           >
-            <TextInput
-              aria-label="Бажана ціна"
+            <MoneyInput
+              aria-label={t('desiredPrice')}
+              currency={price.currency}
+              disabled={price.disabled}
               inputMode="decimal"
               min="0"
               onChange={field('desiredSalePrice')}
@@ -3308,15 +3353,16 @@ function PartFields({
             />
           </Field>
         </div>
+        {price.note}
       </SectionPanel>
       {showCompatibility ? (
         <SectionPanel
           description={
             sourceCar === null
-              ? 'До яких авто підходить деталь. Можна вказати кілька. Необовʼязково.'
-              : 'Перший рядок підставлено з авто-джерела. Додайте інші, якщо деталь підходить і до них.'
+              ? t('compatDescription')
+              : t('compatFromSourceDescription')
           }
-          title={step('05', 'Сумісність')}
+          title={step('05', t('compatStep'))}
           variant={variant}
         >
           {sourceCar === null ? null : (
@@ -3336,7 +3382,7 @@ function PartFields({
                   </span>
                 </span>
                 <span className="text-app-muted mt-0.5 block text-[12px] text-pretty">
-                  З вибраного авто-джерела. Змінюється разом із джерелом.
+                  {t('compatFromSource')}
                 </span>
               </span>
             </div>
@@ -3379,18 +3425,38 @@ function PartFields({
                 type="button"
               >
                 <Plus aria-hidden />
-                Додати ще авто
+                {t('addCar')}
               </Button>
             </div>
           )}
-          <Notice tone="warn">
-            Сумісність задається лише під час створення. Після збереження її не
-            можна змінити.
-          </Notice>
+          <Notice tone="warn">{t('compatOnlyOnCreate')}</Notice>
         </SectionPanel>
       ) : null}
     </>
   )
+}
+
+/**
+ * Source error codes Core sends on create, read in the interface language.
+ * An unknown code falls back to the server's own message (it already follows
+ * Accept-Language); a failure without a code gets the generic sentence.
+ */
+const SOURCE_ERROR_KEYS: Readonly<
+  Record<string, 'archivedSource' | 'invalidSourceType'>
+> = {
+  PART_SOURCE_ARCHIVED: 'archivedSource',
+  INVALID_PART_SOURCE_TYPE: 'invalidSourceType',
+}
+
+const createFailureMessage = (failure: unknown, locale: Locale): string => {
+  const problem = normalizeApiProblem(failure)
+  const code = problem.code?.toUpperCase()
+  if (code === undefined)
+    return translate(partFormMessages, locale, 'createFailed')
+  const known = SOURCE_ERROR_KEYS[code]
+  return known
+    ? translate(partFormMessages, locale, known)
+    : problem.message || translate(partFormMessages, locale, 'createFailed')
 }
 
 function validFormNumbers(values: PartFormValues) {
@@ -3424,6 +3490,9 @@ function PartForm({
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const cabinet = useCabinet()
+  const t = useT(partFormMessages)
+  const tc = useT(commonMessages)
+  const { locale } = useLocale()
   const base = `/app/${cabinet.targetTenant?.slug ?? ''}/parts`
   // Coming back from creating a car or intake restores what was typed.
   const [draft] = useState(() =>
@@ -3458,6 +3527,12 @@ function PartForm({
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showErrors, setShowErrors] = useState(false)
+  // The owner's first part may finish onboarding: say so here, keep the list.
+  const firstPart = useFirstPartCompletion({
+    tenantId: cabinet.targetTenant?.id ?? null,
+    userId: cabinet.snapshot?.userId ?? null,
+    role: cabinet.snapshot?.role,
+  })
   // A car given by link but missing from the active list is most likely
   // archived; say so now rather than after the whole form is filled.
   const [archivedCarId, setArchivedCarId] = useState<string | null>(null)
@@ -3487,15 +3562,45 @@ function PartForm({
     (item) => item.status !== 'uploaded' && item.status !== 'selected',
   )
   const requireSource = true
-  const errors = showErrors ? partFieldErrors(values, { requireSource }) : {}
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault()
+  const guard = useFirstPriceGuard()
+  const errors = showErrors
+    ? partFieldErrors(values, {
+        requireSource,
+        locale,
+        currency: guard.currency,
+      })
+    : {}
+  const price = usePriceSlots(guard, {
+    values: [values.desiredSalePrice],
+    onAccept: (accepted) => void submit(undefined, accepted),
+    // The typed part survives the trip to the currency setting.
+    draftKept: true,
+    onLeave: () =>
+      savePartDraft({
+        root: `/app/${cabinet.targetTenant!.slug}`,
+        values,
+        compatibility: compatRows,
+      }),
+  })
+  const submit = async (
+    event?: React.FormEvent,
+    accepted?: SupportedCurrency | null,
+  ) => {
+    event?.preventDefault()
     if (pendingRef.current || mediaPending) return
     const parsed = validFormNumbers(values)
-    if (Object.keys(partFieldErrors(values, { requireSource })).length > 0) {
+    if (
+      Object.keys(
+        partFieldErrors(values, {
+          requireSource,
+          locale,
+          currency: guard.currency,
+        }),
+      ).length > 0
+    ) {
       setShowErrors(true)
       setStatus(null)
-      setError('Деталь не створено: виправте позначені нижче поля.')
+      setError(t('createInvalid'))
       return
     }
     setShowErrors(false)
@@ -3511,19 +3616,28 @@ function PartForm({
         : {}),
       name: values.name.trim(),
       quantity: parsed.quantity,
-      unit: 'шт',
+      unit: PIECES_UNIT,
       photoKeys: [],
       ...(condition !== undefined ? { condition } : {}),
       ...(notes !== undefined ? { notes } : {}),
       ...(oemCode !== undefined ? { oemCode } : {}),
       ...(partType !== undefined ? { partType } : {}),
-      ...(parsed.price !== undefined ? { desiredSalePrice: parsed.price } : {}),
+      // No price without an accounting currency; the part itself still saves.
+      ...(parsed.price !== undefined && !price.disabled
+        ? { desiredSalePrice: parsed.price }
+        : {}),
     }
+    const pricing = price.hasPrice && !price.disabled
     pendingRef.current = true
     setPending(true)
     setStatus(null)
     setError(null)
     try {
+      if (
+        guard.needsCheck(pricing) &&
+        !(await guard.beforeSave(pricing, accepted))
+      )
+        return
       const scope = requireLatestMutation()
       if (request.sourceType === 'car')
         carMutation.requireLatestMutation({
@@ -3538,7 +3652,7 @@ function PartForm({
       if (request.sourceType === 'car') {
         const car = await carsApi.get(request.carId!, { signal: scope.signal })
         if (car.status === 'archived') {
-          setError('До архівного автомобіля не можна додавати деталі.')
+          setError(t('archivedCarBlocked'))
           return
         }
       }
@@ -3578,9 +3692,7 @@ function PartForm({
         })
         setMediaItems(readyMedia)
         if (uploads.some((result) => result.status === 'rejected')) {
-          setError(
-            'Частина фото не завантажилася. Повторіть завантаження або приберіть ці файли.',
-          )
+          setError(t('mediaPartialFailed'))
           return
         }
       }
@@ -3596,7 +3708,7 @@ function PartForm({
           ? ({ kind: 'none' } as const)
           : await resolveCompatibility(compatRows, { signal: scope.signal })
       if (resolved.kind === 'unknown') {
-        setError(unknownBrandsMessage(resolved.brands))
+        setError(unknownBrandsMessage(resolved.brands, locale))
         return
       }
       /**
@@ -3619,44 +3731,49 @@ function PartForm({
           resolved.items,
         )
       }
-      setStatus('Деталь створено.')
-    } catch {
-      setError(
-        'Не вдалося створити деталь. Перевірте зв’язок і надішліть форму ще раз.',
-      )
+      guard.afterSave(pricing)
+      setStatus(t('created'))
+      firstPart.check()
+    } catch (failure) {
+      setError(createFailureMessage(failure, locale))
     } finally {
       pendingRef.current = false
       setPending(false)
     }
   }
   // The footer says the single next thing to fix, in the order the form reads.
-  const archivedMessage =
-    'Автомобіль в архіві — нові деталі до нього не додаються. Оберіть інше авто.'
+  const archivedMessage = t('archivedSource')
   const blocking = {
-    ...partFieldErrors(values, { requireSource }),
+    ...partFieldErrors(values, {
+      requireSource,
+      locale,
+      currency: guard.currency,
+    }),
     ...(archivedSource ? { sourceId: archivedMessage } : {}),
   }
   const footerNote = mediaPending
-    ? 'Дочекайтеся, доки завантажаться всі фото.'
+    ? t('waitForPhotos')
     : (blocking.name ??
       blocking.quantity ??
       blocking.sourceId ??
       blocking.desiredSalePrice ??
-      rowsProblem(compatRows) ??
-      'Фото можна додати пізніше.')
+      rowsProblem(compatRows, locale) ??
+      t('photosLater'))
   const ready =
-    Object.keys(blocking).length === 0 && rowsProblem(compatRows) === null
+    Object.keys(blocking).length === 0 &&
+    rowsProblem(compatRows, locale) === null
 
   return (
     <Sheet
       description={
         <>
-          Обовʼязкові поля позначені <span className="text-brand">*</span>.
-          Решту можна заповнити пізніше.
+          {t('requiredFields')} <span className="text-brand">*</span>.{' '}
+          {t('restLater')}
         </>
       }
       footer={
         <div className="flex flex-wrap items-center gap-2.5">
+          <div className="basis-full empty:hidden">{price.saveNotes}</div>
           <p
             className={cn(
               'min-w-0 text-[12px] text-pretty',
@@ -3671,7 +3788,7 @@ function PartForm({
               onClick={() => void navigate(base)}
               type="button"
             >
-              Скасувати
+              {tc('cancel')}
             </Button>
             <Button
               aria-busy={pending || mediaPending}
@@ -3680,12 +3797,12 @@ function PartForm({
               type="submit"
               variant="primary"
             >
-              Створити деталь
+              {t('createPart')}
             </Button>
           </div>
         </div>
       }
-      eyebrow="Склад · Деталі"
+      eyebrow={t('sheetEyebrow')}
       onOpenChange={(next: boolean) => {
         if (!next && !pending) void navigate(base)
       }}
@@ -3706,6 +3823,7 @@ function PartForm({
           errors={
             archivedSource ? { ...errors, sourceId: archivedMessage } : errors
           }
+          price={price}
           setValues={setValues}
           sourceOptions={sourceOptions}
           values={values}
@@ -3719,12 +3837,17 @@ function PartForm({
           title={
             <span className="flex items-baseline gap-2.5">
               <span className="text-app-dim font-mono text-[11px]">06</span>
-              Фото
+              {t('photos')}
             </span>
           }
           variant="plain"
         />
         {status ? <Notice tone="ok">{status}</Notice> : null}
+        {firstPart.done && cabinet.targetTenant ? (
+          <OnboardingCompletedNotice
+            dashboardPath={cabinetPath(cabinet.targetTenant.slug, 'dashboard')}
+          />
+        ) : null}
         {error ? <Notice tone="danger">{error}</Notice> : null}
       </form>
     </Sheet>
@@ -3746,6 +3869,10 @@ function PartEdit({
     typeof useLatestMutationGuard
   >['requireLatestMutation']
 }) {
+  const t = useT(partFormMessages)
+  const tl = useT(lostResponseMessages)
+  const tc = useT(commonMessages)
+  const { locale } = useLocale()
   const [values, setValues] = useState<PartFormValues | null>(null)
   const [detail, setDetail] = useState<PartDetail | null>(null)
   const [mediaItems, setMediaItems] = useState<PartMediaItem[]>([])
@@ -3758,18 +3885,25 @@ function PartEdit({
   const [error, setError] = useState<string | null>(null)
   const [showErrors, setShowErrors] = useState(false)
   const mediaPending = mediaItems.some((item) => item.status !== 'uploaded')
+  const guard = useFirstPriceGuard()
   const errors =
     showErrors && values
-      ? partFieldErrors(values, { requireSource: false })
+      ? partFieldErrors(values, {
+          requireSource: false,
+          locale,
+          currency: guard.currency,
+        })
       : {}
+  const price = usePriceSlots(guard, {
+    values: [values?.desiredSalePrice],
+    onAccept: (accepted) => void save(undefined, accepted),
+  })
   useEffect(() => {
     const controller = new AbortController()
     void partsApi.get(partId, { signal: controller.signal }).then(
       (part) => {
         if (!part) {
-          setError(
-            'Не вдалося завантажити деталь для редагування. Оновіть сторінку або поверніться до списку.',
-          )
+          setError(translate(partFormMessages, locale, 'editLoadFailed'))
           return
         }
         setValues({
@@ -3777,7 +3911,7 @@ function PartEdit({
           sourceId: part.carId ?? part.intakeId ?? '',
           name: part.name,
           quantity: String(part.quantityTotal),
-          unit: 'шт',
+          unit: PIECES_UNIT,
           condition: part.condition,
           notes: part.notes ?? '',
           oemCode: part.oemCode ?? '',
@@ -3789,7 +3923,9 @@ function PartEdit({
         setMediaItems(
           (part.photos ?? []).map((photo, index) => ({
             id: `existing-media-${photo.id}`,
-            name: `Існуюче фото ${index + 1}`,
+            name: translate(partFormMessages, locale, 'existingPhoto', {
+              n: index + 1,
+            }),
             status: 'uploaded',
             existing: true,
             storageKey: photo.storageKey,
@@ -3800,23 +3936,33 @@ function PartEdit({
       },
       () => {
         if (!controller.signal.aborted)
-          setError(
-            'Не вдалося завантажити деталь для редагування. Оновіть сторінку або поверніться до списку.',
-          )
+          setError(translate(partFormMessages, locale, 'editLoadFailed'))
       },
     )
     return () => controller.abort()
+    // The locale only words the messages; a language switch must not refetch
+    // the part and throw away what is being edited.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partId])
-  const save = async (event: React.FormEvent) => {
-    event.preventDefault()
+  const save = async (
+    event?: React.FormEvent,
+    accepted?: SupportedCurrency | null,
+  ) => {
+    event?.preventDefault()
     if (!values || pendingRef.current || mediaPending) return
     const parsed = validFormNumbers(values)
     if (
-      Object.keys(partFieldErrors(values, { requireSource: false })).length > 0
+      Object.keys(
+        partFieldErrors(values, {
+          requireSource: false,
+          locale,
+          currency: guard.currency,
+        }),
+      ).length > 0
     ) {
       setShowErrors(true)
       setStatus(null)
-      setError('Зміни не збережено: виправте позначені нижче поля.')
+      setError(t('saveInvalid'))
       return
     }
     setShowErrors(false)
@@ -3824,7 +3970,13 @@ function PartEdit({
     setPending(true)
     setStatus(null)
     setError(null)
+    const pricing = price.hasPrice && !price.disabled
     try {
+      if (
+        guard.needsCheck(pricing) &&
+        !(await guard.beforeSave(pricing, accepted))
+      )
+        return
       const scope = requireLatestMutation({ quota: false })
       await partsApi.update(
         partId,
@@ -3834,20 +3986,37 @@ function PartEdit({
           notes: optional(values.notes) ?? null,
           quantity: parsed.quantity,
           partType: optional(values.partType) ?? null,
-          unit: 'шт',
+          unit: PIECES_UNIT,
           photoKeys: committedPhotoKeys(mediaItems),
-          desiredSalePrice: {
-            isSet: true,
-            value: parsed.price ?? null,
-          },
+          // Without an accounting currency the price is left as it is.
+          desiredSalePrice: price.disabled
+            ? { isSet: false }
+            : { isSet: true, value: parsed.price ?? null },
         },
         { signal: scope.signal },
       )
-      setStatus('Зміни збережено.')
-    } catch {
-      setError(
-        'Не вдалося зберегти зміни. Перевірте зв’язок і надішліть форму ще раз.',
-      )
+      guard.afterSave(pricing)
+      setStatus(t('saved'))
+    } catch (failure) {
+      if (!isLostResponse(failure)) {
+        setError(t('saveFailed'))
+        return
+      }
+      // The PATCH may have landed: read the part back first. Saving the same
+      // values again is safe, and the form keeps them meanwhile.
+      setStatus(tl('checking'))
+      try {
+        const fresh = await partsApi.get(partId)
+        const landed =
+          fresh.name === values.name.trim() &&
+          (price.disabled || fresh.desiredSalePrice === (parsed.price ?? null))
+        setStatus(landed ? t('saved') : null)
+        if (landed) guard.afterSave(pricing)
+        else setError(tl('notSaved'))
+      } catch {
+        setStatus(null)
+        setError(tl('checkFailed'))
+      }
     } finally {
       pendingRef.current = false
       setPending(false)
@@ -3867,7 +4036,7 @@ function PartEdit({
       setConfirmingDelete(false)
       void navigate(base, { replace: true })
     } catch {
-      setDeleteError('Не вдалося видалити деталь.')
+      setDeleteError(t('deleteFailed'))
     } finally {
       setDeleting(false)
     }
@@ -3882,19 +4051,19 @@ function PartEdit({
             to={backTo}
           >
             <ChevronLeft aria-hidden className="size-3.5" />
-            До деталі
+            {t('backToPart')}
           </Link>
           <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>Склад</span>
+            <span>{t('breadcrumbWarehouse')}</span>
             <span aria-hidden className="text-white/20">
               /
             </span>
-            <span>Запчастини</span>
+            <span>{t('breadcrumbParts')}</span>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           <Button asChild className="px-[18px] text-sm font-semibold">
-            <Link to={backTo}>Скасувати</Link>
+            <Link to={backTo}>{tc('cancel')}</Link>
           </Button>
           <Button
             aria-busy={pending || mediaPending}
@@ -3904,7 +4073,7 @@ function PartEdit({
             type="submit"
             variant="primary"
           >
-            Зберегти зміни
+            {t('saveChanges')}
           </Button>
         </div>
       </div>
@@ -3912,7 +4081,7 @@ function PartEdit({
       <div className="mx-auto grid w-full max-w-[1360px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
         <div className="min-w-0">
           <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
-            {detail?.name ?? 'Редагувати деталь'}
+            {detail?.name ?? t('editTitle')}
           </h1>
           {detail ? (
             <p className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm font-medium">
@@ -3920,7 +4089,7 @@ function PartEdit({
                 {detail.qrCode}
               </span>
               <span>
-                Створено {detail.createdByName} ·{' '}
+                {t('createdBy', { name: detail.createdByName ?? '' })}{' '}
                 <DateValue value={detail.createdAt} />
               </span>
             </p>
@@ -3941,26 +4110,26 @@ function PartEdit({
               <Card
                 aside={
                   <span className="text-app-dim text-[13px]">
-                    Не змінюється
+                    {t('notEditable')}
                   </span>
                 }
-                title="Джерело"
+                title={t('sourceStep')}
               >
                 <p className="text-app-muted text-sm">
-                  Джерело задане під час створення запчастини.
+                  {t('sourceSetOnCreate')}
                 </p>
                 <div className="border-app-line bg-app-input flex flex-wrap items-center justify-between gap-3 rounded-[14px] border px-4 py-3.5">
                   <span className="text-[16px] font-semibold text-white">
                     {detail?.carId && detail.carCode
-                      ? `З авто · ${detail.carCode}${detail.carBrand ? ` (${detail.carBrand} ${detail.carModel ?? ''})` : ''}`
+                      ? `${t('fromCar', { code: detail.carCode })}${detail.carBrand ? ` (${detail.carBrand} ${detail.carModel ?? ''})` : ''}`
                       : detail?.intakeId
-                        ? 'З приймання'
-                        : sourceLabel(values.sourceType)}
+                        ? t('fromIntake')
+                        : sourceLabel(values.sourceType, locale)}
                   </span>
                   {detail?.carId && canViewCars ? (
                     <Button asChild>
                       <Link to={`/app/${tenantSlug}/cars/${detail.carId}`}>
-                        Відкрити авто
+                        {t('openCar')}
                         <ExternalLink aria-hidden />
                       </Link>
                     </Button>
@@ -3969,7 +4138,7 @@ function PartEdit({
                       <Link
                         to={`/app/${tenantSlug}/intakes/${detail.intakeId}`}
                       >
-                        Відкрити приймання
+                        {t('openIntake')}
                         <ExternalLink aria-hidden />
                       </Link>
                     </Button>
@@ -3977,12 +4146,12 @@ function PartEdit({
                 </div>
               </Card>
 
-              <Card title="Опис деталі">
+              <Card title={t('describeStep')}>
                 <div className="grid gap-4">
                   <p className="text-app-muted text-sm">
-                    Як запчастина виглядає у списку складу та в пошуку.
+                    {t('describeEditDescription')}
                   </p>
-                  <Field error={errors.name} label="Назва" required>
+                  <Field error={errors.name} label={t('name')} required>
                     <TextInput
                       name="name"
                       onChange={(event) =>
@@ -3997,7 +4166,7 @@ function PartEdit({
                     />
                   </Field>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="Тип деталі">
+                    <Field label={t('partType')}>
                       <TextInput
                         name="partType"
                         onChange={(event) =>
@@ -4010,10 +4179,7 @@ function PartEdit({
                         value={values.partType}
                       />
                     </Field>
-                    <Field
-                      hint="Редагування OEM поки не приймає сервер"
-                      label="OEM-код"
-                    >
+                    <Field hint={t('oemServerHint')} label={t('oem')}>
                       <TextInput
                         className="font-mono"
                         disabled
@@ -4022,7 +4188,7 @@ function PartEdit({
                       />
                     </Field>
                   </div>
-                  <Field label="Нотатки">
+                  <Field label={t('notes')}>
                     <TextArea
                       className="resize-none"
                       name="notes"
@@ -4040,33 +4206,33 @@ function PartEdit({
                 </div>
               </Card>
 
-              <Card title="Стан деталі">
+              <Card title={t('conditionStep')}>
                 <div className="grid gap-4">
                   <p className="text-app-muted text-sm">
-                    Оберіть один із трьох сталих станів деталі.
+                    {t('conditionDescription')}
                   </p>
                   <PillGroup
                     className="flex-wrap"
-                    label="Стан деталі"
+                    label={t('conditionStep')}
                     onChange={(next) =>
                       setValues((current) =>
                         current ? { ...current, condition: next } : current,
                       )
                     }
-                    options={PART_CONDITIONS}
+                    options={partConditions(locale)}
                     value={values.condition}
                   />
                 </div>
               </Card>
 
-              <Card title="Кількість і ціна">
+              <Card title={t('quantityStep')}>
                 <p className="text-app-muted text-sm">
-                  Скільки одиниць на складі та за скільки їх продавати.
+                  {t('quantityDescription')}
                 </p>
                 <div className="grid items-start gap-4 sm:grid-cols-3">
-                  <Field error={errors.quantity} label="Кількість" required>
+                  <Field error={errors.quantity} label={t('quantity')} required>
                     <QuantityStepper
-                      label="Кількість на складі"
+                      label={t('quantityInStock')}
                       min={0}
                       onChange={(next) =>
                         setValues((current) =>
@@ -4078,15 +4244,21 @@ function PartEdit({
                       value={Number(values.quantity) || 0}
                     />
                   </Field>
-                  <Field hint="Фіксована одиниця обліку" label="Одиниця">
-                    <TextInput name="unit" readOnly value="шт" />
+                  <Field hint={t('unitHint')} label={t('unit')}>
+                    <TextInput
+                      name="unit"
+                      readOnly
+                      value={unitLabel(values.unit, locale)}
+                    />
                   </Field>
                   <Field
                     error={errors.desiredSalePrice}
-                    hint="У доларах"
-                    label="Бажана ціна"
+                    hint={price.hint}
+                    label={t('desiredPrice')}
                   >
-                    <TextInput
+                    <MoneyInput
+                      currency={price.currency}
+                      disabled={price.disabled}
                       inputMode="decimal"
                       name="desiredSalePrice"
                       onChange={(event) =>
@@ -4103,26 +4275,25 @@ function PartEdit({
                     />
                   </Field>
                 </div>
+                {price.note}
+                {price.saveNotes}
               </Card>
 
               <Card
                 aside={
                   <span className="text-app-dim text-[13px]">
-                    Лише для читання
+                    {t('readOnly')}
                   </span>
                 }
-                title="Сумісність"
+                title={t('compatStep')}
               >
-                <p className="text-app-muted text-sm">
-                  Сумісність задана під час створення і доступна лише для
-                  читання.
-                </p>
+                <p className="text-app-muted text-sm">{t('compatReadOnly')}</p>
                 <SpecGrid
                   specs={[
-                    { label: 'Марка', value: detail?.compatCarBrand ?? '—' },
-                    { label: 'Модель', value: detail?.compatCarModel ?? '—' },
+                    { label: t('make'), value: detail?.compatCarBrand ?? '—' },
+                    { label: t('model'), value: detail?.compatCarModel ?? '—' },
                     {
-                      label: 'Рік',
+                      label: t('year'),
                       value:
                         detail?.compatCarYear === null ||
                         detail?.compatCarYear === undefined
@@ -4133,39 +4304,38 @@ function PartEdit({
                 />
               </Card>
 
-              <Card title="Фото">
-                <p className="text-app-muted text-sm">
-                  Нові фото завантажуються одразу після вибору. Зберегти можна,
-                  коли всі файли завантажені.
-                </p>
+              <Card title={t('photos')}>
+                <p className="text-app-muted text-sm">{t('photosUploadNow')}</p>
                 <PartMediaFields
                   items={mediaItems}
                   requireLatestMutation={requireLatestMutation}
                   setItems={setMediaItems}
                 />
                 <p className="text-app-dim text-[13px]">
-                  Покупці бачать фото у картці деталі.
+                  {t('buyersSeePhotos')}
                 </p>
               </Card>
             </div>
 
             <aside className="sticky top-24 grid min-w-[280px] flex-[0_0_320px] gap-5">
-              <Card title="Зведення">
+              <Card title={t('summary')}>
                 <dl className="grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
                   <dt className="text-app-muted text-sm font-semibold">
-                    Доступно
+                    {t('available')}
                   </dt>
                   <dd className="font-mono text-[16px] text-white tabular-nums">
-                    {detail?.quantityAvailable ?? 0} {values.unit || 'шт'}
+                    {detail?.quantityAvailable ?? 0}{' '}
+                    {unitLabel(values.unit, locale)}
                   </dd>
                   <dt className="text-app-muted text-sm font-semibold">
-                    У резерві
+                    {t('reserved')}
                   </dt>
                   <dd className="font-mono text-[16px] text-white tabular-nums">
-                    {detail?.quantityReserved ?? 0} {values.unit || 'шт'}
+                    {detail?.quantityReserved ?? 0}{' '}
+                    {unitLabel(values.unit, locale)}
                   </dd>
                   <dt className="text-app-muted text-sm font-semibold">
-                    QR-код
+                    {t('qrCode')}
                   </dt>
                   <dd className="font-mono text-[14px] break-all text-white">
                     {detail?.qrCode ?? '—'}
@@ -4174,16 +4344,16 @@ function PartEdit({
                 <Button asChild className="mt-4 w-full text-sm font-semibold">
                   <Link to={`/app/${tenantSlug}/stickers?part=${partId}`}>
                     <Printer aria-hidden />
-                    Надрукувати стікер
+                    {t('printSticker')}
                   </Link>
                 </Button>
               </Card>
 
-              <Card title="Видалення">
+              <Card title={t('deletion')}>
                 <p className="text-app-muted text-sm">
                   {detail && detail.quantityReserved > 0
-                    ? 'Деталь у резерві під замовлення — сервер відхилить видалення.'
-                    : 'Деталь не входить у відкриті замовлення — її можна видалити.'}
+                    ? t('deleteBlocked')
+                    : t('deleteAllowed')}
                 </p>
                 <Button
                   className="w-full text-sm font-semibold"
@@ -4192,26 +4362,30 @@ function PartEdit({
                   variant="danger"
                 >
                   <Trash2 aria-hidden />
-                  Видалити запчастину
+                  {t('deletePart')}
                 </Button>
               </Card>
             </aside>
           </form>
         ) : !error ? (
-          <SkeletonRows columns={2} label="Завантажуємо деталь…" rows={4} />
+          <SkeletonRows
+            columns={2}
+            label={translate(partDetailMessages, locale, 'loading')}
+            rows={4}
+          />
         ) : null}
       </div>
 
       <ConfirmDialog
-        confirmLabel="Видалити"
-        consequence="Історія продажів, резерви та фото цієї деталі зникнуть назавжди."
+        confirmLabel={tc('delete')}
+        consequence={t('deleteConsequence')}
         destructive
         error={deleteError}
         onConfirm={() => void remove()}
         onOpenChange={setConfirmingDelete}
         open={confirmingDelete}
         pending={deleting}
-        title="Видалити деталь?"
+        title={t('deleteTitle')}
       />
     </div>
   )

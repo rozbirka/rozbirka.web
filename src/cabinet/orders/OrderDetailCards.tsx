@@ -2,10 +2,13 @@ import { useEffect, useId, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { CreditCard, Plus } from 'lucide-react'
 import { Button, TextArea, Thumbnail } from '@/components/app'
-import { cn, plural } from '@/lib/utils'
+import { commonMessages, useLocale, useT } from '@/i18n'
+import { cn } from '@/lib/utils'
 import { customersApi, type CustomerDetail } from '@/api/customers'
 import type { OrderDetail, OrderDetailItem } from '@/api/orders'
 import { money, type OrderMoney } from './order-money'
+import { orderCardMessages } from './order-cards-messages'
+import { paymentMessages } from './payment-messages'
 import type { OrderStep } from './order-steps'
 
 /**
@@ -100,9 +103,10 @@ export function OrderCard({
  * a refund — never a greyed-out stage the server cannot reach.
  */
 export function OrderSteps({ steps }: { steps: readonly OrderStep[] }) {
+  const t = useT(orderCardMessages)
   return (
     <ol
-      aria-label="Стан замовлення"
+      aria-label={t('stepsLabel')}
       className="grid gap-1.5"
       style={{
         gridTemplateColumns: `repeat(${String(steps.length)}, minmax(0, 1fr))`,
@@ -146,7 +150,7 @@ export function OrderSteps({ steps }: { steps: readonly OrderStep[] }) {
  */
 export function OrderItemsCard({
   addPath,
-  currency = 'USD',
+  currency,
   editable,
   items,
   note,
@@ -156,8 +160,8 @@ export function OrderItemsCard({
 }: {
   /** Where a new line is added, when this order may still be changed. */
   addPath: string | null
-  /** What the line prices are kept in. Core prices an order's items in USD. */
-  currency?: string
+  /** The accounting currency line prices are kept in; `null` if unknown. */
+  currency: string | null
   editable: boolean
   items: readonly OrderDetailItem[]
   /** One line under the total, when the total needs explaining. */
@@ -167,38 +171,39 @@ export function OrderItemsCard({
   partsPath: string | null
   total: number | null
 }) {
+  const t = useT(orderCardMessages)
   return (
     <OrderCard
       aside={
         !editable || addPath === null ? null : (
           <div className="flex flex-wrap items-center gap-2.5">
-            <SmallButton label="Редагувати позиції" onClick={onEdit}>
-              Редагувати
+            <SmallButton label={t('editItems')} onClick={onEdit}>
+              {t('edit')}
             </SmallButton>
             <Link
               className="border-app-line-2 text-app-ink relative inline-flex h-[34px] items-center gap-1.5 rounded-[9px] border px-3.5 text-[13px] font-semibold whitespace-nowrap transition-colors hover:bg-white/[0.06] after:absolute after:-inset-1.5 after:content-['']"
               to={addPath}
             >
               <Plus aria-hidden className="text-brand size-4" />
-              Додати позицію
+              {t('addItem')}
             </Link>
           </div>
         )
       }
-      count={`${String(items.length)} ${plural(items.length, ['позиція', 'позиції', 'позицій'])}`}
-      title="Позиції"
+      count={t('itemCount', { count: items.length })}
+      title={t('items')}
     >
       {items.length === 0 ? (
         <p className="border-app-line text-app-muted border-t px-6 py-5 text-[14px]">
-          У цьому замовленні немає жодної запчастини.
+          {t('noItems')}
         </p>
       ) : (
         <>
           <div className="border-app-line text-app-muted grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-y px-6 py-2.5 font-mono text-[10px] tracking-[0.14em] uppercase">
-            <span>Деталь</span>
-            <span className="text-right">Сума</span>
+            <span>{t('columnPart')}</span>
+            <span className="text-right">{t('columnTotal')}</span>
           </div>
-          <ul aria-label="Позиції замовлення">
+          <ul aria-label={t('orderItems')}>
             {items.map((item) => (
               <li
                 className="border-app-line grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b px-6 py-3.5 transition-colors last:border-b-0 hover:bg-white/[0.02]"
@@ -219,7 +224,7 @@ export function OrderItemsCard({
           <div className="flex flex-col items-end gap-2 px-6 pt-4 pb-[18px]">
             <span className="flex items-baseline gap-5">
               <span className="text-app-muted text-[14px] font-semibold">
-                Разом
+                {t('total')}
               </span>
               <span className="min-w-[104px] text-right text-[22px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
                 {money(total, currency)}
@@ -244,6 +249,7 @@ function OrderItemLine({
   item: OrderDetailItem
   partsPath: string | null
 }) {
+  const t = useT(orderCardMessages)
   const origin = [
     [item.carBrand, item.carModel].filter(Boolean).join(' '),
     item.carCode,
@@ -263,7 +269,7 @@ function OrderItemLine({
           aria-hidden
           className="border-app-line bg-app-input text-app-dim grid size-12 shrink-0 place-items-center rounded-[10px] border font-mono text-[9px]"
         >
-          фото
+          {t('photo')}
         </span>
       ) : (
         <Thumbnail
@@ -304,6 +310,7 @@ export function OrderPaymentsCard({
   paidLine: string | null
   payments: OrderDetail['payments']
 }) {
+  const t = useT(orderCardMessages)
   return (
     <OrderCard
       aside={
@@ -314,14 +321,14 @@ export function OrderPaymentsCard({
         )
       }
       count={String(payments.length)}
-      title="Платежі"
+      title={t('payments')}
     >
       {payments.length === 0 ? (
         <p className="border-app-line text-app-muted border-t px-6 pt-4 pb-[18px] text-[14px] text-pretty">
-          Платежів ще немає.
+          {t('noPayments')}
         </p>
       ) : (
-        <ul aria-label="Платежі замовлення">
+        <ul aria-label={t('orderPayments')}>
           {payments.map((payment) => (
             <li
               className="border-app-line flex items-center gap-3.5 border-t px-6 py-3.5"
@@ -332,7 +339,7 @@ export function OrderPaymentsCard({
               </span>
               <span className="min-w-0">
                 <span className="block text-[15px] font-semibold text-white">
-                  Платіж
+                  {t('payment')}
                 </span>
                 <span className="text-app-muted mt-0.5 block truncate text-[13px]">
                   {payment.accountName} · {payment.currency}
@@ -361,6 +368,8 @@ export function OrderNotesCard({
   notes: string | null
   onSave: (value: string) => void
 }) {
+  const t = useT(orderCardMessages)
+  const tc = useT(commonMessages)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(notes ?? '')
   const hasNote = notes !== null && notes !== ''
@@ -370,37 +379,37 @@ export function OrderNotesCard({
       aside={
         editable && !editing ? (
           <SmallButton
-            label={hasNote ? 'Редагувати нотатки' : 'Додати нотатки'}
+            label={hasNote ? t('editNotes') : t('addNotes')}
             onClick={() => {
               setDraft(notes ?? '')
               setEditing(true)
             }}
           >
-            {hasNote ? 'Редагувати' : 'Додати'}
+            {hasNote ? t('edit') : t('add')}
           </SmallButton>
         ) : null
       }
       padded
-      title="Нотатки"
+      title={t('notes')}
     >
       {editing ? (
         <>
           <TextArea
-            aria-label="Нотатки замовлення"
+            aria-label={t('orderNotes')}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="Домовленості з клієнтом, спосіб отримання, що перевірити перед видачею"
+            placeholder={t('notesPlaceholder')}
             rows={3}
             value={draft}
           />
           <div className="mt-2.5 flex flex-wrap justify-end gap-2">
             <Button
-              aria-label="Скасувати редагування нотаток"
+              aria-label={t('cancelNotes')}
               onClick={() => setEditing(false)}
             >
-              Скасувати
+              {tc('cancel')}
             </Button>
             <Button
-              aria-label="Зберегти нотатки"
+              aria-label={t('saveNotes')}
               disabled={busy}
               onClick={() => {
                 onSave(draft)
@@ -408,7 +417,7 @@ export function OrderNotesCard({
               }}
               variant="primary"
             >
-              Зберегти
+              {tc('save')}
             </Button>
           </div>
         </>
@@ -417,7 +426,7 @@ export function OrderNotesCard({
           {notes}
         </p>
       ) : (
-        <p className="text-app-dim text-[14px]">Нотаток немає</p>
+        <p className="text-app-dim text-[14px]">{t('noNotes')}</p>
       )}
     </OrderCard>
   )
@@ -430,61 +439,80 @@ const DUE_TONE: Record<OrderMoney['tone'], string> = {
   dim: 'text-app-dim',
 }
 
-/** What is still owed, and the one or two moves that can be made about it. */
+const STATUS_KEY = {
+  pending: 'statusPending',
+  confirmed: 'statusConfirmed',
+  refunded: 'statusRefunded',
+  cancelled: 'statusCancelled',
+  other: null,
+} as const
+
+/**
+ * What the order is worth and what was actually paid (ROZ-162 board 3b): the
+ * value in the accounting currency and each currency's payments, side by
+ * side. No remaining sum, no debt or overpayment, no progress bar — the two
+ * are not comparable without a rate, and full payment is the operator's
+ * acknowledgement when confirming.
+ */
 export function OrderDueCard({
+  accountingCurrency,
   actions,
   hint,
   summary,
+  tills,
 }: {
+  accountingCurrency: string | null
   actions: ReactNode
   hint: string | null
   summary: OrderMoney
+  /** The tills the payments went to, in the order recorded. */
+  tills: readonly string[]
 }) {
-  const headline = summary.remaining ?? summary.totalUsd
+  const t = useT(paymentMessages)
+  const { locale } = useLocale()
+  const statusKey = STATUS_KEY[summary.status]
 
   return (
     <section
-      aria-label="До сплати"
+      aria-label={t('orderValue')}
       className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
     >
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-          До сплати
+          {t('orderValue')}
         </h2>
-        <p className={cn('text-[13px] font-bold', DUE_TONE[summary.tone])}>
-          {summary.label}
-        </p>
+        {statusKey === null ? null : (
+          <p className={cn('text-[13px] font-bold', DUE_TONE[summary.tone])}>
+            {t(statusKey)}
+          </p>
+        )}
       </div>
-      <p className="mt-3 text-[38px] leading-none font-extrabold tracking-[-0.03em] text-white tabular-nums">
-        {money(headline, 'USD')}
+      <p className="mt-3 text-[34px] leading-none font-extrabold tracking-[-0.03em] text-white tabular-nums">
+        {money(summary.value, accountingCurrency, locale)}
       </p>
-      <span aria-hidden className="mt-4.5 flex gap-0.5">
-        <span
-          className="bg-state-ok h-[5px] rounded-l-full"
-          style={{ flex: summary.paidPercent }}
-        />
-        <span
-          className="h-[5px] rounded-r-full bg-white/[0.08]"
-          style={{ flex: 100 - summary.paidPercent }}
-        />
-      </span>
-      <dl className="mt-4 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
-        <dt className="text-app-muted text-[14px]">Сума замовлення</dt>
-        <dd className="font-mono text-[14px] text-white tabular-nums">
-          {money(summary.totalUsd, 'USD')}
-        </dd>
-        <dt className="text-app-muted text-[14px]">Сплачено</dt>
-        <dd
-          className={cn(
-            'font-mono text-[14px] tabular-nums',
-            summary.paid !== null && summary.paid > 0
-              ? 'text-state-ok'
-              : 'text-app-muted',
+      <p className="text-app-dim mt-1.5 text-[12px]">
+        {accountingCurrency === null ? t('valueUnknown') : t('inAccounting')}
+      </p>
+      <dl className="border-app-line mt-4 grid gap-1.5 border-t pt-4">
+        <dt className="text-app-muted text-[14px]">{t('actualPayments')}</dt>
+        <dd className="grid gap-1">
+          {summary.paid.length === 0 ? (
+            <span className="text-app-dim text-[14px]">{t('noPayments')}</span>
+          ) : (
+            summary.paid.map((sum) => (
+              <span
+                className="font-mono text-[16px] font-semibold text-white tabular-nums"
+                key={sum.currency}
+              >
+                {money(sum.amount, sum.currency, locale)}
+              </span>
+            ))
           )}
-        >
-          {summary.paid === null
-            ? '—'
-            : money(summary.paid, summary.paidCurrency ?? 'USD')}
+          {tills.length === 0 ? null : (
+            <span className="text-app-muted text-[12.5px]">
+              {`${t('till')} ${tills.join(', ')}`}
+            </span>
+          )}
         </dd>
       </dl>
       <div className="mt-5 grid gap-2">{actions}</div>
@@ -503,12 +531,15 @@ export function OrderDueCard({
  * stays a name until they arrive.
  */
 export function OrderCustomerCard({
+  accountingCurrency,
   customerId,
   customerName,
   initials,
   onChange,
   to,
 }: {
+  /** What the customer's spending is counted in; `null` if unknown. */
+  accountingCurrency: string | null
   customerId: string | null
   customerName: string | null
   initials: string
@@ -516,6 +547,7 @@ export function OrderCustomerCard({
   onChange?: (() => void) | undefined
   to: string
 }) {
+  const t = useT(orderCardMessages)
   const [loadedCustomer, setLoadedCustomer] = useState<{
     id: string
     detail: CustomerDetail
@@ -541,13 +573,13 @@ export function OrderCustomerCard({
 
   return (
     <section
-      aria-label="Клієнт"
+      aria-label={t('customer')}
       className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
     >
       <div className="flex items-center gap-3 px-[22px] py-[18px]">
         {customerId === null ? (
           <p className="text-app-muted min-w-0 flex-1 text-[15px]">
-            Клієнта не вказано
+            {t('noCustomer')}
           </p>
         ) : (
           <Link
@@ -559,35 +591,37 @@ export function OrderCustomerCard({
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[17px] font-bold tracking-[-0.015em] text-white">
-                {customer?.name ?? customerName ?? 'Без імені'}
+                {customer?.name ?? customerName ?? t('noName')}
               </span>
               <span className="text-app-muted mt-[3px] block font-mono text-[12px]">
-                {customer?.phone ?? 'картка клієнта'}
+                {customer?.phone ?? t('customerCard')}
               </span>
             </span>
           </Link>
         )}
         {onChange === undefined ? null : (
           <SmallButton
-            label={customerId === null ? 'Додати клієнта' : 'Змінити клієнта'}
+            label={customerId === null ? t('addCustomer') : t('changeCustomer')}
             onClick={onChange}
           >
-            {customerId === null ? 'Додати' : 'Змінити'}
+            {customerId === null ? t('add') : t('change')}
           </SmallButton>
         )}
       </div>
       {customer === null ? null : (
         <dl className="border-app-line grid grid-cols-2 border-t">
           <div className="border-app-line border-r px-[22px] py-3">
-            <dt className="text-app-muted text-[12px]">Замовлень</dt>
+            <dt className="text-app-muted text-[12px]">
+              {t('customerOrders')}
+            </dt>
             <dd className="mt-[3px] font-mono text-[14px] text-white tabular-nums">
               {customer.ordersCount ?? '—'}
             </dd>
           </div>
           <div className="px-[22px] py-3">
-            <dt className="text-app-muted text-[12px]">Витратив</dt>
+            <dt className="text-app-muted text-[12px]">{t('customerSpent')}</dt>
             <dd className="mt-[3px] font-mono text-[14px] text-white tabular-nums">
-              {money(customer.totalAmount, 'USD')}
+              {money(customer.totalAmount, accountingCurrency)}
             </dd>
           </div>
         </dl>
@@ -606,10 +640,11 @@ export function OrderHistoryCard({
   when,
 }: {
   rows: readonly OrderDetail['history'][number][]
-  /** The event name in Ukrainian; unknown codes fall through as themselves. */
+  /** The event name in words; unknown codes fall through as themselves. */
   title?: (eventType: string) => string
   when: (timestamp: string) => string
 }) {
+  const t = useT(orderCardMessages)
   const [expanded, setExpanded] = useState(false)
   const ordered = [...rows].sort((left, right) =>
     right.createdAt.localeCompare(left.createdAt),
@@ -617,14 +652,12 @@ export function OrderHistoryCard({
   const visible = expanded ? ordered : ordered.slice(0, 3)
 
   return (
-    <OrderCard padded title="Історія">
+    <OrderCard padded title={t('history')}>
       {ordered.length === 0 ? (
-        <p className="text-app-muted text-[14px]">
-          Дії із замовленням зʼявляться тут одразу після збереження.
-        </p>
+        <p className="text-app-muted text-[14px]">{t('historyEmpty')}</p>
       ) : (
         <>
-          <ol aria-label="Історія замовлення" className="grid">
+          <ol aria-label={t('historyLabel')} className="grid">
             {visible.map((entry, index) => (
               <li
                 className="flex gap-3.5"
@@ -657,8 +690,8 @@ export function OrderHistoryCard({
               type="button"
             >
               {expanded
-                ? 'Згорнути історію'
-                : `Показати всю історію · ${String(ordered.length)}`}
+                ? t('historyCollapse')
+                : t('historyExpand', { count: ordered.length })}
             </button>
           ) : null}
         </>

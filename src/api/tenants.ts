@@ -2,6 +2,7 @@ import { apiClient } from './client'
 import type { RequestOptions } from './contracts'
 import { normalizeApiProblem } from './errors'
 import { tenantPreference } from './tenant-preference'
+import { normalizeTenant } from './tenant-settings'
 import type { CreateTenantRequest, CreateTenantResponse, Tenant } from './types'
 
 const requestConfig = (options: RequestOptions) =>
@@ -13,7 +14,7 @@ export const tenantsApi = {
       '/tenants',
       requestConfig(options),
     )
-    return resp.data
+    return resp.data.map(normalizeTenant)
   },
 
   async create(

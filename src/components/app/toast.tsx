@@ -14,6 +14,8 @@ import {
   type ToastRequest,
   type ToastTone,
 } from './toast-context'
+import { useT } from '@/i18n/hooks'
+import { appMessages } from './app-messages'
 
 interface ActiveToast extends ToastRequest {
   id: number
@@ -36,6 +38,7 @@ const DEFAULT_DURATION = 6000
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ActiveToast[]>([])
   const nextId = useRef(0)
+  const t = useT(appMessages)
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>())
 
   const dismiss = useCallback((id: number) => {
@@ -103,7 +106,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 </button>
               )}
               <button
-                aria-label="Закрити сповіщення"
+                aria-label={t('closeNotification')}
                 className="text-app-dim hover:text-app-ink grid size-6 shrink-0 place-items-center"
                 onClick={() => dismiss(toast.id)}
                 type="button"

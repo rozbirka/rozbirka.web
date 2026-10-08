@@ -1,6 +1,7 @@
 import { Navigate, type RouteObject } from 'react-router'
 import type { ComponentType } from 'react'
 import App from '@/App'
+import { LocaleOverride } from '@/i18n/LocaleProvider'
 import { RedirectIfAuth, RequireAuth } from '@/auth/guards'
 import type { CabinetModuleScreenProps } from '@/cabinet/ModuleBoundary'
 import {
@@ -285,7 +286,34 @@ export function createAppRoutes(
   includePrototypeRoutes: boolean,
 ): RouteObject[] {
   const routes: RouteObject[] = [
-    { path: '/', element: <App /> },
+    // Each landing URL has one fixed language (`/` uk, `/en`, `/pl`): pin it
+    // so hydration matches the prerendered HTML and <html lang> stays
+    // truthful. The privacy policy (not prerendered) pins its own page
+    // language: Ukrainian source, translations on request.
+    {
+      path: '/',
+      element: (
+        <LocaleOverride locale="uk">
+          <App />
+        </LocaleOverride>
+      ),
+    },
+    {
+      path: '/en',
+      element: (
+        <LocaleOverride locale="en-GB">
+          <App />
+        </LocaleOverride>
+      ),
+    },
+    {
+      path: '/pl',
+      element: (
+        <LocaleOverride locale="pl">
+          <App />
+        </LocaleOverride>
+      ),
+    },
     {
       path: '/privacy',
       hydrateFallbackElement,

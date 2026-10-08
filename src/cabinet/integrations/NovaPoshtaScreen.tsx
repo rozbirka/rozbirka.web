@@ -22,8 +22,11 @@ import {
   type IntegrationDiagnostics,
 } from '@/api/integrations'
 import { normalizeApiProblem } from '@/api/errors'
+import { useTenantSettings } from '@/auth/useTenantSettings'
+import { commonMessages, useLocale, useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import { cabinetPath } from '../cabinet-paths'
+import { moduleLabel, navigationGroupLabel } from '../module-messages'
 import { cabinetModules } from '../module-registry'
 import { RedesignShell } from '../redesign-shell'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
@@ -36,21 +39,15 @@ import {
   diagnosticCheckLabel,
   integrationErrorMessage,
   integrationMark,
+  integrationProblemMessage,
   integrationStatusPresentation,
+  isCountryUnavailableProblem,
+  isNovaPoshtaAvailable,
 } from './integration-labels'
+import { integrationsMessages } from './integrations-messages'
+import { NovaPoshtaUnavailable } from './nova-poshta-unavailable'
 
-const NO_RENAME =
-  'Перейменувати підключення не можна — назву задає каталог сервісів.'
-
-const NO_SHIPMENT_TOTALS =
-  'Скільки доставок за місяць і скільки їх у дорозі — сервіс не рахує: відправлення читаються по одному замовленню.'
-
-const FACTS = [
-  'Оформлення доставки Україною між відділеннями просто з картки замовлення.',
-  'Розрахунок орієнтовної вартості доставки за даними Нової пошти.',
-  'Створення ТТН і збереження номера в замовленні.',
-  'Оновлення статусу відправлення. Статус оплати замовлення змінюється окремо, вручну.',
-]
+const FACTS = ['fact1', 'fact2', 'fact3', 'fact4'] as const
 
 type Tab = 'overview' | 'points' | 'statuses' | 'settings'
 
@@ -64,7 +61,8 @@ const TAB_SUFFIX: Record<Tab, string> = {
 type LoadState =
   | { kind: 'loading' }
   | { kind: 'ready'; integration: Integration }
-  | { kind: 'error' }
+  /** `unavailable`: Core refused NP for this business's country. */
+  | { kind: 'error'; unavailable: boolean }
 
 function Card({
   title,
@@ -142,6 +140,12 @@ export function NovaPoshtaScreen() {
   const params = useParams()
   const location = useLocation()
   const integrationId = params['integrationId'] ?? ''
+  const { locale } = useLocale()
+  const t = useT(integrationsMessages)
+  const tc = useT(commonMessages)
+  const { countryCode } = useTenantSettings()
+  // Outside Ukraine nothing is read: Core would refuse every request anyway.
+  const countryBlocked = !isNovaPoshtaAvailable(countryCode)
   const tenant = cabinet.targetTenant
   const generation = cabinet.snapshot?.generation
   const scopeKey = `${generation ?? ''}:${tenant?.id ?? ''}:${integrationId}`
@@ -175,7 +179,7 @@ export function NovaPoshtaScreen() {
   }, [])
 
   useEffect(() => {
-    if (integrationId === '') return
+    if (integrationId === '' || countryBlocked) return
     const controller = new AbortController()
     void integrationsApi
       .getById(integrationId, { signal: controller.signal })
@@ -184,18 +188,26 @@ export function NovaPoshtaScreen() {
           if (!controller.signal.aborted)
             setLoaded({ key: scopeKey, state: { kind: 'ready', integration } })
         },
-        () => {
+        (problem: unknown) => {
           if (!controller.signal.aborted)
-            setLoaded({ key: scopeKey, state: { kind: 'error' } })
+            setLoaded({
+              key: scopeKey,
+              state: {
+                kind: 'error',
+                unavailable: isCountryUnavailableProblem(
+                  normalizeApiProblem(problem),
+                ),
+              },
+            })
         },
       )
     return () => controller.abort()
-  }, [integrationId, scopeKey])
+  }, [countryBlocked, integrationId, scopeKey])
 
   // Tab counters, read once for the header: a badge must not wait for its own
   // tab to be opened. Each panel reports its number back after a change.
   useEffect(() => {
-    if (integrationId === '') return
+    if (integrationId === '' || countryBlocked) return
     const controller = new AbortController()
     void integrationsApi
       .dispatchPoints(integrationId, { signal: controller.signal })
@@ -214,15 +226,13 @@ export function NovaPoshtaScreen() {
         () => undefined,
       )
     return () => controller.abort()
-  }, [integrationId, scopeKey])
+  }, [countryBlocked, integrationId, scopeKey])
 
   if (tenant === null) {
-    return (
-      <p className="text-app-muted text-sm">
-        Оберіть розбірку, щоб відкрити інтеграцію.
-      </p>
-    )
+    return <p className="text-app-muted text-sm">{t('pickBusinessOne')}</p>
   }
+
+  const settingsLabel = navigationGroupLabel('settings', locale) ?? ''
 
   const listPath = cabinetPath(tenant.slug, 'integrations')
   const tabPath = (target: Tab) =>
@@ -241,16 +251,36 @@ export function NovaPoshtaScreen() {
         ? 'settings'
         : 'overview'
 
+  const backToList = (
+    <Button asChild>
+      <Link to={listPath}>
+        <ArrowLeft aria-hidden />
+        {moduleLabel('integrations', locale)}
+      </Link>
+    </Button>
+  )
+
+  if (countryBlocked || (state.kind === 'error' && state.unavailable)) {
+    return (
+      <RedesignShell
+        actions={backToList}
+        crumb={`${settingsLabel} · ${t('crumbIntegration')}`}
+      >
+        <NovaPoshtaUnavailable />
+      </RedesignShell>
+    )
+  }
+
   if (state.kind !== 'ready') {
     return (
-      <RedesignShell crumb="Налаштування · Інтеграція">
+      <RedesignShell crumb={`${settingsLabel} · ${t('crumbIntegration')}`}>
         {state.kind === 'loading' ? (
-          <p className="text-app-muted text-sm">Завантажуємо…</p>
+          <p className="text-app-muted text-sm">{t('loading')}</p>
         ) : (
           <Notice tone="danger">
-            Не вдалося відкрити інтеграцію.{' '}
+            {t('openError')}{' '}
             <Link className="underline underline-offset-4" to={listPath}>
-              Повернутися до списку
+              {t('backToList')}
             </Link>
           </Notice>
         )}
@@ -259,7 +289,7 @@ export function NovaPoshtaScreen() {
   }
 
   const integration = state.integration
-  const status = integrationStatusPresentation(integration.status)
+  const status = integrationStatusPresentation(integration.status, locale)
   const active = integration.status === 'active'
   const configured = integration.configured
   const failing = integration.status === 'error'
@@ -278,7 +308,7 @@ export function NovaPoshtaScreen() {
     try {
       requireLatestMutation()
     } catch {
-      setError('Дія недоступна: немає прав на налаштування команди.')
+      setError(t('noAccess'))
       return false
     }
     setBusy(kind)
@@ -292,7 +322,10 @@ export function NovaPoshtaScreen() {
       toast?.show({ tone: 'ok', message: successMessage })
       return true
     } catch (problem) {
-      if (mountedRef.current) setError(normalizeApiProblem(problem).message)
+      if (mountedRef.current)
+        setError(
+          integrationProblemMessage(normalizeApiProblem(problem), locale),
+        )
       return false
     } finally {
       if (mountedRef.current) setBusy(null)
@@ -303,7 +336,7 @@ export function NovaPoshtaScreen() {
     const verified = await run(
       'verify',
       () => integrationsApi.verify(integration.id),
-      'Підключення перевірено.',
+      t('verified'),
     )
     if (!verified || !mountedRef.current) return
     try {
@@ -322,7 +355,7 @@ export function NovaPoshtaScreen() {
     await run(
       'save',
       () => integrationsApi.saveNovaPoshtaKey(integration.id, value),
-      'Ключ збережено й перевірено.',
+      t('keySaved'),
     )
   }
 
@@ -333,7 +366,7 @@ export function NovaPoshtaScreen() {
         active
           ? integrationsApi.deactivate(integration.id)
           : integrationsApi.activate(integration.id),
-      active ? 'Інтеграцію вимкнено.' : 'Інтеграцію увімкнено.',
+      active ? t('turnedOff') : t('turnedOn'),
     )
 
   const tabs: {
@@ -342,40 +375,33 @@ export function NovaPoshtaScreen() {
     badge?: string
     danger?: boolean
   }[] = [
-    { id: 'overview', label: 'Огляд' },
+    { id: 'overview', label: t('tabOverview') },
     {
       id: 'points',
-      label: 'Точки відправлення',
+      label: t('tabPoints'),
       ...(points === null ? {} : { badge: String(points) }),
     },
     {
       id: 'statuses',
-      label: 'Статуси',
+      label: t('tabStatuses'),
       ...(failures !== null && failures > 0
-        ? { badge: `${failures} з помилкою`, danger: true }
+        ? { badge: t('failuresBadge', { count: failures }), danger: true }
         : {}),
     },
-    { id: 'settings', label: 'Налаштування' },
+    { id: 'settings', label: t('tabSettings') },
   ]
 
   return (
     <RedesignShell
-      actions={
-        <Button asChild>
-          <Link to={listPath}>
-            <ArrowLeft aria-hidden />
-            Інтеграції
-          </Link>
-        </Button>
-      }
-      crumb={`Налаштування · ${integration.displayName}`}
+      actions={backToList}
+      crumb={`${settingsLabel} · ${integration.displayName}`}
     >
       <div className="flex flex-wrap items-start gap-4">
         <span
           aria-hidden
           className="border-app-line text-app-muted inline-flex size-14 shrink-0 items-center justify-center rounded-[15px] border font-mono text-[15px]"
         >
-          {integrationMark(integration.code)}
+          {integrationMark(integration.code, locale)}
         </span>
         <div className="min-w-0 flex-[1_1_300px]">
           <div className="flex flex-wrap items-center gap-3">
@@ -385,31 +411,26 @@ export function NovaPoshtaScreen() {
             <StatusPill tone={status.tone}>{status.label}</StatusPill>
           </div>
           <p className="text-app-muted mt-2.5 max-w-[62ch] text-[14px] leading-6 text-pretty">
-            Доставка Україною між відділеннями. Керування доступне тим, кому
-            відкриті налаштування команди.
+            {t('intro')}
           </p>
         </div>
         <div className="flex items-center gap-3 pt-1">
           <span
             className={`text-[14px] font-semibold ${active ? 'text-app-ink' : 'text-app-muted'}`}
           >
-            {active ? 'Увімкнена' : 'Вимкнена'}
+            {active ? t('stateOn') : t('stateOff')}
           </span>
           <Switch
             checked={active}
             disabled={busy !== null || (!active && !configured)}
-            label="Інтеграція увімкнена"
+            label={t('switchLabel')}
             onChange={toggle}
-            title={
-              !active && !configured
-                ? 'Спершу збережіть ключ доступу.'
-                : undefined
-            }
+            title={!active && !configured ? t('saveKeyFirst') : undefined}
           />
         </div>
       </div>
 
-      <nav aria-label="Розділи інтеграції">
+      <nav aria-label={t('sectionsNav')}>
         <ul className="border-app-line-2 flex flex-wrap items-end gap-1 border-b">
           {tabs.map((item) => (
             <li key={item.id}>
@@ -445,7 +466,7 @@ export function NovaPoshtaScreen() {
       {tab === 'overview' && (
         <div className="grid gap-5">
           <Card
-            title="Стан підключення"
+            title={t('statusCard')}
             tone={failing ? 'danger' : active ? 'ok' : 'plain'}
           >
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -453,19 +474,20 @@ export function NovaPoshtaScreen() {
                 className={`text-[16px] font-bold ${failing ? 'text-state-danger' : 'text-app-ink'}`}
               >
                 {failing
-                  ? 'Сервіс відхилив підключення'
+                  ? t('rejected')
                   : configured
                     ? active
-                      ? 'Підключення працює'
-                      : 'Інтеграція вимкнена'
-                    : 'Ключ доступу ще не збережено'}
+                      ? t('working')
+                      : t('integrationOff')
+                    : t('noKeyYet')}
               </p>
               <p className="text-app-dim font-mono text-[12px]">
                 {integration.verifiedAt === null ? (
-                  'ще не перевірялося'
+                  t('notCheckedYet')
                 ) : (
                   <>
-                    перевірено <DateValue value={integration.verifiedAt} />
+                    {t('checkedPrefix')}{' '}
+                    <DateValue value={integration.verifiedAt} />
                   </>
                 )}
               </p>
@@ -473,9 +495,9 @@ export function NovaPoshtaScreen() {
             <p className="text-app-muted text-[13px] leading-5 text-pretty">
               {integration.lastErrorCode === null
                 ? configured
-                  ? 'Ключ приймається сервісом. Довідники міст і відділень доступні.'
-                  : 'Додайте ключ доступу в «Налаштуваннях», щоб перевірити підключення.'
-                : integrationErrorMessage(integration.lastErrorCode)}
+                  ? t('keyAccepted')
+                  : t('addKeyHint')
+                : integrationErrorMessage(integration.lastErrorCode, locale)}
             </p>
             {diagnostics !== null && (
               <ul className="grid gap-2.5">
@@ -494,11 +516,11 @@ export function NovaPoshtaScreen() {
                     />
                     <span className="min-w-0">
                       <span className="text-app-ink block">
-                        {diagnosticCheckLabel(check.code)}
+                        {diagnosticCheckLabel(check.code, locale)}
                       </span>
                       {check.errorCode !== null && (
                         <span className="text-app-muted mt-0.5 block text-[12.5px] text-pretty">
-                          {integrationErrorMessage(check.errorCode)}
+                          {integrationErrorMessage(check.errorCode, locale)}
                         </span>
                       )}
                     </span>
@@ -511,18 +533,14 @@ export function NovaPoshtaScreen() {
                 aria-busy={busy === 'verify'}
                 disabled={busy !== null || !configured}
                 onClick={() => void verify()}
-                title={
-                  configured
-                    ? undefined
-                    : 'Спершу збережіть ключ доступу — перевіряти поки нічого.'
-                }
+                title={configured ? undefined : t('nothingToVerify')}
               >
-                {busy === 'verify' ? 'Перевіряємо…' : 'Перевірити ще раз'}
+                {busy === 'verify' ? t('verifying') : t('verifyAgain')}
               </Button>
               {(failing || !configured) && (
                 <Button asChild variant="primary">
                   <Link to={tabPath('settings')}>
-                    {configured ? 'Замінити ключ' : 'Додати ключ'}
+                    {configured ? t('replaceKey') : t('addKey')}
                   </Link>
                 </Button>
               )}
@@ -531,29 +549,29 @@ export function NovaPoshtaScreen() {
 
           <div className="grid gap-5 sm:grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))]">
             <Stat
-              label="Точок відправлення"
-              note="Звідки можна відправляти посилки"
+              label={t('statPoints')}
+              note={t('statPointsNote')}
               value={points === null ? '—' : String(points)}
             />
             <Stat
-              label="Помилок обробки"
+              label={t('statFailures')}
               note={
                 failures === null || failures === 0
-                  ? 'Події перевізника обробляються'
-                  : 'Подій не прийнято — див. «Статуси»'
+                  ? t('statFailuresOk')
+                  : t('statFailuresBad')
               }
               tone={failures !== null && failures > 0 ? 'danger' : 'plain'}
               value={failures === null ? '—' : String(failures)}
             />
             <Stat
-              label="Доставок за 30 днів"
-              note="Сервіс не рахує відправлення по розбірці"
-              title={NO_SHIPMENT_TOTALS}
+              label={t('statDeliveries')}
+              note={t('statDeliveriesNote')}
+              title={t('noShipmentTotals')}
               value="—"
             />
           </div>
 
-          <Card title="Що робить інтеграція">
+          <Card title={t('factsTitle')}>
             <ul className="grid gap-3">
               {FACTS.map((fact) => (
                 <li
@@ -564,7 +582,7 @@ export function NovaPoshtaScreen() {
                     aria-hidden
                     className="bg-app-line-2 mt-2 size-1.5 shrink-0 rounded-full"
                   />
-                  {fact}
+                  {t(fact)}
                 </li>
               ))}
             </ul>
@@ -595,12 +613,12 @@ export function NovaPoshtaScreen() {
       {tab === 'settings' && (
         <div className="grid max-w-[640px] gap-5">
           <DeliveryPreferencesPanel integrationId={integration.id} />
-          <Card title="Підключення">
-            <Field hint={NO_RENAME} label="Назва підключення">
+          <Card title={t('connectionCard')}>
+            <Field hint={t('noRename')} label={t('nameLabel')}>
               <TextInput
                 disabled
                 readOnly
-                title={NO_RENAME}
+                title={t('noRename')}
                 value={integration.displayName}
               />
             </Field>
@@ -611,16 +629,12 @@ export function NovaPoshtaScreen() {
                 noValidate
                 onSubmit={(event) => void saveKey(event)}
               >
-                <Field
-                  hint="Після збереження ключ буде приховано. Старий ключ перестане діяти одразу."
-                  label="Новий ключ доступу"
-                  required
-                >
+                <Field hint={t('newKeyHint')} label={t('newKeyLabel')} required>
                   <TextInput
                     autoComplete="off"
                     className="font-mono"
                     onChange={(event) => setKey(event.target.value)}
-                    placeholder="Вставте ключ з кабінету Нової пошти"
+                    placeholder={t('keyPlaceholder')}
                     value={key}
                   />
                 </Field>
@@ -631,7 +645,7 @@ export function NovaPoshtaScreen() {
                     type="submit"
                     variant="primary"
                   >
-                    {busy === 'save' ? 'Зберігаємо…' : 'Зберегти ключ'}
+                    {busy === 'save' ? tc('saving') : t('saveKey')}
                   </Button>
                   <Button
                     disabled={busy !== null}
@@ -640,7 +654,7 @@ export function NovaPoshtaScreen() {
                       setKey('')
                     }}
                   >
-                    Скасувати
+                    {tc('cancel')}
                   </Button>
                 </div>
               </form>
@@ -648,17 +662,16 @@ export function NovaPoshtaScreen() {
               <>
                 <div className="border-app-line bg-app-input flex flex-wrap items-center gap-3 rounded-[11px] border px-3.5 py-3">
                   <span className="text-app-muted min-w-0 font-mono text-[15px] tracking-[0.12em]">
-                    {configured ? '••••••••••••••••' : 'ключ не збережено'}
+                    {configured ? '••••••••••••••••' : t('keyNotSaved')}
                   </span>
                   {configured && (
                     <span className="text-state-ok ml-auto text-[12px] font-bold">
-                      Збережено
+                      {tc('saved')}
                     </span>
                   )}
                 </div>
                 <p className="text-app-dim text-[12.5px] leading-5 text-pretty">
-                  Збережений ключ не показуємо відкритим текстом — його можна
-                  тільки замінити на новий.
+                  {t('keyHiddenNote')}
                 </p>
                 <div className="flex flex-wrap gap-2.5">
                   <Button
@@ -666,21 +679,15 @@ export function NovaPoshtaScreen() {
                     onClick={() => setEditingKey(true)}
                     variant={configured ? 'ghost' : 'primary'}
                   >
-                    {configured ? 'Замінити ключ' : 'Додати ключ'}
+                    {configured ? t('replaceKey') : t('addKey')}
                   </Button>
                   <Button
                     aria-busy={busy === 'verify'}
                     disabled={busy !== null || !configured}
                     onClick={() => void verify()}
-                    title={
-                      configured
-                        ? undefined
-                        : 'Спершу збережіть ключ доступу — перевіряти поки нічого.'
-                    }
+                    title={configured ? undefined : t('nothingToVerify')}
                   >
-                    {busy === 'verify'
-                      ? 'Перевіряємо…'
-                      : 'Перевірити підключення'}
+                    {busy === 'verify' ? t('verifying') : t('verifyConnection')}
                   </Button>
                 </div>
               </>
@@ -688,27 +695,21 @@ export function NovaPoshtaScreen() {
           </Card>
 
           <Card
-            title={active ? 'Вимкнення' : 'Увімкнення'}
+            title={active ? t('disableCard') : t('enableCard')}
             tone={active ? 'danger' : 'plain'}
           >
             <p className="text-app-muted text-[13px] leading-5 text-pretty">
-              {active
-                ? 'Створені ТТН залишаться дійсними, але оформити нову доставку й отримати оновлення статусів буде неможливо.'
-                : 'Після ввімкнення доставку можна буде оформити просто з картки замовлення. Спершу збережіть і перевірте ключ доступу.'}
+              {active ? t('disableText') : t('enableText')}
             </p>
             <div>
               <Button
                 aria-busy={busy === 'toggle'}
                 disabled={busy !== null || (!active && !configured)}
                 onClick={toggle}
-                title={
-                  !active && !configured
-                    ? 'Спершу збережіть ключ доступу.'
-                    : undefined
-                }
+                title={!active && !configured ? t('saveKeyFirst') : undefined}
                 variant={active ? 'danger' : 'primary'}
               >
-                {active ? 'Вимкнути інтеграцію' : 'Увімкнути інтеграцію'}
+                {active ? t('disableButton') : t('enableButton')}
               </Button>
             </div>
           </Card>

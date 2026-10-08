@@ -17,12 +17,12 @@ const generatorCli = join(
 export const defaultOutputDirectory = join(repositoryRoot, 'src/api/generated')
 
 function usage() {
-  return 'Usage: npm run contracts:generate -- --core <file-or-url> --identity <file-or-url> [--out <directory>]'
+  return 'Usage: npm run contracts:generate -- --core <file-or-url> [--out <directory>]'
 }
 
 export function parseArguments(argumentsToParse, commandUsage = usage()) {
   const values = {}
-  const supported = new Set(['--core', '--identity', '--out'])
+  const supported = new Set(['--core', '--out'])
 
   for (let index = 0; index < argumentsToParse.length; index += 2) {
     const flag = argumentsToParse[index]
@@ -42,13 +42,9 @@ export function parseArguments(argumentsToParse, commandUsage = usage()) {
   if (!values['--core']) {
     throw new Error(`Missing required argument --core. ${commandUsage}`)
   }
-  if (!values['--identity']) {
-    throw new Error(`Missing required argument --identity. ${commandUsage}`)
-  }
 
   return {
     core: values['--core'],
-    identity: values['--identity'],
     outputDirectory: values['--out']
       ? resolve(values['--out'])
       : defaultOutputDirectory,
@@ -187,26 +183,21 @@ async function generateOne(label, input, workingDirectory) {
   return `${provenanceHeader(label, contents)}${generated}`
 }
 
-export async function generateContracts({ core, identity, outputDirectory }) {
+/**
+ * Core owns every API the web calls, including `/auth/*` (the separate
+ * Identity contract is obsolete), so it is the only generator input.
+ */
+export async function generateContracts({ core, outputDirectory }) {
   validateInput(core, 'Core')
-  validateInput(identity, 'Identity')
 
   const workingDirectory = await mkdtemp(
     join(tmpdir(), 'rozbirka-contract-generate-'),
   )
   try {
     const coreOutput = await generateOne('Core', core, workingDirectory)
-    const identityOutput = await generateOne(
-      'Identity',
-      identity,
-      workingDirectory,
-    )
 
     await mkdir(outputDirectory, { recursive: true })
-    await Promise.all([
-      writeFile(join(outputDirectory, 'core.ts'), coreOutput),
-      writeFile(join(outputDirectory, 'identity.ts'), identityOutput),
-    ])
+    await writeFile(join(outputDirectory, 'core.ts'), coreOutput)
   } finally {
     await rm(workingDirectory, { recursive: true, force: true })
   }

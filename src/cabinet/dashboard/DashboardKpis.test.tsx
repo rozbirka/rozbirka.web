@@ -4,6 +4,7 @@ import type {
   DashboardAnalytics,
   DashboardData,
 } from '@/api/dashboard-contract'
+import { LocaleProvider } from '@/i18n'
 import { DashboardKpis } from './DashboardKpis'
 
 const data = (overrides: Partial<DashboardData> = {}): DashboardData => ({
@@ -51,18 +52,48 @@ const analytics = (
 it('says today’s takings in the currency the server tagged them with', () => {
   render(<DashboardKpis analytics={analytics()} data={data()} parts={null} />)
 
-  const revenue = screen.getByText('Виручка сьогодні').closest('div')
+  const revenue = screen.getByText('Надходження сьогодні').closest('div')
   expect(revenue).toHaveTextContent('103')
   expect(revenue).toHaveTextContent('USD')
   expect(revenue).toHaveTextContent('1 продаж')
 })
 
 it('reports the payback of the yard against what it put in', () => {
-  render(<DashboardKpis analytics={analytics()} data={data()} parts={null} />)
+  render(
+    <DashboardKpis
+      accountingCurrency="GBP"
+      analytics={analytics()}
+      data={data()}
+      parts={null}
+    />,
+  )
 
   const payoff = screen.getByText('Окупність складу').closest('div')
   expect(payoff).toHaveTextContent('88')
-  expect(payoff).toHaveTextContent('76 874 з 87 770 $')
+  expect(payoff).toHaveTextContent('76 874 з 87 770 GBP')
+})
+
+it('lists other currencies received today beside the headline, unsummed', () => {
+  render(
+    <DashboardKpis
+      analytics={analytics()}
+      data={data({
+        revenue: {
+          today: [
+            { currency: 'UAH', amount: 4200 },
+            { currency: 'EUR', amount: 30 },
+          ],
+          week: [],
+          month: [],
+        },
+      })}
+      parts={null}
+    />,
+  )
+
+  const receipts = screen.getByText('Надходження сьогодні').closest('div')
+  expect(receipts).toHaveTextContent('4 200UAH')
+  expect(receipts).toHaveTextContent('+ 30 EUR')
 })
 
 it('compares active orders with the period, the only comparison there is', () => {
@@ -117,8 +148,35 @@ it('leaves out a figure the account may not see rather than showing a dash', () 
     />,
   )
 
-  expect(screen.queryByText('Виручка сьогодні')).not.toBeInTheDocument()
+  expect(screen.queryByText('Надходження сьогодні')).not.toBeInTheDocument()
   expect(screen.queryByText('Окупність складу')).not.toBeInTheDocument()
   expect(screen.queryByText('Активні замовлення')).not.toBeInTheDocument()
   expect(screen.getByText('Доступно на складі')).toBeVisible()
+})
+
+it('reads the figures in English (UK)', () => {
+  render(
+    <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+      <DashboardKpis
+        accountingCurrency="GBP"
+        analytics={analytics()}
+        data={data({ todaySalesCount: 2 })}
+        parts={null}
+      />
+    </LocaleProvider>,
+  )
+
+  expect(screen.getByText('Receipts today').closest('div')).toHaveTextContent(
+    '2 sales',
+  )
+  expect(screen.getByText('Stock payback').closest('div')).toHaveTextContent(
+    '76,874 of 87,770 GBP',
+  )
+  expect(screen.getByText('Active orders').closest('div')).toHaveTextContent(
+    '−2 over the period',
+  )
+  expect(
+    screen.getByText('Available in stock').closest('div'),
+  ).toHaveTextContent('978items')
+  expect(screen.queryByText(/[А-Яа-яЇїІіЄєҐґ]/)).toBeNull()
 })

@@ -14,6 +14,7 @@ import {
   type NovaPoshtaTrackingSubscription,
 } from '@/api/integrations'
 import { normalizeApiProblem } from '@/api/errors'
+import { commonMessages, useLocale, useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import { cabinetModules } from '../module-registry'
 import { tenantRequestScope } from '../tenant-request-scope'
@@ -24,14 +25,10 @@ import {
   trackingReasonMessage,
   trackingStatePresentation,
 } from './integration-labels'
+import { npFeedMessages } from './np-feed-messages'
 
 /** A state that changes on its own is worth re-reading this often. */
 const POLL_INTERVAL_MS = 5_000
-
-const CALLBACK_UNAVAILABLE =
-  'У цьому середовищі автоматичні оновлення ще не налаштовані. Адресу прийому задає адміністратор сервісу — вводити її вручну не потрібно.'
-
-const NO_ACCESS = 'Дія недоступна: немає прав на налаштування команди.'
 
 type LoadState =
   | { kind: 'loading' }
@@ -99,6 +96,9 @@ export function TrackingSubscriptionPanel({
   integrationId: string
 }) {
   const cabinet = useCabinet()
+  const { locale } = useLocale()
+  const t = useT(npFeedMessages)
+  const tc = useT(commonMessages)
   const tenant = cabinet.targetTenant
   const generation = cabinet.snapshot?.generation
   const scopeKey = `${generation ?? ''}:${tenant?.id ?? ''}:${integrationId}`
@@ -204,7 +204,7 @@ export function TrackingSubscriptionPanel({
       try {
         requireLatestMutation()
       } catch {
-        patch({ error: NO_ACCESS })
+        patch({ error: t('noAccess') })
         return
       }
       runningRef.current = true
@@ -224,7 +224,7 @@ export function TrackingSubscriptionPanel({
       } catch (problem) {
         if (!mountedRef.current) return
         const normalized = normalizeApiProblem(problem)
-        const message = trackingProblemMessage(normalized)
+        const message = trackingProblemMessage(normalized, locale)
         const needsKey =
           normalized.code?.toLowerCase() === 'tracking_credentials_required'
         patch({
@@ -246,7 +246,7 @@ export function TrackingSubscriptionPanel({
         refresh()
       }
     },
-    [patch, refresh, requireLatestMutation],
+    [locale, patch, refresh, requireLatestMutation, t],
   )
 
   const connect = (key: string | null) =>
@@ -260,69 +260,60 @@ export function TrackingSubscriptionPanel({
     event.preventDefault()
     const value = session.apiKey.trim()
     if (value === '') {
-      patch({ keyError: 'Вставте ключ із кабінету Нової пошти.' })
+      patch({ keyError: t('pasteKey') })
       return
     }
     connect(value)
   }
 
   if (tenant === null) {
-    return (
-      <p className="text-app-muted text-sm">
-        Оберіть розбірку, щоб побачити автоматичні оновлення.
-      </p>
-    )
+    return <p className="text-app-muted text-sm">{t('pickBusinessTracking')}</p>
   }
 
   const { busy } = session
   const presentation =
-    subscription === null ? null : trackingStatePresentation(subscription.state)
+    subscription === null
+      ? null
+      : trackingStatePresentation(subscription.state, locale)
   const reason =
     subscription === null
       ? null
-      : trackingReasonMessage(subscription.reasonCode)
+      : trackingReasonMessage(subscription.reasonCode, locale)
   const callbackReady = subscription?.publicCallbackConfigured ?? false
 
   return (
     <section
-      aria-label="Автоматичне оновлення доставки"
+      aria-label={t('trackingTitle')}
       className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-6 py-5"
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-          Автоматичне оновлення доставки
+          {t('trackingTitle')}
         </h2>
         {presentation !== null && (
           <StatusPill tone={presentation.tone}>{presentation.label}</StatusPill>
         )}
       </div>
       <p className="text-app-muted mt-2 max-w-[62ch] text-[13.5px] leading-5 text-pretty">
-        Отримуйте оновлення статусів доставки від Нової пошти. Нові накладні
-        підключатимуться автоматично.
+        {t('trackingIntro')}
       </p>
 
       <div className="mt-4 grid gap-3.5">
         {state.kind === 'loading' && (
-          <p className="text-app-muted text-sm">Читаємо стан підписки…</p>
+          <p className="text-app-muted text-sm">{t('readingState')}</p>
         )}
 
-        {state.kind === 'denied' && (
-          <Notice tone="warn">
-            Немає доступу до автоматичних оновлень: потрібні права на
-            налаштування команди.
-          </Notice>
-        )}
+        {state.kind === 'denied' && <Notice tone="warn">{t('denied')}</Notice>}
 
         {state.kind === 'error' && (
           <Notice tone="danger">
-            Не вдалося прочитати стан автоматичних оновлень. На вже створені
-            накладні це не впливає —{' '}
+            {t('stateError')}{' '}
             <button
               className="underline underline-offset-4"
               onClick={refresh}
               type="button"
             >
-              спробувати ще раз
+              {t('tryAgainLower')}
             </button>
             .
           </Notice>
@@ -346,10 +337,10 @@ export function TrackingSubscriptionPanel({
               </p>
               <p className="text-app-dim font-mono text-[12px]">
                 {subscription.lastCallbackAt === null ? (
-                  'оновлень ще не надходило'
+                  t('noUpdatesYet')
                 ) : (
                   <>
-                    останнє оновлення{' '}
+                    {t('lastUpdate')}{' '}
                     <DateValue value={subscription.lastCallbackAt} />
                   </>
                 )}
@@ -359,23 +350,18 @@ export function TrackingSubscriptionPanel({
             {reason !== null && <Notice tone="warn">{reason}</Notice>}
 
             {!callbackReady && (
-              <Notice tone="warn">{CALLBACK_UNAVAILABLE}</Notice>
+              <Notice tone="warn">{t('callbackUnavailable')}</Notice>
             )}
 
             {subscription.pendingNumbers > 0 && (
               <p className="text-app-muted text-[13px] leading-5">
-                Накладних у черзі підключення: {subscription.pendingNumbers}.
+                {t('pendingNumbers', { count: subscription.pendingNumbers })}
               </p>
             )}
 
             {subscription.unconfirmedNumbers > 0 && (
               <Notice tone="warn">
-                Для {subscription.unconfirmedNumbers}{' '}
-                {subscription.unconfirmedNumbers === 1
-                  ? 'накладної'
-                  : 'накладних'}{' '}
-                автоматичні оновлення не підтверджені. Періодична перевірка
-                продовжується.
+                {t('unconfirmed', { count: subscription.unconfirmedNumbers })}
               </Notice>
             )}
 
@@ -386,8 +372,8 @@ export function TrackingSubscriptionPanel({
                 )}
                 <Field
                   error={session.keyError}
-                  hint="Ключ зберігається в сервісі зашифрованим і більше не показується."
-                  label="API-ключ Нової пошти"
+                  hint={t('keyHint')}
+                  label={t('keyLabel')}
                   required
                 >
                   <div className="flex items-start gap-2">
@@ -397,21 +383,19 @@ export function TrackingSubscriptionPanel({
                       onChange={(event) =>
                         patch({ apiKey: event.target.value, keyError: null })
                       }
-                      placeholder="Вставте ключ з кабінету Нової пошти"
+                      placeholder={t('keyPlaceholder')}
                       spellCheck={false}
                       type={session.revealed ? 'text' : 'password'}
                       value={session.apiKey}
                     />
                     <Button
                       aria-label={
-                        session.revealed ? 'Приховати ключ' : 'Показати ключ'
+                        session.revealed ? t('hideKey') : t('showKey')
                       }
                       aria-pressed={session.revealed}
                       onClick={() => patch({ revealed: !session.revealed })}
                       size="icon"
-                      title={
-                        session.revealed ? 'Приховати ключ' : 'Показати ключ'
-                      }
+                      title={session.revealed ? t('hideKey') : t('showKey')}
                     >
                       {session.revealed ? (
                         <EyeOff aria-hidden />
@@ -425,11 +409,11 @@ export function TrackingSubscriptionPanel({
                   <Button
                     aria-busy={busy === 'connect'}
                     disabled={busy !== null || !callbackReady}
-                    title={callbackReady ? undefined : CALLBACK_UNAVAILABLE}
+                    title={callbackReady ? undefined : t('callbackUnavailable')}
                     type="submit"
                     variant="primary"
                   >
-                    {busy === 'connect' ? 'Підключаємо…' : 'Підключити'}
+                    {busy === 'connect' ? t('connecting') : t('connect')}
                   </Button>
                   <Button
                     disabled={busy !== null}
@@ -443,7 +427,7 @@ export function TrackingSubscriptionPanel({
                       })
                     }
                   >
-                    Скасувати
+                    {tc('cancel')}
                   </Button>
                 </div>
               </form>
@@ -454,10 +438,10 @@ export function TrackingSubscriptionPanel({
                     aria-busy={busy === 'connect'}
                     disabled={busy !== null || !callbackReady}
                     onClick={() => connect(null)}
-                    title={callbackReady ? undefined : CALLBACK_UNAVAILABLE}
+                    title={callbackReady ? undefined : t('callbackUnavailable')}
                     variant="primary"
                   >
-                    {busy === 'connect' ? 'Підключаємо…' : 'Підключити'}
+                    {busy === 'connect' ? t('connecting') : t('connect')}
                   </Button>
                 )}
 
@@ -467,7 +451,7 @@ export function TrackingSubscriptionPanel({
                     onClick={() => patch({ keyForm: true, keyPrompt: null })}
                     variant="primary"
                   >
-                    Ввести ключ
+                    {t('enterKey')}
                   </Button>
                 )}
 
@@ -483,7 +467,7 @@ export function TrackingSubscriptionPanel({
                       )
                     }
                   >
-                    {busy === 'retry' ? 'Повторюємо…' : 'Повторити зараз'}
+                    {busy === 'retry' ? t('retrying') : t('retryNow')}
                   </Button>
                 )}
 
@@ -493,12 +477,12 @@ export function TrackingSubscriptionPanel({
                     onClick={() => patch({ confirming: true })}
                     variant="ghost"
                   >
-                    Відключити
+                    {t('disconnect')}
                   </Button>
                 )}
 
                 <Button disabled={busy !== null} onClick={refresh}>
-                  Оновити стан
+                  {t('refreshState')}
                 </Button>
               </div>
             )}
@@ -507,8 +491,8 @@ export function TrackingSubscriptionPanel({
       </div>
 
       <ConfirmDialog
-        confirmLabel="Відключити"
-        consequence="Накладні й історія залишаться. Періодична перевірка статусів продовжить працювати."
+        confirmLabel={t('disconnect')}
+        consequence={t('disconnectConsequence')}
         error={session.confirmError}
         icon={PlugZap}
         onConfirm={() =>
@@ -523,7 +507,7 @@ export function TrackingSubscriptionPanel({
         }
         open={session.confirming}
         pending={busy === 'disconnect'}
-        title="Відключити автоматичні оновлення доставки?"
+        title={t('disconnectTitle')}
       />
     </section>
   )

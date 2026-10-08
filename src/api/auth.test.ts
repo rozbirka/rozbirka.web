@@ -8,6 +8,7 @@ import { authApi } from './auth'
 import { identityClient } from './client'
 import { credentials } from './credentials'
 import { sessionApi } from './session'
+import { requestLocale } from '../i18n/request-locale'
 
 const challengeData = (seconds = 0) => ({
   challengeId: 'test-challenge',
@@ -117,4 +118,35 @@ it('commits the access returned by update-name and returns the updated user', as
   ).resolves.toEqual(updatedUser)
   expect(requestSignal).toBe(controller.signal)
   expect(credentials.getAccess()).toBe('updated-access')
+})
+
+it('patches the personal language and sends the interface locale', async () => {
+  let observed: InternalAxiosRequestConfig | undefined
+  const updatedUser = {
+    id: 'user-1',
+    phone: '+48512345678',
+    displayName: 'Jan',
+    language: 'pl',
+  }
+  requestLocale.set('pl')
+  identityClient.defaults.adapter = (config) => {
+    observed = config
+    return Promise.resolve(
+      response(config, {
+        data: {
+          user: updatedUser,
+          accessToken: 'language-access',
+          expiresIn: 900,
+        },
+      }),
+    )
+  }
+
+  await expect(authApi.updateLanguage('pl')).resolves.toEqual(updatedUser)
+  expect(observed?.method).toBe('patch')
+  expect(observed?.url).toBe('/auth/me/language')
+  expect(observed?.data).toBe(JSON.stringify({ language: 'pl' }))
+  expect(observed?.headers.get('Accept-Language')).toBe('pl')
+  expect(credentials.getAccess()).toBe('language-access')
+  requestLocale.set(null)
 })

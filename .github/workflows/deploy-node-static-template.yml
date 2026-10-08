@@ -96,7 +96,7 @@ jobs:
         run: npm run test:contracts
 
       - if: inputs.run_build
-        name: Immutable Core and Identity contract drift gate
+        name: Immutable Core contract drift gate
         shell: bash
         run: |
           set -euo pipefail
@@ -105,8 +105,7 @@ jobs:
             --manifest contracts/openapi-sources.json \
             --out "$contract_dir")"
           core_path="$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.core)' "$paths_json")"
-          identity_path="$(node -e 'const value=JSON.parse(process.argv[1]); process.stdout.write(value.identity)' "$paths_json")"
-          npm run contracts:check -- --core "$core_path" --identity "$identity_path"
+          npm run contracts:check -- --core "$core_path"
 
       - if: inputs.run_build
         name: Auth and tenant integration gate
@@ -116,7 +115,8 @@ jobs:
     if: ${{ !inputs.skip_e2e }}
     name: Browser E2E ${{ inputs.project_name }} (${{ matrix.project }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Room for one slow apt mirror retry on top of the ~6 minute suite.
+    timeout-minutes: 25
     permissions:
       contents: read
     # The e2e stub server keeps global state, so a run stays on a single worker;
@@ -161,18 +161,24 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}-${{ matrix.browser }}
 
-      # Installing system deps goes through apt and has hung on the runner;
-      # bound each attempt so a stuck mirror costs seconds, not the whole job.
+      # System packages come from the runner's apt mirror, which can crawl
+      # (WebKit needs ~126 MB). Retrying apt only races the previous run for
+      # the dpkg lock, so install them once with a long bound; only the
+      # browser download itself is retried.
       - if: inputs.run_build
         name: Install ${{ matrix.browser }}
         shell: bash
         run: |
           set -euo pipefail
+          # The runner's own background apt run can hold the dpkg lock for a
+          # while; make apt wait for it instead of failing at once.
+          echo 'DPkg::Lock::Timeout "180";' | sudo tee /etc/apt/apt.conf.d/99-dpkg-lock-timeout >/dev/null
+          timeout 900 npx playwright install-deps ${{ matrix.browser }}
           for attempt in 1 2 3; do
-            if timeout 300 npx playwright install --with-deps ${{ matrix.browser }}; then
+            if timeout 300 npx playwright install ${{ matrix.browser }}; then
               exit 0
             fi
-            echo "playwright install attempt ${attempt} failed or timed out; retrying"
+            echo "playwright browser download attempt ${attempt} failed or timed out; retrying"
             sleep 10
           done
           exit 1

@@ -3,6 +3,8 @@ import { Check, Pencil, X } from 'lucide-react'
 import { Button } from './button'
 import { cn } from '@/lib/utils'
 import type { ReactNode } from 'react'
+import { useT } from '@/i18n/hooks'
+import { appMessages } from './app-messages'
 
 export interface InlineEditProps {
   /** The value as it reads in the table when nothing is being edited. */
@@ -45,6 +47,7 @@ export function InlineEdit({
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const t = useT(appMessages)
 
   useEffect(() => {
     if (editing) inputRef.current?.focus()
@@ -79,7 +82,7 @@ export function InlineEdit({
   if (!editing)
     return (
       <button
-        aria-label={`Змінити — ${label}`}
+        aria-label={t('editValue', { label })}
         className={cn(
           'hover:border-app-line-2 focus-visible:outline-brand group inline-flex min-h-9 items-center gap-1.5 rounded-[8px] border border-transparent px-1.5 text-left',
           className,
@@ -91,7 +94,7 @@ export function InlineEdit({
           if (onOpen)
             void onOpen().then(
               (loaded) => setDraft(loaded),
-              () => setError('Не вдалося прочитати поточне значення.'),
+              () => setError(t('readValueFailed')),
             )
         }}
         ref={triggerRef}
@@ -134,7 +137,7 @@ export function InlineEdit({
         />
         <Button
           aria-busy={pending}
-          aria-label="Зберегти значення"
+          aria-label={t('saveValue')}
           disabled={pending}
           onClick={() => void commit()}
           size="icon"
@@ -143,7 +146,7 @@ export function InlineEdit({
           <Check aria-hidden />
         </Button>
         <Button
-          aria-label="Скасувати зміну"
+          aria-label={t('cancelChange')}
           disabled={pending}
           onClick={close}
           size="icon"

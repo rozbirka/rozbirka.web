@@ -16,10 +16,19 @@ import {
   type NovaPoshtaCounterparty,
   type NovaPoshtaContact,
 } from '@/api/integrations'
+import type { ApiProblem } from '@/api/contracts'
 import { normalizeApiProblem } from '@/api/errors'
+import { commonMessages, useLocale, useT } from '@/i18n'
+import { moduleLabel } from '../module-messages'
+import { integrationProblemMessage } from './integration-labels'
+import { npFormsMessages } from './np-forms-messages'
 import { SettlementPicker } from './settlement-picker'
 
-/** Core's own contact rule, so a bad phone is caught before the round trip. */
+/**
+ * Core's own contact rule, so a bad phone is caught before the round trip. NP
+ * is Ukrainian-only, so the example and placeholder stay +380 in every
+ * interface language.
+ */
 const PHONE = /^\+?[1-9]\d{7,14}$/
 
 const FORM_ID = 'dispatch-point-form'
@@ -132,6 +141,9 @@ export function DispatchPointForm({
   onSubmit: (submission: DispatchPointSubmission) => void
   pending: boolean
 }) {
+  const { locale } = useLocale()
+  const t = useT(npFormsMessages)
+  const tc = useT(commonMessages)
   const point = draft.point
   const [name, setName] = useState(point?.name ?? '')
   const [senderName, setSenderName] = useState(point?.senderName ?? '')
@@ -154,7 +166,7 @@ export function DispatchPointForm({
   const [divisionChoice, setDivisionChoice] = useState<string | null>(
     point?.warehouseRef ?? null,
   )
-  const [lookupError, setLookupError] = useState<string | null>(null)
+  const [lookupError, setLookupError] = useState<ApiProblem | null>(null)
 
   // Nova Poshta will not take a sender typed into this form: it has to be a
   // counterparty already registered against the tenant's own key, together
@@ -192,7 +204,7 @@ export function DispatchPointForm({
         (problem) => {
           if (!controller.signal.aborted) {
             setLoadedDivisions({ settlementRef, items: [] })
-            setLookupError(normalizeApiProblem(problem).message)
+            setLookupError(normalizeApiProblem(problem))
           }
         },
       )
@@ -210,7 +222,7 @@ export function DispatchPointForm({
         (problem) => {
           if (!controller.signal.aborted) {
             setSenders([])
-            setLookupError(normalizeApiProblem(problem).message)
+            setLookupError(normalizeApiProblem(problem))
           }
         },
       )
@@ -232,7 +244,7 @@ export function DispatchPointForm({
         (problem) => {
           if (!controller.signal.aborted) {
             setContacts({ counterpartyRef: senderChoice, items: [] })
-            setLookupError(normalizeApiProblem(problem).message)
+            setLookupError(normalizeApiProblem(problem))
           }
         },
       )
@@ -312,7 +324,7 @@ export function DispatchPointForm({
 
   return (
     <Sheet
-      description="Дані точки підставляються у відправника накладної під час оформлення доставки."
+      description={t('formDescription')}
       footer={
         <div className="flex w-full flex-wrap items-center gap-2.5">
           {onDeactivate !== undefined && (
@@ -320,18 +332,16 @@ export function DispatchPointForm({
               disabled={pending || deactivateLocked}
               onClick={onDeactivate}
               title={
-                deactivateLocked
-                  ? 'Типову точку не можна вимкнути — спершу зробіть типовою іншу.'
-                  : 'Точка перестане пропонуватися при оформленні. Створені накладні не змінюються.'
+                deactivateLocked ? t('defaultCantDisable') : t('deactivateHint')
               }
               variant="danger"
             >
-              Вимкнути точку
+              {t('deactivate')}
             </Button>
           )}
           <div className="ml-auto flex flex-wrap items-center gap-2.5">
             <Button disabled={pending} onClick={onClose}>
-              Скасувати
+              {tc('cancel')}
             </Button>
             <Button
               aria-busy={pending}
@@ -340,33 +350,35 @@ export function DispatchPointForm({
               type="submit"
               variant="primary"
             >
-              {point === null ? 'Додати точку' : 'Зберегти зміни'}
+              {point === null ? t('addPoint') : t('saveChanges')}
             </Button>
           </div>
         </div>
       }
-      eyebrow="Інтеграції · Нова пошта"
+      eyebrow={`${moduleLabel('integrations', locale)} · ${t('novaPoshta')}`}
       onOpenChange={(open) => {
         if (!open && !pending) onClose()
       }}
       open
       size="lg"
       title={
-        point === null ? 'Нова точка відправлення' : `Точка «${point.name}»`
+        point === null
+          ? t('newPointTitle')
+          : t('pointTitle', { name: point.name })
       }
     >
       <form className="grid gap-3.5" id={FORM_ID} noValidate onSubmit={submit}>
         {error !== null && <Notice tone="danger">{error}</Notice>}
-        {lookupError !== null && <Notice tone="warn">{lookupError}</Notice>}
+        {lookupError !== null && (
+          <Notice tone="warn">
+            {integrationProblemMessage(lookupError, locale)}
+          </Notice>
+        )}
 
-        <Field
-          hint="Видно лише всередині Rozbirka."
-          label="Назва точки"
-          required
-        >
+        <Field hint={t('pointNameHint')} label={t('pointNameLabel')} required>
           <TextInput
             onChange={(event) => setName(event.target.value)}
-            placeholder="напр. Головний склад"
+            placeholder={t('pointNamePlaceholder')}
             value={name}
           />
         </Field>
@@ -375,21 +387,17 @@ export function DispatchPointForm({
           integrationId={integrationId}
           onPick={setSettlement}
           picked={settlement}
-          savedHint={
-            point === null
-              ? undefined
-              : 'Збережений пункт залишається, доки не виберете інший.'
-          }
+          savedHint={point === null ? undefined : t('savedSettlementHint')}
           use="sending"
         />
 
         <Field
           hint={
             settlementRef === null
-              ? 'Спершу оберіть населений пункт.'
-              : 'Показані лише відділення, які приймають відправлення.'
+              ? t('pickSettlementFirst')
+              : t('sendingBranchesOnly')
           }
-          label="Відділення відправлення"
+          label={t('branchLabel')}
           required
         >
           <SelectInput
@@ -402,7 +410,7 @@ export function DispatchPointForm({
             value={warehouseRef ?? ''}
           >
             <option value="">
-              {divisions === null ? 'Завантажуємо…' : 'Оберіть відділення'}
+              {divisions === null ? t('loading') : t('pickBranch')}
             </option>
             {(divisions ?? []).map((item) => (
               <option key={item.ref} value={item.ref}>
@@ -412,11 +420,7 @@ export function DispatchPointForm({
           </SelectInput>
         </Field>
 
-        <Field
-          hint="Відправник із кабінету Нової пошти. Створити нового тут не можна — тільки в кабінеті перевізника."
-          label="Відправник"
-          required
-        >
+        <Field hint={t('formSenderHint')} label={t('senderLabel')} required>
           <SelectInput
             disabled={senders === null}
             onChange={(event) => {
@@ -429,10 +433,10 @@ export function DispatchPointForm({
           >
             <option value="">
               {senders === null
-                ? 'Завантажуємо…'
+                ? t('loading')
                 : senders.length === 0
-                  ? 'Кабінет не повернув жодного відправника'
-                  : 'Оберіть відправника'}
+                  ? t('noSenders')
+                  : t('pickSender')}
             </option>
             {(senders ?? []).map((item) => (
               <option key={item.ref} value={item.ref}>
@@ -445,11 +449,9 @@ export function DispatchPointForm({
 
         <Field
           hint={
-            counterpartyRef === null
-              ? 'Спершу оберіть відправника.'
-              : 'Ця особа буде вказана в накладній як контакт відправника.'
+            counterpartyRef === null ? t('pickSenderFirst') : t('contactHint')
           }
-          label="Контактна особа відправника"
+          label={t('senderContactLabel')}
           required
         >
           <SelectInput
@@ -470,7 +472,7 @@ export function DispatchPointForm({
             value={contactRef ?? ''}
           >
             <option value="">
-              {contactOptions === null ? 'Завантажуємо…' : 'Оберіть особу'}
+              {contactOptions === null ? t('loading') : t('pickPerson')}
             </option>
             {(contactOptions ?? []).map((item) => (
               <option key={item.ref} value={item.ref}>
@@ -481,21 +483,17 @@ export function DispatchPointForm({
           </SelectInput>
         </Field>
 
-        <Field label="Ім’я відправника" required>
+        <Field label={t('senderNameLabel')} required>
           <TextInput
             onChange={(event) => setSenderName(event.target.value)}
-            placeholder="ПІБ контактної особи"
+            placeholder={t('senderNamePlaceholder')}
             value={senderName}
           />
         </Field>
 
         <Field
-          error={
-            phone !== '' && !phoneValid
-              ? 'Телефон у міжнародному форматі, напр. +380672147730'
-              : undefined
-          }
-          label="Телефон відправника"
+          error={phone !== '' && !phoneValid ? t('phoneError') : undefined}
+          label={t('phoneLabel')}
           required
         >
           <TextInput
@@ -509,18 +507,18 @@ export function DispatchPointForm({
 
         {isCompany && (
           <>
-            <Field label="Назва компанії" required>
+            <Field label={t('companyName')} required>
               <TextInput
                 onChange={(event) => setCompanyName(event.target.value)}
-                placeholder="Юридична назва"
+                placeholder={t('companyNamePlaceholder')}
                 value={companyName}
               />
             </Field>
-            <Field label="Ідентифікаційний код" required>
+            <Field label={t('companyTin')} required>
               <TextInput
                 className="font-mono"
                 onChange={(event) => setCompanyTin(event.target.value)}
-                placeholder="ЄДРПОУ або ІПН"
+                placeholder={t('companyTinPlaceholder')}
                 value={companyTin}
               />
             </Field>
@@ -530,33 +528,25 @@ export function DispatchPointForm({
         <div className="border-app-line bg-app-input grid gap-4 rounded-[14px] border px-5 py-4.5">
           <Toggle
             checked={isCompany}
-            hint="Додає назву та ідентифікаційний код у накладну."
-            label="Відправник — компанія"
+            hint={t('isCompanyHint')}
+            label={t('isCompanyLabel')}
             onChange={setIsCompany}
           />
           <Toggle
             checked={makeDefault}
             disabled={defaultLocked}
-            hint="Підставляється в оформлення доставки. Менеджер може вибрати іншу."
-            label="Точка за замовчуванням"
+            hint={t('defaultHint')}
+            label={t('defaultLabel')}
             onChange={setMakeDefault}
-            title={
-              defaultLocked
-                ? 'Ця точка вже типова. Щоб змінити, зробіть типовою іншу точку.'
-                : undefined
-            }
+            title={defaultLocked ? t('alreadyDefault') : undefined}
           />
           <Toggle
             checked={isActive}
             disabled={defaultLocked}
-            hint="Неактивні точки не пропонуються під час оформлення."
-            label="Активна"
+            hint={t('activeHint')}
+            label={t('active')}
             onChange={setIsActive}
-            title={
-              defaultLocked
-                ? 'Типову точку не можна вимкнути — спершу зробіть типовою іншу.'
-                : undefined
-            }
+            title={defaultLocked ? t('defaultCantDisable') : undefined}
           />
         </div>
       </form>

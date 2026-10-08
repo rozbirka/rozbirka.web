@@ -2,13 +2,13 @@ import { expect, it } from 'vitest'
 import type { DeliveryOrder } from '@/api/delivery'
 import type { CashTransaction } from '@/api/cash'
 import {
-  deliveryGate,
   deliveryStage,
-  depositState,
   hryvnia,
   linkableTransactions,
   linkedGross,
   paymentOutcome,
+  uah,
+  wholeUah,
 } from './delivery-money'
 
 const delivery = (over: Partial<DeliveryOrder> = {}): DeliveryOrder => ({
@@ -45,25 +45,6 @@ const receipt = (over: Partial<CashTransaction> = {}): CashTransaction => ({
   ...over,
 })
 
-it('treats any outstanding balance as what stands between here and a waybill', () => {
-  expect(deliveryGate(delivery({ outstandingUah: 3600 })).blocked).toBe(true)
-  expect(deliveryGate(delivery()).blocked).toBe(false)
-})
-
-it('reads a deposit of zero as unknown rather than as nothing to pay', () => {
-  expect(depositState(delivery({ requiredDepositUah: 0 })).kind).toBe('unknown')
-})
-
-it('separates a waived deposit from a covered one', () => {
-  expect(depositState(delivery({ depositWaived: true })).kind).toBe('waived')
-  expect(depositState(delivery()).kind).toBe('covered')
-  expect(
-    depositState(
-      delivery({ depositSatisfied: false, depositShortfallUah: 160 }),
-    ).label,
-  ).toContain('160')
-})
-
 it('follows the lifecycle by the dates Core stamps', () => {
   expect(deliveryStage(delivery())).toBe('open')
   expect(deliveryStage(delivery({ dispatchedAt: 'now' }))).toBe('dispatched')
@@ -82,12 +63,11 @@ it('adds the fee to a linked receipt instead of taking it off', () => {
 it('refuses a payment that would exceed what the order still owes', () => {
   const outcome = paymentOutcome(4000, 3600)
 
-  expect(outcome.over).toBe(true)
-  expect(outcome.note).toContain('не може перевищувати залишок')
+  expect(outcome).toEqual({ gross: 4000, over: true, remaining: 0 })
 })
 
 it('says whether a payment closes the balance or leaves some of it', () => {
-  expect(paymentOutcome(3600, 3600).title).toBe('Залишок буде закритий')
+  expect(paymentOutcome(3600, 3600).remaining).toBe(0)
   expect(paymentOutcome(1000, 3600).remaining).toBe(2600)
 })
 
@@ -109,4 +89,14 @@ it('takes a hryvnia figure the way the cabinet is typed', () => {
   expect(hryvnia('0')).toBeNull()
   expect(hryvnia('0', { allowZero: true })).toBe(0)
   expect(hryvnia('12,345')).toBeNull()
+})
+
+it('formats hryvnia in the interface language with the ISO code', () => {
+  const plain = (text: string) => text.replace(/[\u00a0\u202f]/g, ' ')
+  expect(plain(uah(1250.5, 'uk'))).toBe('1 250,50 UAH')
+  expect(plain(uah(1250.5, 'en-GB'))).toBe('1,250.50 UAH')
+  expect(plain(uah(1250.5, 'pl'))).toBe('1250,50 UAH')
+  expect(plain(wholeUah(360, 'en-GB'))).toBe('360 UAH')
+  for (const locale of ['uk', 'en-GB', 'pl'] as const)
+    expect(uah(10, locale)).not.toContain('₴')
 })

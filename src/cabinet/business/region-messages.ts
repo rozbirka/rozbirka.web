@@ -1,0 +1,151 @@
+import { defineMessages } from '@/i18n/messages'
+
+export const regionMessages = defineMessages({
+  uk: {
+    regionTitle: 'Регіон і документи',
+    country: 'Країна бізнесу',
+    countryUA: 'Україна',
+    countryGB: 'Велика Британія',
+    countryPL: 'Польща',
+    tz: 'Часовий пояс',
+    tzKyiv: 'Київ',
+    tzLondon: 'Лондон',
+    tzWarsaw: 'Варшава',
+    docLang: 'Мова документів',
+    docLangHint:
+      'Накладні, рахунки, стікери, PDF і повідомлення клієнтам. Не залежить від мови інтерфейсу.',
+    beforeFirst:
+      'Країну й часовий пояс можна змінити до першої операції. Після неї вони зафіксуються, а мову документів можна буде змінювати й далі.',
+    lockReasons:
+      'Першою операцією вважається будь-який збережений запис: авто, партія, запчастина, замовлення, витрата на авто або касова операція.',
+    notLockedYet:
+      'Ще не зафіксовано: власник може змінити країну й часовий пояс до першої операції.',
+    preview: 'Так виглядатимуть документи',
+    previewDate: 'Дата',
+    previewTime: 'Час',
+    previewAmount: 'Сума',
+    save: 'Зберегти регіон',
+    saving: 'Зберігаємо…',
+    cancel: 'Скасувати',
+    confirmTitle: 'Зберегти регіон і мову документів?',
+    confirmBody:
+      'Після першої операції змінити країну й часовий пояс не вийде.',
+    saved: 'Регіон і мову документів збережено.',
+    lockedTitle: 'Зафіксовано після першої операції',
+    lockedBody:
+      'Від країни й часового поясу залежать дати, звітний день і нумерація документів, тому після першої операції їх не можна змінити. Мову документів можна змінювати й далі.',
+    noRights: 'Змінювати ці налаштування може лише власник кабінету.',
+    yourRole: 'Ваша роль',
+    roleOwner: 'Власник',
+    roleManager: 'Менеджер',
+    roleMaster: 'Майстер',
+    regionErr: 'Не вдалося зберегти. Налаштування не змінено.',
+    retry: 'Спробувати ще раз',
+    raceLocked:
+      'За цей час у кабінеті вже провели першу операцію, тому країну й часовий пояс зафіксовано. Налаштування не змінено.',
+    invalid: 'Оберіть підтримувану країну, часовий пояс і мову.',
+    forbidden: 'Змінювати ці налаштування може лише власник кабінету.',
+    unknownTitle: 'Налаштування регіону недоступні',
+    unknownBody:
+      'Сервер ще не передає країну, часовий пояс і мову документів. Дати показуємо за київським часом.',
+    unknownValue: 'Невідомо',
+  },
+  'en-GB': {
+    regionTitle: 'Region and documents',
+    country: 'Business country',
+    countryUA: 'Ukraine',
+    countryGB: 'United Kingdom',
+    countryPL: 'Poland',
+    tz: 'Time zone',
+    tzKyiv: 'Kyiv',
+    tzLondon: 'London',
+    tzWarsaw: 'Warsaw',
+    docLang: 'Document language',
+    docLangHint:
+      'Invoices, bills, labels, PDFs and customer messages. Independent of the interface language.',
+    beforeFirst:
+      'You can change the country and time zone until the first operation. After that they’re locked; the document language can still be changed.',
+    lockReasons:
+      'The first operation is any saved record: a car, batch, part, order, car expense or till transaction.',
+    notLockedYet:
+      'Not locked yet: the owner can change the country and time zone until the first operation.',
+    preview: 'How documents will look',
+    previewDate: 'Date',
+    previewTime: 'Time',
+    previewAmount: 'Amount',
+    save: 'Save region',
+    saving: 'Saving…',
+    cancel: 'Cancel',
+    confirmTitle: 'Save region and document language?',
+    confirmBody:
+      'After the first operation, you won’t be able to change the country or time zone.',
+    saved: 'Region and document language saved.',
+    lockedTitle: 'Locked after the first operation',
+    lockedBody:
+      'Dates, the reporting day and document numbering depend on the country and time zone, so they can’t be changed after the first operation. The document language can still be changed.',
+    noRights: 'Only the account owner can change these settings.',
+    yourRole: 'Your role',
+    roleOwner: 'Owner',
+    roleManager: 'Manager',
+    roleMaster: 'Mechanic',
+    regionErr: 'Couldn’t save. Your settings haven’t changed.',
+    retry: 'Try again',
+    raceLocked:
+      'The first operation was recorded in the meantime, so the country and time zone are now locked. Your settings haven’t changed.',
+    invalid: 'Choose a supported country, time zone and language.',
+    forbidden: 'Only the account owner can change these settings.',
+    unknownTitle: 'Region settings unavailable',
+    unknownBody:
+      'The server doesn’t provide the country, time zone and document language yet. Dates are shown in Kyiv time.',
+    unknownValue: 'Unknown',
+  },
+  pl: {
+    regionTitle: 'Region i dokumenty',
+    country: 'Kraj działalności',
+    countryUA: 'Ukraina',
+    countryGB: 'Wielka Brytania',
+    countryPL: 'Polska',
+    tz: 'Strefa czasowa',
+    tzKyiv: 'Kijów',
+    tzLondon: 'Londyn',
+    tzWarsaw: 'Warszawa',
+    docLang: 'Język dokumentów',
+    docLangHint:
+      'Faktury, rachunki, etykiety, PDF-y i wiadomości do klientów. Niezależny od języka interfejsu.',
+    beforeFirst:
+      'Kraj i strefę czasową można zmienić do pierwszej operacji. Potem zostaną zablokowane, a język dokumentów nadal będzie można zmieniać.',
+    lockReasons:
+      'Pierwszą operacją jest każdy zapisany rekord: samochód, partia, część, zamówienie, wydatek na samochód lub operacja kasowa.',
+    notLockedYet:
+      'Jeszcze niezablokowane: właściciel może zmienić kraj i strefę czasową do pierwszej operacji.',
+    preview: 'Tak będą wyglądać dokumenty',
+    previewDate: 'Data',
+    previewTime: 'Godzina',
+    previewAmount: 'Kwota',
+    save: 'Zapisz region',
+    saving: 'Zapisywanie…',
+    cancel: 'Anuluj',
+    confirmTitle: 'Zapisać region i język dokumentów?',
+    confirmBody:
+      'Po pierwszej operacji nie będzie można zmienić kraju ani strefy czasowej.',
+    saved: 'Zapisano region i język dokumentów.',
+    lockedTitle: 'Zablokowane po pierwszej operacji',
+    lockedBody:
+      'Od kraju i strefy czasowej zależą daty, dzień rozliczeniowy i numeracja dokumentów, dlatego po pierwszej operacji nie można ich zmienić. Język dokumentów można nadal zmieniać.',
+    noRights: 'Tylko właściciel konta może zmienić te ustawienia.',
+    yourRole: 'Twoja rola',
+    roleOwner: 'Właściciel',
+    roleManager: 'Menedżer',
+    roleMaster: 'Mechanik',
+    regionErr: 'Nie udało się zapisać. Ustawienia nie zostały zmienione.',
+    retry: 'Spróbuj ponownie',
+    raceLocked:
+      'W międzyczasie zarejestrowano pierwszą operację, więc kraj i strefa czasowa są teraz zablokowane. Ustawienia nie zostały zmienione.',
+    invalid: 'Wybierz obsługiwany kraj, strefę czasową i język.',
+    forbidden: 'Tylko właściciel konta może zmienić te ustawienia.',
+    unknownTitle: 'Ustawienia regionu są niedostępne',
+    unknownBody:
+      'Serwer nie przekazuje jeszcze kraju, strefy czasowej ani języka dokumentów. Daty pokazujemy według czasu kijowskiego.',
+    unknownValue: 'Nieznany',
+  },
+})

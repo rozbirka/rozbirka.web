@@ -20,9 +20,11 @@ describe('ordersApi', () => {
     const key = 'order-confirm-0001'
 
     await ordersApi.create(create)
-    await ordersApi.updatePayments('order-1', [
-      { accountId: 'cash-1', amount: 100, currency: 'USD' },
-    ])
+    await ordersApi.updatePayments(
+      'order-1',
+      [{ accountId: 'cash-1', amount: 100, currency: 'USD' }],
+      { idempotencyKey: 'order-payments-0001' },
+    )
     await ordersApi.confirm(
       'order-1',
       { payments: [{ accountId: 'cash-1', amount: 250, currency: 'UAH' }] },
@@ -36,9 +38,12 @@ describe('ordersApi', () => {
     )
 
     expect(post).toHaveBeenNthCalledWith(1, '/orders', create)
-    expect(put).toHaveBeenCalledWith('/orders/order-1/payments', {
-      payments: [{ accountId: 'cash-1', amount: 100, currency: 'USD' }],
-    })
+    // Core honours Idempotency-Key on PUT payments too.
+    expect(put).toHaveBeenCalledWith(
+      '/orders/order-1/payments',
+      { payments: [{ accountId: 'cash-1', amount: 100, currency: 'USD' }] },
+      { idempotency: { idempotencyKey: 'order-payments-0001' } },
+    )
     expect(post).toHaveBeenNthCalledWith(
       2,
       '/orders/order-1/confirm',

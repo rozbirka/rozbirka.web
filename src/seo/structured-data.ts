@@ -45,7 +45,9 @@ export function buildStructuredData(
       },
       {
         '@type': 'SoftwareApplication',
-        '@id': `${origin}/#software`,
+        // `/` keeps `https://rozbirka.pro/#software`; each language version
+        // of the landing is its own description of the same product.
+        '@id': `${entry.canonical}#software`,
         name: 'rozbirka',
         url: entry.canonical,
         description: entry.description,

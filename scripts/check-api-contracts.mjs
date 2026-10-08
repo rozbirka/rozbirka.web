@@ -8,7 +8,7 @@ import {
 } from './generate-api-contracts.mjs'
 
 const usage =
-  'Usage: npm run contracts:check -- --core <file-or-url> --identity <file-or-url> [--out <directory>]'
+  'Usage: npm run contracts:check -- --core <file-or-url> [--out <directory>]'
 
 async function fileMatches(expectedPath, actualPath) {
   try {
@@ -35,11 +35,10 @@ async function main() {
   try {
     await generateContracts({
       core: options.core,
-      identity: options.identity,
       outputDirectory: generatedDirectory,
     })
 
-    const filenames = ['core.ts', 'identity.ts']
+    const filenames = ['core.ts']
     const comparisons = await Promise.all(
       filenames.map(async (filename) => ({
         filename,

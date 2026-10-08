@@ -142,6 +142,28 @@ describe('production asset budget', () => {
     )
   })
 
+  it('counts only the largest landing language document toward the critical budget', async () => {
+    const workspace = await workspaceWithChunk(1)
+    const landing = Buffer.alloc(1.2 * 1024 * 1024)
+    for (const locale of ['en', 'pl']) {
+      await mkdir(path.join(workspace, 'dist', locale))
+      await writeFile(
+        path.join(workspace, 'dist', locale, 'index.html'),
+        landing,
+      )
+    }
+    await writeFile(path.join(workspace, 'dist', 'index.html'), landing)
+
+    const { stdout } = await execFileAsync(process.execPath, [checker], {
+      cwd: workspace,
+    })
+    const documents = stdout
+      .split('\n')
+      .filter((line) => /(?:^|\/)index\.html /.test(line))
+    expect(documents).toHaveLength(1)
+    expect(stdout).toMatch(/critical-total 1258\d{3}\n/)
+  })
+
   it('ignores bare imports that are not emitted JavaScript files', async () => {
     const workspace = await workspaceWithChunk(1, {
       staticBareImport: 'react-router/dom',

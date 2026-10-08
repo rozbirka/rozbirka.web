@@ -9,6 +9,11 @@ function env(): EdgeEnv {
       // eslint-disable-next-line @typescript-eslint/require-await
       fetch: vi.fn(async (request: Request) => {
         const path = new URL(request.url).pathname
+        if (path === '/en/index.html' || path === '/pl/index.html') {
+          return new Response(`<html>landing ${path}</html>`, {
+            headers: { 'content-type': 'text/html' },
+          })
+        }
         if (path === '/index.html') {
           return new Response('<html>app</html>', {
             headers: { 'content-type': 'text/html', etag: '"index"' },
@@ -148,6 +153,40 @@ describe('edge routing', () => {
     expect(response.status).toBe(200)
     expect(await response.text()).toContain('app')
   })
+
+  it.each([
+    ['/en', '/en/index.html'],
+    ['/en/', '/en/index.html'],
+    ['/pl', '/pl/index.html'],
+    ['/pl/', '/pl/index.html'],
+  ])(
+    'serves the prerendered language landing for %s',
+    async (path, document) => {
+      const response = await handleRequest(
+        new Request(`https://rozbirka.pro${path}`),
+        env(),
+      )
+
+      expect(response.status).toBe(200)
+      expect(response.headers.get('cache-control')).toBe(
+        'max-age=0, must-revalidate',
+      )
+      expect(response.headers.get('x-robots-tag')).toBeNull()
+      expect(await response.text()).toContain(`landing ${document}`)
+    },
+  )
+
+  it.each(['/uk', '/de', '/en/login', '/pl/privacy'])(
+    'does not invent language routes for %s',
+    async (path) => {
+      const response = await handleRequest(
+        new Request(`https://rozbirka.pro${path}`),
+        env(),
+      )
+
+      expect(response.status).toBe(404)
+    },
+  )
 
   it.each([
     '/oblik-avtozapchastyn',

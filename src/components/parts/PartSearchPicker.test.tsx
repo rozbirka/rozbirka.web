@@ -9,6 +9,7 @@ import {
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { LocaleProvider } from '@/i18n'
 import { PartSearchPicker, type PartPickerItem } from './PartSearchPicker'
 
 const partMocks = vi.hoisted(() => ({
@@ -66,6 +67,7 @@ function Harness({
   const [query, setQuery] = useState('')
   return (
     <PartSearchPicker
+      currency="USD"
       onClear={vi.fn()}
       onQueryChange={setQuery}
       onSelect={(selected) => {
@@ -145,6 +147,27 @@ describe('PartSearchPicker', () => {
     expect(partMocks.list).not.toHaveBeenCalled()
   })
 
+  it('speaks English (UK) inside an en-GB locale', async () => {
+    const user = userEvent.setup()
+    render(
+      <LocaleProvider locale="en-GB" syncDocumentLang={false}>
+        <Harness />
+      </LocaleProvider>,
+    )
+
+    await user.type(
+      screen.getByRole('searchbox', { name: 'Search for a part' }),
+      'inverter',
+    )
+
+    const option = await screen.findByRole('option', {
+      name: 'Choose part Інвертор 1',
+    })
+    expect(option).toHaveTextContent('3 in stock')
+    expect(screen.getByRole('button', { name: /^All/ })).toBeVisible()
+    expect(screen.getByRole('listbox', { name: 'Parts found' })).toBeVisible()
+  })
+
   it('reuses loaded prices when repeated searches return the same parts', async () => {
     render(<Harness />)
     const search = screen.getByRole('searchbox', {
@@ -192,7 +215,7 @@ describe('PartSearchPicker', () => {
     expect(reservedFilter).not.toHaveClass('bg-state-warn-soft')
     expect(within(dropdown).queryByRole('button', { name: /Немає/ })).toBeNull()
     expect(within(dropdown).queryByText('І1')).toBeNull()
-    expect(within(dropdown).getByText('0 $')).toBeVisible()
+    expect(within(dropdown).getByText(/^0,00\sUSD$/)).toBeVisible()
     expect(within(dropdown).getByText('—')).toBeVisible()
     expect(
       within(dropdown).getAllByText('Volkswagen ID.4 · 2022'),

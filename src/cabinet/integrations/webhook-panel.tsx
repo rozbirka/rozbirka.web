@@ -19,19 +19,14 @@ import {
   type NovaPoshtaWebhookStatus,
 } from '@/api/integrations'
 import { normalizeApiProblem } from '@/api/errors'
-import { plural } from '@/lib/utils'
+import { commonMessages, useLocale, useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import { cabinetModules } from '../module-registry'
 import { Kpi, KpiStrip } from '../redesign-kpi'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
-
-const NO_EVENT_DETAIL =
-  'Сервіс повертає тільки ідентифікатори подій — ні номера накладної, ні причини, ні часу по кожній з них немає.'
-
-const NO_FEED_STATS =
-  'Скільки подій оброблено за добу й скільки відхилено через підпис — сервіс не рахує.'
-
-const EVENTS: [string, string, string] = ['подія', 'події', 'подій']
+import { integrationProblemMessage } from './integration-labels'
+import { npFeedMessages } from './np-feed-messages'
+import { waitedFor } from './webhook-wait'
 
 type LoadState =
   | { kind: 'loading' }
@@ -49,17 +44,6 @@ function Card({ title, children }: { title: ReactNode; children: ReactNode }) {
   )
 }
 
-/** Minutes are what an operator reads here, not a timestamp. */
-function waitedFor(from: string): string {
-  const minutes = Math.max(
-    0,
-    Math.round((Date.now() - Date.parse(from)) / 60000),
-  )
-  if (minutes < 60) return `${minutes} хв`
-  const hours = Math.floor(minutes / 60)
-  return hours < 24 ? `${hours} год` : `${Math.floor(hours / 24)} дн`
-}
-
 /**
  * The carrier's status feed as a tab: whether events arrive at all, and what
  * happened to the ones that could not be processed.
@@ -73,6 +57,9 @@ export function WebhookPanel({
 }) {
   const cabinet = useCabinet()
   const toast = useToast()
+  const { locale } = useLocale()
+  const t = useT(npFeedMessages)
+  const tc = useT(commonMessages)
   const tenant = cabinet.targetTenant
   const tenantId = cabinet.snapshot?.tenantId ?? null
   const generation = cabinet.snapshot?.generation
@@ -128,9 +115,7 @@ export function WebhookPanel({
 
   if (tenant === null) {
     return (
-      <p className="text-app-muted text-sm">
-        Оберіть розбірку, щоб відкрити діагностику.
-      </p>
+      <p className="text-app-muted text-sm">{t('pickBusinessDiagnostics')}</p>
     )
   }
 
@@ -145,7 +130,7 @@ export function WebhookPanel({
       requireLatestMutation()
       return true
     } catch {
-      setError('Дія недоступна: немає прав на налаштування команди.')
+      setError(t('noAccess'))
       return false
     }
   }
@@ -163,7 +148,10 @@ export function WebhookPanel({
       setSecret('')
       reload()
     } catch (problem) {
-      if (mountedRef.current) setError(normalizeApiProblem(problem).message)
+      if (mountedRef.current)
+        setError(
+          integrationProblemMessage(normalizeApiProblem(problem), locale),
+        )
     } finally {
       if (mountedRef.current) setBusy(null)
     }
@@ -179,7 +167,10 @@ export function WebhookPanel({
       if (!mountedRef.current) return
       reload()
     } catch (problem) {
-      if (mountedRef.current) setError(normalizeApiProblem(problem).message)
+      if (mountedRef.current)
+        setError(
+          integrationProblemMessage(normalizeApiProblem(problem), locale),
+        )
     } finally {
       if (mountedRef.current) {
         setBusy(null)
@@ -212,8 +203,8 @@ export function WebhookPanel({
       tone: failed === 0 ? 'ok' : 'danger',
       message:
         failed === 0
-          ? `Повторено подій: ${done}.`
-          : `Повторено ${done} із ${ids.length}. Не вдалося: ${failed}.`,
+          ? t('retriedAll', { done })
+          : t('retriedSome', { done, total: ids.length, failed }),
     })
     reload()
   }
@@ -224,9 +215,9 @@ export function WebhookPanel({
       if (!navigator.clipboard?.writeText)
         throw new Error('Clipboard unavailable')
       await navigator.clipboard.writeText(receiveUrl)
-      toast.show({ tone: 'ok', message: 'Адресу прийому скопійовано.' })
+      toast.show({ tone: 'ok', message: t('urlCopied') })
     } catch {
-      setError('Не вдалося скопіювати адресу прийому.')
+      setError(t('copyFailed'))
     }
   }
 
@@ -234,11 +225,10 @@ export function WebhookPanel({
     <div className="grid gap-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <p className="text-app-muted max-w-[62ch] text-[14px] leading-6 text-pretty">
-          Чи Rozbirka отримує події Нової пошти і що сталося з необробленими.
-          Технічний блок для адміністратора.
+          {t('webhookIntro')}
         </p>
         <Button disabled={busy !== null} onClick={reload}>
-          Оновити дані
+          {t('refreshData')}
         </Button>
       </div>
 
@@ -246,21 +236,20 @@ export function WebhookPanel({
 
       {state.kind === 'error' && (
         <Notice tone="danger">
-          Не вдалося прочитати стан черги подій. На вже створені накладні це не
-          впливає —{' '}
+          {t('queueError')}{' '}
           <button
             className="underline underline-offset-4"
             onClick={reload}
             type="button"
           >
-            спробувати ще раз
+            {t('tryAgainLower')}
           </button>
           .
         </Notice>
       )}
 
       {state.kind === 'loading' && (
-        <p className="text-app-muted text-sm">Збираємо дані про черги подій…</p>
+        <p className="text-app-muted text-sm">{t('queueLoading')}</p>
       )}
 
       {status !== null && (
@@ -268,58 +257,39 @@ export function WebhookPanel({
           {status.enabled ? (
             status.deadLetters > 0 ? (
               <Notice tone="warn">
-                Прийом подій налаштований, але{' '}
-                {plural(status.deadLetters, [
-                  'одну подію',
-                  `${status.deadLetters} події`,
-                  `${status.deadLetters} подій`,
-                ])}{' '}
-                не вдалося обробити після всіх спроб. Статуси цих відправлень
-                оновлюються лише вручну.
+                {t('deadLettersWarn', { count: status.deadLetters })}
               </Notice>
             ) : (
-              <Notice tone="ok">
-                Прийом подій налаштований, черга чиста. Статуси відправлень
-                оновлюються самі.
-              </Notice>
+              <Notice tone="ok">{t('queueClean')}</Notice>
             )
           ) : (
-            <Notice tone="danger">
-              Прийом подій не налаштований. Rozbirka не отримує події Нової
-              пошти — статуси відправлень оновлюються тільки вручну, з картки
-              замовлення.
-            </Notice>
+            <Notice tone="danger">{t('notConfigured')}</Notice>
           )}
 
           <KpiStrip>
             <Kpi
-              label="Прийом подій"
+              label={t('kpiReceiving')}
               meta={
-                status.enabled
-                  ? 'Секрет збережено, підпис перевіряється'
-                  : 'Секрет не збережено'
+                status.enabled ? t('secretSavedMeta') : t('secretMissingMeta')
               }
               tone={status.enabled ? 'plain' : 'warn'}
-              value={status.enabled ? 'Так' : 'Ні'}
+              value={status.enabled ? tc('yes') : tc('no')}
             />
             <Kpi
-              label="Очікують обробки"
-              meta={
-                status.pending === 0
-                  ? 'Черга порожня'
-                  : 'Обробляються за чергою'
-              }
-              unit={plural(status.pending, EVENTS)}
+              label={t('kpiPending')}
+              meta={status.pending === 0 ? t('queueEmpty') : t('inQueue')}
+              unit={t('events', { count: status.pending })}
               value={String(status.pending)}
             />
             <Kpi
-              label="Найстаріша необроблена"
+              label={t('kpiOldest')}
               meta={
                 status.oldestPendingAt === null ? (
-                  'Необроблених подій немає'
+                  t('noUnprocessed')
                 ) : (
                   <>
-                    Подія від <DateValue value={status.oldestPendingAt} />
+                    {t('eventFrom')}{' '}
+                    <DateValue value={status.oldestPendingAt} />
                   </>
                 )
               }
@@ -327,30 +297,30 @@ export function WebhookPanel({
               value={
                 status.oldestPendingAt === null
                   ? '—'
-                  : waitedFor(status.oldestPendingAt)
+                  : waitedFor(status.oldestPendingAt, locale)
               }
             />
             <Kpi
-              label="Спроби вичерпані"
+              label={t('kpiExhausted')}
               meta={
                 status.deadLetters === 0
-                  ? 'Без помилок'
-                  : 'Потрібне ручне повторення'
+                  ? t('noErrors')
+                  : t('manualRetryNeeded')
               }
               tone={status.deadLetters === 0 ? 'plain' : 'warn'}
-              unit={plural(status.deadLetters, EVENTS)}
+              unit={t('events', { count: status.deadLetters })}
               value={String(status.deadLetters)}
             />
           </KpiStrip>
 
           <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)]">
             <section
-              aria-label="Події з вичерпаними спробами"
+              aria-label={t('exhaustedTitle')}
               className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
             >
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 px-6 pt-5 pb-4">
                 <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-                  Події з вичерпаними спробами
+                  {t('exhaustedTitle')}
                 </h2>
                 {status.deadLetterIds.length > 0 && (
                   <Button
@@ -358,18 +328,17 @@ export function WebhookPanel({
                     disabled={busy !== null}
                     onClick={() => void retryAll(status.deadLetterIds)}
                   >
-                    Повторити всі
+                    {t('retryAll')}
                   </Button>
                 )}
               </div>
               {status.deadLetterIds.length === 0 ? (
                 <div className="border-app-line grid justify-items-center gap-2 border-t px-6 py-10 text-center">
                   <p className="text-[17px] font-bold tracking-[-0.01em] text-white">
-                    Помилок обробки немає
+                    {t('noProcessingErrors')}
                   </p>
                   <p className="text-app-muted max-w-[44ch] text-[13px] leading-5 text-pretty">
-                    Список заповнюється лише тоді, коли спроби обробити подію
-                    вичерпані.
+                    {t('listExplain')}
                   </p>
                 </div>
               ) : (
@@ -382,43 +351,38 @@ export function WebhookPanel({
                       >
                         <span
                           className="text-app-muted min-w-0 flex-1 truncate font-mono text-[13px]"
-                          title={NO_EVENT_DETAIL}
+                          title={t('noEventDetail')}
                         >
-                          Подія {eventId.slice(0, 8)}
+                          {t('eventLabel', { id: eventId.slice(0, 8) })}
                         </span>
                         <Button
                           aria-busy={retrying === eventId}
                           disabled={busy !== null}
                           onClick={() => void retryOne(eventId)}
                         >
-                          {retrying === eventId ? 'Повторюємо…' : 'Повторити'}
+                          {retrying === eventId ? t('retrying') : t('retry')}
                         </Button>
                       </li>
                     ))}
                   </ul>
                   <p
                     className="text-app-dim border-app-line border-t px-6 py-4 text-[13px] leading-5 text-pretty"
-                    title={NO_EVENT_DETAIL}
+                    title={t('noEventDetail')}
                   >
-                    Сервіс не повідомляє, якої накладної стосується подія і чому
-                    її не вдалося обробити. Показано до 20 найстаріших.
+                    {t('deadListNote')}
                   </p>
                 </>
               )}
             </section>
 
-            <Card title="Секрет для перевірки підпису">
+            <Card title={t('secretCard')}>
               {editingSecret ? (
                 <form
                   className="grid gap-3.5"
                   noValidate
                   onSubmit={(event) => void saveSecret(event)}
                 >
-                  <Field
-                    hint="Після збереження секрет буде приховано."
-                    label="Новий секрет"
-                    required
-                  >
+                  <Field hint={t('secretHint')} label={t('newSecret')} required>
                     <TextInput
                       autoComplete="off"
                       className="font-mono"
@@ -433,7 +397,7 @@ export function WebhookPanel({
                       type="submit"
                       variant="primary"
                     >
-                      Зберегти секрет
+                      {t('saveSecret')}
                     </Button>
                     <Button
                       disabled={busy !== null}
@@ -442,7 +406,7 @@ export function WebhookPanel({
                         setSecret('')
                       }}
                     >
-                      Скасувати
+                      {tc('cancel')}
                     </Button>
                   </div>
                 </form>
@@ -452,11 +416,11 @@ export function WebhookPanel({
                     <span className="text-app-muted min-w-0 font-mono text-[15px] tracking-[0.12em]">
                       {status.enabled
                         ? '••••••••••••••••'
-                        : 'секрет не збережено'}
+                        : t('secretNotSaved')}
                     </span>
                     {status.enabled && (
                       <span className="text-state-ok ml-auto text-[12px] font-bold">
-                        Збережено
+                        {tc('saved')}
                       </span>
                     )}
                   </div>
@@ -466,27 +430,23 @@ export function WebhookPanel({
                       onClick={() => setEditingSecret(true)}
                       variant={status.enabled ? 'ghost' : 'primary'}
                     >
-                      {status.enabled ? 'Замінити секрет' : 'Додати секрет'}
+                      {status.enabled ? t('replaceSecret') : t('addSecret')}
                     </Button>
                     <Button
                       disabled={busy !== null || receiveUrl === null}
                       onClick={() => void copyUrl()}
                     >
-                      Скопіювати адресу прийому
+                      {t('copyUrl')}
                     </Button>
                   </div>
                 </>
               )}
-              <Notice tone="warn">
-                Збереження секрету в Rozbirka не реєструє підписку в Новій пошті
-                — її налаштовують окремо, у кабінеті перевізника.
-              </Notice>
+              <Notice tone="warn">{t('secretWarn')}</Notice>
               <p
                 className="text-app-dim text-[12.5px] leading-5 text-pretty"
-                title={NO_FEED_STATS}
+                title={t('noFeedStats')}
               >
-                Скільки подій оброблено за добу й скільки відхилено через підпис
-                — тут не показуємо: сервіс цього не рахує.
+                {t('feedStatsNote')}
               </p>
             </Card>
           </div>

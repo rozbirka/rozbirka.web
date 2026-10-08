@@ -4,7 +4,15 @@ export interface ProductDocumentSeo {
   description: string
   canonical: string
   ogImage: string
-  breadcrumbs: readonly { name: string; path: string }[]
+  /** Landing documents carry a SoftwareApplication graph, no breadcrumbs. */
+  landing?: boolean
+  /** Document language written to `<html lang>`. */
+  locale?: string
+  /** `og:locale` value (e.g. `en_GB`). */
+  ogLocale?: string
+  /** `hreflang` alternates injected after the canonical link. */
+  alternates?: readonly { hreflang: string; href: string }[]
+  breadcrumbs?: readonly { name: string; path: string }[]
 }
 
 export function documentPathForRoute(pathname: string): string

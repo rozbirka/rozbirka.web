@@ -4,12 +4,16 @@ import { credentials } from '@/api/credentials'
 import { profileApi } from '@/api/profile'
 import { tenantPreference } from '@/api/tenant-preference'
 import { Button, Field, Notice, TextInput } from '@/components/app'
+import { commonMessages, useT } from '@/i18n'
+import { accountMessages } from './account-messages'
 
-const CONFIRMATION_PHRASE = 'ВИДАЛИТИ'
 const CONFIRMATION_DELAY_SECONDS = 5
 
 export function AccountDeletion() {
   const auth = useAuth()
+  const t = useT(accountMessages)
+  const tc = useT(commonMessages)
+  const confirmationPhrase = t('confirmPhrase')
   const [deleteState, setDeleteState] = useState<
     'idle' | 'confirming' | 'pending' | 'error'
   >('idle')
@@ -39,7 +43,7 @@ export function AccountDeletion() {
   const handleDelete = async () => {
     if (
       deleteState !== 'confirming' ||
-      confirmation !== CONFIRMATION_PHRASE ||
+      confirmation !== confirmationPhrase ||
       secondsLeft > 0 ||
       active.current
     )
@@ -63,18 +67,13 @@ export function AccountDeletion() {
   }
   return (
     <section className="border-state-danger/30 bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5">
-      <h2 className="text-app-ink text-[15px] font-bold">Видалити акаунт</h2>
+      <h2 className="text-app-ink text-[15px] font-bold">{t('deleteTitle')}</h2>
       <p className="text-app-muted mt-2.5 text-[13px] leading-5 text-pretty">
-        Цю дію неможливо скасувати. Будуть видалені ваші ім’я, телефон, сеанси
-        та членства в розбірках. Спільні записи, документи й фото компанії
-        залишаться. Видалення акаунта не скасовує підписки компанії або магазину
-        застосунків.
+        {t('deleteBody')}
       </p>
       {deleteState === 'error' && (
         <div className="mt-3">
-          <Notice tone="danger">
-            Не вдалося видалити акаунт. Спробуйте ще раз.
-          </Notice>
+          <Notice tone="danger">{t('deleteFailed')}</Notice>
         </div>
       )}
       {deleteState === 'confirming' || deleteState === 'pending' ? (
@@ -85,15 +84,15 @@ export function AccountDeletion() {
           role="group"
         >
           <p className="text-sm text-white" id="delete-account-title">
-            Підтвердіть видалення акаунта. Ця дія незворотна.
+            {t('confirmPrompt')}
           </p>
           {deleteState === 'pending' ? (
             <p className="text-app-muted text-sm" role="status">
-              Видалення акаунта… Дочекайтеся підтвердження.
+              {t('deleting')}
             </p>
           ) : (
             <div className="grid gap-3">
-              <Field label={`Для підтвердження введіть ${CONFIRMATION_PHRASE}`}>
+              <Field label={t('typeToConfirm', { phrase: confirmationPhrase })}>
                 <TextInput
                   autoComplete="off"
                   onChange={(event) => setConfirmation(event.target.value)}
@@ -102,8 +101,8 @@ export function AccountDeletion() {
               </Field>
               <p className="text-app-dim text-[12.5px]" role="status">
                 {secondsLeft > 0
-                  ? `Остаточне видалення буде доступне через ${secondsLeft} с.`
-                  : 'Час очікування завершено.'}
+                  ? t('waitSeconds', { seconds: secondsLeft })
+                  : t('waitOver')}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -113,16 +112,16 @@ export function AccountDeletion() {
                     setSecondsLeft(CONFIRMATION_DELAY_SECONDS)
                   }}
                 >
-                  Скасувати
+                  {tc('cancel')}
                 </Button>
                 <Button
                   disabled={
-                    confirmation !== CONFIRMATION_PHRASE || secondsLeft > 0
+                    confirmation !== confirmationPhrase || secondsLeft > 0
                   }
                   onClick={() => void handleDelete()}
                   variant="danger"
                 >
-                  Так, видалити акаунт
+                  {t('confirmDelete')}
                 </Button>
               </div>
             </div>
@@ -138,7 +137,7 @@ export function AccountDeletion() {
           }}
           variant="danger"
         >
-          Видалити акаунт
+          {t('deleteTitle')}
         </Button>
       )}
     </section>

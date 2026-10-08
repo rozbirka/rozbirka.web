@@ -12,6 +12,7 @@ import {
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { Compass, Loader2, PauseCircle, RotateCcw } from 'lucide-react'
 import { Button, ErrorState, StateScreen } from '@/components/app'
+import { useT, type MessageKey } from '@/i18n'
 import { billingApi } from '../api/billing'
 import { tenantPreference } from '../api/tenant-preference'
 import type { Tenant } from '../api/types'
@@ -21,6 +22,7 @@ import type { TenantAccessSnapshot } from './access-types'
 import { cabinetPath } from './cabinet-paths'
 import { cabinetModules } from './module-registry'
 import { evaluateModuleAccess } from './policy'
+import { shellMessages } from './shell-messages'
 import { tenantRequestScope } from './tenant-request-scope'
 import {
   TenantDepartureError,
@@ -397,6 +399,15 @@ export function CabinetProvider({ children }: { children: ReactNode }) {
         error: null,
       }
     }
+    // Same tenant, newer object (e.g. business settings merged after a save
+    // or a re-read): expose the fresh one without a scope transition.
+    if (
+      state.targetTenant !== null &&
+      state.targetTenant !== routeTarget &&
+      state.targetTenant.id === routeTarget.id
+    ) {
+      return { ...state, targetTenant: routeTarget }
+    }
     return state
   }, [auth.status, auth.user, routeTarget, state])
 
@@ -435,30 +446,30 @@ export function CabinetProvider({ children }: { children: ReactNode }) {
     case 'not-found':
       content = (
         <ShellRecovery
-          description={
+          descriptionKey={
             recoveryTenant === null
-              ? 'Ця адреса не веде до жодної з ваших розбірок. Перевірте посилання або поверніться на головну сторінку.'
-              : 'Ця адреса не веде до жодної з ваших розбірок. Перевірте посилання або відкрийте активну розбірку.'
+              ? 'shell.notFoundHome'
+              : 'shell.notFoundActive'
           }
           icon={<Compass aria-hidden />}
-          label="Невідома розбірка"
+          labelKey="shell.notFoundLabel"
           recoveryTenant={recoveryTenant}
-          title="Розбірку не знайдено"
+          titleKey="shell.notFoundTitle"
         />
       )
       break
     case 'inactive':
       content = (
         <ShellRecovery
-          description={
+          descriptionKey={
             recoveryTenant === null
-              ? 'Доступ до цієї розбірки призупинено. Попросіть власника поновити її або поверніться на головну сторінку.'
-              : 'Доступ до цієї розбірки призупинено. Відкрийте активну розбірку або попросіть власника поновити цю.'
+              ? 'shell.inactiveHome'
+              : 'shell.inactiveActive'
           }
           icon={<PauseCircle aria-hidden />}
-          label="Неактивна розбірка"
+          labelKey="shell.inactiveLabel"
           recoveryTenant={recoveryTenant}
-          title="Розбірка неактивна"
+          titleKey="shell.inactiveTitle"
         />
       )
       break
@@ -488,6 +499,7 @@ function ShellFrame({
   account?: boolean
   children: ReactNode
 }) {
+  const t = useT(shellMessages)
   return (
     <div className="bg-app-canvas grid min-h-dvh place-items-center px-4 py-10">
       <div className="w-full max-w-md">
@@ -495,7 +507,7 @@ function ShellFrame({
         {account && (
           <div className="mt-5 flex justify-center">
             <Button asChild variant="quiet">
-              <Link to="/account/security">Особистий акаунт</Link>
+              <Link to="/account/security">{t('shell.account')}</Link>
             </Button>
           </div>
         )}
@@ -507,13 +519,14 @@ function ShellFrame({
 const spinner = <Loader2 aria-hidden className="motion-safe:animate-spin" />
 
 function ShellLoading() {
+  const t = useT(shellMessages)
   return (
     <ShellFrame>
       <StateScreen
-        description="Готуємо доступи, тарифи й дані розбірки. Це триває кілька секунд."
+        description={t('shell.loadingBody')}
         icon={spinner}
-        label="Завантаження розбірки"
-        title="Завантажуємо розбірку…"
+        label={t('shell.loadingLabel')}
+        title={t('shell.loadingTitle')}
         tone="brand"
       />
     </ShellFrame>
@@ -521,16 +534,17 @@ function ShellLoading() {
 }
 
 function ShellSwitching({ target }: { target: Tenant | null }) {
+  const t = useT(shellMessages)
   return (
     <ShellFrame>
       <StateScreen
-        description="Закриваємо дані попередньої розбірки, щоб вони не змішалися з новою."
+        description={t('shell.switchingBody')}
         icon={spinner}
-        label="Перемикання розбірки"
+        label={t('shell.switchingLabel')}
         title={
           target === null
-            ? 'Перемикаємо розбірку…'
-            : `Відкриваємо «${target.name}»…`
+            ? t('shell.switchingTitle')
+            : t('shell.switchingTo', { name: target.name })
         }
         tone="brand"
       />
@@ -539,49 +553,54 @@ function ShellSwitching({ target }: { target: Tenant | null }) {
 }
 
 function ShellLoadFailure({ onRetry }: { onRetry: () => void }) {
+  const t = useT(shellMessages)
   return (
     <ShellFrame account>
       <ErrorState
-        description="Не вдалося отримати доступи до розбірки. Перевірте зв’язок і спробуйте ще раз — дані залишилися на місці."
-        label="Помилка завантаження розбірки"
+        description={t('shell.loadFailedBody')}
+        label={t('shell.loadFailedLabel')}
         onRetry={onRetry}
-        title="Не вдалося завантажити розбірку"
+        title={t('shell.loadFailedTitle')}
       />
     </ShellFrame>
   )
 }
 
 function ShellCleanupFailure() {
+  const t = useT(shellMessages)
   return (
     <ShellFrame account>
       <ErrorState
         actions={
           <Button onClick={() => window.location.reload()} variant="primary">
             <RotateCcw aria-hidden />
-            Перезапустити застосунок
+            {t('shell.restart')}
           </Button>
         }
-        description="Дані попередньої розбірки лишилися в пам’яті застосунку. Перезапустіть його, щоб відкрити наступну розбірку з чистими даними."
-        label="Помилка очищення даних розбірки"
-        title="Не вдалося безпечно очистити дані попередньої розбірки."
+        description={t('shell.cleanupBody')}
+        label={t('shell.cleanupLabel')}
+        title={t('shell.cleanupTitle')}
       />
     </ShellFrame>
   )
 }
 
+type ShellMessageKey = MessageKey<typeof shellMessages>
+
 function ShellRecovery({
-  title,
-  description,
+  titleKey,
+  descriptionKey,
   icon,
-  label,
+  labelKey,
   recoveryTenant,
 }: {
-  title: string
-  description: string
+  titleKey: ShellMessageKey
+  descriptionKey: ShellMessageKey
   icon: ReactNode
-  label: string
+  labelKey: ShellMessageKey
   recoveryTenant: Tenant | null
 }) {
+  const t = useT(shellMessages)
   return (
     <ShellFrame account>
       <StateScreen
@@ -594,15 +613,17 @@ function ShellRecovery({
                   : cabinetPath(recoveryTenant.slug, 'dashboard')
               }
             >
-              {recoveryTenant === null ? 'На головну' : 'До активної розбірки'}
+              {recoveryTenant === null
+                ? t('shell.toHome')
+                : t('shell.toActive')}
             </Link>
           </Button>
         }
-        description={description}
+        description={t(descriptionKey)}
         icon={icon}
-        label={label}
+        label={t(labelKey)}
         role="alert"
-        title={title}
+        title={t(titleKey)}
         tone="warn"
       />
     </ShellFrame>

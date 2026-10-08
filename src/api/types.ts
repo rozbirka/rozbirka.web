@@ -1,29 +1,22 @@
-// === Core authentication ===
+import type { SupportedCurrency } from '../i18n/currencies'
+import type { Locale } from '../i18n/locales'
+import type { components } from './generated/core'
 
-export interface SendOtpRequest {
-  phone: string
-}
+// === Core authentication (`/auth/*` in the pinned Core contract) ===
 
-export interface SendOtpResponse {
-  retryAfterSeconds: number
-  cooldownSeconds: number
-  challengeId: string
-  expiresAt: string
-  resendAt: string
-}
+type CoreSchemas = components['schemas']
 
-export interface VerifyOtpRequest {
-  phone: string
-  code: string
-  challengeId: string
-}
+export type SendOtpRequest = CoreSchemas['SendOtpRequest']
+export type SendOtpResponse = CoreSchemas['OtpSendResponse']
+export type VerifyOtpRequest = CoreSchemas['VerifyOtpRequest']
 
-export interface VerifyUser {
-  id: string
-  phone: string
-  displayName: string
-}
+/** User returned by the verify endpoints; `language` `null` = automatic. */
+export type VerifyUser = CoreSchemas['VerifyUserDto']
 
+/**
+ * The Worker's session verify response: Core's `VerifyResponse` without the
+ * refresh token, which stays in the Worker's HttpOnly cookie.
+ */
 export interface SessionVerifyResponse {
   accessToken: string
   user: VerifyUser
@@ -35,26 +28,26 @@ export interface SessionRefreshResponse {
   expiresIn: number
 }
 
-export interface UpdateNameRequest {
-  name: string
+export type UpdateNameRequest = CoreSchemas['UpdateNameRequest']
+
+/**
+ * PATCH /auth/me/language — `null` returns to automatic selection. Narrower
+ * than Core's `UpdateLanguageRequest` (any string): the web sends only
+ * supported locales; contract-alignment.ts keeps the two in step.
+ */
+export interface UpdateLanguageRequest {
+  language: Locale | null
 }
 
-export interface UpdateNameResponse {
-  user: VerifyUser
-  accessToken: string
-  expiresIn: number
-}
+/** Response of PATCH /auth/me/name and /auth/me/language. */
+export type UpdateNameResponse = CoreSchemas['UpdateNameResponse']
 
-export type UserRole = 'owner' | 'manager' | 'master' | (string & {})
-
-export interface User {
-  id: string
-  phone: string | null
-  displayName: string
-  role: UserRole
-  isActive: boolean
-  lastLoginAt: string | null
-}
+/**
+ * GET /auth/me. `language` is the saved personal interface language (`uk`,
+ * `en-GB`, `pl`; `null` = automatic) and is validated by the locale resolver
+ * before use; `effectiveLanguage` is Core's own resolution.
+ */
+export type User = CoreSchemas['MeResponse']
 
 // === Tenants (rozbirka.core) ===
 
@@ -76,6 +69,24 @@ export interface Tenant {
    * yard carries the cost of an uncollected parcel itself.
    */
   requireDeliveryDeposit: boolean
+  /*
+   * Business settings (Core `TenantDto`). Optional because older Cores and
+   * fixtures lack them; `normalizeTenant` turns unknown values into `null`.
+   * Missing means unknown — read them through `tenantSettings()`, never
+   * guess.
+   */
+  /** `UA`, `GB` or `PL`. */
+  countryCode?: 'UA' | 'GB' | 'PL' | null
+  /** IANA zone of the business, e.g. `Europe/Kyiv`. */
+  timeZoneId?: string | null
+  /** Language of documents and customer messages (not the user's UI). */
+  documentLanguage?: Locale | null
+  /** `null` until the owner chooses it; there is no default currency. */
+  accountingCurrency?: SupportedCurrency | null
+  /** Region and document language are fixed after the first operation. */
+  regionLocked?: boolean | null
+  /** Accounting currency is fixed after the first priced record. */
+  currencyLocked?: boolean | null
 }
 
 export interface CreateTenantRequest {

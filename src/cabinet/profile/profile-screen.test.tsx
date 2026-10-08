@@ -20,7 +20,10 @@ import type { TenantAccessSnapshot } from '../access-types'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { ProfileScreen } from './profile-screen'
 
-vi.mock('@/auth/AuthContext', () => ({ useAuth: vi.fn() }))
+vi.mock('@/auth/AuthContext', () => {
+  const useAuth = vi.fn()
+  return { useAuth, useOptionalAuth: () => useAuth() as unknown }
+})
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
 vi.mock('@/api/profile', () => ({ profileApi: { deleteAccount: vi.fn() } }))
 
@@ -98,9 +101,7 @@ beforeEach(() => {
       id: 'user-1',
       phone: '+380733182301',
       displayName: 'Олена',
-      role: 'manager',
-      isActive: true,
-      lastLoginAt: null,
+      effectiveLanguage: 'uk',
     },
     tenant,
     tenants: [tenant],
@@ -369,9 +370,7 @@ it('resets for an in-place auth transition and ignores the prior update completi
       id: 'user-2',
       phone: '+380501112233',
       displayName: 'Нове імʼя',
-      role: 'owner',
-      isActive: true,
-      lastLoginAt: null,
+      effectiveLanguage: 'uk',
     },
     tenant,
     tenants: [tenant],
@@ -435,4 +434,38 @@ it('does not clear a newer session after old-account deletion completes', async 
   })
   expect(credentials.getAccess()).toBe('B')
   expect(signOut).not.toHaveBeenCalled()
+})
+
+it('shows every member the business region read-only with why it is locked', () => {
+  const settled: Tenant = {
+    ...tenant,
+    countryCode: 'PL',
+    timeZoneId: 'Europe/Warsaw',
+    documentLanguage: 'pl',
+    regionLocked: true,
+  }
+  vi.mocked(useCabinet).mockReturnValue({
+    status: 'ready',
+    targetTenant: settled,
+    snapshot: { ...snapshot, role: 'Master' },
+    error: null,
+    retry: vi.fn(),
+    switchTenant: vi.fn(),
+  } satisfies CabinetContextValue)
+  render(<ProfileScreen />, { wrapper: MemoryRouter })
+
+  const card = screen.getByRole('region', { name: 'Документи бізнесу' })
+  expect(within(card).getByText('Польща')).toBeVisible()
+  expect(within(card).getByText(/Варшава/)).toBeVisible()
+  expect(within(card).getByText('Polski')).toHaveAttribute('lang', 'pl')
+  expect(
+    within(card).getByText(/Зафіксовано після першої операції/),
+  ).toBeVisible()
+  expect(
+    within(card).getByText(
+      /авто, партія, запчастина, замовлення, витрата на авто або касова операція/,
+    ),
+  ).toBeVisible()
+  expect(within(card).queryByRole('combobox')).toBeNull()
+  expect(within(card).queryByRole('button')).toBeNull()
 })

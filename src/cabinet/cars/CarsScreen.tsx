@@ -30,7 +30,14 @@ import {
   Trash2,
   Wallet,
 } from 'lucide-react'
-import { cn, plural } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import {
+  commonMessages,
+  useLocale,
+  useT,
+  type SupportedCurrency,
+  type Translate,
+} from '@/i18n'
 import {
   ActionMenu,
   Button,
@@ -81,7 +88,19 @@ import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { CarExpenseDrawer } from './CarExpenseDrawer'
 import { CarPartsCard } from './CarPartsCard'
 import { CarProfitabilityCard } from './CarProfitabilityCard'
-import { money } from './car-money'
+import { carFormMessages } from './car-form-messages'
+import { formatDay } from './day'
+import { carsMessages } from './messages'
+import { useCarMoney } from './car-money'
+import { currencyMessages } from '../currency/messages'
+import { MoneyInput } from '../currency/price-currency'
+import {
+  useAccountingCurrency,
+  useFirstPriceGuard,
+} from '../currency/use-accounting-currency'
+import { usePriceSlots, type PriceSlots } from '../currency/use-price-slots'
+import { useCurrencyDraft } from '../currency/form-draft'
+import { amountPrecisionError } from '../currency/amount-precision'
 
 /**
  * The shots that make a car card usable to someone who never saw the car. The
@@ -89,35 +108,29 @@ import { money } from './car-money'
  * without pretending the server stores a slot per shot.
  */
 const CAR_SHOTS = [
-  'Передня частина',
-  'Задня чверть',
-  'Бік',
-  'Салон',
-  'Дисплей',
-  'Табличка VIN',
+  'shotFront',
+  'shotRearQuarter',
+  'shotSide',
+  'shotInterior',
+  'shotDisplay',
+  'shotVinPlate',
 ] as const
 
 /**
- * How long the car has been sitting. A yard reads this as money standing
- * still, so it goes next to the acquisition date rather than being left for
- * the reader to work out.
+ * How long the car has been sitting, in whole days. A yard reads this as money
+ * standing still, so it goes next to the acquisition date rather than being
+ * left for the reader to work out.
  */
-const daysOnStock = (acquiredAt: string): string | null => {
+const daysOnStock = (acquiredAt: string): number | null => {
   const since = new Date(acquiredAt)
   if (Number.isNaN(since.getTime())) return null
-  const days = Math.max(
-    0,
-    Math.round((Date.now() - since.getTime()) / 86_400_000),
-  )
-  return `${String(days)} ${plural(days, ['день', 'дні', 'днів'])}`
+  return Math.max(0, Math.round((Date.now() - since.getTime()) / 86_400_000))
 }
 
-/** Dates arrive as ISO strings; anything unparsable is shown as it came. */
-const day = (value: string) => {
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime())
-    ? value
-    : new Intl.DateTimeFormat('uk-UA', { dateStyle: 'medium' }).format(parsed)
+/** `formatDay` bound to the reader's locale and the business time zone. */
+function useDay() {
+  const { locale, timeZone } = useLocale()
+  return (value: string) => formatDay(value, locale, timeZone)
 }
 const positiveInteger = (value: string | null, fallback: number) => {
   const parsed = Number(value)
@@ -183,12 +196,13 @@ function useAccess() {
 }
 
 function Denied({ decision }: { decision: ModuleAccessDecision }) {
+  const t = useT(carsMessages)
   const message =
     decision.kind === 'quota-exhausted'
-      ? 'Ліміт автомобілів вичерпано.'
+      ? t('deniedQuota')
       : decision.kind === 'subscription-blocked'
-        ? 'Поточна підписка не дозволяє цю дію.'
-        : 'Недостатньо прав.'
+        ? t('deniedSubscription')
+        : t('deniedPermission')
   return (
     <Notice role="alert" tone="warn">
       {message}
@@ -198,6 +212,7 @@ function Denied({ decision }: { decision: ModuleAccessDecision }) {
 
 export function CarsScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
   const { cabinet, createDecision, manageDecision } = useAccess()
+  const tf = useT(carFormMessages)
   const { tenant, carId } = useParams<{ tenant: string; carId: string }>()
   const location = useLocation()
   const base = `/app/${tenant ?? cabinet.targetTenant?.slug ?? ''}/cars`
@@ -206,9 +221,9 @@ export function CarsScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
   if (location.pathname.endsWith('/edit') && manageDecision.kind !== 'allowed')
     return <Denied decision={manageDecision} />
   if (location.pathname.endsWith('/new'))
-    return <CarForm title="Новий автомобіль" />
+    return <CarForm title={tf('newCar')} />
   if (carId && location.pathname.endsWith('/edit'))
-    return <CarForm carId={carId} title="Редагувати автомобіль" />
+    return <CarForm carId={carId} title={tf('editCar')} />
   return carId ? (
     <CarDetail base={base} carId={carId} />
   ) : (
@@ -234,13 +249,17 @@ const sortCars = (cars: readonly CarListItem[], sort: CarSort) =>
 /** One car in the grid: what it looks like, what came back, how far it is. */
 function CarCard({
   car,
+  currency,
   href,
   showMoney,
 }: {
   car: CarListItem
+  currency: string | null
   href: string
   showMoney: boolean
 }) {
+  const t = useT(carsMessages)
+  const money = useCarMoney(currency)
   const percent = car.profitability?.recoupedPercent ?? null
   const paidOff = percent !== null && percent >= 100
 
@@ -270,7 +289,7 @@ function CarCard({
               car.status === 'active' ? 'bg-state-ok' : 'bg-app-dim',
             )}
           />
-          {car.status === 'active' ? 'Активний' : 'Архів'}
+          {car.status === 'active' ? t('cardActive') : t('cardArchived')}
         </span>
         {showMoney && percent !== null ? (
           <span
@@ -297,11 +316,11 @@ function CarCard({
         </span>
         <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3">
           <span className="text-app-muted min-w-0 truncate text-[14px]">
-            {car.brand} {car.model} ({car.year})
+            {car.brand} {car.model} ({String(car.year)})
           </span>
           {showMoney ? (
             <span className="text-app-dim font-mono text-[11px] tracking-[0.14em] whitespace-nowrap uppercase">
-              Повернено
+              {t('cardRecouped')}
             </span>
           ) : null}
         </span>
@@ -321,13 +340,13 @@ function CarCard({
         ) : null}
         <span className="flex items-baseline justify-between gap-3">
           <span className="text-app-muted text-[14px]">
-            Запчастин{' '}
+            {t('cardParts')}{' '}
             <span className="font-semibold text-white tabular-nums">
               {car.partsCount}
             </span>
           </span>
           <span className="text-app-muted text-[14px]">
-            Продано{' '}
+            {t('cardSold')}{' '}
             <span className="font-semibold text-white tabular-nums">
               {car.soldPartsCount}
             </span>
@@ -340,6 +359,9 @@ function CarCard({
 
 function CarsList({ base }: { base: string }) {
   const { createDecision, financeView } = useAccess()
+  const t = useT(carsMessages)
+  const tc = useT(commonMessages)
+  const accounting = useAccountingCurrency()
   const [params, setParams] = useSearchParams()
   const selected = useMemo<CarListParams>(
     () => ({
@@ -391,10 +413,10 @@ function CarsList({ base }: { base: string }) {
         <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
           <div className="min-w-0">
             <p className="text-app-dim font-mono text-[12px] tracking-[0.14em] uppercase">
-              Склад
+              {t('eyebrow')}
             </p>
             <h1 className="mt-1.5 text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
-              Автомобілі
+              {t('title')}
             </h1>
           </div>
           {createDecision.kind === 'allowed' ? (
@@ -405,7 +427,7 @@ function CarsList({ base }: { base: string }) {
             >
               <Link to={`${base}/new`}>
                 <Plus aria-hidden />
-                Додати автомобіль
+                {t('addCar')}
               </Link>
             </Button>
           ) : null}
@@ -422,40 +444,36 @@ function CarsList({ base }: { base: string }) {
             <span className="border-app-line bg-app-raised focus-within:border-app-line-2 flex h-13 items-center gap-3 rounded-[14px] border px-4">
               <Search aria-hidden className="text-app-dim size-4 shrink-0" />
               <input
-                aria-label="Пошук автомобілів"
+                aria-label={t('searchLabel')}
                 className="text-app-ink placeholder:text-app-dim min-w-0 flex-1 bg-transparent text-sm outline-none"
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Пошук автомобілів"
+                placeholder={t('searchLabel')}
                 value={query}
               />
               <button className="sr-only" type="submit">
-                Шукати
+                {t('searchSubmit')}
               </button>
             </span>
           </form>
           <PillGroup
-            label="Статус автомобілів"
+            label={t('statusFilter')}
             onChange={(next) =>
               change({ status: next || undefined, page: '1' })
             }
             options={[
-              { value: '', label: 'Усі' },
-              { value: 'active', label: 'Активні' },
-              { value: 'archived', label: 'Архів' },
+              { value: '', label: t('filterAll') },
+              { value: 'active', label: t('filterActive') },
+              { value: 'archived', label: t('filterArchived') },
             ]}
             value={selected.status ?? ''}
           />
           {financeView ? (
             <PillGroup
-              label={
-                totalPages > 1
-                  ? 'Порядок карток на цій сторінці'
-                  : 'Порядок карток'
-              }
+              label={totalPages > 1 ? t('sortLabelThisPage') : t('sortLabel')}
               onChange={(next) => change({ sort: next })}
               options={[
-                { value: 'payback', label: 'Окупність' },
-                { value: 'parts', label: 'Запчастини' },
+                { value: 'payback', label: t('sortPayback') },
+                { value: 'parts', label: t('sortParts') },
               ]}
               value={sort}
             />
@@ -468,23 +486,24 @@ function CarsList({ base }: { base: string }) {
           <span className="text-[18px] font-bold text-white tabular-nums">
             {data?.total ?? 0}
           </span>{' '}
-          знайдено
+          {t('found')}
         </p>
 
         {cars.length === 0 ? (
           <EmptyState
-            description="Додайте перше авто — після розбирання його деталі потраплять на склад."
-            title="Автомобілів поки немає"
+            description={t('emptyDescription')}
+            title={t('emptyTitle')}
           />
         ) : (
           <ul
-            aria-label="Список автомобілів"
+            aria-label={t('listLabel')}
             className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
           >
             {cars.map((car) => (
               <li className="grid" key={car.id}>
                 <CarCard
                   car={car}
+                  currency={accounting.currency}
                   href={`${base}/${car.id}`}
                   showMoney={financeView}
                 />
@@ -494,29 +513,29 @@ function CarsList({ base }: { base: string }) {
         )}
 
         <nav
-          aria-label="Пагінація автомобілів"
+          aria-label={t('paginationLabel')}
           className="border-app-line flex flex-wrap items-center justify-between gap-3 border-t pt-5"
         >
           <p className="text-app-dim text-[14px]">
-            Сторінка {page} з {totalPages}
+            {t('pageOf', { page, total: totalPages })}
           </p>
           <span className="flex items-center gap-2.5">
             <Button
-              aria-label="Попередня сторінка"
+              aria-label={t('previousPage')}
               className="px-4 text-sm font-semibold"
               disabled={page <= 1}
               onClick={() => change({ page: String(page - 1) })}
             >
               <ChevronLeft aria-hidden />
-              Назад
+              {tc('back')}
             </Button>
             <Button
-              aria-label="Наступна сторінка"
+              aria-label={t('nextPage')}
               className="px-4 text-sm font-semibold"
               disabled={page >= totalPages}
               onClick={() => change({ page: String(page + 1) })}
             >
-              Далі
+              {tc('next')}
               <ChevronRight aria-hidden />
             </Button>
           </span>
@@ -543,6 +562,15 @@ const carColors: Record<string, string> = {
   orange: '#d9762f',
   brown: '#7a5a3c',
   beige: '#cbbfa6',
+  // Polish names, so a colour picked in Polish keeps its dot.
+  biały: '#e9e7e4',
+  czarny: '#1c1c1e',
+  szary: '#7c7a77',
+  srebrny: '#b9b7b4',
+  niebieski: '#3b6fd4',
+  czerwony: '#c8443c',
+  zielony: '#3f9a63',
+  żółty: '#d7b13a',
   синій: '#3b6fd4',
   чорний: '#1c1c1e',
   білий: '#e9e7e4',
@@ -560,19 +588,29 @@ const colorSwatch = (value: string) =>
  * itself stays free text — the server takes any word, and these are only a
  * shortcut to the usual ones.
  */
-const CAR_COLORS = [
-  'Білий',
-  'Чорний',
-  'Сірий',
-  'Срібний',
-  'Синій',
-  'Червоний',
-].map((label) => ({ label, swatch: colorSwatch(label) }))
+const CAR_COLOR_KEYS = [
+  'colorWhite',
+  'colorBlack',
+  'colorGrey',
+  'colorSilver',
+  'colorBlue',
+  'colorRed',
+] as const
+/** The quick colours in the reader's language: the word is what gets saved. */
+const quickColors = (tf: Translate<(typeof carFormMessages)['uk']>) =>
+  CAR_COLOR_KEYS.map((key) => {
+    const label = tf(key)
+    return { label, swatch: colorSwatch(label) }
+  })
 
 function CarDetail({ base, carId }: { base: string; carId: string }) {
   const { manageDecision, partsView, partsManage, financeView, financeManage } =
     useAccess()
   const manage = manageDecision.kind === 'allowed'
+  const t = useT(carsMessages)
+  const tc = useT(commonMessages)
+  const day = useDay()
+  const accounting = useAccountingCurrency()
   const navigate = useNavigate()
   const [car, setCar] = useState<Car | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
@@ -623,9 +661,9 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
       if (!navigator.clipboard?.writeText)
         throw new Error('Clipboard unavailable')
       await navigator.clipboard.writeText(vin)
-      setCopyStatus('VIN скопійовано.')
+      setCopyStatus(t('vinCopied'))
     } catch {
-      setProblem('Не вдалося скопіювати VIN.')
+      setProblem(t('vinCopyFailed'))
     }
   }
   if (!car)
@@ -634,12 +672,12 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
         <ErrorState
           description={problem}
           onRetry={() => void load()}
-          title="Не вдалося завантажити автомобіль"
+          title={t('loadFailed')}
         />
       </PageBody>
     ) : (
       <PageBody width="narrow">
-        <SkeletonRows label="Завантажуємо автомобіль…" rows={4} />
+        <SkeletonRows label={t('loading')} rows={4} />
       </PageBody>
     )
   const profit = car.profitability
@@ -666,21 +704,21 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
             to={base}
           >
             <ChevronLeft aria-hidden className="size-3.5" />
-            До автомобілів
+            {t('backToCars')}
           </Link>
           <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>Склад</span>
+            <span>{t('eyebrow')}</span>
             <span aria-hidden className="text-white/20">
               /
             </span>
-            <span>Автомобілі</span>
+            <span>{t('title')}</span>
           </p>
         </div>
         {manage || partsManage ? (
           <div className="flex flex-wrap items-center gap-2.5">
             {manage ? (
               <Button asChild className="px-4 text-sm font-bold">
-                <Link to={`${base}/${car.id}/edit`}>Редагувати</Link>
+                <Link to={`${base}/${car.id}/edit`}>{tc('edit')}</Link>
               </Button>
             ) : null}
             {partsManage && car.status !== 'archived' ? (
@@ -689,7 +727,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
                   <Link
                     to={`${partsBase}/imports?car_id=${encodeURIComponent(car.id)}`}
                   >
-                    Імпорт запчастин
+                    {t('importParts')}
                   </Link>
                 </Button>
               </FeatureGate>
@@ -702,7 +740,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
               >
                 {/* The part form picks the car up from the link. */}
                 <Link to={`${partsBase}/new?car_id=${car.id}`}>
-                  Додати запчастину
+                  {t('addPart')}
                 </Link>
               </Button>
             ) : null}
@@ -712,21 +750,21 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
                   actions={[
                     {
                       key: 'archive',
-                      label: 'Архівувати',
+                      label: t('archive'),
                       icon: <Archive aria-hidden className="size-4" />,
                       disabled: busy,
                       onSelect: () => setPendingAction('archive'),
                     },
                     {
                       key: 'delete',
-                      label: 'Видалити',
+                      label: tc('delete'),
                       icon: <Trash2 aria-hidden className="size-4" />,
                       destructive: true,
                       disabled: busy,
                       onSelect: () => setPendingAction('delete'),
                     },
                   ]}
-                  label="Інші дії з автомобілем"
+                  label={t('moreActions')}
                 />
               </>
             ) : null}
@@ -741,16 +779,20 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
             <StatusPill tone={car.status === 'active' ? 'ok' : 'neutral'}>
-              {car.status === 'active' ? 'Активний' : 'Архівний'}
+              {car.status === 'active'
+                ? t('statusActive')
+                : t('statusArchived')}
             </StatusPill>
             <p className="text-app-muted text-[13px]">
-              на складі з {day(car.acquiredAt)}
-              {onStock === null ? '' : ` · ${onStock}`}
+              {t('onStockSince', { date: day(car.acquiredAt) })}
+              {onStock === null
+                ? ''
+                : ` · ${t('daysOnStock', { count: onStock })}`}
             </p>
           </div>
           <h1 className="mt-3.5 text-[38px] leading-[1.04] font-extrabold tracking-[-0.03em] text-balance text-white sm:text-[46px] lg:text-[48px]">
             {car.brand} {car.model} <span className="text-app-dim">·</span>{' '}
-            {car.year}
+            {String(car.year)}
           </h1>
           <div className="mt-3.5 flex flex-wrap items-center gap-2.5">
             <span className="border-app-line-2 text-app-ink rounded-[7px] border bg-white/[0.05] px-2.5 py-1 font-mono text-[14px] font-medium">
@@ -759,7 +801,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
             {car.vin ? (
               <CodeChip
                 code={car.vin}
-                label="Копіювати VIN"
+                label={t('copyVin')}
                 onCopy={() => {
                   void copyVin(car.vin ?? '')
                 }}
@@ -779,61 +821,71 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
         </div>
 
         <div className="mt-4 grid items-start gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
-          <section aria-label="Фото та нотатки" className="grid min-w-0 gap-6">
+          <section
+            aria-label={t('photosAndNotes')}
+            className="grid min-w-0 gap-6"
+          >
             <Card
               aside={
                 <span className="text-app-dim font-mono text-[12px] tracking-[0.1em] uppercase">
-                  {car.photos.length}{' '}
-                  {plural(car.photos.length, ['знімок', 'знімки', 'знімків'])}
+                  {t('photoCount', { count: car.photos.length })}
                 </span>
               }
               bodyClassName="p-0"
               headerClassName="pb-4"
-              title="Фото"
+              title={t('photosTitle')}
             >
               <Gallery
                 emptyLabel={
                   <span className="grid gap-1">
-                    <span>Фото цього авто ще немає.</span>
+                    <span>{t('photosEmpty')}</span>
                     <span>
-                      Радимо зняти{' '}
-                      {CAR_SHOTS.slice(0, 3).join(', ').toLowerCase()} — і
-                      додати їх у редагуванні автомобіля.
+                      {t('photosAdvice', {
+                        shots: CAR_SHOTS.slice(0, 3)
+                          .map((shot) => t(shot))
+                          .join(', ')
+                          .toLowerCase(),
+                      })}
                     </span>
                   </span>
                 }
-                label={`Фото автомобіля ${car.code}`}
-                photos={car.photos.map((photo, index) => ({
-                  id: photo.id,
-                  url: photo.url,
-                  ...(photo.thumbnailUrl
-                    ? { thumbnailUrl: photo.thumbnailUrl }
-                    : {}),
-                  alt: `${CAR_SHOTS[index] ?? `Знімок ${String(index + 1)}`} — фото автомобіля ${car.code}`,
-                }))}
+                label={t('galleryLabel', { code: car.code })}
+                photos={car.photos.map((photo, index) => {
+                  const shot = CAR_SHOTS[index]
+                  return {
+                    id: photo.id,
+                    url: photo.url,
+                    ...(photo.thumbnailUrl
+                      ? { thumbnailUrl: photo.thumbnailUrl }
+                      : {}),
+                    alt: t('photoAlt', {
+                      shot:
+                        shot === undefined
+                          ? t('shotNumber', { number: index + 1 })
+                          : t(shot),
+                      code: car.code,
+                    }),
+                  }
+                })}
                 variant="framed"
               />
             </Card>
 
-            <Card title="Нотатки">
+            <Card title={t('notesTitle')}>
               {car.notes ? (
                 <p className="text-app-ink text-[15px] leading-[1.55] whitespace-pre-line text-pretty">
                   {car.notes}
                 </p>
               ) : (
-                <p className="text-app-muted text-[14px]">
-                  Нотаток немає. Їх можна додати в редагуванні автомобіля.
-                </p>
+                <p className="text-app-muted text-[14px]">{t('notesEmpty')}</p>
               )}
             </Card>
           </section>
 
-          <aside
-            aria-label="Зведення автомобіля"
-            className="grid min-w-0 gap-6"
-          >
+          <aside aria-label={t('summaryLabel')} className="grid min-w-0 gap-6">
             {financeView && profit ? (
               <CarProfitabilityCard
+                currency={accounting.currency}
                 expensesTotal={expensesTotal}
                 profit={profit}
                 purchasePrice={car.purchasePrice}
@@ -863,18 +915,18 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
         confirmLabel={
           deleteBlocked
             ? archived
-              ? 'Зрозуміло'
-              : 'Архівувати'
+              ? t('understood')
+              : t('archive')
             : pendingAction === 'archive'
-              ? 'Архівувати'
-              : 'Видалити'
+              ? t('archive')
+              : tc('delete')
         }
         consequence={
           deleteBlocked
-            ? `До авто прив’язано ${String(partsOnCar)} ${plural(partsOnCar ?? 0, ['деталь', 'деталі', 'деталей'])}, тому видалити його не можна.${archived ? ' Авто вже в архіві, його історія збережена.' : ' Архівуйте авто, щоб прибрати його з активного списку — деталі лишаться на складі.'}`
+            ? `${t('deleteBlockedParts', { count: partsOnCar ?? 0 })} ${archived ? t('deleteBlockedArchived') : t('deleteBlockedArchiveHint')}`
             : pendingAction === 'archive'
-              ? 'Автомобіль зникне з активного списку. Його деталі лишаться на складі.'
-              : 'Автомобіль і його витрати буде видалено назавжди. Якщо до авто прив’язані деталі, навіть продані, видалення буде відхилено — тоді архівуйте авто.'
+              ? t('archiveConsequence')
+              : t('deleteConsequence')
         }
         destructive={pendingAction === 'delete' && !deleteBlocked}
         onConfirm={() => {
@@ -889,10 +941,10 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
         pending={busy}
         title={
           deleteBlocked
-            ? 'Автомобіль не можна видалити'
+            ? t('deleteBlockedTitle')
             : pendingAction === 'archive'
-              ? 'Архівувати автомобіль?'
-              : 'Видалити автомобіль?'
+              ? t('archiveTitle')
+              : t('deleteTitle')
         }
       />
     </div>
@@ -911,29 +963,62 @@ function Expenses({
   onProblem: (message: string) => void
 }) {
   const { requireLatestMutation } = useLatestMutationGuard(cabinetModules.cars)
+  const t = useT(carsMessages)
+  const tc = useT(commonMessages)
+  const { locale } = useLocale()
+  const day = useDay()
   const toast = useOptionalToast()
-  const [name, setName] = useState('')
-  const [amount, setAmount] = useState('')
-  const [editing, setEditing] = useState<CarExpense | null>(null)
-  const [formOpen, setFormOpen] = useState(false)
+  // An expense typed before leaving for the currency setting reopens here.
+  const draft = useCurrencyDraft<{
+    name: string
+    amount: string
+    editingId: string | null
+  }>(`car-expense:${car.id}`)
+  const [name, setName] = useState(() => draft.initial?.name ?? '')
+  const [amount, setAmount] = useState(() => draft.initial?.amount ?? '')
+  const [editing, setEditing] = useState<CarExpense | null>(
+    () =>
+      (car.expenses ?? []).find(
+        (expense) => expense.id === draft.initial?.editingId,
+      ) ?? null,
+  )
+  const [formOpen, setFormOpen] = useState(() => draft.initial !== null)
   const [pendingRemoval, setPendingRemoval] = useState<CarExpense | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const create = async (event: FormEvent) => {
-    event.preventDefault()
+  const guard = useFirstPriceGuard()
+  const money = useCarMoney(guard.currency)
+  const price = usePriceSlots(guard, {
+    values: [amount],
+    onAccept: (accepted) => void create(undefined, accepted),
+    draftKept: true,
+    onLeave: () => draft.keep({ name, amount, editingId: editing?.id ?? null }),
+  })
+  const create = async (
+    event?: FormEvent,
+    accepted?: SupportedCurrency | null,
+  ) => {
+    event?.preventDefault()
     const value = Number(amount)
-    if (!canManage || busy) return
+    if (!canManage || busy || price.disabled) return
     if (!name.trim()) {
-      setFormError('Впишіть назву витрати — наприклад, «Транспортування».')
+      setFormError(t('expenseNameRequired'))
       return
     }
     if (!Number.isFinite(value) || value <= 0) {
-      setFormError('Сума має бути числом більшим за нуль — наприклад, 500.')
+      setFormError(t('expenseAmountInvalid'))
+      return
+    }
+    const precision = amountPrecisionError(value, guard.currency, locale)
+    if (precision !== null) {
+      setFormError(precision)
       return
     }
     setFormError(null)
     setBusy(true)
     try {
+      if (guard.needsCheck(true) && !(await guard.beforeSave(true, accepted)))
+        return
       requireLatestMutation({ permission: 'cars.view', quota: false })
       const scope = requireLatestMutation({
         permission: 'finance.manage',
@@ -959,8 +1044,9 @@ function Expenses({
           { signal: scope.signal },
         )
       }
+      guard.afterSave(true)
       await onChanged()
-      const message = editing ? 'Витрату оновлено.' : 'Витрату додано.'
+      const message = editing ? t('expenseUpdated') : t('expenseAdded')
       setName('')
       setAmount('')
       setEditing(null)
@@ -1000,32 +1086,32 @@ function Expenses({
     setFormOpen(true)
   }
   return (
-    <Card bodyClassName="grid gap-5" title="Витрати">
+    <Card bodyClassName="grid gap-5" title={t('expensesTitle')}>
       <p className="text-app-dim text-[12.5px] leading-[1.45] text-pretty">
-        Транспортування, мийка, розмитнення — додаються до вкладеного.
+        {t('expensesIntro')}
       </p>
       {expenses.length === 0 ? (
         <p className="text-app-muted text-[13px] leading-5 text-pretty">
-          Витрат ще немає. Вкладене дорівнює ціні придбання.
+          {t('expensesNone')}
         </p>
       ) : (
         <DataTable
-          caption="Витрати автомобіля"
+          caption={t('expensesCaption')}
           columns={[
             {
               key: 'name',
-              label: 'Витрата',
+              label: t('columnExpense'),
               variant: 'primary',
               cell: (expense: CarExpense) => expense.name,
             },
             {
               key: 'createdAt',
-              label: 'Додано',
+              label: t('columnAdded'),
               cell: (expense: CarExpense) => day(expense.createdAt),
             },
             {
               key: 'amount',
-              label: 'Сума',
+              label: t('columnAmount'),
               align: 'end',
               cell: (expense: CarExpense) => money(expense.amount),
             },
@@ -1033,7 +1119,7 @@ function Expenses({
               ? [
                   {
                     key: 'actions',
-                    label: 'Дії',
+                    label: tc('actions'),
                     align: 'end' as const,
                     headerHidden: true,
                     cell: (expense: CarExpense) => (
@@ -1041,21 +1127,21 @@ function Expenses({
                         actions={[
                           {
                             key: 'edit',
-                            label: 'Редагувати',
+                            label: tc('edit'),
                             icon: <Pencil aria-hidden className="size-4" />,
                             disabled: busy,
                             onSelect: () => openForm(expense),
                           },
                           {
                             key: 'remove',
-                            label: 'Видалити',
+                            label: tc('delete'),
                             icon: <Trash2 aria-hidden className="size-4" />,
                             destructive: true,
                             disabled: busy,
                             onSelect: () => setPendingRemoval(expense),
                           },
                         ]}
-                        label={`Дії з витратою ${expense.name}`}
+                        label={t('expenseActions', { name: expense.name })}
                       />
                     ),
                   },
@@ -1064,17 +1150,16 @@ function Expenses({
           ]}
           empty={
             <EmptyState
-              description="Транспортування, мийка, розмитнення — усе, що ви вклали в авто понад ціну придбання."
+              description={t('expensesEmptyDescription')}
               icon={<Wallet aria-hidden />}
-              title="Витрат ще немає"
+              title={t('expensesEmptyTitle')}
             />
           }
           footer={
             expenses.length === 0 ? undefined : (
               <div className="border-app-line flex flex-wrap items-baseline justify-between gap-2 border-t px-3.5 py-2.5">
                 <span className="text-app-dim text-[13.5px]">
-                  Разом {expenses.length}{' '}
-                  {plural(expenses.length, ['витрата', 'витрати', 'витрат'])}
+                  {t('expensesTotal', { count: expenses.length })}
                 </span>
                 <span className="text-[16px] font-semibold tabular-nums text-white">
                   {money(total)}
@@ -1095,7 +1180,7 @@ function Expenses({
             variant="primary"
           >
             <Plus aria-hidden />
-            Додати витрату
+            {t('addExpense')}
           </Button>
         </div>
       ) : null}
@@ -1117,13 +1202,17 @@ function Expenses({
         }}
         onSubmit={(event) => void create(event)}
         open={formOpen}
+        price={price}
       />
 
       <ConfirmDialog
-        confirmLabel="Видалити витрату"
+        confirmLabel={t('removeExpense')}
         consequence={
           pendingRemoval
-            ? `Витрата «${pendingRemoval.name}» на ${money(pendingRemoval.amount)} зникне назавжди, а інвестована сума зменшиться.`
+            ? t('removeExpenseConsequence', {
+                name: pendingRemoval.name,
+                amount: money(pendingRemoval.amount),
+              })
             : ''
         }
         onConfirm={() => {
@@ -1132,36 +1221,70 @@ function Expenses({
         onOpenChange={(open) => setPendingRemoval(open ? pendingRemoval : null)}
         open={pendingRemoval !== null}
         pending={busy}
-        title="Видалити витрату?"
+        title={t('removeExpenseTitle')}
       />
     </Card>
   )
 }
 
+interface CarFormValues {
+  code: string
+  brand: string
+  model: string
+  year: string
+  color: string
+  vin: string
+  acquiredAt: string
+  purchasePrice: string
+  notes: string
+}
+
+interface CarExpenseDraft {
+  id: number
+  name: string
+  amount: string
+}
+
 function CarForm({ carId, title }: { carId?: string; title: string }) {
   const { tenant } = useParams<{ tenant: string }>()
   const { cabinet, financeManage } = useAccess()
+  const t = useT(carsMessages)
+  const tf = useT(carFormMessages)
+  const tc = useT(commonMessages)
+  const { locale } = useLocale()
+  const day = useDay()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const base = `/app/${tenant ?? cabinet.targetTenant?.slug ?? ''}/cars`
   const cabinetRoot = base.replace(/\/cars$/, '')
-  const [values, setValues] = useState({
-    code: '',
-    brand: '',
-    model: '',
-    year: '',
-    color: '',
-    vin: '',
-    acquiredAt: '',
-    purchasePrice: '',
-    notes: '',
-  })
+  // What was typed survives the trip to the accounting-currency setting.
+  const draft = useCurrencyDraft<{
+    values: CarFormValues
+    expenses: CarExpenseDraft[]
+    makeId: number | null
+  }>(`car-form:${carId ?? 'new'}`)
+  const [values, setValues] = useState<CarFormValues>(
+    () =>
+      draft.initial?.values ?? {
+        code: '',
+        brand: '',
+        model: '',
+        year: '',
+        color: '',
+        vin: '',
+        acquiredAt: '',
+        purchasePrice: '',
+        notes: '',
+      },
+  )
   const [media, setMedia] = useState<MediaUploadResult[]>([])
   const [pendingMedia, setPendingMedia] = useState<PendingMedia[]>([])
-  const [makeId, setMakeId] = useState<number | null>(null)
-  const [expenses, setExpenses] = useState<
-    { id: number; name: string; amount: string }[]
-  >([])
+  const [makeId, setMakeId] = useState<number | null>(
+    () => draft.initial?.makeId ?? null,
+  )
+  const [expenses, setExpenses] = useState<CarExpenseDraft[]>(
+    () => draft.initial?.expenses ?? [],
+  )
   const [createdCarId, setCreatedCarId] = useState<string | null>(null)
   /** The car as the server last sent it — for its expenses, parts and dates. */
   const [loaded, setLoaded] = useState<Car | null>(null)
@@ -1178,23 +1301,42 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
   const [loading, setLoading] = useState(carId !== undefined)
   const [problem, setProblem] = useState<string | null>(null)
   const { requireLatestMutation } = useLatestMutationGuard(cabinetModules.cars)
+  const tCurrency = useT(currencyMessages)
+  const guard = useFirstPriceGuard()
+  const money = useCarMoney(guard.currency)
+  const priceEditable = !carId || financeManage
+  const price = usePriceSlots(guard, {
+    values: priceEditable
+      ? [
+          values.purchasePrice,
+          ...(carId ? [] : expenses.map((expense) => expense.amount)),
+        ]
+      : [],
+    onAccept: (accepted) => void submit(undefined, accepted),
+    draftKept: true,
+    onLeave: () => draft.keep({ values, expenses, makeId }),
+  })
+  const restoredDraft = draft.initial !== null
   useEffect(() => {
     if (!carId) return
     void carsApi.get(carId).then(
       (car) => {
         setLoading(false)
         setLoaded(car)
-        setValues({
-          code: car.code,
-          brand: car.brand,
-          model: car.model,
-          year: String(car.year),
-          color: car.color ?? '',
-          vin: car.vin ?? '',
-          acquiredAt: car.acquiredAt,
-          purchasePrice: String(car.purchasePrice),
-          notes: car.notes ?? '',
-        })
+        // A draft brought back from the currency setting wins over the
+        // server copy it was typed on top of.
+        if (!restoredDraft)
+          setValues({
+            code: car.code,
+            brand: car.brand,
+            model: car.model,
+            year: String(car.year),
+            color: car.color ?? '',
+            vin: car.vin ?? '',
+            acquiredAt: car.acquiredAt,
+            purchasePrice: String(car.purchasePrice),
+            notes: car.notes ?? '',
+          })
         setMedia(
           car.photos.map((photo) => ({
             storageKey: photo.storageKey,
@@ -1207,10 +1349,18 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
         setProblem(normalizeApiProblem(error).message)
       },
     )
-  }, [carId])
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
+  }, [carId, restoredDraft])
+  const submit = async (
+    event?: FormEvent,
+    accepted?: SupportedCurrency | null,
+  ) => {
+    event?.preventDefault()
     if (busy) return
+    if (!carId && price.disabled) {
+      // A new car needs its purchase price, and a price needs the currency.
+      setProblem(tCurrency('needCurrency'))
+      return
+    }
     const purchasePrice = Number(values.purchasePrice)
     const request = {
       code: values.code.trim(),
@@ -1229,9 +1379,16 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
       !Number.isInteger(request.year) ||
       ((!carId || financeManage) && !Number.isFinite(purchasePrice))
     ) {
-      setProblem(
-        'Заповніть обовʼязкові поля: код, марку, модель, рік числом і ціну придбання числом.',
-      )
+      setProblem(tf('requiredFieldsMissing'))
+      return
+    }
+    // Core refuses an amount finer than the currency allows; say so here.
+    const pricePrecision =
+      (!carId || financeManage) && values.purchasePrice.trim() !== ''
+        ? amountPrecisionError(purchasePrice, guard.currency, locale)
+        : null
+    if (pricePrecision !== null) {
+      setProblem(pricePrecision)
       return
     }
     const preparedExpenses = expenses.map((expense) => ({
@@ -1249,19 +1406,37 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
           expense.amount <= 0,
       )
     ) {
-      setProblem(
-        'Перевірте правильність додаткових витрат. Кожна потребує назви до 200 символів і суми більшої за нуль.',
-      )
+      setProblem(tf('expensesInvalid'))
+      return
+    }
+    const expensePrecision = carId
+      ? null
+      : (preparedExpenses
+          .map((expense) =>
+            amountPrecisionError(expense.amount, guard.currency, locale),
+          )
+          .find((message) => message !== null) ?? null)
+    if (expensePrecision !== null) {
+      setProblem(expensePrecision)
       return
     }
     setProblem(null)
     setBusy(true)
     try {
+      if (
+        guard.needsCheck(price.hasPrice) &&
+        !(await guard.beforeSave(price.hasPrice, accepted))
+      ) {
+        setBusy(false)
+        return
+      }
       let savedCarId = carId ?? createdCarId
       if (carId) {
         const updateRequest: UpdateCarRequest = {
           ...request,
-          ...(financeManage ? { purchasePrice } : {}),
+          // Without an accounting currency the price stays as it is; the
+          // rest of the car still saves.
+          ...(financeManage && !price.disabled ? { purchasePrice } : {}),
         }
         const scope = requireLatestMutation({ quota: false })
         if ('purchasePrice' in updateRequest)
@@ -1327,13 +1502,16 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
             setCompletedExpenseIds(new Set(completed))
           } catch (error: unknown) {
             setProblem(
-              `Автомобіль створено, але не всі витрати збережено: ${normalizeApiProblem(error).message} Виправте дані витрати й надішліть форму ще раз — автомобіль не створиться повторно.`,
+              tf('expensesPartiallySaved', {
+                error: normalizeApiProblem(error).message,
+              }),
             )
             setBusy(false)
             return
           }
         }
       }
+      guard.afterSave(price.hasPrice)
       void navigate(
         (carId === undefined
           ? sourceReturnPath(searchParams, cabinetRoot, { carId: savedCarId })
@@ -1383,14 +1561,14 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     : initialExpensesTotal
   const invested = (priceValid ? priceNumber : 0) + expensesTotal
   const checks: { label: string; done: boolean }[] = [
-    { label: 'Код заповнено', done: values.code.trim() !== '' },
+    { label: tf('checkCode'), done: values.code.trim() !== '' },
     {
-      label: 'Марка й модель',
+      label: tf('checkMakeModel'),
       done: values.brand.trim() !== '' && values.model.trim() !== '',
     },
-    { label: 'Рік — чотири цифри', done: /^\d{4}$/.test(values.year.trim()) },
+    { label: tf('checkYear'), done: /^\d{4}$/.test(values.year.trim()) },
     {
-      label: priceLocked ? 'Ціну веде фінансист' : 'Ціна придбання',
+      label: priceLocked ? tf('checkPriceLocked') : tf('checkPrice'),
       done: priceLocked || priceValid,
     },
   ]
@@ -1398,11 +1576,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
   if (loading)
     return (
       <div className="type-redesign -mx-4 -mt-6 grid content-start px-4 pt-8 sm:-mx-6 sm:px-6 md:-mx-8 md:-mt-8 md:px-8 lg:-mx-10 lg:-mt-10 lg:px-12">
-        <SkeletonRows
-          columns={2}
-          label="Завантажуємо дані автомобіля…"
-          rows={5}
-        />
+        <SkeletonRows columns={2} label={tf('loadingCar')} rows={5} />
       </div>
     )
 
@@ -1416,14 +1590,14 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
               to={backTo}
             >
               <ChevronLeft aria-hidden className="size-3.5" />
-              {carId ? 'До автомобіля' : 'До автомобілів'}
+              {carId ? tf('backToCar') : t('backToCars')}
             </Link>
             <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-              <span>Склад</span>
+              <span>{t('eyebrow')}</span>
               <span aria-hidden className="text-white/20">
                 /
               </span>
-              <span>Автомобілі</span>
+              <span>{t('title')}</span>
               {values.code.trim() === '' ? null : (
                 <>
                   <span aria-hidden className="text-white/20">
@@ -1438,7 +1612,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
             <Button asChild className="px-[18px] text-sm font-semibold">
-              <Link to={backTo}>Скасувати</Link>
+              <Link to={backTo}>{tc('cancel')}</Link>
             </Button>
             <Button
               aria-busy={busy}
@@ -1447,7 +1621,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
               type="submit"
               variant="primary"
             >
-              {carId ? 'Зберегти зміни' : 'Створити автомобіль'}
+              {carId ? tf('saveChanges') : tf('createCar')}
             </Button>
           </div>
         </div>
@@ -1482,12 +1656,12 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
               <span>
                 {loaded === null ? (
                   <>
-                    Обовʼязкові поля позначені{' '}
-                    <span className="text-brand font-bold">*</span>. Решту можна
-                    заповнити пізніше.
+                    {tf('requiredMarked')}{' '}
+                    <span className="text-brand font-bold">*</span>.{' '}
+                    {tf('restLater')}
                   </>
                 ) : (
-                  `Створено ${day(loaded.createdAt)}`
+                  tf('createdOn', { date: day(loaded.createdAt) })
                 )}
               </span>
             </p>
@@ -1496,9 +1670,9 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
           {problem ? <Notice tone="danger">{problem}</Notice> : null}
           {createdCarId ? (
             <Notice tone="ok">
-              Автомобіль створено. Решту витрат можна додати на його сторінці.{' '}
+              {tf('createdNotice')}{' '}
               <Link className="underline" to={`${base}/${createdCarId}`}>
-                Відкрити автомобіль
+                {tf('openCar')}
               </Link>
             </Notice>
           ) : null}
@@ -1506,20 +1680,12 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
           <div className="flex flex-wrap items-start gap-6">
             <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-5">
               <CarStep
-                hint={
-                  carId
-                    ? 'Код і VIN використовуються в пошуку та на стікерах. Зміна коду не впливає на вже надруковані стікери.'
-                    : 'За кодом ви знаходите авто на складі, за VIN — звіряєте його з документами.'
-                }
+                hint={carId ? tf('identityHintEdit') : tf('identityHintNew')}
                 number="01"
-                title="Ідентифікація"
+                title={tf('identityTitle')}
               >
                 <div className="grid gap-3.5 sm:grid-cols-2">
-                  <Field
-                    hint="Внутрішній номер авто на складі"
-                    label="Код"
-                    required
-                  >
+                  <Field hint={tf('codeHint')} label={tf('codeLabel')} required>
                     <TextInput
                       {...bind('code')}
                       className="font-mono"
@@ -1527,11 +1693,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                       required
                     />
                   </Field>
-                  <Field
-                    hint="Чотири цифри, наприклад 2020"
-                    label="Рік"
-                    required
-                  >
+                  <Field hint={tf('yearHint')} label={tf('yearLabel')} required>
                     <TextInput
                       {...bind('year')}
                       className="font-mono"
@@ -1542,7 +1704,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                   </Field>
                   <VehicleCatalogPicker
                     disabled={busy}
-                    label="Марка"
+                    label={tf('makeLabel')}
                     onSelect={(option) => {
                       setMakeId(option.id)
                       setValues((current) => ({
@@ -1556,7 +1718,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                   />
                   <VehicleCatalogPicker
                     disabled={busy || values.brand === ''}
-                    label="Модель"
+                    label={tf('modelLabel')}
                     makeId={makeId}
                     makeName={values.brand}
                     onSelect={(option) =>
@@ -1571,9 +1733,11 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                 </div>
 
                 <div className="mt-4">
-                  <p className="text-app-ink text-[13px] font-bold">Колір</p>
+                  <p className="text-app-ink text-[13px] font-bold">
+                    {tf('colorTitle')}
+                  </p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    {CAR_COLORS.map((option) => {
+                    {quickColors(tf).map((option) => {
                       const active =
                         values.color.trim().toLowerCase() ===
                         option.label.toLowerCase()
@@ -1608,19 +1772,19 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                   </div>
                   <div className="mt-3">
                     <Field
-                      hint="Будь-який колір можна вписати словами."
-                      label="Колір словами"
+                      hint={tf('colorFreeHint')}
+                      label={tf('colorFreeLabel')}
                     >
-                      <TextInput {...bind('color')} placeholder="Синій" />
+                      <TextInput
+                        {...bind('color')}
+                        placeholder={tf('colorPlaceholder')}
+                      />
                     </Field>
                   </div>
                 </div>
 
                 <div className="mt-4">
-                  <Field
-                    hint="17 символів з техпаспорта. Декодування VIN сервер не виконує — марку, модель і рік заповнюємо вручну."
-                    label="VIN"
-                  >
+                  <Field hint={tf('vinHint')} label="VIN">
                     <TextInput
                       {...bind('vin')}
                       className="font-mono tracking-[0.04em] uppercase"
@@ -1644,44 +1808,43 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
               </CarStep>
 
               <CarStep
-                hint="Ціна придбання разом із витратами формує інвестовану суму авто."
+                hint={tf('purchaseHint')}
                 number="02"
-                title="Придбання"
+                title={tf('purchaseTitle')}
               >
                 <div className="grid gap-3.5 sm:grid-cols-2">
-                  <Field label="Дата придбання">
+                  <Field label={tf('acquiredAt')}>
                     <TextInput {...bind('acquiredAt')} type="date" />
                   </Field>
                   <Field
-                    hint={
-                      priceLocked
-                        ? 'Ціну змінює користувач із правом на фінанси'
-                        : 'У доларах, без пробілів'
-                    }
-                    label="Ціна придбання"
+                    hint={priceLocked ? tf('purchasePriceLocked') : price.hint}
+                    label={tf('checkPrice')}
                     required={!priceLocked}
                   >
-                    <TextInput
+                    <MoneyInput
                       {...bind('purchasePrice')}
                       className="font-mono"
-                      disabled={busy || priceLocked}
+                      currency={price.currency}
+                      disabled={busy || priceLocked || price.disabled}
                       inputMode="decimal"
                       placeholder="10380"
-                      required={!priceLocked}
+                      required={!priceLocked && !price.disabled}
                     />
                   </Field>
                 </div>
+                {priceLocked ? null : price.note}
               </CarStep>
 
               {financeManage ? (
                 <CarStep
-                  hint="Те, що вже витрачено на авто: транспортування, розмитнення, мийка. Разом із ціною придбання це інвестована сума."
+                  hint={tf('extraExpensesHint')}
                   number="03"
-                  title="Додаткові витрати"
+                  title={tf('extraExpensesTitle')}
                 >
                   {carId ? (
                     <CarFormExpenses
                       expenses={loaded?.expenses ?? []}
+                      money={money}
                       to={`${base}/${carId}`}
                     />
                   ) : (
@@ -1690,28 +1853,29 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                       completed={completedExpenseIds}
                       expenses={expenses}
                       onChange={setExpenses}
+                      price={price}
                     />
                   )}
                 </CarStep>
               ) : null}
 
               <CarStep
-                hint="Можна вибрати кілька файлів одразу або зняти на камеру."
+                hint={tf('photosHint')}
                 number={financeManage ? '04' : '03'}
-                title="Фото"
+                title={tf('photosTitle')}
               >
                 {carId ? (
                   <>
                     {media.length === 0 ? (
                       <p className="border-app-line-2 text-app-muted rounded-[14px] border border-dashed bg-white/[0.02] px-6 py-8 text-center text-sm">
-                        Фото немає.
+                        {tf('noPhotos')}
                       </p>
                     ) : (
                       <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                         {media.map((item, index) => (
                           <li key={item.storageKey}>
                             <img
-                              alt={`Поточне фото автомобіля ${String(index + 1)}`}
+                              alt={tf('currentPhotoAlt', { number: index + 1 })}
                               className="border-app-line rounded-control aspect-4/3 w-full border object-cover"
                               src={item.url}
                             />
@@ -1720,8 +1884,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                       </ul>
                     )}
                     <p className="text-app-muted mt-3 text-[13px]">
-                      Фото додають і прибирають під час створення авто — ручка
-                      оновлення їх не приймає.
+                      {tf('photosEditNote')}
                     </p>
                   </>
                 ) : (
@@ -1734,14 +1897,14 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
               </CarStep>
 
               <CarStep
-                hint="Стан авто, домовленості з продавцем, що перевірити перед розбиранням."
+                hint={tf('notesHint')}
                 number={financeManage ? '05' : '04'}
-                title="Нотатки"
+                title={tf('notesTitle')}
               >
-                <Field label="Нотатки">
+                <Field label={tf('notesTitle')}>
                   <TextArea
                     {...bind('notes')}
-                    placeholder="Ходова частина в робочому стані."
+                    placeholder={tf('notesPlaceholder')}
                     rows={4}
                   />
                 </Field>
@@ -1749,11 +1912,11 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
             </div>
 
             <section
-              aria-label={carId ? 'Зведення' : 'Перед створенням'}
+              aria-label={carId ? tf('summaryTitle') : tf('beforeCreateTitle')}
               className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-[18px] border px-5.5 pt-[22px] pb-6"
             >
               <h2 className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
-                {carId ? 'Зведення' : 'Перед створенням'}
+                {carId ? tf('summaryTitle') : tf('beforeCreateTitle')}
               </h2>
               <div className="border-app-line bg-app-canvas mt-4 rounded-[14px] border p-4">
                 <p
@@ -1762,7 +1925,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                     values.code.trim() === '' ? 'text-app-dim' : 'text-white',
                   )}
                 >
-                  {values.code.trim() || 'Код не вказано'}
+                  {values.code.trim() || tf('codeMissing')}
                 </p>
                 <p
                   className={cn(
@@ -1773,7 +1936,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                   )}
                 >
                   {`${values.brand.trim()} ${values.model.trim()}`.trim() ||
-                    'Марка й модель не вказані'}
+                    tf('makeModelMissing')}
                 </p>
                 <p
                   className={cn(
@@ -1781,12 +1944,12 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                     vinLength === 17 ? 'text-app-muted' : 'text-app-dim',
                   )}
                 >
-                  {values.vin.trim().toUpperCase() || 'VIN не вказано'}
+                  {values.vin.trim().toUpperCase() || tf('vinMissing')}
                 </p>
               </div>
               <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
                 <dt className="text-app-muted text-[14px] font-semibold">
-                  Ціна придбання
+                  {tf('summaryPrice')}
                 </dt>
                 <dd
                   className={cn(
@@ -1797,7 +1960,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                   {priceValid ? money(priceNumber) : '—'}
                 </dd>
                 <dt className="text-app-muted text-[14px] font-semibold">
-                  Витрати
+                  {tf('summaryExpenses')}
                 </dt>
                 <dd
                   className={cn(
@@ -1809,7 +1972,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                 </dd>
                 <dd aria-hidden className="bg-app-line col-span-2 my-1 h-px" />
                 <dt className="text-[15px] font-bold text-white">
-                  Інвестовано
+                  {tf('summaryInvested')}
                 </dt>
                 <dd className="font-mono text-[20px] text-white">
                   {invested > 0 ? money(invested) : '—'}
@@ -1837,11 +2000,14 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                     </span>
                     {check.label}
                     <span className="sr-only">
-                      {check.done ? ' — заповнено' : ' — ще не заповнено'}
+                      {check.done ? tf('checkDone') : tf('checkNotDone')}
                     </span>
                   </li>
                 ))}
               </ul>
+              {priceEditable ? (
+                <div className="mt-5.5 empty:hidden">{price.saveNotes}</div>
+              ) : null}
               <Button
                 aria-busy={busy}
                 className="mt-5.5 min-h-11.5 w-full text-[15px] font-bold"
@@ -1849,16 +2015,18 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                 type="submit"
                 variant="primary"
               >
-                {carId ? 'Зберегти зміни' : 'Створити автомобіль'}
+                {carId ? tf('saveChanges') : tf('createCar')}
               </Button>
               {carId && loaded !== null ? (
                 <div className="border-app-line mt-5 border-t pt-4.5">
                   <p className="text-app-muted text-[13px] leading-[1.5]">
                     {loaded.profitability == null
-                      ? 'Видалення прибирає авто разом з його історією. Авто з деталями видалити не можна.'
+                      ? tf('deleteNoProfitability')
                       : loaded.profitability.partsTotal > 0
-                        ? `На авто закріплено ${String(loaded.profitability.partsTotal)} ${plural(loaded.profitability.partsTotal, ['запчастину', 'запчастини', 'запчастин'])}, тому видалити його не можна. Щоб прибрати авто зі списку, архівуйте його на картці авто.`
-                        : 'Видалення прибирає авто разом з його історією.'}
+                        ? tf('deleteBlockedParts', {
+                            count: loaded.profitability.partsTotal,
+                          })
+                        : tf('deleteAllowed')}
                   </p>
                   <Button
                     className="mt-3 min-h-10 w-full text-[13px] font-bold"
@@ -1869,7 +2037,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                     variant="danger"
                   >
                     <Trash2 aria-hidden />
-                    Видалити автомобіль
+                    {tf('deleteCar')}
                   </Button>
                 </div>
               ) : null}
@@ -1879,8 +2047,8 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
       </form>
 
       <ConfirmDialog
-        confirmLabel="Видалити автомобіль"
-        consequence="Автомобіль і його витрати буде видалено назавжди. Якщо до авто прив’язані деталі, навіть продані, видалення буде відхилено."
+        confirmLabel={tf('deleteCar')}
+        consequence={tf('deleteConsequence')}
         destructive
         onConfirm={() => void remove()}
         onOpenChange={(next) => {
@@ -1888,7 +2056,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
         }}
         open={deleting}
         pending={busy}
-        title="Видалити автомобіль?"
+        title={tf('deleteTitle')}
       />
     </div>
   )
@@ -1934,16 +2102,19 @@ function CarStep({
 /** What an existing car has already spent, and where it is managed. */
 function CarFormExpenses({
   expenses,
+  money,
   to,
 }: {
   expenses: readonly CarExpense[]
+  money: (value: number) => string
   to: string
 }) {
+  const tf = useT(carFormMessages)
   return (
     <>
       {expenses.length === 0 ? (
         <p className="border-app-line-2 text-app-muted rounded-xl border border-dashed bg-white/[0.02] p-4.5 text-sm">
-          Витрат ще немає.
+          {tf('noExpenses')}
         </p>
       ) : (
         <ul className="grid gap-3">
@@ -1963,11 +2134,9 @@ function CarFormExpenses({
         </ul>
       )}
       <div className="border-app-line mt-4.5 flex flex-wrap items-center justify-between gap-4 border-t pt-4.5">
-        <p className="text-app-muted text-[13px]">
-          Витрати впливають на інвестовану суму й окупність авто.
-        </p>
+        <p className="text-app-muted text-[13px]">{tf('expensesAffect')}</p>
         <Button asChild className="text-[13px] font-bold">
-          <Link to={to}>Керувати витратами</Link>
+          <Link to={to}>{tf('manageExpenses')}</Link>
         </Button>
       </div>
     </>
@@ -1980,7 +2149,9 @@ function NewCarExpenses({
   completed,
   expenses,
   onChange,
+  price,
 }: {
+  price: PriceSlots
   busy: boolean
   completed: ReadonlySet<number>
   expenses: { id: number; name: string; amount: string }[]
@@ -1990,11 +2161,13 @@ function NewCarExpenses({
     ) => { id: number; name: string; amount: string }[],
   ) => void
 }) {
+  const tf = useT(carFormMessages)
+  const tc = useT(commonMessages)
   return (
     <>
       {expenses.length === 0 ? (
         <p className="border-app-line-2 text-app-muted rounded-xl border border-dashed bg-white/[0.02] p-4.5 text-sm">
-          Витрат ще немає — авто збережеться й без них.
+          {tf('noNewExpenses')}
         </p>
       ) : (
         <ul className="grid">
@@ -2010,7 +2183,10 @@ function NewCarExpenses({
               >
                 {/* The label stays short on screen; the number that keeps
                     each row apart is carried in the accessible name. */}
-                <Field label="Назва" srLabel={`витрати ${String(index + 1)}`}>
+                <Field
+                  label={tf('expenseNameLabel')}
+                  srLabel={tf('expenseRowSr', { number: index + 1 })}
+                >
                   <TextInput
                     disabled={busy || saved}
                     onChange={(event) =>
@@ -2022,18 +2198,19 @@ function NewCarExpenses({
                         ),
                       )
                     }
-                    placeholder="Транспортування"
+                    placeholder={tf('expenseNamePlaceholder')}
                     value={expense.name}
                   />
                 </Field>
                 <Field
-                  hint={index === 0 ? 'У доларах' : undefined}
-                  label="Сума"
-                  srLabel={`витрати ${String(index + 1)}`}
+                  hint={index === 0 ? price.hint : undefined}
+                  label={tf('expenseAmountLabel')}
+                  srLabel={tf('expenseRowSr', { number: index + 1 })}
                 >
-                  <TextInput
+                  <MoneyInput
                     className="font-mono"
-                    disabled={busy || saved}
+                    currency={price.currency}
+                    disabled={busy || saved || price.disabled}
                     inputMode="decimal"
                     onChange={(event) =>
                       onChange((current) =>
@@ -2049,9 +2226,11 @@ function NewCarExpenses({
                   />
                 </Field>
                 <div className="flex items-center justify-end gap-2 sm:pt-[27px]">
-                  {saved ? <StatusPill tone="ok">Збережено</StatusPill> : null}
+                  {saved ? (
+                    <StatusPill tone="ok">{tc('saved')}</StatusPill>
+                  ) : null}
                   <Button
-                    aria-label={`Прибрати витрату ${String(index + 1)}`}
+                    aria-label={tf('removeExpenseRow', { number: index + 1 })}
                     disabled={busy || saved}
                     onClick={() =>
                       onChange((current) =>
@@ -2070,9 +2249,7 @@ function NewCarExpenses({
         </ul>
       )}
       <div className="border-app-line mt-4.5 flex flex-wrap items-center justify-between gap-4 border-t pt-4.5">
-        <p className="text-app-muted text-[13px]">
-          Витрати можна додати й пізніше, на сторінці авто.
-        </p>
+        <p className="text-app-muted text-[13px]">{tf('expensesLater')}</p>
         <Button
           className="text-[13px] font-bold"
           disabled={busy}
@@ -2084,7 +2261,7 @@ function NewCarExpenses({
           }
         >
           <Plus aria-hidden />
-          Додати витрату
+          {tf('addExpense')}
         </Button>
       </div>
     </>
@@ -2107,7 +2284,7 @@ async function loadMakes(): Promise<VehicleOption[]> {
   const response = await fetch(
     `${vehicleCatalogUrl}/GetMakesForVehicleType/car?format=json`,
   )
-  if (!response.ok) throw new Error('Не вдалося завантажити марки')
+  if (!response.ok) throw new Error('vehicle-makes-unavailable')
   const payload = (await response.json()) as {
     Results?: {
       MakeId?: number
@@ -2129,7 +2306,7 @@ async function loadModels(makeId: number): Promise<VehicleOption[]> {
   const response = await fetch(
     `${vehicleCatalogUrl}/GetModelsForMakeId/${String(makeId)}?format=json`,
   )
-  if (!response.ok) throw new Error('Не вдалося завантажити моделі')
+  if (!response.ok) throw new Error('vehicle-models-unavailable')
   const payload = (await response.json()) as {
     Results?: { Model_ID?: number; Model_Name?: string }[]
   }
@@ -2156,7 +2333,7 @@ export function VehicleCatalogPicker({
   type: 'make' | 'model'
   value: string
 }) {
-  const objectLabel = type === 'make' ? 'марку' : 'модель'
+  const tf = useT(carFormMessages)
   const [open, setOpen] = useState(false)
   const [options, setOptions] = useState<VehicleOption[]>([])
   const [query, setQuery] = useState('')
@@ -2216,8 +2393,7 @@ export function VehicleCatalogPicker({
           }
         },
         () => {
-          if (!cancelled)
-            setProblem('Не вдалося завантажити список. Спробуйте ще раз.')
+          if (!cancelled) setProblem(tf('listFailed'))
         },
       )
       .finally(() => {
@@ -2226,7 +2402,7 @@ export function VehicleCatalogPicker({
     return () => {
       cancelled = true
     }
-  }, [loadedFor, makeId, makeName, open, requestKey, type])
+  }, [loadedFor, makeId, makeName, open, requestKey, tf, type])
   const shown = options.filter((option) =>
     option.name
       .toLocaleLowerCase('uk')
@@ -2253,7 +2429,7 @@ export function VehicleCatalogPicker({
           onClick={togglePicker}
           type="button"
         >
-          {value || `Оберіть ${objectLabel}`}
+          {value || (type === 'make' ? tf('pickMake') : tf('pickModel'))}
         </button>
         {open ? (
           <div
@@ -2262,15 +2438,15 @@ export function VehicleCatalogPicker({
             role="listbox"
           >
             <TextInput
-              aria-label={`Пошук: ${label}`}
+              aria-label={tf('searchIn', { label })}
               autoFocus
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Почніть вводити назву"
+              placeholder={tf('startTyping')}
               value={query}
             />
             {loading ? (
               <p className="text-app-muted py-4 text-center text-sm">
-                Завантажуємо…
+                {tf('loadingList')}
               </p>
             ) : null}
             {problem ? <Notice tone="danger">{problem}</Notice> : null}
@@ -2307,6 +2483,7 @@ function PendingMediaPicker({
   items: PendingMedia[]
   onChange: (items: PendingMedia[]) => void
 }) {
+  const tf = useT(carFormMessages)
   const choose = (files: FileList | null) => {
     if (!files) return
     const next = Array.from(files).map((file, index) => ({
@@ -2329,13 +2506,15 @@ function PendingMediaPicker({
     <fieldset className="grid gap-3">
       <label className="border-app-line-2 bg-app-input hover:border-brand flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-[14px] border border-dashed px-5 text-center">
         <ImagePlus aria-hidden className="text-app-muted size-6" />
-        <span className="mt-2 text-sm font-bold text-white">Вибрати фото</span>
+        <span className="mt-2 text-sm font-bold text-white">
+          {tf('choosePhotos')}
+        </span>
         <span className="text-app-dim mt-1 text-xs">
-          Файли завантажаться після створення автомобіля
+          {tf('uploadAfterCreate')}
         </span>
         <input
           accept="image/*"
-          aria-label="Додати фото"
+          aria-label={tf('addPhotos')}
           className="sr-only"
           disabled={disabled}
           multiple
@@ -2344,7 +2523,7 @@ function PendingMediaPicker({
         />
       </label>
       {items.length === 0 ? (
-        <p className="text-app-dim text-[13.5px]">Файлів ще не вибрано.</p>
+        <p className="text-app-dim text-[13.5px]">{tf('noFiles')}</p>
       ) : (
         <ul className="grid gap-2 sm:grid-cols-2">
           {items.map((item) => (
@@ -2354,7 +2533,7 @@ function PendingMediaPicker({
             >
               {item.previewUrl ? (
                 <img
-                  alt="Попередній перегляд фото"
+                  alt={tf('photoPreview')}
                   className="size-12 rounded-control object-cover"
                   src={item.previewUrl}
                 />
@@ -2365,7 +2544,7 @@ function PendingMediaPicker({
                 {item.file.name}
               </span>
               <Button
-                aria-label={`Прибрати ${item.file.name}`}
+                aria-label={tf('removeFile', { name: item.file.name })}
                 disabled={disabled}
                 onClick={() => remove(item.id)}
                 size="icon"
@@ -2396,6 +2575,7 @@ export function MediaPicker({
   items: MediaUploadResult[]
   onChange: (items: MediaUploadResult[]) => void
 }) {
+  const tf = useT(carFormMessages)
   const definition = cabinetModules[entityType]
   const { requireLatestMutation } = useLatestMutationGuard(definition)
   const [busy, setBusy] = useState(false)
@@ -2507,36 +2687,37 @@ export function MediaPicker({
           bare && 'sr-only',
         )}
       >
-        Фото
+        {tf('photosTitle')}
       </legend>
       {bare ? null : (
-        <p className="text-app-dim text-[13.5px]">
-          Можна вибрати кілька файлів одразу або зняти на камеру.
-        </p>
+        <p className="text-app-dim text-[13.5px]">{tf('photosHint')}</p>
       )}
       <PhotoFileField
-        aria-label="Додати фото"
+        aria-label={tf('addPhotos')}
         capture="environment"
         disabled={busy}
         multiple
         onChange={(event) => void upload(event.target.files)}
       />
       {pendingPreviews.length > 0 ? (
-        <ul aria-label="Вибрані фото" className="grid gap-2 sm:grid-cols-2">
+        <ul
+          aria-label={tf('selectedPhotos')}
+          className="grid gap-2 sm:grid-cols-2"
+        >
           {pendingPreviews.map((item) => (
             <li
               className="border-app-line flex min-w-0 items-center gap-3 rounded-control border p-2"
               key={item.id}
             >
               <img
-                alt={`Попередній перегляд ${item.name}`}
+                alt={tf('previewOf', { name: item.name })}
                 className="size-12 shrink-0 rounded-control object-cover"
                 src={item.url}
               />
               <span className="text-app-ink min-w-0 flex-1 truncate text-sm">
                 {item.name}
               </span>
-              <span className="text-app-dim text-xs">Завантаження…</span>
+              <span className="text-app-dim text-xs">{tf('uploading')}</span>
             </li>
           ))}
         </ul>
@@ -2547,7 +2728,7 @@ export function MediaPicker({
           role="alert"
         >
           <p className="text-state-danger text-[14.5px] font-medium">
-            Ці файли не завантажилися. Виберіть інші або спробуйте ще раз.
+            {tf('uploadFailed')}
           </p>
           <ul className="text-app-ink mt-1.5 grid gap-1 text-[14px]">
             {problems.map((problem) => (
@@ -2564,18 +2745,18 @@ export function MediaPicker({
               key={item.storageKey}
             >
               <img
-                alt="Попередній перегляд фото"
+                alt={tf('photoPreview')}
                 className="rounded-control size-12 shrink-0 object-cover"
                 src={item.url}
               />
               <span className="text-app-ink min-w-0 flex-1 truncate text-[14.5px]">
                 {names[item.storageKey] ??
                   item.storageKey.split('/').pop() ??
-                  'Фото'}
+                  tf('photoFallback')}
               </span>
               <Button disabled={busy} onClick={() => void remove(item)}>
                 <Trash2 aria-hidden />
-                Прибрати фото
+                {tf('removePhoto')}
               </Button>
             </li>
           ))}
@@ -2586,7 +2767,7 @@ export function MediaPicker({
             aria-hidden
             className="mr-1.5 inline size-4 align-text-bottom"
           />
-          Файлів ще не вибрано.
+          {tf('noFiles')}
         </p>
       )}
     </fieldset>

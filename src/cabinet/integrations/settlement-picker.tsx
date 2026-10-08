@@ -2,13 +2,16 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { Field, TextInput } from '@/components/app'
 import { integrationsApi, type NovaPoshtaSettlement } from '@/api/integrations'
 import { normalizeApiProblem } from '@/api/errors'
+import { useLocale, useT } from '@/i18n'
+import { integrationProblemMessage } from './integration-labels'
+import { npFormsMessages } from './np-forms-messages'
 
 export type SettlementUse = 'sending' | 'receiving'
 
-const PROHIBITED: Record<SettlementUse, string> = {
-  sending: 'не приймає відправлень',
-  receiving: 'не видає відправлень',
-}
+const PROHIBITED = {
+  sending: 'prohibitedSending',
+  receiving: 'prohibitedReceiving',
+} as const satisfies Record<SettlementUse, string>
 
 const prohibited = (
   settlement: NovaPoshtaSettlement,
@@ -25,7 +28,7 @@ const prohibited = (
  */
 export function SettlementPicker({
   integrationId,
-  label = 'Населений пункт',
+  label,
   onPick,
   picked,
   savedHint,
@@ -39,6 +42,8 @@ export function SettlementPicker({
   savedHint?: string | undefined
   use: SettlementUse
 }) {
+  const { locale } = useLocale()
+  const t = useT(npFormsMessages)
   const listId = useId()
   const [query, setQuery] = useState(picked?.name ?? '')
   const [open, setOpen] = useState(false)
@@ -70,7 +75,9 @@ export function SettlementPicker({
           },
           (problem) => {
             if (!controller.signal.aborted)
-              setFailure(normalizeApiProblem(problem).message)
+              setFailure(
+                integrationProblemMessage(normalizeApiProblem(problem), locale),
+              )
           },
         )
     }, 300)
@@ -78,6 +85,9 @@ export function SettlementPicker({
       controller.abort()
       window.clearTimeout(timer)
     }
+    // The failure text is set once per search; a language switch mid-search
+    // does not need to repeat the request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [integrationId, matched, term])
 
   useEffect(() => {
@@ -106,11 +116,11 @@ export function SettlementPicker({
             ? savedHint
             : matched
               ? prohibited(picked, use)
-                ? `Обрано з довідника. Цей пункт ${PROHIBITED[use]}.`
-                : 'Обрано з довідника Нової пошти.'
-              : 'Почніть вводити назву — підкажемо з довідника Нової пошти.'
+                ? t('pickedProhibited', { rule: t(PROHIBITED[use]) })
+                : t('picked')
+              : t('startTypingHint')
         }
-        label={label}
+        label={label ?? t('settlementLabel')}
         required
       >
         {/* The list lives inside the field, so the note stays under both —
@@ -152,7 +162,7 @@ export function SettlementPicker({
               }
               if (event.key === 'Escape') setOpen(false)
             }}
-            placeholder="Почніть вводити назву"
+            placeholder={t('startTyping')}
             role="combobox"
             spellCheck={false}
             value={query}
@@ -163,29 +173,28 @@ export function SettlementPicker({
               {/* The list floats on the lighter overlay surface, where the page
               dim grey lands a hair under 4.5:1. */}
               <p className="border-app-line text-app-muted flex items-center justify-between gap-2.5 border-b px-3.5 py-2.5 font-mono text-[10px] tracking-[0.12em] uppercase">
-                <span>Довідник Нової пошти</span>
+                <span>{t('directory')}</span>
                 <span>
                   {failure !== null
-                    ? 'помилка'
+                    ? t('directoryError')
                     : loading
-                      ? 'Шукаємо…'
+                      ? t('searching')
                       : options.length > 0
-                        ? `${options.length} збіг.`
-                        : 'без збігів'}
+                        ? t('matches', { count: options.length })
+                        : t('noMatches')}
                 </span>
               </p>
               {failure !== null ? (
                 <p className="text-state-danger px-3.5 py-4 text-[13px] leading-5 text-pretty">
-                  Не вдалося завантажити довідник. Причину показано під полем.
+                  {t('directoryFailed')}
                 </p>
               ) : loading ? (
                 <p className="text-app-muted px-3.5 py-4 text-[13px] leading-5">
-                  Завантажуємо довідник…
+                  {t('directoryLoading')}
                 </p>
               ) : options.length === 0 ? (
                 <p className="text-app-muted px-3.5 py-4 text-[13px] leading-5 text-pretty">
-                  У довіднику немає населеного пункту з такою назвою. Перевірте
-                  написання або введіть коротший запит.
+                  {t('nothingFound')}
                 </p>
               ) : (
                 <ul className="max-h-[200px] overflow-auto" id={listId}>
@@ -203,7 +212,7 @@ export function SettlementPicker({
                         </span>
                         {prohibited(settlement, use) && (
                           <span className="text-state-warn font-mono text-[11px] whitespace-nowrap">
-                            {PROHIBITED[use]}
+                            {t(PROHIBITED[use])}
                           </span>
                         )}
                       </button>

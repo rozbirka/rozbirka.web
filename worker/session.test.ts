@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { handleSessionRequest } from './session'
+import { handleSessionRequest, safeAcceptLanguage } from './session'
 
 const challengeData = (seconds = 0) => ({
   challengeId: 'test-challenge',
@@ -165,6 +165,43 @@ describe('session BFF', () => {
     },
   )
 
+  it('forwards a plain Accept-Language so Identity localises the OTP SMS', async () => {
+    let upstreamRequest: Request | undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        upstreamRequest = new Request(input, init)
+        return Promise.resolve(
+          Response.json({
+            data: {
+              ...challengeData(),
+              cooldownSeconds: 60,
+              retryAfterSeconds: 300,
+            },
+          }),
+        )
+      }),
+    )
+
+    await handleSessionRequest(
+      new Request('https://rozbirka.pro/session/otp/send', {
+        method: 'POST',
+        headers: {
+          origin: 'https://rozbirka.pro',
+          'content-type': 'application/json',
+          'accept-language': 'pl',
+        },
+        body: JSON.stringify({ phone: '+48512345678' }),
+      }),
+      env,
+    )
+
+    expect(upstreamRequest?.headers.get('accept-language')).toBe('pl')
+    expect(safeAcceptLanguage('en-GB,en;q=0.9')).toBe('en-GB,en;q=0.9')
+    expect(safeAcceptLanguage('pl\r\nX-Evil: 1')).toBeNull()
+    expect(safeAcceptLanguage('x'.repeat(101))).toBeNull()
+  })
+
   it('collapses a verify-only OTP error code on the send route', async () => {
     identityResponse(
       {
@@ -263,6 +300,66 @@ describe('session BFF', () => {
       code: '123456',
     })
   })
+
+  it.each([
+    ['a saved language', 'en-GB', { language: 'en-GB' }],
+    ['automatic selection', null, { language: null }],
+    ['no language field', undefined, {}],
+    ['a malformed value', 'en-GB<script>', {}],
+    ['a non-string value', 42, {}],
+  ])(
+    'passes the user’s personal language through on verify: %s',
+    async (_name, language, expected) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() =>
+          Promise.resolve(
+            Response.json({
+              data: {
+                accessToken: 'access',
+                refreshToken: 'refresh-secret',
+                user: {
+                  id: 'u1',
+                  phone: '+380501112233',
+                  displayName: 'Vlad',
+                  ...(language === undefined ? {} : { language }),
+                },
+                isNewUser: false,
+              },
+            }),
+          ),
+        ),
+      )
+
+      const response = await handleSessionRequest(
+        new Request('https://rozbirka.pro/session/otp/verify', {
+          method: 'POST',
+          headers: {
+            origin: 'https://rozbirka.pro',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            phone: '+380501112233',
+            challengeId: 'test-challenge',
+            code: '123456',
+          }),
+        }),
+        env,
+      )
+
+      expect(response!.status).toBe(200)
+      expect(await response!.json()).toEqual({
+        accessToken: 'access',
+        user: {
+          id: 'u1',
+          phone: '+380501112233',
+          displayName: 'Vlad',
+          ...expected,
+        },
+        isNewUser: false,
+      })
+    },
+  )
 
   it('rotates the refresh cookie and returns only the access token', async () => {
     let upstreamRequest: Request | undefined

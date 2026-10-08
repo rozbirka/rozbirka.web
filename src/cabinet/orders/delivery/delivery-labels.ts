@@ -1,25 +1,38 @@
 import type { StatusTone } from '@/components/app'
 import type { ShipmentDraft, Shipment } from '@/api/shipping'
+import { translate, type Locale, type MessageKey } from '@/i18n'
 import { hryvnia } from './delivery-money'
+import { deliveryMessages } from './messages'
 
 /** Core refuses to create a waybill on a quote older than this. */
 export const QUOTE_TTL_MS = 24 * 60 * 60 * 1000
 
-const STATES: Record<string, { label: string; tone: StatusTone }> = {
-  Draft: { label: 'Чернетка', tone: 'neutral' },
-  Creating: { label: 'Створюємо ТТН', tone: 'info' },
-  Created: { label: 'ТТН створено', tone: 'ok' },
-  Unknown: { label: 'Результат невідомий', tone: 'warn' },
-  Cancelling: { label: 'Скасовуємо', tone: 'info' },
-  Cancelled: { label: 'Скасовано', tone: 'neutral' },
-  CancelUnknown: { label: 'Скасування невідоме', tone: 'warn' },
+type DeliveryKey = MessageKey<typeof deliveryMessages>
+
+const STATES: Record<string, { key: DeliveryKey; tone: StatusTone }> = {
+  Draft: { key: 'stateDraft', tone: 'neutral' },
+  Creating: { key: 'stateCreating', tone: 'info' },
+  Created: { key: 'stateCreated', tone: 'ok' },
+  Unknown: { key: 'shipUnknown', tone: 'warn' },
+  Cancelling: { key: 'stateCancelling', tone: 'info' },
+  Cancelled: { key: 'stateCancelled', tone: 'neutral' },
+  CancelUnknown: { key: 'stateCancelUnknown', tone: 'warn' },
 }
 
-export function shipmentStatePresentation(state: string): {
+export function shipmentStatePresentation(
+  state: string,
+  locale: Locale,
+): {
   label: string
   tone: StatusTone
 } {
-  return STATES[state] ?? { label: state, tone: 'neutral' }
+  const known = STATES[state]
+  return known === undefined
+    ? { label: state, tone: 'neutral' }
+    : {
+        label: translate(deliveryMessages, locale, known.key),
+        tone: known.tone,
+      }
 }
 
 /**
@@ -70,66 +83,70 @@ export interface QuotePresentation {
   canCreate: boolean
 }
 
-export function quotePresentation(state: QuoteState): QuotePresentation {
+export function quotePresentation(
+  state: QuoteState,
+  locale: Locale,
+): QuotePresentation {
+  const t = (key: DeliveryKey) => translate(deliveryMessages, locale, key)
   switch (state.kind) {
     case 'busy':
       return {
-        title: 'Розрахунок виконується',
-        note: 'Не закривайте панель. Введені дані збережені у формі.',
+        title: t('quoteBusyTitle'),
+        note: t('quoteBusyNote'),
         tone: 'plain',
         showMoney: false,
         dimMoney: false,
-        action: 'Розраховуємо…',
+        action: t('quoteBusyAction'),
         canCreate: false,
       }
     case 'ready':
       return {
-        title: 'Розрахунок отримано',
-        note: 'Дані Нової пошти для цього відправлення.',
+        title: t('quoteReadyTitle'),
+        note: t('quoteReadyNote'),
         tone: 'ok',
         showMoney: true,
         dimMoney: false,
-        action: 'Перерахувати',
+        action: t('quoteRecalc'),
         canCreate: true,
       }
     case 'stale':
       return {
-        title: 'Розрахунок застарів',
-        note: 'Минуло більше 24 годин. Тарифи могли змінитися, тому передоплату потрібно підтвердити новим розрахунком.',
+        title: t('quoteStaleTitle'),
+        note: t('quoteStaleNote'),
         tone: 'warn',
         showMoney: true,
         dimMoney: true,
-        action: 'Перерахувати',
+        action: t('quoteRecalc'),
         canCreate: false,
       }
     case 'dirty':
       return {
-        title: 'Дані доставки змінено',
-        note: 'Після розрахунку ви змінили форму. Суми нижче більше не відповідають їй — збережіть і перерахуйте.',
+        title: t('quoteDirtyTitle'),
+        note: t('quoteDirtyNote'),
         tone: 'warn',
         showMoney: true,
         dimMoney: true,
-        action: 'Зберегти й перерахувати',
+        action: t('quoteDirtyAction'),
         canCreate: false,
       }
     case 'failed':
       return {
-        title: 'Помилка розрахунку',
+        title: t('quoteFailedTitle'),
         note: state.message,
         tone: 'danger',
         showMoney: false,
         dimMoney: false,
-        action: 'Повторити розрахунок',
+        action: t('quoteRetry'),
         canCreate: false,
       }
     default:
       return {
-        title: 'Вартість доставки',
-        note: 'Розрахунок ще не виконувався. Заповніть посилки й оцінку повернення, щоб дізнатися орієнтовну вартість і потрібну передоплату.',
+        title: t('quoteNoneTitle'),
+        note: t('quoteNoneNote'),
         tone: 'plain',
         showMoney: false,
         dimMoney: false,
-        action: 'Розрахувати доставку',
+        action: t('quoteNoneAction'),
         canCreate: false,
       }
   }

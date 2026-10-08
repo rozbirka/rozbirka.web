@@ -24,14 +24,18 @@ import { cn } from '@/lib/utils'
 import { ModuleAccessDeniedError } from '../policy'
 import { tenantRequestScope } from '../tenant-request-scope'
 import { BillingCard, BillingShell } from './billing-shell'
+import { translate, useLocale, useT, type Locale } from '@/i18n'
 import {
-  dayWord,
+  daysText,
   featureLabel,
   intervalLabel,
-  LIMIT_LABELS,
+  intervalName,
+  limitLabels,
 } from './billing-vocabulary'
+import { billingMessages } from './messages'
+import { plansMessages } from './plans-messages'
 import {
-  BILLING_MANAGEMENT_UNAVAILABLE,
+  billingManagementUnavailable,
   BillingContractNotice,
   BillingManagementUnavailableError,
   BillingMutationGate,
@@ -53,19 +57,16 @@ type PlansState =
       kind: 'error'
       generation: number | undefined
       attempt: number
-      message: string
+      error: unknown
     }
 
 /** A result that arrived for a tenant we have already left changes nothing. */
 type MutationOutcome = 'applied' | 'stale'
 
-/** What the plan catalogue does not carry, said where the design asks for it. */
-const NO_PRORATION =
-  'Залишок оплаченого періоду кабінет не перераховує — оплата починається з нового рахунку.'
-const NO_PLAN_COPY =
-  'Опису «кому цей тариф» і позначок знижки в тарифах теж немає: є назва, сума, валюта, період, ліміти й перелік можливостей.'
-
 export function PlansScreen() {
+  const { locale } = useLocale()
+  const t = useT(plansMessages)
+  const limits = limitLabels(locale)
   const [searchParams] = useSearchParams()
   const { cabinet, controlDecision, requireLatestMutation } =
     useBillingMutation('plans')
@@ -109,7 +110,7 @@ export function PlansScreen() {
           kind: 'error',
           generation,
           attempt: loadAttempt,
-          message: plansFailureMessage(error),
+          error,
         })
       })
     return () => {
@@ -142,7 +143,7 @@ export function PlansScreen() {
       return 'applied'
     },
     // No success toast: a checkout leaves the app for the Mono pay page.
-    { errorMessage: checkoutFailureMessage },
+    { errorMessage: (error) => checkoutFailureMessage(error, locale) },
   )
 
   const resetCheckout = checkout.reset
@@ -160,7 +161,7 @@ export function PlansScreen() {
   if (currentPlansState.kind === 'loading') {
     return (
       <PlansFrame>
-        <SkeletonRows columns={3} label="Завантажуємо тарифи…" rows={3} />
+        <SkeletonRows columns={3} label={t('loading')} rows={3} />
       </PlansFrame>
     )
   }
@@ -168,9 +169,9 @@ export function PlansScreen() {
     return (
       <PlansFrame>
         <ErrorState
-          description={currentPlansState.message}
+          description={plansFailureMessage(currentPlansState.error, locale)}
           onRetry={() => setLoadAttempt((attempt) => attempt + 1)}
-          title="Тарифи не завантажилися"
+          title={t('loadFailedTitle')}
         />
       </PlansFrame>
     )
@@ -212,7 +213,7 @@ export function PlansScreen() {
       actions={
         intervals.length > 1 ? (
           <div
-            aria-label="Період оплати"
+            aria-label={t('billingPeriod')}
             className="border-app-line bg-app-raised flex min-w-0 flex-wrap gap-1 rounded-[14px] border p-1"
             role="group"
           >
@@ -229,7 +230,7 @@ export function PlansScreen() {
                 onClick={() => setInterval(one)}
                 type="button"
               >
-                {intervalLabel(one).replace(/^за /, '')}
+                {intervalName(one, locale)}
               </button>
             ))}
           </div>
@@ -241,8 +242,7 @@ export function PlansScreen() {
       )}
       {management.kind === 'provider' && (
         <Notice tone="info">
-          Цією підпискою керує {management.label}. Змінюйте або скасовуйте її в
-          налаштуваннях магазину.
+          {t('managedByProvider', { provider: management.label })}
         </Notice>
       )}
       {contractManaged && <BillingContractNotice />}
@@ -275,9 +275,9 @@ export function PlansScreen() {
                   {plan.name}
                 </h2>
                 {isSelected ? (
-                  <StatusPill tone="info">Обрано</StatusPill>
+                  <StatusPill tone="info">{t('selected')}</StatusPill>
                 ) : isCurrent ? (
-                  <StatusPill tone="ok">Поточний тариф</StatusPill>
+                  <StatusPill tone="ok">{t('currentPlan')}</StatusPill>
                 ) : null}
               </div>
               <div>
@@ -288,17 +288,19 @@ export function PlansScreen() {
                     value={plan.amount}
                   />
                   <span className="text-app-dim text-[13px]">
-                    {intervalLabel(plan.interval)}
+                    {intervalLabel(plan.interval, locale)}
                   </span>
                 </p>
                 <p className="text-app-dim mt-2 text-[12.5px]">
                   {plan.trialDays > 0
-                    ? `${String(plan.trialDays)} ${dayWord(plan.trialDays)} безкоштовно`
-                    : 'Без пробного періоду'}
+                    ? t('trialFree', {
+                        days: daysText(plan.trialDays, locale),
+                      })
+                    : t('noTrial')}
                 </p>
               </div>
               <dl className="border-app-line grid gap-1.5 border-t pt-3.5">
-                {LIMIT_LABELS.map((limit) => (
+                {limits.map((limit) => (
                   <div
                     className="flex items-baseline justify-between gap-3"
                     key={limit.key}
@@ -313,7 +315,7 @@ export function PlansScreen() {
                 ))}
                 <div className="flex items-baseline justify-between gap-3">
                   <dt className="text-app-muted text-[13px]">
-                    Фото на позицію
+                    {t('photosPerItem')}
                   </dt>
                   <dd className="text-app-ink font-mono text-[13px] tabular-nums">
                     {plan.limits.photosPerPart ?? '∞'}
@@ -323,7 +325,7 @@ export function PlansScreen() {
               <ul className="border-app-line grid gap-1.5 border-t pt-3.5">
                 {allFeatures.length === 0 ? (
                   <li className="text-app-dim text-[12.5px]">
-                    Можливостей тариф не перелічує.
+                    {t('noFeaturesListed')}
                   </li>
                 ) : (
                   allFeatures.map((code) => {
@@ -338,16 +340,16 @@ export function PlansScreen() {
                       >
                         {included ? (
                           <Check
-                            aria-label="є в тарифі"
+                            aria-label={t('includedInPlan')}
                             className="text-state-ok mt-0.5 size-4 shrink-0"
                           />
                         ) : (
                           <Minus
-                            aria-label="немає в тарифі"
+                            aria-label={t('notInPlan')}
                             className="text-app-dim mt-0.5 size-4 shrink-0"
                           />
                         )}
-                        {featureLabel(code)}
+                        {featureLabel(code, locale)}
                       </li>
                     )
                   })
@@ -355,7 +357,9 @@ export function PlansScreen() {
               </ul>
               <div className="mt-auto pt-1">
                 {isCurrent ? (
-                  <p className="text-app-dim text-[13px]">Цей тариф уже діє.</p>
+                  <p className="text-app-dim text-[13px]">
+                    {t('alreadyActive')}
+                  </p>
                 ) : canCheckout ? (
                   <BillingMutationGate decision={controlDecision}>
                     <Button
@@ -367,7 +371,7 @@ export function PlansScreen() {
                       variant="primary"
                       {...checkout.triggerProps}
                     >
-                      Обрати
+                      {t('choose')}
                     </Button>
                   </BillingMutationGate>
                 ) : null}
@@ -377,13 +381,13 @@ export function PlansScreen() {
         })}
       </ul>
 
-      <BillingCard title="Що входить у кожен тариф">
+      <BillingCard title={t('whatsIncluded')}>
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-[13.5px]">
-            <caption className="sr-only">Порівняння тарифів</caption>
+            <caption className="sr-only">{t('comparison')}</caption>
             <thead>
               <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
-                <th className="py-2.5 pr-3 text-left">Можливість</th>
+                <th className="py-2.5 pr-3 text-left">{t('feature')}</th>
                 {plans.map((plan) => (
                   <th className="px-3 py-2.5 text-right" key={plan.code}>
                     {plan.name}
@@ -392,7 +396,7 @@ export function PlansScreen() {
               </tr>
             </thead>
             <tbody>
-              {LIMIT_LABELS.map((limit) => (
+              {limits.map((limit) => (
                 <tr className="border-app-line border-b" key={limit.key}>
                   <td className="text-app-muted py-2.5 pr-3">{limit.label}</td>
                   {plans.map((plan) => (
@@ -408,18 +412,18 @@ export function PlansScreen() {
               {allFeatures.map((code) => (
                 <tr className="border-app-line border-b" key={code}>
                   <td className="text-app-muted py-2.5 pr-3">
-                    {featureLabel(code)}
+                    {featureLabel(code, locale)}
                   </td>
                   {plans.map((plan) => (
                     <td className="px-3 py-2.5 text-right" key={plan.code}>
                       {plan.features.includes(code) ? (
                         <Check
-                          aria-label="є"
+                          aria-label={t('included')}
                           className="text-state-ok ml-auto size-4"
                         />
                       ) : (
                         <Minus
-                          aria-label="немає"
+                          aria-label={t('notIncluded')}
                           className="text-app-dim ml-auto size-4"
                         />
                       )}
@@ -431,7 +435,7 @@ export function PlansScreen() {
           </table>
         </div>
         <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-          {NO_PRORATION} {NO_PLAN_COPY}
+          {t('noProration')} {t('noPlanCopy')}
         </p>
       </BillingCard>
     </PlansFrame>
@@ -445,47 +449,48 @@ function PlansFrame({
   actions?: ReactNode
   children: ReactNode
 }) {
+  const t = useT(plansMessages)
   return (
     <BillingShell
       actions={actions}
-      crumb="Налаштування · Підписка · Тарифи"
-      lead="Порівняйте ліміти й можливості, перш ніж міняти тариф."
-      title="Тарифи"
+      crumb={t('crumb')}
+      lead={t('lead')}
+      title={t('title')}
     >
       {children}
     </BillingShell>
   )
 }
 
-function plansFailureMessage(error: unknown): string {
+function plansFailureMessage(error: unknown, locale: Locale): string {
   const problem = normalizeApiProblem(error)
   if (problem.kind === 'network' || problem.kind === 'timeout') {
-    return 'Не вдалося завантажити тарифи: немає з’єднання з мережею. Перевірте інтернет і спробуйте ще раз.'
+    return translate(plansMessages, locale, 'loadNetwork')
   }
   if (problem.kind === 'forbidden') {
-    return 'У вас немає доступу до тарифів цієї розбірки. Попросіть власника надати доступ до білінгу.'
+    return translate(plansMessages, locale, 'loadForbidden')
   }
-  return 'Не вдалося завантажити тарифи. Спробуйте ще раз.'
+  return translate(plansMessages, locale, 'loadFailed')
 }
 
-function checkoutFailureMessage(error: unknown): string {
+function checkoutFailureMessage(error: unknown, locale: Locale): string {
   if (error instanceof BillingManagementUnavailableError) {
-    return BILLING_MANAGEMENT_UNAVAILABLE
+    return billingManagementUnavailable(locale)
   }
   if (error instanceof ModuleAccessDeniedError) {
-    return 'Дія більше недоступна: права або стан підписки змінилися. Оновіть сторінку.'
+    return translate(billingMessages, locale, 'actionUnavailable')
   }
   const problem = normalizeApiProblem(error)
   if (problem.kind === 'forbidden') {
-    return 'У вас більше немає права змінювати підписку. Попросіть власника розбірки надати доступ до білінгу.'
+    return translate(billingMessages, locale, 'noRightToChange')
   }
   if (problem.kind === 'conflict') {
-    return 'Підписка вже змінилася. Оновіть сторінку та спробуйте ще раз.'
+    return translate(billingMessages, locale, 'subscriptionChanged')
   }
   if (problem.kind === 'network' || problem.kind === 'timeout') {
-    return 'Не вдалося розпочати оплату: немає з’єднання з мережею. Перевірте інтернет і спробуйте ще раз.'
+    return translate(billingMessages, locale, 'checkoutNetwork')
   }
-  return 'Не вдалося розпочати оплату. Спробуйте ще раз.'
+  return translate(billingMessages, locale, 'checkoutFailed')
 }
 
 function isCurrentScope(

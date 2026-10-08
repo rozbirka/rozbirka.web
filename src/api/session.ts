@@ -2,6 +2,7 @@ import axios, { type AxiosInstance, type CreateAxiosDefaults } from 'axios'
 import type { ApiProblem } from './contracts'
 import { credentials } from './credentials'
 import { normalizeApiProblem } from './errors'
+import { requestLocale } from '../i18n/request-locale'
 import type {
   SendOtpRequest,
   SendOtpResponse,
@@ -29,6 +30,18 @@ export const createSessionApi = (
     timeout: 15000,
     withCredentials: true,
   })
+  // OTP SMS and auth errors follow the interface language (Identity reads
+  // Accept-Language; the worker forwards it).
+  client.interceptors?.request.use(
+    (config) => {
+      const locale = requestLocale.get()
+      if (locale) config.headers.set('Accept-Language', locale)
+      return config
+    },
+    undefined,
+    // Synchronous: request ordering between refresh and verify matters.
+    { synchronous: true },
+  )
   let sessionMutationDepth = 0
   // Serialize cookie-changing responses, not only in-memory token updates.
   let mutationTail = Promise.resolve()

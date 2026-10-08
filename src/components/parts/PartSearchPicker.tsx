@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { partsApi, type PartListItem, type PartSearchItem } from '@/api/parts'
 import { cn } from '@/lib/utils'
+import { formatMoney, translate, useLocale, useT, type Locale } from '@/i18n'
+import { partPickerMessages } from './part-picker-messages'
 
 type PartPickerFilter = 'all' | 'available' | 'reserved'
 
@@ -16,38 +18,43 @@ interface PartSearchPickerProps {
   onSelect: (part: PartPickerItem) => void
   onClear: () => void
   disabled?: boolean
+  /** The accounting currency of the prices; `null` shows bare numbers. */
+  currency?: string | null
 }
 
-const filterOptions: { value: PartPickerFilter; label: string }[] = [
-  { value: 'all', label: 'Усі' },
-  { value: 'available', label: 'В наявності' },
-  { value: 'reserved', label: 'Резерв' },
+const filterOptions: readonly PartPickerFilter[] = [
+  'all',
+  'available',
+  'reserved',
 ]
 const PAGE_SIZE = 6
 
-const price = (value: number | null) =>
-  value === null
-    ? '—'
-    : `${new Intl.NumberFormat('uk-UA', { maximumFractionDigits: 2 }).format(value)} $`
+const price = (
+  value: number | null,
+  currency: string | null,
+  locale: Locale,
+) => (value === null ? '—' : (formatMoney(value, currency, locale) ?? '—'))
 
-const statusPresentation = (part: PartPickerItem) => {
+const statusPresentation = (part: PartPickerItem, locale: Locale) => {
   if (part.status === 'reserved')
     return {
-      label: 'Резерв',
+      label: translate(partPickerMessages, locale, 'reserved'),
       className: 'border-state-warn/35 bg-state-warn-soft text-state-warn',
     }
   if (part.status === 'available' || part.quantityAvailable > 0)
     return {
-      label: `${part.quantityAvailable} в наявності`,
+      label: translate(partPickerMessages, locale, 'inStock', {
+        count: part.quantityAvailable,
+      }),
       className: 'border-state-ok/35 bg-state-ok-soft text-state-ok',
     }
   if (part.quantityReserved > 0)
     return {
-      label: 'Резерв',
+      label: translate(partPickerMessages, locale, 'reserved'),
       className: 'border-state-warn/35 bg-state-warn-soft text-state-warn',
     }
   return {
-    label: 'Немає',
+    label: translate(partPickerMessages, locale, 'none'),
     className: 'border-state-danger/35 bg-state-danger-soft text-state-danger',
   }
 }
@@ -79,6 +86,7 @@ export function PartSearchPicker({
   onSelect,
   onClear,
   disabled = false,
+  currency = null,
 }: PartSearchPickerProps) {
   const inputId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
@@ -97,7 +105,9 @@ export function PartSearchPicker({
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<boolean>(false)
+  const { locale } = useLocale()
+  const t = useT(partPickerMessages)
 
   useEffect(() => {
     const close = (event: PointerEvent) => {
@@ -153,7 +163,7 @@ export function PartSearchPicker({
     const controller = new AbortController()
     const timer = window.setTimeout(() => {
       setLoading(true)
-      setError(null)
+      setError(false)
       const status = filterStatus(filter)
       void partsApi
         .search(
@@ -218,7 +228,7 @@ export function PartSearchPicker({
         })
         .catch(() => {
           if (!controller.signal.aborted && request === listRequestRef.current)
-            setError('Не вдалося завантажити запчастини.')
+            setError(true)
         })
         .finally(() => {
           if (!controller.signal.aborted && request === listRequestRef.current)
@@ -237,7 +247,7 @@ export function PartSearchPicker({
   return (
     <div className="relative" ref={rootRef}>
       <label className="sr-only" htmlFor={inputId}>
-        Пошук запчастини
+        {t('label')}
       </label>
       <div className="relative">
         <Search
@@ -265,7 +275,7 @@ export function PartSearchPicker({
             onClear()
           }}
           onFocus={() => setOpen(true)}
-          placeholder="Назва, артикул або QR-код"
+          placeholder={t('placeholder')}
           role="searchbox"
           value={query}
         />
@@ -273,51 +283,53 @@ export function PartSearchPicker({
 
       {open && query.trim() ? (
         <div
-          aria-label="Результати пошуку запчастин"
+          aria-label={t('results')}
           className="border-app-line bg-app-raised absolute top-[calc(100%+8px)] right-0 left-0 z-40 overflow-hidden rounded-[18px] border shadow-2xl"
           id={`${inputId}-results`}
           role="dialog"
         >
           <div className="border-app-line flex flex-wrap items-center justify-between gap-3 border-b px-3 py-3">
             <div className="flex flex-wrap gap-2">
-              {filterOptions.map((option) => (
-                <button
-                  aria-pressed={filter === option.value}
-                  className={cn(
-                    'flex min-h-10 items-center gap-2 rounded-full border px-3.5 text-sm font-semibold transition-colors',
-                    option.value === 'all' &&
-                      (filter === option.value
-                        ? 'border-app-line-2 bg-white/[0.09] text-white'
-                        : 'border-app-line-2 text-app-muted hover:bg-white/[0.04]'),
-                    option.value === 'available' &&
-                      (filter === option.value
-                        ? 'border-state-ok/35 bg-state-ok-soft text-state-ok'
-                        : 'border-state-ok/25 text-state-ok hover:bg-state-ok-soft/50'),
-                    option.value === 'reserved' &&
-                      (filter === option.value
-                        ? 'border-state-warn/35 bg-state-warn-soft text-state-warn'
-                        : 'border-state-warn/25 text-state-warn hover:bg-state-warn-soft/50'),
-                  )}
-                  key={option.value}
-                  onClick={() => {
-                    setFilter(option.value)
-                    setPage(1)
-                    setItems([])
-                    setTotal(0)
-                    setTotalPages(1)
-                    setError(null)
-                  }}
-                  type="button"
-                >
-                  {option.label}
-                  <span className="text-app-dim font-mono text-xs">
-                    {counts[option.value]}
-                  </span>
-                </button>
-              ))}
+              {filterOptions
+                .map((value) => ({ value, label: t(value) }))
+                .map((option) => (
+                  <button
+                    aria-pressed={filter === option.value}
+                    className={cn(
+                      'flex min-h-10 items-center gap-2 rounded-full border px-3.5 text-sm font-semibold transition-colors',
+                      option.value === 'all' &&
+                        (filter === option.value
+                          ? 'border-app-line-2 bg-white/[0.09] text-white'
+                          : 'border-app-line-2 text-app-muted hover:bg-white/[0.04]'),
+                      option.value === 'available' &&
+                        (filter === option.value
+                          ? 'border-state-ok/35 bg-state-ok-soft text-state-ok'
+                          : 'border-state-ok/25 text-state-ok hover:bg-state-ok-soft/50'),
+                      option.value === 'reserved' &&
+                        (filter === option.value
+                          ? 'border-state-warn/35 bg-state-warn-soft text-state-warn'
+                          : 'border-state-warn/25 text-state-warn hover:bg-state-warn-soft/50'),
+                    )}
+                    key={option.value}
+                    onClick={() => {
+                      setFilter(option.value)
+                      setPage(1)
+                      setItems([])
+                      setTotal(0)
+                      setTotalPages(1)
+                      setError(false)
+                    }}
+                    type="button"
+                  >
+                    {option.label}
+                    <span className="text-app-dim font-mono text-xs">
+                      {counts[option.value]}
+                    </span>
+                  </button>
+                ))}
             </div>
             <p className="text-app-dim font-mono text-xs tabular-nums">
-              {shown} з {total}
+              {t('shownOf', { shown: String(shown), total: String(total) })}
             </p>
           </div>
 
@@ -327,34 +339,34 @@ export function PartSearchPicker({
                 className="text-state-danger px-5 py-8 text-center text-sm"
                 role="alert"
               >
-                {error}
+                {t('loadFailed')}
               </p>
             ) : loading && items.length === 0 ? (
               <p
                 className="text-app-muted px-5 py-8 text-center text-sm"
                 role="status"
               >
-                Шукаємо запчастини…
+                {t('searching')}
               </p>
             ) : items.length === 0 ? (
               <p className="text-app-muted px-5 py-8 text-center text-sm">
-                Нічого не знайдено
+                {t('nothing')}
               </p>
             ) : (
               <ul
-                aria-label="Знайдені запчастини"
+                aria-label={t('found')}
                 className="divide-app-line grid divide-y"
                 role="listbox"
               >
                 {items.map((part) => {
-                  const presentation = statusPresentation(part)
+                  const presentation = statusPresentation(part, locale)
                   const car = part.car
                     ? `${part.car.make} ${part.car.model} · ${part.car.year}`
-                    : 'Без привʼязки до автомобіля'
+                    : t('noCar')
                   return (
                     <li key={part.id}>
                       <button
-                        aria-label={`Обрати запчастину ${part.name}`}
+                        aria-label={t('choose', { name: part.name })}
                         className="hover:bg-white/[0.035] grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors"
                         onClick={() => {
                           setOpen(false)
@@ -383,7 +395,7 @@ export function PartSearchPicker({
                         </span>
                         <span className="grid justify-items-end gap-1 pl-2">
                           <span className="font-mono text-[15px] font-bold text-white tabular-nums">
-                            {price(part.effectiveSalePrice)}
+                            {price(part.effectiveSalePrice, currency, locale)}
                           </span>
                           <span className="text-app-dim font-mono text-xs">
                             {part.externalCode ?? '—'}
@@ -400,7 +412,7 @@ export function PartSearchPicker({
                 className="text-state-danger px-4 py-3 text-center text-xs"
                 role="alert"
               >
-                {error}
+                {t('loadFailed')}
               </p>
             )}
             {hasMore && (
@@ -412,7 +424,7 @@ export function PartSearchPicker({
                   onClick={() => setPage((current) => current + 1)}
                   type="button"
                 >
-                  {loading ? 'Завантажуємо…' : 'Показати ще'}
+                  {loading ? t('loading') : t('showMore')}
                 </button>
               </div>
             )}

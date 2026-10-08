@@ -7,6 +7,8 @@ import { deliveryApi, type DeliveryOrder } from '@/api/delivery'
 import { shippingApi, type Shipment } from '@/api/shipping'
 import { normalizeApiProblem } from '@/api/errors'
 import type { OrderDetail } from '@/api/orders'
+import type { BusinessCountry } from '@/api/tenant-settings'
+import { commonMessages, useFormat, useLocale, useT } from '@/i18n'
 import {
   integrationErrorMessage,
   integrationStatusPresentation,
@@ -38,6 +40,8 @@ import {
   WaybillReadinessDrawer,
 } from './WaybillDrawers'
 import { hasWaybill, lifecycle } from './delivery-view'
+import { deliveryMessages } from './messages'
+import { deliveryProblemMessage } from './nova-poshta-availability'
 import type { DeliveryOrderLoad } from './use-delivery-order'
 
 type Drawer =
@@ -75,11 +79,6 @@ const usePaymentIdempotencyKeys = () => {
   }
 }
 
-const when = (value: string) => {
-  const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})/.exec(value)
-  return parts ? `${parts[1]}-${parts[2]}-${parts[3]} ${parts[4]}` : value
-}
-
 /**
  * A delivery order, whole.
  *
@@ -88,27 +87,44 @@ const when = (value: string) => {
  * rather than a single column the eye has to search. The money half is Core's
  * alone and keeps working whatever the carrier is doing; only the waybill half
  * waits on Nova Poshta.
+ *
+ * Outside Ukraine there is no Nova Poshta: an existing delivery order stays
+ * readable, but nothing that books, prints or tracks a waybill is offered.
  */
 export function DeliveryOrderBody({
+  countryCode = null,
+  accountingCurrency = null,
   customerPath,
   delivery,
   financeAllowed,
   integrationsPath,
   load,
   mutationsAllowed,
+  novaPoshtaAvailable = true,
   order,
   partsPath,
 }: {
+  /** The tenant's country, for the phone example in the booking form. */
+  countryCode?: BusinessCountry | null
+  /** The order lines' currency; `null` when not chosen or not reported. */
+  accountingCurrency?: string | null
   customerPath: string | null
   delivery: DeliveryOrder
   financeAllowed: boolean
   integrationsPath: string | null
   load: DeliveryOrderLoad
   mutationsAllowed: boolean
+  /** False for a business outside Ukraine. */
+  novaPoshtaAvailable?: boolean
   order: OrderDetail
   partsPath: string | null
 }) {
   const toast = useOptionalToast()
+  const { locale, timeZone } = useLocale()
+  const t = useT(deliveryMessages)
+  const tc = useT(commonMessages)
+  const format = useFormat()
+  const when = (value: string) => format.dateTime(value) ?? value
   // The body is only mounted once the money record exists, so the load has
   // certainly settled by now.
   const state = load.state!
@@ -173,7 +189,7 @@ export function DeliveryOrderBody({
     try {
       load.setShipment((await action()) ?? null)
     } catch (problem) {
-      setError(normalizeApiProblem(problem).message)
+      setError(deliveryProblemMessage(problem, locale))
     } finally {
       setBusy(false)
     }
@@ -185,9 +201,9 @@ export function DeliveryOrderBody({
       if (!navigator.clipboard?.writeText)
         throw new Error('Clipboard unavailable')
       await navigator.clipboard.writeText(shipment.number)
-      toast?.show({ tone: 'ok', message: 'Номер ТТН скопійовано.' })
+      toast?.show({ tone: 'ok', message: t('numberCopied') })
     } catch {
-      setError('Не вдалося скопіювати номер ТТН.')
+      setError(t('copyFailed'))
     }
   }
 
@@ -204,7 +220,9 @@ export function DeliveryOrderBody({
 
   return (
     <>
-      <DeliveryLifecycle steps={lifecycle(delivery, shipment)} />
+      <DeliveryLifecycle
+        steps={lifecycle(delivery, shipment, locale, timeZone)}
+      />
 
       <DeliveryTabs
         delivery={delivery}
@@ -218,7 +236,7 @@ export function DeliveryOrderBody({
         <Notice tone="danger">
           {load.error}
           <Button className="mt-2.5" onClick={load.reload}>
-            Повторити
+            {tc('retry')}
           </Button>
         </Notice>
       )}
@@ -229,6 +247,7 @@ export function DeliveryOrderBody({
             <>
               <OrderItemsCard
                 addPath={null}
+                currency={accountingCurrency}
                 editable={false}
                 items={order.items}
                 onEdit={() => undefined}
@@ -246,7 +265,7 @@ export function DeliveryOrderBody({
                         disabled={busy}
                         onClick={() => setDrawer({ kind: 'pay', mode: 'link' })}
                       >
-                        Прив’язати транзакцію
+                        {t('linkTransaction')}
                       </Button>
                       <Button
                         disabled={busy}
@@ -255,7 +274,7 @@ export function DeliveryOrderBody({
                         }
                       >
                         <Plus aria-hidden />
-                        Внести оплату
+                        {t('recordPayment')}
                       </Button>
                     </>
                   )
@@ -266,30 +285,36 @@ export function DeliveryOrderBody({
             </>
           ) : (
             <>
-              {integrationId === null && carrier !== null ? (
+              {novaPoshtaAvailable ? null : (
+                <Notice tone="info">{t('countryUnavailable')}</Notice>
+              )}
+              {novaPoshtaAvailable &&
+              integrationId === null &&
+              carrier !== null ? (
                 <Notice tone="warn">
                   <p className="font-semibold">
                     {carrier.status === 'missing'
-                      ? 'Нову пошту не підключено.'
-                      : `Нова пошта недоступна: ${integrationStatusPresentation(carrier.status).label.toLowerCase()}.`}
+                      ? t('npNotConnected')
+                      : t('npUnavailable', {
+                          status: integrationStatusPresentation(
+                            carrier.status,
+                            locale,
+                          ).label.toLocaleLowerCase(locale),
+                        })}
                   </p>
                   {carrier.errorCode === null ? null : (
                     <p className="mt-1">
-                      {integrationErrorMessage(carrier.errorCode)}
+                      {integrationErrorMessage(carrier.errorCode, locale)}
                     </p>
                   )}
-                  <p className="mt-1">
-                    Замовлення лишається доставковим: гроші й етапи працюють, а
-                    накладну не створити й не оновити, доки інтеграцію не
-                    відновлять.
-                  </p>
+                  <p className="mt-1">{t('npDownNote')}</p>
                   {integrationsPath === null ? null : (
                     <p className="mt-2">
                       <RouterLink
                         className="text-brand hover:text-brand-hover font-semibold"
                         to={integrationsPath}
                       >
-                        Відкрити інтеграції
+                        {t('openIntegrations')}
                       </RouterLink>
                     </p>
                   )}
@@ -304,17 +329,17 @@ export function DeliveryOrderBody({
                         disabled={busy}
                         onClick={() => setDrawer({ kind: 'waybill' })}
                       >
-                        Дані ТТН
+                        {t('waybillData')}
                       </Button>
                       <Button
                         disabled={busy}
                         onClick={() => setDrawer({ kind: 'label' })}
                       >
                         <Printer aria-hidden />
-                        Друк етикетки
+                        {t('printLabel')}
                       </Button>
                       <Button disabled={busy} onClick={() => void copyNumber()}>
-                        Копіювати номер
+                        {t('copyNumber')}
                       </Button>
                       <Button
                         aria-busy={busy}
@@ -325,7 +350,7 @@ export function DeliveryOrderBody({
                           )
                         }
                       >
-                        Оновити статус
+                        {t('refreshStatus')}
                       </Button>
                     </>
                   ) : (
@@ -337,14 +362,14 @@ export function DeliveryOrderBody({
                           variant="primary"
                         >
                           {shipment === null
-                            ? 'Оформити доставку'
-                            : 'Продовжити оформлення'}
+                            ? t('startDelivery')
+                            : t('continueDelivery')}
                         </Button>
                         <Button
                           disabled={busy}
                           onClick={() => setDrawer({ kind: 'attach' })}
                         >
-                          Прив’язати накладну з кабінету НП
+                          {t('attachWaybill')}
                         </Button>
                       </>
                     )
@@ -354,7 +379,9 @@ export function DeliveryOrderBody({
                 shipment={shipment}
               />
 
-              {created ? null : <DeliveryGateCard delivery={delivery} />}
+              {created || !novaPoshtaAvailable ? null : (
+                <DeliveryGateCard delivery={delivery} />
+              )}
 
               <RecipientCard phone={state.customerPhone} shipment={shipment} />
 
@@ -367,10 +394,12 @@ export function DeliveryOrderBody({
           <DeliveryDueCard
             busy={busy}
             delivery={delivery}
+            novaPoshtaAvailable={novaPoshtaAvailable}
             onPrimary={primary}
             shipment={shipment}
           />
           <OrderCustomerCard
+            accountingCurrency={accountingCurrency}
             customerId={order.customerId}
             customerName={order.customerName}
             initials={initials(order.customerName ?? '—')}
@@ -378,7 +407,7 @@ export function DeliveryOrderBody({
           />
           <OrderHistoryCard
             rows={order.history}
-            title={orderEventTitle}
+            title={(eventType) => orderEventTitle(eventType, locale)}
             when={when}
           />
         </aside>
@@ -403,7 +432,7 @@ export function DeliveryOrderBody({
         />
       )}
 
-      {drawer?.kind === 'readiness' && (
+      {drawer?.kind === 'readiness' && novaPoshtaAvailable && (
         <WaybillReadinessDrawer
           busy={busy}
           delivery={delivery}
@@ -418,6 +447,7 @@ export function DeliveryOrderBody({
       {drawer?.kind === 'booking' && integrationId !== null && (
         <DeliveryDrawer
           customerName={order.customerName}
+          countryCode={countryCode}
           customerPhone={state.customerPhone}
           declaredValue={delivery.agreedTotalUah}
           delivery={delivery}
