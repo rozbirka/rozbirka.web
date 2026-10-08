@@ -74,6 +74,7 @@ import { placementMessages } from './placement-messages'
 import { resultsMessages } from './results-messages'
 import { sessionMessages } from './session-messages'
 import { warehouseMessages } from './warehouse-messages'
+import { inventoryCodeFromName } from './inventory-code'
 import { buildZoneLabelHtml } from './zone-label-output'
 
 type LoadState<T> =
@@ -676,7 +677,7 @@ function Overview() {
               submitLabel={t('addWarehouse')}
               title={t('newWarehouseTitle')}
             >
-              <NameAndCode draft={draft} onChange={setDraft} />
+              <NameAndCode autoCode draft={draft} onChange={setDraft} />
             </FormDialog>
           </div>
         )
@@ -1527,7 +1528,11 @@ function WarehouseView({ id }: { id: string }) {
                 {operationError ? (
                   <Notice tone="danger">{operationError}</Notice>
                 ) : null}
-                <NameAndCode draft={draft} onChange={setDraft} />
+                <NameAndCode
+                  autoCode={addingZone}
+                  draft={draft}
+                  onChange={setDraft}
+                />
               </form>
             </Sheet>
 
@@ -1822,7 +1827,11 @@ function WarehouseShelves({
           }}
         >
           {error ? <Notice tone="danger">{error}</Notice> : null}
-          <NameAndCode draft={draft} onChange={setDraft} />
+          <NameAndCode
+            autoCode={addingTo !== null}
+            draft={draft}
+            onChange={setDraft}
+          />
         </form>
       </Sheet>
       <ConfirmDialog
@@ -1850,9 +1859,11 @@ function WarehouseShelves({
 
 /** Name and code, the two fields every warehouse and zone dialog asks for. */
 function NameAndCode({
+  autoCode = false,
   draft,
   onChange,
 }: {
+  autoCode?: boolean
   draft: { name: string; code: string }
   onChange: (draft: { name: string; code: string }) => void
 }) {
@@ -1861,7 +1872,16 @@ function NameAndCode({
     <>
       <Field label={t('name')} required>
         <TextInput
-          onChange={(event) => onChange({ ...draft, name: event.target.value })}
+          onChange={(event) => {
+            const name = event.target.value
+            const code =
+              autoCode &&
+              (draft.code === '' ||
+                draft.code === inventoryCodeFromName(draft.name))
+                ? inventoryCodeFromName(name)
+                : draft.code
+            onChange({ name, code })
+          }}
           value={draft.name}
         />
       </Field>

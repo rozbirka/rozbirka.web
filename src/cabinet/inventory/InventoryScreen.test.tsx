@@ -811,16 +811,19 @@ it('creates a shelf in a side drawer for its zone', async () => {
   expect(drawer).toHaveClass('sm:right-0')
   expect(within(drawer).getByText('Стелаж A1')).toBeInTheDocument()
 
-  await user.type(
-    within(drawer).getByRole('textbox', { name: 'Назва' }),
-    'Полиця 2',
-  )
-  await user.type(within(drawer).getByRole('textbox', { name: 'Код' }), 'P2')
+  const name = within(drawer).getByRole('textbox', { name: 'Назва' })
+  const code = within(drawer).getByRole('textbox', { name: 'Код' })
+  await user.type(name, 'Полиця 2')
+  expect(code).toHaveValue('polytsya-2')
+  await user.clear(code)
+  await user.type(code, 'P2')
+  await user.type(name, ' для кузова')
+  expect(code).toHaveValue('P2')
   await user.click(within(drawer).getByRole('button', { name: 'Зберегти' }))
 
   await waitFor(() =>
     expect(api.createShelf).toHaveBeenCalledWith(
-      { zoneId: 'zone-1', name: 'Полиця 2', code: 'P2' },
+      { zoneId: 'zone-1', name: 'Полиця 2 для кузова', code: 'P2' },
       expect.anything(),
     ),
   )
@@ -839,12 +842,14 @@ it('creates a zone in a side drawer for its warehouse', async () => {
     within(drawer).getByRole('textbox', { name: 'Назва' }),
     'Стелаж B2',
   )
-  await user.type(within(drawer).getByRole('textbox', { name: 'Код' }), 'B2')
+  expect(within(drawer).getByRole('textbox', { name: 'Код' })).toHaveValue(
+    'stelazh-b2',
+  )
   await user.click(within(drawer).getByRole('button', { name: 'Додати зону' }))
 
   await waitFor(() =>
     expect(api.createZone).toHaveBeenCalledWith(
-      { warehouseId: 'wh-1', name: 'Стелаж B2', code: 'B2' },
+      { warehouseId: 'wh-1', name: 'Стелаж B2', code: 'stelazh-b2' },
       expect.anything(),
     ),
   )
