@@ -120,7 +120,7 @@ export function ProfileScreen() {
       {saveState === 'success' && <Notice tone="ok">{t('nameSaved')}</Notice>}
       {saveState === 'error' && <Notice tone="danger">{t('nameError')}</Notice>}
 
-      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]">
         <Card title={t('personal')}>
           <div className="flex items-center gap-4">
             <span
@@ -181,31 +181,12 @@ export function ProfileScreen() {
               </Button>
             </div>
           </form>
-        </Card>
 
-        <div className="grid min-w-0 content-start gap-5">
-          <LanguageCard />
-
-          {/* Every member reads the business region here, read-only; the
-              owner edits it in Business → «Регіон і документи». */}
-          <Card title={t('docCardTitle')}>
-            <p className="text-app-muted text-[13.5px]">{t('docCardBody')}</p>
-            {cabinet.targetTenant ? (
-              <div className="mt-3 grid gap-3 text-[13.5px]">
-                <RegionSummary tenant={cabinet.targetTenant} />
-              </div>
-            ) : (
-              <dl className="mt-3 flex items-baseline justify-between gap-4 text-[13.5px]">
-                <dt className="text-app-muted">{t('docLang')}</dt>
-                <dd className="text-app-ink text-right font-medium">
-                  {t('docLangUnknown')}
-                </dd>
-              </dl>
-            )}
-          </Card>
-
-          <Card title={t('access')}>
-            <dl className="grid gap-3 text-[13.5px]">
+          <div className="border-app-line mt-6 border-t pt-5">
+            <h3 className="text-app-ink text-[15px] font-bold">
+              {t('access')}
+            </h3>
+            <dl className="mt-3 grid gap-3 text-[13.5px]">
               <div className="flex items-baseline justify-between gap-4">
                 <dt className="text-app-muted">{t('role')}</dt>
                 <dd className="text-app-ink text-right font-medium">
@@ -219,18 +200,52 @@ export function ProfileScreen() {
                 </dd>
               </div>
             </dl>
-            <div className="border-app-line mt-4 border-t pt-4">
-              <Button
-                className="w-full justify-center"
-                onClick={() => void auth.signOut()}
-              >
-                <LogOut aria-hidden />
-                {t('signOut')}
-              </Button>
-            </div>
+            <Button
+              className="mt-4 w-full justify-center sm:w-auto"
+              onClick={() => void auth.signOut()}
+            >
+              <LogOut aria-hidden />
+              {t('signOut')}
+            </Button>
+          </div>
+        </Card>
+
+        <div className="grid min-w-0 content-start gap-5">
+          <Card title={t('settings')}>
+            <LanguageCard embedded />
+
+            {/* Business settings remain read-only for every member here. */}
+            <details className="border-app-line group mt-5 border-t pt-4">
+              <summary className="text-app-ink flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-[14px] font-semibold marker:content-none [&::-webkit-details-marker]:hidden">
+                {t('docCardTitle')}
+                <span
+                  aria-hidden
+                  className="text-app-dim transition-transform group-open:rotate-180"
+                >
+                  ⌄
+                </span>
+              </summary>
+              <div className="pt-2 pb-1">
+                <p className="text-app-muted text-[13.5px]">
+                  {t('docCardBody')}
+                </p>
+                {cabinet.targetTenant ? (
+                  <div className="mt-3 grid gap-3 text-[13.5px]">
+                    <RegionSummary tenant={cabinet.targetTenant} />
+                  </div>
+                ) : (
+                  <dl className="mt-3 flex items-baseline justify-between gap-4 text-[13.5px]">
+                    <dt className="text-app-muted">{t('docLang')}</dt>
+                    <dd className="text-app-ink text-right font-medium">
+                      {t('docLangUnknown')}
+                    </dd>
+                  </dl>
+                )}
+              </div>
+            </details>
           </Card>
 
-          <AccountDeletion key={auth.user?.id} />
+          <AccountDeletion compact key={auth.user?.id} />
         </div>
       </div>
     </RedesignShell>
