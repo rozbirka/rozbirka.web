@@ -73,12 +73,40 @@ it('round-trips only OpenAPI-supported part changes and does not fabricate compa
   expect(JSON.parse(request?.data as string)).toEqual({
     name: 'Front bumper',
     photoKeys: ['owned-key'],
-    desiredSalePrice: { isSet: false },
   })
   expect(JSON.parse(request?.data as string)).not.toHaveProperty(
     'compatCarBrand',
   )
 })
+
+it.each([
+  { value: 125.5, expected: 125.5 },
+  { value: 0, expected: 0 },
+  { value: null, expected: null },
+])(
+  'sends desired sale price $value as a scalar for Core',
+  async ({ value, expected }) => {
+    let request: InternalAxiosRequestConfig | undefined
+    apiClient.defaults.adapter = (config) => {
+      request = config
+      return Promise.resolve({
+        data: { data: { id: 'part-1' } },
+        status: 200,
+        statusText: 'OK',
+        headers: new AxiosHeaders(),
+        config,
+      } satisfies AxiosResponse)
+    }
+
+    await partsApi.update('part-1', {
+      desiredSalePrice: { isSet: true, value },
+    })
+
+    expect(JSON.parse(request?.data as string)).toEqual({
+      desiredSalePrice: expected,
+    })
+  },
+)
 
 it('restores relations Core omits rather than sends as null', async () => {
   // `JsonIgnoreCondition.WhenWritingNull` drops a null property entirely, so a

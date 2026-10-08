@@ -449,10 +449,14 @@ export const partsApi = {
     request: UpdatePartRequest,
     options: RequestOptions = {},
   ): Promise<PartDetail> {
+    const { desiredSalePrice, ...fields } = request
+    const body = desiredSalePrice.isSet
+      ? { ...fields, desiredSalePrice: desiredSalePrice.value ?? null }
+      : fields
     return (
       await apiClient.put<PartDetail>(
         `/parts/${encodeURIComponent(id)}`,
-        request,
+        body,
         requestConfig(options),
       )
     ).data
