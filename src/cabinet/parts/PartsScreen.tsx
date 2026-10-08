@@ -25,7 +25,6 @@ import {
   ShoppingBag,
   Tag,
   Plus,
-  X,
   Printer,
   Search,
   Trash2,
@@ -50,6 +49,7 @@ import {
   EmptyState,
   ErrorState,
   Field,
+  FormDialog,
   InlineEdit,
   Notice,
   SelectInput,
@@ -118,6 +118,7 @@ import { VehicleCatalogPicker } from '../cars/CarsScreen'
 import {
   emptyRow,
   filledRows,
+  isBlankRow,
   resolveCompatibility,
   rowProblem,
   rowsProblem,
@@ -2600,16 +2601,12 @@ function partFieldErrors(
   return errors
 }
 
-/** One vehicle in the compatibility list, with its own pair of pickers. */
-function CompatibilityRowCard({
-  index,
+/** Pickers used while adding or editing one extra compatible vehicle. */
+function CompatibilityEditorFields({
   onChange,
-  onRemove,
   row,
 }: {
-  index: number
   onChange: (patch: Partial<CompatibilityRow>) => void
-  onRemove?: (() => void) | undefined
   row: CompatibilityRow
 }) {
   // The picker keeps the make's own id so it can list that make's models.
@@ -2617,31 +2614,9 @@ function CompatibilityRowCard({
   const t = useT(partFormMessages)
   const { locale } = useLocale()
   const problem = rowProblem(row, locale)
-  const title = t('vehicleN', { n: index + 1 })
-
   return (
-    <section
-      aria-label={title}
-      className="border-app-line bg-app-raised rounded-[14px] border px-4 pt-3.5 pb-4"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <h4 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-          {title}
-        </h4>
-        {onRemove === undefined ? null : (
-          <Button
-            className="min-h-8 px-2.5 text-[12px]"
-            onClick={onRemove}
-            type="button"
-            variant="quiet"
-          >
-            <X aria-hidden className="size-3" />
-            {t('remove')}
-          </Button>
-        )}
-      </div>
-
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+    <>
+      <div className="grid gap-3 sm:grid-cols-3">
         <VehicleCatalogPicker
           disabled={false}
           label={t('make')}
@@ -2674,12 +2649,8 @@ function CompatibilityRowCard({
         </Field>
       </div>
 
-      {problem === null ? null : (
-        <Notice className="mt-3" tone="danger">
-          {problem}
-        </Notice>
-      )}
-    </section>
+      {problem === null ? null : <Notice tone="danger">{problem}</Notice>}
+    </>
   )
 }
 
@@ -3058,6 +3029,33 @@ function PartFields({
     values.sourceType === 'car'
       ? (sourceOptions.cars.find((car) => car.id === values.sourceId) ?? null)
       : null
+  const [editingCompatibility, setEditingCompatibility] = useState<{
+    mode: 'add' | 'edit'
+    row: CompatibilityRow
+  } | null>(null)
+  const [compatibilityError, setCompatibilityError] = useState<string | null>(
+    null,
+  )
+  const nextCompatibilityKey = useRef(0)
+  const saveCompatibility = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (!compatibility || !editingCompatibility) return
+    const row = editingCompatibility.row
+    const problem =
+      row.brand === '' ? t('compatChooseMake') : rowProblem(row, locale)
+    if (problem) {
+      setCompatibilityError(problem)
+      return
+    }
+    compatibility.setRows(
+      editingCompatibility.mode === 'add'
+        ? [...compatibility.rows, row]
+        : compatibility.rows.map((item) => (item.key === row.key ? row : item)),
+    )
+    setEditingCompatibility(null)
+    setCompatibilityError(null)
+  }
   const showCompatibility = !edit
   const step = (number: string, title: string) =>
     variant === 'plain' ? (
@@ -3390,38 +3388,68 @@ function PartFields({
           )}
           {compatibility === undefined ? null : (
             <div className="grid gap-2.5">
-              {compatibility.rows.map((row, index) => (
-                <CompatibilityRowCard
-                  index={index}
-                  key={row.key}
-                  onChange={(patch) => {
-                    compatibility.setRows(
-                      compatibility.rows.map((item) =>
-                        item.key === row.key ? { ...item, ...patch } : item,
-                      ),
-                    )
-                  }}
-                  onRemove={
-                    compatibility.rows.length > 1
-                      ? () => {
+              {compatibility.rows.map((row, index) => {
+                const title = t('vehicleN', {
+                  n: index + (sourceCar === null ? 1 : 2),
+                })
+                const vehicle = [row.brand, row.model].filter(Boolean).join(' ')
+                return (
+                  <section
+                    aria-label={title}
+                    className="border-app-line bg-app-raised flex flex-wrap items-center justify-between gap-3 rounded-[14px] border px-4 py-3.5"
+                    key={row.key}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+                        {title}
+                      </p>
+                      <p className="mt-1 text-[15px] font-bold text-white">
+                        {vehicle}
+                        {row.year.trim() ? ` · ${row.year.trim()}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <Button
+                        onClick={() => {
+                          setCompatibilityError(null)
+                          setEditingCompatibility({
+                            mode: 'edit',
+                            row: { ...row },
+                          })
+                        }}
+                        type="button"
+                        variant="quiet"
+                      >
+                        {t('editCompatibility')}
+                      </Button>
+                      <Button
+                        onClick={() =>
                           compatibility.setRows(
                             compatibility.rows.filter(
                               (item) => item.key !== row.key,
                             ),
                           )
                         }
-                      : undefined
-                  }
-                  row={row}
-                />
-              ))}
+                        type="button"
+                        variant="quiet"
+                      >
+                        {t('remove')}
+                      </Button>
+                    </div>
+                  </section>
+                )
+              })}
               <Button
                 className="w-full justify-center border-dashed"
                 onClick={() => {
-                  compatibility.setRows([
-                    ...compatibility.rows,
-                    emptyRow(`row-${String(Date.now())}`),
-                  ])
+                  nextCompatibilityKey.current += 1
+                  setCompatibilityError(null)
+                  setEditingCompatibility({
+                    mode: 'add',
+                    row: emptyRow(
+                      `row-${String(Date.now())}-${String(nextCompatibilityKey.current)}`,
+                    ),
+                  })
                 }}
                 type="button"
               >
@@ -3433,6 +3461,44 @@ function PartFields({
           <Notice tone="warn">{t('compatOnlyOnCreate')}</Notice>
         </SectionPanel>
       ) : null}
+      {compatibility === undefined ? null : (
+        <FormDialog
+          error={compatibilityError}
+          onOpenChange={(open) => {
+            if (!open) {
+              setEditingCompatibility(null)
+              setCompatibilityError(null)
+            }
+          }}
+          onSubmit={saveCompatibility}
+          open={editingCompatibility !== null}
+          size="lg"
+          submitLabel={
+            editingCompatibility?.mode === 'edit'
+              ? t('saveCompatibility')
+              : t('confirmAddCar')
+          }
+          title={
+            editingCompatibility?.mode === 'edit'
+              ? t('editCompatibilityTitle')
+              : t('addCompatibilityTitle')
+          }
+        >
+          {editingCompatibility === null ? null : (
+            <CompatibilityEditorFields
+              key={editingCompatibility.row.key}
+              onChange={(patch) =>
+                setEditingCompatibility((current) =>
+                  current
+                    ? { ...current, row: { ...current.row, ...patch } }
+                    : current,
+                )
+              }
+              row={editingCompatibility.row}
+            />
+          )}
+        </FormDialog>
+      )}
     </>
   )
 }
@@ -3504,8 +3570,8 @@ function PartForm({
   useEffect(() => {
     if (draft) clearPartDraft()
   }, [draft])
-  const [compatRows, setCompatRows] = useState<CompatibilityRow[]>(() =>
-    draft?.compatibility.length ? draft.compatibility : [emptyRow('row-1')],
+  const [compatRows, setCompatRows] = useState<CompatibilityRow[]>(
+    () => draft?.compatibility.filter((row) => !isBlankRow(row)) ?? [],
   )
   // A part started from a car's page arrives with that car already chosen,
   // so nobody has to find it again in the source list.

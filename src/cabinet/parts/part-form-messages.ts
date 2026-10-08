@@ -104,10 +104,16 @@ export const partFormMessages = defineMessages({
     compatDescription:
       'До яких авто підходить деталь. Можна вказати кілька. Необовʼязково.',
     compatFromSourceDescription:
-      'Перший рядок підставлено з авто-джерела. Додайте інші, якщо деталь підходить і до них.',
+      'Сумісність з авто-джерела вже додано. Додайте інші авто, якщо деталь підходить і до них.',
     compatStep: 'Сумісність',
     compatFromSource: 'З вибраного авто-джерела. Змінюється разом із джерелом.',
     addCar: 'Додати ще авто',
+    addCompatibilityTitle: 'Додати сумісність',
+    editCompatibilityTitle: 'Змінити сумісність',
+    editCompatibility: 'Змінити',
+    confirmAddCar: 'Додати авто',
+    saveCompatibility: 'Зберегти',
+    compatChooseMake: 'Оберіть марку.',
     compatOnlyOnCreate:
       'Сумісність задається лише під час створення. Після збереження її не можна змінити.',
     createInvalid: 'Деталь не створено: виправте позначені нижче поля.',
@@ -275,11 +281,17 @@ export const partFormMessages = defineMessages({
     compatDescription:
       'Which cars the part fits. You can list several. Optional.',
     compatFromSourceDescription:
-      'The first row comes from the source car. Add others if the part fits them too.',
+      'Compatibility with the source car is already included. Add other cars if the part fits them too.',
     compatStep: 'Compatibility',
     compatFromSource:
       'From the chosen source car. Changes along with the source.',
     addCar: 'Add another car',
+    addCompatibilityTitle: 'Add compatibility',
+    editCompatibilityTitle: 'Edit compatibility',
+    editCompatibility: 'Edit',
+    confirmAddCar: 'Add car',
+    saveCompatibility: 'Save',
+    compatChooseMake: 'Choose a make.',
     compatOnlyOnCreate:
       'Compatibility can only be set when creating the part. It can’t be changed after saving.',
     createInvalid: 'Part not created: fix the fields marked below.',
@@ -445,11 +457,17 @@ export const partFormMessages = defineMessages({
     compatDescription:
       'Do jakich aut pasuje część. Możesz podać kilka. Opcjonalnie.',
     compatFromSourceDescription:
-      'Pierwszy wiersz pochodzi z auta źródłowego. Dodaj inne, jeśli część do nich też pasuje.',
+      'Kompatybilność z autem źródłowym jest już dodana. Dodaj inne auta, jeśli część do nich też pasuje.',
     compatStep: 'Kompatybilność',
     compatFromSource:
       'Z wybranego auta źródłowego. Zmienia się razem ze źródłem.',
     addCar: 'Dodaj kolejne auto',
+    addCompatibilityTitle: 'Dodaj kompatybilność',
+    editCompatibilityTitle: 'Zmień kompatybilność',
+    editCompatibility: 'Zmień',
+    confirmAddCar: 'Dodaj auto',
+    saveCompatibility: 'Zapisz',
+    compatChooseMake: 'Wybierz markę.',
     compatOnlyOnCreate:
       'Kompatybilność ustala się tylko podczas tworzenia. Po zapisaniu nie można jej zmienić.',
     createInvalid: 'Nie utworzono części: popraw zaznaczone poniżej pola.',
