@@ -37,7 +37,7 @@ function nativeLanguageName(tag: string): string {
  * is then kept on this device and said so. It never changes the public-site
  * language (`siteLocalePreference`).
  */
-export function LanguageCard() {
+export function LanguageCard({ embedded = false }: { embedded?: boolean }) {
   const auth = useAuth()
   const { locale, resolution, devicePreference, setDevicePreference } =
     useLocale()
@@ -122,7 +122,11 @@ export function LanguageCard() {
     <section
       aria-busy={pending || undefined}
       aria-labelledby={`${groupName}-title`}
-      className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5"
+      className={
+        embedded
+          ? 'min-w-0'
+          : 'border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5'
+      }
     >
       <h2
         className="text-app-ink text-[15px] font-bold"

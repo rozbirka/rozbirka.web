@@ -373,7 +373,7 @@ it('asks a new user for a name and stores the rotated access response', async ()
   await enterOtp(user)
   await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
 
-  const nameInput = await screen.findByLabelText('Ім’я')
+  const nameInput = await screen.findByLabelText('Ім’я власника')
   await user.type(nameInput, 'Олена')
   await user.click(screen.getByRole('button', { name: 'Продовжити' }))
 
@@ -381,6 +381,37 @@ it('asks a new user for a name and stores the rotated access response', async ()
     signal: expect.any(AbortSignal) as AbortSignal,
   })
   expect(credentials.getAccess()).toBe('rotated-access')
+  expect(auth.hydrate).toHaveBeenCalledOnce()
+})
+
+it('asks a pre-created owner whose display name is still their phone for a name after verification', async () => {
+  otpSend.mockResolvedValueOnce({
+    ...challengeData(),
+    cooldownSeconds: 0,
+    retryAfterSeconds: 0,
+  })
+  otpVerify.mockResolvedValue({
+    accessToken: 'access',
+    user: {
+      ...existingUser,
+      displayName: existingUser.phone,
+    },
+    isNewUser: false,
+  })
+  const user = userEvent.setup()
+  renderLogin()
+  await reachOtpStep(user)
+  await enterOtp(user)
+  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+
+  const nameInput = await screen.findByLabelText('Ім’я власника')
+  expect(screen.getByText('Крок 1 з 2')).toBeInTheDocument()
+  await user.type(nameInput, 'Олена')
+  await user.click(screen.getByRole('button', { name: 'Продовжити' }))
+
+  expect(updateName).toHaveBeenCalledWith('Олена', {
+    signal: expect.any(AbortSignal) as AbortSignal,
+  })
   expect(auth.hydrate).toHaveBeenCalledOnce()
 })
 
@@ -433,6 +464,8 @@ it('starts an authenticated unnamed user at the name step and resumes the invite
   const user = userEvent.setup()
   renderLogin('/login?invite=ABCD1234')
 
+  expect(screen.getByText('Майже все')).toBeVisible()
+  expect(screen.queryByText('Крок 1 з 2')).toBeNull()
   const nameInput = screen.getByLabelText('Ім’я')
   await user.type(nameInput, 'Олена')
   await user.click(screen.getByRole('button', { name: 'Продовжити' }))
@@ -441,6 +474,20 @@ it('starts an authenticated unnamed user at the name step and resumes the invite
   expect(
     await screen.findByRole('link', { name: 'Продовжити' }),
   ).toHaveAttribute('href', '/invite/ABCD1234')
+})
+
+it('resumes the owner name step after a reload when the account still uses its phone as display name', () => {
+  auth.status = 'authenticated'
+  auth.user = {
+    id: 'user-1',
+    phone: '+380971110000',
+    displayName: '+380971110000',
+    effectiveLanguage: 'uk',
+  }
+
+  renderLogin()
+
+  expect(screen.getByLabelText('Ім’я власника')).toBeVisible()
 })
 
 it('does not navigate after an unmounted name flow finishes hydrating', async () => {

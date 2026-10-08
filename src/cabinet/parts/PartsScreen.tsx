@@ -56,6 +56,7 @@ import {
   StatusPill,
   TextArea,
   TextInput,
+  useOptionalToast,
   type StatusTone,
 } from '@/components/app'
 import { cn } from '@/lib/utils'
@@ -118,6 +119,7 @@ import { VehicleCatalogPicker } from '../cars/CarsScreen'
 import {
   emptyRow,
   filledRows,
+  isBlankRow,
   resolveCompatibility,
   rowProblem,
   rowsProblem,
@@ -140,8 +142,6 @@ import {
 import { usePriceSlots, type PriceSlots } from '../currency/use-price-slots'
 import { amountPrecisionError } from '../currency/amount-precision'
 import { isLostResponse, lostResponseMessages } from '../lost-response'
-import { OnboardingCompletedNotice } from '../onboarding/first-part-completion'
-import { useFirstPartCompletion } from '../onboarding/use-first-part-completion'
 
 const partStatuses = new Set(['available', 'reserved', 'sold'])
 /** Every group the filter panel draws; the server counts each one for us. */
@@ -2600,7 +2600,7 @@ function partFieldErrors(
   return errors
 }
 
-/** One vehicle in the compatibility list, with its own pair of pickers. */
+/** One optional vehicle in the compatibility list. */
 function CompatibilityRowCard({
   index,
   onChange,
@@ -2609,7 +2609,7 @@ function CompatibilityRowCard({
 }: {
   index: number
   onChange: (patch: Partial<CompatibilityRow>) => void
-  onRemove?: (() => void) | undefined
+  onRemove: () => void
   row: CompatibilityRow
 }) {
   // The picker keeps the make's own id so it can list that make's models.
@@ -2617,8 +2617,7 @@ function CompatibilityRowCard({
   const t = useT(partFormMessages)
   const { locale } = useLocale()
   const problem = rowProblem(row, locale)
-  const title = t('vehicleN', { n: index + 1 })
-
+  const title = t('vehicleN', { n: index })
   return (
     <section
       aria-label={title}
@@ -2628,19 +2627,16 @@ function CompatibilityRowCard({
         <h4 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
           {title}
         </h4>
-        {onRemove === undefined ? null : (
-          <Button
-            className="min-h-8 px-2.5 text-[12px]"
-            onClick={onRemove}
-            type="button"
-            variant="quiet"
-          >
-            <X aria-hidden className="size-3" />
-            {t('remove')}
-          </Button>
-        )}
+        <Button
+          className="min-h-8 px-2.5 text-[12px]"
+          onClick={onRemove}
+          type="button"
+          variant="quiet"
+        >
+          <X aria-hidden className="size-3" />
+          {t('remove')}
+        </Button>
       </div>
-
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
         <VehicleCatalogPicker
           disabled={false}
@@ -3058,6 +3054,7 @@ function PartFields({
     values.sourceType === 'car'
       ? (sourceOptions.cars.find((car) => car.id === values.sourceId) ?? null)
       : null
+  const nextCompatibilityKey = useRef(0)
   const showCompatibility = !edit
   const step = (number: string, title: string) =>
     variant === 'plain' ? (
@@ -3180,7 +3177,8 @@ function PartFields({
             </Field>
           ) : null}
         </div>
-        {sourceCreateLink ? (
+        {sourceCreateLink &&
+        (sourceCreateLink !== 'cars' || !values.sourceId) ? (
           <div className="grid gap-1.5">
             <div className="flex flex-wrap gap-2">
               <Button asChild>
@@ -3391,25 +3389,19 @@ function PartFields({
             <div className="grid gap-2.5">
               {compatibility.rows.map((row, index) => (
                 <CompatibilityRowCard
-                  index={index}
+                  index={index + (sourceCar === null ? 1 : 2)}
                   key={row.key}
-                  onChange={(patch) => {
+                  onChange={(patch) =>
                     compatibility.setRows(
                       compatibility.rows.map((item) =>
                         item.key === row.key ? { ...item, ...patch } : item,
                       ),
                     )
-                  }}
-                  onRemove={
-                    compatibility.rows.length > 1
-                      ? () => {
-                          compatibility.setRows(
-                            compatibility.rows.filter(
-                              (item) => item.key !== row.key,
-                            ),
-                          )
-                        }
-                      : undefined
+                  }
+                  onRemove={() =>
+                    compatibility.setRows(
+                      compatibility.rows.filter((item) => item.key !== row.key),
+                    )
                   }
                   row={row}
                 />
@@ -3417,9 +3409,12 @@ function PartFields({
               <Button
                 className="w-full justify-center border-dashed"
                 onClick={() => {
+                  nextCompatibilityKey.current += 1
                   compatibility.setRows([
                     ...compatibility.rows,
-                    emptyRow(`row-${String(Date.now())}`),
+                    emptyRow(
+                      `row-${String(Date.now())}-${String(nextCompatibilityKey.current)}`,
+                    ),
                   ])
                 }}
                 type="button"
@@ -3492,6 +3487,7 @@ function PartForm({
   const cabinet = useCabinet()
   const t = useT(partFormMessages)
   const tc = useT(commonMessages)
+  const toast = useOptionalToast()
   const { locale } = useLocale()
   const base = `/app/${cabinet.targetTenant?.slug ?? ''}/parts`
   // Coming back from creating a car or intake restores what was typed.
@@ -3503,8 +3499,8 @@ function PartForm({
   useEffect(() => {
     if (draft) clearPartDraft()
   }, [draft])
-  const [compatRows, setCompatRows] = useState<CompatibilityRow[]>(() =>
-    draft?.compatibility.length ? draft.compatibility : [emptyRow('row-1')],
+  const [compatRows, setCompatRows] = useState<CompatibilityRow[]>(
+    () => draft?.compatibility.filter((row) => !isBlankRow(row)) ?? [],
   )
   // A part started from a car's page arrives with that car already chosen,
   // so nobody has to find it again in the source list.
@@ -3524,15 +3520,8 @@ function PartForm({
   )
   const pendingRef = useRef(false)
   const [pending, setPending] = useState(false)
-  const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showErrors, setShowErrors] = useState(false)
-  // The owner's first part may finish onboarding: say so here, keep the list.
-  const firstPart = useFirstPartCompletion({
-    tenantId: cabinet.targetTenant?.id ?? null,
-    userId: cabinet.snapshot?.userId ?? null,
-    role: cabinet.snapshot?.role,
-  })
   // A car given by link but missing from the active list is most likely
   // archived; say so now rather than after the whole form is filled.
   const [archivedCarId, setArchivedCarId] = useState<string | null>(null)
@@ -3599,7 +3588,6 @@ function PartForm({
       ).length > 0
     ) {
       setShowErrors(true)
-      setStatus(null)
       setError(t('createInvalid'))
       return
     }
@@ -3630,7 +3618,6 @@ function PartForm({
     const pricing = price.hasPrice && !price.disabled
     pendingRef.current = true
     setPending(true)
-    setStatus(null)
     setError(null)
     try {
       if (
@@ -3732,8 +3719,13 @@ function PartForm({
         )
       }
       guard.afterSave(pricing)
-      setStatus(t('created'))
-      firstPart.check()
+      toast?.show({ tone: 'ok', message: t('created') })
+      void navigate(
+        cabinetPath(cabinet.targetTenant!.slug, 'parts', created.id),
+        {
+          replace: true,
+        },
+      )
     } catch (failure) {
       setError(createFailureMessage(failure, locale))
     } finally {
@@ -3842,12 +3834,6 @@ function PartForm({
           }
           variant="plain"
         />
-        {status ? <Notice tone="ok">{status}</Notice> : null}
-        {firstPart.done && cabinet.targetTenant ? (
-          <OnboardingCompletedNotice
-            dashboardPath={cabinetPath(cabinet.targetTenant.slug, 'dashboard')}
-          />
-        ) : null}
         {error ? <Notice tone="danger">{error}</Notice> : null}
       </form>
     </Sheet>
@@ -4350,13 +4336,13 @@ function PartEdit({
               </Card>
 
               <Card title={t('deletion')}>
-                <p className="text-app-muted text-sm">
+                <p className="text-app-muted text-sm leading-5">
                   {detail && detail.quantityReserved > 0
                     ? t('deleteBlocked')
                     : t('deleteAllowed')}
                 </p>
                 <Button
-                  className="w-full text-sm font-semibold"
+                  className="mt-5 w-full text-sm font-semibold"
                   onClick={() => setConfirmingDelete(true)}
                   type="button"
                   variant="danger"

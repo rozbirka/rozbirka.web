@@ -42,7 +42,7 @@ vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
 
 const ownerRole: RoleDto = {
   id: 'role-owner',
-  name: 'Власник',
+  name: 'Owner',
   isSystem: true,
   permissions: ['team.view', 'team.manage'],
   membersCount: 1,
@@ -54,6 +54,14 @@ const mechanicRole: RoleDto = {
   isSystem: false,
   permissions: ['parts.view'],
   membersCount: 1,
+}
+
+const managerRole: RoleDto = {
+  id: 'role-manager',
+  name: 'Менеджер',
+  isSystem: true,
+  permissions: ['team.view'],
+  membersCount: 0,
 }
 
 const member: TeamMemberDto = {
@@ -157,11 +165,15 @@ beforeEach(() => {
   tenantRequestScope.rotate()
   vi.mocked(useCabinet).mockReturnValue(cabinet())
   vi.mocked(teamApi.listMembers).mockResolvedValue([member])
-  vi.mocked(teamApi.listRoles).mockResolvedValue([ownerRole, mechanicRole])
+  vi.mocked(teamApi.listRoles).mockResolvedValue([
+    ownerRole,
+    mechanicRole,
+    managerRole,
+  ])
   vi.mocked(teamApi.listInvitations).mockResolvedValue([invitation()])
   vi.mocked(teamApi.changeRole).mockResolvedValue({
     ...member,
-    role: ownerRole,
+    role: managerRole,
   })
   vi.mocked(teamApi.deactivateMember).mockResolvedValue(undefined)
   vi.mocked(teamApi.activateMember).mockResolvedValue(undefined)
@@ -226,7 +238,7 @@ it('loads the member, role, and invitation lifecycle with tenant cancellation', 
     await screen.findByRole('heading', { name: 'Команда' }),
   ).toBeInTheDocument()
   expect(await screen.findByText('Олена')).toBeInTheDocument()
-  expect(screen.getAllByText('Власник').length).toBeGreaterThan(0)
+  expect(screen.queryByRole('option', { name: 'Власник' })).toBeNull()
   expect(screen.getByText('Активне')).toBeInTheDocument()
   expect(teamApi.listMembers).toHaveBeenCalledWith({
     signal: tenantRequestScope.signal,
@@ -342,12 +354,16 @@ it('confirms and completes member, role, permission, and invitation mutations', 
   await screen.findByText('Олена')
   await user.selectOptions(
     screen.getByLabelText('Роль для Олена'),
-    'role-owner',
+    'role-manager',
   )
   await waitFor(() =>
-    expect(teamApi.changeRole).toHaveBeenCalledWith('member-1', 'role-owner', {
-      signal: tenantRequestScope.signal,
-    }),
+    expect(teamApi.changeRole).toHaveBeenCalledWith(
+      'member-1',
+      'role-manager',
+      {
+        signal: tenantRequestScope.signal,
+      },
+    ),
   )
 
   await user.click(
@@ -436,7 +452,7 @@ it('refreshes authoritative cabinet access after an access-changing direct mutat
 
   await user.selectOptions(
     await screen.findByLabelText('Роль для Олена'),
-    'role-owner',
+    'role-manager',
   )
 
   await waitFor(() => expect(currentCabinet.retry).toHaveBeenCalledOnce())
@@ -455,7 +471,7 @@ it('does not read team data before an access-changing mutation retry settles', a
 
   await user.selectOptions(
     await screen.findByLabelText('Роль для Олена'),
-    'role-owner',
+    'role-manager',
   )
   await waitFor(() => expect(currentCabinet.retry).toHaveBeenCalledOnce())
 
@@ -553,7 +569,7 @@ it('keeps mutation controls fail-closed when authoritative access retry fails', 
 
   await user.selectOptions(
     await screen.findByLabelText('Роль для Олена'),
-    'role-owner',
+    'role-manager',
   )
   await waitFor(() => expect(currentCabinet.retry).toHaveBeenCalledOnce())
   accessRetry.reject(new Error('offline'))
@@ -585,7 +601,7 @@ it('refreshes access before the access-warning retry starts any team reads', asy
 
   await user.selectOptions(
     await screen.findByLabelText('Роль для Олена'),
-    'role-owner',
+    'role-manager',
   )
   await waitFor(() => expect(currentCabinet.retry).toHaveBeenCalledOnce())
   failedAccessRetry.reject(new Error('offline'))
@@ -767,6 +783,39 @@ it('creates an invitation and refreshes the visible invitation lifecycle', async
   expect(currentCabinet.retry).toHaveBeenCalledOnce()
 })
 
+it('keeps the owner role read-only and excludes Owner from role assignment and invitations', async () => {
+  vi.mocked(teamApi.listMembers).mockResolvedValue([
+    member,
+    {
+      ...member,
+      id: 'member-owner',
+      userId: 'user-owner',
+      name: 'Олексій',
+      role: ownerRole,
+    },
+  ])
+  const user = userEvent.setup()
+  renderScreen()
+
+  expect(await screen.findByText('Олексій')).toBeInTheDocument()
+  expect(screen.queryByLabelText('Роль для Олексій')).toBeNull()
+  expect(screen.getByText('Власник')).toBeInTheDocument()
+  expect(
+    within(screen.getByLabelText('Роль для Олена')).queryByRole('option', {
+      name: 'Власник',
+    }),
+  ).toBeNull()
+
+  await user.click(screen.getByRole('button', { name: 'Запросити' }))
+  const inviteRole = screen.getByLabelText('Роль для запрошення')
+  expect(inviteRole).toHaveValue('role-mechanic')
+  expect(
+    within(inviteRole).queryByRole('option', { name: 'Власник' }),
+  ).toBeNull()
+  expect(teamApi.changeRole).not.toHaveBeenCalled()
+  expect(teamApi.createInvitation).not.toHaveBeenCalled()
+})
+
 it('refreshes visible member data after a successful member mutation', async () => {
   const currentCabinet = cabinet()
   vi.mocked(useCabinet).mockReturnValue(currentCabinet)
@@ -930,9 +979,9 @@ it('renders the team in English (UK)', async () => {
   expect(screen.getByText('Showing 2 of 2 members')).toBeInTheDocument()
   expect(screen.getByText('you')).toBeInTheDocument()
   // System role translated, custom role name as the business gave it.
-  expect(
-    screen.getAllByRole('option', { name: 'Owner' }).length,
-  ).toBeGreaterThan(0)
+  expect(screen.queryByRole('option', { name: 'Owner' })).toBeNull()
+  expect(screen.queryByLabelText('Role for Ivan')).toBeNull()
+  expect(screen.getByText('Owner')).toBeInTheDocument()
   expect(
     screen.getAllByRole('option', { name: 'Механік' }).length,
   ).toBeGreaterThan(0)

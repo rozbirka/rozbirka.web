@@ -114,6 +114,9 @@ const initials = (name: string) =>
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('')
 
+const isOwnerRole = (role: Pick<RoleDto, 'name' | 'isSystem'>) =>
+  role.isSystem && role.name.trim().toLowerCase() === 'owner'
+
 const invitationStatus = (
   invitation: InvitationDto,
 ): { message: TeamKey; tone: StatusTone; active: boolean } => {
@@ -245,6 +248,10 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
   const teamData =
     data?.tenantId === tenantId && data.generation === generation ? data : null
   const availableRoles = useMemo(() => teamData?.roles ?? [], [teamData?.roles])
+  const assignableRoles = useMemo(
+    () => availableRoles.filter((role) => !isOwnerRole(role)),
+    [availableRoles],
+  )
 
   const roleAssignment = useOperation(
     async () => {
@@ -278,7 +285,8 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
 
   const invitationCreation = useOperation(
     async () => {
-      if (!invitationRoleId) return false
+      if (!assignableRoles.some((role) => role.id === invitationRoleId))
+        return false
       return mutate(t('invitationCreated'), (signal) =>
         teamApi.createInvitation(invitationRoleId, { signal }),
       )
@@ -298,7 +306,9 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
     }
     invitationCreation.reset()
     setInvitationRoleId((current) =>
-      current === '' ? (availableRoles[0]?.id ?? '') : current,
+      assignableRoles.some((role) => role.id === current)
+        ? current
+        : (assignableRoles[0]?.id ?? ''),
     )
     setInvitationDrawerOpen(true)
   }
@@ -624,7 +634,9 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                             </span>
                           </td>
                           <td className="px-3 py-3.5">
-                            {canManageAccess ? (
+                            {canManageAccess &&
+                            member.userId !== myUserId &&
+                            !isOwnerRole(member.role) ? (
                               <SelectInput
                                 aria-busy={roleAssignment.pending}
                                 aria-label={t('roleFor', { name: member.name })}
@@ -638,7 +650,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                                 }}
                                 value={member.role.id}
                               >
-                                {availableRoles.map((role) => (
+                                {assignableRoles.map((role) => (
                                   <option key={role.id} value={role.id}>
                                     {roleLabel(role, locale)}
                                   </option>
@@ -943,7 +955,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                 onChange={(event) => setInvitationRoleId(event.target.value)}
                 value={invitationRoleId}
               >
-                {availableRoles.map((role) => (
+                {assignableRoles.map((role) => (
                   <option key={role.id} value={role.id}>
                     {roleLabel(role, locale)}
                   </option>

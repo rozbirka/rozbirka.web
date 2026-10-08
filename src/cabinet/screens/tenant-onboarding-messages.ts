@@ -3,6 +3,7 @@ import { defineMessages } from '@/i18n'
 /** Creating the first yard (ROZ-163/164): name and city, then the dashboard. */
 export const tenantOnboardingMessages = defineMessages({
   uk: {
+    step: 'Крок 2 з 2',
     title: 'Розкажіть про свій бізнес',
     subtitle:
       'Назву бачить ваша команда й клієнти в документах. Змінити її можна будь-коли в налаштуваннях.',
@@ -22,6 +23,7 @@ export const tenantOnboardingMessages = defineMessages({
     create: 'Створити розбірку',
   },
   'en-GB': {
+    step: 'Step 2 of 2',
     title: 'Tell us about your business',
     subtitle:
       'Your team and customers see the name on documents. You can change it any time in settings.',
@@ -40,6 +42,7 @@ export const tenantOnboardingMessages = defineMessages({
     create: 'Create business',
   },
   pl: {
+    step: 'Krok 2 z 2',
     title: 'Opowiedz nam o swojej firmie',
     subtitle:
       'Nazwę widzą Twój zespół i klienci w dokumentach. Możesz ją zmienić w każdej chwili w ustawieniach.',

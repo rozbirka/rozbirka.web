@@ -14,6 +14,7 @@ export const billingMessages = defineMessages({
     featureCompatSuggest: 'Підбір сумісності',
     featureMultiCashRegisters: 'Декілька кас',
     featureExtendedPhotos: 'Більше фото на позицію',
+    featureQrCodes: 'QR-коди',
 
     limitCars: 'Авто',
     limitIntakes: 'Партії',
@@ -74,6 +75,7 @@ export const billingMessages = defineMessages({
     featureCompatSuggest: 'Compatibility suggestions',
     featureMultiCashRegisters: 'Multiple tills',
     featureExtendedPhotos: 'More photos per item',
+    featureQrCodes: 'QR codes',
 
     limitCars: 'Cars',
     limitIntakes: 'Batches',
@@ -129,6 +131,7 @@ export const billingMessages = defineMessages({
     featureCompatSuggest: 'Dobór kompatybilności',
     featureMultiCashRegisters: 'Kilka kas',
     featureExtendedPhotos: 'Więcej zdjęć na pozycję',
+    featureQrCodes: 'Kody QR',
 
     limitCars: 'Auta',
     limitIntakes: 'Partie',

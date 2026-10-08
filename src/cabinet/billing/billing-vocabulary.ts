@@ -15,6 +15,7 @@ const featureKeys: Record<string, BillingKey> = {
   compat_suggest: 'featureCompatSuggest',
   multi_cash_registers: 'featureMultiCashRegisters',
   extended_photos: 'featureExtendedPhotos',
+  qr_codes: 'featureQrCodes',
 }
 
 export const featureLabel = (code: string, locale: Locale = SOURCE_LOCALE) => {

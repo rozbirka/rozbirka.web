@@ -204,6 +204,11 @@ html {
   padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
 }
 
+/* Separate consecutive inline messages across cabinet screens and dialogs. */
+[data-slot='app-notice'] + [data-slot='app-notice'] {
+  margin-block-start: 0.75rem;
+}
+
 /*
  * A pane that still scrolls, without the bar drawing a line down the layout.
  * Only for surfaces where the scroll is obvious from the content itself —
