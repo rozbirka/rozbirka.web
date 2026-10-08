@@ -23,6 +23,7 @@ import { BrandLogo } from '@/components/site/brand-logo'
 import { authApi } from '@/api/auth'
 import { normalizeApiProblem } from '@/api/errors'
 import { useAuth } from '@/auth/AuthContext'
+import { needsOwnerName } from '@/auth/owner-name'
 import { resolvePostLoginDestination } from '@/auth/post-login'
 import type { SendOtpResponse } from '@/api/types'
 import { useT } from '@/i18n/hooks'
@@ -157,9 +158,9 @@ export function LoginScreen() {
     fallbackReturnTo ?? '/account',
     auth.tenant,
   )
+  const ownerSetup = returnTo.startsWith('/account') && auth.tenant === null
   const [step, setStep] = useState<Step>(() =>
-    auth.status === 'authenticated' &&
-    (auth.user?.displayName.trim().length ?? 0) < 2
+    auth.status === 'authenticated' && needsOwnerName(auth.user)
       ? 'name'
       : 'phone',
   )
@@ -318,8 +319,10 @@ export function LoginScreen() {
           : await authApi.otpVerify(request, options)
       if (!isCurrentNavigationOperation(generation)) return null
       clearStoredOtpFlow()
-      // Existing user — straight to success. Brand-new user — ask their name first.
-      if (response.isNewUser) return { generation, next: 'name' }
+      // A provisioned account still has its phone as display name until the
+      // owner supplies a name. Ask for it even when the user row already exists.
+      if (response.isNewUser || needsOwnerName(response.user))
+        return { generation, next: 'name' }
       await auth.hydrate(response.accessToken)
       if (!isCurrentNavigationOperation(generation)) return null
       return { generation, next: 'success' }
@@ -558,6 +561,7 @@ export function LoginScreen() {
               error={saveName.error}
               fieldError={nameError}
               name={name}
+              ownerSetup={ownerSetup}
               onChange={(value) => {
                 setName(value)
                 if (nameError) setNameError(null)
@@ -835,6 +839,7 @@ function OtpStep({
 
 function NameStep({
   name,
+  ownerSetup,
   onChange,
   onSubmit,
   pending,
@@ -843,6 +848,7 @@ function NameStep({
   fieldError,
 }: {
   name: string
+  ownerSetup: boolean
   onChange: (v: string) => void
   onSubmit: (e: FormEvent) => void
   pending: boolean
@@ -853,7 +859,10 @@ function NameStep({
   const t = useT(loginMessages)
   return (
     <div className="anim-fade-up flex flex-col gap-6">
-      <StepHeader eyebrow={t('eyebrowName')} title={t('nameTitle')}>
+      <StepHeader
+        eyebrow={ownerSetup ? t('eyebrowOwnerName') : t('eyebrowName')}
+        title={ownerSetup ? t('ownerNameTitle') : t('nameTitle')}
+      >
         <p className="text-app-muted text-[13.5px] leading-[1.5]">
           {t('nameLead')}
         </p>
@@ -865,7 +874,7 @@ function NameStep({
         <Field
           error={fieldError ?? undefined}
           hint={t('nameHint')}
-          label={t('nameLabel')}
+          label={ownerSetup ? t('ownerNameLabel') : t('nameLabel')}
         >
           <TextInput
             autoComplete="name"
