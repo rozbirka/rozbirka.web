@@ -108,12 +108,6 @@ export const partFormMessages = defineMessages({
     compatStep: 'Сумісність',
     compatFromSource: 'З вибраного авто-джерела. Змінюється разом із джерелом.',
     addCar: 'Додати ще авто',
-    addCompatibilityTitle: 'Додати сумісність',
-    editCompatibilityTitle: 'Змінити сумісність',
-    editCompatibility: 'Змінити',
-    confirmAddCar: 'Додати авто',
-    saveCompatibility: 'Зберегти',
-    compatChooseMake: 'Оберіть марку.',
     compatOnlyOnCreate:
       'Сумісність задається лише під час створення. Після збереження її не можна змінити.',
     createInvalid: 'Деталь не створено: виправте позначені нижче поля.',
@@ -286,12 +280,6 @@ export const partFormMessages = defineMessages({
     compatFromSource:
       'From the chosen source car. Changes along with the source.',
     addCar: 'Add another car',
-    addCompatibilityTitle: 'Add compatibility',
-    editCompatibilityTitle: 'Edit compatibility',
-    editCompatibility: 'Edit',
-    confirmAddCar: 'Add car',
-    saveCompatibility: 'Save',
-    compatChooseMake: 'Choose a make.',
     compatOnlyOnCreate:
       'Compatibility can only be set when creating the part. It can’t be changed after saving.',
     createInvalid: 'Part not created: fix the fields marked below.',
@@ -462,12 +450,6 @@ export const partFormMessages = defineMessages({
     compatFromSource:
       'Z wybranego auta źródłowego. Zmienia się razem ze źródłem.',
     addCar: 'Dodaj kolejne auto',
-    addCompatibilityTitle: 'Dodaj kompatybilność',
-    editCompatibilityTitle: 'Zmień kompatybilność',
-    editCompatibility: 'Zmień',
-    confirmAddCar: 'Dodaj auto',
-    saveCompatibility: 'Zapisz',
-    compatChooseMake: 'Wybierz markę.',
     compatOnlyOnCreate:
       'Kompatybilność ustala się tylko podczas tworzenia. Po zapisaniu nie można jej zmienić.',
     createInvalid: 'Nie utworzono części: popraw zaznaczone poniżej pola.',

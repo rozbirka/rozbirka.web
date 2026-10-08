@@ -771,15 +771,12 @@ it('creates a part with every supported source, inventory, price, and compatibil
   fireEvent.click(screen.getByRole('radio', { name: 'Хороший' }))
 
   fireEvent.click(screen.getByRole('button', { name: 'Додати ще авто' }))
-  const vehicle = within(
-    await screen.findByRole('dialog', { name: 'Додати сумісність' }),
-  )
+  const vehicle = within(screen.getByRole('region', { name: 'Авто 1' }))
   fireEvent.click(vehicle.getByRole('button', { name: 'Марка' }))
   fireEvent.click(await screen.findByRole('option', { name: 'Ford' }))
   fireEvent.click(vehicle.getByRole('button', { name: 'Модель' }))
   fireEvent.click(await screen.findByRole('option', { name: 'Focus' }))
   fireEvent.change(vehicle.getByLabelText('Рік'), { target: { value: '2018' } })
-  fireEvent.click(vehicle.getByRole('button', { name: 'Додати авто' }))
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
   expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
@@ -2412,7 +2409,7 @@ it('shows the selected source car as compatibility without an empty vehicle form
   expect(screen.queryByRole('region', { name: 'Авто 1' })).toBeNull()
 })
 
-it('adds, edits, and removes extra compatibility through a dialog', async () => {
+it('adds and removes extra compatibility inline on demand', async () => {
   const user = userEvent.setup()
   vi.stubGlobal(
     'fetch',
@@ -2444,28 +2441,17 @@ it('adds, edits, and removes extra compatibility through a dialog', async () => 
   expect(screen.queryByRole('region', { name: 'Авто 1' })).toBeNull()
 
   await user.click(screen.getByRole('button', { name: 'Додати ще авто' }))
-  const dialog = await screen.findByRole('dialog', {
-    name: 'Додати сумісність',
-  })
-  expect(screen.queryByRole('region', { name: 'Авто 1' })).toBeNull()
-  fireEvent.click(within(dialog).getByRole('button', { name: 'Марка' }))
+  const vehicle = within(await screen.findByRole('region', { name: 'Авто 1' }))
+  expect(screen.queryByRole('dialog', { name: 'Додати сумісність' })).toBeNull()
+  fireEvent.click(vehicle.getByRole('button', { name: 'Марка' }))
   fireEvent.click(await screen.findByRole('option', { name: 'Ford' }))
-  fireEvent.click(within(dialog).getByRole('button', { name: 'Модель' }))
+  fireEvent.click(vehicle.getByRole('button', { name: 'Модель' }))
   fireEvent.click(await screen.findByRole('option', { name: 'Focus' }))
-  fireEvent.change(within(dialog).getByLabelText('Рік'), {
+  fireEvent.change(vehicle.getByLabelText('Рік'), {
     target: { value: '2018' },
   })
-  await user.click(within(dialog).getByRole('button', { name: 'Додати авто' }))
-
-  const selected = await screen.findByRole('region', { name: 'Авто 1' })
-  expect(within(selected).getByText('Ford Focus · 2018')).toBeVisible()
-  expect(screen.queryByRole('dialog', { name: 'Додати сумісність' })).toBeNull()
-  await user.click(within(selected).getByRole('button', { name: 'Змінити' }))
-  expect(
-    await screen.findByRole('dialog', { name: 'Змінити сумісність' }),
-  ).toBeVisible()
-  await user.click(screen.getByRole('button', { name: 'Скасувати' }))
-  await user.click(within(selected).getByRole('button', { name: 'Прибрати' }))
+  expect(vehicle.getByLabelText('Рік')).toHaveValue('2018')
+  await user.click(vehicle.getByRole('button', { name: 'Прибрати' }))
 
   expect(screen.queryByRole('region', { name: 'Авто 1' })).toBeNull()
 })
@@ -2496,12 +2482,9 @@ it('refuses to save a make the yard has never catalogued', async () => {
     target: { value: 'Цапфа' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Додати ще авто' }))
-  const vehicle = within(
-    await screen.findByRole('dialog', { name: 'Додати сумісність' }),
-  )
+  const vehicle = within(screen.getByRole('region', { name: 'Авто 1' }))
   fireEvent.click(vehicle.getByRole('button', { name: 'Марка' }))
   fireEvent.click(await screen.findByRole('option', { name: 'Rivian' }))
-  fireEvent.click(vehicle.getByRole('button', { name: 'Додати авто' }))
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
   expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -2534,13 +2517,11 @@ it('keeps the donor row by replacing compatibility after creating a car part', a
   fireEvent.change(screen.getByLabelText('Назва'), {
     target: { value: 'Цапфа' },
   })
+  expect(await screen.findByText('Ford Focus')).toBeVisible()
   fireEvent.click(screen.getByRole('button', { name: 'Додати ще авто' }))
-  const vehicle = within(
-    await screen.findByRole('dialog', { name: 'Додати сумісність' }),
-  )
+  const vehicle = within(screen.getByRole('region', { name: 'Авто 2' }))
   fireEvent.click(vehicle.getByRole('button', { name: 'Марка' }))
   fireEvent.click(await screen.findByRole('option', { name: 'Ford' }))
-  fireEvent.click(vehicle.getByRole('button', { name: 'Додати авто' }))
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
   expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
