@@ -15,6 +15,7 @@ import { FEATURES } from '@/api/types'
 import { LocaleProvider, type Locale } from '@/i18n'
 import { PartsScreen } from './PartsScreen'
 import { resetOnboardingCache } from '../onboarding/use-owner-onboarding'
+import { ToastProvider } from '@/components/app'
 
 const inventoryMocks = vi.hoisted(() => ({
   getPartZones: vi.fn().mockResolvedValue([
@@ -329,6 +330,45 @@ it('returns from the new-part drawer to the parts directory', async () => {
   expect(router.state.location.pathname).toBe('/app/yard/parts')
   expect(screen.getByText('Екран деталей')).toBeVisible()
 })
+
+it('opens the newly created part instead of leaving the creation drawer open', async () => {
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant',
+        children: [
+          {
+            path: 'parts/new',
+            element: <PartsScreen definition={partsDefinition as never} />,
+          },
+          { path: 'parts/:partId', element: <p>Картка деталі</p> },
+        ],
+      },
+    ],
+    { initialEntries: ['/app/yard/parts/new?car_id=car-1'] },
+  )
+  render(
+    <ToastProvider>
+      <RouterProvider router={router} />
+    </ToastProvider>,
+  )
+
+  fireEvent.change(screen.getByLabelText('Назва'), {
+    target: { value: 'Дзеркало' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
+
+  expect(await screen.findByText('Картка деталі')).toBeVisible()
+  expect(router.state.location.pathname).toBe('/app/yard/parts/part-1')
+  expect(screen.queryByRole('dialog', { name: 'Нова деталь' })).toBeNull()
+  expect(screen.getByRole('status')).toHaveTextContent('Деталь створено.')
+})
+
+async function expectPartFormClosed() {
+  await vi.waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  )
+}
 
 afterEach(() => {
   vi.restoreAllMocks()
@@ -779,7 +819,7 @@ it('creates a part with every supported source, inventory, price, and compatibil
   fireEvent.change(vehicle.getByLabelText('Рік'), { target: { value: '2018' } })
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
-  expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
+  await expectPartFormClosed()
   expect(partMocks.create).toHaveBeenCalledWith(
     {
       sourceType: 'batch',
@@ -858,7 +898,7 @@ it('retains successful media uploads while exposing retry and remove for each fa
   await screen.findByText('mirror.jpg · Завантажено')
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
-  expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
+  await expectPartFormClosed()
   expect(mediaMocks.upload).toHaveBeenCalledTimes(3)
   expect(partMocks.create).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -903,7 +943,7 @@ it('removes a selected file without uploading it before save', async () => {
   expect(mediaMocks.remove).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
-  expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
+  await expectPartFormClosed()
   expect(partMocks.create).toHaveBeenCalledWith(
     expect.objectContaining({ photoKeys: [] }),
     expect.objectContaining({
@@ -968,7 +1008,7 @@ it('persists a tenant-authorized labeled car selection without exposing its raw 
   expect(screen.queryByLabelText('ID джерела')).not.toBeInTheDocument()
   expect(screen.queryByLabelText('Марка сумісності')).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
-  expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
+  await expectPartFormClosed()
   expect(partMocks.create).toHaveBeenCalledWith(
     {
       sourceType: 'car',
@@ -1901,8 +1941,8 @@ it('blocks an invalid create and points at the offending fields', async () => {
   })
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
-  expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
-  expect(screen.getByLabelText('Назва')).not.toHaveAttribute('aria-invalid')
+  await expectPartFormClosed()
+  expect(screen.queryByLabelText('Назва')).toBeNull()
 })
 
 it('requires a source selection before creating a car-sourced part', async () => {
@@ -2524,7 +2564,7 @@ it('keeps the donor row by replacing compatibility after creating a car part', a
   fireEvent.click(await screen.findByRole('option', { name: 'Ford' }))
   fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
-  expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
+  await expectPartFormClosed()
   // The list never rides along with the part: that would drop the donor row.
   expect(partMocks.create.mock.calls[0]?.[0]).not.toHaveProperty(
     'compatibilities',
@@ -3120,7 +3160,7 @@ it('reads the new-part form in English (UK) and Polish', async () => {
   expect(within(drawer).getByText('You can add photos later.')).toBeVisible()
 
   await user.click(within(drawer).getByRole('button', { name: 'Create part' }))
-  expect(await within(drawer).findByText('Part created.')).toBeVisible()
+  await expectPartFormClosed()
   expect(partMocks.create).toHaveBeenCalledWith(
     expect.objectContaining({ unit: 'шт', name: 'Hub carrier RR' }),
     expect.anything(),
@@ -3287,7 +3327,7 @@ describe('asking price and the accounting currency', () => {
     ).toBeVisible()
     fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
 
-    expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
+    await expectPartFormClosed()
     expect(tenantMocks.list).toHaveBeenCalled()
     expect(partMocks.create).toHaveBeenCalledWith(
       expect.objectContaining({ desiredSalePrice: 0 }),
@@ -3347,7 +3387,7 @@ describe('the owner’s first part', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Створити деталь' }))
   }
 
-  it('keeps the parts screen and offers the way back to the dashboard', async () => {
+  it('opens the saved part even when it completes onboarding', async () => {
     onboardingMocks.get
       .mockReset()
       .mockResolvedValueOnce(onboardingFacts)
@@ -3359,24 +3399,18 @@ describe('the owner’s first part', () => {
     renderNewPart()
     await fillAndSave()
 
-    expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
-    expect(
-      await screen.findByText('Основне налаштування завершено'),
-    ).toBeVisible()
-    expect(screen.getByRole('link', { name: 'До дашборду' })).toHaveAttribute(
-      'href',
-      '/app/yard/dashboard',
-    )
-    expect(onboardingMocks.get).toHaveBeenCalledTimes(2)
+    await expectPartFormClosed()
+    expect(screen.queryByText('Основне налаштування завершено')).toBeNull()
+    expect(partMocks.create).toHaveBeenCalledOnce()
   })
 
-  it('says nothing when the part does not finish onboarding', async () => {
+  it('opens the saved part when onboarding remains incomplete', async () => {
     onboardingMocks.get.mockReset().mockResolvedValue(onboardingFacts)
     renderNewPart()
     await fillAndSave()
 
-    expect(await screen.findByText('Деталь створено.')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'До дашборду' })).toBeNull()
+    await expectPartFormClosed()
+    expect(partMocks.create).toHaveBeenCalledOnce()
   })
 })
 

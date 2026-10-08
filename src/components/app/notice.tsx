@@ -43,6 +43,7 @@ export function Notice({
 
   return (
     <div
+      data-slot="app-notice"
       className={cn(
         'rounded-control flex flex-wrap items-start gap-2.5 border px-3.5 py-2.5 text-[14.5px]',
         toneClass[tone],

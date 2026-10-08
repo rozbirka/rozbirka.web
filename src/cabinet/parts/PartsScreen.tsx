@@ -56,6 +56,7 @@ import {
   StatusPill,
   TextArea,
   TextInput,
+  useOptionalToast,
   type StatusTone,
 } from '@/components/app'
 import { cn } from '@/lib/utils'
@@ -141,8 +142,6 @@ import {
 import { usePriceSlots, type PriceSlots } from '../currency/use-price-slots'
 import { amountPrecisionError } from '../currency/amount-precision'
 import { isLostResponse, lostResponseMessages } from '../lost-response'
-import { OnboardingCompletedNotice } from '../onboarding/first-part-completion'
-import { useFirstPartCompletion } from '../onboarding/use-first-part-completion'
 
 const partStatuses = new Set(['available', 'reserved', 'sold'])
 /** Every group the filter panel draws; the server counts each one for us. */
@@ -3488,6 +3487,7 @@ function PartForm({
   const cabinet = useCabinet()
   const t = useT(partFormMessages)
   const tc = useT(commonMessages)
+  const toast = useOptionalToast()
   const { locale } = useLocale()
   const base = `/app/${cabinet.targetTenant?.slug ?? ''}/parts`
   // Coming back from creating a car or intake restores what was typed.
@@ -3520,15 +3520,8 @@ function PartForm({
   )
   const pendingRef = useRef(false)
   const [pending, setPending] = useState(false)
-  const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showErrors, setShowErrors] = useState(false)
-  // The owner's first part may finish onboarding: say so here, keep the list.
-  const firstPart = useFirstPartCompletion({
-    tenantId: cabinet.targetTenant?.id ?? null,
-    userId: cabinet.snapshot?.userId ?? null,
-    role: cabinet.snapshot?.role,
-  })
   // A car given by link but missing from the active list is most likely
   // archived; say so now rather than after the whole form is filled.
   const [archivedCarId, setArchivedCarId] = useState<string | null>(null)
@@ -3595,7 +3588,6 @@ function PartForm({
       ).length > 0
     ) {
       setShowErrors(true)
-      setStatus(null)
       setError(t('createInvalid'))
       return
     }
@@ -3626,7 +3618,6 @@ function PartForm({
     const pricing = price.hasPrice && !price.disabled
     pendingRef.current = true
     setPending(true)
-    setStatus(null)
     setError(null)
     try {
       if (
@@ -3728,8 +3719,13 @@ function PartForm({
         )
       }
       guard.afterSave(pricing)
-      setStatus(t('created'))
-      firstPart.check()
+      toast?.show({ tone: 'ok', message: t('created') })
+      void navigate(
+        cabinetPath(cabinet.targetTenant!.slug, 'parts', created.id),
+        {
+          replace: true,
+        },
+      )
     } catch (failure) {
       setError(createFailureMessage(failure, locale))
     } finally {
@@ -3838,12 +3834,6 @@ function PartForm({
           }
           variant="plain"
         />
-        {status ? <Notice tone="ok">{status}</Notice> : null}
-        {firstPart.done && cabinet.targetTenant ? (
-          <OnboardingCompletedNotice
-            dashboardPath={cabinetPath(cabinet.targetTenant.slug, 'dashboard')}
-          />
-        ) : null}
         {error ? <Notice tone="danger">{error}</Notice> : null}
       </form>
     </Sheet>
