@@ -789,7 +789,10 @@ it('shows shelves under their zone and prints the shelf QR', async () => {
   renderAt('/app/yard/inventory/warehouses/wh-1')
 
   expect(await screen.findByText(/Полиця 1/)).toBeInTheDocument()
-  await user.click(screen.getByRole('button', { name: 'Друк QR полиці' }))
+  await user.click(
+    screen.getByRole('button', { name: 'Дії з полицею Полиця 1' }),
+  )
+  await user.click(screen.getByRole('menuitem', { name: 'Друк QR полиці' }))
   expect(printable.buildZoneLabelHtml).toHaveBeenCalledWith(
     [
       expect.objectContaining({
@@ -800,6 +803,28 @@ it('shows shelves under their zone and prints the shelf QR', async () => {
     'uk',
   )
   expect(print).toHaveBeenCalled()
+
+  await user.click(
+    screen.getByRole('button', { name: 'Дії з полицею Полиця 1' }),
+  )
+  await user.click(screen.getByRole('menuitem', { name: 'Редагувати полицю' }))
+  expect(screen.getByRole('dialog', { name: 'Редагувати полицю' })).toHaveClass(
+    'sm:right-0',
+  )
+  await user.click(
+    within(screen.getByRole('dialog', { name: 'Редагувати полицю' })).getByRole(
+      'button',
+      { name: 'Скасувати' },
+    ),
+  )
+
+  await user.click(
+    screen.getByRole('button', { name: 'Дії з полицею Полиця 1' }),
+  )
+  await user.click(screen.getByRole('menuitem', { name: 'Архівувати полицю' }))
+  expect(
+    screen.getByRole('dialog', { name: 'Архівувати полицю' }),
+  ).toBeInTheDocument()
 })
 
 it('creates a shelf in a side drawer for its zone', async () => {

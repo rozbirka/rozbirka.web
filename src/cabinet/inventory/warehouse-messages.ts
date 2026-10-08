@@ -18,6 +18,7 @@ export const warehouseMessages = defineMessages({
     archiveShelf: 'Архівувати полицю',
     archiveShelfHint: 'Полиці з деталями спочатку потрібно звільнити.',
     printShelf: 'Друк QR полиці',
+    shelfActions: 'Дії з полицею {name}',
     exportStock: 'Експорт залишків',
     exportUnavailable: 'Вивантажити залишки складу файлом поки не можна',
     archiveWarehouse: 'Архівувати склад',
@@ -99,6 +100,7 @@ export const warehouseMessages = defineMessages({
     archiveShelf: 'Archive shelf',
     archiveShelfHint: 'Move parts off this shelf before archiving it.',
     printShelf: 'Print shelf QR',
+    shelfActions: 'Actions for shelf {name}',
     exportStock: 'Export stock',
     exportUnavailable:
       'Exporting warehouse stock to a file isn’t available yet',
@@ -178,6 +180,7 @@ export const warehouseMessages = defineMessages({
     archiveShelf: 'Archiwizuj półkę',
     archiveShelfHint: 'Przed archiwizacją przenieś części z tej półki.',
     printShelf: 'Drukuj QR półki',
+    shelfActions: 'Działania dla półki {name}',
     exportStock: 'Eksport stanów',
     exportUnavailable:
       'Eksport stanów magazynu do pliku nie jest jeszcze dostępny',

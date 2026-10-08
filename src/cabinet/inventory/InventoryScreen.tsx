@@ -1708,11 +1708,13 @@ function WarehouseShelves({
               )
               return (
                 <section
-                  className="border-app-line border-b pb-4 last:border-0"
+                  className="border-app-line min-w-0 border-b pb-4 last:border-0"
                   key={zone.id}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="font-semibold text-white">{zone.name}</h3>
+                  <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                    <h3 className="min-w-0 break-words font-semibold text-white">
+                      {zone.name}
+                    </h3>
                     {canManage ? (
                       <Button
                         variant="ghost"
@@ -1735,47 +1737,48 @@ function WarehouseShelves({
                   <ul className="mt-2 grid gap-2">
                     {shelves.map((shelf) => (
                       <li
-                        className="flex items-center justify-between gap-3"
+                        className="flex min-w-0 items-center justify-between gap-3"
                         key={shelf.id}
                       >
                         <span className="min-w-0 truncate text-sm text-white">
                           {shelf.name}{' '}
                           <span className="text-app-muted">· {shelf.code}</span>
                         </span>
-                        <div className="flex shrink-0 gap-1">
-                          <Button
-                            variant="ghost"
-                            aria-label={t('printShelf')}
-                            onClick={() => void printShelf(shelf)}
-                          >
-                            <Printer aria-hidden />
-                          </Button>
-                          {canManage ? (
-                            <>
-                              <Button
-                                variant="ghost"
-                                aria-label={t('editShelf')}
-                                onClick={() => {
-                                  setError(null)
-                                  setDraft({
-                                    name: shelf.name,
-                                    code: shelf.code,
-                                  })
-                                  setEditing(shelf)
-                                }}
-                              >
-                                <Pencil aria-hidden />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                aria-label={t('archiveShelf')}
-                                onClick={() => setArchiving(shelf)}
-                              >
-                                <Archive aria-hidden />
-                              </Button>
-                            </>
-                          ) : null}
-                        </div>
+                        <ActionMenu
+                          label={t('shelfActions', { name: shelf.name })}
+                          actions={[
+                            {
+                              key: 'print',
+                              label: t('printShelf'),
+                              icon: <Printer aria-hidden />,
+                              onSelect: () => void printShelf(shelf),
+                            },
+                            ...(canManage
+                              ? [
+                                  {
+                                    key: 'edit',
+                                    label: t('editShelf'),
+                                    icon: <Pencil aria-hidden />,
+                                    onSelect: () => {
+                                      setError(null)
+                                      setDraft({
+                                        name: shelf.name,
+                                        code: shelf.code,
+                                      })
+                                      setEditing(shelf)
+                                    },
+                                  },
+                                  {
+                                    key: 'archive',
+                                    label: t('archiveShelf'),
+                                    icon: <Archive aria-hidden />,
+                                    destructive: true,
+                                    onSelect: () => setArchiving(shelf),
+                                  },
+                                ]
+                              : []),
+                          ]}
+                        />
                       </li>
                     ))}
                   </ul>
