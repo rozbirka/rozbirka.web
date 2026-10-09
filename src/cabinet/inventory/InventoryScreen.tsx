@@ -1088,7 +1088,7 @@ function WarehouseView({ id }: { id: string }) {
                   label={t('statPositions')}
                   meta={`${ti('zones', { count: real.length })} · ${t('unassigned', { count: warehouse.unassignedPartCount })}`}
                   unit={ti('positionsUnit')}
-                  value={stock.total === null ? '—' : String(stock.total)}
+                  value={stock.total == null ? '—' : String(stock.total)}
                 />
                 <WarehouseStat
                   label={t('statFilled')}
@@ -1101,7 +1101,7 @@ function WarehouseView({ id }: { id: string }) {
                     occupancy !== null && occupancy >= 80 ? 'warn' : 'plain'
                   }
                   unit="%"
-                  value={occupancy === null ? '—' : String(occupancy)}
+                  value={occupancy == null ? '—' : String(occupancy)}
                 />
                 <WarehouseStat
                   label={t('statValue')}
@@ -1119,7 +1119,7 @@ function WarehouseView({ id }: { id: string }) {
                   }
                   unit={ti('positionsUnit')}
                   value={
-                    stock.differing === null ? '—' : String(stock.differing)
+                    stock.differing == null ? '—' : String(stock.differing)
                   }
                 />
               </div>
@@ -4089,7 +4089,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                   label={t('statPace')}
                   meta={t('scanners', { count: scanners.length })}
                   unit={speed === null ? undefined : t('perHour')}
-                  value={speed === null ? '—' : String(speed)}
+                  value={speed == null ? '—' : String(speed)}
                 />
                 <JournalStat
                   label={t('statLast')}

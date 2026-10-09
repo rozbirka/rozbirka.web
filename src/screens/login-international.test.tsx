@@ -61,13 +61,13 @@ it('signs in a British number in English without rewriting it to +380', async ()
   expect(
     screen.getByRole('heading', { name: 'Sign in with your phone number' }),
   ).toBeVisible()
-  expect(
-    screen.getByRole('radio', { name: /United Kingdom \+44/ }),
-  ).toBeChecked()
+  expect(screen.getByRole('combobox', { name: 'Number country' })).toHaveValue(
+    'GB',
+  )
   const input = screen.getByLabelText('Phone number')
   await user.clear(input)
   await user.type(input, '07700 900123')
-  expect(input).toHaveValue('+44 7700 900123')
+  expect(input).toHaveValue('7700 900123')
 
   await user.click(screen.getByRole('button', { name: 'Get code' }))
   expect(otpSend).toHaveBeenCalledWith(
@@ -86,8 +86,10 @@ it('switches the number country when a full international number is pasted', asy
   await user.click(input)
   await user.clear(input)
   await user.paste('+48 512 345 678')
-  expect(input).toHaveValue('+48 512 345 678')
-  expect(screen.getByRole('radio', { name: /Польща \+48/ })).toBeChecked()
+  expect(input).toHaveValue('512 345 678')
+  expect(screen.getByRole('combobox', { name: 'Країна номера' })).toHaveValue(
+    'PL',
+  )
 })
 
 it('keeps the national digits when the country is changed', async () => {
@@ -97,9 +99,12 @@ it('keeps the national digits when the country is changed', async () => {
   const input = screen.getByLabelText('Numer telefonu')
   await user.clear(input)
   await user.type(input, '512345678')
-  expect(input).toHaveValue('+48 512 345 678')
-  await user.click(screen.getByRole('radio', { name: /Ukraina \+380/ }))
-  expect(input).toHaveValue('+380 51 234 56 78')
+  expect(input).toHaveValue('512 345 678')
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Kraj numeru' }),
+    'UA',
+  )
+  expect(input).toHaveValue('51 234 56 78')
 })
 
 it('rejects a number from an unsupported country before sending', async () => {

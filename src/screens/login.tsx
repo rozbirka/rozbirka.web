@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
-import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, ChevronDown } from 'lucide-react'
 import {
   Button,
   Field,
@@ -30,7 +30,6 @@ import { useT } from '@/i18n/hooks'
 import { LocaleOverride, useLocale } from '@/i18n/LocaleProvider'
 import { siteLocalePreference } from '@/i18n/locale-preference'
 import type { Translate } from '@/i18n/messages'
-import { Segmented } from '@/components/app/segmented'
 import {
   formatPhone,
   isValidSignInPhone,
@@ -58,6 +57,11 @@ const COUNTRY_KEY = {
   GB: 'countryGB',
   PL: 'countryPL',
 } as const
+const PHONE_FLAGS: Record<PhoneCountry, string> = {
+  UA: '🇺🇦',
+  GB: '🇬🇧',
+  PL: '🇵🇱',
+}
 const MAX_PHONE_DIGITS = 15
 const OTP_FLOW_STORAGE_KEY = 'rozbirka.loginOtpFlow'
 
@@ -642,6 +646,10 @@ function PhoneStep({
   fieldError: string | null
 }) {
   const t = useT(loginMessages)
+  const dialCode = phoneDialCode(country)
+  const nationalPhone = phone.startsWith(dialCode)
+    ? phone.slice(dialCode.length).trimStart()
+    : phone
   return (
     <div className="anim-fade-up flex flex-col gap-6">
       <StepHeader
@@ -658,44 +666,54 @@ function PhoneStep({
       <form className="flex flex-col gap-4" noValidate onSubmit={onSubmit}>
         {error !== null && <Notice tone="danger">{error}</Notice>}
 
-        <div className="flex flex-col gap-1.5">
-          <span className="text-app-muted text-[12.5px]">
-            {t('phoneCountry')}
-          </span>
-          <Segmented
-            label={t('phoneCountry')}
-            name="login-phone-country"
-            onChange={onCountryChange}
-            options={PHONE_COUNTRIES.map((code) => ({
-              value: code,
-              label: `${code} ${phoneDialCode(code)}`,
-              srLabel: `${t(COUNTRY_KEY[code])} ${phoneDialCode(code)}`,
-              disabled: pending,
-            }))}
-            value={country}
-          />
-        </div>
-
         <Field
           error={fieldError ?? undefined}
           hint={t('phoneHint', { pattern: PHONE_PATTERN[country] })}
           label={t('phoneLabel')}
         >
-          <TextInput
-            autoComplete="tel"
-            autoFocus
-            disabled={pending}
-            className="min-h-12 px-4 text-[16px] tracking-[0.02em] tabular-nums"
-            inputMode="tel"
-            maxLength={22}
-            onChange={(e) => onChange(e.target.value)}
-            onFocus={() => {
-              if (!phone) onChange(`${phoneDialCode(country)} `)
-            }}
-            placeholder={PHONE_PATTERN[country].replace(/X/g, '0')}
-            type="tel"
-            value={phone}
-          />
+          <div className="border-app-line-2 bg-app-input rounded-control focus-within:border-brand flex min-h-12 items-stretch border transition-colors hover:border-white/20 has-[input[aria-invalid=true]]:border-state-danger">
+            <div className="border-app-line-2 relative flex shrink-0 items-center border-r">
+              <span
+                aria-hidden
+                className="text-app-ink pointer-events-none flex min-h-12 items-center gap-1.5 px-3 text-[14px]"
+              >
+                <span>{PHONE_FLAGS[country]}</span>
+                <span className="tabular-nums">{dialCode}</span>
+                <ChevronDown className="text-app-dim size-3.5" />
+              </span>
+              <select
+                aria-label={t('phoneCountry')}
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                disabled={pending}
+                onChange={(event) =>
+                  onCountryChange(event.target.value as PhoneCountry)
+                }
+                value={country}
+              >
+                {PHONE_COUNTRIES.map((code) => (
+                  <option key={code} value={code}>
+                    {PHONE_FLAGS[code]} {t(COUNTRY_KEY[code])}{' '}
+                    {phoneDialCode(code)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <TextInput
+              autoComplete="tel"
+              autoFocus
+              disabled={pending}
+              className="min-h-12 min-w-0 flex-1 rounded-none border-0 bg-transparent px-3 text-[16px] tracking-[0.02em] tabular-nums hover:border-0 focus-visible:border-0"
+              inputMode="tel"
+              maxLength={22}
+              onChange={(e) => onChange(e.target.value)}
+              placeholder={PHONE_PATTERN[country]
+                .slice(dialCode.length)
+                .trimStart()
+                .replace(/X/g, '0')}
+              type="tel"
+              value={nationalPhone}
+            />
+          </div>
         </Field>
 
         <Button
@@ -717,21 +735,26 @@ function PhoneStep({
         )}
 
         <div className="flex justify-center">
-          <Button
-            className="text-[13px]"
+          <button
+            className="group text-app-dim min-h-11 cursor-pointer text-center text-[13px] leading-[1.5] outline-none disabled:cursor-not-allowed disabled:opacity-55 focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
             disabled={pending}
             onClick={onPurposeChange}
-            variant="quiet"
+            type="button"
           >
-            {purpose === 'login' ? t('toRegistration') : t('toLogin')}
-          </Button>
+            {purpose === 'login' ? t('toRegistrationLead') : t('toLoginLead')}{' '}
+            <span className="text-app-muted hover:text-white group-hover:text-white group-focus-visible:text-white">
+              {purpose === 'login'
+                ? t('toRegistrationAction')
+                : t('toLoginAction')}
+            </span>
+          </button>
         </div>
 
         <p className="text-app-dim text-center text-[12px] leading-[1.5]">
-          {t('termsLead')}{' '}
-          <a className="text-app-muted hover:text-white" href="#offer">
-            {t('termsLink')}
-          </a>
+          {t('privacyLead')}{' '}
+          <Link className="text-app-muted hover:text-white" to="/privacy">
+            {t('privacyLink')}
+          </Link>
         </p>
       </form>
     </div>

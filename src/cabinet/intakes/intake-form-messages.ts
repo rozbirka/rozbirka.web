@@ -89,12 +89,6 @@ export const intakeFormMessages = defineMessages({
     partTypePlaceholder: 'оптика, кузов, ходова',
     oemLabel: 'OEM-код',
     oemHint: 'Приймання поки не зберігає OEM — впишіть його на картці деталі',
-    conditionLabel: 'Стан',
-    conditionGroup: 'Стан деталі',
-    unitCostPending:
-      'Собівартість позиції з’явиться, щойно приймання матиме ціну й позиції.',
-    unitCostFromBatch:
-      'Собівартість підтягується з партії — {amount} на одиницю.',
     quantityPriceTitle: 'Кількість і ціна',
     quantity: 'Кількість',
     quantityStepper: 'Кількість деталей',
@@ -113,9 +107,7 @@ export const intakeFormMessages = defineMessages({
     newPosition: 'Нова позиція',
     partNameFallback: 'Назва деталі',
     availableInCell: 'Доступно · {code}',
-    unitCost: 'Собівартість',
     salePrice: 'Ціна продажу',
-    margin: 'Маржа',
     justAdded: 'Додані щойно',
     noCellLower: 'без комірки',
 
@@ -272,11 +264,6 @@ export const intakeFormMessages = defineMessages({
     partTypePlaceholder: 'lights, body, suspension',
     oemLabel: 'OEM code',
     oemHint: 'Intakes don’t store the OEM yet — add it on the part card',
-    conditionLabel: 'Condition',
-    conditionGroup: 'Part condition',
-    unitCostPending:
-      'The item cost appears once the intake has a price and items.',
-    unitCostFromBatch: 'Cost comes from the batch — {amount} per unit.',
     quantityPriceTitle: 'Quantity and price',
     quantity: 'Quantity',
     quantityStepper: 'Number of parts',
@@ -295,9 +282,7 @@ export const intakeFormMessages = defineMessages({
     newPosition: 'New item',
     partNameFallback: 'Part name',
     availableInCell: 'Available · {code}',
-    unitCost: 'Cost',
     salePrice: 'Sale price',
-    margin: 'Margin',
     justAdded: 'Just added',
     noCellLower: 'no cell',
 
@@ -451,11 +436,6 @@ export const intakeFormMessages = defineMessages({
     partTypePlaceholder: 'oświetlenie, nadwozie, zawieszenie',
     oemLabel: 'Kod OEM',
     oemHint: 'Przyjęcie nie zapisuje jeszcze OEM — wpisz go na karcie części',
-    conditionLabel: 'Stan',
-    conditionGroup: 'Stan części',
-    unitCostPending:
-      'Koszt pozycji pojawi się, gdy przyjęcie będzie miało cenę i pozycje.',
-    unitCostFromBatch: 'Koszt pochodzi z partii — {amount} za sztukę.',
     quantityPriceTitle: 'Ilość i cena',
     quantity: 'Ilość',
     quantityStepper: 'Liczba części',
@@ -475,9 +455,7 @@ export const intakeFormMessages = defineMessages({
     newPosition: 'Nowa pozycja',
     partNameFallback: 'Nazwa części',
     availableInCell: 'Dostępna · {code}',
-    unitCost: 'Koszt własny',
     salePrice: 'Cena sprzedaży',
-    margin: 'Marża',
     justAdded: 'Właśnie dodane',
     noCellLower: 'bez komórki',
 

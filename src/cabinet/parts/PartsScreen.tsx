@@ -1,11 +1,4 @@
-import {
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Link,
   useLocation,
@@ -25,7 +18,6 @@ import {
   ShoppingBag,
   Tag,
   Plus,
-  X,
   Printer,
   Search,
   Trash2,
@@ -73,6 +65,7 @@ import {
 import { partsListMessages } from './parts-list-messages'
 import { partDetailMessages } from './part-detail-messages'
 import { partFormMessages } from './part-form-messages'
+import { CompatibilityRowCard, ConditionTile } from './PartFormChoices'
 import {
   conditionLabel,
   conditionPhrase,
@@ -115,13 +108,11 @@ import { inventoryApi, type PartInventoryZone } from '@/api/inventory'
 import { normalizeApiProblem } from '@/api/errors'
 import type { ApiProblem } from '@/api/contracts'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
-import { VehicleCatalogPicker } from '../cars/CarsScreen'
 import {
   emptyRow,
   filledRows,
   isBlankRow,
   resolveCompatibility,
-  rowProblem,
   rowsProblem,
   unknownBrandsMessage,
   type CompatibilityRow,
@@ -326,6 +317,10 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const [error, setError] = useState<ApiProblem | null>(null)
   const isNew = location.pathname.endsWith('/new')
   const isEdit = location.pathname.endsWith('/edit')
+  const showEditBackground =
+    isEdit &&
+    (location.state as { partEditBackground?: boolean } | null)
+      ?.partEditBackground === true
   const createDecision = evaluateModuleAccess(
     definition,
     accessState(cabinet),
@@ -525,7 +520,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
 
   useEffect(() => {
     const controller = new AbortController()
-    if (partId && !isEdit) {
+    if (partId && (!isEdit || showEditBackground)) {
       void Promise.all([
         partsApi.get(partId, { signal: controller.signal }),
         partsApi.history(partId, { signal: controller.signal }),
@@ -560,7 +555,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         })
     }
     return () => controller.abort()
-  }, [isEdit, isNew, partId, reloadToken, searchRequest])
+  }, [isEdit, isNew, partId, reloadToken, searchRequest, showEditBackground])
 
   if (isNew && createDecision.kind !== 'allowed')
     return <AccessDenied decision={createDecision} />
@@ -577,12 +572,26 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     )
   if (isEdit && partId)
     return (
-      <PartEdit
-        canViewCars={links.cars}
-        canViewIntakes={links.intakes}
-        partId={partId}
-        requireLatestMutation={requireLatestMutation}
-      />
+      <>
+        {showEditBackground ? (
+          <PartDetailScreen
+            detail={detail}
+            history={history}
+            error={error !== null}
+            partId={partId}
+            canManage={canManage}
+            links={links}
+            requireLatestMutation={requireLatestMutation}
+            tenantSlug={cabinet.targetTenant?.slug ?? ''}
+          />
+        ) : null}
+        <PartEdit
+          canViewCars={links.cars}
+          canViewIntakes={links.intakes}
+          partId={partId}
+          requireLatestMutation={requireLatestMutation}
+        />
+      </>
     )
   if (partId)
     return (
@@ -1413,7 +1422,12 @@ function PartDetailScreen({
           {canManage ? (
             <>
               <Button asChild className="px-4 text-sm font-semibold">
-                <Link to={`${base}/${partId}/edit`}>{tc('edit')}</Link>
+                <Link
+                  state={{ partEditBackground: true }}
+                  to={`${base}/${partId}/edit`}
+                >
+                  {tc('edit')}
+                </Link>
               </Button>
               <Button disabled title={t('addToOrderHint')} variant="primary">
                 {t('addToOrder')}
@@ -1566,7 +1580,12 @@ function PartDetailScreen({
                         asChild
                         className="min-h-8 px-3 text-[12px] font-bold"
                       >
-                        <Link to={`${base}/${partId}/edit`}>{t('change')}</Link>
+                        <Link
+                          state={{ partEditBackground: true }}
+                          to={`${base}/${partId}/edit`}
+                        >
+                          {t('change')}
+                        </Link>
                       </Button>
                     ) : null
                   }
@@ -1584,7 +1603,10 @@ function PartDetailScreen({
                       </div>
                       {canManage ? (
                         <Button asChild variant="primary">
-                          <Link to={`${base}/${partId}/edit`}>
+                          <Link
+                            state={{ partEditBackground: true }}
+                            to={`${base}/${partId}/edit`}
+                          >
                             {t('setPrice')}
                           </Link>
                         </Button>
@@ -2359,6 +2381,7 @@ const mediaMetaLabel = (item: PartMediaItem, locale: Locale) =>
 /** Section of a form: one heading, one purpose, one surface. */
 function PartMediaFields({
   deferUploads = false,
+  description,
   items,
   requireLatestMutation,
   setItems,
@@ -2366,6 +2389,7 @@ function PartMediaFields({
   variant = 'panel',
 }: {
   deferUploads?: boolean
+  description?: ReactNode
   items: PartMediaItem[]
   requireLatestMutation: ReturnType<
     typeof useLatestMutationGuard
@@ -2466,7 +2490,8 @@ function PartMediaFields({
   return (
     <SectionPanel
       description={
-        deferUploads ? t('mediaDeferDescription') : t('mediaDescription')
+        description ??
+        (deferUploads ? t('mediaDeferDescription') : t('mediaDescription'))
       }
       title={title ?? t('photos')}
       variant={variant}
@@ -2600,85 +2625,6 @@ function partFieldErrors(
   return errors
 }
 
-/** One optional vehicle in the compatibility list. */
-function CompatibilityRowCard({
-  index,
-  onChange,
-  onRemove,
-  row,
-}: {
-  index: number
-  onChange: (patch: Partial<CompatibilityRow>) => void
-  onRemove: () => void
-  row: CompatibilityRow
-}) {
-  // The picker keeps the make's own id so it can list that make's models.
-  const [makeId, setMakeId] = useState<number | null>(null)
-  const t = useT(partFormMessages)
-  const { locale } = useLocale()
-  const problem = rowProblem(row, locale)
-  const title = t('vehicleN', { n: index })
-  return (
-    <section
-      aria-label={title}
-      className="border-app-line bg-app-raised rounded-[14px] border px-4 pt-3.5 pb-4"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <h4 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-          {title}
-        </h4>
-        <Button
-          className="min-h-8 px-2.5 text-[12px]"
-          onClick={onRemove}
-          type="button"
-          variant="quiet"
-        >
-          <X aria-hidden className="size-3" />
-          {t('remove')}
-        </Button>
-      </div>
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
-        <VehicleCatalogPicker
-          disabled={false}
-          label={t('make')}
-          onSelect={(option) => {
-            setMakeId(option.id)
-            onChange({ brand: option.name, model: '' })
-          }}
-          type="make"
-          value={row.brand}
-        />
-        <VehicleCatalogPicker
-          disabled={row.brand === ''}
-          label={t('model')}
-          makeId={makeId}
-          makeName={row.brand}
-          onSelect={(option) => {
-            onChange({ model: option.name })
-          }}
-          type="model"
-          value={row.model}
-        />
-        <Field label={t('year')}>
-          <TextInput
-            inputMode="numeric"
-            onChange={(event) => {
-              onChange({ year: event.target.value })
-            }}
-            value={row.year}
-          />
-        </Field>
-      </div>
-
-      {problem === null ? null : (
-        <Notice className="mt-3" tone="danger">
-          {problem}
-        </Notice>
-      )}
-    </section>
-  )
-}
-
 /** Where the part came from, as one chip that leads to the source. */
 function SourceChip({
   href,
@@ -2779,18 +2725,18 @@ type DetailT = Translate<(typeof partDetailMessages)['uk']>
  * Years go in as strings so no locale groups them like quantities.
  */
 const yearSpan = (
-  from: number | null,
-  to: number | null,
+  from: number | null | undefined,
+  to: number | null | undefined,
   t: DetailT,
 ): string => {
-  if (from === null && to === null) return t('anyYear')
-  if (from !== null && to !== null)
+  if (from == null && to == null) return '—'
+  if (from != null && to != null)
     return from === to
       ? String(from)
       : t('yearRange', { from: String(from), to: String(to) })
-  return from !== null
-    ? t('yearFrom', { year: String(from) })
-    : t('yearTo', { year: String(to ?? 0) })
+  if (from != null) return t('yearFrom', { year: String(from) })
+  if (to != null) return t('yearTo', { year: String(to) })
+  return '—'
 }
 
 /**
@@ -2885,83 +2831,6 @@ const SOURCE_KINDS = [
   { value: 'car', label: 'kindCarLabel', hint: 'kindCarHint' },
   { value: 'batch', label: 'kindBatchLabel', hint: 'kindBatchHint' },
 ] as const
-
-/**
- * What each condition means for a buyer. The label alone is a guess; the line
- * under it is what stops "задовільний" and "на запчастини" being used
- * interchangeably.
- */
-const CONDITION_HINTS: Record<
-  string,
-  { hint: 'hintGood' | 'hintFair' | 'hintScrap'; tone: string }
-> = {
-  good: { hint: 'hintGood', tone: 'border-state-ok bg-state-ok' },
-  fair: { hint: 'hintFair', tone: 'border-state-warn bg-state-warn' },
-  scrap: { hint: 'hintScrap', tone: 'border-state-danger bg-state-danger' },
-}
-
-function ConditionTile({
-  label,
-  onPick,
-  picked,
-  value,
-}: {
-  label: string
-  onPick: () => void
-  picked: boolean
-  value: string
-}) {
-  const t = useT(partFormMessages)
-  const meaning = CONDITION_HINTS[value]
-  const hintId = useId()
-  return (
-    <button
-      aria-checked={picked}
-      aria-describedby={hintId}
-      aria-label={label}
-      className={cn(
-        'rounded-control flex min-h-[92px] flex-col items-start gap-2 border px-3.5 py-3 text-left transition-colors',
-        picked
-          ? 'border-app-line-2 bg-white/[0.06]'
-          : 'border-app-line hover:border-app-line-2',
-      )}
-      onClick={onPick}
-      role="radio"
-      type="button"
-    >
-      <span className="flex w-full items-center gap-2">
-        <span
-          aria-hidden
-          className={cn(
-            'grid size-4 shrink-0 place-items-center rounded-full border-[1.5px]',
-            picked ? meaning?.tone.split(' ')[0] : 'border-white/20',
-          )}
-        >
-          <span
-            className={cn(
-              'size-[7px] rounded-full',
-              picked ? meaning?.tone.split(' ')[1] : '',
-            )}
-          />
-        </span>
-        <span
-          className={cn(
-            'text-[14px] font-bold whitespace-nowrap',
-            picked ? 'text-white' : 'text-app-ink',
-          )}
-        >
-          {label}
-        </span>
-      </span>
-      <span
-        className="text-app-dim text-[12px] leading-[1.4] text-pretty"
-        id={hintId}
-      >
-        {meaning ? t(meaning.hint) : null}
-      </span>
-    </button>
-  )
-}
 
 function SourceTile({
   kind,
@@ -3856,11 +3725,18 @@ function PartEdit({
   >['requireLatestMutation']
 }) {
   const t = useT(partFormMessages)
+  const td = useT(partDetailMessages)
   const tl = useT(lostResponseMessages)
   const tc = useT(commonMessages)
   const { locale } = useLocale()
   const [values, setValues] = useState<PartFormValues | null>(null)
   const [detail, setDetail] = useState<PartDetail | null>(null)
+  const [compatState, setCompatState] = useState<{
+    partId: string
+    data: PartCompatibilities | null
+    error: boolean
+  } | null>(null)
+  const compat = compatState?.partId === partId ? compatState : null
   const [mediaItems, setMediaItems] = useState<PartMediaItem[]>([])
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -3884,6 +3760,20 @@ function PartEdit({
     values: [values?.desiredSalePrice],
     onAccept: (accepted) => void save(undefined, accepted),
   })
+  useEffect(() => {
+    const controller = new AbortController()
+    void partsApi.compatibilities(partId, { signal: controller.signal }).then(
+      (result) => {
+        if (!controller.signal.aborted)
+          setCompatState({ partId, data: result, error: false })
+      },
+      () => {
+        if (!controller.signal.aborted)
+          setCompatState({ partId, data: null, error: true })
+      },
+    )
+    return () => controller.abort()
+  }, [partId])
   useEffect(() => {
     const controller = new AbortController()
     void partsApi.get(partId, { signal: controller.signal }).then(
@@ -4029,31 +3919,20 @@ function PartEdit({
   }
 
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-        <div className="flex min-w-0 items-center gap-5">
-          <Link
-            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-            to={backTo}
+    <Sheet
+      description={detail?.name ?? undefined}
+      eyebrow={t('sheetEyebrow')}
+      footer={
+        <div className="flex w-full items-center justify-end gap-2.5">
+          <Button
+            disabled={pending || deleting}
+            onClick={() => void navigate(backTo)}
+            type="button"
           >
-            <ChevronLeft aria-hidden className="size-3.5" />
-            {t('backToPart')}
-          </Link>
-          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>{t('breadcrumbWarehouse')}</span>
-            <span aria-hidden className="text-white/20">
-              /
-            </span>
-            <span>{t('breadcrumbParts')}</span>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <Button asChild className="px-[18px] text-sm font-semibold">
-            <Link to={backTo}>{tc('cancel')}</Link>
+            {tc('cancel')}
           </Button>
           <Button
             aria-busy={pending || mediaPending}
-            className="px-5 text-sm font-bold"
             disabled={pending || mediaPending || values === null}
             form="part-edit"
             type="submit"
@@ -4062,77 +3941,76 @@ function PartEdit({
             {t('saveChanges')}
           </Button>
         </div>
-      </div>
-
-      <div className="mx-auto grid w-full max-w-[1360px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-        <div className="min-w-0">
-          <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
-            {detail?.name ?? t('editTitle')}
-          </h1>
-          {detail ? (
-            <p className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm font-medium">
-              <span className="border-app-line bg-app-input text-app-ink rounded-[7px] border px-2.5 py-1 font-mono text-[13px]">
-                {detail.qrCode}
-              </span>
-              <span>
-                {t('createdBy', { name: detail.createdByName ?? '' })}{' '}
-                <DateValue value={detail.createdAt} />
-              </span>
-            </p>
-          ) : null}
-        </div>
-
+      }
+      onOpenChange={(next) => {
+        if (!next && !pending && !deleting) void navigate(backTo)
+      }}
+      open
+      size="lg"
+      title={t('editTitle')}
+    >
+      <div className="grid gap-5">
         {status ? <Notice tone="ok">{status}</Notice> : null}
         {error ? <Notice tone="danger">{error}</Notice> : null}
 
         {values ? (
           <form
-            className="flex flex-wrap items-start gap-6"
+            className="grid gap-5"
             id="part-edit"
             noValidate
             onSubmit={(event) => void save(event)}
           >
-            <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
-              <Card
+            <div className="grid">
+              <SectionPanel
                 aside={
                   <span className="text-app-dim text-[13px]">
                     {t('notEditable')}
                   </span>
                 }
                 title={t('sourceStep')}
+                variant="plain"
               >
-                <p className="text-app-muted text-sm">
-                  {t('sourceSetOnCreate')}
-                </p>
-                <div className="border-app-line bg-app-input flex flex-wrap items-center justify-between gap-3 rounded-[14px] border px-4 py-3.5">
-                  <span className="text-[16px] font-semibold text-white">
-                    {detail?.carId && detail.carCode
-                      ? `${t('fromCar', { code: detail.carCode })}${detail.carBrand ? ` (${detail.carBrand} ${detail.carModel ?? ''})` : ''}`
-                      : detail?.intakeId
-                        ? t('fromIntake')
-                        : sourceLabel(values.sourceType, locale)}
-                  </span>
-                  {detail?.carId && canViewCars ? (
-                    <Button asChild>
-                      <Link to={`/app/${tenantSlug}/cars/${detail.carId}`}>
-                        {t('openCar')}
-                        <ExternalLink aria-hidden />
-                      </Link>
-                    </Button>
-                  ) : detail?.intakeId && canViewIntakes ? (
-                    <Button asChild>
-                      <Link
-                        to={`/app/${tenantSlug}/intakes/${detail.intakeId}`}
-                      >
-                        {t('openIntake')}
-                        <ExternalLink aria-hidden />
-                      </Link>
-                    </Button>
-                  ) : null}
+                <div className="grid gap-4">
+                  <p className="text-app-muted text-sm">
+                    {t('sourceSetOnCreate')}
+                  </p>
+                  <div className="border-app-line bg-app-input flex flex-wrap items-center justify-between gap-4 rounded-[14px] border px-4 py-4">
+                    <div className="grid min-w-0 gap-1">
+                      <span className="break-words text-[16px] font-semibold text-white">
+                        {detail?.carId && detail.carCode
+                          ? t('fromCar', { code: detail.carCode })
+                          : detail?.intakeId
+                            ? t('fromIntake')
+                            : sourceLabel(values.sourceType, locale)}
+                      </span>
+                      {detail?.carId && detail.carBrand ? (
+                        <span className="text-app-muted text-sm">
+                          {detail.carBrand} {detail.carModel}
+                        </span>
+                      ) : null}
+                    </div>
+                    {detail?.carId && canViewCars ? (
+                      <Button asChild>
+                        <Link to={`/app/${tenantSlug}/cars/${detail.carId}`}>
+                          {t('openCar')}
+                          <ExternalLink aria-hidden />
+                        </Link>
+                      </Button>
+                    ) : detail?.intakeId && canViewIntakes ? (
+                      <Button asChild>
+                        <Link
+                          to={`/app/${tenantSlug}/intakes/${detail.intakeId}`}
+                        >
+                          {t('openIntake')}
+                          <ExternalLink aria-hidden />
+                        </Link>
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
-              </Card>
+              </SectionPanel>
 
-              <Card title={t('describeStep')}>
+              <SectionPanel title={t('describeStep')} variant="plain">
                 <div className="grid gap-4">
                   <p className="text-app-muted text-sm">
                     {t('describeEditDescription')}
@@ -4190,121 +4068,152 @@ function PartEdit({
                     />
                   </Field>
                 </div>
-              </Card>
+              </SectionPanel>
 
-              <Card title={t('conditionStep')}>
+              <SectionPanel title={t('conditionStep')} variant="plain">
                 <div className="grid gap-4">
                   <p className="text-app-muted text-sm">
                     {t('conditionDescription')}
                   </p>
-                  <PillGroup
-                    className="flex-wrap"
-                    label={t('conditionStep')}
-                    onChange={(next) =>
-                      setValues((current) =>
-                        current ? { ...current, condition: next } : current,
-                      )
-                    }
-                    options={partConditions(locale)}
-                    value={values.condition}
-                  />
-                </div>
-              </Card>
-
-              <Card title={t('quantityStep')}>
-                <p className="text-app-muted text-sm">
-                  {t('quantityDescription')}
-                </p>
-                <div className="grid items-start gap-4 sm:grid-cols-3">
-                  <Field error={errors.quantity} label={t('quantity')} required>
-                    <QuantityStepper
-                      label={t('quantityInStock')}
-                      min={0}
-                      onChange={(next) =>
-                        setValues((current) =>
-                          current
-                            ? { ...current, quantity: String(next) }
-                            : current,
-                        )
-                      }
-                      value={Number(values.quantity) || 0}
-                    />
-                  </Field>
-                  <Field hint={t('unitHint')} label={t('unit')}>
-                    <TextInput
-                      name="unit"
-                      readOnly
-                      value={unitLabel(values.unit, locale)}
-                    />
-                  </Field>
-                  <Field
-                    error={errors.desiredSalePrice}
-                    hint={price.hint}
-                    label={t('desiredPrice')}
+                  <div
+                    aria-label={t('conditionStep')}
+                    className="grid gap-2 sm:grid-cols-3"
+                    role="radiogroup"
                   >
-                    <MoneyInput
-                      currency={price.currency}
-                      disabled={price.disabled}
-                      inputMode="decimal"
-                      name="desiredSalePrice"
-                      onChange={(event) =>
-                        setValues((current) =>
-                          current
-                            ? {
-                                ...current,
-                                desiredSalePrice: event.target.value,
-                              }
-                            : current,
-                        )
-                      }
-                      value={values.desiredSalePrice}
-                    />
-                  </Field>
+                    {partConditions(locale).map((option) => (
+                      <ConditionTile
+                        key={option.value}
+                        label={option.label}
+                        onPick={() =>
+                          setValues((current) =>
+                            current
+                              ? { ...current, condition: option.value }
+                              : current,
+                          )
+                        }
+                        picked={values.condition === option.value}
+                        value={option.value}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-app-dim text-[12px] leading-5 text-pretty">
+                    {t('conditionVisible')}
+                  </p>
                 </div>
-                {price.note}
-                {price.saveNotes}
-              </Card>
+              </SectionPanel>
 
-              <Card
+              <SectionPanel title={t('quantityStep')} variant="plain">
+                <div className="grid gap-4">
+                  <p className="text-app-muted text-sm">
+                    {t('quantityDescription')}
+                  </p>
+                  <div className="grid items-start gap-4 sm:grid-cols-2">
+                    <Field
+                      error={errors.quantity}
+                      label={t('quantity')}
+                      required
+                    >
+                      <QuantityStepper
+                        label={t('quantityInStock')}
+                        min={0}
+                        onChange={(next) =>
+                          setValues((current) =>
+                            current
+                              ? { ...current, quantity: String(next) }
+                              : current,
+                          )
+                        }
+                        value={Number(values.quantity) || 0}
+                      />
+                    </Field>
+                    <Field hint={t('unitHint')} label={t('unit')}>
+                      <TextInput
+                        name="unit"
+                        readOnly
+                        value={unitLabel(values.unit, locale)}
+                      />
+                    </Field>
+                    <Field
+                      error={errors.desiredSalePrice}
+                      hint={price.hint}
+                      label={t('desiredPrice')}
+                    >
+                      <MoneyInput
+                        currency={price.currency}
+                        disabled={price.disabled}
+                        inputMode="decimal"
+                        name="desiredSalePrice"
+                        onChange={(event) =>
+                          setValues((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  desiredSalePrice: event.target.value,
+                                }
+                              : current,
+                          )
+                        }
+                        value={values.desiredSalePrice}
+                      />
+                    </Field>
+                  </div>
+                  {price.note}
+                  {price.saveNotes}
+                </div>
+              </SectionPanel>
+
+              <SectionPanel
                 aside={
                   <span className="text-app-dim text-[13px]">
                     {t('readOnly')}
                   </span>
                 }
                 title={t('compatStep')}
+                variant="plain"
               >
                 <p className="text-app-muted text-sm">{t('compatReadOnly')}</p>
-                <SpecGrid
-                  specs={[
-                    { label: t('make'), value: detail?.compatCarBrand ?? '—' },
-                    { label: t('model'), value: detail?.compatCarModel ?? '—' },
-                    {
-                      label: t('year'),
-                      value:
-                        detail?.compatCarYear === null ||
-                        detail?.compatCarYear === undefined
-                          ? '—'
-                          : String(detail.compatCarYear),
-                    },
-                  ]}
-                />
-              </Card>
+                {compat?.error ? (
+                  <Notice tone="danger">{t('compatLoadFailed')}</Notice>
+                ) : compat === null ? (
+                  <p className="text-app-muted text-sm">{td('loadingShort')}</p>
+                ) : compat.data?.items.length === 0 ? (
+                  <p className="text-app-muted text-sm">{td('compatEmpty')}</p>
+                ) : (
+                  <div className="grid gap-3">
+                    {compat.data?.items.map((item) => (
+                      <SpecGrid
+                        key={item.id}
+                        specs={[
+                          {
+                            label: t('make'),
+                            value: item.makeName ?? item.equipmentTypeName,
+                          },
+                          {
+                            label: t('model'),
+                            value: item.modelName ?? td('anyModel'),
+                          },
+                          {
+                            label: t('year'),
+                            value: yearSpan(item.yearFrom, item.yearTo, td),
+                          },
+                        ]}
+                      />
+                    ))}
+                  </div>
+                )}
+              </SectionPanel>
 
-              <Card title={t('photos')}>
-                <p className="text-app-muted text-sm">{t('photosUploadNow')}</p>
-                <PartMediaFields
-                  items={mediaItems}
-                  requireLatestMutation={requireLatestMutation}
-                  setItems={setMediaItems}
-                />
-                <p className="text-app-dim text-[13px]">
-                  {t('buyersSeePhotos')}
-                </p>
-              </Card>
+              <PartMediaFields
+                description={t('photosUploadNow')}
+                items={mediaItems}
+                requireLatestMutation={requireLatestMutation}
+                setItems={setMediaItems}
+                variant="plain"
+              />
             </div>
 
-            <aside className="sticky top-24 grid min-w-[280px] flex-[0_0_320px] gap-5">
-              <Card title={t('summary')}>
+            <aside className="grid">
+              <SectionPanel title={t('summary')} variant="plain">
                 <dl className="grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
                   <dt className="text-app-muted text-sm font-semibold">
                     {t('available')}
@@ -4333,9 +4242,9 @@ function PartEdit({
                     {t('printSticker')}
                   </Link>
                 </Button>
-              </Card>
+              </SectionPanel>
 
-              <Card title={t('deletion')}>
+              <SectionPanel title={t('deletion')} variant="plain">
                 <p className="text-app-muted text-sm leading-5">
                   {detail && detail.quantityReserved > 0
                     ? t('deleteBlocked')
@@ -4350,7 +4259,7 @@ function PartEdit({
                   <Trash2 aria-hidden />
                   {t('deletePart')}
                 </Button>
-              </Card>
+              </SectionPanel>
             </aside>
           </form>
         ) : !error ? (
@@ -4373,6 +4282,6 @@ function PartEdit({
         pending={deleting}
         title={t('deleteTitle')}
       />
-    </div>
+    </Sheet>
   )
 }

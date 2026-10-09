@@ -154,6 +154,7 @@ export const partFormMessages = defineMessages({
     readOnly: 'Лише для читання',
     compatReadOnly:
       'Сумісність задана під час створення і доступна лише для читання.',
+    compatLoadFailed: 'Не вдалося завантажити сумісність.',
     photosUploadNow:
       'Нові фото завантажуються одразу після вибору. Зберегти можна, коли всі файли завантажені.',
     buyersSeePhotos: 'Покупці бачать фото у картці деталі.',
@@ -326,6 +327,7 @@ export const partFormMessages = defineMessages({
     readOnly: 'Read-only',
     compatReadOnly:
       'Compatibility was set when the part was created and is read-only.',
+    compatLoadFailed: 'Could not load compatibility.',
     photosUploadNow:
       'New photos upload as soon as you choose them. You can save once all files have uploaded.',
     buyersSeePhotos: 'Buyers see the photos on the part’s page.',
@@ -496,6 +498,7 @@ export const partFormMessages = defineMessages({
     readOnly: 'Tylko do odczytu',
     compatReadOnly:
       'Kompatybilność ustalono podczas tworzenia i jest tylko do odczytu.',
+    compatLoadFailed: 'Nie udało się wczytać kompatybilności.',
     photosUploadNow:
       'Nowe zdjęcia są przesyłane od razu po wybraniu. Zapisać można, gdy wszystkie pliki zostaną przesłane.',
     buyersSeePhotos: 'Kupujący widzą zdjęcia na karcie części.',

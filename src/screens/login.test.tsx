@@ -130,6 +130,7 @@ beforeEach(() => {
     user: existingUser,
     isNewUser: false,
   })
+  cancelRegistration.mockResolvedValue(undefined)
   updateName.mockResolvedValue(existingUser)
 })
 
@@ -138,6 +139,80 @@ afterEach(() => {
   vi.resetAllMocks()
   credentials.clear()
   sessionStorage.clear()
+})
+
+it('opens the privacy policy from the phone step', async () => {
+  const user = userEvent.setup()
+  renderLogin()
+
+  const policy = screen.getByRole('link', {
+    name: 'політикою конфіденційності',
+  })
+  expect(policy).toHaveAttribute('href', '/privacy')
+  await user.click(policy)
+  expect(screen.getByTestId('location')).toHaveTextContent('/privacy')
+})
+
+it('shows the registration sign-in switch as a text action without a filled hover', async () => {
+  const user = userEvent.setup()
+  renderLogin()
+
+  await user.click(
+    screen.getByRole('button', {
+      name: 'Немає облікового запису? Зареєструватися',
+    }),
+  )
+
+  const signIn = screen.getByRole('button', {
+    name: 'Вже маєте обліковий запис? Увійти',
+  })
+  expect(signIn).not.toHaveClass('rounded-control')
+  expect(signIn).not.toHaveClass('hover:bg-white/[0.04]')
+  expect(screen.getByText('Увійти')).toHaveClass('hover:text-white')
+  await user.click(signIn)
+  expect(
+    screen.getByRole('heading', { name: 'Вхід за номером телефону' }),
+  ).toBeVisible()
+})
+
+it('places the country selector inside the phone field and sends one international prefix', async () => {
+  const user = userEvent.setup()
+  renderLogin()
+
+  const country = screen.getByRole('combobox', { name: 'Країна номера' })
+  const phone = screen.getByRole('textbox', { name: 'Номер телефону' })
+  expect(country).toHaveValue('UA')
+  expect(screen.queryByRole('radiogroup', { name: 'Країна номера' })).toBeNull()
+
+  await user.type(phone, '501112233')
+  expect(phone).toHaveValue('50 111 22 33')
+  await user.click(screen.getByRole('button', { name: 'Отримати код' }))
+  await waitFor(() =>
+    expect(otpSend).toHaveBeenCalledWith(
+      { phone: '+380501112233' },
+      { signal: expect.any(AbortSignal) as AbortSignal },
+    ),
+  )
+})
+
+it('changes the prefix from the phone-field dropdown', async () => {
+  const user = userEvent.setup()
+  renderLogin()
+
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Країна номера' }),
+    'PL',
+  )
+  const phone = screen.getByRole('textbox', { name: 'Номер телефону' })
+  await user.type(phone, '512345678')
+  expect(phone).toHaveValue('512 345 678')
+  await user.click(screen.getByRole('button', { name: 'Отримати код' }))
+  await waitFor(() =>
+    expect(otpSend).toHaveBeenCalledWith(
+      { phone: '+48512345678' },
+      { signal: expect.any(AbortSignal) as AbortSignal },
+    ),
+  )
 })
 
 it('restores an active OTP challenge after the login page reloads', async () => {
