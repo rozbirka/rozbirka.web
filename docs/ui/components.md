@@ -48,3 +48,9 @@ ConfirmDialog при відкритті ставить focus на «Скасув
 [SiteHeader](../../src/components/site/header.tsx), [FAQ](../../src/components/site/faq.tsx), [Pricing](../../src/components/site/pricing.tsx), [PageContainer](../../src/components/layout/page-container.tsx) і [Section](../../src/components/layout/section.tsx) належать маркетинговому шару.
 
 У кабінеті є PageHeader/PageBody і окремий [RedesignShell](../../src/cabinet/redesign-shell.tsx). Обирати реалізацію за сусідніми екранами й прийнятим дизайном; сам факт наявності redesign не є дорученням мігрувати всі сторінки.
+
+## Фото
+
+[Thumbnail та Gallery](../../src/components/app/photo.tsx) утримують фото у визначеній рамці й показують повідомлення, якщо файл недоступний. Повноекранний переглядач обмежує фото доступною висотою, дозволяє прокручувати всю смугу мініатюр і повертає фокус на кнопку відкриття після закриття.
+
+[Форма авто](../../src/cabinet/cars/CarsScreen.tsx) зберігає додавання, видалення та вибір обкладинки як чернетку до «Зберегти зміни». Перше фото є обкладинкою; ліміт 10 фото перевіряється також на сервері.

@@ -96,6 +96,8 @@ export interface CreateCarRequest {
 }
 
 export interface UpdateCarRequest {
+  /** Ordered final photo set; omitted preserves existing photos. */
+  photoKeys?: string[] | null | undefined
   code?: string | null | undefined
   brand?: string | null | undefined
   model?: string | null | undefined
@@ -174,6 +176,7 @@ export const carsApi = {
     options: RequestOptions = {},
   ): Promise<Car> {
     const safeRequest: UpdateCarRequest = {
+      photoKeys: request.photoKeys,
       code: request.code,
       brand: request.brand,
       model: request.model,

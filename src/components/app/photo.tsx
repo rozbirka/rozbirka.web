@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+  type ReactNode,
+} from 'react'
 import { ChevronLeft, ChevronRight, ImageOff, X } from 'lucide-react'
 import { Dialog, Slot } from 'radix-ui'
 import { cn } from '@/lib/utils'
@@ -86,7 +93,7 @@ export function Thumbnail({
           <img
             alt={alt}
             className={cn(
-              'relative h-full w-full object-cover',
+              'absolute inset-0 h-full w-full object-cover',
               placeholder !== null &&
                 'transition-opacity duration-200 motion-reduce:transition-none',
               placeholder !== null && !loaded && 'opacity-0',
@@ -118,12 +125,14 @@ function Lightbox({
   label,
   onIndex,
   onClose,
+  returnFocus,
 }: {
   photos: readonly Photo[]
   index: number
   label: string
   onIndex: (next: number) => void
   onClose: () => void
+  returnFocus: RefObject<HTMLButtonElement | null>
 }) {
   const t = useT(appMessages)
   const total = photos.length
@@ -131,6 +140,7 @@ function Lightbox({
     (delta: number) => onIndex((index + delta + total) % total),
     [index, onIndex, total],
   )
+  const [failedSource, setFailedSource] = useState<string | null>(null)
   const touchStart = useRef<number | null>(null)
 
   useEffect(() => {
@@ -150,7 +160,13 @@ function Lightbox({
     <Dialog.Root onOpenChange={(next) => !next && onClose()} open>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/90" />
-        <Dialog.Content className="fixed inset-0 z-50 grid grid-rows-[auto_minmax(0,1fr)_auto] gap-2 p-3 sm:p-4">
+        <Dialog.Content
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            returnFocus.current?.focus()
+          }}
+          className="fixed inset-0 z-50 grid grid-rows-[auto_minmax(0,1fr)_auto] gap-2 p-3 sm:p-4"
+        >
           <Dialog.Title className="sr-only">{label}</Dialog.Title>
           <Dialog.Description className="sr-only">{alt}</Dialog.Description>
           <header className="flex items-center justify-between gap-3">
@@ -192,11 +208,25 @@ function Lightbox({
             ) : (
               <span />
             )}
-            <img
-              alt={alt}
-              className="mx-auto max-h-full max-w-full rounded-lg object-contain"
-              src={photo.url}
-            />
+            <div className="relative h-full min-h-0 w-full min-w-0">
+              {failedSource === photo.url ? (
+                <span
+                  role="status"
+                  className="text-app-muted absolute inset-0 grid place-content-center justify-items-center gap-2"
+                >
+                  <ImageOff aria-hidden />
+                  {t('photoUnavailable')}
+                </span>
+              ) : (
+                <img
+                  key={photo.url}
+                  alt={alt}
+                  className="absolute inset-0 h-full w-full rounded-lg object-contain"
+                  onError={() => setFailedSource(photo.url)}
+                  src={photo.url}
+                />
+              )}
+            </div>
             {total > 1 ? (
               <Button
                 aria-label={t('nextPhoto')}
@@ -212,9 +242,12 @@ function Lightbox({
           </div>
 
           {total > 1 ? (
-            <ul className="flex justify-center gap-1.5 overflow-x-auto pb-1">
+            <ul className="flex justify-start gap-1.5 overflow-x-auto pb-1">
               {photos.map((item, position) => (
-                <li key={item.id}>
+                <li
+                  className="shrink-0 first:ml-auto last:mr-auto"
+                  key={item.id}
+                >
                   <button
                     aria-current={position === index ? 'true' : undefined}
                     aria-label={t('photoNumber', {
@@ -265,6 +298,7 @@ export function PhotoGrid({
   className?: string
 }) {
   const t = useT(appMessages)
+  const opener = useRef<HTMLButtonElement | null>(null)
   const [openIndex, setOpenIndex] = useState<number | null>(null)
 
   if (photos.length === 0) {
@@ -289,7 +323,10 @@ export function PhotoGrid({
             <button
               aria-label={photo.alt ?? `${label} ${String(index + 1)}`}
               className="focus-visible:outline-brand block w-full cursor-zoom-in"
-              onClick={() => setOpenIndex(index)}
+              onClick={(event) => {
+                opener.current = event.currentTarget
+                setOpenIndex(index)
+              }}
               type="button"
             >
               <Thumbnail
@@ -302,7 +339,8 @@ export function PhotoGrid({
       </ul>
       {openIndex === null ? null : (
         <Lightbox
-          index={openIndex}
+          returnFocus={opener}
+          index={Math.min(openIndex, photos.length - 1)}
           label={label}
           onClose={() => setOpenIndex(null)}
           onIndex={setOpenIndex}
@@ -342,8 +380,10 @@ export function Gallery({
 }) {
   const t = useT(appMessages)
   const [current, setCurrent] = useState(0)
+  const opener = useRef<HTMLButtonElement | null>(null)
   const [openIndex, setOpenIndex] = useState<number | null>(null)
-  const shown = photos[Math.min(current, photos.length - 1)]
+  const selected = Math.min(current, photos.length - 1)
+  const shown = photos[selected]
 
   // Paging through a gallery is a sequence: the next photo is almost always
   // the next click, so it is worth having it in the cache before then.
@@ -381,13 +421,16 @@ export function Gallery({
     <div className={cn('grid', framed ? 'gap-0' : 'gap-2', className)}>
       <div className={cn('relative', framed && 'border-app-line border-y')}>
         <button
-          aria-label={t('openFullScreen', { name: nameOf(shown, current) })}
+          aria-label={t('openFullScreen', { name: nameOf(shown, selected) })}
           className="focus-visible:outline-brand block w-full cursor-zoom-in"
-          onClick={() => setOpenIndex(current)}
+          onClick={(event) => {
+            opener.current = event.currentTarget
+            setOpenIndex(Math.min(current, photos.length - 1))
+          }}
           type="button"
         >
           <Thumbnail
-            alt={nameOf(shown, current)}
+            alt={nameOf(shown, selected)}
             className={cn(framed && 'rounded-none border-0')}
             photo={shown}
             ratio={ratio === 'wide' ? 'wide' : 'square'}
@@ -399,7 +442,7 @@ export function Gallery({
             aria-hidden
             className="border-app-line-2 text-app-muted pointer-events-none absolute bottom-3 left-3 rounded-full border bg-black/70 px-3 py-1 font-mono text-[12px] tracking-[0.08em] tabular-nums backdrop-blur-sm"
           >
-            {pad(current + 1)} / {pad(photos.length)}
+            {pad(selected + 1)} / {pad(photos.length)}
           </span>
         ) : null}
       </div>
@@ -416,14 +459,14 @@ export function Gallery({
           {photos.map((photo, index) => (
             <li key={photo.id}>
               <button
-                aria-current={index === current ? 'true' : undefined}
+                aria-current={index === selected ? 'true' : undefined}
                 aria-label={t('showPhoto', { name: nameOf(photo, index) })}
                 className={cn(
                   'focus-visible:outline-brand block w-full cursor-pointer overflow-hidden transition-opacity',
                   framed
                     ? 'rounded-[10px] border-[1.5px]'
                     : 'rounded-panel border',
-                  index === current
+                  index === selected
                     ? 'border-brand'
                     : 'border-app-line-2 opacity-70 hover:opacity-100',
                 )}
@@ -446,7 +489,8 @@ export function Gallery({
       ) : null}
       {openIndex === null ? null : (
         <Lightbox
-          index={openIndex}
+          returnFocus={opener}
+          index={Math.min(openIndex, photos.length - 1)}
           label={label}
           onClose={() => setOpenIndex(null)}
           onIndex={(next) => {
