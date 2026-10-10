@@ -1,4 +1,11 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -925,35 +932,45 @@ it('allows a manager to edit non-financial car fields without submitting purchas
   )
 })
 
-it('renders committed photos read-only on edit instead of sending pending-media deletes', async () => {
+it('edits photos as a draft and saves removal and cover selection without media deletes', async () => {
+  const user = userEvent.setup()
   vi.mocked(carsApi.get).mockResolvedValue({
     ...detail,
-    photos: [
-      {
-        id: 'photo-1',
-        storageKey: 'cars/committed/photo-1',
-        url: 'https://cdn.example/car.jpg',
-        thumbnailUrl: 'https://cdn.example/car-thumb.jpg',
-        sortOrder: 0,
-      },
-    ],
+    photos: [1, 2].map((n) => ({
+      id: `photo-${n}`,
+      storageKey: `cars/photo-${n}`,
+      url: `/photo-${n}.jpg`,
+      thumbnailUrl: `/thumb-${n}.jpg`,
+      sortOrder: n - 1,
+    })),
   })
+  vi.mocked(carsApi.update).mockResolvedValue(detail)
   render(
     <MemoryRouter initialEntries={['/app/demo/cars/car-1/edit']}>
       <Routes>
         <Route path="/app/:tenant/cars/:carId/edit" element={<CarsScreen />} />
+        <Route path="/app/:tenant/cars/:carId" element={<p>Saved</p>} />
       </Routes>
     </MemoryRouter>,
   )
-
-  expect(
-    await screen.findByRole('img', { name: 'Поточне фото автомобіля 1' }),
-  ).toHaveAttribute('src', 'https://cdn.example/car.jpg')
-  expect(screen.queryByLabelText('Додати фото')).not.toBeInTheDocument()
-  expect(
-    screen.queryByRole('button', { name: 'Прибрати фото' }),
-  ).not.toBeInTheDocument()
+  await screen.findByRole('img', { name: 'Поточне фото автомобіля 1' })
+  expect(screen.getByLabelText('Додати фото')).toBeEnabled()
+  await user.click(
+    screen.getByRole('button', { name: 'Зробити обкладинкою фото 2' }),
+  )
+  await user.click(screen.getByRole('button', { name: 'Прибрати фото 2' }))
+  expect(carsApi.update).not.toHaveBeenCalled()
   expect(mediaApi.remove).not.toHaveBeenCalled()
+  await user.click(
+    screen.getAllByRole('button', { name: 'Зберегти зміни' })[0]!,
+  )
+  await waitFor(() =>
+    expect(carsApi.update).toHaveBeenCalledWith(
+      'car-1',
+      expect.objectContaining({ photoKeys: ['cars/photo-2'] }),
+      expect.anything(),
+    ),
+  )
 })
 
 it('loads URL-backed car search and displays the server profitability unchanged', async () => {
@@ -1187,4 +1204,170 @@ it('brings back the car typed before leaving to choose the currency', async () =
   expect(
     sessionStorage.getItem('rozbirka:currency-draft:car-form:new'),
   ).toBeNull()
+})
+
+it('reuses successful photo uploads after a failed car update and saves a new cover', async () => {
+  const user = userEvent.setup()
+  vi.stubGlobal(
+    'URL',
+    Object.assign(URL, {
+      createObjectURL: vi.fn(() => '/new-preview.jpg'),
+      revokeObjectURL: vi.fn(),
+    }),
+  )
+  vi.mocked(mediaApi.upload).mockResolvedValue({
+    storageKey: 'cars/new-photo',
+    url: '/new-photo.jpg',
+  })
+  vi.mocked(carsApi.get).mockResolvedValue({
+    ...detail,
+    photos: [
+      {
+        id: 'old',
+        storageKey: 'cars/old',
+        url: '/old.jpg',
+        thumbnailUrl: '/old-thumb.jpg',
+        sortOrder: 0,
+      },
+    ],
+  })
+  vi.mocked(carsApi.update)
+    .mockRejectedValueOnce(new Error('Save failed'))
+    .mockResolvedValue(detail)
+  render(
+    <MemoryRouter initialEntries={['/app/demo/cars/car-1/edit']}>
+      <Routes>
+        <Route path="/app/:tenant/cars/:carId/edit" element={<CarsScreen />} />
+        <Route path="/app/:tenant/cars/:carId" element={<p>Saved</p>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const input = await screen.findByLabelText('Додати фото')
+  await user.upload(
+    input,
+    new File(['png'], 'Screenshot 2026-08-23 at 15.35.27.png', {
+      type: 'image/png',
+    }),
+  )
+  expect(mediaApi.upload).not.toHaveBeenCalled()
+  await user.click(
+    screen.getByRole('button', { name: 'Зробити обкладинкою фото 2' }),
+  )
+  await user.click(
+    screen.getAllByRole('button', { name: 'Зберегти зміни' })[0]!,
+  )
+  await waitFor(() => expect(carsApi.update).toHaveBeenCalledTimes(1))
+  await waitFor(() =>
+    expect(
+      screen.getAllByRole('button', { name: 'Зберегти зміни' })[0],
+    ).toBeEnabled(),
+  )
+  await user.click(
+    screen.getAllByRole('button', { name: 'Зберегти зміни' })[0]!,
+  )
+  await waitFor(() => expect(carsApi.update).toHaveBeenCalledTimes(2))
+  expect(mediaApi.upload).toHaveBeenCalledTimes(1)
+  expect(carsApi.update).toHaveBeenLastCalledWith(
+    'car-1',
+    expect.objectContaining({ photoKeys: ['cars/new-photo', 'cars/old'] }),
+    expect.anything(),
+  )
+  expect(mediaApi.remove).not.toHaveBeenCalled()
+})
+
+it('keeps server photos unchanged on cancel and rejects selection above ten photos', async () => {
+  const user = userEvent.setup()
+  vi.mocked(carsApi.get).mockResolvedValue({
+    ...detail,
+    photos: Array.from({ length: 10 }, (_, index) => ({
+      id: `photo-${index}`,
+      storageKey: `cars/${index}`,
+      url: `/photo-${index}.jpg`,
+      thumbnailUrl: `/thumb-${index}.jpg`,
+      sortOrder: index,
+    })),
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/demo/cars/car-1/edit']}>
+      <Routes>
+        <Route path="/app/:tenant/cars/:carId/edit" element={<CarsScreen />} />
+        <Route path="/app/:tenant/cars/:carId" element={<p>Cancelled</p>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  await screen.findByRole('img', { name: 'Поточне фото автомобіля 1' })
+  await user.upload(
+    screen.getByLabelText('Додати фото'),
+    new File(['png'], 'extra.png', { type: 'image/png' }),
+  )
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Максимум 10 фото.',
+  )
+  await user.click(screen.getByRole('button', { name: 'Прибрати фото 1' }))
+  await user.click(screen.getByRole('link', { name: 'Скасувати' }))
+  expect(await screen.findByText('Cancelled')).toBeVisible()
+  expect(carsApi.update).not.toHaveBeenCalled()
+  expect(mediaApi.upload).not.toHaveBeenCalled()
+  expect(mediaApi.remove).not.toHaveBeenCalled()
+})
+
+it('shows a fallback when the car list cover fails to load', async () => {
+  vi.mocked(carsApi.list).mockResolvedValue({
+    items: [{ ...car, coverPhotoUrl: '/missing-cover.jpg' }],
+    page: 1,
+    pageSize: 20,
+    total: 1,
+    totalPages: 1,
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/demo/cars']}>
+      <Routes>
+        <Route path="/app/:tenant/cars" element={<CarsScreen />} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const list = await screen.findByRole('list', { name: 'Список автомобілів' })
+  const image = list.querySelector('img')!
+  fireEvent.error(image)
+  expect(within(list).getByText('Фото недоступне')).toBeVisible()
+})
+
+it('does not save after cancellation while an edit photo upload is pending', async () => {
+  const user = userEvent.setup()
+  vi.stubGlobal(
+    'URL',
+    Object.assign(URL, {
+      createObjectURL: vi.fn(() => '/preview.jpg'),
+      revokeObjectURL: vi.fn(),
+    }),
+  )
+  let resolveUpload!: (value: { storageKey: string; url: string }) => void
+  vi.mocked(mediaApi.upload).mockReturnValue(
+    new Promise((resolve) => {
+      resolveUpload = resolve
+    }),
+  )
+  render(
+    <MemoryRouter initialEntries={['/app/demo/cars/car-1/edit']}>
+      <Routes>
+        <Route path="/app/:tenant/cars/:carId/edit" element={<CarsScreen />} />
+        <Route path="/app/:tenant/cars/:carId" element={<p>Cancelled</p>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  await user.upload(
+    await screen.findByLabelText('Додати фото'),
+    new File(['png'], 'new.png', { type: 'image/png' }),
+  )
+  await user.click(
+    screen.getAllByRole('button', { name: 'Зберегти зміни' })[0]!,
+  )
+  await waitFor(() => expect(mediaApi.upload).toHaveBeenCalledTimes(1))
+  await user.click(screen.getByRole('link', { name: 'Скасувати' }))
+  expect(await screen.findByText('Cancelled')).toBeVisible()
+  await act(async () => {
+    resolveUpload({ storageKey: 'cars/new', url: '/new.jpg' })
+    await Promise.resolve()
+  })
+  expect(carsApi.update).not.toHaveBeenCalled()
 })

@@ -52,6 +52,7 @@ import {
   Notice,
   PageBody,
   PhotoFileField,
+  Thumbnail,
   PillGroup,
   SkeletonRows,
   StatusPill,
@@ -270,11 +271,11 @@ function CarCard({
     >
       <span className="bg-app-input relative block aspect-4/3">
         {car.coverPhotoUrl ? (
-          <img
+          <Thumbnail
             alt=""
-            className="h-full w-full object-cover"
-            loading="lazy"
-            src={car.coverPhotoUrl}
+            className="absolute inset-0 h-full w-full rounded-none border-0"
+            photo={{ url: car.coverPhotoUrl }}
+            ratio="wide"
           />
         ) : (
           <span className="text-app-dim grid h-full place-items-center">
@@ -1279,6 +1280,26 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
   )
   const [media, setMedia] = useState<MediaUploadResult[]>([])
   const [pendingMedia, setPendingMedia] = useState<PendingMedia[]>([])
+  const [photoOrder, setPhotoOrder] = useState<string[]>([])
+  const lifetime = useRef<AbortController | null>(null)
+  useEffect(() => {
+    const controller = new AbortController()
+    lifetime.current = controller
+    return () => controller.abort()
+  }, [])
+  const pendingPreviews = useRef<PendingMedia[]>([])
+  useEffect(() => {
+    pendingPreviews.current = pendingMedia
+  }, [pendingMedia])
+  useEffect(
+    () => () => {
+      if (typeof URL.revokeObjectURL === 'function')
+        pendingPreviews.current.forEach((item) =>
+          URL.revokeObjectURL(item.previewUrl),
+        )
+    },
+    [],
+  )
   const [makeId, setMakeId] = useState<number | null>(
     () => draft.initial?.makeId ?? null,
   )
@@ -1337,6 +1358,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
             purchasePrice: String(car.purchasePrice),
             notes: car.notes ?? '',
           })
+        setPhotoOrder(car.photos.map((photo) => photo.storageKey))
         setMedia(
           car.photos.map((photo) => ({
             storageKey: photo.storageKey,
@@ -1420,6 +1442,9 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
       setProblem(expensePrecision)
       return
     }
+    const lifetimeSignal = lifetime.current?.signal
+    const requestSignal = (signal: AbortSignal) =>
+      lifetimeSignal ? AbortSignal.any([signal, lifetimeSignal]) : signal
     setProblem(null)
     setBusy(true)
     try {
@@ -1432,8 +1457,29 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
       }
       let savedCarId = carId ?? createdCarId
       if (carId) {
+        const uploadedMedia = [...media]
+        const savedOrder = [...photoOrder]
+        // Keep successful uploads in the draft if a later upload or save fails.
+        // Retrying then reuses the pending assets instead of uploading twice.
+        for (const item of pendingMedia) {
+          const scope = requireLatestMutation({ quota: false })
+          const uploaded = await mediaApi.upload(item.file, 'cars', {
+            signal: requestSignal(scope.signal),
+          })
+          lifetimeSignal?.throwIfAborted()
+          uploadedMedia.push(uploaded)
+          const position = savedOrder.indexOf(item.id)
+          if (position >= 0) savedOrder[position] = uploaded.storageKey
+          setMedia([...uploadedMedia])
+          setPhotoOrder([...savedOrder])
+          setPendingMedia((current) =>
+            current.filter((pending) => pending.id !== item.id),
+          )
+          if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
+        }
         const updateRequest: UpdateCarRequest = {
           ...request,
+          photoKeys: savedOrder,
           // Without an accounting currency the price stays as it is; the
           // rest of the car still saves.
           ...(financeManage && !price.disabled ? { purchasePrice } : {}),
@@ -1444,8 +1490,9 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
             permission: 'finance.manage',
             quota: false,
           })
+        lifetimeSignal?.throwIfAborted()
         const car = await carsApi.update(carId, updateRequest, {
-          signal: scope.signal,
+          signal: requestSignal(scope.signal),
         })
         savedCarId = car.id
       } else {
@@ -1458,7 +1505,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                 quota: false,
               })
               return mediaApi.upload(item.file, 'cars', {
-                signal: uploadScope.signal,
+                signal: requestSignal(uploadScope.signal),
               })
             }),
           )
@@ -1476,7 +1523,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
             quota: false,
           })
           const car = await carsApi.create(createRequest, {
-            signal: scope.signal,
+            signal: requestSignal(scope.signal),
           })
           savedCarId = car.id
           setCreatedCarId(car.id)
@@ -1496,7 +1543,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                 name: expense.name,
                 amount: expense.amount,
               },
-              { signal: scope.signal },
+              { signal: requestSignal(scope.signal) },
             )
             completed.add(expense.id)
             setCompletedExpenseIds(new Set(completed))
@@ -1511,6 +1558,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
           }
         }
       }
+      lifetimeSignal?.throwIfAborted()
       guard.afterSave(price.hasPrice)
       void navigate(
         (carId === undefined
@@ -1865,28 +1913,112 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                 title={tf('photosTitle')}
               >
                 {carId ? (
-                  <>
-                    {media.length === 0 ? (
-                      <p className="border-app-line-2 text-app-muted rounded-[14px] border border-dashed bg-white/[0.02] px-6 py-8 text-center text-sm">
-                        {tf('noPhotos')}
-                      </p>
-                    ) : (
-                      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        {media.map((item, index) => (
-                          <li key={item.storageKey}>
-                            <img
-                              alt={tf('currentPhotoAlt', { number: index + 1 })}
-                              className="border-app-line rounded-control aspect-4/3 w-full border object-cover"
-                              src={item.url}
-                            />
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <p className="text-app-muted mt-3 text-[13px]">
+                  <fieldset className="grid gap-3" disabled={busy}>
+                    <p className="text-app-muted text-sm">
                       {tf('photosEditNote')}
                     </p>
-                  </>
+                    <PhotoFileField
+                      aria-label={tf('addPhotos')}
+                      multiple
+                      disabled={busy}
+                      onChange={(event) => {
+                        const files = Array.from(event.target.files ?? [])
+                        event.target.value = ''
+                        if (photoOrder.length + files.length > 10) {
+                          setProblem(tf('photosLimit'))
+                          return
+                        }
+                        const picked = files.map((file) => ({
+                          id: crypto.randomUUID(),
+                          file,
+                          previewUrl: URL.createObjectURL(file),
+                        }))
+                        setPendingMedia((current) => [...current, ...picked])
+                        setPhotoOrder((current) => [
+                          ...current,
+                          ...picked.map((item) => item.id),
+                        ])
+                      }}
+                    />
+                    {photoOrder.length === 0 ? (
+                      <p className="text-app-dim text-sm">{tf('noPhotos')}</p>
+                    ) : (
+                      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        {photoOrder.map((key, index) => {
+                          const existing = media.find(
+                            (item) => item.storageKey === key,
+                          )
+                          const pending = pendingMedia.find(
+                            (item) => item.id === key,
+                          )
+                          return (
+                            <li
+                              key={key}
+                              className="grid min-w-0 content-start gap-2"
+                            >
+                              <Thumbnail
+                                photo={{
+                                  url:
+                                    existing?.url ?? pending?.previewUrl ?? '',
+                                }}
+                                alt={tf('currentPhotoAlt', {
+                                  number: index + 1,
+                                })}
+                                ratio="wide"
+                              />
+                              {index === 0 ? (
+                                <span className="text-brand text-xs">
+                                  {tf('coverPhoto')}
+                                </span>
+                              ) : (
+                                <Button
+                                  size="md"
+                                  variant="quiet"
+                                  className="min-w-0 px-2 text-xs whitespace-normal"
+                                  aria-label={tf('makeCoverPhoto', {
+                                    number: index + 1,
+                                  })}
+                                  onClick={() =>
+                                    setPhotoOrder((current) => [
+                                      key,
+                                      ...current.filter((item) => item !== key),
+                                    ])
+                                  }
+                                >
+                                  {tf('makeCover')}
+                                </Button>
+                              )}
+                              <Button
+                                size="md"
+                                variant="quiet"
+                                className="min-w-0 px-2 text-xs whitespace-normal"
+                                aria-label={tf('removePhotoNumber', {
+                                  number: index + 1,
+                                })}
+                                onClick={() => {
+                                  setPhotoOrder((current) =>
+                                    current.filter((item) => item !== key),
+                                  )
+                                  setMedia((current) =>
+                                    current.filter(
+                                      (item) => item.storageKey !== key,
+                                    ),
+                                  )
+                                  setPendingMedia((current) =>
+                                    current.filter((item) => item.id !== key),
+                                  )
+                                  if (pending?.previewUrl)
+                                    URL.revokeObjectURL(pending.previewUrl)
+                                }}
+                              >
+                                {tf('removePhoto')}
+                              </Button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
+                  </fieldset>
                 ) : (
                   <PendingMediaPicker
                     disabled={busy}

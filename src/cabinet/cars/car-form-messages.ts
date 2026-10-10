@@ -66,8 +66,13 @@ export const carFormMessages = defineMessages({
     photosHint: 'Можна вибрати кілька файлів одразу або зняти на камеру.',
     noPhotos: 'Фото немає.',
     currentPhotoAlt: 'Поточне фото автомобіля {number}',
+    coverPhoto: 'Обкладинка',
+    makeCover: 'Зробити обкладинкою',
+    makeCoverPhoto: 'Зробити обкладинкою фото {number}',
+    removePhotoNumber: 'Прибрати фото {number}',
+    photosLimit: 'Максимум 10 фото.',
     photosEditNote:
-      'Фото додають і прибирають під час створення авто — ручка оновлення їх не приймає.',
+      'Перше фото — обкладинка. Зміни застосуються після збереження.',
     notesTitle: 'Нотатки',
     notesHint:
       'Стан авто, домовленості з продавцем, що перевірити перед розбиранням.',
@@ -194,8 +199,13 @@ export const carFormMessages = defineMessages({
     photosHint: 'You can pick several files at once or use the camera.',
     noPhotos: 'No photos.',
     currentPhotoAlt: 'Current car photo {number}',
+    coverPhoto: 'Cover',
+    makeCover: 'Set as cover',
+    makeCoverPhoto: 'Set photo {number} as cover',
+    removePhotoNumber: 'Remove photo {number}',
+    photosLimit: 'Maximum 10 photos.',
     photosEditNote:
-      'Photos are added and removed when the car is created — editing doesn’t change them.',
+      'The first photo is the cover. Changes apply when you save.',
     notesTitle: 'Notes',
     notesHint:
       'Condition of the car, arrangements with the seller, what to check before dismantling.',
@@ -320,8 +330,13 @@ export const carFormMessages = defineMessages({
     photosHint: 'Możesz wybrać kilka plików naraz lub zrobić zdjęcie aparatem.',
     noPhotos: 'Brak zdjęć.',
     currentPhotoAlt: 'Obecne zdjęcie auta {number}',
+    coverPhoto: 'Okładka',
+    makeCover: 'Ustaw jako okładkę',
+    makeCoverPhoto: 'Ustaw zdjęcie {number} jako okładkę',
+    removePhotoNumber: 'Usuń zdjęcie {number}',
+    photosLimit: 'Maksymalnie 10 zdjęć.',
     photosEditNote:
-      'Zdjęcia dodaje się i usuwa przy tworzeniu auta — edycja ich nie zmienia.',
+      'Pierwsze zdjęcie jest okładką. Zmiany zostaną zastosowane po zapisaniu.',
     notesTitle: 'Notatki',
     notesHint:
       'Stan auta, ustalenia ze sprzedawcą, co sprawdzić przed rozbiórką.',

@@ -156,7 +156,7 @@ describe('carsApi', () => {
     })
   })
 
-  it('strips runtime-only media fields from the documented car update payload', async () => {
+  it('sends the ordered photo set in the car update payload', async () => {
     let request!: InternalAxiosRequestConfig
     apiClient.defaults.adapter = (config) => {
       request = config
@@ -166,12 +166,13 @@ describe('carsApi', () => {
     await carsApi.update('car-1', {
       code: 'CAR-002',
       notes: null,
-      photoKeys: ['pending/cars/unsafe'],
-    } as never)
+      photoKeys: ['pending/cars/new', 'cars/existing'],
+    })
 
     expect(JSON.parse(request.data as string)).toEqual({
       code: 'CAR-002',
       notes: null,
+      photoKeys: ['pending/cars/new', 'cars/existing'],
     })
   })
 })

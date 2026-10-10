@@ -1,6 +1,28 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
 
+test('prerendered landing paints before hydration entry downloads', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'Matches the Lighthouse browser')
+  await page.goto('/', { waitUntil: 'networkidle' })
+
+  const timing = await page.evaluate(() => {
+    const paint = performance.getEntriesByName('first-contentful-paint')[0]
+    const entry = performance
+      .getEntriesByType('resource')
+      .find((resource) =>
+        /\/assets\/index-[^/]+\.js$/.test(new URL(resource.name).pathname),
+      )
+    return { paint: paint?.startTime, hydration: entry?.startTime }
+  })
+
+  expect(timing.paint).toBeDefined()
+  expect(timing.hydration).toBeDefined()
+  expect(timing.hydration).toBeGreaterThanOrEqual(timing.paint ?? Infinity)
+})
+
 test('retired SEO use-case URLs return the branded 404 page', async ({
   page,
 }) => {

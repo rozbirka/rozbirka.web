@@ -55,10 +55,33 @@ const criticalCss = css.replace(
   /url\(["']?\/fonts\/VisueltPro-Hero\.woff2["']?\)/,
   `url("data:font/woff2;base64,${heroFont.toString('base64')}")`,
 )
-const template = appShell.replace(
-  stylesheetPattern,
-  `<style>${criticalCss}</style>`,
-)
+// Render the prerendered page before starting hydration downloads.
+const entryScript = appShell.match(
+  /<script type="module"[^>]*>[\s\S]*?<\/script>/,
+)?.[0]
+const entryUrl = entryScript?.match(/src="([^"]+)"/)?.[1]
+if (!entryScript || !entryUrl) {
+  throw new Error('Production entry script was not found')
+}
+const hydrationScript = `<script>
+const hydrate = () => import(${JSON.stringify(entryUrl)});
+if (typeof PerformanceObserver !== 'undefined' && PerformanceObserver.supportedEntryTypes.includes('paint')) {
+  const observer = new PerformanceObserver((list) => {
+    if (list.getEntries().some((entry) => entry.name === 'first-contentful-paint')) {
+      observer.disconnect();
+      hydrate();
+    }
+  });
+  observer.observe({ type: 'paint', buffered: true });
+} else {
+  requestAnimationFrame(() => requestAnimationFrame(hydrate));
+}
+</script>`
+const template = appShell
+  .replace(stylesheetPattern, `<style>${criticalCss}</style>`)
+  .replace(entryScript, '')
+  .replace(/<link rel="modulepreload"[^>]*>/g, '')
+  .replace('</body>', `${hydrationScript}</body>`)
 
 await writeFile(resolve('dist/app.html'), appShell)
 

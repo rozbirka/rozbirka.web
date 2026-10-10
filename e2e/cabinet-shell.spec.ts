@@ -2443,3 +2443,144 @@ test('contains a long inventory QR at mobile width in the browser @hardening', a
     ),
   ).toBe(true)
 })
+
+for (const viewport of [
+  { width: 1280, height: 800 },
+  { width: 375, height: 812 },
+]) {
+  test(`car photos stay bounded and edits save the selected cover at ${viewport.width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport)
+    await installCabinetApiBoundary(page, { businessOperations: true })
+    const portrait =
+      'data:image/svg+xml,' +
+      encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="1000"><rect width="400" height="1000" fill="#367ca1"/></svg>',
+      )
+    const photos = Array.from({ length: 10 }, (_, index) => ({
+      id: `photo-${index}`,
+      storageKey: `cars/photo-${index}`,
+      url: index === 9 ? '/missing-car-photo.jpg' : portrait,
+      thumbnailUrl: portrait,
+      sortOrder: index,
+    }))
+    let car = {
+      id: 'car-1',
+      code: 'CAR-001',
+      brand: 'BMW',
+      model: 'X5',
+      year: 2020,
+      color: null,
+      vin: null,
+      notes: null,
+      status: 'active',
+      acquiredAt: '2026-08-01',
+      createdAt: '2026-08-01T12:00:00Z',
+      purchasePrice: 1000,
+      photos,
+      expenses: [],
+      profitability: null,
+    }
+    const writes: { photoKeys?: string[] }[] = []
+    await page.route('**/api/v1/cars**', async (route) => {
+      const request = route.request()
+      const path = new URL(request.url()).pathname
+      if (request.method() === 'PUT') {
+        const body = request.postDataJSON() as { photoKeys?: string[] }
+        writes.push(body)
+        car = {
+          ...car,
+          photos: (body.photoKeys ?? []).map((key, index) => ({
+            ...photos.find((photo) => photo.storageKey === key)!,
+            sortOrder: index,
+          })),
+        }
+        await fulfillData(route, car)
+      } else if (path.endsWith('/parts')) {
+        await fulfillData(route, {
+          items: [],
+          page: 1,
+          pageSize: 20,
+          total: 0,
+          totalPages: 0,
+        })
+      } else if (path.endsWith('/car-1')) {
+        await fulfillData(route, car)
+      } else {
+        await fulfillData(route, {
+          items: [
+            {
+              ...car,
+              coverPhotoUrl: portrait,
+              partsCount: 0,
+              soldPartsCount: 0,
+            },
+          ],
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+        })
+      }
+    })
+    await page.route('**/missing-car-photo.jpg', (route) =>
+      route.fulfill({ status: 404, body: '' }),
+    )
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await loginFrom(page)
+    await page.goto('/app/koval/cars')
+    const card = page
+      .getByRole('list', { name: 'Список автомобілів' })
+      .getByRole('link')
+      .first()
+    await expect(card).toBeVisible()
+    const cardPhoto = await card.locator('img').boundingBox()
+    expect(cardPhoto).not.toBeNull()
+    expect(cardPhoto!.height / cardPhoto!.width).toBeCloseTo(0.75, 1)
+    await card.click()
+    const opener = page.getByRole('button', { name: /відкрити на весь екран/ })
+    await opener.click()
+    const dialog = page.getByRole('dialog')
+    const full = await dialog.locator('img').first().boundingBox()
+    expect(full!.y).toBeGreaterThanOrEqual(0)
+    expect(full!.y + full!.height).toBeLessThanOrEqual(viewport.height)
+    const strip = dialog.locator('ul')
+    const firstReachable = await strip.evaluate(
+      (element) =>
+        element.firstElementChild!.getBoundingClientRect().left >=
+        element.getBoundingClientRect().left,
+    )
+    expect(firstReachable).toBe(true)
+    await dialog.getByRole('button', { name: 'Фото 10', exact: true }).click()
+    await expect(dialog.getByText('Фото недоступне')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(opener).toBeFocused()
+    await page.goto('/app/koval/cars/car-1/edit')
+    await expect(page.getByLabel('Додати фото')).toBeEnabled()
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true)
+    await page
+      .getByRole('button', { name: 'Зробити обкладинкою фото 2', exact: true })
+      .click()
+    await page
+      .getByRole('button', { name: 'Прибрати фото 2', exact: true })
+      .click()
+    expect(writes).toHaveLength(0)
+    await page
+      .getByRole('button', { name: 'Зберегти зміни', exact: true })
+      .first()
+      .click()
+    await expect(page).toHaveURL('/app/koval/cars/car-1')
+    expect(writes).toHaveLength(1)
+    expect(writes[0].photoKeys).toEqual([
+      'cars/photo-1',
+      ...photos.slice(2).map((photo) => photo.storageKey),
+    ])
+    expect(errors).toEqual([])
+  })
+}
