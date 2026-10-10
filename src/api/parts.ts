@@ -248,6 +248,17 @@ export interface PartCompatibilities {
   items: PartCompatibilityItem[]
 }
 
+const normalizeCompatibilities = (
+  result: PartCompatibilities,
+): PartCompatibilities => ({
+  ...result,
+  items: (result.items ?? []).map((item) => ({
+    ...item,
+    yearFrom: item.yearFrom ?? null,
+    yearTo: item.yearTo ?? null,
+  })),
+})
+
 export interface CreatePartRequest {
   sourceType: string
   carId?: string | null
@@ -425,7 +436,7 @@ export const partsApi = {
         requestConfig(options),
       )
     ).data
-    return { ...result, items: result.items ?? [] }
+    return normalizeCompatibilities(result)
   },
   /**
    * Replaces the manual rows only: what Core observed from the donor car
@@ -442,7 +453,7 @@ export const partsApi = {
         { expectedVersion, items },
       )
     ).data
-    return { ...result, items: result.items ?? [] }
+    return normalizeCompatibilities(result)
   },
   async update(
     id: string,

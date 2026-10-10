@@ -49,6 +49,40 @@ it('sends server-supported inventory filters and preserves all selected source i
   })
 })
 
+it('normalizes omitted compatibility years to null', async () => {
+  apiClient.defaults.adapter = (config) =>
+    Promise.resolve({
+      data: {
+        data: {
+          partId: 'part-1',
+          version: 'v1',
+          items: [
+            {
+              id: 'compat-1',
+              equipmentTypeId: 'type-car',
+              equipmentTypeName: 'Легкове авто',
+              makeId: 'make-vw',
+              makeName: 'Volkswagen',
+              modelId: null,
+              modelName: null,
+              evidenceType: 'Manual',
+            },
+          ],
+        },
+      },
+      status: 200,
+      statusText: 'OK',
+      headers: new AxiosHeaders(),
+      config,
+    } satisfies AxiosResponse)
+
+  const compatibility = await partsApi.compatibilities('part-1')
+  expect(compatibility.items[0]).toMatchObject({
+    yearFrom: null,
+    yearTo: null,
+  })
+})
+
 it('round-trips only OpenAPI-supported part changes and does not fabricate compatibility fields', async () => {
   let request: InternalAxiosRequestConfig | undefined
   apiClient.defaults.adapter = (config) => {

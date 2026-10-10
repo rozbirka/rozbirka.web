@@ -610,6 +610,34 @@ it('loads only the source selector that becomes relevant', async () => {
 })
 
 it('shows server-authoritative compatibility as read-only when mutation is absent from the contract', async () => {
+  partMocks.compatibilities.mockResolvedValueOnce({
+    partId: 'part-1',
+    version: 'v1',
+    items: [
+      {
+        id: 'compat-1',
+        equipmentTypeId: 'type-car',
+        equipmentTypeName: 'Легкове авто',
+        makeId: 'make-ford',
+        makeName: 'Ford',
+        modelId: 'model-focus',
+        modelName: 'Focus',
+        yearFrom: 2018,
+        yearTo: 2018,
+        evidenceType: 'DonorObservation',
+      },
+      {
+        id: 'compat-2',
+        equipmentTypeId: 'type-car',
+        equipmentTypeName: 'Легкове авто',
+        makeId: 'make-vw',
+        makeName: 'Volkswagen',
+        modelId: null,
+        modelName: null,
+        evidenceType: 'Manual',
+      },
+    ],
+  })
   partMocks.get.mockResolvedValue({
     id: 'part-1',
     name: 'Bumper',
@@ -646,6 +674,8 @@ it('shows server-authoritative compatibility as read-only when mutation is absen
   const card = await screen.findByRole('region', { name: /Сумісність/ })
   expect(within(card).getByText('Ford Focus')).toBeVisible()
   expect(within(card).getByText('2018')).toBeVisible()
+  expect(within(card).getByText('—')).toBeVisible()
+  expect(within(card).queryByText('undefined')).not.toBeInTheDocument()
   // The donor row is Core's own, and the screen says so rather than offering
   // an edit that would be refused.
   expect(within(card).getByText('авто-джерело, не редагується')).toBeVisible()
@@ -764,8 +794,156 @@ it('shows the fixed condition choices in a separate card when editing a part', a
     within(condition).getByRole('radio', { name: 'Задовільний' }),
   ).toHaveAttribute('aria-checked', 'true')
   expect(
+    within(conditionCard).getByText(
+      'Справна, є сліди використання або дрібні косметичні дефекти.',
+    ),
+  ).toBeVisible()
+  fireEvent.click(
+    within(condition).getByRole('radio', { name: 'На запчастини' }),
+  )
+  expect(
+    within(condition).getByRole('radio', { name: 'На запчастини' }),
+  ).toHaveAttribute('aria-checked', 'true')
+  fireEvent.click(screen.getByRole('button', { name: 'Зберегти зміни' }))
+  await vi.waitFor(() =>
+    expect(partMocks.update).toHaveBeenCalledWith(
+      'part-1',
+      expect.objectContaining({ condition: 'scrap' }),
+      expect.anything(),
+    ),
+  )
+  expect(
     screen.queryByRole('combobox', { name: 'Стан' }),
   ).not.toBeInTheDocument()
+})
+
+it('shows saved compatibility rows in the part edit screen', async () => {
+  partMocks.get.mockResolvedValueOnce({
+    id: 'part-1',
+    source: 'batch',
+    carId: null,
+    intakeId: 'intake-1',
+    name: 'Фара',
+    quantityTotal: 1,
+    unit: 'шт',
+    condition: 'good',
+    notes: null,
+    oemCode: null,
+    partType: null,
+    desiredSalePrice: null,
+    compatCarBrand: null,
+    compatCarModel: null,
+    compatCarYear: null,
+  })
+  partMocks.compatibilities.mockResolvedValueOnce({
+    partId: 'part-1',
+    version: 'v1',
+    items: [
+      {
+        id: 'compat-1',
+        equipmentTypeId: 'type-car',
+        equipmentTypeName: 'Легкове авто',
+        makeId: 'make-ford',
+        makeName: 'Ford',
+        modelId: 'model-focus',
+        modelName: 'Focus',
+        yearFrom: 2018,
+        yearTo: 2018,
+        evidenceType: 'Manual',
+      },
+      {
+        id: 'compat-2',
+        equipmentTypeId: 'type-car',
+        equipmentTypeName: 'Легкове авто',
+        makeId: 'make-vw',
+        makeName: 'Volkswagen',
+        modelId: null,
+        modelName: null,
+        evidenceType: 'Manual',
+      },
+    ],
+  })
+
+  render(
+    <MemoryRouter initialEntries={['/app/yard/parts/part-1/edit']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/parts/:partId/edit"
+          element={<PartsScreen definition={partsDefinition as never} />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const compatibility = await screen.findByRole('region', {
+    name: 'Сумісність',
+  })
+  expect(await within(compatibility).findByText('Ford')).toBeVisible()
+  expect(within(compatibility).getByText('Focus')).toBeVisible()
+  expect(within(compatibility).getByText('2018')).toBeVisible()
+  expect(within(compatibility).getByText('Volkswagen')).toBeVisible()
+  expect(within(compatibility).getByText('—')).toBeVisible()
+  expect(within(compatibility).queryByText('undefined')).not.toBeInTheDocument()
+  expect(partMocks.compatibilities).toHaveBeenCalledWith(
+    'part-1',
+    expect.objectContaining({
+      signal: expect.any(AbortSignal) as AbortSignal,
+    }),
+  )
+})
+
+it('opens part editing from its card in a side drawer and closes back to the card', async () => {
+  partMocks.get.mockResolvedValue({
+    id: 'part-1',
+    name: 'Фара',
+    source: 'batch',
+    carId: null,
+    intakeId: 'intake-1',
+    condition: 'good',
+    status: 'available',
+    quantityTotal: 1,
+    quantityAvailable: 1,
+    quantityReserved: 0,
+    quantitySoldTotal: 0,
+    unit: 'шт',
+    notes: null,
+    oemCode: null,
+    partType: null,
+    desiredSalePrice: null,
+    photos: [],
+    reservations: null,
+    order: null,
+    soldOrders: null,
+    createdByName: 'Олена',
+    createdAt: '2026-08-28T12:00:00Z',
+  })
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant/parts/:partId',
+        element: <PartsScreen definition={partsDefinition as never} />,
+      },
+      {
+        path: '/app/:tenant/parts/:partId/edit',
+        element: <PartsScreen definition={partsDefinition as never} />,
+      },
+    ],
+    { initialEntries: ['/app/yard/parts/part-1'] },
+  )
+  const user = userEvent.setup()
+  render(<RouterProvider router={router} />)
+
+  await user.click(await screen.findByRole('link', { name: 'Редагувати' }))
+  expect(router.state.location.pathname).toBe('/app/yard/parts/part-1/edit')
+  const drawer = await screen.findByRole('dialog', {
+    name: 'Редагувати деталь',
+  })
+  expect(
+    within(drawer).getByRole('button', { name: 'Зберегти зміни' }),
+  ).toBeVisible()
+  await user.click(within(drawer).getByRole('button', { name: 'Закрити' }))
+  expect(router.state.location.pathname).toBe('/app/yard/parts/part-1')
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })
 
 it('creates a part with every supported source, inventory, price, and compatibility field', async () => {
@@ -1121,6 +1299,7 @@ it('loads existing edit values and updates every field accepted by the immutable
   )
 
   expect(await screen.findByLabelText('Назва')).toHaveValue('Front bumper')
+  expect(screen.getAllByRole('region', { name: 'Фото' })).toHaveLength(1)
   // The source is stated, not editable — it is fixed when the part is born.
   expect(await screen.findByText(/З авто · CAR-01/)).toBeInTheDocument()
   expect(screen.queryByLabelText('ID джерела')).not.toBeInTheDocument()

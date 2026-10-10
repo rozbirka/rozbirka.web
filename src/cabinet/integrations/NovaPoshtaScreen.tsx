@@ -379,7 +379,7 @@ export function NovaPoshtaScreen() {
     {
       id: 'points',
       label: t('tabPoints'),
-      ...(points === null ? {} : { badge: String(points) }),
+      ...(points == null ? {} : { badge: String(points) }),
     },
     {
       id: 'statuses',
@@ -551,7 +551,7 @@ export function NovaPoshtaScreen() {
             <Stat
               label={t('statPoints')}
               note={t('statPointsNote')}
-              value={points === null ? '—' : String(points)}
+              value={points == null ? '—' : String(points)}
             />
             <Stat
               label={t('statFailures')}
@@ -561,7 +561,7 @@ export function NovaPoshtaScreen() {
                   : t('statFailuresBad')
               }
               tone={failures !== null && failures > 0 ? 'danger' : 'plain'}
-              value={failures === null ? '—' : String(failures)}
+              value={failures == null ? '—' : String(failures)}
             />
             <Stat
               label={t('statDeliveries')}

@@ -21,6 +21,7 @@ const methods: Record<string, readonly string[]> = {
   '/auth/logout': ['POST'],
   '/auth/me': ['GET', 'DELETE'],
   '/auth/me/name': ['PATCH'],
+  '/auth/me/language': ['PATCH'],
 }
 const safeCodes = new Set([
   'OTP_INVALID',
@@ -43,7 +44,17 @@ function user(value: unknown) {
     typeof value.displayName !== 'string'
   )
     return null
-  return { id: value.id, phone: value.phone, displayName: value.displayName }
+  return {
+    id: value.id,
+    phone: value.phone,
+    displayName: value.displayName,
+    ...(value.language === null ||
+    value.language === 'uk' ||
+    value.language === 'en-GB' ||
+    value.language === 'pl'
+      ? { language: value.language }
+      : {}),
+  }
 }
 
 /** Transport-only native relay. Core owns auth; registration is never relayed. */
@@ -94,6 +105,15 @@ export async function handleNativeAuth(
       if (!text(input.name, 64))
         return jsonProblem(400, 'INVALID_REQUEST', 'Invalid request')
       body = { name: input.name }
+    } else if (url.pathname.endsWith('/language')) {
+      if (
+        input.language !== null &&
+        input.language !== 'uk' &&
+        input.language !== 'en-GB' &&
+        input.language !== 'pl'
+      )
+        return jsonProblem(400, 'INVALID_REQUEST', 'Invalid request')
+      body = { language: input.language }
     } else {
       if (!text(input.refreshToken, 1024))
         return jsonProblem(400, 'INVALID_REQUEST', 'Invalid request')

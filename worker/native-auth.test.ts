@@ -171,6 +171,69 @@ it.each([
   expect(result?.headers.get('set-cookie')).toBeNull()
 })
 
+it.each(['pl', null])(
+  'relays a personal language choice %s and returns the saved profile language',
+  async (language) => {
+    let upstream: Request | undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init: RequestInit) => {
+        upstream = new Request(input, init)
+        return Promise.resolve(
+          Response.json({
+            data: {
+              user: { ...auth.user, language },
+              accessToken: 'next-access',
+              expiresIn: 3600,
+            },
+          }),
+        )
+      }),
+    )
+
+    const result = await handleNativeAuth(
+      request(
+        '/auth/me/language',
+        'PATCH',
+        { language, ignored: 'drop' },
+        { authorization: 'Bearer access', cookie: 'browser=never-forward' },
+      ),
+      env,
+    )
+
+    expect(result?.status).toBe(200)
+    expect(upstream?.url).toBe(`${env.CORE_ORIGIN}/auth/me/language`)
+    expect(await upstream?.json()).toEqual({ language })
+    expect(upstream?.headers.get('authorization')).toBe('Bearer access')
+    expect(upstream?.headers.get('cookie')).toBeNull()
+    expect(await result?.json()).toEqual({
+      data: {
+        user: { ...auth.user, language },
+        accessToken: 'next-access',
+        expiresIn: 3600,
+      },
+    })
+  },
+)
+
+it('returns the saved language when native mobile reads its profile', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() =>
+      Promise.resolve(
+        Response.json({ data: { ...auth.user, language: 'pl' } }),
+      ),
+    ),
+  )
+  const result = await handleNativeAuth(
+    request('/auth/me', 'GET', {}, { authorization: 'Bearer access' }),
+    env,
+  )
+  expect(await result?.json()).toEqual({
+    data: { ...auth.user, language: 'pl' },
+  })
+})
+
 it('preserves safe 429 Retry-After but not upstream error details', async () => {
   vi.stubGlobal(
     'fetch',

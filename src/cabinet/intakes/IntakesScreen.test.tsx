@@ -5,6 +5,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { intakesApi } from '@/api/intakes'
 import { mediaApi } from '@/api/media'
 import { partsApi } from '@/api/parts'
+import { equipmentApi } from '@/api/equipment'
 import type { PlanUsageDto } from '@/api/types'
 import { useCabinet } from '../CabinetContext'
 import { IntakesScreen } from './IntakesScreen'
@@ -25,6 +26,15 @@ vi.mock('@/api/intakes', () => ({
 vi.mock('@/api/parts', () => ({
   partsApi: {
     update: vi.fn(),
+    compatibilities: vi.fn(),
+    replaceCompatibilities: vi.fn(),
+  },
+}))
+vi.mock('@/api/equipment', () => ({
+  equipmentApi: {
+    types: vi.fn(),
+    makes: vi.fn(),
+    models: vi.fn(),
   },
 }))
 vi.mock('@/api/media', () => ({
@@ -179,6 +189,23 @@ beforeEach(() => {
     url: 'https://cdn.example/part.jpg',
   })
   vi.mocked(mediaApi.remove).mockResolvedValue(undefined)
+  vi.mocked(equipmentApi.types).mockResolvedValue([
+    { id: 'type-car', code: 'passenger_car', name: 'Passenger car' },
+  ])
+  vi.mocked(equipmentApi.makes).mockResolvedValue([
+    { id: 'make-vw', equipmentTypeId: 'type-car', name: 'Volkswagen' },
+  ])
+  vi.mocked(equipmentApi.models).mockResolvedValue([])
+  vi.mocked(partsApi.compatibilities).mockResolvedValue({
+    partId: 'part-new',
+    version: 'v1',
+    items: [],
+  })
+  vi.mocked(partsApi.replaceCompatibilities).mockResolvedValue({
+    partId: 'part-new',
+    version: 'v2',
+    items: [],
+  })
 })
 
 it('loads the URL search and status list state through the server adapter', async () => {
@@ -555,7 +582,7 @@ it('allows no-photo part creation without parts.manage and exposes upload only w
   expect(screen.queryByLabelText('Додати фото')).not.toBeInTheDocument()
   await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Бампер')
   await user.click(
-    within(screen.getByRole('region', { name: 'Нова позиція' })).getByRole(
+    within(screen.getByRole('dialog', { name: 'Додати деталь' })).getByRole(
       'button',
       { name: 'Додати деталь' },
     ),
@@ -592,6 +619,139 @@ it('allows no-photo part creation without parts.manage and exposes upload only w
   )
 
   expect(await screen.findByLabelText('Додати фото')).toBeEnabled()
+})
+
+it('uses the standard condition choices and compatibility section without invented part costs', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage', 'parts.view']),
+  )
+  vi.mocked(intakesApi.addPart).mockResolvedValue({ id: 'part-new' } as never)
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId/parts/new"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const condition = await screen.findByRole('radiogroup', {
+    name: 'Стан деталі',
+  })
+  expect(within(condition).getAllByRole('radio')).toHaveLength(3)
+  expect(
+    within(condition).getByRole('radio', { name: 'Задовільний' }),
+  ).toBeVisible()
+  expect(screen.getByRole('heading', { name: /Сумісність/ })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Додати ще авто' })).toBeVisible()
+  expect(screen.queryByText('Собівартість')).not.toBeInTheDocument()
+  expect(screen.queryByText('Маржа')).not.toBeInTheDocument()
+  await user.click(
+    within(condition).getByRole('radio', { name: 'Задовільний' }),
+  )
+  await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Бампер')
+  await user.click(saveButton('Додати деталь'))
+  await waitFor(() =>
+    expect(intakesApi.addPart).toHaveBeenCalledWith(
+      'intake-1',
+      expect.objectContaining({ condition: 'fair' }),
+      expect.anything(),
+    ),
+  )
+})
+
+it('saves intake part compatibility and retries without adding a duplicate part', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage', 'parts.view', 'parts.manage']),
+  )
+  vi.mocked(intakesApi.addPart).mockResolvedValue({ id: 'part-new' } as never)
+  vi.mocked(partsApi.replaceCompatibilities)
+    .mockRejectedValueOnce(new Error('Temporary failure'))
+    .mockResolvedValueOnce({ partId: 'part-new', version: 'v2', items: [] })
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({ Results: [{ MakeId: 1, MakeName: 'Volkswagen' }] }),
+    }),
+  )
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId/parts/new"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+  await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Фара')
+  await user.click(screen.getByRole('button', { name: 'Додати ще авто' }))
+  await user.click(screen.getByRole('button', { name: 'Марка' }))
+  await user.click(await screen.findByRole('option', { name: 'Volkswagen' }))
+  await user.type(screen.getByRole('textbox', { name: 'Рік' }), '2018')
+  await user.click(saveButton('Додати деталь'))
+  await waitFor(() =>
+    expect(partsApi.replaceCompatibilities).toHaveBeenCalledTimes(1),
+  )
+  expect(intakesApi.addPart).toHaveBeenCalledTimes(1)
+  expect(partsApi.replaceCompatibilities).toHaveBeenCalledWith(
+    'part-new',
+    'v1',
+    [
+      {
+        equipmentTypeId: 'type-car',
+        makeId: 'make-vw',
+        modelId: null,
+        yearFrom: 2018,
+        yearTo: 2018,
+      },
+    ],
+  )
+  await user.click(saveButton('Додати деталь'))
+  await waitFor(() =>
+    expect(partsApi.replaceCompatibilities).toHaveBeenCalledTimes(2),
+  )
+  expect(intakesApi.addPart).toHaveBeenCalledTimes(1)
+  vi.unstubAllGlobals()
+})
+
+it('opens add-part over its intake in a side drawer and returns to the intake on close', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage', 'parts.view']),
+  )
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId"
+          element={<IntakesScreen />}
+        />
+        <Route
+          path="/app/:tenant/intakes/:intakeId/parts/new"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  await user.click(
+    (await screen.findAllByRole('link', { name: 'Додати деталь' }))[0]!,
+  )
+  const drawer = await screen.findByRole('dialog', { name: 'Додати деталь' })
+  expect(drawer).toHaveClass('sm:right-0')
+  expect(document.querySelector('[role="main"]')).toHaveTextContent(
+    'Липнева партія',
+  )
+  await user.click(within(drawer).getByRole('button', { name: 'Закрити' }))
+  expect(screen.queryByRole('dialog', { name: 'Додати деталь' })).toBeNull()
+  expect(screen.getByRole('heading', { name: 'Липнева партія' })).toBeVisible()
 })
 
 it('rechecks parts.view before uploading intake-part media', async () => {
@@ -648,11 +808,14 @@ it('locks add-part submit, prevents duplicates, normalizes conflict, and retains
 
   await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Бампер')
   const save = within(
-    screen.getByRole('region', { name: 'Нова позиція' }),
+    screen.getByRole('dialog', { name: 'Додати деталь' }),
   ).getByRole('button', { name: 'Додати деталь' })
   await user.click(save)
   expect(save).toBeDisabled()
-  expect(save.closest('form')).toHaveAttribute('aria-busy', 'true')
+  expect(document.querySelector('#intake-part-form')).toHaveAttribute(
+    'aria-busy',
+    'true',
+  )
   await user.click(save)
   expect(intakesApi.addPart).toHaveBeenCalledTimes(1)
   rejectPart({ kind: 'conflict', message: 'QR-код уже використано.' })
