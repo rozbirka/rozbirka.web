@@ -1,5 +1,11 @@
 import { useState } from 'react'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, it, vi } from 'vitest'
 import { Button } from './button'
@@ -666,4 +672,23 @@ it('introduces a record by its own name with the specification under it', () => 
 
   expect(screen.getByText('A-104')).toBeVisible()
   expect(screen.getByText('Tesla Model Y (2023)')).toBeVisible()
+})
+
+it('returns focus to the gallery opener and explains unavailable full photos', async () => {
+  const user = userEvent.setup()
+  render(
+    <Gallery
+      label="Фото"
+      photos={[{ id: 'one', url: '/missing.jpg', alt: 'Авто' }]}
+    />,
+  )
+  const opener = screen.getByRole('button', {
+    name: 'Авто — відкрити на весь екран',
+  })
+  await user.click(opener)
+  const dialog = screen.getByRole('dialog')
+  fireEvent.error(within(dialog).getByRole('img', { name: 'Авто' }))
+  expect(within(dialog).getByText('Фото недоступне')).toBeVisible()
+  await user.keyboard('{Escape}')
+  expect(opener).toHaveFocus()
 })
