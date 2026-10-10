@@ -35,6 +35,7 @@ export const mediaApi = {
       {
         headers: { 'Content-Type': 'multipart/form-data' },
         params: { entityType },
+        timeout: 60000,
         ...requestConfig(options),
       },
     )

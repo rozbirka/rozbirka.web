@@ -47,6 +47,7 @@ describe('mediaApi', () => {
 
     expect(request.url).toBe('/media/upload')
     expect(request.method).toBe('post')
+    expect(request.timeout).toBe(60000)
     expect(request.params).toEqual({ entityType: 'cars' })
     expect(request.data).toBeInstanceOf(FormData)
     expect((request.data as FormData).get('file')).toBe(file)
