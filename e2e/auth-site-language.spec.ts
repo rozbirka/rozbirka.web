@@ -22,6 +22,10 @@ for (const entry of [
     page,
   }) => {
     await page.goto('/')
+    await expect(page.locator('#root')).toHaveAttribute(
+      'data-app-hydrated',
+      'true',
+    )
     const mobile = (page.viewportSize()?.width ?? 1280) < 1024
     if (mobile) {
       await page.getByRole('button', { name: 'Відкрити меню' }).click()
