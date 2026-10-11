@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { ToastProvider } from '@/components/app'
 import { useCabinet } from '../CabinetContext'
 import { cabinetModules } from '../module-registry'
+import { tenantRequestScope } from '../tenant-request-scope'
 import { CashScreen } from './CashScreen'
 
 const cashMocks = vi.hoisted(() => ({
@@ -1263,6 +1264,39 @@ it('keeps current bank currencies visible when addition fails', async () => {
   expect(screen.getByText('UAH (Українська гривня)')).toBeVisible()
   expect(screen.queryByText('GBP (Фунт стерлінгів)')).not.toBeInTheDocument()
   expect(cashMocks.getById).toHaveBeenCalledTimes(2)
+})
+
+it('ignores a bank currency failure after the tenant scope changes', async () => {
+  cashMocks.getById.mockResolvedValue({
+    id: 'cash-1',
+    name: 'Банк',
+    type: 'bank',
+    isActive: true,
+    balances: { UAH: 100 },
+  })
+  let rejectAddition!: (reason: unknown) => void
+  cashMocks.addCurrency.mockImplementation(
+    () =>
+      new Promise((_, reject) => {
+        rejectAddition = reject
+      }),
+  )
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/cash/cash-1/edit']}>
+      <CashScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await user.click(await screen.findByRole('button', { name: 'Додати GBP' }))
+  await act(async () => {
+    tenantRequestScope.rotate()
+    rejectAddition({ kind: 'conflict', message: 'Old tenant failed' })
+    await Promise.resolve()
+  })
+
+  expect(screen.queryByText('Old tenant failed')).not.toBeInTheDocument()
+  expect(screen.getByText('UAH (Українська гривня)')).toBeVisible()
 })
 
 it('does not offer removal of the final bank currency', async () => {

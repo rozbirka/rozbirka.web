@@ -500,14 +500,15 @@ function CashRegisterEdit({
     if (busy || !mutationsAllowed) return
     setBusy(true)
     setError(null)
+    let scope: ReturnType<typeof requireLatestMutation> | null = null
     try {
-      const scope = requireLatestMutation({ quota: false })
+      scope = requireLatestMutation({ quota: false })
       if (action === 'add') await cashApi.addCurrency(registerId, currency)
       else await cashApi.removeCurrency(registerId, currency)
       if (scope.signal.aborted) return
       await load(scope.signal)
     } catch (failure) {
-      setError(problemMessage(failure, t))
+      if (!scope?.signal.aborted) setError(problemMessage(failure, t))
     } finally {
       setBusy(false)
     }
