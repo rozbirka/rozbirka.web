@@ -8,6 +8,44 @@ export interface PrintableZoneLabel {
   zoneName: string
   zoneCode: string
   warehouseName: string
+  kind?: 'warehouse' | 'zone' | 'section' | 'shelf'
+  path?: string[]
+}
+
+const locationText: Record<
+  Locale,
+  {
+    title: string
+    kinds: Record<NonNullable<PrintableZoneLabel['kind']>, string>
+  }
+> = {
+  uk: {
+    title: 'QR-етикетки місць зберігання',
+    kinds: {
+      warehouse: 'Склад',
+      zone: 'Зона',
+      section: 'Секція',
+      shelf: 'Полиця',
+    },
+  },
+  'en-GB': {
+    title: 'Location QR labels',
+    kinds: {
+      warehouse: 'Warehouse',
+      zone: 'Zone',
+      section: 'Section',
+      shelf: 'Shelf',
+    },
+  },
+  pl: {
+    title: 'Etykiety QR lokalizacji',
+    kinds: {
+      warehouse: 'Magazyn',
+      zone: 'Strefa',
+      section: 'Sekcja',
+      shelf: 'Półka',
+    },
+  },
 }
 
 const escapeHtml = (value: string) =>
@@ -42,10 +80,11 @@ export const buildZoneLabelHtml = async (
   const body = labels
     .map(
       ({ zone, svg }) => `<article class="label">
-  <div class="qr" role="img" aria-label="${text('qrAlt', zone.zoneName)}">${svg}</div>
+  <div class="qr" role="img" aria-label="${zone.kind && zone.kind !== 'zone' ? escapeHtml(`${locationText[locale].kinds[zone.kind]} QR ${zone.zoneName}`) : text('qrAlt', zone.zoneName)}">${svg}</div>
+  ${zone.kind ? `<span>${escapeHtml(locationText[locale].kinds[zone.kind])}</span>` : ''}
   <strong>${escapeHtml(zone.zoneName)}</strong>
   <span>${escapeHtml(zone.zoneCode)}</span>
-  <small>${escapeHtml(zone.warehouseName)}</small>
+  <small>${escapeHtml((zone.path ?? [zone.warehouseName]).join(' · '))}</small>
 </article>`,
     )
     .join('\n')
@@ -55,7 +94,7 @@ export const buildZoneLabelHtml = async (
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>${text('documentTitle')}</title>
+  <title>${zones.some((zone) => zone.kind && zone.kind !== 'zone') ? escapeHtml(locationText[locale].title) : text('documentTitle')}</title>
   <style>
     @page { size: 40mm 58mm; margin: 0; }
     html,body{margin:0;padding:0}

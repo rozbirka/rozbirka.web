@@ -5,6 +5,17 @@ import type { components } from './generated/core'
 export type Warehouse = components['schemas']['WarehouseDto']
 export type WarehouseDetail = components['schemas']['WarehouseDetailDto']
 export type InventoryZone = components['schemas']['InventoryZoneDto']
+export interface InventorySection {
+  id: string
+  zoneId: string
+  zoneName: string
+  warehouseId: string
+  warehouseName: string
+  name: string
+  code: string
+  qrCode: string
+  isActive: boolean
+}
 export interface InventoryShelf {
   id: string
   zoneId: string
@@ -15,6 +26,8 @@ export interface InventoryShelf {
   code: string
   qrCode: string
   isActive: boolean
+  sectionId: string
+  sectionName: string
 }
 export type InventorySession = components['schemas']['InventorySessionDto']
 export type InventorySessionResults =
@@ -31,6 +44,8 @@ export type PartInventoryZone =
     shelfId?: string | null
     shelfName?: string | null
     shelfCode?: string | null
+    sectionId?: string | null
+    sectionName?: string | null
   }
 
 export interface WarehouseInput {
@@ -171,8 +186,53 @@ export const inventoryApi = {
       })
     ).data
   },
-  async createShelf(
+  async getSections(
+    zoneId?: string,
+    options: RequestOptions = {},
+  ): Promise<InventorySection[]> {
+    return (
+      await apiClient.get<InventorySection[]>('/inventory/sections', {
+        ...config(options),
+        params: zoneId ? { zoneId } : undefined,
+      })
+    ).data
+  },
+  async createSection(
     input: { zoneId: string; name: string; code: string },
+    options: RequestOptions = {},
+  ): Promise<InventorySection> {
+    return (
+      await apiClient.post<InventorySection>(
+        '/inventory/sections',
+        input,
+        config(options),
+      )
+    ).data
+  },
+  async updateSection(
+    sectionId: string,
+    input: { name: string; code: string; isActive: boolean },
+    options: RequestOptions = {},
+  ): Promise<InventorySection> {
+    return (
+      await apiClient.put<InventorySection>(
+        `/inventory/sections/${id(sectionId)}`,
+        input,
+        config(options),
+      )
+    ).data
+  },
+  async archiveSection(
+    sectionId: string,
+    options: RequestOptions = {},
+  ): Promise<void> {
+    await apiClient.delete(
+      `/inventory/sections/${id(sectionId)}`,
+      config(options),
+    )
+  },
+  async createShelf(
+    input: { zoneId: string; sectionId: string; name: string; code: string },
     options: RequestOptions = {},
   ): Promise<InventoryShelf> {
     return (
@@ -218,11 +278,16 @@ export const inventoryApi = {
     zoneIds: string[],
     options: RequestOptions = {},
     shelfId?: string,
+    sectionId?: string,
   ): Promise<PartInventoryZone[]> {
     return (
       await apiClient.put<PartInventoryZone[]>(
         `/parts/${id(partId)}/inventory-zones`,
-        { zoneIds, ...(shelfId ? { shelfId } : {}) },
+        {
+          zoneIds,
+          ...(shelfId ? { shelfId } : {}),
+          ...(sectionId ? { sectionId } : {}),
+        },
         config(options),
       )
     ).data
