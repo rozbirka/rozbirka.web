@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import {
   commonMessages,
   currencyName,
+  parseCurrency,
   SUPPORTED_CURRENCIES,
   useLocale,
   useT,
@@ -450,6 +451,8 @@ function CashRegisterEdit({
 }: CabinetModuleScreenProps & { registerId: string }) {
   const t = useT(cashMessages)
   const tc = useT(commonMessages)
+  const { locale } = useLocale()
+  const { money } = useCashText()
   const cabinet = useCabinet()
   const location = useLocation()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
@@ -490,6 +493,22 @@ function CashRegisterEdit({
       await navigate(detailPath, { replace: true })
     } catch (failure) {
       setError(problemMessage(failure, t))
+      setBusy(false)
+    }
+  }
+  const changeCurrency = async (currency: string, action: 'add' | 'remove') => {
+    if (busy || !mutationsAllowed) return
+    setBusy(true)
+    setError(null)
+    try {
+      const scope = requireLatestMutation({ quota: false })
+      if (action === 'add') await cashApi.addCurrency(registerId, currency)
+      else await cashApi.removeCurrency(registerId, currency)
+      if (scope.signal.aborted) return
+      await load(scope.signal)
+    } catch (failure) {
+      setError(problemMessage(failure, t))
+    } finally {
       setBusy(false)
     }
   }
@@ -560,6 +579,69 @@ function CashRegisterEdit({
               value={name}
             />
           </Field>
+          <fieldset className="grid gap-3">
+            <legend className="text-app-muted text-sm font-semibold">
+              {t('currencies')}
+            </legend>
+            <div className="grid gap-2">
+              {Object.entries(register.balances).map(([code, balance]) => {
+                const supportedCode = parseCurrency(code)
+                const canRemove =
+                  mutationsAllowed &&
+                  balance === 0 &&
+                  !(
+                    register.type === 'bank' &&
+                    Object.keys(register.balances).length === 1
+                  )
+                return (
+                  <div
+                    className="border-app-line bg-app-input rounded-control flex items-center justify-between gap-3 border px-3 py-2"
+                    key={code}
+                  >
+                    <div>
+                      <p className="text-sm font-semibold">
+                        {code} (
+                        {supportedCode
+                          ? currencyName(supportedCode, locale)
+                          : code}
+                        )
+                      </p>
+                      <p className="text-app-dim text-xs">
+                        {money(balance, code)}
+                      </p>
+                    </div>
+                    {canRemove && (
+                      <Button
+                        aria-label={`${t('removeCurrency')} ${code}`}
+                        disabled={busy}
+                        onClick={() => void changeCurrency(code, 'remove')}
+                        type="button"
+                      >
+                        {t('removeCurrency')}
+                      </Button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            {mutationsAllowed && (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {SUPPORTED_CURRENCIES.filter(
+                  (code) => !(code in register.balances),
+                ).map((code) => (
+                  <Button
+                    aria-label={`${t('addCurrency')} ${code}`}
+                    disabled={busy}
+                    key={code}
+                    onClick={() => void changeCurrency(code, 'add')}
+                    type="button"
+                  >
+                    + {code}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </fieldset>
         </form>
       )}
     </Sheet>
