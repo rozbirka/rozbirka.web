@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { ToastProvider } from '@/components/app'
 import { useCabinet } from '../CabinetContext'
 import { cabinetModules } from '../module-registry'
+import { tenantRequestScope } from '../tenant-request-scope'
 import { CashScreen } from './CashScreen'
 
 const cashMocks = vi.hoisted(() => ({
@@ -68,6 +69,86 @@ beforeEach(() => {
     endUtc: '2026-09-18T00:00:00Z',
     registers: [],
   })
+})
+
+it('reactivates an inactive cash register and restores its active actions', async () => {
+  let active = false
+  cashMocks.getById.mockImplementation(() =>
+    Promise.resolve({
+      id: 'cash-1',
+      name: 'Резерв',
+      type: 'bank',
+      isActive: active,
+      balances: { EUR: 0 },
+    }),
+  )
+  cashMocks.transactions.mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 20,
+    totalPages: 0,
+  })
+  cashMocks.activate.mockImplementation(() => {
+    active = true
+    return Promise.resolve({
+      id: 'cash-1',
+      name: 'Резерв',
+      type: 'bank',
+      isActive: true,
+      balances: { EUR: 0 },
+    })
+  })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/cash/cash-1']}>
+      <CashScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  expect(
+    await screen.findByRole('button', { name: 'Активувати касу' }),
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: 'Нова операція' }),
+  ).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Активувати касу' }))
+
+  await waitFor(() => expect(cashMocks.activate).toHaveBeenCalledWith('cash-1'))
+  expect(
+    await screen.findByRole('button', { name: 'Нова операція' }),
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: 'Активувати касу' }),
+  ).not.toBeInTheDocument()
+})
+
+it('does not offer activation without finance.manage', async () => {
+  vi.mocked(useCabinet).mockReturnValue(cabinet(['finance.view']))
+  cashMocks.getById.mockResolvedValue({
+    id: 'cash-1',
+    name: 'Резерв',
+    type: 'bank',
+    isActive: false,
+    balances: { EUR: 0 },
+  })
+  cashMocks.transactions.mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 20,
+    totalPages: 0,
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/garage/cash/cash-1']}>
+      <CashScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByRole('heading', { name: 'Резерв' })).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: 'Активувати касу' }),
+  ).not.toBeInTheDocument()
 })
 
 it('returns from a cash register card to the cash directory', async () => {
@@ -1139,7 +1220,39 @@ it('creates a register with contract-supported currencies and opening balances',
   })
 })
 
-it('shows only the name field on the register edit screen', async () => {
+it('creates a bank register with GBP and PLN balances', async () => {
+  cashMocks.create.mockResolvedValue({ id: 'bank-2' })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/cash/new']}>
+      <CashScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await user.type(screen.getByLabelText('Назва'), 'Закордонний рахунок')
+  await user.click(screen.getByRole('button', { name: /Безготівкова/ }))
+  const currencyGroup = screen.getByRole('group', { name: 'Валюти' })
+  await user.click(
+    within(currencyGroup).getByRole('button', { name: /GBP \(/ }),
+  )
+  await user.click(
+    within(currencyGroup).getByRole('button', { name: /PLN \(/ }),
+  )
+  await user.click(
+    within(currencyGroup).getByRole('button', { name: /UAH \(/ }),
+  )
+  await user.type(screen.getByLabelText('Баланс GBP'), '100')
+  await user.click(screen.getByRole('button', { name: 'Зберегти' }))
+
+  expect(cashMocks.create).toHaveBeenCalledWith({
+    name: 'Закордонний рахунок',
+    type: 'bank',
+    currencies: ['GBP', 'PLN'],
+    initialBalances: { GBP: 100 },
+  })
+})
+
+it('shows currency management alongside the name on the register edit screen', async () => {
   cashMocks.getById.mockResolvedValue({
     id: 'cash-1',
     name: 'Основна каса',
@@ -1157,15 +1270,198 @@ it('shows only the name field on the register edit screen', async () => {
   expect(screen.getByRole('textbox', { name: 'Назва каси' })).toHaveValue(
     'Основна каса',
   )
+  expect(screen.getByRole('group', { name: 'Валюти' })).toBeVisible()
   for (const removed of [
     'Тип каси',
-    'Валюти',
     'Рахунки',
     'Відповідальний',
     'Склад',
     'Звіряння й доступ',
   ])
     expect(screen.queryByText(removed)).not.toBeInTheDocument()
+})
+
+it('adds GBP to an existing UAH bank and refreshes its currencies', async () => {
+  let balances = { UAH: 100 } as Record<string, number>
+  cashMocks.getById.mockImplementation(() =>
+    Promise.resolve({
+      id: 'cash-1',
+      name: 'Банк',
+      type: 'bank',
+      isActive: true,
+      balances,
+    }),
+  )
+  cashMocks.addCurrency.mockImplementation(() => {
+    balances = { UAH: 100, GBP: 0 }
+    return Promise.resolve()
+  })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/cash/cash-1/edit']}>
+      <CashScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await user.click(await screen.findByRole('button', { name: 'Додати GBP' }))
+
+  await waitFor(() =>
+    expect(cashMocks.addCurrency).toHaveBeenCalledWith('cash-1', 'GBP'),
+  )
+  expect(await screen.findByText('GBP (Фунт стерлінгів)')).toBeVisible()
+  expect(screen.getByText('UAH (Українська гривня)')).toBeVisible()
+})
+
+it('keeps current bank currencies visible when addition fails', async () => {
+  cashMocks.getById.mockResolvedValue({
+    id: 'cash-1',
+    name: 'Банк',
+    type: 'bank',
+    isActive: true,
+    balances: { UAH: 100 },
+  })
+  cashMocks.transactions.mockResolvedValue({
+    items: [],
+    page: 1,
+    pageSize: 20,
+    total: 0,
+    totalPages: 0,
+  })
+  cashMocks.addCurrency.mockRejectedValue({
+    kind: 'conflict',
+    message: 'Add failed',
+  })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/cash/cash-1/edit']}>
+      <CashScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await user.click(await screen.findByRole('button', { name: 'Додати GBP' }))
+
+  expect(await screen.findByText('Add failed')).toBeVisible()
+  expect(screen.getByText('UAH (Українська гривня)')).toBeVisible()
+  expect(screen.queryByText('GBP (Фунт стерлінгів)')).not.toBeInTheDocument()
+  expect(cashMocks.getById).toHaveBeenCalledTimes(2)
+})
+
+it('ignores a bank currency failure after the tenant scope changes', async () => {
+  cashMocks.getById.mockResolvedValue({
+    id: 'cash-1',
+    name: 'Банк',
+    type: 'bank',
+    isActive: true,
+    balances: { UAH: 100 },
+  })
+  let rejectAddition!: (reason: unknown) => void
+  cashMocks.addCurrency.mockImplementation(
+    () =>
+      new Promise((_, reject) => {
+        rejectAddition = reject
+      }),
+  )
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/cash/cash-1/edit']}>
+      <CashScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await user.click(await screen.findByRole('button', { name: 'Додати GBP' }))
+  await act(async () => {
+    tenantRequestScope.rotate()
+    rejectAddition({ kind: 'conflict', message: 'Old tenant failed' })
+    await Promise.resolve()
+  })
+
+  expect(screen.queryByText('Old tenant failed')).not.toBeInTheDocument()
+  expect(screen.getByText('UAH (Українська гривня)')).toBeVisible()
+})
+
+it('does not offer removal of the final bank currency', async () => {
+  cashMocks.getById.mockResolvedValue({
+    id: 'cash-1',
+    name: 'Банк',
+    type: 'bank',
+    isActive: true,
+    balances: { UAH: 0 },
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/garage/cash/cash-1/edit']}>
+      <CashScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByText('UAH (Українська гривня)')).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: 'Видалити UAH' }),
+  ).not.toBeInTheDocument()
+})
+
+it('removes an unused bank currency and refreshes the balances', async () => {
+  let balances = { UAH: 100, GBP: 0 } as Record<string, number>
+  cashMocks.getById.mockImplementation(() =>
+    Promise.resolve({
+      id: 'cash-1',
+      name: 'Банк',
+      type: 'bank',
+      isActive: true,
+      balances,
+    }),
+  )
+  cashMocks.removeCurrency.mockImplementation(() => {
+    balances = { UAH: 100 }
+    return Promise.resolve()
+  })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/cash/cash-1/edit']}>
+      <CashScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await user.click(await screen.findByRole('button', { name: 'Видалити GBP' }))
+
+  await waitFor(() =>
+    expect(cashMocks.removeCurrency).toHaveBeenCalledWith('cash-1', 'GBP'),
+  )
+  await waitFor(() =>
+    expect(screen.queryByText('GBP (Фунт стерлінгів)')).not.toBeInTheDocument(),
+  )
+  expect(screen.getByText('UAH (Українська гривня)')).toBeVisible()
+})
+
+it.each([
+  [
+    'CURRENCY_HAS_TRANSACTIONS',
+    'Валюту GBP не можна видалити, оскільки з нею вже були операції.',
+  ],
+  ['LAST_BANK_CURRENCY', 'Останню валюту банківської каси видалити не можна.'],
+  ['REGISTER_BALANCE_NOT_ZERO', 'Спочатку обнуліть баланс GBP.'],
+])('shows a Ukrainian removal error for %s', async (code, message) => {
+  cashMocks.getById.mockResolvedValue({
+    id: 'cash-1',
+    name: 'Банк',
+    type: 'bank',
+    isActive: true,
+    balances: { UAH: 0, GBP: 0 },
+  })
+  cashMocks.removeCurrency.mockRejectedValue({
+    kind: 'conflict',
+    code,
+    message: 'English server error',
+  })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/cash/cash-1/edit']}>
+      <CashScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await user.click(await screen.findByRole('button', { name: 'Видалити GBP' }))
+  expect(await screen.findByText(message)).toBeVisible()
+  expect(screen.queryByText('English server error')).not.toBeInTheDocument()
 })
 
 it('saves the register name and returns to its exact detail route', async () => {
@@ -1523,5 +1819,5 @@ it('does not render unsupported till settings', async () => {
   expect(screen.queryByText('Відповідальний')).not.toBeInTheDocument()
   expect(screen.queryByText('Склад')).not.toBeInTheDocument()
   expect(screen.queryByText('Звіряння й доступ')).not.toBeInTheDocument()
-  expect(screen.queryByText('Валюти')).not.toBeInTheDocument()
+  expect(screen.getByText('Валюти')).toBeVisible()
 })
