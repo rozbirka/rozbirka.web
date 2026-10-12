@@ -6,6 +6,7 @@ import { BrandLogo } from '@/components/site/brand-logo'
 import { NavLinks } from '@/components/site/nav-links'
 import { useLocale, useT } from '@/i18n'
 import { landingLocaleForPath, landingPathFor } from '@/seo/landing-locales'
+import { SupportLink } from './support-link'
 import { siteMessages } from './site-messages'
 
 export function SiteFooter() {
@@ -48,6 +49,9 @@ export function SiteFooter() {
 
           <div className="flex flex-wrap items-center gap-6">
             <ul role="list" className="flex flex-wrap items-center gap-6">
+              <li>
+                <SupportLink />
+              </li>
               <li>
                 {/* The privacy policy is a Ukrainian legal text only. */}
                 <a
