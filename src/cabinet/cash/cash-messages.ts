@@ -116,6 +116,8 @@ export const cashMessages = defineMessages({
     operationsTo: 'Операції до',
     ledgerPages: 'Сторінки журналу',
     saveChanges: 'Зберегти зміни',
+    activateTill: 'Активувати касу',
+    tillActivated: 'Касу активовано.',
     editTitle: 'Редагування каси',
     editNoRight:
       'Зберегти не вдасться: бракує права finance.manage. Попросіть власника кабінету відкрити доступ.',
@@ -266,6 +268,8 @@ export const cashMessages = defineMessages({
     operationsTo: 'Transactions to',
     ledgerPages: 'Ledger pages',
     saveChanges: 'Save changes',
+    activateTill: 'Activate till',
+    tillActivated: 'Till activated.',
     editTitle: 'Edit till',
     editNoRight:
       'You can’t save: the finance.manage permission is missing. Ask the account owner for access.',
@@ -441,6 +445,8 @@ export const cashMessages = defineMessages({
     operationsTo: 'Operacje do',
     ledgerPages: 'Strony dziennika',
     saveChanges: 'Zapisz zmiany',
+    activateTill: 'Aktywuj kasę',
+    tillActivated: 'Kasa aktywowana.',
     editTitle: 'Edycja kasy',
     editNoRight:
       'Nie można zapisać: brak uprawnienia finance.manage. Poproś właściciela konta o dostęp.',

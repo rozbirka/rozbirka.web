@@ -89,6 +89,8 @@ export function CashCard({
   lastOperationAt,
   canManage,
   onNewOperation,
+  onActivate,
+  activating,
   error,
   filters,
   pagination,
@@ -102,6 +104,8 @@ export function CashCard({
   lastOperationAt: string | null
   canManage: boolean
   onNewOperation?: (() => void) | undefined
+  onActivate?: (() => void) | undefined
+  activating?: boolean | undefined
   error: string | null
   filters: ReactNode
   pagination: ReactNode
@@ -146,6 +150,16 @@ export function CashCard({
               variant="primary"
             >
               {t('newOperation')}
+            </Button>
+          ) : null}
+          {canManage && !register.isActive && onActivate ? (
+            <Button
+              aria-busy={activating}
+              disabled={activating}
+              onClick={onActivate}
+              variant="primary"
+            >
+              {t('activateTill')}
             </Button>
           ) : null}
         </>

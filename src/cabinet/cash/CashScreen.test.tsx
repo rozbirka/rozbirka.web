@@ -71,6 +71,86 @@ beforeEach(() => {
   })
 })
 
+it('reactivates an inactive cash register and restores its active actions', async () => {
+  let active = false
+  cashMocks.getById.mockImplementation(() =>
+    Promise.resolve({
+      id: 'cash-1',
+      name: 'Резерв',
+      type: 'bank',
+      isActive: active,
+      balances: { EUR: 0 },
+    }),
+  )
+  cashMocks.transactions.mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 20,
+    totalPages: 0,
+  })
+  cashMocks.activate.mockImplementation(() => {
+    active = true
+    return Promise.resolve({
+      id: 'cash-1',
+      name: 'Резерв',
+      type: 'bank',
+      isActive: true,
+      balances: { EUR: 0 },
+    })
+  })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/cash/cash-1']}>
+      <CashScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  expect(
+    await screen.findByRole('button', { name: 'Активувати касу' }),
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: 'Нова операція' }),
+  ).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Активувати касу' }))
+
+  await waitFor(() => expect(cashMocks.activate).toHaveBeenCalledWith('cash-1'))
+  expect(
+    await screen.findByRole('button', { name: 'Нова операція' }),
+  ).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: 'Активувати касу' }),
+  ).not.toBeInTheDocument()
+})
+
+it('does not offer activation without finance.manage', async () => {
+  vi.mocked(useCabinet).mockReturnValue(cabinet(['finance.view']))
+  cashMocks.getById.mockResolvedValue({
+    id: 'cash-1',
+    name: 'Резерв',
+    type: 'bank',
+    isActive: false,
+    balances: { EUR: 0 },
+  })
+  cashMocks.transactions.mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 20,
+    totalPages: 0,
+  })
+  render(
+    <MemoryRouter initialEntries={['/app/garage/cash/cash-1']}>
+      <CashScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  expect(await screen.findByRole('heading', { name: 'Резерв' })).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: 'Активувати касу' }),
+  ).not.toBeInTheDocument()
+})
+
 it('returns from a cash register card to the cash directory', async () => {
   cashMocks.getById.mockResolvedValue({
     id: 'cash-1',

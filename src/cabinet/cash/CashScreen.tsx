@@ -272,6 +272,7 @@ function CashRegisterDetail({
   const [movementOpen, setMovementOpen] = useState(false)
   const [movementBusy, setMovementBusy] = useState(false)
   const [movementError, setMovementError] = useState<string | null>(null)
+  const [activateBusy, setActivateBusy] = useState(false)
   const ledgerCurrency = params.get('currency') ?? undefined
   const ledgerFrom = params.get('from') ?? undefined
   const ledgerTo = params.get('to') ?? undefined
@@ -342,6 +343,23 @@ function CashRegisterDetail({
       setMovementBusy(false)
     }
   }
+  const activateRegister = async () => {
+    if (activateBusy || !mutationsAllowed || register?.isActive) return
+    setActivateBusy(true)
+    setError(null)
+    let scope: ReturnType<typeof requireLatestMutation> | null = null
+    try {
+      scope = requireLatestMutation({ quota: false })
+      const activated = await cashApi.activate(registerId)
+      if (scope.signal.aborted) return
+      setRegister(activated)
+      toast?.show({ message: t('tillActivated'), tone: 'ok' })
+    } catch (failure) {
+      if (!scope?.signal.aborted) setError(problemMessage(failure, t))
+    } finally {
+      setActivateBusy(false)
+    }
+  }
   if (error && !register)
     return (
       <PageBody width="narrow">
@@ -366,6 +384,12 @@ function CashRegisterDetail({
       <CashCard
         cashHref={`/app/${cabinet.targetTenant?.slug ?? ''}/cash`}
         canManage={mutationsAllowed}
+        activating={activateBusy}
+        onActivate={
+          mutationsAllowed && !register.isActive
+            ? () => void activateRegister()
+            : undefined
+        }
         onNewOperation={
           mutationsAllowed && register.isActive
             ? () => {
