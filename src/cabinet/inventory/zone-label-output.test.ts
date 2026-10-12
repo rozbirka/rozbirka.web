@@ -20,7 +20,11 @@ it('encodes the raw zone code and renders a thermal-label print sheet', async ()
 
   expect(qr.toString).toHaveBeenCalledWith(
     'ZONE-1',
-    expect.objectContaining({ type: 'svg', errorCorrectionLevel: 'M' }),
+    expect.objectContaining({
+      type: 'svg',
+      errorCorrectionLevel: 'H',
+      margin: 0,
+    }),
   )
   expect(html).toContain('@page { size: 40mm 58mm; margin: 0; }')
   expect(html).toContain('A &lt; 1')
@@ -51,7 +55,7 @@ it('prints label text in the given document language', async () => {
   expect(polish).toContain('<title>Etykiety QR stref</title>')
 })
 
-it('prints the type and full ancestor path for every physical location', async () => {
+it('prints the type and full location path like the mobile label', async () => {
   qr.toString.mockClear()
   qr.toString.mockResolvedValue('<svg>qr</svg>')
   const html = await buildZoneLabelHtml([
@@ -98,5 +102,12 @@ it('prints the type and full ancestor path for every physical location', async (
   expect(html).toContain('Зона')
   expect(html).toContain('Секція')
   expect(html).toContain('Полиця')
-  expect(html).toContain('Основний · A · Стелаж · Полиця')
+  expect(html).toContain('<small>Основний · A · Стелаж · Полиця</small>')
+  const labels = new DOMParser()
+    .parseFromString(html, 'text/html')
+    .querySelectorAll('.label')
+  expect(labels.item(0)?.querySelector('small')?.textContent).toBe('Основний')
+  expect(labels.item(1)?.querySelector('small')?.textContent).toBe(
+    'Основний · A',
+  )
 })

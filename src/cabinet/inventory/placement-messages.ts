@@ -20,7 +20,7 @@ export const placementMessages = defineMessages({
     legendEmpty: 'порожня',
     legendFilled: 'є позиції',
     legendBusiest: 'найзавантаженіша',
-    zoneHint: 'Виберіть зону складу. За потреби далі вкажіть конкретну полицю.',
+    zoneHint: 'Виберіть зони складу. За потреби далі вкажіть конкретну полицю.',
     zone: 'Зона',
     section: 'Секція / стелаж',
     sectionHint: 'Секцію можна вказати після зони або зберегти деталь у зоні.',
@@ -33,10 +33,10 @@ export const placementMessages = defineMessages({
     noActiveZones: 'На цьому складі немає активних зон.',
     noZonesFound:
       'Зон за запитом не знайдено. Перевірте код або виберіть інший склад.',
-    quantityHint: 'Скільки одиниць кладемо у вибрану зону.',
+    quantityHint: 'Кількість запчастини в обраних місцях.',
     quantity: 'Кількість',
     notSplitTitle:
-      'Залишок між зонами не ділиться — запчастина лежить у зоні цілком',
+      'Залишок між зонами не ділиться — запчастина лежить у зонах цілком',
     notSplit:
       'Залишок між зонами не ділиться: запчастина лежить у вибраних зонах цілком, тому кількість тут не редагується.',
     records: {
@@ -49,6 +49,9 @@ export const placementMessages = defineMessages({
     historyHidden: 'Історію видно тим, хто має право «parts.view».',
     neverMoved: 'Запчастину ще не переміщували.',
     newPlacement: 'Нове розміщення',
+    noLocationSelected: 'Виберіть склад або зону.',
+    locationLevel: 'Рівень',
+    warehouseLevel: 'Лише склад',
     noZonesPicked: 'Зони не вибрані',
     zonesPicked: 'Зон вибрано',
     before: 'Було',
@@ -80,7 +83,7 @@ export const placementMessages = defineMessages({
     legendEmpty: 'empty',
     legendFilled: 'has items',
     legendBusiest: 'busiest',
-    zoneHint: 'Choose a warehouse zone. You can then select a specific shelf.',
+    zoneHint: 'Choose warehouse zones. You can then select a specific shelf.',
     zone: 'Zone',
     section: 'Section / rack',
     sectionHint: 'Select a section after a zone, or save the part in the zone.',
@@ -93,10 +96,10 @@ export const placementMessages = defineMessages({
     zoneSearchPlaceholder: 'Zone name or code, e.g. A1',
     noActiveZones: 'This warehouse has no active zones.',
     noZonesFound: 'No zones match. Check the code or choose another warehouse.',
-    quantityHint: 'How many units go into the selected zone.',
+    quantityHint: 'The part quantity at the selected locations.',
     quantity: 'Quantity',
     notSplitTitle:
-      'Stock isn’t split between zones — the whole part lies in the zone',
+      'Stock isn’t split between zones — the whole part lies in each zone',
     notSplit:
       'Stock isn’t split between zones: the whole part lies in the selected zones, so the quantity can’t be edited here.',
     records: { one: '{count} entry', other: '{count} entries' },
@@ -105,6 +108,9 @@ export const placementMessages = defineMessages({
       'History is visible to those with the “parts.view” permission.',
     neverMoved: 'This part hasn’t been moved yet.',
     newPlacement: 'New location',
+    noLocationSelected: 'Choose a warehouse or zone.',
+    locationLevel: 'Level',
+    warehouseLevel: 'Warehouse only',
     noZonesPicked: 'No zones selected',
     zonesPicked: 'Zones selected',
     before: 'Before',
@@ -135,7 +141,7 @@ export const placementMessages = defineMessages({
     legendFilled: 'są pozycje',
     legendBusiest: 'najbardziej zajęta',
     zoneHint:
-      'Wybierz strefę magazynu, a następnie konkretną półkę, jeśli potrzeba.',
+      'Wybierz strefy magazynu, a następnie konkretną półkę, jeśli potrzeba.',
     zone: 'Strefa',
     section: 'Sekcja / regał',
     sectionHint:
@@ -149,10 +155,10 @@ export const placementMessages = defineMessages({
     zoneSearchPlaceholder: 'Nazwa lub kod strefy, np. A1',
     noActiveZones: 'W tym magazynie nie ma aktywnych stref.',
     noZonesFound: 'Nie znaleziono stref. Sprawdź kod lub wybierz inny magazyn.',
-    quantityHint: 'Ile sztuk odkładamy do wybranej strefy.',
+    quantityHint: 'Liczba sztuk części w wybranych miejscach.',
     quantity: 'Ilość',
     notSplitTitle:
-      'Stan nie dzieli się między strefy — część leży w strefie w całości',
+      'Stan nie dzieli się między strefy — część leży w strefach w całości',
     notSplit:
       'Stan nie dzieli się między strefy: część leży w wybranych strefach w całości, dlatego ilości nie można tu edytować.',
     records: {
@@ -165,6 +171,9 @@ export const placementMessages = defineMessages({
     historyHidden: 'Historię widzą osoby z uprawnieniem „parts.view”.',
     neverMoved: 'Część nie była jeszcze przenoszona.',
     newPlacement: 'Nowa lokalizacja',
+    noLocationSelected: 'Wybierz magazyn lub strefę.',
+    locationLevel: 'Poziom',
+    warehouseLevel: 'Tylko magazyn',
     noZonesPicked: 'Nie wybrano stref',
     zonesPicked: 'Wybrane strefy',
     before: 'Było',

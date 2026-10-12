@@ -15,6 +15,7 @@ export interface InventorySection {
   code: string
   qrCode: string
   isActive: boolean
+  partCount: number
 }
 export interface InventoryShelf {
   id: string
@@ -28,6 +29,7 @@ export interface InventoryShelf {
   isActive: boolean
   sectionId: string
   sectionName: string
+  partCount: number
 }
 export type InventorySession = components['schemas']['InventorySessionDto']
 export type InventorySessionResults =

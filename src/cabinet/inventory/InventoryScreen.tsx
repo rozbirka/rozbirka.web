@@ -7,9 +7,12 @@ import {
   type ReactNode,
 } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
+import QRCode from 'qrcode'
 import {
   Archive,
   ArrowRight,
+  Check,
+  ChevronRight,
   ChevronLeft,
   ClipboardList,
   Download,
@@ -1175,7 +1178,7 @@ function WarehouseView({ id }: { id: string }) {
                 />
               </div>
 
-              <div className="flex flex-wrap items-start gap-5">
+              <div className="grid min-w-0 gap-5">
                 <Card
                   aside={
                     canManage ? (
@@ -1194,7 +1197,7 @@ function WarehouseView({ id }: { id: string }) {
                     )
                   }
                   bodyClassName="p-0 pt-4"
-                  className="min-w-0 flex-[2_1_34rem]"
+                  className="min-w-0"
                   title={t('zonesTitle')}
                 >
                   <div
@@ -1341,7 +1344,7 @@ function WarehouseView({ id }: { id: string }) {
                   warehouseId={id}
                 />
 
-                <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-5">
+                <div className="grid min-w-0 gap-5 lg:grid-cols-2 lg:items-start">
                   <section
                     aria-label={t('activeSession')}
                     className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
@@ -1669,6 +1672,38 @@ function WarehouseShelves({
     useState<InventorySection | null>(null)
   const [editing, setEditing] = useState<InventoryShelf | null>(null)
   const [archiving, setArchiving] = useState<InventoryShelf | null>(null)
+  const [expandedSectionId, setExpandedSectionId] = useState<string | null>(
+    null,
+  )
+  const [previewLocation, setPreviewLocation] = useState<{
+    location: InventorySection | InventoryShelf
+    kind: 'section' | 'shelf'
+  } | null>(null)
+  const [previewQr, setPreviewQr] = useState<{
+    code: string
+    url: string | null
+  } | null>(null)
+  useEffect(() => {
+    let active = true
+    if (previewLocation) {
+      void QRCode.toDataURL(previewLocation.location.qrCode, {
+        width: 360,
+        margin: 2,
+        errorCorrectionLevel: 'M',
+      })
+        .then((url) => {
+          if (active)
+            setPreviewQr({ code: previewLocation.location.qrCode, url })
+        })
+        .catch(() => {
+          if (active)
+            setPreviewQr({ code: previewLocation.location.qrCode, url: null })
+        })
+    }
+    return () => {
+      active = false
+    }
+  }, [previewLocation])
   const [draft, setDraft] = useState({ name: '', code: '' })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -1739,6 +1774,12 @@ function WarehouseShelves({
     }
   }
 
+  const startAddingShelf = (section: InventorySection) => {
+    setError(null)
+    setDraft({ name: '', code: '' })
+    setAddingTo(section)
+  }
+
   const printNestedLocation = async (
     location: InventorySection | InventoryShelf,
     kind: 'section' | 'shelf',
@@ -1784,7 +1825,7 @@ function WarehouseShelves({
   return (
     <Card
       title={t('shelvesTitle')}
-      className="min-w-0 flex-[1_1_20rem]"
+      className="min-w-0"
       bodyClassName="px-6 pb-6"
     >
       {error ? <Notice tone="danger">{error}</Notice> : null}
@@ -1795,7 +1836,7 @@ function WarehouseShelves({
         </Button>
       ) : null}
       {resource.state.kind === 'ready' ? (
-        <div className="grid gap-5">
+        <div className="grid gap-6">
           {zones.every((zone) => zone.isSystemUnassigned || !zone.isActive) ? (
             <div className="grid gap-4">
               <p className="text-app-muted text-sm">
@@ -1818,7 +1859,7 @@ function WarehouseShelves({
               return (
                 <section
                   aria-label={t('zoneGroup', { name: zone.name })}
-                  className="border-app-line min-w-0 rounded-xl border bg-white/[0.02] p-4"
+                  className="border-app-line min-w-0 border-t pt-6 first:border-t-0 first:pt-0"
                   key={zone.id}
                 >
                   <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
@@ -1829,6 +1870,9 @@ function WarehouseShelves({
                       <h3 className="mt-1 min-w-0 break-words text-base font-semibold text-white">
                         {zone.name}
                       </h3>
+                      <p className="text-app-muted mt-0.5 text-xs">
+                        {zone.code}
+                      </p>
                     </div>
                     {canManage ? (
                       <Button
@@ -1849,7 +1893,7 @@ function WarehouseShelves({
                       {t('noSections')}
                     </p>
                   ) : null}
-                  <div className="mt-3 grid gap-3">
+                  <div className="mt-4 grid gap-3">
                     {sections.map((section) => (
                       <div
                         aria-label={t('sectionGroup', { name: section.name })}
@@ -1858,17 +1902,40 @@ function WarehouseShelves({
                         role="group"
                       >
                         <div className="flex min-w-0 items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-app-dim font-mono text-[11px] tracking-[0.12em] uppercase">
-                              {t('sectionType')}
-                            </p>
-                            <strong className="mt-1 block truncate text-sm text-white">
-                              {section.name}
-                            </strong>
-                            <span className="text-app-muted block truncate text-xs">
-                              {section.code}
+                          <button
+                            aria-expanded={expandedSectionId === section.id}
+                            className="focus-visible:outline-brand flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg text-left"
+                            onClick={() =>
+                              setExpandedSectionId((current) =>
+                                current === section.id ? null : section.id,
+                              )
+                            }
+                            type="button"
+                          >
+                            <ChevronRight
+                              aria-hidden
+                              className={cn(
+                                'text-app-muted size-4 shrink-0 transition-transform',
+                                expandedSectionId === section.id && 'rotate-90',
+                              )}
+                            />
+                            <span className="min-w-0">
+                              <strong className="block truncate text-sm text-white">
+                                {section.name}
+                              </strong>
+                              <span className="text-app-muted block truncate text-xs">
+                                {section.code} ·{' '}
+                                {t('shelfCount', {
+                                  count: loadedShelves.filter(
+                                    (shelf) => shelf.sectionId === section.id,
+                                  ).length,
+                                })}
+                                {section.partCount == null
+                                  ? null
+                                  : ` · ${t('locationParts', { count: section.partCount })}`}
+                              </span>
                             </span>
-                          </div>
+                          </button>
                           <div className="flex items-center gap-2">
                             {canManage ? (
                               <Button
@@ -1889,118 +1956,144 @@ function WarehouseShelves({
                                 <Pencil aria-hidden />
                               </Button>
                             ) : null}
-                            {canManage ? (
-                              <ActionMenu
-                                label={t('sectionActions', {
-                                  name: section.name,
-                                })}
-                                actions={[
-                                  {
-                                    key: 'print',
-                                    label: t('printSection'),
-                                    icon: <Printer aria-hidden />,
-                                    onSelect: () =>
-                                      void printNestedLocation(
-                                        section,
-                                        'section',
-                                      ),
-                                  },
-                                  {
-                                    key: 'archive',
-                                    label: t('archiveSection'),
-                                    icon: <Archive aria-hidden />,
-                                    destructive: true,
-                                    onSelect: () =>
-                                      setArchivingSection(section),
-                                  },
-                                ]}
-                              />
-                            ) : null}
+                            <ActionMenu
+                              label={t('sectionActions', {
+                                name: section.name,
+                              })}
+                              actions={[
+                                {
+                                  key: 'qr',
+                                  label: t('showLocationQr'),
+                                  icon: <ScanLine aria-hidden />,
+                                  onSelect: () =>
+                                    setPreviewLocation({
+                                      location: section,
+                                      kind: 'section',
+                                    }),
+                                },
+                                ...(canManage
+                                  ? [
+                                      {
+                                        key: 'archive',
+                                        label: t('archiveSection'),
+                                        icon: <Archive aria-hidden />,
+                                        destructive: true,
+                                        onSelect: () =>
+                                          setArchivingSection(section),
+                                      },
+                                    ]
+                                  : []),
+                              ]}
+                            />
                           </div>
                         </div>
-                        {loadedShelves.every(
-                          (shelf) => shelf.sectionId !== section.id,
-                        ) ? (
-                          <p className="text-app-muted mt-2 text-sm">
-                            {t('noShelves')}
-                          </p>
-                        ) : null}
-                        <ul className="mt-2 grid gap-2">
-                          {loadedShelves
-                            .filter((shelf) => shelf.sectionId === section.id)
-                            .map((shelf) => (
-                              <li
-                                className="border-app-line flex min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2"
-                                key={shelf.id}
-                              >
-                                <span className="min-w-0">
-                                  <span className="text-app-dim block font-mono text-[10px] tracking-[0.12em] uppercase">
-                                    {t('shelfType')}
-                                  </span>
-                                  <span className="block truncate text-sm text-white">
-                                    {shelf.name}
-                                  </span>
-                                  <span className="text-app-muted block truncate text-xs">
-                                    {shelf.code}
-                                  </span>
-                                </span>
-                                <ActionMenu
-                                  label={t('shelfActions', {
-                                    name: shelf.name,
-                                  })}
-                                  actions={[
-                                    {
-                                      key: 'print',
-                                      label: t('printShelf'),
-                                      icon: <Printer aria-hidden />,
-                                      onSelect: () =>
-                                        void printNestedLocation(
-                                          shelf,
-                                          'shelf',
-                                        ),
-                                    },
-                                    ...(canManage
-                                      ? [
-                                          {
-                                            key: 'edit',
-                                            label: t('editShelf'),
-                                            icon: <Pencil aria-hidden />,
-                                            onSelect: () => {
-                                              setError(null)
-                                              setDraft({
-                                                name: shelf.name,
-                                                code: shelf.code,
-                                              })
-                                              setEditing(shelf)
-                                            },
-                                          },
-                                          {
-                                            key: 'archive',
-                                            label: t('archiveShelf'),
-                                            icon: <Archive aria-hidden />,
-                                            destructive: true,
-                                            onSelect: () => setArchiving(shelf),
-                                          },
-                                        ]
-                                      : []),
-                                  ]}
-                                />
-                              </li>
-                            ))}
-                        </ul>
-                        {canManage ? (
-                          <Button
-                            className="mt-3"
-                            variant="ghost"
-                            onClick={() => {
-                              setError(null)
-                              setDraft({ name: '', code: '' })
-                              setAddingTo(section)
-                            }}
+                        {expandedSectionId === section.id ? (
+                          <div
+                            className="border-app-line mt-4 border-t pt-4"
+                            id={`shelves-${section.id}`}
                           >
-                            <Plus aria-hidden />
-                            {t('addShelf')}
-                          </Button>
+                            {loadedShelves.every(
+                              (shelf) => shelf.sectionId !== section.id,
+                            ) ? (
+                              <div className="border-app-line-2 mt-4 flex min-h-28 flex-1 flex-col items-start justify-between gap-3 rounded-lg border border-dashed bg-white/[0.02] p-3">
+                                <p className="text-app-muted text-sm">
+                                  {t('noShelves')}
+                                </p>
+                                {canManage ? (
+                                  <Button
+                                    variant="ghost"
+                                    onClick={() => startAddingShelf(section)}
+                                  >
+                                    <Plus aria-hidden />
+                                    {t('addShelf')}
+                                  </Button>
+                                ) : null}
+                              </div>
+                            ) : null}
+                            <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3 empty:hidden">
+                              {loadedShelves
+                                .filter(
+                                  (shelf) => shelf.sectionId === section.id,
+                                )
+                                .map((shelf) => (
+                                  <li
+                                    className="border-app-line flex min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2"
+                                    key={shelf.id}
+                                  >
+                                    <span className="min-w-0">
+                                      <span className="text-app-dim block font-mono text-[10px] tracking-[0.12em] uppercase">
+                                        {t('shelfType')}
+                                      </span>
+                                      <span className="block truncate text-sm text-white">
+                                        {shelf.name}
+                                      </span>
+                                      <span className="text-app-muted block truncate text-xs">
+                                        {shelf.code}
+                                        {shelf.partCount == null
+                                          ? null
+                                          : ` · ${t('locationParts', { count: shelf.partCount })}`}
+                                      </span>
+                                    </span>
+                                    <ActionMenu
+                                      label={t('shelfActions', {
+                                        name: shelf.name,
+                                      })}
+                                      actions={[
+                                        {
+                                          key: 'qr',
+                                          label: t('showLocationQr'),
+                                          icon: <ScanLine aria-hidden />,
+                                          onSelect: () =>
+                                            setPreviewLocation({
+                                              location: shelf,
+                                              kind: 'shelf',
+                                            }),
+                                        },
+                                        ...(canManage
+                                          ? [
+                                              {
+                                                key: 'edit',
+                                                label: t('editShelf'),
+                                                icon: <Pencil aria-hidden />,
+                                                onSelect: () => {
+                                                  setError(null)
+                                                  setDraft({
+                                                    name: shelf.name,
+                                                    code: shelf.code,
+                                                  })
+                                                  setEditing(shelf)
+                                                },
+                                              },
+                                              {
+                                                key: 'archive',
+                                                label: t('archiveShelf'),
+                                                icon: <Archive aria-hidden />,
+                                                destructive: true,
+                                                onSelect: () =>
+                                                  setArchiving(shelf),
+                                              },
+                                            ]
+                                          : []),
+                                      ]}
+                                    />
+                                  </li>
+                                ))}
+                            </ul>
+                            {canManage &&
+                            loadedShelves.some(
+                              (shelf) => shelf.sectionId === section.id,
+                            ) ? (
+                              <div className="pt-3">
+                                <Button
+                                  variant="ghost"
+                                  onClick={() => startAddingShelf(section)}
+                                >
+                                  <Plus aria-hidden />
+                                  {t('addShelf')}
+                                </Button>
+                              </div>
+                            ) : null}
+                          </div>
                         ) : null}
                       </div>
                     ))}
@@ -2010,6 +2103,67 @@ function WarehouseShelves({
             })}
         </div>
       ) : null}
+      <Sheet
+        open={previewLocation !== null}
+        onOpenChange={(open) => {
+          if (!open) setPreviewLocation(null)
+        }}
+        title={previewLocation?.location.name ?? t('showLocationQr')}
+        eyebrow={
+          previewLocation
+            ? t(
+                previewLocation.kind === 'section'
+                  ? 'sectionType'
+                  : 'shelfType',
+              )
+            : undefined
+        }
+        footer={
+          previewLocation ? (
+            <Button
+              variant="primary"
+              onClick={() =>
+                void printNestedLocation(
+                  previewLocation.location,
+                  previewLocation.kind,
+                )
+              }
+            >
+              <Printer aria-hidden />
+              {t(
+                previewLocation.kind === 'section'
+                  ? 'printSection'
+                  : 'printShelf',
+              )}
+            </Button>
+          ) : undefined
+        }
+      >
+        {previewLocation ? (
+          <div className="grid justify-items-center gap-4">
+            {previewQr?.code !== previewLocation.location.qrCode ? (
+              <SkeletonRows rows={1} />
+            ) : previewQr.url ? (
+              <img
+                src={previewQr.url}
+                alt={`${t('showLocationQr')}: ${previewLocation.location.name}`}
+                className="w-full max-w-[360px] rounded-xl bg-white"
+              />
+            ) : (
+              <Notice tone="danger">{t('printFailed')}</Notice>
+            )}
+            <p className="text-app-muted text-center text-sm">
+              {previewLocation.location.warehouseName} ·{' '}
+              {previewLocation.location.zoneName}
+              {previewLocation.kind === 'shelf' &&
+              'sectionName' in previewLocation.location
+                ? ` · ${previewLocation.location.sectionName}`
+                : ''}{' '}
+              · {previewLocation.location.name}
+            </p>
+          </div>
+        ) : null}
+      </Sheet>
       <Sheet
         open={
           addingTo !== null ||
@@ -5072,7 +5226,7 @@ function PartPlacementView({ partId }: { partId: string }) {
   )
 
   const save = async () => {
-    if (!canManage || !selected.length) return
+    if (!canManage || selected.length === 0) return
     setSaving(true)
     try {
       setOperationError(null)
@@ -5169,7 +5323,9 @@ function PartPlacementView({ partId }: { partId: string }) {
         const before = placement.map((zone) => zone.zoneId)
         const selectedShelfId =
           shelfSelection === undefined
-            ? (placement.find((zone) => zone.shelfId)?.shelfId ?? null)
+            ? (placement.find(
+                (zone) => zone.shelfId && selected.includes(zone.zoneId),
+              )?.shelfId ?? null)
             : shelfSelection
         const selectedSectionId =
           sectionSelection === undefined
@@ -5185,6 +5341,17 @@ function PartPlacementView({ partId }: { partId: string }) {
           selectedSectionId !==
             (placement.find((zone) => zone.sectionId)?.sectionId ?? null)
         const chosen = zones.filter((zone) => selected.includes(zone.id))
+        const selectedSection = sections.find(
+          (section) =>
+            section.id === selectedSectionId &&
+            selected.includes(section.zoneId),
+        )
+        const selectedShelf = shelves.find(
+          (shelf) =>
+            shelf.id === selectedShelfId &&
+            shelf.sectionId === selectedSection?.id,
+        )
+        const hasPhysicalZone = chosen.some((zone) => !zone.isSystemUnassigned)
         const availableSections = sections.filter(
           (section) => section.isActive && selected.includes(section.zoneId),
         )
@@ -5197,12 +5364,13 @@ function PartPlacementView({ partId }: { partId: string }) {
         const moves = (history?.events ?? []).filter((event) =>
           PLACEMENT_EVENTS.has(event.eventType),
         )
-        const toggle = (zoneId: string) => {
+        const toggleZone = (zoneId: string) => {
           setSaved(false)
           setShelfSelection(null)
           setSectionSelection(null)
-          setSelection((value) => {
-            const current = value ?? selected
+          setSelection((currentSelection) => {
+            const current =
+              currentSelection ?? placement.map((zone) => zone.zoneId)
             return current.includes(zoneId)
               ? current.filter((id) => id !== zoneId)
               : [...current.filter((id) => id !== warehouseOnly?.id), zoneId]
@@ -5375,10 +5543,19 @@ function PartPlacementView({ partId }: { partId: string }) {
                     title={t('zone')}
                   >
                     {warehouseOnly ? (
-                      <label className="border-app-line mb-3 flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm">
+                      <label
+                        className={cn(
+                          'mb-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
+                          selected.length === 1 &&
+                            selected[0] === warehouseOnly.id
+                            ? 'border-brand bg-brand/[0.08]'
+                            : 'border-app-line hover:border-app-line-2',
+                        )}
+                      >
                         <input
                           type="radio"
-                          name="placement-warehouse-only"
+                          name="placement-location"
+                          className="peer sr-only"
                           disabled={!canManage}
                           checked={
                             selected.length === 1 &&
@@ -5391,7 +5568,22 @@ function PartPlacementView({ partId }: { partId: string }) {
                             setSaved(false)
                           }}
                         />
-                        {t('warehouseOnly')}
+                        <span>{t('warehouseOnly')}</span>
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                            selected.length === 1 &&
+                              selected[0] === warehouseOnly.id
+                              ? 'border-brand bg-brand text-app-canvas'
+                              : 'border-app-line-2',
+                          )}
+                        >
+                          {selected.length === 1 &&
+                          selected[0] === warehouseOnly.id ? (
+                            <Check size={15} strokeWidth={3} />
+                          ) : null}
+                        </span>
                       </label>
                     ) : null}
                     <SearchInput
@@ -5421,7 +5613,7 @@ function PartPlacementView({ partId }: { partId: string }) {
                                 className={cn(
                                   'block cursor-pointer rounded-xl border px-3 pt-2.5 pb-3 hover:border-white/20',
                                   on
-                                    ? 'border-app-line-2 bg-white/[0.06]'
+                                    ? 'border-brand bg-brand/[0.08]'
                                     : 'border-app-line bg-app-canvas',
                                 )}
                               >
@@ -5442,11 +5634,24 @@ function PartPlacementView({ partId }: { partId: string }) {
                                   <input
                                     aria-label={`${zone.warehouseName} · ${zone.name}`}
                                     checked={on}
-                                    className="accent-brand mt-0.5 size-4.5 shrink-0"
+                                    className="peer sr-only"
                                     disabled={!canManage}
-                                    onChange={() => toggle(zone.id)}
+                                    onChange={() => toggleZone(zone.id)}
                                     type="checkbox"
                                   />
+                                  <span
+                                    aria-hidden="true"
+                                    className={cn(
+                                      'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                      on
+                                        ? 'border-brand bg-brand text-app-canvas'
+                                        : 'border-app-line-2',
+                                    )}
+                                  >
+                                    {on ? (
+                                      <Check size={15} strokeWidth={3} />
+                                    ) : null}
+                                  </span>
                                 </span>
                                 <span
                                   aria-hidden
@@ -5477,79 +5682,170 @@ function PartPlacementView({ partId }: { partId: string }) {
                     )}
                   </Step>
 
-                  <Step
-                    number="03"
-                    title={t('section')}
-                    hint={t('sectionHint')}
-                  >
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <label className="border-app-line flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm">
-                        <input
-                          type="radio"
-                          name="placement-section"
-                          disabled={!canManage || selected.length === 0}
-                          checked={!selectedSectionId}
-                          onChange={() => {
-                            setSectionSelection(null)
-                            setShelfSelection(null)
-                          }}
-                        />
-                        {t('noSection')}
-                      </label>
-                      {availableSections.map((section) => (
+                  {hasPhysicalZone ? (
+                    <Step
+                      number="03"
+                      title={t('section')}
+                      hint={t('sectionHint')}
+                    >
+                      <div className="grid gap-2 sm:grid-cols-2">
                         <label
-                          className="border-app-line flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm"
-                          key={section.id}
+                          className={cn(
+                            'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
+                            !selectedSectionId
+                              ? 'border-brand bg-brand/[0.08]'
+                              : 'border-app-line hover:border-app-line-2',
+                          )}
                         >
                           <input
                             type="radio"
                             name="placement-section"
-                            disabled={!canManage}
-                            checked={selectedSectionId === section.id}
+                            className="peer sr-only"
+                            disabled={!canManage || selected.length === 0}
+                            checked={!selectedSectionId}
                             onChange={() => {
-                              setSectionSelection(section.id)
+                              setSectionSelection(null)
                               setShelfSelection(null)
                             }}
                           />
-                          {section.zoneName} · {section.name}
+                          <span>{t('noSection')}</span>
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                              !selectedSectionId
+                                ? 'border-brand bg-brand text-app-canvas'
+                                : 'border-app-line-2',
+                            )}
+                          >
+                            {!selectedSectionId ? (
+                              <Check size={15} strokeWidth={3} />
+                            ) : null}
+                          </span>
                         </label>
-                      ))}
-                    </div>
-                  </Step>
+                        {availableSections.map((section) => (
+                          <label
+                            className={cn(
+                              'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
+                              selectedSectionId === section.id
+                                ? 'border-brand bg-brand/[0.08]'
+                                : 'border-app-line hover:border-app-line-2',
+                            )}
+                            key={section.id}
+                          >
+                            <input
+                              type="radio"
+                              name="placement-section"
+                              className="peer sr-only"
+                              disabled={!canManage}
+                              checked={selectedSectionId === section.id}
+                              onChange={() => {
+                                setSectionSelection(section.id)
+                                setShelfSelection(null)
+                              }}
+                            />
+                            <span>
+                              {section.zoneName} · {section.name}
+                            </span>
+                            <span
+                              aria-hidden="true"
+                              className={cn(
+                                'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                selectedSectionId === section.id
+                                  ? 'border-brand bg-brand text-app-canvas'
+                                  : 'border-app-line-2',
+                              )}
+                            >
+                              {selectedSectionId === section.id ? (
+                                <Check size={15} strokeWidth={3} />
+                              ) : null}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </Step>
+                  ) : null}
 
-                  <Step number="04" title={t('shelf')} hint={t('shelfHint')}>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <label className="border-app-line flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm">
-                        <input
-                          type="radio"
-                          name="placement-shelf"
-                          disabled={!canManage || !selectedSectionId}
-                          checked={!selectedShelfId}
-                          onChange={() => setShelfSelection(null)}
-                        />
-                        {t('noShelf')}
-                      </label>
-                      {availableShelves.map((shelf) => (
+                  {hasPhysicalZone && selectedSectionId ? (
+                    <Step number="04" title={t('shelf')} hint={t('shelfHint')}>
+                      <div className="grid gap-2 sm:grid-cols-2">
                         <label
-                          className="border-app-line flex cursor-pointer items-center gap-3 rounded-xl border p-3 text-sm"
-                          key={shelf.id}
+                          className={cn(
+                            'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
+                            !selectedShelfId
+                              ? 'border-brand bg-brand/[0.08]'
+                              : 'border-app-line hover:border-app-line-2',
+                          )}
                         >
                           <input
                             type="radio"
                             name="placement-shelf"
-                            disabled={!canManage}
-                            checked={selectedShelfId === shelf.id}
-                            onChange={() => setShelfSelection(shelf.id)}
+                            className="peer sr-only"
+                            disabled={!canManage || !selectedSectionId}
+                            checked={!selectedShelfId}
+                            onChange={() => setShelfSelection(null)}
                           />
-                          {shelf.zoneName} · {shelf.sectionName} · {shelf.name}
+                          <span>{t('noShelf')}</span>
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                              !selectedShelfId
+                                ? 'border-brand bg-brand text-app-canvas'
+                                : 'border-app-line-2',
+                            )}
+                          >
+                            {!selectedShelfId ? (
+                              <Check size={15} strokeWidth={3} />
+                            ) : null}
+                          </span>
                         </label>
-                      ))}
-                    </div>
-                  </Step>
+                        {availableShelves.map((shelf) => (
+                          <label
+                            className={cn(
+                              'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
+                              selectedShelfId === shelf.id
+                                ? 'border-brand bg-brand/[0.08]'
+                                : 'border-app-line hover:border-app-line-2',
+                            )}
+                            key={shelf.id}
+                          >
+                            <input
+                              type="radio"
+                              name="placement-shelf"
+                              className="peer sr-only"
+                              disabled={!canManage}
+                              checked={selectedShelfId === shelf.id}
+                              onChange={() => setShelfSelection(shelf.id)}
+                            />
+                            <span>
+                              {shelf.zoneName} · {shelf.sectionName} ·{' '}
+                              {shelf.name}
+                            </span>
+                            <span
+                              aria-hidden="true"
+                              className={cn(
+                                'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                selectedShelfId === shelf.id
+                                  ? 'border-brand bg-brand text-app-canvas'
+                                  : 'border-app-line-2',
+                              )}
+                            >
+                              {selectedShelfId === shelf.id ? (
+                                <Check size={15} strokeWidth={3} />
+                              ) : null}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </Step>
+                  ) : null}
 
                   <Step
                     hint={t('quantityHint')}
-                    number="05"
+                    number={
+                      selectedSectionId ? '05' : hasPhysicalZone ? '04' : '03'
+                    }
                     title={t('quantity')}
                   >
                     <div className="flex flex-wrap items-center gap-4.5">
@@ -5626,54 +5922,33 @@ function PartPlacementView({ partId }: { partId: string }) {
                     {t('newPlacement')}
                   </h2>
                   <div className="border-app-line bg-app-canvas mt-4 rounded-[14px] border p-4">
-                    <p
-                      className={cn(
-                        'font-mono text-[22px] tracking-[-0.01em]',
-                        chosen.length === 0 ? 'text-app-dim' : 'text-app-ink',
-                      )}
-                    >
-                      {chosen.length === 0
-                        ? '— · —'
-                        : chosen
-                            .slice(0, 2)
-                            .map((zone) => zone.code)
-                            .join(' · ') + (chosen.length > 2 ? ' …' : '')}
-                    </p>
-                    <p className="text-app-muted mt-2 text-[13px]">
-                      {chosen.length === 0
-                        ? t('noZonesPicked')
-                        : chosen
-                            .map(
-                              (zone) => `${zone.warehouseName} · ${zone.name}`,
-                            )
-                            .join(', ')}
-                    </p>
+                    {chosen.length > 0 ? (
+                      <ul className="grid gap-3 text-[14px]">
+                        {chosen.map((zone) => (
+                          <li className="min-w-0" key={zone.id}>
+                            <span className="text-app-ink font-semibold">
+                              {zone.warehouseName} ·{' '}
+                              {zone.isSystemUnassigned
+                                ? t('warehouseLevel')
+                                : zone.name}
+                            </span>
+                            {selectedSection?.zoneId === zone.id ? (
+                              <span className="text-app-muted block">
+                                {selectedSection.name}
+                                {selectedShelf
+                                  ? ` · ${selectedShelf.name}`
+                                  : ''}
+                              </span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-app-muted text-[14px]">
+                        {t('noLocationSelected')}
+                      </p>
+                    )}
                   </div>
-                  <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
-                    <dt className="text-app-muted text-[14px] font-semibold">
-                      {t('zonesPicked')}
-                    </dt>
-                    <dd className="font-mono text-[15px] text-white tabular-nums">
-                      {chosen.length}
-                    </dd>
-                    <dt className="text-app-muted text-[14px] font-semibold">
-                      {t('before')}
-                    </dt>
-                    <dd className="font-mono text-[15px] text-white tabular-nums">
-                      {placement.length}
-                    </dd>
-                    <dd
-                      aria-hidden
-                      className="bg-app-line col-span-2 my-1 h-px"
-                    />
-                    <dt
-                      className="text-app-muted text-[14px] font-semibold"
-                      title={t('capacityNotCounted')}
-                    >
-                      {t('capacity')}
-                    </dt>
-                    <dd className="text-app-dim font-mono text-[15px]">—</dd>
-                  </dl>
                   {canManage ? (
                     <Button
                       aria-busy={saving}
