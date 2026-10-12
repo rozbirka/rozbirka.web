@@ -1432,6 +1432,38 @@ it('removes an unused bank currency and refreshes the balances', async () => {
   expect(screen.getByText('UAH (Українська гривня)')).toBeVisible()
 })
 
+it.each([
+  [
+    'CURRENCY_HAS_TRANSACTIONS',
+    'Валюту GBP не можна видалити, оскільки з нею вже були операції.',
+  ],
+  ['LAST_BANK_CURRENCY', 'Останню валюту банківської каси видалити не можна.'],
+  ['REGISTER_BALANCE_NOT_ZERO', 'Спочатку обнуліть баланс GBP.'],
+])('shows a Ukrainian removal error for %s', async (code, message) => {
+  cashMocks.getById.mockResolvedValue({
+    id: 'cash-1',
+    name: 'Банк',
+    type: 'bank',
+    isActive: true,
+    balances: { UAH: 0, GBP: 0 },
+  })
+  cashMocks.removeCurrency.mockRejectedValue({
+    kind: 'conflict',
+    code,
+    message: 'English server error',
+  })
+  const user = userEvent.setup()
+  render(
+    <MemoryRouter initialEntries={['/app/garage/cash/cash-1/edit']}>
+      <CashScreen definition={definition} />
+    </MemoryRouter>,
+  )
+
+  await user.click(await screen.findByRole('button', { name: 'Видалити GBP' }))
+  expect(await screen.findByText(message)).toBeVisible()
+  expect(screen.queryByText('English server error')).not.toBeInTheDocument()
+})
+
 it('saves the register name and returns to its exact detail route', async () => {
   const register = {
     id: 'cash-1',

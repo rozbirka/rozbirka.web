@@ -58,6 +58,22 @@ const problemMessage = (error: unknown, t: CashT) => {
   if (problem.kind === 'forbidden') return t('forbidden')
   return problem.message
 }
+const removeCurrencyProblemMessage = (
+  error: unknown,
+  currency: string,
+  t: CashT,
+) => {
+  switch (normalizeApiProblem(error).code) {
+    case 'CURRENCY_HAS_TRANSACTIONS':
+      return t('currencyHasTransactions', { code: currency })
+    case 'LAST_BANK_CURRENCY':
+      return t('lastBankCurrency')
+    case 'REGISTER_BALANCE_NOT_ZERO':
+      return t('currencyBalanceNotZero', { code: currency })
+    default:
+      return problemMessage(error, t)
+  }
+}
 type CashReplayOperation = 'movement' | 'transfer'
 const isAmbiguousMutationFailure = (error: unknown) => {
   const kind = normalizeApiProblem(error).kind
@@ -532,7 +548,12 @@ function CashRegisterEdit({
       if (scope.signal.aborted) return
       await load(scope.signal)
     } catch (failure) {
-      if (!scope?.signal.aborted) setError(problemMessage(failure, t))
+      if (!scope?.signal.aborted)
+        setError(
+          action === 'remove'
+            ? removeCurrencyProblemMessage(failure, currency, t)
+            : problemMessage(failure, t),
+        )
     } finally {
       setBusy(false)
     }
