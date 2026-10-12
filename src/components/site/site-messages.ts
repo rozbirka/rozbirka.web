@@ -8,6 +8,8 @@ import { defineMessages } from '@/i18n/messages'
  */
 export const siteMessages = defineMessages({
   uk: {
+    support: 'Написати в підтримку',
+    supportAria: 'Написати в підтримку в Telegram (нове вікно)',
     skipToContent: 'До основного контенту',
     mainNav: 'Головна навігація',
     mobileNav: 'Мобільна навігація',
@@ -57,6 +59,8 @@ export const siteMessages = defineMessages({
     backToTop: 'Нагору',
   },
   'en-GB': {
+    support: 'Contact support',
+    supportAria: 'Contact support on Telegram (new window)',
     skipToContent: 'Skip to main content',
     mainNav: 'Main navigation',
     mobileNav: 'Mobile navigation',
@@ -104,6 +108,8 @@ export const siteMessages = defineMessages({
     backToTop: 'Back to top',
   },
   pl: {
+    support: 'Napisz do wsparcia',
+    supportAria: 'Napisz do wsparcia w Telegramie (nowe okno)',
     skipToContent: 'Przejdź do treści',
     mainNav: 'Główna nawigacja',
     mobileNav: 'Nawigacja mobilna',
