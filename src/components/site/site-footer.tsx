@@ -49,9 +49,7 @@ export function SiteFooter() {
 
           <div className="flex flex-wrap items-center gap-6">
             <ul role="list" className="flex flex-wrap items-center gap-6">
-              <li>
-                <SupportLink />
-              </li>
+              <SupportLink asListItem />
               <li>
                 {/* The privacy policy is a Ukrainian legal text only. */}
                 <a

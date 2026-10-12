@@ -27,6 +27,17 @@ describe('public Telegram support links', () => {
     )
     expect(screen.queryByRole('link')).toBeNull()
   })
+  it('leaves no empty footer item when support is disabled', () => {
+    vi.stubEnv('VITE_TELEGRAM_SUPPORT_BOT', '')
+    render(
+      <LocaleOverride locale="uk">
+        <ul>
+          <SupportLink asListItem />
+        </ul>
+      </LocaleOverride>,
+    )
+    expect(screen.queryByRole('listitem')).toBeNull()
+  })
   it.each([
     ['uk', 'Написати в підтримку'],
     ['en-GB', 'Contact support'],

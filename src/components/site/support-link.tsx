@@ -3,7 +3,13 @@ import { MessageCircle } from 'lucide-react'
 import { useT } from '@/i18n'
 import { siteMessages } from './site-messages'
 
-export function SupportLink({ floating = false }: { floating?: boolean }) {
+export function SupportLink({
+  floating = false,
+  asListItem = false,
+}: {
+  floating?: boolean
+  asListItem?: boolean
+}) {
   const t = useT(siteMessages)
   const username: unknown = import.meta.env['VITE_TELEGRAM_SUPPORT_BOT']
   const href = telegramSupportHref(
@@ -11,7 +17,7 @@ export function SupportLink({ floating = false }: { floating?: boolean }) {
   )
   if (!href) return null
 
-  return (
+  const link = (
     <a
       href={href}
       target="_blank"
@@ -27,4 +33,5 @@ export function SupportLink({ floating = false }: { floating?: boolean }) {
       {t('support')}
     </a>
   )
+  return asListItem ? <li>{link}</li> : link
 }
