@@ -137,7 +137,6 @@ export const cashMessages = defineMessages({
     removeCurrency: 'Видалити',
     currencyHasTransactions:
       'Валюту {code} не можна видалити, оскільки з нею вже були операції.',
-    lastBankCurrency: 'Останню валюту банківської каси видалити не можна.',
     currencyBalanceNotZero: 'Спочатку обнуліть баланс {code}.',
     initialBalances: 'Початкові баланси',
     initialBalancesHint: 'Необов’язково. Порожнє поле означає нульовий баланс.',
@@ -294,7 +293,6 @@ export const cashMessages = defineMessages({
     removeCurrency: 'Remove',
     currencyHasTransactions:
       'You cannot remove {code} because it has transaction history.',
-    lastBankCurrency: 'You cannot remove the last currency of a bank till.',
     currencyBalanceNotZero: 'Set the {code} balance to zero first.',
     initialBalances: 'Opening balances',
     initialBalancesHint: 'Optional. An empty field means a zero balance.',
@@ -474,7 +472,6 @@ export const cashMessages = defineMessages({
     removeCurrency: 'Usuń',
     currencyHasTransactions:
       'Nie można usunąć waluty {code}, ponieważ ma historię operacji.',
-    lastBankCurrency: 'Nie można usunąć ostatniej waluty kasy bankowej.',
     currencyBalanceNotZero: 'Najpierw wyzeruj saldo {code}.',
     initialBalances: 'Salda początkowe',
     initialBalancesHint: 'Opcjonalnie. Puste pole oznacza saldo zerowe.',

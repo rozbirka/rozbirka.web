@@ -1220,7 +1220,7 @@ it('creates a register with contract-supported currencies and opening balances',
   })
 })
 
-it('creates a bank register with GBP and PLN balances', async () => {
+it('creates a UAH-only bank after selecting currencies for a cash register', async () => {
   cashMocks.create.mockResolvedValue({ id: 'bank-2' })
   const user = userEvent.setup()
   render(
@@ -1229,30 +1229,25 @@ it('creates a bank register with GBP and PLN balances', async () => {
     </MemoryRouter>,
   )
 
-  await user.type(screen.getByLabelText('Назва'), 'Закордонний рахунок')
+  await user.type(screen.getByLabelText('Назва'), 'Банківський рахунок')
+  await user.click(screen.getByRole('button', { name: /USD/ }))
   await user.click(screen.getByRole('button', { name: /Безготівкова/ }))
-  const currencyGroup = screen.getByRole('group', { name: 'Валюти' })
-  await user.click(
-    within(currencyGroup).getByRole('button', { name: /GBP \(/ }),
-  )
-  await user.click(
-    within(currencyGroup).getByRole('button', { name: /PLN \(/ }),
-  )
-  await user.click(
-    within(currencyGroup).getByRole('button', { name: /UAH \(/ }),
-  )
-  await user.type(screen.getByLabelText('Баланс GBP'), '100')
+  expect(
+    screen.queryByRole('group', { name: 'Валюти' }),
+  ).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Баланс USD')).not.toBeInTheDocument()
+  await user.type(screen.getByLabelText('Баланс UAH'), '100')
   await user.click(screen.getByRole('button', { name: 'Зберегти' }))
 
   expect(cashMocks.create).toHaveBeenCalledWith({
-    name: 'Закордонний рахунок',
+    name: 'Банківський рахунок',
     type: 'bank',
-    currencies: ['GBP', 'PLN'],
-    initialBalances: { GBP: 100 },
+    currencies: ['UAH'],
+    initialBalances: { UAH: 100 },
   })
 })
 
-it('shows currency management alongside the name on the register edit screen', async () => {
+it('shows only the name field on a bank register edit screen', async () => {
   cashMocks.getById.mockResolvedValue({
     id: 'cash-1',
     name: 'Основна каса',
@@ -1270,7 +1265,9 @@ it('shows currency management alongside the name on the register edit screen', a
   expect(screen.getByRole('textbox', { name: 'Назва каси' })).toHaveValue(
     'Основна каса',
   )
-  expect(screen.getByRole('group', { name: 'Валюти' })).toBeVisible()
+  expect(
+    screen.queryByRole('group', { name: 'Валюти' }),
+  ).not.toBeInTheDocument()
   for (const removed of [
     'Тип каси',
     'Рахунки',
@@ -1281,13 +1278,13 @@ it('shows currency management alongside the name on the register edit screen', a
     expect(screen.queryByText(removed)).not.toBeInTheDocument()
 })
 
-it('adds GBP to an existing UAH bank and refreshes its currencies', async () => {
+it('adds GBP to an existing UAH cash register and refreshes its currencies', async () => {
   let balances = { UAH: 100 } as Record<string, number>
   cashMocks.getById.mockImplementation(() =>
     Promise.resolve({
       id: 'cash-1',
-      name: 'Банк',
-      type: 'bank',
+      name: 'Готівкова каса',
+      type: 'cash',
       isActive: true,
       balances,
     }),
@@ -1312,11 +1309,11 @@ it('adds GBP to an existing UAH bank and refreshes its currencies', async () => 
   expect(screen.getByText('UAH (Українська гривня)')).toBeVisible()
 })
 
-it('keeps current bank currencies visible when addition fails', async () => {
+it('keeps current cash register currencies visible when addition fails', async () => {
   cashMocks.getById.mockResolvedValue({
     id: 'cash-1',
-    name: 'Банк',
-    type: 'bank',
+    name: 'Готівкова каса',
+    type: 'cash',
     isActive: true,
     balances: { UAH: 100 },
   })
@@ -1346,11 +1343,11 @@ it('keeps current bank currencies visible when addition fails', async () => {
   expect(cashMocks.getById).toHaveBeenCalledTimes(2)
 })
 
-it('ignores a bank currency failure after the tenant scope changes', async () => {
+it('ignores a cash register currency failure after the tenant scope changes', async () => {
   cashMocks.getById.mockResolvedValue({
     id: 'cash-1',
-    name: 'Банк',
-    type: 'bank',
+    name: 'Готівкова каса',
+    type: 'cash',
     isActive: true,
     balances: { UAH: 100 },
   })
@@ -1379,7 +1376,7 @@ it('ignores a bank currency failure after the tenant scope changes', async () =>
   expect(screen.getByText('UAH (Українська гривня)')).toBeVisible()
 })
 
-it('does not offer removal of the final bank currency', async () => {
+it('does not offer currency management on a bank register', async () => {
   cashMocks.getById.mockResolvedValue({
     id: 'cash-1',
     name: 'Банк',
@@ -1393,19 +1390,25 @@ it('does not offer removal of the final bank currency', async () => {
     </MemoryRouter>,
   )
 
-  expect(await screen.findByText('UAH (Українська гривня)')).toBeVisible()
+  await screen.findByRole('heading', { name: 'Редагування каси' })
+  expect(
+    screen.queryByRole('group', { name: 'Валюти' }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Додати GBP' }),
+  ).not.toBeInTheDocument()
   expect(
     screen.queryByRole('button', { name: 'Видалити UAH' }),
   ).not.toBeInTheDocument()
 })
 
-it('removes an unused bank currency and refreshes the balances', async () => {
+it('removes an unused cash register currency and refreshes the balances', async () => {
   let balances = { UAH: 100, GBP: 0 } as Record<string, number>
   cashMocks.getById.mockImplementation(() =>
     Promise.resolve({
       id: 'cash-1',
-      name: 'Банк',
-      type: 'bank',
+      name: 'Готівкова каса',
+      type: 'cash',
       isActive: true,
       balances,
     }),
@@ -1437,13 +1440,12 @@ it.each([
     'CURRENCY_HAS_TRANSACTIONS',
     'Валюту GBP не можна видалити, оскільки з нею вже були операції.',
   ],
-  ['LAST_BANK_CURRENCY', 'Останню валюту банківської каси видалити не можна.'],
   ['REGISTER_BALANCE_NOT_ZERO', 'Спочатку обнуліть баланс GBP.'],
 ])('shows a Ukrainian removal error for %s', async (code, message) => {
   cashMocks.getById.mockResolvedValue({
     id: 'cash-1',
-    name: 'Банк',
-    type: 'bank',
+    name: 'Готівкова каса',
+    type: 'cash',
     isActive: true,
     balances: { UAH: 0, GBP: 0 },
   })
