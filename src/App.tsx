@@ -7,6 +7,7 @@ import { Pricing } from '@/components/site/pricing'
 import { FAQ } from '@/components/site/faq'
 import { landingFaqEntries } from '@/components/site/faq-messages'
 import { CtaBanner } from '@/components/site/cta-banner'
+import { SupportLink } from '@/components/site/support-link'
 import { SiteFooter } from '@/components/site/site-footer'
 import type { LandingNavigationState } from '@/components/site/language-switcher'
 import { siteMessages } from '@/components/site/site-messages'
@@ -52,6 +53,7 @@ function App() {
       </a>
       <div className="min-h-screen bg-black text-white">
         <SiteHeader />
+        <SupportLink floating />
         <main id="main">
           <Hero />
           <div className="font-visuelt">

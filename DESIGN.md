@@ -31,3 +31,8 @@ text branding and mailto contacts only; the privacy policy adds a row of
 page-language buttons (translations pending legal review, see
 `UX-CONTRACT.md`). Personal account controls use app Button
 and Notice primitives and remain accessible outside company entitlement gates.
+
+Public support links reuse the landing brand pill and Visuelt typography. The floating
+link observes device safe areas; the footer offers the same destination. Labels and
+new-window accessible names follow the landing locale. An unconfigured bot hides
+the links rather than exposing a placeholder Telegram account.
