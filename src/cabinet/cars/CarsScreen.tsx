@@ -1459,24 +1459,38 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
       if (carId) {
         const uploadedMedia = [...media]
         const savedOrder = [...photoOrder]
-        // Keep successful uploads in the draft if a later upload or save fails.
-        // Retrying then reuses the pending assets instead of uploading twice.
-        for (const item of pendingMedia) {
-          const scope = requireLatestMutation({ quota: false })
-          const uploaded = await mediaApi.upload(item.file, 'cars', {
-            signal: requestSignal(scope.signal),
-          })
-          lifetimeSignal?.throwIfAborted()
-          uploadedMedia.push(uploaded)
+        // Upload together, then keep each success in the draft if another
+        // upload or the car update fails. Retrying will not upload it twice.
+        const uploadResults = await Promise.allSettled(
+          pendingMedia.map((item) => {
+            const scope = requireLatestMutation({ quota: false })
+            return mediaApi.upload(item.file, 'cars', {
+              signal: requestSignal(scope.signal),
+            })
+          }),
+        )
+        lifetimeSignal?.throwIfAborted()
+        const completedIds = new Set<string>()
+        uploadResults.forEach((result, index) => {
+          if (result.status !== 'fulfilled') return
+          const item = pendingMedia[index]!
+          uploadedMedia.push(result.value)
           const position = savedOrder.indexOf(item.id)
-          if (position >= 0) savedOrder[position] = uploaded.storageKey
+          if (position >= 0) savedOrder[position] = result.value.storageKey
+          completedIds.add(item.id)
+          if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
+        })
+        if (completedIds.size > 0) {
           setMedia([...uploadedMedia])
           setPhotoOrder([...savedOrder])
           setPendingMedia((current) =>
-            current.filter((pending) => pending.id !== item.id),
+            current.filter((pending) => !completedIds.has(pending.id)),
           )
-          if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
         }
+        const failedUpload = uploadResults.find(
+          (result) => result.status === 'rejected',
+        )
+        if (failedUpload?.status === 'rejected') throw failedUpload.reason
         const updateRequest: UpdateCarRequest = {
           ...request,
           photoKeys: savedOrder,
