@@ -799,6 +799,12 @@ it('keeps the owner role read-only and excludes Owner from role assignment and i
 
   expect(await screen.findByText('Олексій')).toBeInTheDocument()
   expect(screen.queryByLabelText('Роль для Олексій')).toBeNull()
+  expect(
+    screen.queryByRole('button', { name: 'Дії з учасником Олексій' }),
+  ).toBeNull()
+  expect(
+    screen.getByRole('button', { name: 'Дії з учасником Олена' }),
+  ).toBeInTheDocument()
   expect(screen.getByText('Власник')).toBeInTheDocument()
   expect(
     within(screen.getByLabelText('Роль для Олена')).queryByRole('option', {
