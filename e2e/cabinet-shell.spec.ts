@@ -210,6 +210,8 @@ const isRecognizedReportsPath = (path: string) =>
 
 const isRecognizedInventoryPath = (path: string) =>
   path === '/api/v1/warehouses' ||
+  path === '/api/v1/inventory/sections' ||
+  path === '/api/v1/inventory/shelves' ||
   path === '/api/v1/inventory/sessions' ||
   /^\/api\/v1\/inventory\/sessions\/[^/]+(?:\/(?:results|audit))?$/.test(path)
 
@@ -591,6 +593,14 @@ async function installCabinetApiBoundary(
           updatedAt: '2026-09-02T09:00:00.000Z',
         },
       ])
+      return
+    }
+    if (
+      (path === '/api/v1/inventory/sections' ||
+        path === '/api/v1/inventory/shelves') &&
+      request.method() === 'GET'
+    ) {
+      await fulfillData(route, [])
       return
     }
     if (path === '/api/v1/inventory/sessions' && request.method() === 'GET') {
