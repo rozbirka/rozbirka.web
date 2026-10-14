@@ -51,6 +51,23 @@ describe('normalizeApiProblem', () => {
     })
   })
 
+  it('reads Core validation details from a 400 response', () => {
+    expect(
+      normalizeApiProblem(
+        axiosFailure(400, {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Перевірте введені дані',
+            details: [{ field: 'desiredSalePrice', message: 'Завелика сума' }],
+          },
+        }),
+      ),
+    ).toMatchObject({
+      status: 400,
+      fieldErrors: { desiredSalePrice: ['Завелика сума'] },
+    })
+  })
+
   it('reads retry-after and marks an expired session', () => {
     expect(
       normalizeApiProblem(axiosFailure(401, {}, { 'retry-after': '30' })),
