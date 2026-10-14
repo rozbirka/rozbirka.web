@@ -2444,6 +2444,158 @@ test('contains a long inventory QR at mobile width in the browser @hardening', a
   ).toBe(true)
 })
 
+test('creates and places a zone from an empty warehouse without QR scanning @hardening', async ({
+  page,
+}) => {
+  await installCabinetApiBoundary(page)
+  let zones: Record<string, unknown>[] = []
+  let placement: string[] = []
+  await page.route('**/api/v1/**', async (route) => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname
+    if (path === '/api/v1/inventory/zones') {
+      if (request.method() === 'POST') {
+        const input = request.postDataJSON() as {
+          warehouseId: string
+          name: string
+          code: string
+        }
+        zones = [
+          {
+            id: 'zone-new',
+            tenantId: 'tenant-1',
+            warehouseId: input.warehouseId,
+            warehouseName: 'Основний склад',
+            name: input.name,
+            code: input.code,
+            qrCode: 'ZONE-NEW',
+            isActive: true,
+            isSystemUnassigned: false,
+            createdAt: '2026-10-14T10:00:00Z',
+            updatedAt: '2026-10-14T10:00:00Z',
+          },
+        ]
+        return fulfillData(route, zones[0], 201)
+      }
+      return fulfillData(route, zones)
+    }
+    if (path === '/api/v1/parts/part-empty/inventory-zones') {
+      if (request.method() === 'PUT') {
+        placement = (request.postDataJSON() as { zoneIds: string[] }).zoneIds
+        return fulfillData(route, [])
+      }
+      return fulfillData(
+        route,
+        placement.map((zoneId) => ({
+          zoneId,
+          warehouseId: 'warehouse-1',
+          warehouseName: 'Основний склад',
+          zoneName: 'Стелаж A1',
+          zoneCode: 'A1',
+          zoneQrCode: 'ZONE-NEW',
+          isSystemUnassigned: false,
+        })),
+      )
+    }
+    await route.fallback()
+  })
+  await loginFrom(page)
+  await page.goto('/app/koval/parts/part-empty/inventory')
+
+  await expect(
+    page.getByRole('radio', { name: /Основний склад/ }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: 'Сканувати зону' }),
+  ).toHaveCount(0)
+  await page.getByRole('button', { name: 'Додати зону' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Нова зона' })
+  await dialog.getByRole('textbox', { name: 'Назва' }).fill('Стелаж A1')
+  await dialog.getByRole('textbox', { name: 'Код' }).fill('A1')
+  await dialog.getByRole('button', { name: 'Додати зону' }).click()
+  await expect(
+    page.getByRole('checkbox', { name: 'Основний склад · Стелаж A1' }),
+  ).toBeChecked()
+  await page.getByRole('button', { name: 'Зберегти розміщення' }).click()
+  await expect.poll(() => placement).toEqual(['zone-new'])
+  await expect(page.getByText('Розміщення збережено')).toBeVisible()
+})
+
+test('creates a warehouse before a zone when placement has no warehouses @hardening', async ({
+  page,
+}) => {
+  await installCabinetApiBoundary(page)
+  let warehouse: Record<string, unknown> | null = null
+  let zone: Record<string, unknown> | null = null
+  await page.route('**/api/v1/**', async (route) => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname
+    if (path === '/api/v1/warehouses') {
+      if (request.method() === 'POST') {
+        const input = request.postDataJSON() as { name: string; code: string }
+        warehouse = {
+          id: 'warehouse-new',
+          tenantId: 'tenant-1',
+          name: input.name,
+          code: input.code,
+          isActive: true,
+          isSystemDefault: true,
+          zoneCount: 0,
+          createdAt: '2026-10-14T10:00:00Z',
+          updatedAt: '2026-10-14T10:00:00Z',
+        }
+        return fulfillData(route, warehouse, 201)
+      }
+      return fulfillData(route, warehouse ? [warehouse] : [])
+    }
+    if (path === '/api/v1/inventory/zones') {
+      if (request.method() === 'POST') {
+        const input = request.postDataJSON() as {
+          name: string
+          code: string
+          warehouseId: string
+        }
+        zone = {
+          id: 'zone-new',
+          tenantId: 'tenant-1',
+          warehouseId: input.warehouseId,
+          warehouseName: 'Новий склад',
+          name: input.name,
+          code: input.code,
+          qrCode: 'ZONE-NEW',
+          isActive: true,
+          isSystemUnassigned: false,
+          createdAt: '2026-10-14T10:00:00Z',
+          updatedAt: '2026-10-14T10:00:00Z',
+        }
+        return fulfillData(route, zone, 201)
+      }
+      return fulfillData(route, zone ? [zone] : [])
+    }
+    if (path === '/api/v1/parts/part-no-house/inventory-zones')
+      return fulfillData(route, [])
+    await route.fallback()
+  })
+  await loginFrom(page)
+  await page.goto('/app/koval/parts/part-no-house/inventory')
+
+  await page.getByRole('button', { name: 'Додати склад' }).click()
+  const warehouseDialog = page.getByRole('dialog', { name: 'Новий склад' })
+  await warehouseDialog
+    .getByRole('textbox', { name: 'Назва' })
+    .fill('Новий склад')
+  await warehouseDialog.getByRole('textbox', { name: 'Код' }).fill('NEW')
+  await warehouseDialog.getByRole('button', { name: 'Додати склад' }).click()
+
+  const zoneDialog = page.getByRole('dialog', { name: 'Нова зона' })
+  await zoneDialog.getByRole('textbox', { name: 'Назва' }).fill('Полиця A1')
+  await zoneDialog.getByRole('textbox', { name: 'Код' }).fill('A1')
+  await zoneDialog.getByRole('button', { name: 'Додати зону' }).click()
+  await expect(
+    page.getByRole('checkbox', { name: 'Новий склад · Полиця A1' }),
+  ).toBeChecked()
+})
+
 for (const viewport of [
   { width: 1280, height: 800 },
   { width: 375, height: 812 },

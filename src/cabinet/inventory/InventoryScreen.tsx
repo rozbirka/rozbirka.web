@@ -18,7 +18,6 @@ import {
   Plus,
   Printer,
   RefreshCw,
-  ScanLine,
 } from 'lucide-react'
 import {
   ActionMenu,
@@ -4413,6 +4412,7 @@ function JournalStat({
 const PLACEMENT_EVENTS = new Set(['placed', 'unplaced', 'moved'])
 
 interface PlacementData {
+  warehouses: Warehouse[]
   zones: InventoryZone[]
   placement: PartInventoryZone[]
   part: PartDetail | null
@@ -4424,6 +4424,8 @@ interface PlacementData {
 function PartPlacementView({ partId }: { partId: string }) {
   const t = useT(placementMessages)
   const ti = useT(inventoryMessages)
+  const tw = useT(warehouseMessages)
+  const to = useT(overviewMessages)
   const { date, locale } = useInventoryFormat()
   const { targetTenant } = useCabinet()
   const canManage = usePermission('inventory.zones.manage')
@@ -4433,30 +4435,32 @@ function PartPlacementView({ partId }: { partId: string }) {
   )
   const loader = useCallback(
     async (signal: AbortSignal): Promise<PlacementData> => {
-      const [zones, placement, part, history, byZone] = await Promise.all([
-        inventoryApi.getZones({ signal }),
-        inventoryApi.getPartZones(partId, { signal }),
-        canSeeParts
-          ? partsApi.get(partId, { signal }).then(
-              (data) => data,
-              () => null,
-            )
-          : Promise.resolve(null),
-        canSeeParts
-          ? partsApi.history(partId, { signal }).then(
-              (data) => data,
-              () => null,
-            )
-          : Promise.resolve(null),
-        canSeeParts
-          ? partsApi.facets({}, ['zone'], { signal }).then(
-              (facets) =>
-                new Map(facets.zones.map((zone) => [zone.id, zone.count])),
-              () => null,
-            )
-          : Promise.resolve(null),
-      ])
-      return { zones, placement, part, history, byZone }
+      const [warehouses, zones, placement, part, history, byZone] =
+        await Promise.all([
+          inventoryApi.getWarehouses({ signal }),
+          inventoryApi.getZones({ signal }),
+          inventoryApi.getPartZones(partId, { signal }),
+          canSeeParts
+            ? partsApi.get(partId, { signal }).then(
+                (data) => data,
+                () => null,
+              )
+            : Promise.resolve(null),
+          canSeeParts
+            ? partsApi.history(partId, { signal }).then(
+                (data) => data,
+                () => null,
+              )
+            : Promise.resolve(null),
+          canSeeParts
+            ? partsApi.facets({}, ['zone'], { signal }).then(
+                (facets) =>
+                  new Map(facets.zones.map((zone) => [zone.id, zone.count])),
+                () => null,
+              )
+            : Promise.resolve(null),
+        ])
+      return { warehouses, zones, placement, part, history, byZone }
     },
     [canSeeParts, partId],
   )
@@ -4467,6 +4471,12 @@ function PartPlacementView({ partId }: { partId: string }) {
   const [saving, setSaving] = useState(false)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [createMode, setCreateMode] = useState<'warehouse' | 'zone' | null>(
+    null,
+  )
+  const [draft, setDraft] = useState({ name: '', code: '' })
   const selected = useMemo(
     () =>
       selection ??
@@ -4499,28 +4509,95 @@ function PartPlacementView({ partId }: { partId: string }) {
     }
   }
 
+  const openCreate = (mode: 'warehouse' | 'zone') => {
+    setDraft({ name: '', code: '' })
+    setCreateError(null)
+    setCreateMode(mode)
+  }
+
+  const createWarehouse = async () => {
+    const name = draft.name.trim()
+    const code = draft.code.trim()
+    if (!name || !code || creating) return
+    setCreating(true)
+    try {
+      setCreateError(null)
+      const scope = requireLatestMutation({
+        permission: 'inventory.zones.manage',
+        quota: false,
+      })
+      const warehouse = await inventoryApi.createWarehouse(
+        { name, code },
+        { signal: scope.signal },
+      )
+      setWarehouseId(warehouse.id)
+      setDraft({ name: '', code: '' })
+      setCreateMode('zone')
+      resource.refresh()
+    } catch (error) {
+      setCreateError(normalizeApiProblem(error).message)
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const createZone = async (targetWarehouseId: string) => {
+    const name = draft.name.trim()
+    const code = draft.code.trim()
+    if (!name || !code || creating) return
+    setCreating(true)
+    try {
+      setCreateError(null)
+      const scope = requireLatestMutation({
+        permission: 'inventory.zones.manage',
+        quota: false,
+      })
+      const zone = await inventoryApi.createZone(
+        { warehouseId: targetWarehouseId, name, code },
+        { signal: scope.signal },
+      )
+      setSelection((value) => {
+        const current = value ?? selected
+        return current.includes(zone.id) ? current : [...current, zone.id]
+      })
+      setWarehouseId(zone.warehouseId)
+      setQuery('')
+      setSaved(false)
+      setCreateMode(null)
+      resource.refresh()
+    } catch (error) {
+      setCreateError(normalizeApiProblem(error).message)
+    } finally {
+      setCreating(false)
+    }
+  }
+
   const back = targetTenant
     ? cabinetPath(targetTenant.slug, 'parts', partId)
     : '/'
 
   return (
     <Resource retry={resource.reload} state={resource.state}>
-      {({ zones, placement, part, history, byZone }: PlacementData) => {
+      {({
+        warehouses,
+        zones,
+        placement,
+        part,
+        history,
+        byZone,
+      }: PlacementData) => {
         const real = zones.filter(
           (zone) => zone.isActive && !zone.isSystemUnassigned,
         )
-        const houses = [
-          ...new Map(
-            real.map((zone) => [
-              zone.warehouseId,
-              { id: zone.warehouseId, name: zone.warehouseName },
-            ]),
-          ).values(),
-        ]
+        const houses = warehouses.filter((warehouse) => warehouse.isActive)
         /* Open on the warehouse the part already lies in — that is where a
            correction is most likely to be made. */
+        const preferredHouse = warehouseId ?? placement[0]?.warehouseId
         const house =
-          warehouseId ?? placement[0]?.warehouseId ?? houses[0]?.id ?? null
+          houses.find((item) => item.id === preferredHouse)?.id ??
+          (createMode === 'zone' ? warehouseId : null) ??
+          houses[0]?.id ??
+          null
         const inHouse = real.filter((zone) => zone.warehouseId === house)
         const needle = query.trim().toLowerCase()
         const shown = inHouse.filter(
@@ -4579,10 +4656,6 @@ function PartPlacementView({ partId }: { partId: string }) {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2.5">
-                <Button disabled title={t('scanUnavailable')}>
-                  <ScanLine aria-hidden />
-                  {t('scanZone')}
-                </Button>
                 {canManage ? (
                   <Button
                     aria-busy={saving}
@@ -4647,6 +4720,17 @@ function PartPlacementView({ partId }: { partId: string }) {
                       className="flex flex-wrap gap-2"
                       role="radiogroup"
                     >
+                      {houses.length === 0 ? (
+                        <div className="border-app-line-2 text-app-muted grid w-full gap-3 rounded-xl border border-dashed bg-white/[0.02] p-4.5 text-sm">
+                          <p>{t('noActiveWarehouses')}</p>
+                          {canManage ? (
+                            <Button onClick={() => openCreate('warehouse')}>
+                              <Plus aria-hidden />
+                              {to('addWarehouse')}
+                            </Button>
+                          ) : null}
+                        </div>
+                      ) : null}
                       {houses.map((item) => {
                         const active = item.id === house
                         const count = real.filter(
@@ -4716,19 +4800,30 @@ function PartPlacementView({ partId }: { partId: string }) {
                     number="02"
                     title={t('zone')}
                   >
-                    <SearchInput
-                      aria-label={t('zoneSearch')}
-                      onChange={(event) => setQuery(event.target.value)}
-                      placeholder={t('zoneSearchPlaceholder')}
-                      value={query}
-                    />
-                    {shown.length === 0 ? (
+                    {house === null ? null : (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <SearchInput
+                          aria-label={t('zoneSearch')}
+                          className="min-w-0 flex-1"
+                          onChange={(event) => setQuery(event.target.value)}
+                          placeholder={t('zoneSearchPlaceholder')}
+                          value={query}
+                        />
+                        {canManage ? (
+                          <Button onClick={() => openCreate('zone')}>
+                            <Plus aria-hidden />
+                            {tw('addZone')}
+                          </Button>
+                        ) : null}
+                      </div>
+                    )}
+                    {house !== null && shown.length === 0 ? (
                       <p className="border-app-line-2 text-app-muted mt-3.5 rounded-xl border border-dashed bg-white/[0.02] p-4.5 text-sm">
                         {inHouse.length === 0
                           ? t('noActiveZones')
                           : t('noZonesFound')}
                       </p>
-                    ) : (
+                    ) : house !== null ? (
                       <ul className="mt-3.5 grid grid-cols-[repeat(auto-fill,minmax(min(100%,8rem),1fr))] gap-2">
                         {shown.map((zone) => {
                           const on = selected.includes(zone.id)
@@ -4796,7 +4891,7 @@ function PartPlacementView({ partId }: { partId: string }) {
                           )
                         })}
                       </ul>
-                    )}
+                    ) : null}
                   </Step>
 
                   <Step
@@ -4947,6 +5042,48 @@ function PartPlacementView({ partId }: { partId: string }) {
                 </section>
               </div>
             </div>
+            <FormDialog
+              description={to('newWarehouseHint')}
+              error={createError}
+              onOpenChange={(next) => {
+                if (!next) setCreateMode(null)
+              }}
+              onSubmit={(event) => {
+                event.preventDefault()
+                void createWarehouse()
+              }}
+              open={createMode === 'warehouse'}
+              pending={creating}
+              submitDisabled={
+                draft.name.trim() === '' || draft.code.trim() === ''
+              }
+              submitLabel={to('addWarehouse')}
+              title={to('newWarehouseTitle')}
+            >
+              <NameAndCode draft={draft} onChange={setDraft} />
+            </FormDialog>
+            <FormDialog
+              description={tw('newZoneHint')}
+              error={createError}
+              onOpenChange={(next) => {
+                if (!next) setCreateMode(null)
+              }}
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (house !== null) void createZone(house)
+              }}
+              open={createMode === 'zone'}
+              pending={creating}
+              submitDisabled={
+                draft.name.trim() === '' ||
+                draft.code.trim() === '' ||
+                house === null
+              }
+              submitLabel={tw('addZone')}
+              title={tw('newZoneTitle')}
+            >
+              <NameAndCode draft={draft} onChange={setDraft} />
+            </FormDialog>
           </div>
         )
       }}

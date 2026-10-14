@@ -5,9 +5,6 @@ export const placementMessages = defineMessages({
   uk: {
     backToPart: 'До деталі',
     crumbParts: 'Запчастини',
-    scanUnavailable:
-      'Зону сканують у мобільному застосунку — кабінет вибирає її зі списку',
-    scanZone: 'Сканувати зону',
     saving: 'Зберігаємо…',
     place: 'Розмістити',
     title: 'Розміщення на складі',
@@ -16,11 +13,12 @@ export const placementMessages = defineMessages({
     saved: 'Розміщення збережено',
     warehouseHint: 'Фізичне приміщення, де лежить запчастина.',
     warehouse: 'Склад',
+    noActiveWarehouses:
+      'Немає активних складів. Створіть склад, потім додайте зону.',
     legendEmpty: 'порожня',
     legendFilled: 'є позиції',
     legendBusiest: 'найзавантаженіша',
-    zoneHint:
-      'Зона — найдрібніше місце в нашій системі: саме її і сканують. Можна вибрати кілька.',
+    zoneHint: 'Виберіть одну або кілька зон зі списку або створіть нову.',
     zone: 'Зона',
     zoneSearch: 'Пошук зони',
     zoneSearchPlaceholder: 'Назва або код зони, наприклад A1',
@@ -58,9 +56,6 @@ export const placementMessages = defineMessages({
   'en-GB': {
     backToPart: 'Back to part',
     crumbParts: 'Parts',
-    scanUnavailable:
-      'Zones are scanned in the mobile app — the cabinet picks one from the list',
-    scanZone: 'Scan zone',
     saving: 'Saving…',
     place: 'Place',
     title: 'Warehouse location',
@@ -70,11 +65,12 @@ export const placementMessages = defineMessages({
     saved: 'Location saved',
     warehouseHint: 'The physical room where the part is kept.',
     warehouse: 'Warehouse',
+    noActiveWarehouses:
+      'There are no active warehouses. Create one, then add a zone.',
     legendEmpty: 'empty',
     legendFilled: 'has items',
     legendBusiest: 'busiest',
-    zoneHint:
-      'A zone is the smallest place in our system — it’s what gets scanned. You can pick several.',
+    zoneHint: 'Choose one or more zones from the list, or create a new one.',
     zone: 'Zone',
     zoneSearch: 'Search zones',
     zoneSearchPlaceholder: 'Zone name or code, e.g. A1',
@@ -106,9 +102,6 @@ export const placementMessages = defineMessages({
   pl: {
     backToPart: 'Do części',
     crumbParts: 'Części',
-    scanUnavailable:
-      'Strefę skanuje się w aplikacji mobilnej — panel wybiera ją z listy',
-    scanZone: 'Skanuj strefę',
     saving: 'Zapisywanie…',
     place: 'Rozmieść',
     title: 'Lokalizacja w magazynie',
@@ -117,11 +110,12 @@ export const placementMessages = defineMessages({
     saved: 'Lokalizację zapisano',
     warehouseHint: 'Fizyczne pomieszczenie, w którym leży część.',
     warehouse: 'Magazyn',
+    noActiveWarehouses:
+      'Brak aktywnych magazynów. Utwórz magazyn, a potem dodaj strefę.',
     legendEmpty: 'pusta',
     legendFilled: 'są pozycje',
     legendBusiest: 'najbardziej zajęta',
-    zoneHint:
-      'Strefa to najmniejsze miejsce w naszym systemie — to ją się skanuje. Można wybrać kilka.',
+    zoneHint: 'Wybierz jedną lub kilka stref z listy albo utwórz nową.',
     zone: 'Strefa',
     zoneSearch: 'Szukaj strefy',
     zoneSearchPlaceholder: 'Nazwa lub kod strefy, np. A1',
