@@ -18,6 +18,10 @@ import { resetOnboardingCache } from '../onboarding/use-owner-onboarding'
 import { ToastProvider } from '@/components/app'
 
 const inventoryMocks = vi.hoisted(() => ({
+  getZones: vi.fn(),
+  getSections: vi.fn(),
+  getShelves: vi.fn(),
+  replacePartZones: vi.fn(),
   getPartZones: vi.fn().mockResolvedValue([
     {
       isSystemUnassigned: false,
@@ -286,6 +290,39 @@ beforeEach(() => {
   })
   mediaMocks.upload.mockReset()
   mediaMocks.remove.mockReset().mockResolvedValue(undefined)
+  inventoryMocks.getZones.mockReset().mockResolvedValue([
+    {
+      id: 'system',
+      warehouseId: 'warehouse',
+      warehouseName: 'Основний склад',
+      name: 'Без зони',
+      isSystemUnassigned: true,
+      isActive: true,
+    },
+    {
+      id: 'zone',
+      warehouseId: 'warehouse',
+      warehouseName: 'Основний склад',
+      name: 'Контейнер',
+      isSystemUnassigned: false,
+      isActive: true,
+    },
+  ])
+  inventoryMocks.getSections
+    .mockReset()
+    .mockResolvedValue([
+      { id: 'section', zoneId: 'zone', name: 'Стелаж', isActive: true },
+    ])
+  inventoryMocks.getShelves.mockReset().mockResolvedValue([
+    {
+      id: 'shelf',
+      sectionId: 'section',
+      zoneId: 'zone',
+      name: 'Полиця',
+      isActive: true,
+    },
+  ])
+  inventoryMocks.replacePartZones.mockReset().mockResolvedValue([])
   cabinetMock.snapshot.permissions = new Set([
     'parts.view',
     'parts.manage',
@@ -362,6 +399,55 @@ it('opens the newly created part instead of leaving the creation drawer open', a
   expect(router.state.location.pathname).toBe('/app/yard/parts/part-1')
   expect(screen.queryByRole('dialog', { name: 'Нова деталь' })).toBeNull()
   expect(screen.getByRole('status')).toHaveTextContent('Деталь створено.')
+})
+
+it('saves the chosen warehouse, zone, section and shelf after creating a part', async () => {
+  cabinetMock.snapshot.permissions.add('inventory.view')
+  cabinetMock.snapshot.permissions.add('inventory.zones.manage')
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/app/:tenant/parts/new',
+        element: <PartsScreen definition={partsDefinition as never} />,
+      },
+      { path: '/app/:tenant/parts/:partId', element: <p>Картка деталі</p> },
+    ],
+    { initialEntries: ['/app/yard/parts/new?car_id=car-1'] },
+  )
+  const user = userEvent.setup()
+  render(
+    <ToastProvider>
+      <RouterProvider router={router} />
+    </ToastProvider>,
+  )
+  await user.selectOptions(
+    await screen.findByRole('combobox', { name: 'Склад' }),
+    'warehouse',
+  )
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Зона' }),
+    'zone',
+  )
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Секція' }),
+    'section',
+  )
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Полиця' }),
+    'shelf',
+  )
+  fireEvent.change(screen.getByLabelText('Назва'), {
+    target: { value: 'Фара' },
+  })
+  await user.click(screen.getByRole('button', { name: 'Створити деталь' }))
+  expect(await screen.findByText('Картка деталі')).toBeVisible()
+  expect(inventoryMocks.replacePartZones).toHaveBeenCalledWith(
+    'part-1',
+    ['zone'],
+    expect.anything(),
+    'shelf',
+    'section',
+  )
 })
 
 async function expectPartFormClosed() {
