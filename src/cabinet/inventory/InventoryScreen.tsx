@@ -72,6 +72,7 @@ import { resultsMessages } from './results-messages'
 import { sessionMessages } from './session-messages'
 import { warehouseMessages } from './warehouse-messages'
 import { buildZoneLabelHtml } from './zone-label-output'
+import { ZoneEditorSheet, type ZoneDraft } from './ZoneEditorSheet'
 
 type LoadState<T> =
   | { kind: 'loading' }
@@ -811,9 +812,8 @@ function WarehouseView({ id }: { id: string }) {
     }
   }
 
-  const createZone = async () => {
-    const name = draft.name.trim()
-    const code = draft.code.trim()
+  const createZone = async (input: ZoneDraft) => {
+    const { name, code } = input
     if (!name || !code) return
     const ok = await run((signal) =>
       inventoryApi
@@ -849,9 +849,8 @@ function WarehouseView({ id }: { id: string }) {
     setArchivingWarehouse(false)
     void navigate(base, { replace: true })
   }
-  const saveZone = async (zone: WarehouseZone) => {
-    const name = draft.name.trim()
-    const code = draft.code.trim()
+  const saveZone = async (zone: WarehouseZone, input: ZoneDraft) => {
+    const { name, code } = input
     if (!name || !code) return
     const ok = await run((signal) =>
       inventoryApi
@@ -1130,7 +1129,7 @@ function WarehouseView({ id }: { id: string }) {
                       <Button
                         className="text-[13px] font-semibold"
                         onClick={() => {
-                          setDraft({ name: '', code: '' })
+                          setOperationError(null)
                           setAddingZone(true)
                         }}
                         variant="ghost"
@@ -1246,10 +1245,7 @@ function WarehouseView({ id }: { id: string }) {
                                 className="min-w-11 px-0"
                                 disabled={zone.isSystemUnassigned}
                                 onClick={() => {
-                                  setDraft({
-                                    name: zone.name,
-                                    code: zone.code,
-                                  })
+                                  setOperationError(null)
                                   setEditingZone(zone)
                                 }}
                                 title={
@@ -1463,52 +1459,29 @@ function WarehouseView({ id }: { id: string }) {
               <NameAndCode draft={draft} onChange={setDraft} />
             </FormDialog>
 
-            <FormDialog
-              description={t('newZoneHint')}
-              onOpenChange={(next) => {
-                if (!next) setAddingZone(false)
-              }}
-              onSubmit={(event) => {
-                event.preventDefault()
-                void createZone()
-              }}
-              open={addingZone}
-              pending={busy}
-              submitDisabled={
-                draft.name.trim() === '' || draft.code.trim() === ''
-              }
-              submitLabel={t('addZone')}
-              title={t('newZoneTitle')}
-            >
-              <NameAndCode draft={draft} onChange={setDraft} />
-            </FormDialog>
+            {addingZone ? (
+              <ZoneEditorSheet
+                error={operationError}
+                onClose={() => setAddingZone(false)}
+                onSubmit={(input) => void createZone(input)}
+                pending={busy}
+              />
+            ) : null}
 
-            <FormDialog
-              description={
-                editingZone === null
-                  ? undefined
-                  : t('editZoneHint', {
-                      zone: editingZone.name,
-                      warehouse: warehouse.name,
-                    })
-              }
-              onOpenChange={(next) => {
-                if (!next) setEditingZone(null)
-              }}
-              onSubmit={(event) => {
-                event.preventDefault()
-                if (editingZone !== null) void saveZone(editingZone)
-              }}
-              open={editingZone !== null}
-              pending={busy}
-              submitDisabled={
-                draft.name.trim() === '' || draft.code.trim() === ''
-              }
-              submitLabel={tc('save')}
-              title={t('editZoneTitle')}
-            >
-              <NameAndCode draft={draft} onChange={setDraft} />
-            </FormDialog>
+            {editingZone === null ? null : (
+              <ZoneEditorSheet
+                description={t('editZoneHint', {
+                  zone: editingZone.name,
+                  warehouse: warehouse.name,
+                })}
+                error={operationError}
+                initial={{ name: editingZone.name, code: editingZone.code }}
+                key={editingZone.id}
+                onClose={() => setEditingZone(null)}
+                onSubmit={(input) => void saveZone(editingZone, input)}
+                pending={busy}
+              />
+            )}
 
             <ConfirmDialog
               confirmLabel={t('archiveWarehouse')}
@@ -4541,9 +4514,8 @@ function PartPlacementView({ partId }: { partId: string }) {
     }
   }
 
-  const createZone = async (targetWarehouseId: string) => {
-    const name = draft.name.trim()
-    const code = draft.code.trim()
+  const createZone = async (targetWarehouseId: string, input: ZoneDraft) => {
+    const { name, code } = input
     if (!name || !code || creating) return
     setCreating(true)
     try {
@@ -5062,28 +5034,14 @@ function PartPlacementView({ partId }: { partId: string }) {
             >
               <NameAndCode draft={draft} onChange={setDraft} />
             </FormDialog>
-            <FormDialog
-              description={tw('newZoneHint')}
-              error={createError}
-              onOpenChange={(next) => {
-                if (!next) setCreateMode(null)
-              }}
-              onSubmit={(event) => {
-                event.preventDefault()
-                if (house !== null) void createZone(house)
-              }}
-              open={createMode === 'zone'}
-              pending={creating}
-              submitDisabled={
-                draft.name.trim() === '' ||
-                draft.code.trim() === '' ||
-                house === null
-              }
-              submitLabel={tw('addZone')}
-              title={tw('newZoneTitle')}
-            >
-              <NameAndCode draft={draft} onChange={setDraft} />
-            </FormDialog>
+            {createMode === 'zone' && house !== null ? (
+              <ZoneEditorSheet
+                error={createError}
+                onClose={() => setCreateMode(null)}
+                onSubmit={(input) => void createZone(house, input)}
+                pending={creating}
+              />
+            ) : null}
           </div>
         )
       }}

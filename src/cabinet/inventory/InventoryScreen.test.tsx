@@ -584,6 +584,42 @@ it('manages part placement without exposing counting actions', async () => {
   expect(screen.queryByText(/камера/i)).not.toBeInTheDocument()
 })
 
+it('opens zone creation in a side drawer and derives its code from the name', async () => {
+  const user = userEvent.setup()
+  renderAt('/app/yard/parts/part-1/inventory')
+
+  await user.click(await screen.findByRole('button', { name: 'Додати зону' }))
+  const drawer = screen.getByRole('dialog', { name: 'Нова зона' })
+  expect(drawer).toHaveClass('sm:right-0')
+  await user.type(
+    within(drawer).getByRole('textbox', { name: 'Назва' }),
+    'Стелаж Б2',
+  )
+  expect(within(drawer).getByRole('textbox', { name: 'Код' })).toHaveValue(
+    'stelazh-b2',
+  )
+})
+
+it('updates the zone code when its name is edited in the side drawer', async () => {
+  const user = userEvent.setup()
+  renderAt('/app/yard/inventory/warehouses/wh-1')
+
+  await user.click(
+    await screen.findByRole('button', { name: 'Редагувати зону Стелаж A1' }),
+  )
+  const drawer = screen.getByRole('dialog', { name: 'Редагувати зону' })
+  expect(drawer).toHaveClass('sm:right-0')
+  expect(within(drawer).getByRole('textbox', { name: 'Код' })).toHaveValue('A1')
+  await user.clear(within(drawer).getByRole('textbox', { name: 'Назва' }))
+  await user.type(
+    within(drawer).getByRole('textbox', { name: 'Назва' }),
+    'Сектор В3',
+  )
+  expect(within(drawer).getByRole('textbox', { name: 'Код' })).toHaveValue(
+    'sektor-v3',
+  )
+})
+
 it('allows a long part QR code to wrap on a narrow placement screen', async () => {
   const qrCode =
     '3870f3f5ecb1dbab378027dd9299c57988085d4d7b80054a7a8156cf523e87db'
