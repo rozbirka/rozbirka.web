@@ -105,6 +105,13 @@ import {
 } from '../module-registry'
 import { evaluateModuleAccess, type ModuleAccessDecision } from '../policy'
 import { inventoryApi, type PartInventoryZone } from '@/api/inventory'
+import { PartPlacementPicker } from '../inventory/PartPlacementPicker'
+import {
+  emptyPartPlacement,
+  type PartPlacement,
+} from '../inventory/part-placement-state'
+import { usePlacementOptions } from '../inventory/usePlacementOptions'
+import { placementMessages } from '../inventory/part-placement-messages'
 import { normalizeApiProblem } from '@/api/errors'
 import type { ApiProblem } from '@/api/contracts'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
@@ -2320,6 +2327,7 @@ interface PartFormValues {
   oemCode: string
   partType: string
   desiredSalePrice: string
+  placement?: PartPlacement
 }
 
 const emptyPartForm: PartFormValues = {
@@ -3355,10 +3363,18 @@ function PartForm({
   const [searchParams] = useSearchParams()
   const cabinet = useCabinet()
   const t = useT(partFormMessages)
+  const tPlacement = useT(placementMessages)
   const tc = useT(commonMessages)
   const toast = useOptionalToast()
   const { locale } = useLocale()
   const base = `/app/${cabinet.targetTenant?.slug ?? ''}/parts`
+  const canPlace =
+    allowedToView(cabinetModules.inventory, cabinet) &&
+    Boolean(cabinet.snapshot?.permissions.has('inventory.zones.manage'))
+  const placementOptions = usePlacementOptions(
+    canPlace,
+    cabinet.targetTenant?.id,
+  )
   // Coming back from creating a car or intake restores what was typed.
   const [draft] = useState(() =>
     searchParams.get(DRAFT_PARAM) === '1'
@@ -3587,8 +3603,26 @@ function PartForm({
           resolved.items,
         )
       }
+      const placement = values.placement
+      let placementFailed = false
+      if (canPlace && placement?.zoneId) {
+        try {
+          await inventoryApi.replacePartZones(
+            created.id,
+            [placement.zoneId],
+            { signal: scope.signal },
+            placement.shelfId || undefined,
+            placement.sectionId || undefined,
+          )
+        } catch {
+          placementFailed = true
+        }
+      }
       guard.afterSave(pricing)
-      toast?.show({ tone: 'ok', message: t('created') })
+      toast?.show({
+        tone: placementFailed ? 'danger' : 'ok',
+        message: placementFailed ? tPlacement('saveFailed') : t('created'),
+      })
       void navigate(
         cabinetPath(cabinet.targetTenant!.slug, 'parts', created.id),
         {
@@ -3690,6 +3724,24 @@ function PartForm({
           values={values}
           variant="plain"
         />
+        {canPlace ? (
+          <SectionPanel
+            title={
+              <span className="flex items-baseline gap-2.5">
+                <span className="text-app-dim font-mono text-[11px]">06</span>
+                {tPlacement('title')}
+              </span>
+            }
+            description={tPlacement('hint')}
+            variant="plain"
+          >
+            <PartPlacementPicker
+              value={values.placement ?? emptyPartPlacement}
+              onChange={(placement) => setValues({ ...values, placement })}
+              options={placementOptions}
+            />
+          </SectionPanel>
+        ) : null}
         <PartMediaFields
           deferUploads
           items={mediaItems}
@@ -3697,7 +3749,9 @@ function PartForm({
           setItems={setMediaItems}
           title={
             <span className="flex items-baseline gap-2.5">
-              <span className="text-app-dim font-mono text-[11px]">06</span>
+              <span className="text-app-dim font-mono text-[11px]">
+                {canPlace ? '07' : '06'}
+              </span>
               {t('photos')}
             </span>
           }
@@ -3875,7 +3929,14 @@ function PartEdit({
       setStatus(t('saved'))
     } catch (failure) {
       if (!isLostResponse(failure)) {
-        setError(t('saveFailed'))
+        const problem = normalizeApiProblem(failure)
+        const fieldMessage = Object.values(problem.fieldErrors ?? {}).flat()[0]
+        setError(
+          fieldMessage ??
+            (problem.status !== undefined && problem.status < 500
+              ? problem.message
+              : t('saveFailed')),
+        )
         return
       }
       // The PATCH may have landed: read the part back first. Saving the same

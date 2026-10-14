@@ -678,87 +678,95 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                           {canManageAccess && (
                             <td className="px-5.5 py-3.5">
                               <span className="flex justify-end">
-                                <ActionMenu
-                                  actions={[
-                                    {
-                                      key: 'permissions',
-                                      label: t('permissions'),
-                                      icon: <KeyRound aria-hidden />,
-                                      onSelect: () =>
-                                        void openPermissions(member),
-                                    },
-                                    {
-                                      key: 'lifecycle',
-                                      label: member.isActive
-                                        ? t('deactivate')
-                                        : t('activate'),
-                                      icon: member.isActive ? (
-                                        <PowerOff aria-hidden />
-                                      ) : (
-                                        <Power aria-hidden />
-                                      ),
-                                      onSelect: () =>
-                                        askConfirmation({
-                                          title: member.isActive
-                                            ? t('deactivateTitle')
-                                            : t('activateTitle'),
-                                          description: member.isActive
-                                            ? t('deactivateDescription', {
-                                                name: member.name,
-                                              })
-                                            : t('activateDescription', {
-                                                name: member.name,
-                                                role: roleLabel(
-                                                  member.role,
-                                                  locale,
-                                                ),
-                                              }),
-                                          failure: member.isActive
-                                            ? t('deactivateFailed')
-                                            : t('activateFailed'),
-                                          confirm: () =>
-                                            mutate(
-                                              member.isActive
-                                                ? t('deactivated')
-                                                : t('activated'),
-                                              (signal) =>
+                                {!isOwnerRole(member.role) ? (
+                                  <ActionMenu
+                                    actions={[
+                                      {
+                                        key: 'permissions',
+                                        label: t('permissions'),
+                                        icon: <KeyRound aria-hidden />,
+                                        onSelect: () =>
+                                          void openPermissions(member),
+                                      },
+                                      {
+                                        key: 'lifecycle',
+                                        label: member.isActive
+                                          ? t('deactivate')
+                                          : t('activate'),
+                                        icon: member.isActive ? (
+                                          <PowerOff aria-hidden />
+                                        ) : (
+                                          <Power aria-hidden />
+                                        ),
+                                        onSelect: () =>
+                                          askConfirmation({
+                                            title: member.isActive
+                                              ? t('deactivateTitle')
+                                              : t('activateTitle'),
+                                            description: member.isActive
+                                              ? t('deactivateDescription', {
+                                                  name: member.name,
+                                                })
+                                              : t('activateDescription', {
+                                                  name: member.name,
+                                                  role: roleLabel(
+                                                    member.role,
+                                                    locale,
+                                                  ),
+                                                }),
+                                            failure: member.isActive
+                                              ? t('deactivateFailed')
+                                              : t('activateFailed'),
+                                            confirm: () =>
+                                              mutate(
                                                 member.isActive
-                                                  ? teamApi.deactivateMember(
-                                                      member.id,
-                                                      { signal },
-                                                    )
-                                                  : teamApi.activateMember(
-                                                      member.id,
-                                                      { signal },
-                                                    ),
-                                            ),
-                                        }),
-                                    },
-                                    {
-                                      key: 'delete',
-                                      label: tc('delete'),
-                                      icon: <Trash2 aria-hidden />,
-                                      destructive: true,
-                                      onSelect: () =>
-                                        askConfirmation({
-                                          title: t('deleteTitle'),
-                                          description: t('deleteDescription', {
-                                            name: member.name,
+                                                  ? t('deactivated')
+                                                  : t('activated'),
+                                                (signal) =>
+                                                  member.isActive
+                                                    ? teamApi.deactivateMember(
+                                                        member.id,
+                                                        { signal },
+                                                      )
+                                                    : teamApi.activateMember(
+                                                        member.id,
+                                                        { signal },
+                                                      ),
+                                              ),
                                           }),
-                                          failure: t('deleteFailed'),
-                                          confirm: () =>
-                                            mutate(t('deleted'), (signal) =>
-                                              teamApi.deleteMember(member.id, {
-                                                signal,
-                                              }),
+                                      },
+                                      {
+                                        key: 'delete',
+                                        label: tc('delete'),
+                                        icon: <Trash2 aria-hidden />,
+                                        destructive: true,
+                                        onSelect: () =>
+                                          askConfirmation({
+                                            title: t('deleteTitle'),
+                                            description: t(
+                                              'deleteDescription',
+                                              {
+                                                name: member.name,
+                                              },
                                             ),
-                                        }),
-                                    },
-                                  ]}
-                                  label={t('memberActions', {
-                                    name: member.name,
-                                  })}
-                                />
+                                            failure: t('deleteFailed'),
+                                            confirm: () =>
+                                              mutate(t('deleted'), (signal) =>
+                                                teamApi.deleteMember(
+                                                  member.id,
+                                                  {
+                                                    signal,
+                                                  },
+                                                ),
+                                              ),
+                                          }),
+                                      },
+                                    ]}
+                                    label={t('memberActions', {
+                                      name: member.name,
+                                    })}
+                                  />
+                                ) : null}
                               </span>
                             </td>
                           )}

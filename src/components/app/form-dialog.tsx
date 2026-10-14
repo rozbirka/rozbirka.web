@@ -161,8 +161,10 @@ export function Sheet({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-[2px]" />
         <Dialog.Content
+          // A hidden file input can receive focus when a photo is chosen.
+          // Clip the shell without making it scrollable; only the body scrolls.
           className={cn(
-            'bg-app-canvas border-app-line fixed inset-x-0 bottom-0 z-50 grid max-h-[92dvh] grid-rows-[auto_1fr_auto] overflow-hidden rounded-t-[24px] border-t text-white shadow-2xl sm:inset-y-0 sm:right-0 sm:left-auto sm:h-dvh sm:max-h-none sm:w-full sm:rounded-none sm:border-t-0 sm:border-l',
+            'bg-app-canvas border-app-line fixed inset-x-0 bottom-0 z-50 grid max-h-[92dvh] grid-rows-[auto_1fr_auto] overflow-clip rounded-t-[24px] border-t text-white shadow-2xl sm:inset-y-0 sm:right-0 sm:left-auto sm:h-dvh sm:max-h-none sm:w-full sm:rounded-none sm:border-t-0 sm:border-l',
             size === 'lg' ? 'sm:max-w-[640px]' : 'sm:max-w-[600px]',
           )}
         >
