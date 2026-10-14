@@ -17,10 +17,13 @@ export const placementMessages = defineMessages({
     warehouseHint: 'Фізичне приміщення, де лежить запчастина.',
     warehouse: 'Склад',
     warehouseOnly: 'Зберегти тільки на рівні складу',
+    noActiveWarehouses:
+      'Немає активних складів. Створіть склад, потім додайте зону.',
     legendEmpty: 'порожня',
     legendFilled: 'є позиції',
     legendBusiest: 'найзавантаженіша',
-    zoneHint: 'Виберіть зони складу. За потреби далі вкажіть конкретну полицю.',
+    zoneHint:
+      'Виберіть зони складу або створіть нову. За потреби далі вкажіть конкретну полицю.',
     zone: 'Зона',
     section: 'Секція / стелаж',
     sectionHint: 'Секцію можна вказати після зони або зберегти деталь у зоні.',
@@ -80,10 +83,13 @@ export const placementMessages = defineMessages({
     warehouseHint: 'The physical room where the part is kept.',
     warehouse: 'Warehouse',
     warehouseOnly: 'Store at warehouse level only',
+    noActiveWarehouses:
+      'There are no active warehouses. Create one, then add a zone.',
     legendEmpty: 'empty',
     legendFilled: 'has items',
     legendBusiest: 'busiest',
-    zoneHint: 'Choose warehouse zones. You can then select a specific shelf.',
+    zoneHint:
+      'Choose warehouse zones or create a new one. You can then select a specific shelf.',
     zone: 'Zone',
     section: 'Section / rack',
     sectionHint: 'Select a section after a zone, or save the part in the zone.',
@@ -137,11 +143,13 @@ export const placementMessages = defineMessages({
     warehouseHint: 'Fizyczne pomieszczenie, w którym leży część.',
     warehouse: 'Magazyn',
     warehouseOnly: 'Przechowuj tylko w magazynie',
+    noActiveWarehouses:
+      'Brak aktywnych magazynów. Utwórz magazyn, a potem dodaj strefę.',
     legendEmpty: 'pusta',
     legendFilled: 'są pozycje',
     legendBusiest: 'najbardziej zajęta',
     zoneHint:
-      'Wybierz strefy magazynu, a następnie konkretną półkę, jeśli potrzeba.',
+      'Wybierz strefy magazynu lub utwórz nową, a następnie konkretną półkę, jeśli potrzeba.',
     zone: 'Strefa',
     section: 'Sekcja / regał',
     sectionHint:

@@ -3929,7 +3929,14 @@ function PartEdit({
       setStatus(t('saved'))
     } catch (failure) {
       if (!isLostResponse(failure)) {
-        setError(t('saveFailed'))
+        const problem = normalizeApiProblem(failure)
+        const fieldMessage = Object.values(problem.fieldErrors ?? {}).flat()[0]
+        setError(
+          fieldMessage ??
+            (problem.status !== undefined && problem.status < 500
+              ? problem.message
+              : t('saveFailed')),
+        )
         return
       }
       // The PATCH may have landed: read the part back first. Saving the same

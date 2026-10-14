@@ -3,7 +3,13 @@ import { apiMessage } from './api-messages'
 import type { ApiProblem, ApiProblemKind } from './contracts'
 
 interface ErrorBody {
-  error?: string | { code?: string; message?: string }
+  error?:
+    | string
+    | {
+        code?: string
+        message?: string
+        details?: unknown
+      }
   message?: string
   errors?: Record<string, unknown>
 }
@@ -56,6 +62,23 @@ const readFieldErrors = (
       return [[field, messages]]
     }),
   )
+  return Object.keys(fieldErrors).length > 0 ? fieldErrors : undefined
+}
+
+const readErrorDetails = (
+  value: unknown,
+): Record<string, string[]> | undefined => {
+  if (!Array.isArray(value)) return undefined
+  const fieldErrors: Record<string, string[]> = {}
+  for (const detail of value) {
+    if (
+      !isRecord(detail) ||
+      typeof detail['field'] !== 'string' ||
+      typeof detail['message'] !== 'string'
+    )
+      continue
+    ;(fieldErrors[detail['field']] ??= []).push(detail['message'])
+  }
   return Object.keys(fieldErrors).length > 0 ? fieldErrors : undefined
 }
 
@@ -112,7 +135,8 @@ export const normalizeApiProblem = (error: unknown): ApiProblem => {
       : typeof body?.message === 'string'
         ? body.message
         : apiMessage(kind)
-  const fieldErrors = readFieldErrors(body?.errors)
+  const fieldErrors =
+    readFieldErrors(body?.errors) ?? readErrorDetails(nestedError?.details)
   const retryAfterSeconds = readRetryAfter(error.response?.headers)
 
   return {

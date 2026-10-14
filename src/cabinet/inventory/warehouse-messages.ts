@@ -103,6 +103,8 @@ export const warehouseMessages = defineMessages({
     name: 'Назва',
     codeLabel: 'Код',
     codeHint: 'Короткий код для етикеток і пошуку — наприклад A1.',
+    codeAutoHint:
+      'Код формується з назви автоматично. За потреби його можна змінити.',
   },
   'en-GB': {
     printBlocked: 'The browser blocked the print window.',
@@ -204,6 +206,8 @@ export const warehouseMessages = defineMessages({
     name: 'Name',
     codeLabel: 'Code',
     codeHint: 'A short code for labels and search — e.g. A1.',
+    codeAutoHint:
+      'The code follows the name automatically. You can change it if needed.',
   },
   pl: {
     printBlocked: 'Przeglądarka zablokowała okno drukowania.',
@@ -308,5 +312,7 @@ export const warehouseMessages = defineMessages({
     name: 'Nazwa',
     codeLabel: 'Kod',
     codeHint: 'Krótki kod do etykiet i wyszukiwania — np. A1.',
+    codeAutoHint:
+      'Kod tworzy się automatycznie z nazwy. Możesz go zmienić w razie potrzeby.',
   },
 })
