@@ -1352,7 +1352,7 @@ it('explains that a real zone is needed before sections and opens the zone drawe
     name: 'Секції та полиці за зонами',
   })
   expect(
-    within(shelves).getByText(/спочатку додайте зону/i),
+    await within(shelves).findByText(/спочатку додайте зону/i),
   ).toBeInTheDocument()
   expect(
     within(shelves).queryByRole('button', { name: 'Додати секцію' }),
