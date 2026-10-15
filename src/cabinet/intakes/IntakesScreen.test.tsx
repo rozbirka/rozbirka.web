@@ -6,7 +6,6 @@ import { intakesApi } from '@/api/intakes'
 import { mediaApi } from '@/api/media'
 import { partsApi } from '@/api/parts'
 import { equipmentApi } from '@/api/equipment'
-import { inventoryApi } from '@/api/inventory'
 import type { PlanUsageDto } from '@/api/types'
 import { useCabinet } from '../CabinetContext'
 import { IntakesScreen } from './IntakesScreen'
@@ -44,14 +43,6 @@ vi.mock('@/api/media', () => ({
     remove: vi.fn(),
   },
 }))
-vi.mock('@/api/inventory', () => ({
-  inventoryApi: {
-    getZones: vi.fn(),
-    getSections: vi.fn(),
-    getShelves: vi.fn(),
-    replacePartZones: vi.fn(),
-  },
-}))
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
 vi.mock('../module-registry', () => ({
   cabinetModules: {
@@ -69,13 +60,6 @@ vi.mock('../module-registry', () => ({
       viewPermission: 'parts.view',
       mutationPermission: 'parts.manage',
       quotaResource: 'parts',
-      allowedSubscriptionStates: ['active'],
-    },
-    inventory: {
-      key: 'inventory',
-      routeSegment: '/inventory',
-      viewPermission: 'inventory.view',
-      mutationPermission: 'inventory.zones.manage',
       allowedSubscriptionStates: ['active'],
     },
   },
@@ -222,37 +206,6 @@ beforeEach(() => {
     version: 'v2',
     items: [],
   })
-  vi.mocked(inventoryApi.getZones).mockResolvedValue([
-    {
-      id: 'system',
-      warehouseId: 'warehouse',
-      warehouseName: 'Основний склад',
-      name: 'Без зони',
-      isSystemUnassigned: true,
-      isActive: true,
-    },
-    {
-      id: 'zone',
-      warehouseId: 'warehouse',
-      warehouseName: 'Основний склад',
-      name: 'Контейнер',
-      isSystemUnassigned: false,
-      isActive: true,
-    },
-  ] as never)
-  vi.mocked(inventoryApi.getSections).mockResolvedValue([
-    { id: 'section', zoneId: 'zone', name: 'Стелаж', isActive: true },
-  ] as never)
-  vi.mocked(inventoryApi.getShelves).mockResolvedValue([
-    {
-      id: 'shelf',
-      sectionId: 'section',
-      zoneId: 'zone',
-      name: 'Полиця',
-      isActive: true,
-    },
-  ] as never)
-  vi.mocked(inventoryApi.replacePartZones).mockResolvedValue([])
 })
 
 it('loads the URL search and status list state through the server adapter', async () => {
@@ -708,66 +661,6 @@ it('uses the standard condition choices and compatibility section without invent
       expect.anything(),
     ),
   )
-})
-
-it('saves intake part location through zone, section, and shelf and retries without creating a duplicate', async () => {
-  const user = userEvent.setup()
-  vi.mocked(useCabinet).mockReturnValue(
-    cabinet([
-      'intakes.view',
-      'intakes.manage',
-      'parts.view',
-      'inventory.view',
-      'inventory.zones.manage',
-    ]),
-  )
-  vi.mocked(intakesApi.addPart).mockResolvedValue({ id: 'part-new' } as never)
-  vi.mocked(inventoryApi.replacePartZones)
-    .mockRejectedValueOnce(new Error('Temporary failure'))
-    .mockResolvedValueOnce([])
-  render(
-    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/new']}>
-      <Routes>
-        <Route
-          path="/app/:tenant/intakes/:intakeId/parts/new"
-          element={<IntakesScreen />}
-        />
-      </Routes>
-    </MemoryRouter>,
-  )
-
-  await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Фара')
-  await user.selectOptions(
-    await screen.findByRole('combobox', { name: 'Склад' }),
-    'warehouse',
-  )
-  await user.selectOptions(
-    screen.getByRole('combobox', { name: 'Зона' }),
-    'zone',
-  )
-  await user.selectOptions(
-    screen.getByRole('combobox', { name: 'Секція' }),
-    'section',
-  )
-  await user.selectOptions(
-    screen.getByRole('combobox', { name: 'Полиця' }),
-    'shelf',
-  )
-  await user.click(saveButton('Додати деталь'))
-  await waitFor(() =>
-    expect(inventoryApi.replacePartZones).toHaveBeenCalledWith(
-      'part-new',
-      ['zone'],
-      expect.anything(),
-      'shelf',
-      'section',
-    ),
-  )
-  await user.click(saveButton('Додати деталь'))
-  await waitFor(() =>
-    expect(inventoryApi.replacePartZones).toHaveBeenCalledTimes(2),
-  )
-  expect(intakesApi.addPart).toHaveBeenCalledTimes(1)
 })
 
 it('saves intake part compatibility and retries without adding a duplicate part', async () => {

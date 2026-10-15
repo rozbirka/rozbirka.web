@@ -22,6 +22,7 @@ import {
   PackagePlus,
   Plus,
   Printer,
+  ScanLine,
   Trash2,
   X,
 } from 'lucide-react'
@@ -41,6 +42,7 @@ import {
   QuantityStepper,
   SearchInput,
   SectionPanel,
+  SelectInput,
   Sheet,
   SkeletonRows,
   StatusPill,
@@ -57,14 +59,7 @@ import {
   type IntakeListParams,
   isIntakeStatus,
 } from '@/api/intakes'
-import { inventoryApi } from '@/api/inventory'
-import { PartPlacementPicker } from '../inventory/PartPlacementPicker'
-import {
-  emptyPartPlacement,
-  type PartPlacement,
-} from '../inventory/part-placement-state'
-import { usePlacementOptions } from '../inventory/usePlacementOptions'
-import { placementMessages } from '../inventory/part-placement-messages'
+import { inventoryApi, type InventoryZone } from '@/api/inventory'
 import { partsApi } from '@/api/parts'
 import { normalizeApiProblem } from '@/api/errors'
 import { cn } from '@/lib/utils'
@@ -1821,12 +1816,9 @@ function PartForm({
   const t = useT(intakesMessages)
   const tf = useT(intakeFormMessages)
   const tp = useT(partFormMessages)
-  const tPlacement = useT(placementMessages)
   const params = useParams<{ tenant: string }>()
   const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
-  const canPlace =
-    allowedToView(cabinetModules.inventory, cabinet) &&
-    Boolean(cabinet.snapshot?.permissions.has('inventory.zones.manage'))
+  const canPlace = allowedToView(cabinetModules.inventory, cabinet)
   const emptyPosition = {
     name: '',
     partType: '',
@@ -1835,7 +1827,7 @@ function PartForm({
     quantity: 1,
     unit: PIECES,
     price: '',
-    placement: emptyPartPlacement,
+    zoneId: '',
     notes: '',
   }
   // The position typed before leaving for the currency setting comes back.
@@ -1847,10 +1839,7 @@ function PartForm({
   const [problem, setProblem] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<{ name?: string }>({})
   const [intake, setIntake] = useState<Intake | null>(null)
-  const placementOptions = usePlacementOptions(
-    canPlace,
-    cabinet.targetTenant?.id,
-  )
+  const [zones, setZones] = useState<InventoryZone[]>([])
   const [added, setAdded] = useState<AddedPart[]>([])
   const [compatRows, setCompatRows] = useState<CompatibilityRow[]>([])
   const nextCompatibilityKey = useRef(0)
@@ -1873,6 +1862,22 @@ function PartForm({
     return () => controller.abort()
   }, [intakeId])
 
+  useEffect(() => {
+    if (!canPlace) return
+    const controller = new AbortController()
+    void inventoryApi
+      .getZones({ activeOnly: true, signal: controller.signal })
+      .then(
+        (next) => {
+          if (!controller.signal.aborted) setZones(next)
+        },
+        () => {
+          // Without zones the cell simply stays unset — the part is still added.
+        },
+      )
+    return () => controller.abort()
+  }, [canPlace])
+
   const update = (key: keyof typeof values, value: string | number) =>
     setValues((current) => ({ ...current, [key]: value }))
 
@@ -1880,10 +1885,7 @@ function PartForm({
   const hasPrice =
     values.price.trim() !== '' && Number.isFinite(price) && price > 0
   const named = values.name.trim().length > 0
-  const zone =
-    placementOptions.zones.find(
-      (item) => item.id === values.placement?.zoneId,
-    ) ?? null
+  const zone = zones.find((item) => item.id === values.zoneId) ?? null
   // Only a positive price is sent, so only that one can lock the currency.
   const priceSlots = usePriceSlots(guard, {
     values: hasPrice ? [values.price] : [],
@@ -1928,6 +1930,7 @@ function PartForm({
       unit: values.unit || null,
       notes: values.notes.trim() || null,
       photoKeys: media.map((item) => item.storageKey),
+      ...(values.zoneId ? { inventoryZoneIds: [values.zoneId] } : {}),
     }
     setBusy(true)
     try {
@@ -1982,21 +1985,6 @@ function PartForm({
           { signal: partScope!.signal },
         )
         guard.afterSave(true)
-      }
-      if (canPlace && values.placement?.zoneId) {
-        try {
-          await inventoryApi.replacePartZones(
-            createdId,
-            [values.placement.zoneId],
-            { signal: intakeScope.signal },
-            values.placement.shelfId || undefined,
-            values.placement.sectionId || undefined,
-          )
-        } catch {
-          setProblem(tPlacement('retrySave'))
-          setBusy(false)
-          return
-        }
       }
       pendingCreatedId.current = null
       if (!andAnother) {
@@ -2241,17 +2229,35 @@ function PartForm({
 
           {canPlace ? (
             <SectionPanel
-              description={tPlacement('hint')}
+              description={tf('placementHint')}
               title={<NumberedTitle number="05" title={tf('placementTitle')} />}
               variant="plain"
             >
-              <PartPlacementPicker
-                value={values.placement ?? emptyPartPlacement}
-                onChange={(placement) =>
-                  setValues((current) => ({ ...current, placement }))
-                }
-                options={placementOptions}
-              />
+              <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
+                <Field label={tf('cell')}>
+                  <SelectInput
+                    name="zoneId"
+                    onChange={(event) => update('zoneId', event.target.value)}
+                    value={values.zoneId}
+                  >
+                    <option value="">{tf('noCell')}</option>
+                    {zones.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.code} · {item.name}
+                      </option>
+                    ))}
+                  </SelectInput>
+                </Field>
+                <Button
+                  className="min-h-11"
+                  disabled
+                  title={tf('scanUnavailable')}
+                  type="button"
+                >
+                  <ScanLine aria-hidden />
+                  {tf('scan')}
+                </Button>
+              </div>
             </SectionPanel>
           ) : null}
 
@@ -2367,7 +2373,6 @@ interface BatchRow {
   quantity: string
   price: string
   zoneId: string
-  placement?: PartPlacement
 }
 
 let batchRowSeq = 0
@@ -2403,15 +2408,12 @@ function BatchPartsForm({
   const tf = useT(intakeFormMessages)
   const params = useParams<{ tenant: string }>()
   const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
-  const canPlace =
-    allowedToView(cabinetModules.inventory, cabinet) &&
-    Boolean(cabinet.snapshot?.permissions.has('inventory.zones.manage'))
+  const canPlace = allowedToView(cabinetModules.inventory, cabinet)
   // The rows typed before leaving for the currency setting come back.
   const draft = useCurrencyDraft<{
     rows: BatchRow[]
     condition: string
     sharedZoneId: string
-    sharedPlacement?: PartPlacement
   }>(`intake-batch:${intakeId}`)
   const [rows, setRows] = useState<BatchRow[]>(
     () =>
@@ -2429,19 +2431,11 @@ function BatchPartsForm({
   const [condition, setCondition] = useState(
     () => draft.initial?.condition ?? 'good',
   )
-  const [sharedPlacement, setSharedPlacement] = useState<PartPlacement>(
-    () =>
-      draft.initial?.sharedPlacement ?? {
-        ...emptyPartPlacement,
-        zoneId: draft.initial?.sharedZoneId ?? '',
-      },
+  const [sharedZoneId, setSharedZoneId] = useState(
+    () => draft.initial?.sharedZoneId ?? '',
   )
   const [intake, setIntake] = useState<Intake | null>(null)
-  const placementOptions = usePlacementOptions(
-    canPlace,
-    cabinet.targetTenant?.id,
-  )
-  const pendingCreatedRows = useRef(new Map<string, string>())
+  const [zones, setZones] = useState<InventoryZone[]>([])
   const [problem, setProblem] = useState<string | null>(null)
   const [saved, setSaved] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -2462,6 +2456,22 @@ function BatchPartsForm({
     return () => controller.abort()
   }, [intakeId])
 
+  useEffect(() => {
+    if (!canPlace) return
+    const controller = new AbortController()
+    void inventoryApi
+      .getZones({ activeOnly: true, signal: controller.signal })
+      .then(
+        (next) => {
+          if (!controller.signal.aborted) setZones(next)
+        },
+        () => {
+          // Without zones the positions are simply booked in without a cell.
+        },
+      )
+    return () => controller.abort()
+  }, [canPlace])
+
   const update = (key: string, field: keyof BatchRow, value: string) =>
     setRows((current) =>
       current.map((row) =>
@@ -2478,7 +2488,7 @@ function BatchPartsForm({
     0,
   )
   const withoutCell = filled.filter(
-    (row) => !row.placement?.zoneId && !row.zoneId && !sharedPlacement.zoneId,
+    (row) => (row.zoneId || sharedZoneId) === '',
   ).length
   const withoutPrice = filled.filter(
     (row) => batchNumber(row.price) === 0,
@@ -2490,28 +2500,16 @@ function BatchPartsForm({
       .map((row) => row.price),
     onAccept: (accepted) => void save(undefined, accepted),
     draftKept: true,
-    onLeave: () =>
-      draft.keep({
-        rows,
-        condition,
-        sharedZoneId: sharedPlacement.zoneId,
-        sharedPlacement,
-      }),
+    onLeave: () => draft.keep({ rows, condition, sharedZoneId }),
   })
   const pricing = priceSlots.hasPrice && !priceSlots.disabled
   const fillDown = () =>
     setRows((current) => {
-      const source = current.find(
-        (row) => Boolean(row.placement?.zoneId) || Boolean(row.zoneId),
-      )
+      const source = current.find((row) => row.zoneId !== '')
       if (!source) return current
       return current.map((row) =>
-        row.name.trim() !== '' && !row.placement?.zoneId && row.zoneId === ''
-          ? {
-              ...row,
-              zoneId: source.zoneId,
-              ...(source.placement ? { placement: source.placement } : {}),
-            }
+        row.name.trim() !== '' && row.zoneId === ''
+          ? { ...row, zoneId: source.zoneId }
           : row,
       )
     })
@@ -2544,11 +2542,7 @@ function BatchPartsForm({
       return
     }
     for (const [index, row] of filled.entries()) {
-      const placement = row.placement?.zoneId
-        ? row.placement
-        : row.zoneId
-          ? { ...emptyPartPlacement, zoneId: row.zoneId }
-          : sharedPlacement
+      const zoneId = row.zoneId || sharedZoneId
       const price = batchNumber(row.price)
       const request: AddIntakePartRequest = {
         name: row.name.trim(),
@@ -2558,39 +2552,26 @@ function BatchPartsForm({
         unit: PIECES,
         notes: null,
         photoKeys: [],
+        ...(zoneId ? { inventoryZoneIds: [zoneId] } : {}),
       }
       try {
         const scope = intakeMutation.requireLatestMutation({ quota: false })
         partMutation.requireLatestMutation({ permission: 'parts.view' })
-        const createdId =
-          pendingCreatedRows.current.get(row.key) ??
-          (
-            await intakesApi.addPart(intakeId, request, {
-              signal: scope.signal,
-            })
-          ).id
-        pendingCreatedRows.current.set(row.key, createdId)
+        const created = await intakesApi.addPart(intakeId, request, {
+          signal: scope.signal,
+        })
         if (price > 0 && !priceSlots.disabled) {
           const priceScope = partMutation.requireLatestMutation({
             permission: 'parts.manage',
             quota: false,
           })
           await partsApi.update(
-            createdId,
+            created.id,
             { desiredSalePrice: { isSet: true, value: price } },
             { signal: priceScope.signal },
           )
           guard.afterSave(true)
         }
-        if (canPlace && placement.zoneId)
-          await inventoryApi.replacePartZones(
-            createdId,
-            [placement.zoneId],
-            { signal: scope.signal },
-            placement.shelfId || undefined,
-            placement.sectionId || undefined,
-          )
-        pendingCreatedRows.current.delete(row.key)
         setSaved(index + 1)
       } catch (error: unknown) {
         setProblem(
@@ -2696,7 +2677,12 @@ function BatchPartsForm({
               </div>
               <div
                 aria-hidden
-                className="border-app-line text-app-muted hidden gap-3 border-t border-b px-6 py-2.5 font-mono text-[10px] tracking-[0.12em] uppercase sm:grid sm:grid-cols-[2.4fr_0.8fr_1fr_44px]"
+                className={cn(
+                  'border-app-line text-app-muted hidden gap-3 border-t border-b px-6 py-2.5 font-mono text-[10px] tracking-[0.12em] uppercase sm:grid',
+                  canPlace
+                    ? 'sm:grid-cols-[2.4fr_0.8fr_1fr_1.4fr_44px]'
+                    : 'sm:grid-cols-[2.4fr_0.8fr_1fr_44px]',
+                )}
               >
                 <span>{tf('columnName')}</span>
                 <span className="text-right">{tf('columnQuantity')}</span>
@@ -2705,12 +2691,18 @@ function BatchPartsForm({
                     ? tf('columnPrice')
                     : tf('columnPriceIn', { code: guard.currency })}
                 </span>
+                {canPlace ? <span>{tf('cell')}</span> : null}
                 <span />
               </div>
               <ul className="divide-app-line border-app-line grid divide-y border-t sm:border-t-0">
                 {rows.map((row, index) => (
                   <li
-                    className="grid items-center gap-3 px-6 py-2.5 sm:grid-cols-[2.4fr_0.8fr_1fr_44px]"
+                    className={cn(
+                      'grid items-center gap-3 px-6 py-2.5',
+                      canPlace
+                        ? 'sm:grid-cols-[2.4fr_0.8fr_1fr_1.4fr_44px]'
+                        : 'sm:grid-cols-[2.4fr_0.8fr_1fr_44px]',
+                    )}
                     key={row.key}
                   >
                     <TextInput
@@ -2752,6 +2744,26 @@ function BatchPartsForm({
                       placeholder="—"
                       value={row.price}
                     />
+                    {canPlace ? (
+                      <SelectInput
+                        aria-label={tf('rowCell', { number: index + 1 })}
+                        onChange={(event) =>
+                          update(row.key, 'zoneId', event.target.value)
+                        }
+                        value={row.zoneId}
+                      >
+                        <option value="">
+                          {sharedZoneId === ''
+                            ? tf('noCell')
+                            : tf('sameAsBatch')}
+                        </option>
+                        {zones.map((zone) => (
+                          <option key={zone.id} value={zone.id}>
+                            {zone.code}
+                          </option>
+                        ))}
+                      </SelectInput>
+                    ) : null}
                     <Button
                       aria-label={tf('removeRow', { number: index + 1 })}
                       className="min-w-11 px-0"
@@ -2765,63 +2777,6 @@ function BatchPartsForm({
                     >
                       <X aria-hidden />
                     </Button>
-                    {canPlace ? (
-                      <details className="border-app-line min-w-0 border-t pt-3 text-sm sm:col-span-4">
-                        <summary className="text-app-ink cursor-pointer font-semibold">
-                          {row.placement?.zoneId
-                            ? (placementOptions.zones.find(
-                                (zone) => zone.id === row.placement?.zoneId,
-                              )?.name ?? tf('cell'))
-                            : row.zoneId
-                              ? (placementOptions.zones.find(
-                                  (zone) => zone.id === row.zoneId,
-                                )?.name ?? tf('cell'))
-                              : sharedPlacement.zoneId
-                                ? tf('sameAsBatch')
-                                : tf('noCell')}
-                        </summary>
-                        <div className="mt-3 grid gap-3">
-                          <Button
-                            type="button"
-                            onClick={() =>
-                              setRows((current) =>
-                                current.map((item) => {
-                                  if (item.key !== row.key) return item
-                                  const { placement: _placement, ...rest } =
-                                    item
-                                  return { ...rest, zoneId: '' }
-                                }),
-                              )
-                            }
-                          >
-                            {tf('sameAsBatch')}
-                          </Button>
-                          <PartPlacementPicker
-                            compact
-                            value={
-                              row.placement ??
-                              (row.zoneId
-                                ? { ...emptyPartPlacement, zoneId: row.zoneId }
-                                : emptyPartPlacement)
-                            }
-                            onChange={(placement) =>
-                              setRows((current) =>
-                                current.map((item) =>
-                                  item.key === row.key
-                                    ? {
-                                        ...item,
-                                        zoneId: placement.zoneId,
-                                        placement,
-                                      }
-                                    : item,
-                                ),
-                              )
-                            }
-                            options={placementOptions}
-                          />
-                        </div>
-                      </details>
-                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -2850,13 +2805,37 @@ function BatchPartsForm({
                 options={conditionOptions(tf)}
                 value={condition}
               />
-              {canPlace ? (
-                <div className="mt-3">
-                  <PartPlacementPicker
-                    value={sharedPlacement}
-                    onChange={setSharedPlacement}
-                    options={placementOptions}
-                  />
+              {canPlace && zones.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  <button
+                    aria-pressed={sharedZoneId === ''}
+                    className={cn(
+                      'focus-visible:outline-brand min-h-9 cursor-pointer rounded-full border px-3.5 text-[13px] font-semibold',
+                      sharedZoneId === ''
+                        ? 'border-app-line-2 bg-app-input text-white'
+                        : 'border-app-line text-app-muted hover:text-app-ink',
+                    )}
+                    onClick={() => setSharedZoneId('')}
+                    type="button"
+                  >
+                    {tf('noCell')}
+                  </button>
+                  {zones.map((zone) => (
+                    <button
+                      aria-pressed={sharedZoneId === zone.id}
+                      className={cn(
+                        'focus-visible:outline-brand min-h-9 cursor-pointer rounded-full border px-3.5 font-mono text-[13px] font-semibold',
+                        sharedZoneId === zone.id
+                          ? 'border-app-line-2 bg-app-input text-white'
+                          : 'border-app-line text-app-muted hover:text-app-ink',
+                      )}
+                      key={zone.id}
+                      onClick={() => setSharedZoneId(zone.id)}
+                      type="button"
+                    >
+                      {zone.code}
+                    </button>
+                  ))}
                 </div>
               ) : null}
             </Card>
