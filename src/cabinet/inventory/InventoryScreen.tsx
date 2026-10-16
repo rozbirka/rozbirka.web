@@ -7,9 +7,12 @@ import {
   type ReactNode,
 } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
+import QRCode from 'qrcode'
 import {
   Archive,
   ArrowRight,
+  Check,
+  ChevronRight,
   ChevronLeft,
   ClipboardList,
   Download,
@@ -31,6 +34,7 @@ import {
   FormDialog,
   Notice,
   SearchInput,
+  Sheet,
   SkeletonRows,
   StatusPill,
   TextArea,
@@ -44,6 +48,8 @@ import {
   type InventorySession,
   type InventorySessionResults,
   type InventoryZone,
+  type InventorySection,
+  type InventoryShelf,
   type PartInventoryZone,
   type Warehouse,
   type WarehouseDetail,
@@ -72,7 +78,9 @@ import { placementMessages } from './placement-messages'
 import { resultsMessages } from './results-messages'
 import { sessionMessages } from './session-messages'
 import { warehouseMessages } from './warehouse-messages'
+import { inventoryCodeFromName } from './inventory-code'
 import { buildZoneLabelHtml } from './zone-label-output'
+import { ZoneEditorSheet, type ZoneDraft } from './ZoneEditorSheet'
 
 type LoadState<T> =
   | { kind: 'loading' }
@@ -812,9 +820,8 @@ function WarehouseView({ id }: { id: string }) {
     }
   }
 
-  const createZone = async () => {
-    const name = draft.name.trim()
-    const code = draft.code.trim()
+  const createZone = async (input: ZoneDraft) => {
+    const { name, code } = input
     if (!name || !code) return
     const ok = await run((signal) =>
       inventoryApi
@@ -850,9 +857,8 @@ function WarehouseView({ id }: { id: string }) {
     setArchivingWarehouse(false)
     void navigate(base, { replace: true })
   }
-  const saveZone = async (zone: WarehouseZone) => {
-    const name = draft.name.trim()
-    const code = draft.code.trim()
+  const saveZone = async (zone: WarehouseZone, input: ZoneDraft) => {
+    const { name, code } = input
     if (!name || !code) return
     const ok = await run((signal) =>
       inventoryApi
@@ -895,6 +901,8 @@ function WarehouseView({ id }: { id: string }) {
           zoneName: zone.name,
           zoneCode: zone.code,
           warehouseName: zone.warehouseName,
+          kind: 'zone' as const,
+          path: [zone.warehouseName, zone.name],
         })),
         documentLocale,
       )
@@ -908,6 +916,44 @@ function WarehouseView({ id }: { id: string }) {
     } finally {
       setPrinting(false)
     }
+  }
+
+  const printWarehouse = async (warehouse: WarehouseDetail) => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      setOperationError(t('printBlocked'))
+      return
+    }
+    printWindow.opener = null
+    try {
+      const html = await buildZoneLabelHtml(
+        [
+          {
+            id: warehouse.id,
+            qrCode: warehouse.qrCode,
+            zoneName: warehouse.name,
+            zoneCode: warehouse.code,
+            warehouseName: warehouse.name,
+            kind: 'warehouse',
+            path: [warehouse.name],
+          },
+        ],
+        documentLocale,
+      )
+      printWindow.document.write(html)
+      printWindow.document.close()
+      printWindow.focus()
+      printWindow.print()
+    } catch {
+      printWindow.close()
+      setOperationError(t('printFailed'))
+    }
+  }
+
+  const startAddingZone = () => {
+    setOperationError(null)
+    setDraft({ name: '', code: '' })
+    setAddingZone(true)
   }
 
   return (
@@ -1014,6 +1060,12 @@ function WarehouseView({ id }: { id: string }) {
                 ) : null}
                 <ActionMenu
                   actions={[
+                    {
+                      key: 'print-warehouse',
+                      label: t('printWarehouse'),
+                      icon: <Printer aria-hidden />,
+                      onSelect: () => void printWarehouse(warehouse),
+                    },
                     {
                       key: 'print',
                       label: printing ? t('printing') : t('printZones'),
@@ -1124,16 +1176,13 @@ function WarehouseView({ id }: { id: string }) {
                 />
               </div>
 
-              <div className="flex flex-wrap items-start gap-5">
+              <div className="grid min-w-0 gap-5">
                 <Card
                   aside={
                     canManage ? (
                       <Button
                         className="text-[13px] font-semibold"
-                        onClick={() => {
-                          setDraft({ name: '', code: '' })
-                          setAddingZone(true)
-                        }}
+                        onClick={startAddingZone}
                         variant="ghost"
                       >
                         <Plus aria-hidden />
@@ -1146,7 +1195,7 @@ function WarehouseView({ id }: { id: string }) {
                     )
                   }
                   bodyClassName="p-0 pt-4"
-                  className="min-w-0 flex-[2_1_34rem]"
+                  className="min-w-0"
                   title={t('zonesTitle')}
                 >
                   <div
@@ -1247,10 +1296,7 @@ function WarehouseView({ id }: { id: string }) {
                                 className="min-w-11 px-0"
                                 disabled={zone.isSystemUnassigned}
                                 onClick={() => {
-                                  setDraft({
-                                    name: zone.name,
-                                    code: zone.code,
-                                  })
+                                  setOperationError(null)
                                   setEditingZone(zone)
                                 }}
                                 title={
@@ -1286,7 +1332,13 @@ function WarehouseView({ id }: { id: string }) {
                   </ul>
                 </Card>
 
-                <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-5">
+                <WarehouseShelves
+                  onAddZone={startAddingZone}
+                  zones={real}
+                  warehouseId={id}
+                />
+
+                <div className="grid min-w-0 gap-5 lg:grid-cols-2 lg:items-start">
                   <section
                     aria-label={t('activeSession')}
                     className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
@@ -1461,55 +1513,38 @@ function WarehouseView({ id }: { id: string }) {
               submitLabel={tc('save')}
               title={t('editWarehouseTitle')}
             >
-              <NameAndCode draft={draft} onChange={setDraft} />
+              <NameAndCode
+                draft={draft}
+                initialCode={warehouse.code}
+                onChange={setDraft}
+              />
             </FormDialog>
 
-            <FormDialog
-              description={t('newZoneHint')}
-              onOpenChange={(next) => {
-                if (!next) setAddingZone(false)
-              }}
-              onSubmit={(event) => {
-                event.preventDefault()
-                void createZone()
-              }}
-              open={addingZone}
-              pending={busy}
-              submitDisabled={
-                draft.name.trim() === '' || draft.code.trim() === ''
-              }
-              submitLabel={t('addZone')}
-              title={t('newZoneTitle')}
-            >
-              <NameAndCode draft={draft} onChange={setDraft} />
-            </FormDialog>
+            {addingZone ? (
+              <ZoneEditorSheet
+                eyebrow={warehouse.name}
+                error={operationError}
+                onClose={() => setAddingZone(false)}
+                onSubmit={(input) => void createZone(input)}
+                pending={busy}
+              />
+            ) : null}
 
-            <FormDialog
-              description={
-                editingZone === null
-                  ? undefined
-                  : t('editZoneHint', {
-                      zone: editingZone.name,
-                      warehouse: warehouse.name,
-                    })
-              }
-              onOpenChange={(next) => {
-                if (!next) setEditingZone(null)
-              }}
-              onSubmit={(event) => {
-                event.preventDefault()
-                if (editingZone !== null) void saveZone(editingZone)
-              }}
-              open={editingZone !== null}
-              pending={busy}
-              submitDisabled={
-                draft.name.trim() === '' || draft.code.trim() === ''
-              }
-              submitLabel={tc('save')}
-              title={t('editZoneTitle')}
-            >
-              <NameAndCode draft={draft} onChange={setDraft} />
-            </FormDialog>
+            {editingZone === null ? null : (
+              <ZoneEditorSheet
+                description={t('editZoneHint', {
+                  zone: editingZone.name,
+                  warehouse: warehouse.name,
+                })}
+                eyebrow={warehouse.name}
+                error={operationError}
+                initial={{ name: editingZone.name, code: editingZone.code }}
+                key={editingZone.id}
+                onClose={() => setEditingZone(null)}
+                onSubmit={(input) => void saveZone(editingZone, input)}
+                pending={busy}
+              />
+            )}
 
             <ConfirmDialog
               confirmLabel={t('archiveWarehouse')}
@@ -1551,12 +1586,662 @@ function WarehouseView({ id }: { id: string }) {
   )
 }
 
-/** Name and code, the two fields every warehouse and zone dialog asks for. */
+function WarehouseShelves({
+  onAddZone,
+  zones,
+  warehouseId,
+}: {
+  onAddZone: () => void
+  zones: WarehouseZone[]
+  warehouseId: string
+}) {
+  const t = useT(warehouseMessages)
+  const tc = useT(commonMessages)
+  const formId = useId()
+  const canManage = usePermission('inventory.zones.manage')
+  const { requireLatestMutation } = useLatestMutationGuard(
+    cabinetModules.inventory,
+  )
+  const documentLocale = useTenantSettings().documentLanguage ?? 'uk'
+  const loader = useCallback(
+    async (signal: AbortSignal) => {
+      const [shelves, sections] = await Promise.all([
+        inventoryApi.getShelves(undefined, { signal }),
+        inventoryApi.getSections(undefined, { signal }),
+      ])
+      return {
+        shelves: shelves.filter((item) => item.warehouseId === warehouseId),
+        sections: sections.filter((item) => item.warehouseId === warehouseId),
+      }
+    },
+    [warehouseId],
+  )
+  const resource = useLoad(loader, warehouseId)
+  const [addingTo, setAddingTo] = useState<InventorySection | null>(null)
+  const [addingSectionTo, setAddingSectionTo] = useState<WarehouseZone | null>(
+    null,
+  )
+  const [editingSection, setEditingSection] = useState<InventorySection | null>(
+    null,
+  )
+  const [archivingSection, setArchivingSection] =
+    useState<InventorySection | null>(null)
+  const [editing, setEditing] = useState<InventoryShelf | null>(null)
+  const [archiving, setArchiving] = useState<InventoryShelf | null>(null)
+  const [expandedSectionId, setExpandedSectionId] = useState<string | null>(
+    null,
+  )
+  const [previewLocation, setPreviewLocation] = useState<{
+    location: InventorySection | InventoryShelf
+    kind: 'section' | 'shelf'
+  } | null>(null)
+  const [previewQr, setPreviewQr] = useState<{
+    code: string
+    url: string | null
+  } | null>(null)
+  useEffect(() => {
+    let active = true
+    if (previewLocation) {
+      void QRCode.toDataURL(previewLocation.location.qrCode, {
+        width: 360,
+        margin: 2,
+        errorCorrectionLevel: 'M',
+      })
+        .then((url) => {
+          if (active)
+            setPreviewQr({ code: previewLocation.location.qrCode, url })
+        })
+        .catch(() => {
+          if (active)
+            setPreviewQr({ code: previewLocation.location.qrCode, url: null })
+        })
+    }
+    return () => {
+      active = false
+    }
+  }, [previewLocation])
+  const [draft, setDraft] = useState({ name: '', code: '' })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const loadedShelves =
+    resource.state.kind === 'ready' ? resource.state.data.shelves : []
+  const loadedSections =
+    resource.state.kind === 'ready' ? resource.state.data.sections : []
+
+  const write = async (action: (signal: AbortSignal) => Promise<unknown>) => {
+    setBusy(true)
+    setError(null)
+    try {
+      const scope = requireLatestMutation({
+        permission: 'inventory.zones.manage',
+        quota: false,
+      })
+      await action(scope.signal)
+      resource.reload()
+      return true
+    } catch (cause) {
+      setError(normalizeApiProblem(cause).message)
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const save = async () => {
+    const name = draft.name.trim()
+    const code = draft.code.trim()
+    if (!name || !code) return
+    const ok = addingSectionTo
+      ? await write((signal) =>
+          inventoryApi.createSection(
+            { zoneId: addingSectionTo.id, name, code },
+            { signal },
+          ),
+        )
+      : editingSection
+        ? await write((signal) =>
+            inventoryApi.updateSection(
+              editingSection.id,
+              { name, code, isActive: editingSection.isActive },
+              { signal },
+            ),
+          )
+        : addingTo
+          ? await write((signal) =>
+              inventoryApi.createShelf(
+                { zoneId: addingTo.zoneId, sectionId: addingTo.id, name, code },
+                { signal },
+              ),
+            )
+          : editing
+            ? await write((signal) =>
+                inventoryApi.updateShelf(
+                  editing.id,
+                  { name, code, isActive: editing.isActive },
+                  { signal },
+                ),
+              )
+            : false
+    if (ok) {
+      setAddingTo(null)
+      setAddingSectionTo(null)
+      setEditingSection(null)
+      setEditing(null)
+    }
+  }
+
+  const startAddingShelf = (section: InventorySection) => {
+    setError(null)
+    setDraft({ name: '', code: '' })
+    setAddingTo(section)
+  }
+
+  const printNestedLocation = async (
+    location: InventorySection | InventoryShelf,
+    kind: 'section' | 'shelf',
+  ) => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      setError(t('printBlocked'))
+      return
+    }
+    printWindow.opener = null
+    try {
+      const html = await buildZoneLabelHtml(
+        [
+          {
+            id: location.id,
+            qrCode: location.qrCode,
+            zoneName: location.name,
+            zoneCode: location.code,
+            warehouseName: location.warehouseName,
+            kind,
+            path: [
+              location.warehouseName,
+              location.zoneName,
+              ...(kind === 'shelf' && 'sectionName' in location
+                ? [location.sectionName]
+                : []),
+              location.name,
+            ],
+          },
+        ],
+        documentLocale,
+      )
+      printWindow.document.write(html)
+      printWindow.document.close()
+      printWindow.focus()
+      printWindow.print()
+    } catch {
+      printWindow.close()
+      setError(t('printFailed'))
+    }
+  }
+
+  return (
+    <Card
+      title={t('shelvesTitle')}
+      className="min-w-0"
+      bodyClassName="px-6 pb-6"
+    >
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+      {resource.state.kind === 'loading' ? <SkeletonRows rows={3} /> : null}
+      {resource.state.kind === 'error' ? (
+        <Button onClick={resource.reload} variant="ghost">
+          {tc('retry')}
+        </Button>
+      ) : null}
+      {resource.state.kind === 'ready' ? (
+        <div className="grid gap-6">
+          {zones.every((zone) => zone.isSystemUnassigned || !zone.isActive) ? (
+            <div className="grid gap-4">
+              <p className="text-app-muted text-sm">
+                {t('noActiveZonesForShelves')}
+              </p>
+              {canManage ? (
+                <Button className="justify-self-start" onClick={onAddZone}>
+                  <Plus aria-hidden />
+                  {t('addZone')}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+          {zones
+            .filter((zone) => !zone.isSystemUnassigned && zone.isActive)
+            .map((zone) => {
+              const sections = loadedSections.filter(
+                (section) => section.zoneId === zone.id,
+              )
+              return (
+                <section
+                  aria-label={t('zoneGroup', { name: zone.name })}
+                  className="border-app-line min-w-0 border-t pt-6 first:border-t-0 first:pt-0"
+                  key={zone.id}
+                >
+                  <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-app-dim font-mono text-[11px] tracking-[0.12em] uppercase">
+                        {t('zoneType')}
+                      </p>
+                      <h3 className="mt-1 min-w-0 break-words text-base font-semibold text-white">
+                        {zone.name}
+                      </h3>
+                      <p className="text-app-muted mt-0.5 text-xs">
+                        {zone.code}
+                      </p>
+                    </div>
+                    {canManage ? (
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          setError(null)
+                          setDraft({ name: '', code: '' })
+                          setAddingSectionTo(zone)
+                        }}
+                      >
+                        <Plus aria-hidden />
+                        {t('addSection')}
+                      </Button>
+                    ) : null}
+                  </div>
+                  {sections.length === 0 ? (
+                    <p className="text-app-muted mt-2 text-sm">
+                      {t('noSections')}
+                    </p>
+                  ) : null}
+                  <div className="mt-4 grid gap-3">
+                    {sections.map((section) => (
+                      <div
+                        aria-label={t('sectionGroup', { name: section.name })}
+                        className="border-app-line bg-app-canvas/50 min-w-0 rounded-xl border p-4"
+                        key={section.id}
+                        role="group"
+                      >
+                        <div className="flex min-w-0 items-start justify-between gap-2">
+                          <button
+                            aria-expanded={expandedSectionId === section.id}
+                            className="focus-visible:outline-brand flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg text-left"
+                            onClick={() =>
+                              setExpandedSectionId((current) =>
+                                current === section.id ? null : section.id,
+                              )
+                            }
+                            type="button"
+                          >
+                            <ChevronRight
+                              aria-hidden
+                              className={cn(
+                                'text-app-muted size-4 shrink-0 transition-transform',
+                                expandedSectionId === section.id && 'rotate-90',
+                              )}
+                            />
+                            <span className="min-w-0">
+                              <strong className="block truncate text-sm text-white">
+                                {section.name}
+                              </strong>
+                              <span className="text-app-muted block truncate text-xs">
+                                {section.code} ·{' '}
+                                {t('shelfCount', {
+                                  count: loadedShelves.filter(
+                                    (shelf) => shelf.sectionId === section.id,
+                                  ).length,
+                                })}
+                                {section.partCount == null
+                                  ? null
+                                  : ` · ${t('locationParts', { count: section.partCount })}`}
+                              </span>
+                            </span>
+                          </button>
+                          <div className="flex items-center gap-2">
+                            {canManage ? (
+                              <Button
+                                aria-label={t('editSectionLabel', {
+                                  name: section.name,
+                                })}
+                                className="min-w-11 px-0"
+                                variant="ghost"
+                                onClick={() => {
+                                  setError(null)
+                                  setDraft({
+                                    name: section.name,
+                                    code: section.code,
+                                  })
+                                  setEditingSection(section)
+                                }}
+                              >
+                                <Pencil aria-hidden />
+                              </Button>
+                            ) : null}
+                            <ActionMenu
+                              label={t('sectionActions', {
+                                name: section.name,
+                              })}
+                              actions={[
+                                {
+                                  key: 'qr',
+                                  label: t('showLocationQr'),
+                                  icon: <ScanLine aria-hidden />,
+                                  onSelect: () =>
+                                    setPreviewLocation({
+                                      location: section,
+                                      kind: 'section',
+                                    }),
+                                },
+                                ...(canManage
+                                  ? [
+                                      {
+                                        key: 'archive',
+                                        label: t('archiveSection'),
+                                        icon: <Archive aria-hidden />,
+                                        destructive: true,
+                                        onSelect: () =>
+                                          setArchivingSection(section),
+                                      },
+                                    ]
+                                  : []),
+                              ]}
+                            />
+                          </div>
+                        </div>
+                        {expandedSectionId === section.id ? (
+                          <div
+                            className="border-app-line mt-4 border-t pt-4"
+                            id={`shelves-${section.id}`}
+                          >
+                            {loadedShelves.every(
+                              (shelf) => shelf.sectionId !== section.id,
+                            ) ? (
+                              <div className="border-app-line-2 mt-4 flex min-h-28 flex-1 flex-col items-start justify-between gap-3 rounded-lg border border-dashed bg-white/[0.02] p-3">
+                                <p className="text-app-muted text-sm">
+                                  {t('noShelves')}
+                                </p>
+                                {canManage ? (
+                                  <Button
+                                    variant="ghost"
+                                    onClick={() => startAddingShelf(section)}
+                                  >
+                                    <Plus aria-hidden />
+                                    {t('addShelf')}
+                                  </Button>
+                                ) : null}
+                              </div>
+                            ) : null}
+                            <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3 empty:hidden">
+                              {loadedShelves
+                                .filter(
+                                  (shelf) => shelf.sectionId === section.id,
+                                )
+                                .map((shelf) => (
+                                  <li
+                                    className="border-app-line flex min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2"
+                                    key={shelf.id}
+                                  >
+                                    <span className="min-w-0">
+                                      <span className="text-app-dim block font-mono text-[10px] tracking-[0.12em] uppercase">
+                                        {t('shelfType')}
+                                      </span>
+                                      <span className="block truncate text-sm text-white">
+                                        {shelf.name}
+                                      </span>
+                                      <span className="text-app-muted block truncate text-xs">
+                                        {shelf.code}
+                                        {shelf.partCount == null
+                                          ? null
+                                          : ` · ${t('locationParts', { count: shelf.partCount })}`}
+                                      </span>
+                                    </span>
+                                    <ActionMenu
+                                      label={t('shelfActions', {
+                                        name: shelf.name,
+                                      })}
+                                      actions={[
+                                        {
+                                          key: 'qr',
+                                          label: t('showLocationQr'),
+                                          icon: <ScanLine aria-hidden />,
+                                          onSelect: () =>
+                                            setPreviewLocation({
+                                              location: shelf,
+                                              kind: 'shelf',
+                                            }),
+                                        },
+                                        ...(canManage
+                                          ? [
+                                              {
+                                                key: 'edit',
+                                                label: t('editShelf'),
+                                                icon: <Pencil aria-hidden />,
+                                                onSelect: () => {
+                                                  setError(null)
+                                                  setDraft({
+                                                    name: shelf.name,
+                                                    code: shelf.code,
+                                                  })
+                                                  setEditing(shelf)
+                                                },
+                                              },
+                                              {
+                                                key: 'archive',
+                                                label: t('archiveShelf'),
+                                                icon: <Archive aria-hidden />,
+                                                destructive: true,
+                                                onSelect: () =>
+                                                  setArchiving(shelf),
+                                              },
+                                            ]
+                                          : []),
+                                      ]}
+                                    />
+                                  </li>
+                                ))}
+                            </ul>
+                            {canManage &&
+                            loadedShelves.some(
+                              (shelf) => shelf.sectionId === section.id,
+                            ) ? (
+                              <div className="pt-3">
+                                <Button
+                                  variant="ghost"
+                                  onClick={() => startAddingShelf(section)}
+                                >
+                                  <Plus aria-hidden />
+                                  {t('addShelf')}
+                                </Button>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )
+            })}
+        </div>
+      ) : null}
+      <Sheet
+        open={previewLocation !== null}
+        onOpenChange={(open) => {
+          if (!open) setPreviewLocation(null)
+        }}
+        title={previewLocation?.location.name ?? t('showLocationQr')}
+        eyebrow={
+          previewLocation
+            ? t(
+                previewLocation.kind === 'section'
+                  ? 'sectionType'
+                  : 'shelfType',
+              )
+            : undefined
+        }
+        footer={
+          previewLocation ? (
+            <Button
+              variant="primary"
+              onClick={() =>
+                void printNestedLocation(
+                  previewLocation.location,
+                  previewLocation.kind,
+                )
+              }
+            >
+              <Printer aria-hidden />
+              {t(
+                previewLocation.kind === 'section'
+                  ? 'printSection'
+                  : 'printShelf',
+              )}
+            </Button>
+          ) : undefined
+        }
+      >
+        {previewLocation ? (
+          <div className="grid justify-items-center gap-4">
+            {previewQr?.code !== previewLocation.location.qrCode ? (
+              <SkeletonRows rows={1} />
+            ) : previewQr.url ? (
+              <img
+                src={previewQr.url}
+                alt={`${t('showLocationQr')}: ${previewLocation.location.name}`}
+                className="w-full max-w-[360px] rounded-xl bg-white"
+              />
+            ) : (
+              <Notice tone="danger">{t('printFailed')}</Notice>
+            )}
+            <p className="text-app-muted text-center text-sm">
+              {previewLocation.location.warehouseName} ·{' '}
+              {previewLocation.location.zoneName}
+              {previewLocation.kind === 'shelf' &&
+              'sectionName' in previewLocation.location
+                ? ` · ${previewLocation.location.sectionName}`
+                : ''}{' '}
+              · {previewLocation.location.name}
+            </p>
+          </div>
+        ) : null}
+      </Sheet>
+      <Sheet
+        open={
+          addingTo !== null ||
+          editing !== null ||
+          addingSectionTo !== null ||
+          editingSection !== null
+        }
+        title={
+          addingSectionTo
+            ? t('newSectionTitle')
+            : editingSection
+              ? t('editSection')
+              : addingTo
+                ? t('newShelfTitle')
+                : t('editShelf')
+        }
+        eyebrow={
+          addingSectionTo?.name ??
+          editingSection?.zoneName ??
+          addingTo?.name ??
+          editing?.zoneName
+        }
+        onOpenChange={(open) => {
+          if (!open && !busy) {
+            setAddingTo(null)
+            setAddingSectionTo(null)
+            setEditingSection(null)
+            setEditing(null)
+          }
+        }}
+        footer={
+          <>
+            <Button
+              disabled={busy}
+              onClick={() => {
+                setAddingTo(null)
+                setAddingSectionTo(null)
+                setEditingSection(null)
+                setEditing(null)
+              }}
+              type="button"
+            >
+              {tc('cancel')}
+            </Button>
+            <Button
+              aria-busy={busy}
+              disabled={busy || !draft.name.trim() || !draft.code.trim()}
+              form={formId}
+              type="submit"
+              variant="primary"
+            >
+              {tc('save')}
+            </Button>
+          </>
+        }
+      >
+        <form
+          className="grid content-start gap-5"
+          id={formId}
+          onSubmit={(event) => {
+            event.preventDefault()
+            void save()
+          }}
+        >
+          {error ? <Notice tone="danger">{error}</Notice> : null}
+          <NameAndCode
+            draft={draft}
+            initialCode={editingSection?.code ?? editing?.code}
+            onChange={setDraft}
+          />
+        </form>
+      </Sheet>
+      <ConfirmDialog
+        open={archiving !== null}
+        title={t('archiveShelf')}
+        confirmLabel={t('archiveShelf')}
+        consequence={t('archiveShelfHint')}
+        destructive
+        pending={busy}
+        onOpenChange={(open) => {
+          if (!open) setArchiving(null)
+        }}
+        onConfirm={() => {
+          if (archiving)
+            void write((signal) =>
+              inventoryApi.archiveShelf(archiving.id, { signal }),
+            ).then((ok) => {
+              if (ok) setArchiving(null)
+            })
+        }}
+      />
+      <ConfirmDialog
+        open={archivingSection !== null}
+        title={t('archiveSection')}
+        confirmLabel={t('archiveSection')}
+        consequence={t('archiveSectionHint')}
+        destructive
+        pending={busy}
+        onOpenChange={(open) => {
+          if (!open) setArchivingSection(null)
+        }}
+        onConfirm={() => {
+          if (archivingSection)
+            void write((signal) =>
+              inventoryApi.archiveSection(archivingSection.id, { signal }),
+            ).then((ok) => {
+              if (ok) setArchivingSection(null)
+            })
+        }}
+      />
+    </Card>
+  )
+}
+
+/** Name and code fields shared by warehouses, zones, sections, and shelves. */
 function NameAndCode({
   draft,
+  initialCode,
   onChange,
 }: {
   draft: { name: string; code: string }
+  initialCode?: string | undefined
   onChange: (draft: { name: string; code: string }) => void
 }) {
   const t = useT(warehouseMessages)
@@ -1564,7 +2249,16 @@ function NameAndCode({
     <>
       <Field label={t('name')} required>
         <TextInput
-          onChange={(event) => onChange({ ...draft, name: event.target.value })}
+          onChange={(event) => {
+            const name = event.target.value
+            const code =
+              draft.code === '' ||
+              draft.code === initialCode ||
+              draft.code === inventoryCodeFromName(draft.name)
+                ? inventoryCodeFromName(name)
+                : draft.code
+            onChange({ name, code })
+          }}
           value={draft.name}
         />
       </Field>
@@ -4413,7 +5107,10 @@ function JournalStat({
 const PLACEMENT_EVENTS = new Set(['placed', 'unplaced', 'moved'])
 
 interface PlacementData {
+  warehouses: Warehouse[]
   zones: InventoryZone[]
+  sections: InventorySection[]
+  shelves: InventoryShelf[]
   placement: PartInventoryZone[]
   part: PartDetail | null
   history: PartHistory | null
@@ -4424,6 +5121,8 @@ interface PlacementData {
 function PartPlacementView({ partId }: { partId: string }) {
   const t = useT(placementMessages)
   const ti = useT(inventoryMessages)
+  const tw = useT(warehouseMessages)
+  const to = useT(overviewMessages)
   const { date, locale } = useInventoryFormat()
   const { targetTenant } = useCabinet()
   const canManage = usePermission('inventory.zones.manage')
@@ -4433,8 +5132,20 @@ function PartPlacementView({ partId }: { partId: string }) {
   )
   const loader = useCallback(
     async (signal: AbortSignal): Promise<PlacementData> => {
-      const [zones, placement, part, history, byZone] = await Promise.all([
+      const [
+        warehouses,
+        zones,
+        sections,
+        shelves,
+        placement,
+        part,
+        history,
+        byZone,
+      ] = await Promise.all([
+        inventoryApi.getWarehouses({ signal }),
         inventoryApi.getZones({ signal }),
+        inventoryApi.getSections(undefined, { signal }),
+        inventoryApi.getShelves(undefined, { signal }),
         inventoryApi.getPartZones(partId, { signal }),
         canSeeParts
           ? partsApi.get(partId, { signal }).then(
@@ -4456,17 +5167,38 @@ function PartPlacementView({ partId }: { partId: string }) {
             )
           : Promise.resolve(null),
       ])
-      return { zones, placement, part, history, byZone }
+      return {
+        warehouses,
+        zones,
+        sections,
+        shelves,
+        placement,
+        part,
+        history,
+        byZone,
+      }
     },
     [canSeeParts, partId],
   )
   const resource = useLoad(loader, partId)
   const [selection, setSelection] = useState<string[] | null>(null)
+  const [shelfSelection, setShelfSelection] = useState<
+    string | null | undefined
+  >(undefined)
+  const [sectionSelection, setSectionSelection] = useState<
+    string | null | undefined
+  >(undefined)
   const [warehouseId, setWarehouseId] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [saving, setSaving] = useState(false)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [createMode, setCreateMode] = useState<'warehouse' | 'zone' | null>(
+    null,
+  )
+  const [draft, setDraft] = useState({ name: '', code: '' })
   const selected = useMemo(
     () =>
       selection ??
@@ -4477,7 +5209,7 @@ function PartPlacementView({ partId }: { partId: string }) {
   )
 
   const save = async () => {
-    if (!canManage || !selected.length) return
+    if (!canManage || selected.length === 0) return
     setSaving(true)
     try {
       setOperationError(null)
@@ -4486,10 +5218,32 @@ function PartPlacementView({ partId }: { partId: string }) {
         permission: 'inventory.zones.manage',
         quota: false,
       })
-      await inventoryApi.replacePartZones(partId, selected, {
-        signal: scope.signal,
-      })
+      const currentShelfId =
+        resource.state.kind === 'ready'
+          ? resource.state.data.placement.find(
+              (zone) => zone.shelfId && selected.includes(zone.zoneId),
+            )?.shelfId
+          : undefined
+      const currentSectionId =
+        resource.state.kind === 'ready'
+          ? resource.state.data.placement.find(
+              (zone) => zone.sectionId && selected.includes(zone.zoneId),
+            )?.sectionId
+          : undefined
+      await inventoryApi.replacePartZones(
+        partId,
+        selected,
+        { signal: scope.signal },
+        shelfSelection === undefined
+          ? (currentShelfId ?? undefined)
+          : (shelfSelection ?? undefined),
+        sectionSelection === undefined
+          ? (currentSectionId ?? undefined)
+          : (sectionSelection ?? undefined),
+      )
       setSelection(null)
+      setShelfSelection(undefined)
+      setSectionSelection(undefined)
       setSaved(true)
       resource.reload()
     } catch (error) {
@@ -4499,29 +5253,103 @@ function PartPlacementView({ partId }: { partId: string }) {
     }
   }
 
+  const openCreate = (mode: 'warehouse' | 'zone') => {
+    setDraft({ name: '', code: '' })
+    setCreateError(null)
+    setCreateMode(mode)
+  }
+
+  const createWarehouse = async () => {
+    const name = draft.name.trim()
+    const code = draft.code.trim()
+    if (!name || !code || creating) return
+    setCreating(true)
+    try {
+      setCreateError(null)
+      const scope = requireLatestMutation({
+        permission: 'inventory.zones.manage',
+        quota: false,
+      })
+      const warehouse = await inventoryApi.createWarehouse(
+        { name, code },
+        { signal: scope.signal },
+      )
+      setWarehouseId(warehouse.id)
+      setDraft({ name: '', code: '' })
+      setCreateMode('zone')
+      resource.refresh()
+    } catch (error) {
+      setCreateError(normalizeApiProblem(error).message)
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const createZone = async (targetWarehouseId: string, input: ZoneDraft) => {
+    const { name, code } = input
+    if (!name || !code || creating) return
+    setCreating(true)
+    try {
+      setCreateError(null)
+      const scope = requireLatestMutation({
+        permission: 'inventory.zones.manage',
+        quota: false,
+      })
+      const zone = await inventoryApi.createZone(
+        { warehouseId: targetWarehouseId, name, code },
+        { signal: scope.signal },
+      )
+      setSelection((value) => {
+        const current = value ?? selected
+        return current.includes(zone.id) ? current : [...current, zone.id]
+      })
+      setWarehouseId(zone.warehouseId)
+      setQuery('')
+      setSaved(false)
+      setCreateMode(null)
+      resource.refresh()
+    } catch (error) {
+      setCreateError(normalizeApiProblem(error).message)
+    } finally {
+      setCreating(false)
+    }
+  }
+
   const back = targetTenant
     ? cabinetPath(targetTenant.slug, 'parts', partId)
     : '/'
 
   return (
     <Resource retry={resource.reload} state={resource.state}>
-      {({ zones, placement, part, history, byZone }: PlacementData) => {
+      {({
+        warehouses,
+        zones,
+        sections,
+        shelves,
+        placement,
+        part,
+        history,
+        byZone,
+      }: PlacementData) => {
         const real = zones.filter(
           (zone) => zone.isActive && !zone.isSystemUnassigned,
         )
-        const houses = [
-          ...new Map(
-            real.map((zone) => [
-              zone.warehouseId,
-              { id: zone.warehouseId, name: zone.warehouseName },
-            ]),
-          ).values(),
-        ]
+        const houses = warehouses.filter((warehouse) => warehouse.isActive)
         /* Open on the warehouse the part already lies in — that is where a
            correction is most likely to be made. */
+        const preferredHouse = warehouseId ?? placement[0]?.warehouseId
         const house =
-          warehouseId ?? placement[0]?.warehouseId ?? houses[0]?.id ?? null
+          houses.find((item) => item.id === preferredHouse)?.id ??
+          (createMode === 'zone' ? warehouseId : null) ??
+          houses[0]?.id ??
+          null
         const inHouse = real.filter((zone) => zone.warehouseId === house)
+        const warehouseOnly = zones.find(
+          (zone) =>
+            zone.warehouseId === house &&
+            zone.isSystemUnassigned &&
+            zone.isActive,
+        )
         const needle = query.trim().toLowerCase()
         const shown = inHouse.filter(
           (zone) =>
@@ -4534,20 +5362,59 @@ function PartPlacementView({ partId }: { partId: string }) {
           ...inHouse.map((zone) => partsIn(zone.id) ?? 0),
         )
         const before = placement.map((zone) => zone.zoneId)
+        const selectedShelfId =
+          shelfSelection === undefined
+            ? (placement.find(
+                (zone) => zone.shelfId && selected.includes(zone.zoneId),
+              )?.shelfId ?? null)
+            : shelfSelection
+        const selectedSectionId =
+          sectionSelection === undefined
+            ? (placement.find(
+                (zone) => zone.sectionId && selected.includes(zone.zoneId),
+              )?.sectionId ?? null)
+            : sectionSelection
         const changed =
           selected.length !== before.length ||
-          selected.some((id) => !before.includes(id))
-        const chosen = real.filter((zone) => selected.includes(zone.id))
+          selected.some((id) => !before.includes(id)) ||
+          selectedShelfId !==
+            (placement.find((zone) => zone.shelfId)?.shelfId ?? null) ||
+          selectedSectionId !==
+            (placement.find((zone) => zone.sectionId)?.sectionId ?? null)
+        const chosen = zones.filter((zone) => selected.includes(zone.id))
+        const selectedSection = sections.find(
+          (section) =>
+            section.id === selectedSectionId &&
+            selected.includes(section.zoneId),
+        )
+        const selectedShelf = shelves.find(
+          (shelf) =>
+            shelf.id === selectedShelfId &&
+            shelf.sectionId === selectedSection?.id,
+        )
+        const hasPhysicalZone = chosen.some((zone) => !zone.isSystemUnassigned)
+        const availableSections = sections.filter(
+          (section) => section.isActive && selected.includes(section.zoneId),
+        )
+        const availableShelves = shelves.filter(
+          (shelf) =>
+            shelf.isActive &&
+            shelf.sectionId === selectedSectionId &&
+            selected.includes(shelf.zoneId),
+        )
         const moves = (history?.events ?? []).filter((event) =>
           PLACEMENT_EVENTS.has(event.eventType),
         )
-        const toggle = (zoneId: string) => {
+        const toggleZone = (zoneId: string) => {
           setSaved(false)
-          setSelection((value) => {
-            const current = value ?? selected
+          setShelfSelection(null)
+          setSectionSelection(null)
+          setSelection((currentSelection) => {
+            const current =
+              currentSelection ?? placement.map((zone) => zone.zoneId)
             return current.includes(zoneId)
               ? current.filter((id) => id !== zoneId)
-              : [...current, zoneId]
+              : [...current.filter((id) => id !== warehouseOnly?.id), zoneId]
           })
         }
 
@@ -4579,10 +5446,6 @@ function PartPlacementView({ partId }: { partId: string }) {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2.5">
-                <Button disabled title={t('scanUnavailable')}>
-                  <ScanLine aria-hidden />
-                  {t('scanZone')}
-                </Button>
                 {canManage ? (
                   <Button
                     aria-busy={saving}
@@ -4647,6 +5510,17 @@ function PartPlacementView({ partId }: { partId: string }) {
                       className="flex flex-wrap gap-2"
                       role="radiogroup"
                     >
+                      {houses.length === 0 ? (
+                        <div className="border-app-line-2 text-app-muted grid w-full gap-3 rounded-xl border border-dashed bg-white/[0.02] p-4.5 text-sm">
+                          <p>{t('noActiveWarehouses')}</p>
+                          {canManage ? (
+                            <Button onClick={() => openCreate('warehouse')}>
+                              <Plus aria-hidden />
+                              {to('addWarehouse')}
+                            </Button>
+                          ) : null}
+                        </div>
+                      ) : null}
                       {houses.map((item) => {
                         const active = item.id === house
                         const count = real.filter(
@@ -4716,19 +5590,74 @@ function PartPlacementView({ partId }: { partId: string }) {
                     number="02"
                     title={t('zone')}
                   >
-                    <SearchInput
-                      aria-label={t('zoneSearch')}
-                      onChange={(event) => setQuery(event.target.value)}
-                      placeholder={t('zoneSearchPlaceholder')}
-                      value={query}
-                    />
-                    {shown.length === 0 ? (
+                    {warehouseOnly ? (
+                      <label
+                        className={cn(
+                          'mb-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
+                          selected.length === 1 &&
+                            selected[0] === warehouseOnly.id
+                            ? 'border-brand bg-brand/[0.08]'
+                            : 'border-app-line hover:border-app-line-2',
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="placement-location"
+                          className="peer sr-only"
+                          disabled={!canManage}
+                          checked={
+                            selected.length === 1 &&
+                            selected[0] === warehouseOnly.id
+                          }
+                          onChange={() => {
+                            setSelection([warehouseOnly.id])
+                            setSectionSelection(null)
+                            setShelfSelection(null)
+                            setSaved(false)
+                          }}
+                        />
+                        <span>{t('warehouseOnly')}</span>
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                            selected.length === 1 &&
+                              selected[0] === warehouseOnly.id
+                              ? 'border-brand bg-brand text-app-canvas'
+                              : 'border-app-line-2',
+                          )}
+                        >
+                          {selected.length === 1 &&
+                          selected[0] === warehouseOnly.id ? (
+                            <Check size={15} strokeWidth={3} />
+                          ) : null}
+                        </span>
+                      </label>
+                    ) : null}
+                    {house === null ? null : (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <SearchInput
+                          aria-label={t('zoneSearch')}
+                          className="min-w-0 flex-1"
+                          onChange={(event) => setQuery(event.target.value)}
+                          placeholder={t('zoneSearchPlaceholder')}
+                          value={query}
+                        />
+                        {canManage ? (
+                          <Button onClick={() => openCreate('zone')}>
+                            <Plus aria-hidden />
+                            {tw('addZone')}
+                          </Button>
+                        ) : null}
+                      </div>
+                    )}
+                    {house !== null && shown.length === 0 ? (
                       <p className="border-app-line-2 text-app-muted mt-3.5 rounded-xl border border-dashed bg-white/[0.02] p-4.5 text-sm">
                         {inHouse.length === 0
                           ? t('noActiveZones')
                           : t('noZonesFound')}
                       </p>
-                    ) : (
+                    ) : house !== null ? (
                       <ul className="mt-3.5 grid grid-cols-[repeat(auto-fill,minmax(min(100%,8rem),1fr))] gap-2">
                         {shown.map((zone) => {
                           const on = selected.includes(zone.id)
@@ -4743,7 +5672,7 @@ function PartPlacementView({ partId }: { partId: string }) {
                                 className={cn(
                                   'block cursor-pointer rounded-xl border px-3 pt-2.5 pb-3 hover:border-white/20',
                                   on
-                                    ? 'border-app-line-2 bg-white/[0.06]'
+                                    ? 'border-brand bg-brand/[0.08]'
                                     : 'border-app-line bg-app-canvas',
                                 )}
                               >
@@ -4764,11 +5693,24 @@ function PartPlacementView({ partId }: { partId: string }) {
                                   <input
                                     aria-label={`${zone.warehouseName} · ${zone.name}`}
                                     checked={on}
-                                    className="accent-brand mt-0.5 size-4.5 shrink-0"
+                                    className="peer sr-only"
                                     disabled={!canManage}
-                                    onChange={() => toggle(zone.id)}
+                                    onChange={() => toggleZone(zone.id)}
                                     type="checkbox"
                                   />
+                                  <span
+                                    aria-hidden="true"
+                                    className={cn(
+                                      'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                      on
+                                        ? 'border-brand bg-brand text-app-canvas'
+                                        : 'border-app-line-2',
+                                    )}
+                                  >
+                                    {on ? (
+                                      <Check size={15} strokeWidth={3} />
+                                    ) : null}
+                                  </span>
                                 </span>
                                 <span
                                   aria-hidden
@@ -4796,12 +5738,173 @@ function PartPlacementView({ partId }: { partId: string }) {
                           )
                         })}
                       </ul>
-                    )}
+                    ) : null}
                   </Step>
+
+                  {hasPhysicalZone ? (
+                    <Step
+                      number="03"
+                      title={t('section')}
+                      hint={t('sectionHint')}
+                    >
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <label
+                          className={cn(
+                            'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
+                            !selectedSectionId
+                              ? 'border-brand bg-brand/[0.08]'
+                              : 'border-app-line hover:border-app-line-2',
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            name="placement-section"
+                            className="peer sr-only"
+                            disabled={!canManage || selected.length === 0}
+                            checked={!selectedSectionId}
+                            onChange={() => {
+                              setSectionSelection(null)
+                              setShelfSelection(null)
+                            }}
+                          />
+                          <span>{t('noSection')}</span>
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                              !selectedSectionId
+                                ? 'border-brand bg-brand text-app-canvas'
+                                : 'border-app-line-2',
+                            )}
+                          >
+                            {!selectedSectionId ? (
+                              <Check size={15} strokeWidth={3} />
+                            ) : null}
+                          </span>
+                        </label>
+                        {availableSections.map((section) => (
+                          <label
+                            className={cn(
+                              'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
+                              selectedSectionId === section.id
+                                ? 'border-brand bg-brand/[0.08]'
+                                : 'border-app-line hover:border-app-line-2',
+                            )}
+                            key={section.id}
+                          >
+                            <input
+                              type="radio"
+                              name="placement-section"
+                              className="peer sr-only"
+                              disabled={!canManage}
+                              checked={selectedSectionId === section.id}
+                              onChange={() => {
+                                setSectionSelection(section.id)
+                                setShelfSelection(null)
+                              }}
+                            />
+                            <span>
+                              {section.zoneName} · {section.name}
+                            </span>
+                            <span
+                              aria-hidden="true"
+                              className={cn(
+                                'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                selectedSectionId === section.id
+                                  ? 'border-brand bg-brand text-app-canvas'
+                                  : 'border-app-line-2',
+                              )}
+                            >
+                              {selectedSectionId === section.id ? (
+                                <Check size={15} strokeWidth={3} />
+                              ) : null}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </Step>
+                  ) : null}
+
+                  {hasPhysicalZone && selectedSectionId ? (
+                    <Step number="04" title={t('shelf')} hint={t('shelfHint')}>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <label
+                          className={cn(
+                            'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
+                            !selectedShelfId
+                              ? 'border-brand bg-brand/[0.08]'
+                              : 'border-app-line hover:border-app-line-2',
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            name="placement-shelf"
+                            className="peer sr-only"
+                            disabled={!canManage || !selectedSectionId}
+                            checked={!selectedShelfId}
+                            onChange={() => setShelfSelection(null)}
+                          />
+                          <span>{t('noShelf')}</span>
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                              !selectedShelfId
+                                ? 'border-brand bg-brand text-app-canvas'
+                                : 'border-app-line-2',
+                            )}
+                          >
+                            {!selectedShelfId ? (
+                              <Check size={15} strokeWidth={3} />
+                            ) : null}
+                          </span>
+                        </label>
+                        {availableShelves.map((shelf) => (
+                          <label
+                            className={cn(
+                              'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
+                              selectedShelfId === shelf.id
+                                ? 'border-brand bg-brand/[0.08]'
+                                : 'border-app-line hover:border-app-line-2',
+                            )}
+                            key={shelf.id}
+                          >
+                            <input
+                              type="radio"
+                              name="placement-shelf"
+                              className="peer sr-only"
+                              disabled={!canManage}
+                              checked={selectedShelfId === shelf.id}
+                              onChange={() => setShelfSelection(shelf.id)}
+                            />
+                            <span>
+                              {shelf.zoneName} · {shelf.sectionName} ·{' '}
+                              {shelf.name}
+                            </span>
+                            <span
+                              aria-hidden="true"
+                              className={cn(
+                                'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                selectedShelfId === shelf.id
+                                  ? 'border-brand bg-brand text-app-canvas'
+                                  : 'border-app-line-2',
+                              )}
+                            >
+                              {selectedShelfId === shelf.id ? (
+                                <Check size={15} strokeWidth={3} />
+                              ) : null}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </Step>
+                  ) : null}
 
                   <Step
                     hint={t('quantityHint')}
-                    number="03"
+                    number={
+                      selectedSectionId ? '05' : hasPhysicalZone ? '04' : '03'
+                    }
                     title={t('quantity')}
                   >
                     <div className="flex flex-wrap items-center gap-4.5">
@@ -4878,54 +5981,33 @@ function PartPlacementView({ partId }: { partId: string }) {
                     {t('newPlacement')}
                   </h2>
                   <div className="border-app-line bg-app-canvas mt-4 rounded-[14px] border p-4">
-                    <p
-                      className={cn(
-                        'font-mono text-[22px] tracking-[-0.01em]',
-                        chosen.length === 0 ? 'text-app-dim' : 'text-app-ink',
-                      )}
-                    >
-                      {chosen.length === 0
-                        ? '— · —'
-                        : chosen
-                            .slice(0, 2)
-                            .map((zone) => zone.code)
-                            .join(' · ') + (chosen.length > 2 ? ' …' : '')}
-                    </p>
-                    <p className="text-app-muted mt-2 text-[13px]">
-                      {chosen.length === 0
-                        ? t('noZonesPicked')
-                        : chosen
-                            .map(
-                              (zone) => `${zone.warehouseName} · ${zone.name}`,
-                            )
-                            .join(', ')}
-                    </p>
+                    {chosen.length > 0 ? (
+                      <ul className="grid gap-3 text-[14px]">
+                        {chosen.map((zone) => (
+                          <li className="min-w-0" key={zone.id}>
+                            <span className="text-app-ink font-semibold">
+                              {zone.warehouseName} ·{' '}
+                              {zone.isSystemUnassigned
+                                ? t('warehouseLevel')
+                                : zone.name}
+                            </span>
+                            {selectedSection?.zoneId === zone.id ? (
+                              <span className="text-app-muted block">
+                                {selectedSection.name}
+                                {selectedShelf
+                                  ? ` · ${selectedShelf.name}`
+                                  : ''}
+                              </span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-app-muted text-[14px]">
+                        {t('noLocationSelected')}
+                      </p>
+                    )}
                   </div>
-                  <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
-                    <dt className="text-app-muted text-[14px] font-semibold">
-                      {t('zonesPicked')}
-                    </dt>
-                    <dd className="font-mono text-[15px] text-white tabular-nums">
-                      {chosen.length}
-                    </dd>
-                    <dt className="text-app-muted text-[14px] font-semibold">
-                      {t('before')}
-                    </dt>
-                    <dd className="font-mono text-[15px] text-white tabular-nums">
-                      {placement.length}
-                    </dd>
-                    <dd
-                      aria-hidden
-                      className="bg-app-line col-span-2 my-1 h-px"
-                    />
-                    <dt
-                      className="text-app-muted text-[14px] font-semibold"
-                      title={t('capacityNotCounted')}
-                    >
-                      {t('capacity')}
-                    </dt>
-                    <dd className="text-app-dim font-mono text-[15px]">—</dd>
-                  </dl>
                   {canManage ? (
                     <Button
                       aria-busy={saving}
@@ -4947,6 +6029,35 @@ function PartPlacementView({ partId }: { partId: string }) {
                 </section>
               </div>
             </div>
+            <FormDialog
+              description={to('newWarehouseHint')}
+              error={createError}
+              onOpenChange={(next) => {
+                if (!next) setCreateMode(null)
+              }}
+              onSubmit={(event) => {
+                event.preventDefault()
+                void createWarehouse()
+              }}
+              open={createMode === 'warehouse'}
+              pending={creating}
+              submitDisabled={
+                draft.name.trim() === '' || draft.code.trim() === ''
+              }
+              submitLabel={to('addWarehouse')}
+              title={to('newWarehouseTitle')}
+            >
+              <NameAndCode draft={draft} onChange={setDraft} />
+            </FormDialog>
+            {createMode === 'zone' && house !== null ? (
+              <ZoneEditorSheet
+                eyebrow={houses.find((item) => item.id === house)?.name}
+                error={createError}
+                onClose={() => setCreateMode(null)}
+                onSubmit={(input) => void createZone(house, input)}
+                pending={creating}
+              />
+            ) : null}
           </div>
         )
       }}
