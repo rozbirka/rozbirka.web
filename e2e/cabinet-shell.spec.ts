@@ -1809,12 +1809,16 @@ test('compact location browser searches and pages large shelf lists @location-br
     const request = route.request().postDataJSON() as Record<string, unknown>
     contentRequests.push(request)
     const partPage = Number(request.page ?? 1)
+    const partPageSize = Number(request.pageSize ?? 30)
     return fulfillData(route, {
-      items: contentsParts.slice((partPage - 1) * 10, partPage * 10),
+      items: contentsParts.slice(
+        (partPage - 1) * partPageSize,
+        partPage * partPageSize,
+      ),
       page: partPage,
-      pageSize: Number(request.pageSize ?? 10),
-      total: 50,
-      totalPages: 5,
+      pageSize: partPageSize,
+      total: contentsParts.length,
+      totalPages: Math.ceil(contentsParts.length / partPageSize),
     })
   })
   await page.route('**/api/v1/warehouses', (route) =>
