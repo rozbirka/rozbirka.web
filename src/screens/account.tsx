@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from 'react-router'
 import { useAuth } from '@/auth/AuthContext'
+import { needsOwnerName } from '@/auth/owner-name'
 import { resolveAccountDestination } from '@/cabinet/cabinet-paths'
 import { TenantOnboardingScreen } from '@/cabinet/screens/tenant-onboarding'
 
@@ -9,6 +10,15 @@ export function AccountScreen() {
   const location = useLocation()
 
   if (auth.tenants.length === 0) {
+    if (needsOwnerName(auth.user)) {
+      return (
+        <Navigate
+          to="/login"
+          state={{ from: location.pathname + location.search }}
+          replace
+        />
+      )
+    }
     return <TenantOnboardingScreen />
   }
 

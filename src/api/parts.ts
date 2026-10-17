@@ -128,6 +128,10 @@ export interface PartSearchRequest {
   carIds?: string[]
   warehouseIds?: string[]
   zoneIds?: string[]
+  sectionIds?: string[]
+  shelfIds?: string[]
+  missingShelf?: boolean | null
+  missingSection?: boolean | null
   conditions?: PartCondition[]
   originTypes?: PartOrigin[]
   compatibility?: PartCompatibilityFilter
@@ -247,6 +251,17 @@ export interface PartCompatibilities {
   version: string
   items: PartCompatibilityItem[]
 }
+
+const normalizeCompatibilities = (
+  result: PartCompatibilities,
+): PartCompatibilities => ({
+  ...result,
+  items: (result.items ?? []).map((item) => ({
+    ...item,
+    yearFrom: item.yearFrom ?? null,
+    yearTo: item.yearTo ?? null,
+  })),
+})
 
 export interface CreatePartRequest {
   sourceType: string
@@ -425,7 +440,7 @@ export const partsApi = {
         requestConfig(options),
       )
     ).data
-    return { ...result, items: result.items ?? [] }
+    return normalizeCompatibilities(result)
   },
   /**
    * Replaces the manual rows only: what Core observed from the donor car
@@ -442,17 +457,21 @@ export const partsApi = {
         { expectedVersion, items },
       )
     ).data
-    return { ...result, items: result.items ?? [] }
+    return normalizeCompatibilities(result)
   },
   async update(
     id: string,
     request: UpdatePartRequest,
     options: RequestOptions = {},
   ): Promise<PartDetail> {
+    const { desiredSalePrice, ...fields } = request
+    const body = desiredSalePrice.isSet
+      ? { ...fields, desiredSalePrice: desiredSalePrice.value ?? null }
+      : fields
     return (
       await apiClient.put<PartDetail>(
         `/parts/${encodeURIComponent(id)}`,
-        request,
+        body,
         requestConfig(options),
       )
     ).data

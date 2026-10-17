@@ -101,7 +101,7 @@ function PayoffRow({
                     : 'text-state-warn',
             )}
           >
-            {percent === null ? '—' : `${String(percent)}%`}
+            {percent == null ? '—' : `${String(percent)}%`}
           </span>
         </span>
         <span aria-hidden className="mt-2.5 flex gap-0.5">

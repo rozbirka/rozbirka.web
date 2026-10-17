@@ -160,6 +160,9 @@ export function TenantOnboardingScreen() {
       <main className="flex flex-1 justify-center px-4 pb-16 sm:px-6">
         <div className="grid w-full max-w-[600px] content-start gap-6">
           <div>
+            <span className="text-brand text-[11px] font-medium tracking-[0.28em] uppercase">
+              {t('step')}
+            </span>
             <h1 className="text-[32px] leading-[1.04] font-extrabold tracking-[-0.03em] text-white sm:text-[40px]">
               {t('title')}
             </h1>

@@ -67,6 +67,8 @@ describe('production route boundary', () => {
 
     expect(app?.lazy).toEqual(expect.any(Function))
     expect(childPaths).toContain('dashboard')
+    expect(childPaths).toContain('inventory/zones/:zoneId')
+    expect(childPaths).toContain('inventory/sections/:sectionId')
     expect(childPaths).toContain('settings/billing/plans')
     expect(childPaths).toContain('settings/billing/payments')
     expect(app?.children?.at(-1)?.path).toBe('*')

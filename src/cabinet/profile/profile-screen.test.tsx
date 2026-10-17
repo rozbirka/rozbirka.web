@@ -389,7 +389,7 @@ it('resets for an in-place auth transition and ignores the prior update completi
   expect(screen.queryByRole('status')).toBeNull()
 })
 
-it('shows a compact profile with only supported account controls', () => {
+it('groups personal details and access, with compact account actions', () => {
   render(<ProfileScreen />, { wrapper: MemoryRouter })
 
   const personal = screen.getByRole('region', { name: 'Особисті дані' })
@@ -399,14 +399,23 @@ it('shows a compact profile with only supported account controls', () => {
   expect(
     within(personal).getByRole('button', { name: 'Скасувати зміни' }),
   ).toBeVisible()
+  const save = within(personal).getByRole('button', { name: 'Зберегти' })
+  const cancel = within(personal).getByRole('button', {
+    name: 'Скасувати зміни',
+  })
+  const signOutButton = within(personal).getByRole('button', {
+    name: 'Вийти з системи',
+  })
+  expect(signOutButton.parentElement).toBe(cancel.parentElement)
+  expect(signOutButton.parentElement).toBe(save.parentElement)
+  expect(save).toHaveAttribute('form', 'profile-form')
   expect(screen.getByLabelText('Телефон')).toBeDisabled()
-  const access = screen.getByRole('region', { name: 'Доступ' })
-  expect(access).toBeVisible()
-  expect(
-    within(access.parentElement!).getByRole('button', {
-      name: 'Видалити акаунт',
-    }),
-  ).toBeVisible()
+  expect(within(personal).getByText('Доступ')).toBeVisible()
+  expect(within(personal).getByText('QA Switch Test')).toBeVisible()
+  expect(screen.queryByRole('region', { name: 'Доступ' })).toBeNull()
+  expect(screen.getByRole('region', { name: 'Налаштування' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Видалити акаунт' })).toBeVisible()
+  expect(screen.queryByText(/Цю дію неможливо скасувати/)).toBeNull()
   expect(screen.getByRole('button', { name: 'Вийти з системи' })).toBeVisible()
   for (const text of [
     'Завантажити фото',
@@ -436,7 +445,7 @@ it('does not clear a newer session after old-account deletion completes', async 
   expect(signOut).not.toHaveBeenCalled()
 })
 
-it('shows every member the business region read-only with why it is locked', () => {
+it('keeps business document details available on demand', () => {
   const settled: Tenant = {
     ...tenant,
     countryCode: 'PL',
@@ -454,18 +463,25 @@ it('shows every member the business region read-only with why it is locked', () 
   } satisfies CabinetContextValue)
   render(<ProfileScreen />, { wrapper: MemoryRouter })
 
-  const card = screen.getByRole('region', { name: 'Документи бізнесу' })
-  expect(within(card).getByText('Польща')).toBeVisible()
-  expect(within(card).getByText(/Варшава/)).toBeVisible()
-  expect(within(card).getByText('Polski')).toHaveAttribute('lang', 'pl')
+  const settings = screen.getByRole('region', { name: 'Налаштування' })
+  const disclosure = within(settings)
+    .getByText('Документи бізнесу')
+    .closest('details')
+  expect(disclosure).not.toBeNull()
+  expect(disclosure).not.toHaveAttribute('open')
+  fireEvent.click(within(settings).getByText('Документи бізнесу'))
+  expect(disclosure).toHaveAttribute('open')
+  expect(within(settings).getByText('Польща')).toBeVisible()
+  expect(within(settings).getByText(/Варшава/)).toBeVisible()
+  expect(within(disclosure!).getByText('Polski')).toHaveAttribute('lang', 'pl')
   expect(
-    within(card).getByText(/Зафіксовано після першої операції/),
+    within(settings).getByText(/Зафіксовано після першої операції/),
   ).toBeVisible()
   expect(
-    within(card).getByText(
+    within(settings).getByText(
       /авто, партія, запчастина, замовлення, витрата на авто або касова операція/,
     ),
   ).toBeVisible()
-  expect(within(card).queryByRole('combobox')).toBeNull()
-  expect(within(card).queryByRole('button')).toBeNull()
+  expect(within(disclosure!).queryByRole('combobox')).toBeNull()
+  expect(within(disclosure!).queryByRole('button')).toBeNull()
 })

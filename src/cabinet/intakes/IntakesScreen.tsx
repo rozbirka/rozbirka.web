@@ -22,7 +22,6 @@ import {
   PackagePlus,
   Plus,
   Printer,
-  ScanLine,
   Trash2,
   X,
 } from 'lucide-react'
@@ -41,7 +40,8 @@ import {
   PillGroup,
   QuantityStepper,
   SearchInput,
-  SelectInput,
+  SectionPanel,
+  Sheet,
   SkeletonRows,
   StatusPill,
   type StatusTone,
@@ -57,7 +57,14 @@ import {
   type IntakeListParams,
   isIntakeStatus,
 } from '@/api/intakes'
-import { inventoryApi, type InventoryZone } from '@/api/inventory'
+import { inventoryApi } from '@/api/inventory'
+import { PartPlacementPicker } from '../inventory/PartPlacementPicker'
+import {
+  emptyPartPlacement,
+  type PartPlacement,
+} from '../inventory/part-placement-state'
+import { usePlacementOptions } from '../inventory/usePlacementOptions'
+import { placementMessages } from '../inventory/part-placement-messages'
 import { partsApi } from '@/api/parts'
 import { normalizeApiProblem } from '@/api/errors'
 import { cn } from '@/lib/utils'
@@ -68,6 +75,16 @@ import { intakesMessages } from './messages'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { MediaPicker } from '../cars/CarsScreen'
+import { CompatibilityRowCard, ConditionTile } from '../parts/PartFormChoices'
+import { partFormMessages } from '../parts/part-form-messages'
+import { conditionLabel } from '../parts/part-labels'
+import {
+  emptyRow,
+  resolveCompatibility,
+  rowsProblem,
+  unknownBrandsMessage,
+  type CompatibilityRow,
+} from '../parts/compatibility-rows'
 import type { MediaUploadResult } from '@/api/media'
 import { cabinetModules } from '../module-registry'
 import { evaluateModuleAccess } from '../policy'
@@ -263,7 +280,10 @@ export function IntakesScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
     if (partCreateDecision.kind !== 'allowed')
       return <Denied decision={partCreateDecision} />
     return intakeId ? (
-      <PartForm canUploadMedia={partsMediaManage} intakeId={intakeId} />
+      <>
+        <IntakeDetail base={base} intakeId={intakeId} />
+        <PartForm canUploadMedia={partsMediaManage} intakeId={intakeId} />
+      </>
     ) : (
       <Denied decision={{ kind: 'permission-denied' }} />
     )
@@ -1800,9 +1820,13 @@ function PartForm({
   const cabinet = useCabinet()
   const t = useT(intakesMessages)
   const tf = useT(intakeFormMessages)
+  const tp = useT(partFormMessages)
+  const tPlacement = useT(placementMessages)
   const params = useParams<{ tenant: string }>()
   const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
-  const canPlace = allowedToView(cabinetModules.inventory, cabinet)
+  const canPlace =
+    allowedToView(cabinetModules.inventory, cabinet) &&
+    Boolean(cabinet.snapshot?.permissions.has('inventory.zones.manage'))
   const emptyPosition = {
     name: '',
     partType: '',
@@ -1811,7 +1835,7 @@ function PartForm({
     quantity: 1,
     unit: PIECES,
     price: '',
-    zoneId: '',
+    placement: emptyPartPlacement,
     notes: '',
   }
   // The position typed before leaving for the currency setting comes back.
@@ -1823,14 +1847,19 @@ function PartForm({
   const [problem, setProblem] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<{ name?: string }>({})
   const [intake, setIntake] = useState<Intake | null>(null)
-  const [zones, setZones] = useState<InventoryZone[]>([])
+  const placementOptions = usePlacementOptions(
+    canPlace,
+    cabinet.targetTenant?.id,
+  )
   const [added, setAdded] = useState<AddedPart[]>([])
+  const [compatRows, setCompatRows] = useState<CompatibilityRow[]>([])
+  const nextCompatibilityKey = useRef(0)
+  const pendingCreatedId = useRef<string | null>(null)
   const [busy, setBusy] = useState(false)
   const intakeMutation = useLatestMutationGuard(cabinetModules.intakes)
   const partMutation = useLatestMutationGuard(cabinetModules.parts)
   const guard = useFirstPriceGuard()
   const { locale } = useLocale()
-  const money = useWholeMoney(guard.currency)
   const lastAnother = useRef(false)
 
   useEffect(() => {
@@ -1844,43 +1873,17 @@ function PartForm({
     return () => controller.abort()
   }, [intakeId])
 
-  useEffect(() => {
-    if (!canPlace) return
-    const controller = new AbortController()
-    void inventoryApi
-      .getZones({ activeOnly: true, signal: controller.signal })
-      .then(
-        (next) => {
-          if (!controller.signal.aborted) setZones(next)
-        },
-        () => {
-          // Without zones the cell simply stays unset — the part is still added.
-        },
-      )
-    return () => controller.abort()
-  }, [canPlace])
-
   const update = (key: keyof typeof values, value: string | number) =>
     setValues((current) => ({ ...current, [key]: value }))
 
-  /**
-   * What one piece of this batch cost: the price of the whole intake spread
-   * over the positions already in it. It is the yard's own arithmetic, shown
-   * so the sale price is set against something rather than guessed.
-   */
-  const unitCost =
-    intake && intake.totalCost !== null && intake.partsCount > 0
-      ? intake.totalCost / intake.partsCount
-      : null
   const price = Number(values.price.replace(',', '.'))
   const hasPrice =
     values.price.trim() !== '' && Number.isFinite(price) && price > 0
-  const margin =
-    hasPrice && unitCost !== null
-      ? Math.round(((price - unitCost) / price) * 100)
-      : null
   const named = values.name.trim().length > 0
-  const zone = zones.find((item) => item.id === values.zoneId) ?? null
+  const zone =
+    placementOptions.zones.find(
+      (item) => item.id === values.placement?.zoneId,
+    ) ?? null
   // Only a positive price is sent, so only that one can lock the currency.
   const priceSlots = usePriceSlots(guard, {
     values: hasPrice ? [values.price] : [],
@@ -1911,6 +1914,11 @@ function PartForm({
       setProblem(pricePrecision)
       return
     }
+    const compatibilityProblem = rowsProblem(compatRows, locale)
+    if (compatibilityProblem !== null) {
+      setProblem(compatibilityProblem)
+      return
+    }
     setFieldErrors({})
     const request: AddIntakePartRequest = {
       name: values.name.trim(),
@@ -1920,7 +1928,6 @@ function PartForm({
       unit: values.unit || null,
       notes: values.notes.trim() || null,
       photoKeys: media.map((item) => item.storageKey),
-      ...(values.zoneId ? { inventoryZoneIds: [values.zoneId] } : {}),
     }
     setBusy(true)
     try {
@@ -1933,30 +1940,72 @@ function PartForm({
       }
       const intakeScope = intakeMutation.requireLatestMutation({ quota: false })
       partMutation.requireLatestMutation({ permission: 'parts.view' })
-      const created = await intakesApi.addPart(intakeId, request, {
+      const resolved = await resolveCompatibility(compatRows, {
         signal: intakeScope.signal,
       })
+      if (resolved.kind === 'unknown') {
+        setProblem(unknownBrandsMessage(resolved.brands, locale))
+        setBusy(false)
+        return
+      }
+      const needsPartManage = pricing || resolved.kind === 'ready'
+      const partScope = needsPartManage
+        ? partMutation.requireLatestMutation({
+            permission: 'parts.manage',
+            quota: false,
+          })
+        : null
+      const createdId =
+        pendingCreatedId.current ??
+        (
+          await intakesApi.addPart(intakeId, request, {
+            signal: intakeScope.signal,
+          })
+        ).id
+      pendingCreatedId.current = createdId
+      if (resolved.kind === 'ready') {
+        const current = await partsApi.compatibilities(createdId, {
+          signal: partScope!.signal,
+        })
+        await partsApi.replaceCompatibilities(
+          createdId,
+          current.version,
+          resolved.items,
+        )
+      }
       // The intake endpoint carries no price, so the asking price is set on the
       // part it just created — one call, right after, before anyone sees it.
       if (pricing) {
-        const priceScope = partMutation.requireLatestMutation({
-          permission: 'parts.manage',
-          quota: false,
-        })
         await partsApi.update(
-          created.id,
+          createdId,
           { desiredSalePrice: { isSet: true, value: price } },
-          { signal: priceScope.signal },
+          { signal: partScope!.signal },
         )
         guard.afterSave(true)
       }
+      if (canPlace && values.placement?.zoneId) {
+        try {
+          await inventoryApi.replacePartZones(
+            createdId,
+            [values.placement.zoneId],
+            { signal: intakeScope.signal },
+            values.placement.shelfId || undefined,
+            values.placement.sectionId || undefined,
+          )
+        } catch {
+          setProblem(tPlacement('retrySave'))
+          setBusy(false)
+          return
+        }
+      }
+      pendingCreatedId.current = null
       if (!andAnother) {
         void navigate(`${base}/${intakeId}`)
         return
       }
       setAdded((current) => [
         {
-          id: created.id,
+          id: createdId,
           name: request.name,
           quantity: values.quantity,
           unit: values.unit || PIECES,
@@ -1974,6 +2023,7 @@ function PartForm({
         notes: '',
       }))
       setMedia([])
+      setCompatRows([])
       setIntake(
         (current) =>
           current && { ...current, partsCount: current.partsCount + 1 },
@@ -1989,28 +2039,25 @@ function PartForm({
   const saveNote = named ? tf('saveNoteNamed') : tf('saveNoteUnnamed')
 
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-        <div className="flex min-w-0 items-center gap-5">
-          <Link
-            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-            to={backTo}
-          >
-            <ChevronLeft aria-hidden className="size-3.5" />
+    <Sheet
+      description={
+        <>
+          {tf('partInIntake')} {intake?.name ?? '…'}
+          {intake
+            ? ` · ${tf('alreadyPositions', { count: intake.partsCount })}`
+            : ''}
+        </>
+      }
+      eyebrow={`${t('eyebrow')} · ${t('title')}`}
+      footer={
+        <div className="flex w-full flex-wrap items-center gap-2.5">
+          <p className="text-app-dim w-full text-[13px]">{saveNote}</p>
+          <div className="w-full empty:hidden">{priceSlots.saveNotes}</div>
+          <Button disabled={busy} onClick={() => void navigate(backTo)}>
             {tf('backToIntake')}
-          </Link>
-          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>{t('eyebrow')}</span>
-            <span aria-hidden className="text-white/20">
-              /
-            </span>
-            <span>{t('title')}</span>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
+          </Button>
           <Button
             aria-busy={busy}
-            className="px-[18px] text-sm font-semibold"
             disabled={busy || !named}
             onClick={(event) => void save(event, true)}
           >
@@ -2018,319 +2065,298 @@ function PartForm({
           </Button>
           <Button
             aria-busy={busy}
-            className="px-5 text-sm font-bold"
             disabled={busy || !named}
-            onClick={(event) => void save(event)}
+            form={INTAKE_PART_FORM}
+            type="submit"
             variant="primary"
           >
             {tf('addPart')}
           </Button>
         </div>
-      </div>
-
-      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-        <div className="min-w-0">
-          <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
-            {tf('addPart')}
-          </h1>
-          <p className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm font-medium">
-            <span>
-              {tf('partInIntake')}{' '}
-              <span className="text-app-ink font-semibold">
-                {intake?.name ?? '…'}
-              </span>
-            </span>
-            {intake ? (
-              <>
-                <span aria-hidden className="text-white/20">
-                  ·
-                </span>
-                <span>
-                  {tf('alreadyPositions', { count: intake.partsCount })}
-                </span>
-              </>
-            ) : null}
-          </p>
-        </div>
-
+      }
+      onOpenChange={(next) => {
+        if (!next && !busy) void navigate(backTo)
+      }}
+      open
+      size="lg"
+      title={tf('addPart')}
+    >
+      <form
+        aria-busy={busy}
+        className="grid gap-5"
+        id={INTAKE_PART_FORM}
+        onSubmit={(event) => void save(event)}
+      >
         {problem ? <Notice tone="danger">{problem}</Notice> : null}
-
-        <form
-          aria-busy={busy}
-          className="flex flex-wrap items-start gap-6"
-          onSubmit={(event) => void save(event)}
-        >
-          <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
-            <FormCard step="01" title={tf('descriptionTitle')}>
-              <Field
-                error={fieldErrors.name}
-                hint={tf('partNameHint')}
-                label={tf('nameLabel')}
+        <div className="grid gap-5">
+          <SectionPanel
+            title={<NumberedTitle number="01" title={tf('descriptionTitle')} />}
+            variant="plain"
+          >
+            <Field
+              error={fieldErrors.name}
+              hint={tf('partNameHint')}
+              label={tf('nameLabel')}
+              required
+            >
+              <TextInput
+                autoComplete="off"
+                name="name"
+                onChange={(event) => update('name', event.target.value)}
+                placeholder={tf('partNamePlaceholder')}
                 required
-              >
+                value={values.name}
+              />
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label={tf('partType')}>
                 <TextInput
                   autoComplete="off"
-                  name="name"
-                  onChange={(event) => update('name', event.target.value)}
-                  placeholder={tf('partNamePlaceholder')}
-                  required
-                  value={values.name}
+                  name="partType"
+                  onChange={(event) => update('partType', event.target.value)}
+                  placeholder={tf('partTypePlaceholder')}
+                  value={values.partType}
                 />
               </Field>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label={tf('partType')}>
-                  <TextInput
-                    autoComplete="off"
-                    name="partType"
-                    onChange={(event) => update('partType', event.target.value)}
-                    placeholder={tf('partTypePlaceholder')}
-                    value={values.partType}
-                  />
-                </Field>
-                <Field hint={tf('oemHint')} label={tf('oemLabel')}>
-                  <TextInput
-                    className="font-mono"
-                    disabled
-                    name="oemCode"
-                    placeholder="1RV-8820-02"
-                    value=""
-                  />
-                </Field>
-              </div>
-              <Field label={tf('conditionLabel')}>
-                <PillGroup
-                  label={tf('conditionGroup')}
-                  onChange={(next) => update('condition', next)}
-                  options={conditionOptions(tf)}
-                  value={values.condition}
+              <Field hint={tf('oemHint')} label={tf('oemLabel')}>
+                <TextInput
+                  className="font-mono"
+                  disabled
+                  name="oemCode"
+                  placeholder="1RV-8820-02"
+                  value=""
                 />
               </Field>
-            </FormCard>
+            </div>
+          </SectionPanel>
 
-            <FormCard
-              description={
-                unitCost === null
-                  ? tf('unitCostPending')
-                  : tf('unitCostFromBatch', { amount: money(unitCost) })
-              }
-              step="02"
-              title={tf('quantityPriceTitle')}
+          <SectionPanel
+            description={tp('conditionDescription')}
+            title={<NumberedTitle number="02" title={tp('conditionStep')} />}
+            variant="plain"
+          >
+            <div
+              aria-label={tp('conditionStep')}
+              className="grid gap-2 sm:grid-cols-3"
+              role="radiogroup"
             >
-              <div className="grid items-start gap-4 sm:grid-cols-3">
-                <Field label={tf('quantity')} required>
-                  <QuantityStepper
-                    label={tf('quantityStepper')}
-                    min={1}
-                    onChange={(next) => update('quantity', next)}
-                    value={values.quantity}
-                  />
-                </Field>
-                <Field hint={tf('unitHint')} label={tf('unitLabel')}>
-                  <TextInput
-                    autoComplete="off"
-                    name="unit"
-                    readOnly
-                    value={unitLabel(t, values.unit)}
-                  />
-                </Field>
-                <Field
-                  hint={priceSlots.hint ?? tf('desiredPriceHint')}
-                  label={tf('salePrice')}
-                >
-                  <MoneyInput
-                    currency={priceSlots.currency}
-                    disabled={priceSlots.disabled}
-                    inputMode="decimal"
-                    name="price"
-                    onChange={(event) => update('price', event.target.value)}
-                    placeholder="0"
-                    value={values.price}
-                  />
-                </Field>
-              </div>
-              {priceSlots.note}
-            </FormCard>
+              {(['good', 'fair', 'scrap'] as const).map((condition) => (
+                <ConditionTile
+                  key={condition}
+                  label={conditionLabel(condition, locale)}
+                  onPick={() => update('condition', condition)}
+                  picked={values.condition === condition}
+                  value={condition}
+                />
+              ))}
+            </div>
+            <p className="text-app-dim text-[12px] leading-5 text-pretty">
+              {tp('conditionVisible')}
+            </p>
+          </SectionPanel>
 
-            {canPlace ? (
-              <FormCard
-                description={tf('placementHint')}
-                step="03"
-                title={tf('placementTitle')}
+          <SectionPanel
+            title={
+              <NumberedTitle number="03" title={tf('quantityPriceTitle')} />
+            }
+            variant="plain"
+          >
+            <div className="grid items-start gap-4 sm:grid-cols-3">
+              <Field label={tf('quantity')} required>
+                <QuantityStepper
+                  label={tf('quantityStepper')}
+                  min={1}
+                  onChange={(next) => update('quantity', next)}
+                  value={values.quantity}
+                />
+              </Field>
+              <Field hint={tf('unitHint')} label={tf('unitLabel')}>
+                <TextInput
+                  autoComplete="off"
+                  name="unit"
+                  readOnly
+                  value={unitLabel(t, values.unit)}
+                />
+              </Field>
+              <Field
+                hint={priceSlots.hint ?? tf('desiredPriceHint')}
+                label={tf('salePrice')}
               >
-                <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
-                  <Field label={tf('cell')}>
-                    <SelectInput
-                      name="zoneId"
-                      onChange={(event) => update('zoneId', event.target.value)}
-                      value={values.zoneId}
-                    >
-                      <option value="">{tf('noCell')}</option>
-                      {zones.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.code} · {item.name}
-                        </option>
-                      ))}
-                    </SelectInput>
-                  </Field>
-                  <Button
-                    className="min-h-11"
-                    disabled
-                    title={tf('scanUnavailable')}
-                    type="button"
-                  >
-                    <ScanLine aria-hidden />
-                    {tf('scan')}
-                  </Button>
-                </div>
-              </FormCard>
-            ) : null}
-
-            <FormCard
-              step={canPlace ? '04' : '03'}
-              title={tf('photosNotesTitle')}
-            >
-              {canUploadMedia ? (
-                <MediaPicker
-                  beforeDispatch={() => {
-                    intakeMutation.requireLatestMutation({ quota: false })
-                    partMutation.requireLatestMutation({
-                      permission: 'parts.view',
-                      quota: false,
-                    })
-                  }}
-                  entityType="parts"
-                  items={media}
-                  onChange={setMedia}
-                />
-              ) : null}
-              <Field label={tf('notes')}>
-                <TextArea
-                  name="notes"
-                  onChange={(event) => update('notes', event.target.value)}
-                  placeholder={tf('notesPlaceholder')}
-                  rows={2}
-                  value={values.notes}
+                <MoneyInput
+                  currency={priceSlots.currency}
+                  disabled={priceSlots.disabled}
+                  inputMode="decimal"
+                  name="price"
+                  onChange={(event) => update('price', event.target.value)}
+                  placeholder="0"
+                  value={values.price}
                 />
               </Field>
-            </FormCard>
-          </div>
+            </div>
+            {priceSlots.note}
+          </SectionPanel>
 
-          <aside className="sticky top-24 grid min-w-[280px] flex-[0_0_320px] gap-5">
-            <Card title={tf('newPosition')}>
-              <div className="border-app-line bg-app-input rounded-[14px] border p-4">
-                <p
-                  className={cn(
-                    'text-[17px] font-bold tracking-[-0.015em]',
-                    named ? 'text-white' : 'text-app-dim',
-                  )}
-                >
-                  {named ? values.name : tf('partNameFallback')}
-                </p>
-                <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                  <StatusPill tone={zone ? 'ok' : 'warn'}>
-                    {zone
-                      ? tf('availableInCell', { code: zone.code })
-                      : tf('noCell')}
-                  </StatusPill>
-                  <span className="text-app-muted font-mono text-[13px]">
+          <SectionPanel
+            description={tp('compatDescription')}
+            title={<NumberedTitle number="04" title={tp('compatStep')} />}
+            variant="plain"
+          >
+            <div className="grid gap-2.5">
+              {compatRows.map((row, index) => (
+                <CompatibilityRowCard
+                  index={index + 1}
+                  key={row.key}
+                  onChange={(patch) =>
+                    setCompatRows((current) =>
+                      current.map((item) =>
+                        item.key === row.key ? { ...item, ...patch } : item,
+                      ),
+                    )
+                  }
+                  onRemove={() =>
+                    setCompatRows((current) =>
+                      current.filter((item) => item.key !== row.key),
+                    )
+                  }
+                  row={row}
+                />
+              ))}
+              <Button
+                className="w-full justify-center border-dashed"
+                onClick={() => {
+                  nextCompatibilityKey.current += 1
+                  setCompatRows((current) => [
+                    ...current,
+                    emptyRow(`row-${String(nextCompatibilityKey.current)}`),
+                  ])
+                }}
+                type="button"
+              >
+                <Plus aria-hidden />
+                {tp('addCar')}
+              </Button>
+            </div>
+            <Notice tone="warn">{tp('compatOnlyOnCreate')}</Notice>
+          </SectionPanel>
+
+          {canPlace ? (
+            <SectionPanel
+              description={tPlacement('hint')}
+              title={<NumberedTitle number="05" title={tf('placementTitle')} />}
+              variant="plain"
+            >
+              <PartPlacementPicker
+                value={values.placement ?? emptyPartPlacement}
+                onChange={(placement) =>
+                  setValues((current) => ({ ...current, placement }))
+                }
+                options={placementOptions}
+              />
+            </SectionPanel>
+          ) : null}
+
+          <SectionPanel
+            title={
+              <NumberedTitle
+                number={canPlace ? '06' : '05'}
+                title={tf('photosNotesTitle')}
+              />
+            }
+            variant="plain"
+          >
+            {canUploadMedia ? (
+              <MediaPicker
+                beforeDispatch={() => {
+                  intakeMutation.requireLatestMutation({ quota: false })
+                  partMutation.requireLatestMutation({
+                    permission: 'parts.view',
+                    quota: false,
+                  })
+                }}
+                entityType="parts"
+                items={media}
+                onChange={setMedia}
+              />
+            ) : null}
+            <Field label={tf('notes')}>
+              <TextArea
+                name="notes"
+                onChange={(event) => update('notes', event.target.value)}
+                placeholder={tf('notesPlaceholder')}
+                rows={2}
+                value={values.notes}
+              />
+            </Field>
+          </SectionPanel>
+        </div>
+
+        <SectionPanel title={tf('newPosition')} variant="plain">
+          <div className="border-app-line bg-app-input rounded-[14px] border p-4">
+            <p
+              className={cn(
+                'text-[17px] font-bold tracking-[-0.015em]',
+                named ? 'text-white' : 'text-app-dim',
+              )}
+            >
+              {named ? values.name : tf('partNameFallback')}
+            </p>
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              <StatusPill tone={zone ? 'ok' : 'warn'}>
+                {zone
+                  ? tf('availableInCell', { code: zone.code })
+                  : tf('noCell')}
+              </StatusPill>
+              <span className="text-app-muted font-mono text-[13px]">
+                {t('quantityWithUnit', {
+                  count: values.quantity,
+                  unit: unitLabel(t, values.unit || PIECES),
+                })}
+              </span>
+            </div>
+          </div>
+        </SectionPanel>
+
+        {added.length > 0 ? (
+          <SectionPanel
+            aside={added.length}
+            title={tf('justAdded')}
+            variant="plain"
+          >
+            <ul className="divide-app-line grid divide-y rounded-control border border-app-line">
+              {added.map((item) => (
+                <li className="flex items-center gap-3 px-6 py-3" key={item.id}>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-white">
+                      {item.name}
+                    </span>
+                    <span className="text-app-muted mt-0.5 block font-mono text-[13px]">
+                      {item.zone ?? tf('noCellLower')}
+                    </span>
+                  </span>
+                  <span className="text-app-muted font-mono text-[14px] whitespace-nowrap">
                     {t('quantityWithUnit', {
-                      count: values.quantity,
-                      unit: unitLabel(t, values.unit || PIECES),
+                      count: item.quantity,
+                      unit: unitLabel(t, item.unit),
                     })}
                   </span>
-                </div>
-              </div>
-              <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
-                <dt className="text-app-muted text-sm font-semibold">
-                  {tf('unitCost')}
-                </dt>
-                <dd className="font-mono text-[16px] text-white tabular-nums">
-                  {unitCost === null ? '—' : money(unitCost)}
-                </dd>
-                <dt className="text-app-muted text-sm font-semibold">
-                  {tf('salePrice')}
-                </dt>
-                <dd
-                  className={cn(
-                    'font-mono text-[16px] tabular-nums',
-                    hasPrice ? 'text-white' : 'text-app-dim',
-                  )}
-                >
-                  {hasPrice ? money(price) : '—'}
-                </dd>
-                <div className="bg-app-line col-span-2 my-1 h-px" />
-                <dt className="text-[16px] font-bold text-white">
-                  {tf('margin')}
-                </dt>
-                <dd
-                  className={cn(
-                    'font-mono text-[20px] tabular-nums',
-                    margin === null
-                      ? 'text-app-dim'
-                      : margin >= 30
-                        ? 'text-state-ok'
-                        : margin > 0
-                          ? 'text-state-warn'
-                          : 'text-state-danger',
-                  )}
-                >
-                  {margin === null ? '—' : `${String(margin)}%`}
-                </dd>
-              </dl>
-              <div className="mt-5 empty:hidden">{priceSlots.saveNotes}</div>
-              <Button
-                aria-busy={busy}
-                className="mt-5 min-h-12 w-full text-[16px] font-bold"
-                disabled={busy || !named}
-                type="submit"
-                variant="primary"
-              >
-                {tf('addPart')}
-              </Button>
-              <p className="text-app-dim mt-3 text-[13px] leading-[1.5]">
-                {saveNote}
-              </p>
-            </Card>
+                </li>
+              ))}
+            </ul>
+          </SectionPanel>
+        ) : null}
+      </form>
+    </Sheet>
+  )
+}
 
-            {added.length > 0 ? (
-              <Card
-                aside={
-                  <span className="text-app-muted font-mono text-[12px]">
-                    {added.length}
-                  </span>
-                }
-                bodyClassName="p-0"
-                title={tf('justAdded')}
-              >
-                <ul className="divide-app-line grid divide-y">
-                  {added.map((item) => (
-                    <li
-                      className="flex items-center gap-3 px-6 py-3"
-                      key={item.id}
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold text-white">
-                          {item.name}
-                        </span>
-                        <span className="text-app-muted mt-0.5 block font-mono text-[13px]">
-                          {item.zone ?? tf('noCellLower')}
-                        </span>
-                      </span>
-                      <span className="text-app-muted font-mono text-[14px] whitespace-nowrap">
-                        {t('quantityWithUnit', {
-                          count: item.quantity,
-                          unit: unitLabel(t, item.unit),
-                        })}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            ) : null}
-          </aside>
-        </form>
-      </div>
-    </div>
+const INTAKE_PART_FORM = 'intake-part-form'
+
+function NumberedTitle({ number, title }: { number: string; title: string }) {
+  return (
+    <span className="flex items-baseline gap-2.5">
+      <span className="text-app-dim font-mono text-[11px]">{number}</span>
+      {title}
+    </span>
   )
 }
 
@@ -2341,6 +2367,7 @@ interface BatchRow {
   quantity: string
   price: string
   zoneId: string
+  placement?: PartPlacement
 }
 
 let batchRowSeq = 0
@@ -2376,12 +2403,15 @@ function BatchPartsForm({
   const tf = useT(intakeFormMessages)
   const params = useParams<{ tenant: string }>()
   const base = `/app/${params.tenant ?? cabinet.targetTenant?.slug ?? ''}/intakes`
-  const canPlace = allowedToView(cabinetModules.inventory, cabinet)
+  const canPlace =
+    allowedToView(cabinetModules.inventory, cabinet) &&
+    Boolean(cabinet.snapshot?.permissions.has('inventory.zones.manage'))
   // The rows typed before leaving for the currency setting come back.
   const draft = useCurrencyDraft<{
     rows: BatchRow[]
     condition: string
     sharedZoneId: string
+    sharedPlacement?: PartPlacement
   }>(`intake-batch:${intakeId}`)
   const [rows, setRows] = useState<BatchRow[]>(
     () =>
@@ -2399,11 +2429,19 @@ function BatchPartsForm({
   const [condition, setCondition] = useState(
     () => draft.initial?.condition ?? 'good',
   )
-  const [sharedZoneId, setSharedZoneId] = useState(
-    () => draft.initial?.sharedZoneId ?? '',
+  const [sharedPlacement, setSharedPlacement] = useState<PartPlacement>(
+    () =>
+      draft.initial?.sharedPlacement ?? {
+        ...emptyPartPlacement,
+        zoneId: draft.initial?.sharedZoneId ?? '',
+      },
   )
   const [intake, setIntake] = useState<Intake | null>(null)
-  const [zones, setZones] = useState<InventoryZone[]>([])
+  const placementOptions = usePlacementOptions(
+    canPlace,
+    cabinet.targetTenant?.id,
+  )
+  const pendingCreatedRows = useRef(new Map<string, string>())
   const [problem, setProblem] = useState<string | null>(null)
   const [saved, setSaved] = useState(0)
   const [busy, setBusy] = useState(false)
@@ -2424,22 +2462,6 @@ function BatchPartsForm({
     return () => controller.abort()
   }, [intakeId])
 
-  useEffect(() => {
-    if (!canPlace) return
-    const controller = new AbortController()
-    void inventoryApi
-      .getZones({ activeOnly: true, signal: controller.signal })
-      .then(
-        (next) => {
-          if (!controller.signal.aborted) setZones(next)
-        },
-        () => {
-          // Without zones the positions are simply booked in without a cell.
-        },
-      )
-    return () => controller.abort()
-  }, [canPlace])
-
   const update = (key: string, field: keyof BatchRow, value: string) =>
     setRows((current) =>
       current.map((row) =>
@@ -2456,7 +2478,7 @@ function BatchPartsForm({
     0,
   )
   const withoutCell = filled.filter(
-    (row) => (row.zoneId || sharedZoneId) === '',
+    (row) => !row.placement?.zoneId && !row.zoneId && !sharedPlacement.zoneId,
   ).length
   const withoutPrice = filled.filter(
     (row) => batchNumber(row.price) === 0,
@@ -2468,16 +2490,28 @@ function BatchPartsForm({
       .map((row) => row.price),
     onAccept: (accepted) => void save(undefined, accepted),
     draftKept: true,
-    onLeave: () => draft.keep({ rows, condition, sharedZoneId }),
+    onLeave: () =>
+      draft.keep({
+        rows,
+        condition,
+        sharedZoneId: sharedPlacement.zoneId,
+        sharedPlacement,
+      }),
   })
   const pricing = priceSlots.hasPrice && !priceSlots.disabled
   const fillDown = () =>
     setRows((current) => {
-      const source = current.find((row) => row.zoneId !== '')
+      const source = current.find(
+        (row) => Boolean(row.placement?.zoneId) || Boolean(row.zoneId),
+      )
       if (!source) return current
       return current.map((row) =>
-        row.name.trim() !== '' && row.zoneId === ''
-          ? { ...row, zoneId: source.zoneId }
+        row.name.trim() !== '' && !row.placement?.zoneId && row.zoneId === ''
+          ? {
+              ...row,
+              zoneId: source.zoneId,
+              ...(source.placement ? { placement: source.placement } : {}),
+            }
           : row,
       )
     })
@@ -2510,7 +2544,11 @@ function BatchPartsForm({
       return
     }
     for (const [index, row] of filled.entries()) {
-      const zoneId = row.zoneId || sharedZoneId
+      const placement = row.placement?.zoneId
+        ? row.placement
+        : row.zoneId
+          ? { ...emptyPartPlacement, zoneId: row.zoneId }
+          : sharedPlacement
       const price = batchNumber(row.price)
       const request: AddIntakePartRequest = {
         name: row.name.trim(),
@@ -2520,26 +2558,39 @@ function BatchPartsForm({
         unit: PIECES,
         notes: null,
         photoKeys: [],
-        ...(zoneId ? { inventoryZoneIds: [zoneId] } : {}),
       }
       try {
         const scope = intakeMutation.requireLatestMutation({ quota: false })
         partMutation.requireLatestMutation({ permission: 'parts.view' })
-        const created = await intakesApi.addPart(intakeId, request, {
-          signal: scope.signal,
-        })
+        const createdId =
+          pendingCreatedRows.current.get(row.key) ??
+          (
+            await intakesApi.addPart(intakeId, request, {
+              signal: scope.signal,
+            })
+          ).id
+        pendingCreatedRows.current.set(row.key, createdId)
         if (price > 0 && !priceSlots.disabled) {
           const priceScope = partMutation.requireLatestMutation({
             permission: 'parts.manage',
             quota: false,
           })
           await partsApi.update(
-            created.id,
+            createdId,
             { desiredSalePrice: { isSet: true, value: price } },
             { signal: priceScope.signal },
           )
           guard.afterSave(true)
         }
+        if (canPlace && placement.zoneId)
+          await inventoryApi.replacePartZones(
+            createdId,
+            [placement.zoneId],
+            { signal: scope.signal },
+            placement.shelfId || undefined,
+            placement.sectionId || undefined,
+          )
+        pendingCreatedRows.current.delete(row.key)
         setSaved(index + 1)
       } catch (error: unknown) {
         setProblem(
@@ -2645,12 +2696,7 @@ function BatchPartsForm({
               </div>
               <div
                 aria-hidden
-                className={cn(
-                  'border-app-line text-app-muted hidden gap-3 border-t border-b px-6 py-2.5 font-mono text-[10px] tracking-[0.12em] uppercase sm:grid',
-                  canPlace
-                    ? 'sm:grid-cols-[2.4fr_0.8fr_1fr_1.4fr_44px]'
-                    : 'sm:grid-cols-[2.4fr_0.8fr_1fr_44px]',
-                )}
+                className="border-app-line text-app-muted hidden gap-3 border-t border-b px-6 py-2.5 font-mono text-[10px] tracking-[0.12em] uppercase sm:grid sm:grid-cols-[2.4fr_0.8fr_1fr_44px]"
               >
                 <span>{tf('columnName')}</span>
                 <span className="text-right">{tf('columnQuantity')}</span>
@@ -2659,18 +2705,12 @@ function BatchPartsForm({
                     ? tf('columnPrice')
                     : tf('columnPriceIn', { code: guard.currency })}
                 </span>
-                {canPlace ? <span>{tf('cell')}</span> : null}
                 <span />
               </div>
               <ul className="divide-app-line border-app-line grid divide-y border-t sm:border-t-0">
                 {rows.map((row, index) => (
                   <li
-                    className={cn(
-                      'grid items-center gap-3 px-6 py-2.5',
-                      canPlace
-                        ? 'sm:grid-cols-[2.4fr_0.8fr_1fr_1.4fr_44px]'
-                        : 'sm:grid-cols-[2.4fr_0.8fr_1fr_44px]',
-                    )}
+                    className="grid items-center gap-3 px-6 py-2.5 sm:grid-cols-[2.4fr_0.8fr_1fr_44px]"
                     key={row.key}
                   >
                     <TextInput
@@ -2712,26 +2752,6 @@ function BatchPartsForm({
                       placeholder="—"
                       value={row.price}
                     />
-                    {canPlace ? (
-                      <SelectInput
-                        aria-label={tf('rowCell', { number: index + 1 })}
-                        onChange={(event) =>
-                          update(row.key, 'zoneId', event.target.value)
-                        }
-                        value={row.zoneId}
-                      >
-                        <option value="">
-                          {sharedZoneId === ''
-                            ? tf('noCell')
-                            : tf('sameAsBatch')}
-                        </option>
-                        {zones.map((zone) => (
-                          <option key={zone.id} value={zone.id}>
-                            {zone.code}
-                          </option>
-                        ))}
-                      </SelectInput>
-                    ) : null}
                     <Button
                       aria-label={tf('removeRow', { number: index + 1 })}
                       className="min-w-11 px-0"
@@ -2745,6 +2765,63 @@ function BatchPartsForm({
                     >
                       <X aria-hidden />
                     </Button>
+                    {canPlace ? (
+                      <details className="border-app-line min-w-0 border-t pt-3 text-sm sm:col-span-4">
+                        <summary className="text-app-ink cursor-pointer font-semibold">
+                          {row.placement?.zoneId
+                            ? (placementOptions.zones.find(
+                                (zone) => zone.id === row.placement?.zoneId,
+                              )?.name ?? tf('cell'))
+                            : row.zoneId
+                              ? (placementOptions.zones.find(
+                                  (zone) => zone.id === row.zoneId,
+                                )?.name ?? tf('cell'))
+                              : sharedPlacement.zoneId
+                                ? tf('sameAsBatch')
+                                : tf('noCell')}
+                        </summary>
+                        <div className="mt-3 grid gap-3">
+                          <Button
+                            type="button"
+                            onClick={() =>
+                              setRows((current) =>
+                                current.map((item) => {
+                                  if (item.key !== row.key) return item
+                                  const { placement: _placement, ...rest } =
+                                    item
+                                  return { ...rest, zoneId: '' }
+                                }),
+                              )
+                            }
+                          >
+                            {tf('sameAsBatch')}
+                          </Button>
+                          <PartPlacementPicker
+                            compact
+                            value={
+                              row.placement ??
+                              (row.zoneId
+                                ? { ...emptyPartPlacement, zoneId: row.zoneId }
+                                : emptyPartPlacement)
+                            }
+                            onChange={(placement) =>
+                              setRows((current) =>
+                                current.map((item) =>
+                                  item.key === row.key
+                                    ? {
+                                        ...item,
+                                        zoneId: placement.zoneId,
+                                        placement,
+                                      }
+                                    : item,
+                                ),
+                              )
+                            }
+                            options={placementOptions}
+                          />
+                        </div>
+                      </details>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -2773,37 +2850,13 @@ function BatchPartsForm({
                 options={conditionOptions(tf)}
                 value={condition}
               />
-              {canPlace && zones.length > 0 ? (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  <button
-                    aria-pressed={sharedZoneId === ''}
-                    className={cn(
-                      'focus-visible:outline-brand min-h-9 cursor-pointer rounded-full border px-3.5 text-[13px] font-semibold',
-                      sharedZoneId === ''
-                        ? 'border-app-line-2 bg-app-input text-white'
-                        : 'border-app-line text-app-muted hover:text-app-ink',
-                    )}
-                    onClick={() => setSharedZoneId('')}
-                    type="button"
-                  >
-                    {tf('noCell')}
-                  </button>
-                  {zones.map((zone) => (
-                    <button
-                      aria-pressed={sharedZoneId === zone.id}
-                      className={cn(
-                        'focus-visible:outline-brand min-h-9 cursor-pointer rounded-full border px-3.5 font-mono text-[13px] font-semibold',
-                        sharedZoneId === zone.id
-                          ? 'border-app-line-2 bg-app-input text-white'
-                          : 'border-app-line text-app-muted hover:text-app-ink',
-                      )}
-                      key={zone.id}
-                      onClick={() => setSharedZoneId(zone.id)}
-                      type="button"
-                    >
-                      {zone.code}
-                    </button>
-                  ))}
+              {canPlace ? (
+                <div className="mt-3">
+                  <PartPlacementPicker
+                    value={sharedPlacement}
+                    onChange={setSharedPlacement}
+                    options={placementOptions}
+                  />
                 </div>
               ) : null}
             </Card>

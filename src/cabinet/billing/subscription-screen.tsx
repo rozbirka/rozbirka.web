@@ -415,7 +415,7 @@ function SubscriptionPanel({
               : t('kpiUntilNextCharge')
           }
           tone={daysLeft !== null && daysLeft < 0 ? 'warn' : 'plain'}
-          value={daysLeft === null ? '—' : String(daysLeft)}
+          value={daysLeft == null ? '—' : String(daysLeft)}
         />
         <Kpi
           label={t('kpiPeriodPrice')}

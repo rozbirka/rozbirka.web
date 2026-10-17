@@ -142,6 +142,7 @@ export function Sheet({
   children,
   footer,
   size = 'md',
+  bodyClassName,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -154,6 +155,8 @@ export function Sheet({
   footer?: ReactNode
   /** Wider panel for a form that carries its own sections. */
   size?: 'md' | 'lg'
+  /** Optional bounded layout for a list with its own fixed search and pager. */
+  bodyClassName?: string
 }) {
   const tc = useT(commonMessages)
   return (
@@ -161,8 +164,10 @@ export function Sheet({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-[2px]" />
         <Dialog.Content
+          // A hidden file input can receive focus when a photo is chosen.
+          // Clip the shell without making it scrollable; only the body scrolls.
           className={cn(
-            'bg-app-canvas border-app-line fixed inset-x-0 bottom-0 z-50 grid max-h-[92dvh] grid-rows-[auto_1fr_auto] overflow-hidden rounded-t-[24px] border-t text-white shadow-2xl sm:inset-y-0 sm:right-0 sm:left-auto sm:h-dvh sm:max-h-none sm:w-full sm:rounded-none sm:border-t-0 sm:border-l',
+            'bg-app-canvas border-app-line fixed inset-x-0 bottom-0 z-50 grid max-h-[92dvh] grid-rows-[auto_1fr_auto] overflow-clip rounded-t-[24px] border-t text-white shadow-2xl sm:inset-y-0 sm:right-0 sm:left-auto sm:h-dvh sm:max-h-none sm:w-full sm:rounded-none sm:border-t-0 sm:border-l',
             size === 'lg' ? 'sm:max-w-[640px]' : 'sm:max-w-[600px]',
           )}
         >
@@ -205,7 +210,12 @@ export function Sheet({
               </button>
             </Dialog.Close>
           </header>
-          <div className="grid min-h-0 content-start gap-5 overflow-y-auto px-5 pt-5 pb-7 sm:px-7">
+          <div
+            className={cn(
+              'grid min-h-0 content-start gap-5 overflow-y-auto px-5 pt-5 pb-7 sm:px-7',
+              bodyClassName,
+            )}
+          >
             {children}
           </div>
           {footer === undefined ? null : (

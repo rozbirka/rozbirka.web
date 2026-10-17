@@ -455,7 +455,7 @@ function OpenOrderItemDrawer({
               {picked.name}
             </p>
           </div>
-          <div className="flex flex-wrap items-end gap-3.5">
+          <div className="grid grid-cols-1 items-start gap-x-3.5 gap-y-3 sm:grid-cols-[180px_minmax(0,1fr)]">
             <Field label={t('quantity')}>
               <QuantityStepper
                 label={t('itemQuantity')}
@@ -466,7 +466,7 @@ function OpenOrderItemDrawer({
               />
             </Field>
             <Field
-              className="flex-[1_1_140px]"
+              className="min-w-0"
               error={pricePrecision ?? undefined}
               hint={priceSlots.hint}
               label={t('unitPrice')}
@@ -480,11 +480,11 @@ function OpenOrderItemDrawer({
                 value={price ?? String(picked.price ?? '')}
               />
             </Field>
-            <p className="text-right">
-              <span className="text-app-muted block text-[12px] font-semibold">
+            <p className="border-app-line flex items-baseline justify-between gap-3 border-t pt-3 sm:col-span-2">
+              <span className="text-app-muted text-[12px] font-semibold">
                 {t('lineSum')}
               </span>
-              <span className="mt-2.5 block font-mono text-[17px] whitespace-nowrap text-white tabular-nums">
+              <span className="font-mono text-[17px] whitespace-nowrap text-white tabular-nums">
                 {money(lineTotal, currency, locale)}
               </span>
             </p>

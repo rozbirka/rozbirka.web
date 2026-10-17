@@ -1,6 +1,7 @@
 import {
+  lazy,
+  Suspense,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
@@ -25,7 +26,6 @@ import {
   ShoppingBag,
   Tag,
   Plus,
-  X,
   Printer,
   Search,
   Trash2,
@@ -56,6 +56,7 @@ import {
   StatusPill,
   TextArea,
   TextInput,
+  useOptionalToast,
   type StatusTone,
 } from '@/components/app'
 import { cn } from '@/lib/utils'
@@ -70,8 +71,10 @@ import {
   type Translate,
 } from '@/i18n'
 import { partsListMessages } from './parts-list-messages'
+import { PartLocationFilters, WITHOUT_LOCATION } from './PartLocationFilters'
 import { partDetailMessages } from './part-detail-messages'
 import { partFormMessages } from './part-form-messages'
+import { CompatibilityRowCard, ConditionTile } from './PartFormChoices'
 import {
   conditionLabel,
   conditionPhrase,
@@ -111,15 +114,22 @@ import {
 } from '../module-registry'
 import { evaluateModuleAccess, type ModuleAccessDecision } from '../policy'
 import { inventoryApi, type PartInventoryZone } from '@/api/inventory'
+import { PartPlacementPicker } from '../inventory/PartPlacementPicker'
+import {
+  emptyPartPlacement,
+  type PartPlacement,
+} from '../inventory/part-placement-state'
+import { usePlacementOptions } from '../inventory/usePlacementOptions'
+import { placementMessages } from '../inventory/part-placement-messages'
+import { placementMessages as movePlacementMessages } from '../inventory/placement-messages'
 import { normalizeApiProblem } from '@/api/errors'
 import type { ApiProblem } from '@/api/contracts'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
-import { VehicleCatalogPicker } from '../cars/CarsScreen'
 import {
   emptyRow,
   filledRows,
+  isBlankRow,
   resolveCompatibility,
-  rowProblem,
   rowsProblem,
   unknownBrandsMessage,
   type CompatibilityRow,
@@ -140,8 +150,12 @@ import {
 import { usePriceSlots, type PriceSlots } from '../currency/use-price-slots'
 import { amountPrecisionError } from '../currency/amount-precision'
 import { isLostResponse, lostResponseMessages } from '../lost-response'
-import { OnboardingCompletedNotice } from '../onboarding/first-part-completion'
-import { useFirstPartCompletion } from '../onboarding/use-first-part-completion'
+
+const PartPlacementDrawer = lazy(() =>
+  import('../inventory/InventoryScreen').then((module) => ({
+    default: module.PartPlacementDrawer,
+  })),
+)
 
 const partStatuses = new Set(['available', 'reserved', 'sold'])
 /** Every group the filter panel draws; the server counts each one for us. */
@@ -160,7 +174,7 @@ const positiveInteger = (value: string | null, fallback: number) => {
 }
 const pageSizeParam = (value: string | null, fallback: number) => {
   const parsed = positiveInteger(value, fallback)
-  return parsed <= 100 ? parsed : fallback
+  return parsed !== 10 && parsed <= 100 ? parsed : fallback
 }
 const statusPresentation = (
   status: string,
@@ -326,6 +340,10 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const [error, setError] = useState<ApiProblem | null>(null)
   const isNew = location.pathname.endsWith('/new')
   const isEdit = location.pathname.endsWith('/edit')
+  const showEditBackground =
+    isEdit &&
+    (location.state as { partEditBackground?: boolean } | null)
+      ?.partEditBackground === true
   const createDecision = evaluateModuleAccess(
     definition,
     accessState(cabinet),
@@ -361,6 +379,14 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       modelId: one('model'),
       warehouseId: one('warehouse'),
       zoneId: one('zone'),
+      sectionId: one('without_section') === '1' ? '' : one('section'),
+      shelfId:
+        one('without_section') === '1' || one('without_shelf') === '1'
+          ? ''
+          : one('shelf'),
+      withoutSection: one('without_section') === '1',
+      withoutShelf:
+        one('without_section') !== '1' && one('without_shelf') === '1',
       page: positiveInteger(searchParams.get('page'), 1),
       pageSize: pageSizeParam(searchParams.get('per_page'), 30),
       carIds: normalizedIds(searchParams.getAll('car_ids')),
@@ -381,6 +407,10 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         : {}),
       ...(filters.warehouseId ? { warehouseIds: [filters.warehouseId] } : {}),
       ...(filters.zoneId ? { zoneIds: [filters.zoneId] } : {}),
+      ...(filters.sectionId ? { sectionIds: [filters.sectionId] } : {}),
+      ...(filters.shelfId ? { shelfIds: [filters.shelfId] } : {}),
+      ...(filters.withoutSection ? { missingSection: true } : {}),
+      ...(filters.withoutShelf ? { missingShelf: true } : {}),
       ...(filters.carIds.length > 0 ? { carIds: filters.carIds } : {}),
       ...(filters.makeId || filters.modelId
         ? {
@@ -481,6 +511,8 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       'model',
       'warehouse',
       'zone',
+      'section',
+      'shelf',
     ] as const) {
       const raw = searchParams.get(name)
       if (raw === null) continue
@@ -492,6 +524,14 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       next.delete('origin')
       next.set('page', '1')
     }
+    for (const name of ['without_section', 'without_shelf']) {
+      if (next.has(name) && next.get(name) !== '1') next.delete(name)
+    }
+    if (filters.withoutSection) {
+      next.delete('section')
+      next.delete('shelf')
+      next.delete('without_shelf')
+    } else if (filters.withoutShelf) next.delete('shelf')
     const rawStatus = searchParams.get('status')
     if (rawStatus !== null && !partStatuses.has(rawStatus))
       next.delete('status')
@@ -525,7 +565,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
 
   useEffect(() => {
     const controller = new AbortController()
-    if (partId && !isEdit) {
+    if (partId && (!isEdit || showEditBackground)) {
       void Promise.all([
         partsApi.get(partId, { signal: controller.signal }),
         partsApi.history(partId, { signal: controller.signal }),
@@ -560,7 +600,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         })
     }
     return () => controller.abort()
-  }, [isEdit, isNew, partId, reloadToken, searchRequest])
+  }, [isEdit, isNew, partId, reloadToken, searchRequest, showEditBackground])
 
   if (isNew && createDecision.kind !== 'allowed')
     return <AccessDenied decision={createDecision} />
@@ -577,12 +617,28 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     )
   if (isEdit && partId)
     return (
-      <PartEdit
-        canViewCars={links.cars}
-        canViewIntakes={links.intakes}
-        partId={partId}
-        requireLatestMutation={requireLatestMutation}
-      />
+      <>
+        {showEditBackground ? (
+          <PartDetailScreen
+            detail={detail}
+            history={history}
+            error={error !== null}
+            partId={partId}
+            canManage={canManage}
+            links={links}
+            requireLatestMutation={requireLatestMutation}
+            tenantSlug={cabinet.targetTenant?.slug ?? ''}
+            onPlacementSaved={() => setReloadToken((value) => value + 1)}
+            placementRevision={reloadToken}
+          />
+        ) : null}
+        <PartEdit
+          canViewCars={links.cars}
+          canViewIntakes={links.intakes}
+          partId={partId}
+          requireLatestMutation={requireLatestMutation}
+        />
+      </>
     )
   if (partId)
     return (
@@ -595,6 +651,8 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         links={links}
         requireLatestMutation={requireLatestMutation}
         tenantSlug={cabinet.targetTenant?.slug ?? ''}
+        onPlacementSaved={() => setReloadToken((value) => value + 1)}
+        placementRevision={reloadToken}
       />
     )
 
@@ -642,6 +700,10 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       ['model', filters.modelId],
       ['warehouse', filters.warehouseId],
       ['zone', filters.zoneId],
+      ['section', filters.sectionId],
+      ['shelf', filters.shelfId],
+      ['without_section', filters.withoutSection ? '1' : ''],
+      ['without_shelf', filters.withoutShelf ? '1' : ''],
     ] as const
   )
     .filter(([, value]) => value !== '')
@@ -801,37 +863,60 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
             </FilterGroup>
 
             <FilterGroup label={t('filterPlacement')}>
-              <SelectInput
-                aria-label={t('warehouse')}
-                name="warehouse"
-                onChange={(event) => {
+              <PartLocationFilters
+                owner={`${cabinet.snapshot?.tenantId}:${cabinet.snapshot?.userId}:${cabinet.snapshot?.generation}`}
+                enabled={links.inventory}
+                warehouseId={filters.warehouseId}
+                fallbackWarehouses={facets?.warehouses ?? []}
+                fallbackZones={facets?.zones ?? []}
+                zoneId={filters.zoneId}
+                sectionId={filters.sectionId}
+                shelfId={filters.shelfId}
+                withoutSection={filters.withoutSection}
+                withoutShelf={filters.withoutShelf}
+                onChange={(level, value) => {
                   const next = new URLSearchParams(searchParams)
-                  if (event.target.value)
-                    next.set('warehouse', event.target.value)
-                  else next.delete('warehouse')
-                  next.delete('zone')
+                  if (level === 'warehouse' || level === 'zone') {
+                    const descendants =
+                      level === 'warehouse'
+                        ? [
+                            'zone',
+                            'section',
+                            'shelf',
+                            'without_section',
+                            'without_shelf',
+                          ]
+                        : [
+                            'section',
+                            'shelf',
+                            'without_section',
+                            'without_shelf',
+                          ]
+                    for (const name of descendants) next.delete(name)
+                    if (value) next.set(level, value)
+                    else next.delete(level)
+                  } else if (level === 'section') {
+                    for (const name of [
+                      'section',
+                      'shelf',
+                      'without_section',
+                      'without_shelf',
+                    ])
+                      next.delete(name)
+                    if (value === WITHOUT_LOCATION)
+                      next.set('without_section', '1')
+                    else if (value) next.set('section', value)
+                  } else {
+                    next.delete('shelf')
+                    next.delete('without_shelf')
+                    if (value === WITHOUT_LOCATION)
+                      next.set('without_shelf', '1')
+                    else if (value) next.set('shelf', value)
+                  }
                   next.delete('page')
                   setSearchParams(next)
                 }}
-                value={filters.warehouseId}
-              >
-                <option value="">{t('warehouseAll')}</option>
-                {facetOptions('warehouses')}
-              </SelectInput>
-              <SelectInput
-                aria-label={t('zone')}
-                className={filters.warehouseId ? undefined : 'opacity-55'}
-                disabled={!filters.warehouseId}
-                name="zone"
-                onChange={(event) => updateFilter('zone', event.target.value)}
-                title={
-                  filters.warehouseId ? undefined : t('chooseWarehouseFirst')
-                }
-                value={filters.zoneId}
-              >
-                <option value="">{t('zoneAll')}</option>
-                {facetOptions('zones')}
-              </SelectInput>
+              />
             </FilterGroup>
 
             <FilterGroup label={t('filterCondition')}>
@@ -1209,6 +1294,8 @@ function PartDetailScreen({
   links,
   requireLatestMutation,
   tenantSlug,
+  onPlacementSaved,
+  placementRevision,
 }: {
   detail: PartDetail | null
   history: Awaited<ReturnType<typeof partsApi.history>> | null
@@ -1225,8 +1312,12 @@ function PartDetailScreen({
     typeof useLatestMutationGuard
   >['requireLatestMutation']
   tenantSlug: string
+  onPlacementSaved: () => void
+  placementRevision: number
 }) {
   const navigate = useNavigate()
+  const [placementOpen, setPlacementOpen] = useState(false)
+  const tPlacement = useT(movePlacementMessages)
   const t = useT(partDetailMessages)
   const tc = useT(commonMessages)
   const { locale } = useLocale()
@@ -1300,7 +1391,7 @@ function PartDetailScreen({
       },
     )
     return () => controller.abort()
-  }, [links.inventory, partId])
+  }, [links.inventory, partId, placementRevision])
   // Every order this part is promised to, the current one included: the card
   // shows one list rather than singling out the order that was opened last.
   const reservations = detail?.reservations ?? []
@@ -1387,6 +1478,27 @@ function PartDetailScreen({
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+      {placementOpen && links.inventory ? (
+        <Suspense
+          fallback={
+            <Sheet
+              open
+              title={tPlacement('title')}
+              onOpenChange={(open) => {
+                if (!open) setPlacementOpen(false)
+              }}
+            >
+              <SkeletonRows rows={3} />
+            </Sheet>
+          }
+        >
+          <PartPlacementDrawer
+            partId={partId}
+            onClose={() => setPlacementOpen(false)}
+            onSaved={onPlacementSaved}
+          />
+        </Suspense>
+      ) : null}
       <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
         <div className="flex min-w-0 items-center gap-5">
           <Link
@@ -1413,7 +1525,12 @@ function PartDetailScreen({
           {canManage ? (
             <>
               <Button asChild className="px-4 text-sm font-semibold">
-                <Link to={`${base}/${partId}/edit`}>{tc('edit')}</Link>
+                <Link
+                  state={{ partEditBackground: true }}
+                  to={`${base}/${partId}/edit`}
+                >
+                  {tc('edit')}
+                </Link>
               </Button>
               <Button disabled title={t('addToOrderHint')} variant="primary">
                 {t('addToOrder')}
@@ -1528,7 +1645,7 @@ function PartDetailScreen({
         ) : (
           <>
             <div className="mt-4 flex flex-wrap items-start gap-6">
-              <div className="flex min-w-[320px] flex-[1_1_560px] flex-col gap-6">
+              <div className="flex min-w-0 sm:min-w-[320px] flex-[1_1_560px] flex-col gap-6">
                 <Card
                   aside={
                     <span className="text-app-dim font-mono text-[12px] tracking-[0.1em] uppercase">
@@ -1536,7 +1653,7 @@ function PartDetailScreen({
                     </span>
                   }
                   bodyClassName="p-0"
-                  className="min-w-[320px] flex-[1_1_620px]"
+                  className="min-w-0 sm:min-w-[320px] flex-[1_1_620px]"
                   headerClassName="pb-4"
                   title={t('photos')}
                 >
@@ -1558,7 +1675,7 @@ function PartDetailScreen({
                   />
                 </Card>
               </div>
-              <div className="flex min-w-[320px] flex-[1_1_440px] flex-col gap-6">
+              <div className="flex min-w-0 sm:min-w-[320px] flex-[1_1_440px] flex-col gap-6">
                 <Card
                   aside={
                     canManage && detail.effectiveSalePrice !== null ? (
@@ -1566,7 +1683,12 @@ function PartDetailScreen({
                         asChild
                         className="min-h-8 px-3 text-[12px] font-bold"
                       >
-                        <Link to={`${base}/${partId}/edit`}>{t('change')}</Link>
+                        <Link
+                          state={{ partEditBackground: true }}
+                          to={`${base}/${partId}/edit`}
+                        >
+                          {t('change')}
+                        </Link>
                       </Button>
                     ) : null
                   }
@@ -1584,7 +1706,10 @@ function PartDetailScreen({
                       </div>
                       {canManage ? (
                         <Button asChild variant="primary">
-                          <Link to={`${base}/${partId}/edit`}>
+                          <Link
+                            state={{ partEditBackground: true }}
+                            to={`${base}/${partId}/edit`}
+                          >
                             {t('setPrice')}
                           </Link>
                         </Button>
@@ -1722,12 +1847,10 @@ function PartDetailScreen({
                     </div>
                     {links.inventory ? (
                       <Button
-                        asChild
                         className="min-h-9 px-3 text-[12px] font-bold"
+                        onClick={() => setPlacementOpen(true)}
                       >
-                        <Link to={`${base}/${partId}/inventory`}>
-                          {t('move')}
-                        </Link>
+                        {t('move')}
                       </Button>
                     ) : null}
                   </div>
@@ -2029,7 +2152,7 @@ function PartDetailScreen({
             ) : null}
 
             <div className="flex flex-wrap items-start gap-6">
-              <div className="flex min-w-[320px] flex-[1_1_440px] flex-col gap-6">
+              <div className="flex min-w-0 sm:min-w-[320px] flex-[1_1_440px] flex-col gap-6">
                 <Card
                   aside={
                     compat === null ? null : (
@@ -2108,7 +2231,7 @@ function PartDetailScreen({
                   ) : null}
                 </Card>
               </div>
-              <div className="flex min-w-[320px] flex-[1_1_440px] flex-col gap-6">
+              <div className="flex min-w-0 sm:min-w-[320px] flex-[1_1_440px] flex-col gap-6">
                 <Card
                   aside={
                     history === null || history.events.length === 0 ? null : (
@@ -2298,6 +2421,7 @@ interface PartFormValues {
   oemCode: string
   partType: string
   desiredSalePrice: string
+  placement?: PartPlacement
 }
 
 const emptyPartForm: PartFormValues = {
@@ -2359,6 +2483,7 @@ const mediaMetaLabel = (item: PartMediaItem, locale: Locale) =>
 /** Section of a form: one heading, one purpose, one surface. */
 function PartMediaFields({
   deferUploads = false,
+  description,
   items,
   requireLatestMutation,
   setItems,
@@ -2366,6 +2491,7 @@ function PartMediaFields({
   variant = 'panel',
 }: {
   deferUploads?: boolean
+  description?: ReactNode
   items: PartMediaItem[]
   requireLatestMutation: ReturnType<
     typeof useLatestMutationGuard
@@ -2466,7 +2592,8 @@ function PartMediaFields({
   return (
     <SectionPanel
       description={
-        deferUploads ? t('mediaDeferDescription') : t('mediaDescription')
+        description ??
+        (deferUploads ? t('mediaDeferDescription') : t('mediaDescription'))
       }
       title={title ?? t('photos')}
       variant={variant}
@@ -2600,89 +2727,6 @@ function partFieldErrors(
   return errors
 }
 
-/** One vehicle in the compatibility list, with its own pair of pickers. */
-function CompatibilityRowCard({
-  index,
-  onChange,
-  onRemove,
-  row,
-}: {
-  index: number
-  onChange: (patch: Partial<CompatibilityRow>) => void
-  onRemove?: (() => void) | undefined
-  row: CompatibilityRow
-}) {
-  // The picker keeps the make's own id so it can list that make's models.
-  const [makeId, setMakeId] = useState<number | null>(null)
-  const t = useT(partFormMessages)
-  const { locale } = useLocale()
-  const problem = rowProblem(row, locale)
-  const title = t('vehicleN', { n: index + 1 })
-
-  return (
-    <section
-      aria-label={title}
-      className="border-app-line bg-app-raised rounded-[14px] border px-4 pt-3.5 pb-4"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <h4 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-          {title}
-        </h4>
-        {onRemove === undefined ? null : (
-          <Button
-            className="min-h-8 px-2.5 text-[12px]"
-            onClick={onRemove}
-            type="button"
-            variant="quiet"
-          >
-            <X aria-hidden className="size-3" />
-            {t('remove')}
-          </Button>
-        )}
-      </div>
-
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
-        <VehicleCatalogPicker
-          disabled={false}
-          label={t('make')}
-          onSelect={(option) => {
-            setMakeId(option.id)
-            onChange({ brand: option.name, model: '' })
-          }}
-          type="make"
-          value={row.brand}
-        />
-        <VehicleCatalogPicker
-          disabled={row.brand === ''}
-          label={t('model')}
-          makeId={makeId}
-          makeName={row.brand}
-          onSelect={(option) => {
-            onChange({ model: option.name })
-          }}
-          type="model"
-          value={row.model}
-        />
-        <Field label={t('year')}>
-          <TextInput
-            inputMode="numeric"
-            onChange={(event) => {
-              onChange({ year: event.target.value })
-            }}
-            value={row.year}
-          />
-        </Field>
-      </div>
-
-      {problem === null ? null : (
-        <Notice className="mt-3" tone="danger">
-          {problem}
-        </Notice>
-      )}
-    </section>
-  )
-}
-
 /** Where the part came from, as one chip that leads to the source. */
 function SourceChip({
   href,
@@ -2783,18 +2827,18 @@ type DetailT = Translate<(typeof partDetailMessages)['uk']>
  * Years go in as strings so no locale groups them like quantities.
  */
 const yearSpan = (
-  from: number | null,
-  to: number | null,
+  from: number | null | undefined,
+  to: number | null | undefined,
   t: DetailT,
 ): string => {
-  if (from === null && to === null) return t('anyYear')
-  if (from !== null && to !== null)
+  if (from == null && to == null) return '—'
+  if (from != null && to != null)
     return from === to
       ? String(from)
       : t('yearRange', { from: String(from), to: String(to) })
-  return from !== null
-    ? t('yearFrom', { year: String(from) })
-    : t('yearTo', { year: String(to ?? 0) })
+  if (from != null) return t('yearFrom', { year: String(from) })
+  if (to != null) return t('yearTo', { year: String(to) })
+  return '—'
 }
 
 /**
@@ -2890,83 +2934,6 @@ const SOURCE_KINDS = [
   { value: 'batch', label: 'kindBatchLabel', hint: 'kindBatchHint' },
 ] as const
 
-/**
- * What each condition means for a buyer. The label alone is a guess; the line
- * under it is what stops "задовільний" and "на запчастини" being used
- * interchangeably.
- */
-const CONDITION_HINTS: Record<
-  string,
-  { hint: 'hintGood' | 'hintFair' | 'hintScrap'; tone: string }
-> = {
-  good: { hint: 'hintGood', tone: 'border-state-ok bg-state-ok' },
-  fair: { hint: 'hintFair', tone: 'border-state-warn bg-state-warn' },
-  scrap: { hint: 'hintScrap', tone: 'border-state-danger bg-state-danger' },
-}
-
-function ConditionTile({
-  label,
-  onPick,
-  picked,
-  value,
-}: {
-  label: string
-  onPick: () => void
-  picked: boolean
-  value: string
-}) {
-  const t = useT(partFormMessages)
-  const meaning = CONDITION_HINTS[value]
-  const hintId = useId()
-  return (
-    <button
-      aria-checked={picked}
-      aria-describedby={hintId}
-      aria-label={label}
-      className={cn(
-        'rounded-control flex min-h-[92px] flex-col items-start gap-2 border px-3.5 py-3 text-left transition-colors',
-        picked
-          ? 'border-app-line-2 bg-white/[0.06]'
-          : 'border-app-line hover:border-app-line-2',
-      )}
-      onClick={onPick}
-      role="radio"
-      type="button"
-    >
-      <span className="flex w-full items-center gap-2">
-        <span
-          aria-hidden
-          className={cn(
-            'grid size-4 shrink-0 place-items-center rounded-full border-[1.5px]',
-            picked ? meaning?.tone.split(' ')[0] : 'border-white/20',
-          )}
-        >
-          <span
-            className={cn(
-              'size-[7px] rounded-full',
-              picked ? meaning?.tone.split(' ')[1] : '',
-            )}
-          />
-        </span>
-        <span
-          className={cn(
-            'text-[14px] font-bold whitespace-nowrap',
-            picked ? 'text-white' : 'text-app-ink',
-          )}
-        >
-          {label}
-        </span>
-      </span>
-      <span
-        className="text-app-dim text-[12px] leading-[1.4] text-pretty"
-        id={hintId}
-      >
-        {meaning ? t(meaning.hint) : null}
-      </span>
-    </button>
-  )
-}
-
 function SourceTile({
   kind,
   onPick,
@@ -3058,6 +3025,7 @@ function PartFields({
     values.sourceType === 'car'
       ? (sourceOptions.cars.find((car) => car.id === values.sourceId) ?? null)
       : null
+  const nextCompatibilityKey = useRef(0)
   const showCompatibility = !edit
   const step = (number: string, title: string) =>
     variant === 'plain' ? (
@@ -3180,7 +3148,8 @@ function PartFields({
             </Field>
           ) : null}
         </div>
-        {sourceCreateLink ? (
+        {sourceCreateLink &&
+        (sourceCreateLink !== 'cars' || !values.sourceId) ? (
           <div className="grid gap-1.5">
             <div className="flex flex-wrap gap-2">
               <Button asChild>
@@ -3391,25 +3360,19 @@ function PartFields({
             <div className="grid gap-2.5">
               {compatibility.rows.map((row, index) => (
                 <CompatibilityRowCard
-                  index={index}
+                  index={index + (sourceCar === null ? 1 : 2)}
                   key={row.key}
-                  onChange={(patch) => {
+                  onChange={(patch) =>
                     compatibility.setRows(
                       compatibility.rows.map((item) =>
                         item.key === row.key ? { ...item, ...patch } : item,
                       ),
                     )
-                  }}
-                  onRemove={
-                    compatibility.rows.length > 1
-                      ? () => {
-                          compatibility.setRows(
-                            compatibility.rows.filter(
-                              (item) => item.key !== row.key,
-                            ),
-                          )
-                        }
-                      : undefined
+                  }
+                  onRemove={() =>
+                    compatibility.setRows(
+                      compatibility.rows.filter((item) => item.key !== row.key),
+                    )
                   }
                   row={row}
                 />
@@ -3417,9 +3380,12 @@ function PartFields({
               <Button
                 className="w-full justify-center border-dashed"
                 onClick={() => {
+                  nextCompatibilityKey.current += 1
                   compatibility.setRows([
                     ...compatibility.rows,
-                    emptyRow(`row-${String(Date.now())}`),
+                    emptyRow(
+                      `row-${String(Date.now())}-${String(nextCompatibilityKey.current)}`,
+                    ),
                   ])
                 }}
                 type="button"
@@ -3491,9 +3457,18 @@ function PartForm({
   const [searchParams] = useSearchParams()
   const cabinet = useCabinet()
   const t = useT(partFormMessages)
+  const tPlacement = useT(placementMessages)
   const tc = useT(commonMessages)
+  const toast = useOptionalToast()
   const { locale } = useLocale()
   const base = `/app/${cabinet.targetTenant?.slug ?? ''}/parts`
+  const canPlace =
+    allowedToView(cabinetModules.inventory, cabinet) &&
+    Boolean(cabinet.snapshot?.permissions.has('inventory.zones.manage'))
+  const placementOptions = usePlacementOptions(
+    canPlace,
+    cabinet.targetTenant?.id,
+  )
   // Coming back from creating a car or intake restores what was typed.
   const [draft] = useState(() =>
     searchParams.get(DRAFT_PARAM) === '1'
@@ -3503,8 +3478,8 @@ function PartForm({
   useEffect(() => {
     if (draft) clearPartDraft()
   }, [draft])
-  const [compatRows, setCompatRows] = useState<CompatibilityRow[]>(() =>
-    draft?.compatibility.length ? draft.compatibility : [emptyRow('row-1')],
+  const [compatRows, setCompatRows] = useState<CompatibilityRow[]>(
+    () => draft?.compatibility.filter((row) => !isBlankRow(row)) ?? [],
   )
   // A part started from a car's page arrives with that car already chosen,
   // so nobody has to find it again in the source list.
@@ -3524,15 +3499,8 @@ function PartForm({
   )
   const pendingRef = useRef(false)
   const [pending, setPending] = useState(false)
-  const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showErrors, setShowErrors] = useState(false)
-  // The owner's first part may finish onboarding: say so here, keep the list.
-  const firstPart = useFirstPartCompletion({
-    tenantId: cabinet.targetTenant?.id ?? null,
-    userId: cabinet.snapshot?.userId ?? null,
-    role: cabinet.snapshot?.role,
-  })
   // A car given by link but missing from the active list is most likely
   // archived; say so now rather than after the whole form is filled.
   const [archivedCarId, setArchivedCarId] = useState<string | null>(null)
@@ -3599,7 +3567,6 @@ function PartForm({
       ).length > 0
     ) {
       setShowErrors(true)
-      setStatus(null)
       setError(t('createInvalid'))
       return
     }
@@ -3630,7 +3597,6 @@ function PartForm({
     const pricing = price.hasPrice && !price.disabled
     pendingRef.current = true
     setPending(true)
-    setStatus(null)
     setError(null)
     try {
       if (
@@ -3731,9 +3697,32 @@ function PartForm({
           resolved.items,
         )
       }
+      const placement = values.placement
+      let placementFailed = false
+      if (canPlace && placement?.zoneId) {
+        try {
+          await inventoryApi.replacePartZones(
+            created.id,
+            [placement.zoneId],
+            { signal: scope.signal },
+            placement.shelfId || undefined,
+            placement.sectionId || undefined,
+          )
+        } catch {
+          placementFailed = true
+        }
+      }
       guard.afterSave(pricing)
-      setStatus(t('created'))
-      firstPart.check()
+      toast?.show({
+        tone: placementFailed ? 'danger' : 'ok',
+        message: placementFailed ? tPlacement('saveFailed') : t('created'),
+      })
+      void navigate(
+        cabinetPath(cabinet.targetTenant!.slug, 'parts', created.id),
+        {
+          replace: true,
+        },
+      )
     } catch (failure) {
       setError(createFailureMessage(failure, locale))
     } finally {
@@ -3829,6 +3818,24 @@ function PartForm({
           values={values}
           variant="plain"
         />
+        {canPlace ? (
+          <SectionPanel
+            title={
+              <span className="flex items-baseline gap-2.5">
+                <span className="text-app-dim font-mono text-[11px]">06</span>
+                {tPlacement('title')}
+              </span>
+            }
+            description={tPlacement('hint')}
+            variant="plain"
+          >
+            <PartPlacementPicker
+              value={values.placement ?? emptyPartPlacement}
+              onChange={(placement) => setValues({ ...values, placement })}
+              options={placementOptions}
+            />
+          </SectionPanel>
+        ) : null}
         <PartMediaFields
           deferUploads
           items={mediaItems}
@@ -3836,18 +3843,14 @@ function PartForm({
           setItems={setMediaItems}
           title={
             <span className="flex items-baseline gap-2.5">
-              <span className="text-app-dim font-mono text-[11px]">06</span>
+              <span className="text-app-dim font-mono text-[11px]">
+                {canPlace ? '07' : '06'}
+              </span>
               {t('photos')}
             </span>
           }
           variant="plain"
         />
-        {status ? <Notice tone="ok">{status}</Notice> : null}
-        {firstPart.done && cabinet.targetTenant ? (
-          <OnboardingCompletedNotice
-            dashboardPath={cabinetPath(cabinet.targetTenant.slug, 'dashboard')}
-          />
-        ) : null}
         {error ? <Notice tone="danger">{error}</Notice> : null}
       </form>
     </Sheet>
@@ -3870,11 +3873,18 @@ function PartEdit({
   >['requireLatestMutation']
 }) {
   const t = useT(partFormMessages)
+  const td = useT(partDetailMessages)
   const tl = useT(lostResponseMessages)
   const tc = useT(commonMessages)
   const { locale } = useLocale()
   const [values, setValues] = useState<PartFormValues | null>(null)
   const [detail, setDetail] = useState<PartDetail | null>(null)
+  const [compatState, setCompatState] = useState<{
+    partId: string
+    data: PartCompatibilities | null
+    error: boolean
+  } | null>(null)
+  const compat = compatState?.partId === partId ? compatState : null
   const [mediaItems, setMediaItems] = useState<PartMediaItem[]>([])
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -3898,6 +3908,20 @@ function PartEdit({
     values: [values?.desiredSalePrice],
     onAccept: (accepted) => void save(undefined, accepted),
   })
+  useEffect(() => {
+    const controller = new AbortController()
+    void partsApi.compatibilities(partId, { signal: controller.signal }).then(
+      (result) => {
+        if (!controller.signal.aborted)
+          setCompatState({ partId, data: result, error: false })
+      },
+      () => {
+        if (!controller.signal.aborted)
+          setCompatState({ partId, data: null, error: true })
+      },
+    )
+    return () => controller.abort()
+  }, [partId])
   useEffect(() => {
     const controller = new AbortController()
     void partsApi.get(partId, { signal: controller.signal }).then(
@@ -3999,7 +4023,14 @@ function PartEdit({
       setStatus(t('saved'))
     } catch (failure) {
       if (!isLostResponse(failure)) {
-        setError(t('saveFailed'))
+        const problem = normalizeApiProblem(failure)
+        const fieldMessage = Object.values(problem.fieldErrors ?? {}).flat()[0]
+        setError(
+          fieldMessage ??
+            (problem.status !== undefined && problem.status < 500
+              ? problem.message
+              : t('saveFailed')),
+        )
         return
       }
       // The PATCH may have landed: read the part back first. Saving the same
@@ -4043,31 +4074,20 @@ function PartEdit({
   }
 
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-        <div className="flex min-w-0 items-center gap-5">
-          <Link
-            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-            to={backTo}
+    <Sheet
+      description={detail?.name ?? undefined}
+      eyebrow={t('sheetEyebrow')}
+      footer={
+        <div className="flex w-full items-center justify-end gap-2.5">
+          <Button
+            disabled={pending || deleting}
+            onClick={() => void navigate(backTo)}
+            type="button"
           >
-            <ChevronLeft aria-hidden className="size-3.5" />
-            {t('backToPart')}
-          </Link>
-          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>{t('breadcrumbWarehouse')}</span>
-            <span aria-hidden className="text-white/20">
-              /
-            </span>
-            <span>{t('breadcrumbParts')}</span>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <Button asChild className="px-[18px] text-sm font-semibold">
-            <Link to={backTo}>{tc('cancel')}</Link>
+            {tc('cancel')}
           </Button>
           <Button
             aria-busy={pending || mediaPending}
-            className="px-5 text-sm font-bold"
             disabled={pending || mediaPending || values === null}
             form="part-edit"
             type="submit"
@@ -4076,77 +4096,76 @@ function PartEdit({
             {t('saveChanges')}
           </Button>
         </div>
-      </div>
-
-      <div className="mx-auto grid w-full max-w-[1360px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-        <div className="min-w-0">
-          <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
-            {detail?.name ?? t('editTitle')}
-          </h1>
-          {detail ? (
-            <p className="text-app-muted mt-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm font-medium">
-              <span className="border-app-line bg-app-input text-app-ink rounded-[7px] border px-2.5 py-1 font-mono text-[13px]">
-                {detail.qrCode}
-              </span>
-              <span>
-                {t('createdBy', { name: detail.createdByName ?? '' })}{' '}
-                <DateValue value={detail.createdAt} />
-              </span>
-            </p>
-          ) : null}
-        </div>
-
+      }
+      onOpenChange={(next) => {
+        if (!next && !pending && !deleting) void navigate(backTo)
+      }}
+      open
+      size="lg"
+      title={t('editTitle')}
+    >
+      <div className="grid gap-5">
         {status ? <Notice tone="ok">{status}</Notice> : null}
         {error ? <Notice tone="danger">{error}</Notice> : null}
 
         {values ? (
           <form
-            className="flex flex-wrap items-start gap-6"
+            className="grid gap-5"
             id="part-edit"
             noValidate
             onSubmit={(event) => void save(event)}
           >
-            <div className="grid min-w-[320px] flex-[1_1_560px] gap-5">
-              <Card
+            <div className="grid">
+              <SectionPanel
                 aside={
                   <span className="text-app-dim text-[13px]">
                     {t('notEditable')}
                   </span>
                 }
                 title={t('sourceStep')}
+                variant="plain"
               >
-                <p className="text-app-muted text-sm">
-                  {t('sourceSetOnCreate')}
-                </p>
-                <div className="border-app-line bg-app-input flex flex-wrap items-center justify-between gap-3 rounded-[14px] border px-4 py-3.5">
-                  <span className="text-[16px] font-semibold text-white">
-                    {detail?.carId && detail.carCode
-                      ? `${t('fromCar', { code: detail.carCode })}${detail.carBrand ? ` (${detail.carBrand} ${detail.carModel ?? ''})` : ''}`
-                      : detail?.intakeId
-                        ? t('fromIntake')
-                        : sourceLabel(values.sourceType, locale)}
-                  </span>
-                  {detail?.carId && canViewCars ? (
-                    <Button asChild>
-                      <Link to={`/app/${tenantSlug}/cars/${detail.carId}`}>
-                        {t('openCar')}
-                        <ExternalLink aria-hidden />
-                      </Link>
-                    </Button>
-                  ) : detail?.intakeId && canViewIntakes ? (
-                    <Button asChild>
-                      <Link
-                        to={`/app/${tenantSlug}/intakes/${detail.intakeId}`}
-                      >
-                        {t('openIntake')}
-                        <ExternalLink aria-hidden />
-                      </Link>
-                    </Button>
-                  ) : null}
+                <div className="grid gap-4">
+                  <p className="text-app-muted text-sm">
+                    {t('sourceSetOnCreate')}
+                  </p>
+                  <div className="border-app-line bg-app-input flex flex-wrap items-center justify-between gap-4 rounded-[14px] border px-4 py-4">
+                    <div className="grid min-w-0 gap-1">
+                      <span className="break-words text-[16px] font-semibold text-white">
+                        {detail?.carId && detail.carCode
+                          ? t('fromCar', { code: detail.carCode })
+                          : detail?.intakeId
+                            ? t('fromIntake')
+                            : sourceLabel(values.sourceType, locale)}
+                      </span>
+                      {detail?.carId && detail.carBrand ? (
+                        <span className="text-app-muted text-sm">
+                          {detail.carBrand} {detail.carModel}
+                        </span>
+                      ) : null}
+                    </div>
+                    {detail?.carId && canViewCars ? (
+                      <Button asChild>
+                        <Link to={`/app/${tenantSlug}/cars/${detail.carId}`}>
+                          {t('openCar')}
+                          <ExternalLink aria-hidden />
+                        </Link>
+                      </Button>
+                    ) : detail?.intakeId && canViewIntakes ? (
+                      <Button asChild>
+                        <Link
+                          to={`/app/${tenantSlug}/intakes/${detail.intakeId}`}
+                        >
+                          {t('openIntake')}
+                          <ExternalLink aria-hidden />
+                        </Link>
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
-              </Card>
+              </SectionPanel>
 
-              <Card title={t('describeStep')}>
+              <SectionPanel title={t('describeStep')} variant="plain">
                 <div className="grid gap-4">
                   <p className="text-app-muted text-sm">
                     {t('describeEditDescription')}
@@ -4204,121 +4223,152 @@ function PartEdit({
                     />
                   </Field>
                 </div>
-              </Card>
+              </SectionPanel>
 
-              <Card title={t('conditionStep')}>
+              <SectionPanel title={t('conditionStep')} variant="plain">
                 <div className="grid gap-4">
                   <p className="text-app-muted text-sm">
                     {t('conditionDescription')}
                   </p>
-                  <PillGroup
-                    className="flex-wrap"
-                    label={t('conditionStep')}
-                    onChange={(next) =>
-                      setValues((current) =>
-                        current ? { ...current, condition: next } : current,
-                      )
-                    }
-                    options={partConditions(locale)}
-                    value={values.condition}
-                  />
-                </div>
-              </Card>
-
-              <Card title={t('quantityStep')}>
-                <p className="text-app-muted text-sm">
-                  {t('quantityDescription')}
-                </p>
-                <div className="grid items-start gap-4 sm:grid-cols-3">
-                  <Field error={errors.quantity} label={t('quantity')} required>
-                    <QuantityStepper
-                      label={t('quantityInStock')}
-                      min={0}
-                      onChange={(next) =>
-                        setValues((current) =>
-                          current
-                            ? { ...current, quantity: String(next) }
-                            : current,
-                        )
-                      }
-                      value={Number(values.quantity) || 0}
-                    />
-                  </Field>
-                  <Field hint={t('unitHint')} label={t('unit')}>
-                    <TextInput
-                      name="unit"
-                      readOnly
-                      value={unitLabel(values.unit, locale)}
-                    />
-                  </Field>
-                  <Field
-                    error={errors.desiredSalePrice}
-                    hint={price.hint}
-                    label={t('desiredPrice')}
+                  <div
+                    aria-label={t('conditionStep')}
+                    className="grid gap-2 sm:grid-cols-3"
+                    role="radiogroup"
                   >
-                    <MoneyInput
-                      currency={price.currency}
-                      disabled={price.disabled}
-                      inputMode="decimal"
-                      name="desiredSalePrice"
-                      onChange={(event) =>
-                        setValues((current) =>
-                          current
-                            ? {
-                                ...current,
-                                desiredSalePrice: event.target.value,
-                              }
-                            : current,
-                        )
-                      }
-                      value={values.desiredSalePrice}
-                    />
-                  </Field>
+                    {partConditions(locale).map((option) => (
+                      <ConditionTile
+                        key={option.value}
+                        label={option.label}
+                        onPick={() =>
+                          setValues((current) =>
+                            current
+                              ? { ...current, condition: option.value }
+                              : current,
+                          )
+                        }
+                        picked={values.condition === option.value}
+                        value={option.value}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-app-dim text-[12px] leading-5 text-pretty">
+                    {t('conditionVisible')}
+                  </p>
                 </div>
-                {price.note}
-                {price.saveNotes}
-              </Card>
+              </SectionPanel>
 
-              <Card
+              <SectionPanel title={t('quantityStep')} variant="plain">
+                <div className="grid gap-4">
+                  <p className="text-app-muted text-sm">
+                    {t('quantityDescription')}
+                  </p>
+                  <div className="grid items-start gap-4 sm:grid-cols-2">
+                    <Field
+                      error={errors.quantity}
+                      label={t('quantity')}
+                      required
+                    >
+                      <QuantityStepper
+                        label={t('quantityInStock')}
+                        min={0}
+                        onChange={(next) =>
+                          setValues((current) =>
+                            current
+                              ? { ...current, quantity: String(next) }
+                              : current,
+                          )
+                        }
+                        value={Number(values.quantity) || 0}
+                      />
+                    </Field>
+                    <Field hint={t('unitHint')} label={t('unit')}>
+                      <TextInput
+                        name="unit"
+                        readOnly
+                        value={unitLabel(values.unit, locale)}
+                      />
+                    </Field>
+                    <Field
+                      error={errors.desiredSalePrice}
+                      hint={price.hint}
+                      label={t('desiredPrice')}
+                    >
+                      <MoneyInput
+                        currency={price.currency}
+                        disabled={price.disabled}
+                        inputMode="decimal"
+                        name="desiredSalePrice"
+                        onChange={(event) =>
+                          setValues((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  desiredSalePrice: event.target.value,
+                                }
+                              : current,
+                          )
+                        }
+                        value={values.desiredSalePrice}
+                      />
+                    </Field>
+                  </div>
+                  {price.note}
+                  {price.saveNotes}
+                </div>
+              </SectionPanel>
+
+              <SectionPanel
                 aside={
                   <span className="text-app-dim text-[13px]">
                     {t('readOnly')}
                   </span>
                 }
                 title={t('compatStep')}
+                variant="plain"
               >
                 <p className="text-app-muted text-sm">{t('compatReadOnly')}</p>
-                <SpecGrid
-                  specs={[
-                    { label: t('make'), value: detail?.compatCarBrand ?? '—' },
-                    { label: t('model'), value: detail?.compatCarModel ?? '—' },
-                    {
-                      label: t('year'),
-                      value:
-                        detail?.compatCarYear === null ||
-                        detail?.compatCarYear === undefined
-                          ? '—'
-                          : String(detail.compatCarYear),
-                    },
-                  ]}
-                />
-              </Card>
+                {compat?.error ? (
+                  <Notice tone="danger">{t('compatLoadFailed')}</Notice>
+                ) : compat === null ? (
+                  <p className="text-app-muted text-sm">{td('loadingShort')}</p>
+                ) : compat.data?.items.length === 0 ? (
+                  <p className="text-app-muted text-sm">{td('compatEmpty')}</p>
+                ) : (
+                  <div className="grid gap-3">
+                    {compat.data?.items.map((item) => (
+                      <SpecGrid
+                        key={item.id}
+                        specs={[
+                          {
+                            label: t('make'),
+                            value: item.makeName ?? item.equipmentTypeName,
+                          },
+                          {
+                            label: t('model'),
+                            value: item.modelName ?? td('anyModel'),
+                          },
+                          {
+                            label: t('year'),
+                            value: yearSpan(item.yearFrom, item.yearTo, td),
+                          },
+                        ]}
+                      />
+                    ))}
+                  </div>
+                )}
+              </SectionPanel>
 
-              <Card title={t('photos')}>
-                <p className="text-app-muted text-sm">{t('photosUploadNow')}</p>
-                <PartMediaFields
-                  items={mediaItems}
-                  requireLatestMutation={requireLatestMutation}
-                  setItems={setMediaItems}
-                />
-                <p className="text-app-dim text-[13px]">
-                  {t('buyersSeePhotos')}
-                </p>
-              </Card>
+              <PartMediaFields
+                description={t('photosUploadNow')}
+                items={mediaItems}
+                requireLatestMutation={requireLatestMutation}
+                setItems={setMediaItems}
+                variant="plain"
+              />
             </div>
 
-            <aside className="sticky top-24 grid min-w-[280px] flex-[0_0_320px] gap-5">
-              <Card title={t('summary')}>
+            <aside className="grid">
+              <SectionPanel title={t('summary')} variant="plain">
                 <dl className="grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
                   <dt className="text-app-muted text-sm font-semibold">
                     {t('available')}
@@ -4347,16 +4397,16 @@ function PartEdit({
                     {t('printSticker')}
                   </Link>
                 </Button>
-              </Card>
+              </SectionPanel>
 
-              <Card title={t('deletion')}>
-                <p className="text-app-muted text-sm">
+              <SectionPanel title={t('deletion')} variant="plain">
+                <p className="text-app-muted text-sm leading-5">
                   {detail && detail.quantityReserved > 0
                     ? t('deleteBlocked')
                     : t('deleteAllowed')}
                 </p>
                 <Button
-                  className="w-full text-sm font-semibold"
+                  className="mt-5 w-full text-sm font-semibold"
                   onClick={() => setConfirmingDelete(true)}
                   type="button"
                   variant="danger"
@@ -4364,7 +4414,7 @@ function PartEdit({
                   <Trash2 aria-hidden />
                   {t('deletePart')}
                 </Button>
-              </Card>
+              </SectionPanel>
             </aside>
           </form>
         ) : !error ? (
@@ -4387,6 +4437,6 @@ function PartEdit({
         pending={deleting}
         title={t('deleteTitle')}
       />
-    </div>
+    </Sheet>
   )
 }

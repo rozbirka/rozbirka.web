@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import {
   commonMessages,
   currencyName,
+  parseCurrency,
   SUPPORTED_CURRENCIES,
   useLocale,
   useT,
@@ -56,6 +57,20 @@ const problemMessage = (error: unknown, t: CashT) => {
   if (problem.status === 402) return t('needsSubscription')
   if (problem.kind === 'forbidden') return t('forbidden')
   return problem.message
+}
+const removeCurrencyProblemMessage = (
+  error: unknown,
+  currency: string,
+  t: CashT,
+) => {
+  switch (normalizeApiProblem(error).code) {
+    case 'CURRENCY_HAS_TRANSACTIONS':
+      return t('currencyHasTransactions', { code: currency })
+    case 'REGISTER_BALANCE_NOT_ZERO':
+      return t('currencyBalanceNotZero', { code: currency })
+    default:
+      return problemMessage(error, t)
+  }
 }
 type CashReplayOperation = 'movement' | 'transfer'
 const isAmbiguousMutationFailure = (error: unknown) => {
@@ -271,6 +286,7 @@ function CashRegisterDetail({
   const [movementOpen, setMovementOpen] = useState(false)
   const [movementBusy, setMovementBusy] = useState(false)
   const [movementError, setMovementError] = useState<string | null>(null)
+  const [activateBusy, setActivateBusy] = useState(false)
   const ledgerCurrency = params.get('currency') ?? undefined
   const ledgerFrom = params.get('from') ?? undefined
   const ledgerTo = params.get('to') ?? undefined
@@ -341,6 +357,23 @@ function CashRegisterDetail({
       setMovementBusy(false)
     }
   }
+  const activateRegister = async () => {
+    if (activateBusy || !mutationsAllowed || register?.isActive) return
+    setActivateBusy(true)
+    setError(null)
+    let scope: ReturnType<typeof requireLatestMutation> | null = null
+    try {
+      scope = requireLatestMutation({ quota: false })
+      const activated = await cashApi.activate(registerId)
+      if (scope.signal.aborted) return
+      setRegister(activated)
+      toast?.show({ message: t('tillActivated'), tone: 'ok' })
+    } catch (failure) {
+      if (!scope?.signal.aborted) setError(problemMessage(failure, t))
+    } finally {
+      setActivateBusy(false)
+    }
+  }
   if (error && !register)
     return (
       <PageBody width="narrow">
@@ -365,6 +398,12 @@ function CashRegisterDetail({
       <CashCard
         cashHref={`/app/${cabinet.targetTenant?.slug ?? ''}/cash`}
         canManage={mutationsAllowed}
+        activating={activateBusy}
+        onActivate={
+          mutationsAllowed && !register.isActive
+            ? () => void activateRegister()
+            : undefined
+        }
         onNewOperation={
           mutationsAllowed && register.isActive
             ? () => {
@@ -450,6 +489,8 @@ function CashRegisterEdit({
 }: CabinetModuleScreenProps & { registerId: string }) {
   const t = useT(cashMessages)
   const tc = useT(commonMessages)
+  const { locale } = useLocale()
+  const { money } = useCashText()
   const cabinet = useCabinet()
   const location = useLocation()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
@@ -490,6 +531,28 @@ function CashRegisterEdit({
       await navigate(detailPath, { replace: true })
     } catch (failure) {
       setError(problemMessage(failure, t))
+      setBusy(false)
+    }
+  }
+  const changeCurrency = async (currency: string, action: 'add' | 'remove') => {
+    if (busy || !mutationsAllowed || register?.type !== 'cash') return
+    setBusy(true)
+    setError(null)
+    let scope: ReturnType<typeof requireLatestMutation> | null = null
+    try {
+      scope = requireLatestMutation({ quota: false })
+      if (action === 'add') await cashApi.addCurrency(registerId, currency)
+      else await cashApi.removeCurrency(registerId, currency)
+      if (scope.signal.aborted) return
+      await load(scope.signal)
+    } catch (failure) {
+      if (!scope?.signal.aborted)
+        setError(
+          action === 'remove'
+            ? removeCurrencyProblemMessage(failure, currency, t)
+            : problemMessage(failure, t),
+        )
+    } finally {
       setBusy(false)
     }
   }
@@ -560,6 +623,65 @@ function CashRegisterEdit({
               value={name}
             />
           </Field>
+          {register.type === 'cash' && (
+            <fieldset className="grid gap-3">
+              <legend className="text-app-muted text-sm font-semibold">
+                {t('currencies')}
+              </legend>
+              <div className="grid gap-2">
+                {Object.entries(register.balances).map(([code, balance]) => {
+                  const supportedCode = parseCurrency(code)
+                  const canRemove = mutationsAllowed && balance === 0
+                  return (
+                    <div
+                      className="border-app-line bg-app-input rounded-control flex items-center justify-between gap-3 border px-3 py-2"
+                      key={code}
+                    >
+                      <div>
+                        <p className="text-sm font-semibold">
+                          {code} (
+                          {supportedCode
+                            ? currencyName(supportedCode, locale)
+                            : code}
+                          )
+                        </p>
+                        <p className="text-app-dim text-xs">
+                          {money(balance, code)}
+                        </p>
+                      </div>
+                      {canRemove && (
+                        <Button
+                          aria-label={`${t('removeCurrency')} ${code}`}
+                          disabled={busy}
+                          onClick={() => void changeCurrency(code, 'remove')}
+                          type="button"
+                        >
+                          {t('removeCurrency')}
+                        </Button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              {mutationsAllowed && (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {SUPPORTED_CURRENCIES.filter(
+                    (code) => !(code in register.balances),
+                  ).map((code) => (
+                    <Button
+                      aria-label={`${t('addCurrency')} ${code}`}
+                      disabled={busy}
+                      key={code}
+                      onClick={() => void changeCurrency(code, 'add')}
+                      type="button"
+                    >
+                      + {code}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </fieldset>
+          )}
         </form>
       )}
     </Sheet>
@@ -585,6 +707,7 @@ function CashRegisterForm({
   const [type, setType] = useState('cash')
   const { locale } = useLocale()
   const [currencies, setCurrencies] = useState<string[]>(['UAH'])
+  const effectiveCurrencies = type === 'bank' ? ['UAH'] : currencies
   const [initialBalances, setInitialBalances] = useState<
     Record<string, string>
   >({ UAH: '' })
@@ -618,9 +741,9 @@ function CashRegisterForm({
         : await cashApi.create({
             name: name.trim(),
             type,
-            currencies,
+            currencies: effectiveCurrencies,
             initialBalances: Object.fromEntries(
-              currencies
+              effectiveCurrencies
                 .filter((code) => initialBalances[code]?.trim())
                 .map((code) => [code, Number(initialBalances[code])]),
             ),
@@ -726,56 +849,58 @@ function CashRegisterForm({
         )}
         {!registerId && (
           <>
-            <fieldset className="grid gap-2">
-              <legend className="text-app-muted text-sm font-semibold">
-                {t('currencies')}
-              </legend>
-              {/* The supported catalog with ISO codes: symbols cannot tell
+            {type !== 'bank' && (
+              <fieldset className="grid gap-2">
+                <legend className="text-app-muted text-sm font-semibold">
+                  {t('currencies')}
+                </legend>
+                {/* The supported catalog with ISO codes: symbols cannot tell
                   CAD from USD. A till may keep any of them; this is not the
                   accounting currency. */}
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                {SUPPORTED_CURRENCIES.map((code) => {
-                  const selected = currencies.includes(code)
-                  return (
-                    <button
-                      aria-label={`${code} (${currencyName(code, locale)})`}
-                      aria-pressed={selected}
-                      className={cn(
-                        'border-app-line rounded-control grid min-h-14 content-center gap-0.5 border px-3 py-2 text-left',
-                        selected
-                          ? 'border-brand bg-brand/10 text-white'
-                          : 'bg-app-input text-app-muted',
-                      )}
-                      key={code}
-                      onClick={() =>
-                        setCurrencies((current) =>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  {SUPPORTED_CURRENCIES.map((code) => {
+                    const selected = currencies.includes(code)
+                    return (
+                      <button
+                        aria-label={`${code} (${currencyName(code, locale)})`}
+                        aria-pressed={selected}
+                        className={cn(
+                          'border-app-line rounded-control grid min-h-14 content-center gap-0.5 border px-3 py-2 text-left',
                           selected
-                            ? current.length === 1
-                              ? current
-                              : current.filter((item) => item !== code)
-                            : [...current, code],
-                        )
-                      }
-                      type="button"
-                    >
-                      <span className="font-mono text-sm font-bold">
-                        {code}
-                      </span>
-                      <span className="text-app-dim text-[11px] leading-tight text-pretty">
-                        {currencyName(code, locale)}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            </fieldset>
+                            ? 'border-brand bg-brand/10 text-white'
+                            : 'bg-app-input text-app-muted',
+                        )}
+                        key={code}
+                        onClick={() =>
+                          setCurrencies((current) =>
+                            selected
+                              ? current.length === 1
+                                ? current
+                                : current.filter((item) => item !== code)
+                              : [...current, code],
+                          )
+                        }
+                        type="button"
+                      >
+                        <span className="font-mono text-sm font-bold">
+                          {code}
+                        </span>
+                        <span className="text-app-dim text-[11px] leading-tight text-pretty">
+                          {currencyName(code, locale)}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </fieldset>
+            )}
             <fieldset className="grid gap-3">
               <legend className="text-app-muted text-sm font-semibold">
                 {t('initialBalances')}
               </legend>
               <p className="text-app-dim text-xs">{t('initialBalancesHint')}</p>
               <div className="grid gap-3 sm:grid-cols-2">
-                {currencies.map((code) => (
+                {effectiveCurrencies.map((code) => (
                   <Field key={code} label={t('balanceOf', { code })}>
                     <TextInput
                       inputMode="decimal"

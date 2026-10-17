@@ -114,6 +114,9 @@ const initials = (name: string) =>
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('')
 
+const isOwnerRole = (role: Pick<RoleDto, 'name' | 'isSystem'>) =>
+  role.isSystem && role.name.trim().toLowerCase() === 'owner'
+
 const invitationStatus = (
   invitation: InvitationDto,
 ): { message: TeamKey; tone: StatusTone; active: boolean } => {
@@ -245,6 +248,10 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
   const teamData =
     data?.tenantId === tenantId && data.generation === generation ? data : null
   const availableRoles = useMemo(() => teamData?.roles ?? [], [teamData?.roles])
+  const assignableRoles = useMemo(
+    () => availableRoles.filter((role) => !isOwnerRole(role)),
+    [availableRoles],
+  )
 
   const roleAssignment = useOperation(
     async () => {
@@ -278,7 +285,8 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
 
   const invitationCreation = useOperation(
     async () => {
-      if (!invitationRoleId) return false
+      if (!assignableRoles.some((role) => role.id === invitationRoleId))
+        return false
       return mutate(t('invitationCreated'), (signal) =>
         teamApi.createInvitation(invitationRoleId, { signal }),
       )
@@ -298,7 +306,9 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
     }
     invitationCreation.reset()
     setInvitationRoleId((current) =>
-      current === '' ? (availableRoles[0]?.id ?? '') : current,
+      assignableRoles.some((role) => role.id === current)
+        ? current
+        : (assignableRoles[0]?.id ?? ''),
     )
     setInvitationDrawerOpen(true)
   }
@@ -624,7 +634,9 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                             </span>
                           </td>
                           <td className="px-3 py-3.5">
-                            {canManageAccess ? (
+                            {canManageAccess &&
+                            member.userId !== myUserId &&
+                            !isOwnerRole(member.role) ? (
                               <SelectInput
                                 aria-busy={roleAssignment.pending}
                                 aria-label={t('roleFor', { name: member.name })}
@@ -638,7 +650,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                                 }}
                                 value={member.role.id}
                               >
-                                {availableRoles.map((role) => (
+                                {assignableRoles.map((role) => (
                                   <option key={role.id} value={role.id}>
                                     {roleLabel(role, locale)}
                                   </option>
@@ -666,87 +678,95 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                           {canManageAccess && (
                             <td className="px-5.5 py-3.5">
                               <span className="flex justify-end">
-                                <ActionMenu
-                                  actions={[
-                                    {
-                                      key: 'permissions',
-                                      label: t('permissions'),
-                                      icon: <KeyRound aria-hidden />,
-                                      onSelect: () =>
-                                        void openPermissions(member),
-                                    },
-                                    {
-                                      key: 'lifecycle',
-                                      label: member.isActive
-                                        ? t('deactivate')
-                                        : t('activate'),
-                                      icon: member.isActive ? (
-                                        <PowerOff aria-hidden />
-                                      ) : (
-                                        <Power aria-hidden />
-                                      ),
-                                      onSelect: () =>
-                                        askConfirmation({
-                                          title: member.isActive
-                                            ? t('deactivateTitle')
-                                            : t('activateTitle'),
-                                          description: member.isActive
-                                            ? t('deactivateDescription', {
-                                                name: member.name,
-                                              })
-                                            : t('activateDescription', {
-                                                name: member.name,
-                                                role: roleLabel(
-                                                  member.role,
-                                                  locale,
-                                                ),
-                                              }),
-                                          failure: member.isActive
-                                            ? t('deactivateFailed')
-                                            : t('activateFailed'),
-                                          confirm: () =>
-                                            mutate(
-                                              member.isActive
-                                                ? t('deactivated')
-                                                : t('activated'),
-                                              (signal) =>
+                                {!isOwnerRole(member.role) ? (
+                                  <ActionMenu
+                                    actions={[
+                                      {
+                                        key: 'permissions',
+                                        label: t('permissions'),
+                                        icon: <KeyRound aria-hidden />,
+                                        onSelect: () =>
+                                          void openPermissions(member),
+                                      },
+                                      {
+                                        key: 'lifecycle',
+                                        label: member.isActive
+                                          ? t('deactivate')
+                                          : t('activate'),
+                                        icon: member.isActive ? (
+                                          <PowerOff aria-hidden />
+                                        ) : (
+                                          <Power aria-hidden />
+                                        ),
+                                        onSelect: () =>
+                                          askConfirmation({
+                                            title: member.isActive
+                                              ? t('deactivateTitle')
+                                              : t('activateTitle'),
+                                            description: member.isActive
+                                              ? t('deactivateDescription', {
+                                                  name: member.name,
+                                                })
+                                              : t('activateDescription', {
+                                                  name: member.name,
+                                                  role: roleLabel(
+                                                    member.role,
+                                                    locale,
+                                                  ),
+                                                }),
+                                            failure: member.isActive
+                                              ? t('deactivateFailed')
+                                              : t('activateFailed'),
+                                            confirm: () =>
+                                              mutate(
                                                 member.isActive
-                                                  ? teamApi.deactivateMember(
-                                                      member.id,
-                                                      { signal },
-                                                    )
-                                                  : teamApi.activateMember(
-                                                      member.id,
-                                                      { signal },
-                                                    ),
-                                            ),
-                                        }),
-                                    },
-                                    {
-                                      key: 'delete',
-                                      label: tc('delete'),
-                                      icon: <Trash2 aria-hidden />,
-                                      destructive: true,
-                                      onSelect: () =>
-                                        askConfirmation({
-                                          title: t('deleteTitle'),
-                                          description: t('deleteDescription', {
-                                            name: member.name,
+                                                  ? t('deactivated')
+                                                  : t('activated'),
+                                                (signal) =>
+                                                  member.isActive
+                                                    ? teamApi.deactivateMember(
+                                                        member.id,
+                                                        { signal },
+                                                      )
+                                                    : teamApi.activateMember(
+                                                        member.id,
+                                                        { signal },
+                                                      ),
+                                              ),
                                           }),
-                                          failure: t('deleteFailed'),
-                                          confirm: () =>
-                                            mutate(t('deleted'), (signal) =>
-                                              teamApi.deleteMember(member.id, {
-                                                signal,
-                                              }),
+                                      },
+                                      {
+                                        key: 'delete',
+                                        label: tc('delete'),
+                                        icon: <Trash2 aria-hidden />,
+                                        destructive: true,
+                                        onSelect: () =>
+                                          askConfirmation({
+                                            title: t('deleteTitle'),
+                                            description: t(
+                                              'deleteDescription',
+                                              {
+                                                name: member.name,
+                                              },
                                             ),
-                                        }),
-                                    },
-                                  ]}
-                                  label={t('memberActions', {
-                                    name: member.name,
-                                  })}
-                                />
+                                            failure: t('deleteFailed'),
+                                            confirm: () =>
+                                              mutate(t('deleted'), (signal) =>
+                                                teamApi.deleteMember(
+                                                  member.id,
+                                                  {
+                                                    signal,
+                                                  },
+                                                ),
+                                              ),
+                                          }),
+                                      },
+                                    ]}
+                                    label={t('memberActions', {
+                                      name: member.name,
+                                    })}
+                                  />
+                                ) : null}
                               </span>
                             </td>
                           )}
@@ -943,7 +963,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                 onChange={(event) => setInvitationRoleId(event.target.value)}
                 value={invitationRoleId}
               >
-                {availableRoles.map((role) => (
+                {assignableRoles.map((role) => (
                   <option key={role.id} value={role.id}>
                     {roleLabel(role, locale)}
                   </option>

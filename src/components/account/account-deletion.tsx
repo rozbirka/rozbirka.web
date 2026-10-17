@@ -9,7 +9,7 @@ import { accountMessages } from './account-messages'
 
 const CONFIRMATION_DELAY_SECONDS = 5
 
-export function AccountDeletion() {
+export function AccountDeletion({ compact = false }: { compact?: boolean }) {
   const auth = useAuth()
   const t = useT(accountMessages)
   const tc = useT(commonMessages)
@@ -66,11 +66,24 @@ export function AccountDeletion() {
     }
   }
   return (
-    <section className="border-state-danger/30 bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5">
-      <h2 className="text-app-ink text-[15px] font-bold">{t('deleteTitle')}</h2>
-      <p className="text-app-muted mt-2.5 text-[13px] leading-5 text-pretty">
-        {t('deleteBody')}
-      </p>
+    <section
+      aria-label={t('deleteTitle')}
+      className={
+        compact
+          ? 'min-w-0'
+          : 'border-state-danger/30 bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5'
+      }
+    >
+      <h2
+        className={compact ? 'sr-only' : 'text-app-ink text-[15px] font-bold'}
+      >
+        {t('deleteTitle')}
+      </h2>
+      {(!compact || deleteState !== 'idle') && (
+        <p className="text-app-muted mt-2.5 text-[13px] leading-5 text-pretty">
+          {t('deleteBody')}
+        </p>
+      )}
       {deleteState === 'error' && (
         <div className="mt-3">
           <Notice tone="danger">{t('deleteFailed')}</Notice>
@@ -129,7 +142,9 @@ export function AccountDeletion() {
         </div>
       ) : (
         <Button
-          className="mt-3.5 w-full justify-center"
+          className={
+            compact ? 'w-full justify-center' : 'mt-3.5 w-full justify-center'
+          }
           onClick={() => {
             setConfirmation('')
             setSecondsLeft(CONFIRMATION_DELAY_SECONDS)

@@ -49,6 +49,40 @@ it('sends server-supported inventory filters and preserves all selected source i
   })
 })
 
+it('normalizes omitted compatibility years to null', async () => {
+  apiClient.defaults.adapter = (config) =>
+    Promise.resolve({
+      data: {
+        data: {
+          partId: 'part-1',
+          version: 'v1',
+          items: [
+            {
+              id: 'compat-1',
+              equipmentTypeId: 'type-car',
+              equipmentTypeName: 'Легкове авто',
+              makeId: 'make-vw',
+              makeName: 'Volkswagen',
+              modelId: null,
+              modelName: null,
+              evidenceType: 'Manual',
+            },
+          ],
+        },
+      },
+      status: 200,
+      statusText: 'OK',
+      headers: new AxiosHeaders(),
+      config,
+    } satisfies AxiosResponse)
+
+  const compatibility = await partsApi.compatibilities('part-1')
+  expect(compatibility.items[0]).toMatchObject({
+    yearFrom: null,
+    yearTo: null,
+  })
+})
+
 it('round-trips only OpenAPI-supported part changes and does not fabricate compatibility fields', async () => {
   let request: InternalAxiosRequestConfig | undefined
   apiClient.defaults.adapter = (config) => {
@@ -73,12 +107,40 @@ it('round-trips only OpenAPI-supported part changes and does not fabricate compa
   expect(JSON.parse(request?.data as string)).toEqual({
     name: 'Front bumper',
     photoKeys: ['owned-key'],
-    desiredSalePrice: { isSet: false },
   })
   expect(JSON.parse(request?.data as string)).not.toHaveProperty(
     'compatCarBrand',
   )
 })
+
+it.each([
+  { value: 125.5, expected: 125.5 },
+  { value: 0, expected: 0 },
+  { value: null, expected: null },
+])(
+  'sends desired sale price $value as a scalar for Core',
+  async ({ value, expected }) => {
+    let request: InternalAxiosRequestConfig | undefined
+    apiClient.defaults.adapter = (config) => {
+      request = config
+      return Promise.resolve({
+        data: { data: { id: 'part-1' } },
+        status: 200,
+        statusText: 'OK',
+        headers: new AxiosHeaders(),
+        config,
+      } satisfies AxiosResponse)
+    }
+
+    await partsApi.update('part-1', {
+      desiredSalePrice: { isSet: true, value },
+    })
+
+    expect(JSON.parse(request?.data as string)).toEqual({
+      desiredSalePrice: expected,
+    })
+  },
+)
 
 it('restores relations Core omits rather than sends as null', async () => {
   // `JsonIgnoreCondition.WhenWritingNull` drops a null property entirely, so a

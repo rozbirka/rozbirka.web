@@ -115,6 +115,7 @@ it('creates the first tenant, hydrates, and hands over to the dashboard checklis
 it('asks only for what creating the yard stores', () => {
   renderOnboarding()
 
+  expect(screen.getByText('Крок 2 з 2')).toBeVisible()
   expect(screen.getByLabelText('Назва розбірки')).toBeVisible()
   expect(screen.getByLabelText(/Місто/)).toBeVisible()
   // Accounting currency is an onboarding step on the dashboard now, chosen

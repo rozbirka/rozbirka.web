@@ -1275,6 +1275,57 @@ it('reuses successful photo uploads after a failed car update and saves a new co
   expect(mediaApi.remove).not.toHaveBeenCalled()
 })
 
+it('uploads edited car photos together and saves them in selection order', async () => {
+  const user = userEvent.setup()
+  vi.stubGlobal(
+    'URL',
+    Object.assign(URL, {
+      createObjectURL: vi.fn((file: File) => `/preview-${file.name}`),
+      revokeObjectURL: vi.fn(),
+    }),
+  )
+  const uploads = new Map<
+    string,
+    (value: { storageKey: string; url: string }) => void
+  >()
+  vi.mocked(mediaApi.upload).mockImplementation(
+    (file) =>
+      new Promise((resolve) => {
+        uploads.set(file.name, resolve)
+      }),
+  )
+  render(
+    <MemoryRouter initialEntries={['/app/demo/cars/car-1/edit']}>
+      <Routes>
+        <Route path="/app/:tenant/cars/:carId/edit" element={<CarsScreen />} />
+        <Route path="/app/:tenant/cars/:carId" element={<p>Saved</p>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+  await user.upload(await screen.findByLabelText('Додати фото'), [
+    new File(['first'], 'first.jpg', { type: 'image/jpeg' }),
+    new File(['second'], 'second.jpg', { type: 'image/jpeg' }),
+  ])
+  await user.click(
+    screen.getAllByRole('button', { name: 'Зберегти зміни' })[0]!,
+  )
+  await waitFor(() => expect(mediaApi.upload).toHaveBeenCalledTimes(2))
+  await act(async () => {
+    uploads.get('second.jpg')!({
+      storageKey: 'cars/second',
+      url: '/second.jpg',
+    })
+    uploads.get('first.jpg')!({ storageKey: 'cars/first', url: '/first.jpg' })
+    await Promise.resolve()
+  })
+  await waitFor(() => expect(carsApi.update).toHaveBeenCalledOnce())
+  expect(carsApi.update).toHaveBeenCalledWith(
+    'car-1',
+    expect.objectContaining({ photoKeys: ['cars/first', 'cars/second'] }),
+    expect.anything(),
+  )
+})
+
 it('keeps server photos unchanged on cancel and rejects selection above ten photos', async () => {
   const user = userEvent.setup()
   vi.mocked(carsApi.get).mockResolvedValue({

@@ -130,6 +130,7 @@ beforeEach(() => {
     user: existingUser,
     isNewUser: false,
   })
+  cancelRegistration.mockResolvedValue(undefined)
   updateName.mockResolvedValue(existingUser)
 })
 
@@ -138,6 +139,80 @@ afterEach(() => {
   vi.resetAllMocks()
   credentials.clear()
   sessionStorage.clear()
+})
+
+it('opens the privacy policy from the phone step', async () => {
+  const user = userEvent.setup()
+  renderLogin()
+
+  const policy = screen.getByRole('link', {
+    name: 'політикою конфіденційності',
+  })
+  expect(policy).toHaveAttribute('href', '/privacy')
+  await user.click(policy)
+  expect(screen.getByTestId('location')).toHaveTextContent('/privacy')
+})
+
+it('shows the registration sign-in switch as a text action without a filled hover', async () => {
+  const user = userEvent.setup()
+  renderLogin()
+
+  await user.click(
+    screen.getByRole('button', {
+      name: 'Немає облікового запису? Зареєструватися',
+    }),
+  )
+
+  const signIn = screen.getByRole('button', {
+    name: 'Вже маєте обліковий запис? Увійти',
+  })
+  expect(signIn).not.toHaveClass('rounded-control')
+  expect(signIn).not.toHaveClass('hover:bg-white/[0.04]')
+  expect(screen.getByText('Увійти')).toHaveClass('hover:text-white')
+  await user.click(signIn)
+  expect(
+    screen.getByRole('heading', { name: 'Вхід за номером телефону' }),
+  ).toBeVisible()
+})
+
+it('places the country selector inside the phone field and sends one international prefix', async () => {
+  const user = userEvent.setup()
+  renderLogin()
+
+  const country = screen.getByRole('combobox', { name: 'Країна номера' })
+  const phone = screen.getByRole('textbox', { name: 'Номер телефону' })
+  expect(country).toHaveValue('UA')
+  expect(screen.queryByRole('radiogroup', { name: 'Країна номера' })).toBeNull()
+
+  await user.type(phone, '501112233')
+  expect(phone).toHaveValue('50 111 22 33')
+  await user.click(screen.getByRole('button', { name: 'Отримати код' }))
+  await waitFor(() =>
+    expect(otpSend).toHaveBeenCalledWith(
+      { phone: '+380501112233' },
+      { signal: expect.any(AbortSignal) as AbortSignal },
+    ),
+  )
+})
+
+it('changes the prefix from the phone-field dropdown', async () => {
+  const user = userEvent.setup()
+  renderLogin()
+
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Країна номера' }),
+    'PL',
+  )
+  const phone = screen.getByRole('textbox', { name: 'Номер телефону' })
+  await user.type(phone, '512345678')
+  expect(phone).toHaveValue('512 345 678')
+  await user.click(screen.getByRole('button', { name: 'Отримати код' }))
+  await waitFor(() =>
+    expect(otpSend).toHaveBeenCalledWith(
+      { phone: '+48512345678' },
+      { signal: expect.any(AbortSignal) as AbortSignal },
+    ),
+  )
 })
 
 it('restores an active OTP challenge after the login page reloads', async () => {
@@ -373,7 +448,7 @@ it('asks a new user for a name and stores the rotated access response', async ()
   await enterOtp(user)
   await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
 
-  const nameInput = await screen.findByLabelText('Ім’я')
+  const nameInput = await screen.findByLabelText('Ім’я власника')
   await user.type(nameInput, 'Олена')
   await user.click(screen.getByRole('button', { name: 'Продовжити' }))
 
@@ -381,6 +456,37 @@ it('asks a new user for a name and stores the rotated access response', async ()
     signal: expect.any(AbortSignal) as AbortSignal,
   })
   expect(credentials.getAccess()).toBe('rotated-access')
+  expect(auth.hydrate).toHaveBeenCalledOnce()
+})
+
+it('asks a pre-created owner whose display name is still their phone for a name after verification', async () => {
+  otpSend.mockResolvedValueOnce({
+    ...challengeData(),
+    cooldownSeconds: 0,
+    retryAfterSeconds: 0,
+  })
+  otpVerify.mockResolvedValue({
+    accessToken: 'access',
+    user: {
+      ...existingUser,
+      displayName: existingUser.phone,
+    },
+    isNewUser: false,
+  })
+  const user = userEvent.setup()
+  renderLogin()
+  await reachOtpStep(user)
+  await enterOtp(user)
+  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+
+  const nameInput = await screen.findByLabelText('Ім’я власника')
+  expect(screen.getByText('Крок 1 з 2')).toBeInTheDocument()
+  await user.type(nameInput, 'Олена')
+  await user.click(screen.getByRole('button', { name: 'Продовжити' }))
+
+  expect(updateName).toHaveBeenCalledWith('Олена', {
+    signal: expect.any(AbortSignal) as AbortSignal,
+  })
   expect(auth.hydrate).toHaveBeenCalledOnce()
 })
 
@@ -433,6 +539,8 @@ it('starts an authenticated unnamed user at the name step and resumes the invite
   const user = userEvent.setup()
   renderLogin('/login?invite=ABCD1234')
 
+  expect(screen.getByText('Майже все')).toBeVisible()
+  expect(screen.queryByText('Крок 1 з 2')).toBeNull()
   const nameInput = screen.getByLabelText('Ім’я')
   await user.type(nameInput, 'Олена')
   await user.click(screen.getByRole('button', { name: 'Продовжити' }))
@@ -441,6 +549,20 @@ it('starts an authenticated unnamed user at the name step and resumes the invite
   expect(
     await screen.findByRole('link', { name: 'Продовжити' }),
   ).toHaveAttribute('href', '/invite/ABCD1234')
+})
+
+it('resumes the owner name step after a reload when the account still uses its phone as display name', () => {
+  auth.status = 'authenticated'
+  auth.user = {
+    id: 'user-1',
+    phone: '+380971110000',
+    displayName: '+380971110000',
+    effectiveLanguage: 'uk',
+  }
+
+  renderLogin()
+
+  expect(screen.getByLabelText('Ім’я власника')).toBeVisible()
 })
 
 it('does not navigate after an unmounted name flow finishes hydrating', async () => {
