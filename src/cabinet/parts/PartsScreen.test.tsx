@@ -264,7 +264,7 @@ beforeEach(() => {
       },
     ],
     page: 1,
-    pageSize: 100,
+    pageSize: 300,
     total: 1,
     totalPages: 1,
   })
@@ -284,7 +284,7 @@ beforeEach(() => {
       },
     ],
     page: 1,
-    pageSize: 100,
+    pageSize: 300,
     total: 1,
     totalPages: 1,
   })
@@ -1814,10 +1814,9 @@ it('renders the immutable detail and history contract with permission-aware link
     'href',
     '/app/yard/parts/part-1/edit',
   )
-  expect(screen.getByRole('link', { name: 'Перемістити' })).toHaveAttribute(
-    'href',
-    '/app/yard/parts/part-1/inventory',
-  )
+  expect(
+    screen.getByRole('button', { name: 'Перемістити' }),
+  ).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Друк стікера' })).toHaveAttribute(
     'href',
     '/app/yard/stickers?part=part-1',
@@ -3261,7 +3260,7 @@ it('does not offer archived cars for new parts', async () => {
       },
     ],
     page: 1,
-    pageSize: 100,
+    pageSize: 300,
     total: 1,
   })
   render(
@@ -3718,4 +3717,81 @@ it('reads the part back after a lost save before reporting it', async () => {
   expect(await screen.findByText(/зміни не збереглися/)).toBeInTheDocument()
   expect(screen.getByLabelText('Назва')).toHaveValue('Дзеркало праве')
   expect(partMocks.update).toHaveBeenCalledOnce()
+})
+
+it('applies section and shelf filters from a warehouse link and resets descendants when zone changes', async () => {
+  partMocks.facets.mockResolvedValue({
+    ...(await partMocks.facets()),
+    warehouses: [{ id: 'warehouse', name: 'Основний склад', count: 52 }],
+    zones: [{ id: 'zone', name: 'Зона А', count: 52 }],
+  })
+  render(
+    <MemoryRouter
+      initialEntries={[
+        '/app/yard/parts?warehouse=warehouse&zone=zone&section=section&shelf=shelf&per_page=10&page=3',
+      ]}
+    >
+      <Routes>
+        <Route
+          path="/app/:tenant/parts"
+          element={
+            <>
+              <PartsScreen definition={partsDefinition as never} />
+              <LocationProbe />
+            </>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+  await vi.waitFor(() =>
+    expect(partMocks.search).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        warehouseIds: ['warehouse'],
+        zoneIds: ['zone'],
+        sectionIds: ['section'],
+        shelfIds: ['shelf'],
+        pageSize: 30,
+        page: 3,
+      }),
+      expect.anything(),
+    ),
+  )
+  expect(screen.queryByRole('radio', { name: /^10$/ })).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(
+    'per_page=30',
+  )
+  fireEvent.change(screen.getByRole('combobox', { name: 'Зона' }), {
+    target: { value: '' },
+  })
+  await vi.waitFor(() => {
+    expect(partMocks.search.mock.lastCall?.[0]).not.toHaveProperty('sectionIds')
+    expect(partMocks.search.mock.lastCall?.[0]).not.toHaveProperty('shelfIds')
+  })
+  expect(screen.getByLabelText('Поточний маршрут')).not.toHaveTextContent(
+    'section=',
+  )
+  expect(screen.getByLabelText('Поточний маршрут')).not.toHaveTextContent(
+    /[?&]page=3(?:&|$)/,
+  )
+})
+
+it.each([
+  ['warehouse=warehouse&zone=zone&without_section=1', { missingSection: true }],
+  [
+    'warehouse=warehouse&zone=zone&section=section&without_shelf=1',
+    { sectionIds: ['section'], missingShelf: true },
+  ],
+])('applies direct location filters from %s', async (query, expected) => {
+  render(
+    <MemoryRouter initialEntries={[`/app/yard/parts?${query}`]}>
+      <PartsScreen definition={partsDefinition as never} />
+    </MemoryRouter>,
+  )
+  await vi.waitFor(() =>
+    expect(partMocks.search).toHaveBeenLastCalledWith(
+      expect.objectContaining({ ...expected, zoneIds: ['zone'], pageSize: 30 }),
+      expect.anything(),
+    ),
+  )
 })

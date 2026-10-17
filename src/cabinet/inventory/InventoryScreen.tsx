@@ -3,6 +3,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -12,8 +13,8 @@ import {
   Archive,
   ArrowRight,
   Check,
-  ChevronRight,
   ChevronLeft,
+  ChevronRight,
   ClipboardList,
   Download,
   Pause,
@@ -77,6 +78,13 @@ import { overviewMessages } from './overview-messages'
 import { placementMessages } from './placement-messages'
 import { resultsMessages } from './results-messages'
 import { sessionMessages } from './session-messages'
+import { LocationSelect } from './LocationSelect'
+import { LocationBrowser } from './LocationBrowser'
+import {
+  locationPartsFilter,
+  locationPartsHref,
+  type LocationContentsTarget,
+} from './location-contents'
 import { warehouseMessages } from './warehouse-messages'
 import { inventoryCodeFromName } from './inventory-code'
 import { buildZoneLabelHtml } from './zone-label-output'
@@ -145,6 +153,12 @@ export function InventoryScreen({
   }
   const tail = route[0] === 'inventory' ? route.slice(1) : []
   if (tail[0] === 'warehouses' && tail[1]) return <WarehouseView id={tail[1]} />
+  if (tail[0] === 'zones' && tail[1])
+    return <LocationView key={`zone:${tail[1]}`} id={tail[1]} kind="zone" />
+  if (tail[0] === 'sections' && tail[1])
+    return (
+      <LocationView key={`section:${tail[1]}`} id={tail[1]} kind="section" />
+    )
   if (tail[0] === 'sessions' && tail[1] === 'new') return <NewSessionView />
   if (tail[0] === 'sessions' && tail[1] && tail[2] === 'results')
     return <ResultsView id={tail[1]} />
@@ -665,29 +679,80 @@ function Overview() {
               </section>
             </div>
 
-            <FormDialog
-              description={t('newWarehouseHint')}
-              onOpenChange={(next) => {
-                if (!next) setAdding(false)
-              }}
-              onSubmit={(event) => {
-                event.preventDefault()
-                void createWarehouse()
-              }}
+            <WarehouseEditorSheet
               open={adding}
+              draft={draft}
+              onChange={setDraft}
+              onClose={() => setAdding(false)}
+              onSubmit={() => void createWarehouse()}
               pending={creating}
-              submitDisabled={
-                draft.name.trim() === '' || draft.code.trim() === ''
-              }
-              submitLabel={t('addWarehouse')}
-              title={t('newWarehouseTitle')}
-            >
-              <NameAndCode draft={draft} onChange={setDraft} />
-            </FormDialog>
+              error={operationError}
+            />
           </div>
         )
       }}
     </Resource>
+  )
+}
+
+function WarehouseEditorSheet({
+  open,
+  draft,
+  onChange,
+  onClose,
+  onSubmit,
+  pending,
+  error,
+}: {
+  open: boolean
+  draft: { name: string; code: string }
+  onChange: (draft: { name: string; code: string }) => void
+  onClose: () => void
+  onSubmit: () => void
+  pending: boolean
+  error: string | null
+}) {
+  const t = useT(overviewMessages)
+  const tc = useT(commonMessages)
+  const formId = useId()
+  return (
+    <Sheet
+      open={open}
+      title={t('newWarehouseTitle')}
+      description={t('newWarehouseHint')}
+      onOpenChange={(next) => {
+        if (!next && !pending) onClose()
+      }}
+      footer={
+        <>
+          <Button disabled={pending} onClick={onClose} type="button">
+            {tc('cancel')}
+          </Button>
+          <Button
+            aria-busy={pending}
+            disabled={pending || !draft.name.trim() || !draft.code.trim()}
+            form={formId}
+            type="submit"
+            variant="primary"
+          >
+            {t('addWarehouse')}
+          </Button>
+        </>
+      }
+    >
+      <form
+        id={formId}
+        aria-busy={pending}
+        className="grid content-start gap-5"
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (!pending && draft.name.trim() && draft.code.trim()) onSubmit()
+        }}
+      >
+        {error ? <Notice tone="danger">{error}</Notice> : null}
+        <NameAndCode draft={draft} onChange={onChange} />
+      </form>
+    </Sheet>
   )
 }
 
@@ -1240,16 +1305,26 @@ function WarehouseView({ id }: { id: string }) {
                           key={zone.id}
                         >
                           <div className="min-w-0">
-                            {partsBase === null ? (
+                            {zone.isSystemUnassigned && partsBase === null ? (
                               <span className="text-[15px] font-bold text-white">
                                 {zone.name}
                               </span>
                             ) : (
                               <Link
-                                className="text-[15px] font-bold text-white hover:underline"
-                                to={`${partsBase}?zone=${encodeURIComponent(zone.id)}`}
+                                className="flex min-h-11 items-center justify-between gap-3 text-[15px] font-bold text-white hover:underline"
+                                to={
+                                  zone.isSystemUnassigned
+                                    ? `${partsBase}?zone=${encodeURIComponent(zone.id)}`
+                                    : `${base}/zones/${encodeURIComponent(zone.id)}`
+                                }
                               >
                                 {zone.name}
+                                {!zone.isSystemUnassigned ? (
+                                  <ChevronRight
+                                    aria-hidden
+                                    className="text-app-muted size-4 shrink-0"
+                                  />
+                                ) : null}
                               </Link>
                             )}
                             <p className="text-app-muted mt-0.5 text-[13px]">
@@ -1331,12 +1406,6 @@ function WarehouseView({ id }: { id: string }) {
                     })}
                   </ul>
                 </Card>
-
-                <WarehouseShelves
-                  onAddZone={startAddingZone}
-                  zones={real}
-                  warehouseId={id}
-                />
 
                 <div className="grid min-w-0 gap-5 lg:grid-cols-2 lg:items-start">
                   <section
@@ -1586,37 +1655,249 @@ function WarehouseView({ id }: { id: string }) {
   )
 }
 
-function WarehouseShelves({
-  onAddZone,
-  zones,
-  warehouseId,
+function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
+  const t = useT(warehouseMessages)
+  const ti = useT(inventoryMessages)
+  const base = useInventoryBase()
+  const location = useLocation()
+  const { targetTenant } = useCabinet()
+  const canViewParts = usePermission('parts.view')
+  const loader = useCallback(
+    async (signal: AbortSignal) => {
+      const section =
+        kind === 'section'
+          ? await inventoryApi.getSection(id, { signal })
+          : null
+      if (section && section.id !== id) throw new Error('Section unavailable')
+      const zone = await inventoryApi.getZone(section?.zoneId ?? id, { signal })
+      if (
+        (section &&
+          (zone.id !== section.zoneId ||
+            zone.warehouseId !== section.warehouseId)) ||
+        (!section && zone.id !== id)
+      )
+        throw new Error('Zone unavailable')
+      return { zone, section }
+    },
+    [id, kind],
+  )
+  const resource = useLoad(loader, id)
+  return (
+    <Resource state={resource.state} retry={resource.reload}>
+      {({ zone, section }) => {
+        const state = location.state as {
+          zoneId?: unknown
+          zoneSearch?: unknown
+          zoneQuery?: unknown
+        } | null
+        const zoneSearch =
+          state?.zoneId === zone.id && typeof state.zoneSearch === 'string'
+            ? state.zoneSearch
+            : ''
+        const returnQuery =
+          state?.zoneId === zone.id && typeof state.zoneQuery === 'string'
+            ? state.zoneQuery
+              ? `?${state.zoneQuery}`
+              : ''
+            : zoneSearch
+              ? `?${new URLSearchParams({ locationSearch: zoneSearch }).toString()}`
+              : ''
+        return (
+          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+              <div className="flex min-w-0 items-center gap-5">
+                <Link
+                  className="border-app-line-2 text-app-muted hover:text-app-ink flex min-h-11 shrink-0 items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                  to={
+                    section
+                      ? `${base}/zones/${zone.id}${returnQuery}`
+                      : `${base}/warehouses/${zone.warehouseId}`
+                  }
+                >
+                  <ChevronLeft aria-hidden className="size-3.5" />
+                  {t(section ? 'backToZone' : 'backToWarehouse')}
+                </Link>
+                <p className="text-app-muted hidden min-w-0 items-center gap-2 text-sm sm:flex">
+                  <span>{ti('crumbWarehouse')}</span>
+                  <span aria-hidden className="text-white/20">
+                    /
+                  </span>
+                  <span className="text-app-muted truncate">
+                    {zone.warehouseName}
+                  </span>
+                  <span aria-hidden className="text-white/20">
+                    /
+                  </span>
+                  {section ? (
+                    <>
+                      <span className="text-app-muted truncate">
+                        {zone.name}
+                      </span>
+                      <span aria-hidden className="text-white/20">
+                        /
+                      </span>
+                    </>
+                  ) : null}
+                  <span>{t(section ? 'sectionType' : 'zoneType')}</span>
+                </p>
+              </div>
+              {canViewParts && targetTenant ? (
+                <Button asChild className="px-4 text-sm font-semibold">
+                  <Link
+                    to={locationPartsHref(
+                      cabinetPath(targetTenant.slug, 'parts'),
+                      zone.warehouseId,
+                      section
+                        ? {
+                            kind: 'section',
+                            zoneId: zone.id,
+                            sectionId: section.id,
+                            name: section.name,
+                            path: [],
+                          }
+                        : {
+                            kind: 'zone',
+                            zoneId: zone.id,
+                            name: zone.name,
+                            path: [],
+                          },
+                    )}
+                  >
+                    {t(section ? 'allSectionParts' : 'allZoneParts')}
+                    <ArrowRight aria-hidden className="size-4" />
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
+            <div className="mx-auto grid w-full max-w-[1440px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+              <header className="min-w-0">
+                <h1 className="break-words text-[38px] leading-[1.05] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+                  {section?.name ?? zone.name}
+                </h1>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <StatusPill
+                    tone={
+                      zone.isActive && section?.isActive !== false
+                        ? 'ok'
+                        : 'neutral'
+                    }
+                  >
+                    {t(
+                      zone.isActive && section?.isActive !== false
+                        ? 'zoneActive'
+                        : 'zoneArchived',
+                    )}
+                  </StatusPill>
+                  <p className="text-app-muted min-w-0 break-all font-mono text-[13px]">
+                    {t('code', { code: section?.code ?? zone.code })}
+                  </p>
+                </div>
+              </header>
+              {zone.isActive &&
+              section?.isActive !== false &&
+              !zone.isSystemUnassigned ? (
+                <>
+                  <p className="text-app-muted max-w-3xl text-base leading-6">
+                    {t(section ? 'sectionBrowseHint' : 'zoneBrowseHint')}
+                  </p>
+                  <ZoneLocations
+                    zone={zone}
+                    {...(section ? { section } : {})}
+                    onStructureChange={resource.refresh}
+                  />
+                </>
+              ) : (
+                <Notice>
+                  {t(
+                    zone.isSystemUnassigned
+                      ? 'systemZoneStructure'
+                      : 'archivedZoneStructure',
+                  )}
+                </Notice>
+              )}
+            </div>
+          </div>
+        )
+      }}
+    </Resource>
+  )
+}
+
+function ZoneLocations({
+  zone,
+  section,
+  onStructureChange,
 }: {
-  onAddZone: () => void
-  zones: WarehouseZone[]
-  warehouseId: string
+  zone: InventoryZone
+  section?: InventorySection
+  onStructureChange: () => void
 }) {
+  const base = useInventoryBase()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const warehouseId = zone.warehouseId
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
   const t = useT(warehouseMessages)
   const tc = useT(commonMessages)
   const formId = useId()
   const canManage = usePermission('inventory.zones.manage')
+  const canViewParts = usePermission('parts.view')
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.inventory,
   )
   const documentLocale = useTenantSettings().documentLanguage ?? 'uk'
   const loader = useCallback(
     async (signal: AbortSignal) => {
-      const [shelves, sections] = await Promise.all([
-        inventoryApi.getShelves(undefined, { signal }),
-        inventoryApi.getSections(undefined, { signal }),
+      const target: LocationContentsTarget = section
+        ? {
+            kind: 'direct',
+            zoneId: zone.id,
+            sectionId: section.id,
+            name: section.name,
+            path: [],
+          }
+        : { kind: 'zone-direct', zoneId: zone.id, name: zone.name, path: [] }
+      const [shelves, sections, directCount] = await Promise.all([
+        section
+          ? inventoryApi.getShelves(zone.id, { signal }, section.id)
+          : Promise.resolve([] as InventoryShelf[]),
+        section
+          ? Promise.resolve([section])
+          : inventoryApi.getSections(zone.id, { signal }),
+        canViewParts
+          ? partsApi
+              .search(
+                { ...locationPartsFilter(target, '', 1), pageSize: 1 },
+                { signal },
+              )
+              .then(
+                (result) => result.total,
+                () => null,
+              )
+          : Promise.resolve(0),
       ])
       return {
-        shelves: shelves.filter((item) => item.warehouseId === warehouseId),
-        sections: sections.filter((item) => item.warehouseId === warehouseId),
+        shelves: shelves.filter(
+          (item) =>
+            item.warehouseId === warehouseId &&
+            item.zoneId === zone.id &&
+            item.sectionId === section?.id,
+        ),
+        sections: sections.filter(
+          (item) => item.warehouseId === warehouseId && item.zoneId === zone.id,
+        ),
+        directCount,
       }
     },
-    [warehouseId],
+    [warehouseId, zone.id, zone.name, section, canViewParts],
   )
-  const resource = useLoad(loader, warehouseId)
+  const resource = useLoad(loader, `${zone.id}:${section?.id ?? ''}`)
   const [addingTo, setAddingTo] = useState<InventorySection | null>(null)
   const [addingSectionTo, setAddingSectionTo] = useState<WarehouseZone | null>(
     null,
@@ -1628,9 +1909,6 @@ function WarehouseShelves({
     useState<InventorySection | null>(null)
   const [editing, setEditing] = useState<InventoryShelf | null>(null)
   const [archiving, setArchiving] = useState<InventoryShelf | null>(null)
-  const [expandedSectionId, setExpandedSectionId] = useState<string | null>(
-    null,
-  )
   const [previewLocation, setPreviewLocation] = useState<{
     location: InventorySection | InventoryShelf
     kind: 'section' | 'shelf'
@@ -1677,7 +1955,9 @@ function WarehouseShelves({
         quota: false,
       })
       await action(scope.signal)
+      if (scope.signal.aborted || !mounted.current) return false
       resource.reload()
+      onStructureChange()
       return true
     } catch (cause) {
       setError(normalizeApiProblem(cause).message)
@@ -1691,13 +1971,15 @@ function WarehouseShelves({
     const name = draft.name.trim()
     const code = draft.code.trim()
     if (!name || !code) return
+    let createdSectionId: string | undefined
     const ok = addingSectionTo
-      ? await write((signal) =>
-          inventoryApi.createSection(
+      ? await write(async (signal) => {
+          const created = await inventoryApi.createSection(
             { zoneId: addingSectionTo.id, name, code },
             { signal },
-          ),
-        )
+          )
+          if (!signal.aborted) createdSectionId = created?.id
+        })
       : editingSection
         ? await write((signal) =>
             inventoryApi.updateSection(
@@ -1723,6 +2005,13 @@ function WarehouseShelves({
               )
             : false
     if (ok) {
+      if (createdSectionId)
+        void navigate(`${base}/sections/${createdSectionId}`, {
+          state: {
+            zoneId: zone.id,
+            zoneQuery: new URLSearchParams(location.search).toString(),
+          },
+        })
       setAddingTo(null)
       setAddingSectionTo(null)
       setEditingSection(null)
@@ -1779,10 +2068,9 @@ function WarehouseShelves({
   }
 
   return (
-    <Card
-      title={t('shelvesTitle')}
-      className="min-w-0"
-      bodyClassName="px-6 pb-6"
+    <section
+      aria-label={t(section ? 'shelfType' : 'sectionType')}
+      className="border-app-line bg-app-raised min-w-0 rounded-[20px] border p-4 sm:p-6"
     >
       {error ? <Notice tone="danger">{error}</Notice> : null}
       {resource.state.kind === 'loading' ? <SkeletonRows rows={3} /> : null}
@@ -1792,272 +2080,93 @@ function WarehouseShelves({
         </Button>
       ) : null}
       {resource.state.kind === 'ready' ? (
-        <div className="grid gap-6">
-          {zones.every((zone) => zone.isSystemUnassigned || !zone.isActive) ? (
-            <div className="grid gap-4">
-              <p className="text-app-muted text-sm">
-                {t('noActiveZonesForShelves')}
-              </p>
-              {canManage ? (
-                <Button className="justify-self-start" onClick={onAddZone}>
-                  <Plus aria-hidden />
-                  {t('addZone')}
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
-          {zones
-            .filter((zone) => !zone.isSystemUnassigned && zone.isActive)
-            .map((zone) => {
-              const sections = loadedSections.filter(
-                (section) => section.zoneId === zone.id,
-              )
-              return (
-                <section
-                  aria-label={t('zoneGroup', { name: zone.name })}
-                  className="border-app-line min-w-0 border-t pt-6 first:border-t-0 first:pt-0"
-                  key={zone.id}
-                >
-                  <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-app-dim font-mono text-[11px] tracking-[0.12em] uppercase">
-                        {t('zoneType')}
-                      </p>
-                      <h3 className="mt-1 min-w-0 break-words text-base font-semibold text-white">
-                        {zone.name}
-                      </h3>
-                      <p className="text-app-muted mt-0.5 text-xs">
-                        {zone.code}
-                      </p>
-                    </div>
-                    {canManage ? (
-                      <Button
-                        variant="ghost"
-                        onClick={() => {
+        <LocationBrowser
+          zone={zone}
+          {...(section ? { section } : {})}
+          base={base}
+          directCount={resource.state.data.directCount}
+          sections={loadedSections}
+          shelves={loadedShelves}
+          canManage={canManage}
+          canViewParts={canViewParts}
+          partsBase={base.replace(/\/inventory$/, '/parts')}
+          onAddSection={(zone) => {
+            setError(null)
+            setDraft({ name: '', code: '' })
+            setAddingSectionTo(zone)
+          }}
+          onAddShelf={startAddingShelf}
+          sectionActions={(section) => (
+            <ActionMenu
+              label={t('sectionActions', { name: section.name })}
+              actions={[
+                {
+                  key: 'qr',
+                  label: t('showLocationQr'),
+                  icon: <ScanLine aria-hidden />,
+                  onSelect: () =>
+                    setPreviewLocation({ location: section, kind: 'section' }),
+                },
+                ...(canManage
+                  ? [
+                      {
+                        key: 'edit',
+                        label: t('editSection'),
+                        icon: <Pencil aria-hidden />,
+                        onSelect: () => {
                           setError(null)
-                          setDraft({ name: '', code: '' })
-                          setAddingSectionTo(zone)
-                        }}
-                      >
-                        <Plus aria-hidden />
-                        {t('addSection')}
-                      </Button>
-                    ) : null}
-                  </div>
-                  {sections.length === 0 ? (
-                    <p className="text-app-muted mt-2 text-sm">
-                      {t('noSections')}
-                    </p>
-                  ) : null}
-                  <div className="mt-4 grid gap-3">
-                    {sections.map((section) => (
-                      <div
-                        aria-label={t('sectionGroup', { name: section.name })}
-                        className="border-app-line bg-app-canvas/50 min-w-0 rounded-xl border p-4"
-                        key={section.id}
-                        role="group"
-                      >
-                        <div className="flex min-w-0 items-start justify-between gap-2">
-                          <button
-                            aria-expanded={expandedSectionId === section.id}
-                            className="focus-visible:outline-brand flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg text-left"
-                            onClick={() =>
-                              setExpandedSectionId((current) =>
-                                current === section.id ? null : section.id,
-                              )
-                            }
-                            type="button"
-                          >
-                            <ChevronRight
-                              aria-hidden
-                              className={cn(
-                                'text-app-muted size-4 shrink-0 transition-transform',
-                                expandedSectionId === section.id && 'rotate-90',
-                              )}
-                            />
-                            <span className="min-w-0">
-                              <strong className="block truncate text-sm text-white">
-                                {section.name}
-                              </strong>
-                              <span className="text-app-muted block truncate text-xs">
-                                {section.code} ·{' '}
-                                {t('shelfCount', {
-                                  count: loadedShelves.filter(
-                                    (shelf) => shelf.sectionId === section.id,
-                                  ).length,
-                                })}
-                                {section.partCount == null
-                                  ? null
-                                  : ` · ${t('locationParts', { count: section.partCount })}`}
-                              </span>
-                            </span>
-                          </button>
-                          <div className="flex items-center gap-2">
-                            {canManage ? (
-                              <Button
-                                aria-label={t('editSectionLabel', {
-                                  name: section.name,
-                                })}
-                                className="min-w-11 px-0"
-                                variant="ghost"
-                                onClick={() => {
-                                  setError(null)
-                                  setDraft({
-                                    name: section.name,
-                                    code: section.code,
-                                  })
-                                  setEditingSection(section)
-                                }}
-                              >
-                                <Pencil aria-hidden />
-                              </Button>
-                            ) : null}
-                            <ActionMenu
-                              label={t('sectionActions', {
-                                name: section.name,
-                              })}
-                              actions={[
-                                {
-                                  key: 'qr',
-                                  label: t('showLocationQr'),
-                                  icon: <ScanLine aria-hidden />,
-                                  onSelect: () =>
-                                    setPreviewLocation({
-                                      location: section,
-                                      kind: 'section',
-                                    }),
-                                },
-                                ...(canManage
-                                  ? [
-                                      {
-                                        key: 'archive',
-                                        label: t('archiveSection'),
-                                        icon: <Archive aria-hidden />,
-                                        destructive: true,
-                                        onSelect: () =>
-                                          setArchivingSection(section),
-                                      },
-                                    ]
-                                  : []),
-                              ]}
-                            />
-                          </div>
-                        </div>
-                        {expandedSectionId === section.id ? (
-                          <div
-                            className="border-app-line mt-4 border-t pt-4"
-                            id={`shelves-${section.id}`}
-                          >
-                            {loadedShelves.every(
-                              (shelf) => shelf.sectionId !== section.id,
-                            ) ? (
-                              <div className="border-app-line-2 mt-4 flex min-h-28 flex-1 flex-col items-start justify-between gap-3 rounded-lg border border-dashed bg-white/[0.02] p-3">
-                                <p className="text-app-muted text-sm">
-                                  {t('noShelves')}
-                                </p>
-                                {canManage ? (
-                                  <Button
-                                    variant="ghost"
-                                    onClick={() => startAddingShelf(section)}
-                                  >
-                                    <Plus aria-hidden />
-                                    {t('addShelf')}
-                                  </Button>
-                                ) : null}
-                              </div>
-                            ) : null}
-                            <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3 empty:hidden">
-                              {loadedShelves
-                                .filter(
-                                  (shelf) => shelf.sectionId === section.id,
-                                )
-                                .map((shelf) => (
-                                  <li
-                                    className="border-app-line flex min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2"
-                                    key={shelf.id}
-                                  >
-                                    <span className="min-w-0">
-                                      <span className="text-app-dim block font-mono text-[10px] tracking-[0.12em] uppercase">
-                                        {t('shelfType')}
-                                      </span>
-                                      <span className="block truncate text-sm text-white">
-                                        {shelf.name}
-                                      </span>
-                                      <span className="text-app-muted block truncate text-xs">
-                                        {shelf.code}
-                                        {shelf.partCount == null
-                                          ? null
-                                          : ` · ${t('locationParts', { count: shelf.partCount })}`}
-                                      </span>
-                                    </span>
-                                    <ActionMenu
-                                      label={t('shelfActions', {
-                                        name: shelf.name,
-                                      })}
-                                      actions={[
-                                        {
-                                          key: 'qr',
-                                          label: t('showLocationQr'),
-                                          icon: <ScanLine aria-hidden />,
-                                          onSelect: () =>
-                                            setPreviewLocation({
-                                              location: shelf,
-                                              kind: 'shelf',
-                                            }),
-                                        },
-                                        ...(canManage
-                                          ? [
-                                              {
-                                                key: 'edit',
-                                                label: t('editShelf'),
-                                                icon: <Pencil aria-hidden />,
-                                                onSelect: () => {
-                                                  setError(null)
-                                                  setDraft({
-                                                    name: shelf.name,
-                                                    code: shelf.code,
-                                                  })
-                                                  setEditing(shelf)
-                                                },
-                                              },
-                                              {
-                                                key: 'archive',
-                                                label: t('archiveShelf'),
-                                                icon: <Archive aria-hidden />,
-                                                destructive: true,
-                                                onSelect: () =>
-                                                  setArchiving(shelf),
-                                              },
-                                            ]
-                                          : []),
-                                      ]}
-                                    />
-                                  </li>
-                                ))}
-                            </ul>
-                            {canManage &&
-                            loadedShelves.some(
-                              (shelf) => shelf.sectionId === section.id,
-                            ) ? (
-                              <div className="pt-3">
-                                <Button
-                                  variant="ghost"
-                                  onClick={() => startAddingShelf(section)}
-                                >
-                                  <Plus aria-hidden />
-                                  {t('addShelf')}
-                                </Button>
-                              </div>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )
-            })}
-        </div>
+                          setDraft({ name: section.name, code: section.code })
+                          setEditingSection(section)
+                        },
+                      },
+                      {
+                        key: 'archive',
+                        label: t('archiveSection'),
+                        icon: <Archive aria-hidden />,
+                        destructive: true,
+                        onSelect: () => setArchivingSection(section),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          )}
+          shelfActions={(shelf) => (
+            <ActionMenu
+              label={t('shelfActions', { name: shelf.name })}
+              actions={[
+                {
+                  key: 'qr',
+                  label: t('showLocationQr'),
+                  icon: <ScanLine aria-hidden />,
+                  onSelect: () =>
+                    setPreviewLocation({ location: shelf, kind: 'shelf' }),
+                },
+                ...(canManage
+                  ? [
+                      {
+                        key: 'edit',
+                        label: t('editShelf'),
+                        icon: <Pencil aria-hidden />,
+                        onSelect: () => {
+                          setError(null)
+                          setDraft({ name: shelf.name, code: shelf.code })
+                          setEditing(shelf)
+                        },
+                      },
+                      {
+                        key: 'archive',
+                        label: t('archiveShelf'),
+                        icon: <Archive aria-hidden />,
+                        destructive: true,
+                        onSelect: () => setArchiving(shelf),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          )}
+        />
       ) : null}
       <Sheet
         open={previewLocation !== null}
@@ -2230,7 +2339,7 @@ function WarehouseShelves({
             })
         }}
       />
-    </Card>
+    </section>
   )
 }
 
@@ -5118,8 +5227,34 @@ interface PlacementData {
   byZone: Map<string, number> | null
 }
 
-function PartPlacementView({ partId }: { partId: string }) {
+export function PartPlacementDrawer({
+  partId,
+  onClose,
+  onSaved,
+}: {
+  partId: string
+  onClose: () => void
+  onSaved: () => void
+}) {
+  return <PartPlacementView partId={partId} drawer={{ onClose, onSaved }} />
+}
+
+function PartPlacementView({
+  partId,
+  drawer,
+}: {
+  partId: string
+  drawer?: { onClose: () => void; onSaved: () => void }
+}) {
   const t = useT(placementMessages)
+  const tc = useT(commonMessages)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
   const ti = useT(inventoryMessages)
   const tw = useT(warehouseMessages)
   const to = useT(overviewMessages)
@@ -5209,7 +5344,7 @@ function PartPlacementView({ partId }: { partId: string }) {
   )
 
   const save = async () => {
-    if (!canManage || selected.length === 0) return
+    if (!canManage || saving || selected.length === 0) return
     setSaving(true)
     try {
       setOperationError(null)
@@ -5241,6 +5376,12 @@ function PartPlacementView({ partId }: { partId: string }) {
           ? (currentSectionId ?? undefined)
           : (sectionSelection ?? undefined),
       )
+      if (scope.signal.aborted || !mounted.current) return
+      if (drawer) {
+        drawer.onSaved()
+        drawer.onClose()
+        return
+      }
       setSelection(null)
       setShelfSelection(undefined)
       setSectionSelection(undefined)
@@ -5319,7 +5460,7 @@ function PartPlacementView({ partId }: { partId: string }) {
     ? cabinetPath(targetTenant.slug, 'parts', partId)
     : '/'
 
-  return (
+  const content = (
     <Resource retry={resource.reload} state={resource.state}>
       {({
         warehouses,
@@ -5419,52 +5560,68 @@ function PartPlacementView({ partId }: { partId: string }) {
         }
 
         return (
-          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-              <div className="flex min-w-0 items-center gap-5">
-                <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-                  to={back}
-                >
-                  <ChevronLeft aria-hidden className="size-3.5" />
-                  {t('backToPart')}
-                </Link>
-                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-                  <span>{ti('crumbWarehouse')}</span>
-                  <span aria-hidden className="text-white/20">
-                    /
-                  </span>
-                  <span>{t('crumbParts')}</span>
-                  {part === null ? null : (
-                    <>
-                      <span aria-hidden className="text-white/20">
-                        /
-                      </span>
-                      <span className="text-app-muted">{part.qrCode}</span>
-                    </>
-                  )}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2.5">
-                {canManage ? (
-                  <Button
-                    aria-busy={saving}
-                    className="px-5 text-sm font-bold"
-                    disabled={saving || selected.length === 0}
-                    onClick={() => void save()}
-                    variant="primary"
+          <div
+            className={
+              drawer
+                ? 'type-redesign grid min-w-0 content-start'
+                : 'type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10'
+            }
+          >
+            {!drawer ? (
+              <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+                <div className="flex min-w-0 items-center gap-5">
+                  <Link
+                    className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                    to={back}
                   >
-                    {saving ? t('saving') : t('place')}
-                  </Button>
-                ) : null}
+                    <ChevronLeft aria-hidden className="size-3.5" />
+                    {t('backToPart')}
+                  </Link>
+                  <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                    <span>{ti('crumbWarehouse')}</span>
+                    <span aria-hidden className="text-white/20">
+                      /
+                    </span>
+                    <span>{t('crumbParts')}</span>
+                    {part === null ? null : (
+                      <>
+                        <span aria-hidden className="text-white/20">
+                          /
+                        </span>
+                        <span className="text-app-muted">{part.qrCode}</span>
+                      </>
+                    )}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {canManage ? (
+                    <Button
+                      aria-busy={saving}
+                      className="px-5 text-sm font-bold"
+                      disabled={saving || selected.length === 0}
+                      onClick={() => void save()}
+                      variant="primary"
+                    >
+                      {saving ? t('saving') : t('place')}
+                    </Button>
+                  ) : null}
+                </div>
               </div>
-            </div>
+            ) : null}
 
-            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div
+              className={
+                drawer
+                  ? 'grid min-w-0 gap-5'
+                  : 'mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12'
+              }
+            >
               <div className="min-w-0">
-                <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                  {t('title')}
-                </h1>
+                {!drawer ? (
+                  <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+                    {t('title')}
+                  </h1>
+                ) : null}
                 <p className="text-app-muted mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px]">
                   {part === null ? (
                     <span>{t('partHidden')}</span>
@@ -5499,7 +5656,13 @@ function PartPlacementView({ partId }: { partId: string }) {
               {saved ? <Notice tone="ok">{t('saved')}</Notice> : null}
 
               <div className="flex flex-wrap items-start gap-6">
-                <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-5">
+                <div
+                  className={
+                    drawer
+                      ? 'grid min-w-0 w-full gap-5'
+                      : 'flex min-w-0 flex-[2_1_34rem] flex-col gap-5'
+                  }
+                >
                   <Step
                     hint={t('warehouseHint')}
                     number="01"
@@ -5658,7 +5821,13 @@ function PartPlacementView({ partId }: { partId: string }) {
                           : t('noZonesFound')}
                       </p>
                     ) : house !== null ? (
-                      <ul className="mt-3.5 grid grid-cols-[repeat(auto-fill,minmax(min(100%,8rem),1fr))] gap-2">
+                      <ul
+                        className={
+                          drawer
+                            ? 'mt-3.5 grid gap-2'
+                            : 'mt-3.5 grid grid-cols-[repeat(auto-fill,minmax(min(100%,8rem),1fr))] gap-2'
+                        }
+                      >
                         {shown.map((zone) => {
                           const on = selected.includes(zone.id)
                           const count = partsIn(zone.id)
@@ -5680,7 +5849,9 @@ function PartPlacementView({ partId }: { partId: string }) {
                                   <span className="min-w-0">
                                     <span
                                       className={cn(
-                                        'block truncate text-[14px] font-bold',
+                                        drawer
+                                          ? 'block break-words text-[14px] font-bold'
+                                          : 'block truncate text-[14px] font-bold',
                                         on ? 'text-app-ink' : 'text-app-muted',
                                       )}
                                     >
@@ -5747,156 +5918,194 @@ function PartPlacementView({ partId }: { partId: string }) {
                       title={t('section')}
                       hint={t('sectionHint')}
                     >
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <label
-                          className={cn(
-                            'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
-                            !selectedSectionId
-                              ? 'border-brand bg-brand/[0.08]'
-                              : 'border-app-line hover:border-app-line-2',
-                          )}
-                        >
-                          <input
-                            type="radio"
-                            name="placement-section"
-                            className="peer sr-only"
-                            disabled={!canManage || selected.length === 0}
-                            checked={!selectedSectionId}
-                            onChange={() => {
-                              setSectionSelection(null)
-                              setShelfSelection(null)
-                            }}
-                          />
-                          <span>{t('noSection')}</span>
-                          <span
-                            aria-hidden="true"
-                            className={cn(
-                              'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
-                              !selectedSectionId
-                                ? 'border-brand bg-brand text-app-canvas'
-                                : 'border-app-line-2',
-                            )}
-                          >
-                            {!selectedSectionId ? (
-                              <Check size={15} strokeWidth={3} />
-                            ) : null}
-                          </span>
-                        </label>
-                        {availableSections.map((section) => (
+                      {drawer ? (
+                        <LocationSelect
+                          label={t('section')}
+                          searchLabel={t('sectionSearch')}
+                          noneLabel={t('noSection')}
+                          value={selectedSectionId}
+                          options={availableSections.map((section) => ({
+                            id: section.id,
+                            name: section.name,
+                            code: section.code,
+                            ...(chosen.length > 1
+                              ? { context: section.zoneName }
+                              : {}),
+                          }))}
+                          disabled={!canManage || saving || creating}
+                          onChange={(id) => {
+                            setSectionSelection(id)
+                            setShelfSelection(null)
+                          }}
+                        />
+                      ) : (
+                        <div className="grid gap-2 sm:grid-cols-2">
                           <label
                             className={cn(
                               'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
-                              selectedSectionId === section.id
+                              !selectedSectionId
                                 ? 'border-brand bg-brand/[0.08]'
                                 : 'border-app-line hover:border-app-line-2',
                             )}
-                            key={section.id}
                           >
                             <input
                               type="radio"
                               name="placement-section"
                               className="peer sr-only"
-                              disabled={!canManage}
-                              checked={selectedSectionId === section.id}
+                              disabled={!canManage || selected.length === 0}
+                              checked={!selectedSectionId}
                               onChange={() => {
-                                setSectionSelection(section.id)
+                                setSectionSelection(null)
                                 setShelfSelection(null)
                               }}
                             />
-                            <span>
-                              {section.zoneName} · {section.name}
-                            </span>
+                            <span>{t('noSection')}</span>
                             <span
                               aria-hidden="true"
                               className={cn(
                                 'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
-                                selectedSectionId === section.id
+                                !selectedSectionId
                                   ? 'border-brand bg-brand text-app-canvas'
                                   : 'border-app-line-2',
                               )}
                             >
-                              {selectedSectionId === section.id ? (
+                              {!selectedSectionId ? (
                                 <Check size={15} strokeWidth={3} />
                               ) : null}
                             </span>
                           </label>
-                        ))}
-                      </div>
+                          {availableSections.map((section) => (
+                            <label
+                              className={cn(
+                                'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
+                                selectedSectionId === section.id
+                                  ? 'border-brand bg-brand/[0.08]'
+                                  : 'border-app-line hover:border-app-line-2',
+                              )}
+                              key={section.id}
+                            >
+                              <input
+                                type="radio"
+                                name="placement-section"
+                                className="peer sr-only"
+                                disabled={!canManage}
+                                checked={selectedSectionId === section.id}
+                                onChange={() => {
+                                  setSectionSelection(section.id)
+                                  setShelfSelection(null)
+                                }}
+                              />
+                              <span>
+                                {section.zoneName} · {section.name}
+                              </span>
+                              <span
+                                aria-hidden="true"
+                                className={cn(
+                                  'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                  selectedSectionId === section.id
+                                    ? 'border-brand bg-brand text-app-canvas'
+                                    : 'border-app-line-2',
+                                )}
+                              >
+                                {selectedSectionId === section.id ? (
+                                  <Check size={15} strokeWidth={3} />
+                                ) : null}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
                     </Step>
                   ) : null}
 
                   {hasPhysicalZone && selectedSectionId ? (
                     <Step number="04" title={t('shelf')} hint={t('shelfHint')}>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <label
-                          className={cn(
-                            'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
-                            !selectedShelfId
-                              ? 'border-brand bg-brand/[0.08]'
-                              : 'border-app-line hover:border-app-line-2',
-                          )}
-                        >
-                          <input
-                            type="radio"
-                            name="placement-shelf"
-                            className="peer sr-only"
-                            disabled={!canManage || !selectedSectionId}
-                            checked={!selectedShelfId}
-                            onChange={() => setShelfSelection(null)}
-                          />
-                          <span>{t('noShelf')}</span>
-                          <span
-                            aria-hidden="true"
-                            className={cn(
-                              'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
-                              !selectedShelfId
-                                ? 'border-brand bg-brand text-app-canvas'
-                                : 'border-app-line-2',
-                            )}
-                          >
-                            {!selectedShelfId ? (
-                              <Check size={15} strokeWidth={3} />
-                            ) : null}
-                          </span>
-                        </label>
-                        {availableShelves.map((shelf) => (
+                      {drawer ? (
+                        <LocationSelect
+                          label={t('shelf')}
+                          searchLabel={t('shelfSearch')}
+                          noneLabel={t('noShelf')}
+                          value={selectedShelfId}
+                          options={availableShelves.map((shelf) => ({
+                            id: shelf.id,
+                            name: shelf.name,
+                            code: shelf.code,
+                          }))}
+                          disabled={!canManage || saving || creating}
+                          onChange={setShelfSelection}
+                        />
+                      ) : (
+                        <div className="grid gap-2 sm:grid-cols-2">
                           <label
                             className={cn(
                               'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
-                              selectedShelfId === shelf.id
+                              !selectedShelfId
                                 ? 'border-brand bg-brand/[0.08]'
                                 : 'border-app-line hover:border-app-line-2',
                             )}
-                            key={shelf.id}
                           >
                             <input
                               type="radio"
                               name="placement-shelf"
                               className="peer sr-only"
-                              disabled={!canManage}
-                              checked={selectedShelfId === shelf.id}
-                              onChange={() => setShelfSelection(shelf.id)}
+                              disabled={!canManage || !selectedSectionId}
+                              checked={!selectedShelfId}
+                              onChange={() => setShelfSelection(null)}
                             />
-                            <span>
-                              {shelf.zoneName} · {shelf.sectionName} ·{' '}
-                              {shelf.name}
-                            </span>
+                            <span>{t('noShelf')}</span>
                             <span
                               aria-hidden="true"
                               className={cn(
                                 'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
-                                selectedShelfId === shelf.id
+                                !selectedShelfId
                                   ? 'border-brand bg-brand text-app-canvas'
                                   : 'border-app-line-2',
                               )}
                             >
-                              {selectedShelfId === shelf.id ? (
+                              {!selectedShelfId ? (
                                 <Check size={15} strokeWidth={3} />
                               ) : null}
                             </span>
                           </label>
-                        ))}
-                      </div>
+                          {availableShelves.map((shelf) => (
+                            <label
+                              className={cn(
+                                'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
+                                selectedShelfId === shelf.id
+                                  ? 'border-brand bg-brand/[0.08]'
+                                  : 'border-app-line hover:border-app-line-2',
+                              )}
+                              key={shelf.id}
+                            >
+                              <input
+                                type="radio"
+                                name="placement-shelf"
+                                className="peer sr-only"
+                                disabled={!canManage}
+                                checked={selectedShelfId === shelf.id}
+                                onChange={() => setShelfSelection(shelf.id)}
+                              />
+                              <span>
+                                {shelf.zoneName} · {shelf.sectionName} ·{' '}
+                                {shelf.name}
+                              </span>
+                              <span
+                                aria-hidden="true"
+                                className={cn(
+                                  'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                  selectedShelfId === shelf.id
+                                    ? 'border-brand bg-brand text-app-canvas'
+                                    : 'border-app-line-2',
+                                )}
+                              >
+                                {selectedShelfId === shelf.id ? (
+                                  <Check size={15} strokeWidth={3} />
+                                ) : null}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
                     </Step>
                   ) : null}
 
@@ -5934,121 +6143,114 @@ function PartPlacementView({ partId }: { partId: string }) {
                     </div>
                   </Step>
 
-                  <Card
-                    aside={
-                      <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
-                        {t('records', { count: moves.length })}
-                      </span>
-                    }
-                    bodyClassName="p-0"
-                    className="min-w-0"
-                    title={t('historyTitle')}
-                  >
-                    {moves.length === 0 ? (
-                      <p className="text-app-muted px-6 pt-4 pb-6 text-sm">
-                        {history === null
-                          ? t('historyHidden')
-                          : t('neverMoved')}
-                      </p>
-                    ) : (
-                      <ul className="grid">
-                        {moves.slice(0, 8).map((event) => (
-                          <li
-                            className="border-app-line flex flex-wrap items-center gap-x-3.5 gap-y-1 border-t px-6 py-3"
-                            key={event.id}
-                          >
-                            <span className="text-app-ink w-28 shrink-0 text-[14px] font-semibold">
-                              {historyLabel(event.eventType, locale)}
-                            </span>
-                            <span className="text-app-muted min-w-0 flex-1 text-[13px]">
-                              {historyDetails(event.data, locale).join(' · ')}
-                            </span>
-                            <span className="text-app-dim font-mono text-[13px] whitespace-nowrap">
-                              {date(event.createdAt)}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </Card>
+                  {!drawer ? (
+                    <Card
+                      aside={
+                        <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
+                          {t('records', { count: moves.length })}
+                        </span>
+                      }
+                      bodyClassName="p-0"
+                      className="min-w-0"
+                      title={t('historyTitle')}
+                    >
+                      {moves.length === 0 ? (
+                        <p className="text-app-muted px-6 pt-4 pb-6 text-sm">
+                          {history === null
+                            ? t('historyHidden')
+                            : t('neverMoved')}
+                        </p>
+                      ) : (
+                        <ul className="grid">
+                          {moves.slice(0, 8).map((event) => (
+                            <li
+                              className="border-app-line flex flex-wrap items-center gap-x-3.5 gap-y-1 border-t px-6 py-3"
+                              key={event.id}
+                            >
+                              <span className="text-app-ink w-28 shrink-0 text-[14px] font-semibold">
+                                {historyLabel(event.eventType, locale)}
+                              </span>
+                              <span className="text-app-muted min-w-0 flex-1 text-[13px]">
+                                {historyDetails(event.data, locale).join(' · ')}
+                              </span>
+                              <span className="text-app-dim font-mono text-[13px] whitespace-nowrap">
+                                {date(event.createdAt)}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </Card>
+                  ) : null}
                 </div>
 
-                <section
-                  aria-label={t('newPlacement')}
-                  className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-[18px] border px-5.5 pt-[22px] pb-6"
-                >
-                  <h2 className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
-                    {t('newPlacement')}
-                  </h2>
-                  <div className="border-app-line bg-app-canvas mt-4 rounded-[14px] border p-4">
-                    {chosen.length > 0 ? (
-                      <ul className="grid gap-3 text-[14px]">
-                        {chosen.map((zone) => (
-                          <li className="min-w-0" key={zone.id}>
-                            <span className="text-app-ink font-semibold">
-                              {zone.warehouseName} ·{' '}
-                              {zone.isSystemUnassigned
-                                ? t('warehouseLevel')
-                                : zone.name}
-                            </span>
-                            {selectedSection?.zoneId === zone.id ? (
-                              <span className="text-app-muted block">
-                                {selectedSection.name}
-                                {selectedShelf
-                                  ? ` · ${selectedShelf.name}`
-                                  : ''}
+                {!drawer ? (
+                  <section
+                    aria-label={t('newPlacement')}
+                    className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-[18px] border px-5.5 pt-[22px] pb-6"
+                  >
+                    <h2 className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
+                      {t('newPlacement')}
+                    </h2>
+                    <div className="border-app-line bg-app-canvas mt-4 rounded-[14px] border p-4">
+                      {chosen.length > 0 ? (
+                        <ul className="grid gap-3 text-[14px]">
+                          {chosen.map((zone) => (
+                            <li className="min-w-0" key={zone.id}>
+                              <span className="text-app-ink font-semibold">
+                                {zone.warehouseName} ·{' '}
+                                {zone.isSystemUnassigned
+                                  ? t('warehouseLevel')
+                                  : zone.name}
                               </span>
-                            ) : null}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-app-muted text-[14px]">
-                        {t('noLocationSelected')}
-                      </p>
-                    )}
-                  </div>
-                  {canManage ? (
-                    <Button
-                      aria-busy={saving}
-                      className="mt-5.5 min-h-11.5 w-full text-[15px] font-bold"
-                      disabled={saving || selected.length === 0}
-                      onClick={() => void save()}
-                      variant="primary"
-                    >
-                      {saving ? t('saving') : t('savePlacement')}
-                    </Button>
-                  ) : null}
-                  <p className="text-app-dim mt-3 text-[12px] leading-[1.5]">
-                    {selected.length === 0
-                      ? t('pickOne')
-                      : changed
-                        ? t('replacesAll')
-                        : t('unchanged')}
-                  </p>
-                </section>
+                              {selectedSection?.zoneId === zone.id ? (
+                                <span className="text-app-muted block">
+                                  {selectedSection.name}
+                                  {selectedShelf
+                                    ? ` · ${selectedShelf.name}`
+                                    : ''}
+                                </span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-app-muted text-[14px]">
+                          {t('noLocationSelected')}
+                        </p>
+                      )}
+                    </div>
+                    {canManage ? (
+                      <Button
+                        aria-busy={saving}
+                        className="mt-5.5 min-h-11.5 w-full text-[15px] font-bold"
+                        disabled={saving || selected.length === 0}
+                        onClick={() => void save()}
+                        variant="primary"
+                      >
+                        {saving ? t('saving') : t('savePlacement')}
+                      </Button>
+                    ) : null}
+                    <p className="text-app-dim mt-3 text-[12px] leading-[1.5]">
+                      {selected.length === 0
+                        ? t('pickOne')
+                        : changed
+                          ? t('replacesAll')
+                          : t('unchanged')}
+                    </p>
+                  </section>
+                ) : null}
               </div>
             </div>
-            <FormDialog
-              description={to('newWarehouseHint')}
-              error={createError}
-              onOpenChange={(next) => {
-                if (!next) setCreateMode(null)
-              }}
-              onSubmit={(event) => {
-                event.preventDefault()
-                void createWarehouse()
-              }}
+            <WarehouseEditorSheet
               open={createMode === 'warehouse'}
+              draft={draft}
+              onChange={setDraft}
+              onClose={() => setCreateMode(null)}
+              onSubmit={() => void createWarehouse()}
               pending={creating}
-              submitDisabled={
-                draft.name.trim() === '' || draft.code.trim() === ''
-              }
-              submitLabel={to('addWarehouse')}
-              title={to('newWarehouseTitle')}
-            >
-              <NameAndCode draft={draft} onChange={setDraft} />
-            </FormDialog>
+              error={createError}
+            />
             {createMode === 'zone' && house !== null ? (
               <ZoneEditorSheet
                 eyebrow={houses.find((item) => item.id === house)?.name}
@@ -6062,5 +6264,39 @@ function PartPlacementView({ partId }: { partId: string }) {
         )
       }}
     </Resource>
+  )
+  if (!drawer) return content
+  const pending = saving || creating
+  return (
+    <Sheet
+      open
+      title={t('title')}
+      onOpenChange={(open) => {
+        if (!open && !pending) drawer.onClose()
+      }}
+      footer={
+        <>
+          <Button disabled={pending} onClick={drawer.onClose} type="button">
+            {tc('cancel')}
+          </Button>
+          {canManage ? (
+            <Button
+              aria-busy={saving}
+              disabled={
+                pending ||
+                resource.state.kind !== 'ready' ||
+                selected.length === 0
+              }
+              onClick={() => void save()}
+              variant="primary"
+            >
+              {saving ? t('saving') : t('savePlacement')}
+            </Button>
+          ) : null}
+        </>
+      }
+    >
+      {content}
+    </Sheet>
   )
 }

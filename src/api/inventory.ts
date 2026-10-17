@@ -180,12 +180,38 @@ export const inventoryApi = {
   async getShelves(
     zoneId?: string,
     options: RequestOptions = {},
+    sectionId?: string,
   ): Promise<InventoryShelf[]> {
     return (
       await apiClient.get<InventoryShelf[]>('/inventory/shelves', {
         ...config(options),
-        params: zoneId ? { zoneId } : undefined,
+        params: {
+          ...(zoneId ? { zoneId } : {}),
+          ...(sectionId ? { sectionId } : {}),
+        },
       })
+    ).data
+  },
+  async getSection(
+    sectionId: string,
+    options: RequestOptions = {},
+  ): Promise<InventorySection> {
+    return (
+      await apiClient.get<InventorySection>(
+        `/inventory/sections/${id(sectionId)}`,
+        config(options),
+      )
+    ).data
+  },
+  async getShelf(
+    shelfId: string,
+    options: RequestOptions = {},
+  ): Promise<InventoryShelf> {
+    return (
+      await apiClient.get<InventoryShelf>(
+        `/inventory/shelves/${id(shelfId)}`,
+        config(options),
+      )
     ).data
   },
   async getSections(

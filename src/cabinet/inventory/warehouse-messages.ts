@@ -3,6 +3,25 @@ import { defineMessages } from '@/i18n'
 /** One warehouse: its zones, figures, active session and dialogs. */
 export const warehouseMessages = defineMessages({
   uk: {
+    allSectionParts: 'Усі запчастини секції',
+    zoneBrowseHint:
+      'Виберіть секцію — відкриються її полиці. Натисніть на полицю — відкриється список її запчастин.',
+    sectionBrowseHint:
+      'Натисніть на полицю — відкриються запчастини з вибраним розміщенням. Запчастини без полиці показані окремо.',
+    backToZone: 'До зони',
+    locationUnavailable: 'Місце недоступне або належить іншій секції.',
+    zoneActive: 'Активна',
+    zoneArchived: 'Архівна',
+    zoneStructure: 'Секції та полиці',
+    locationHierarchy: 'Склад → Зона → Секція → Полиця',
+    zoneStructureHint:
+      'У зоні створюйте секції, а в секціях — полиці. Запчастину можна розмістити й у секції без полиці.',
+    backToWarehouse: 'До складу',
+    allZoneParts: 'Усі запчастини зони',
+    systemZoneStructure:
+      '«Без зони» — місце для нерозміщених деталей. Секції та полиці тут не створюються.',
+    archivedZoneStructure:
+      'Зону архівовано. Створення секцій і полиць недоступне.',
     printBlocked: 'Браузер заблокував вікно друку.',
     printFailed: 'Не вдалося підготувати QR-етикетки.',
     zoneRunning: 'триває',
@@ -107,6 +126,25 @@ export const warehouseMessages = defineMessages({
       'Код формується з назви автоматично. За потреби його можна змінити.',
   },
   'en-GB': {
+    allSectionParts: 'All parts in section',
+    zoneBrowseHint:
+      'Choose a section to open its shelves. Select a shelf to view its parts.',
+    sectionBrowseHint:
+      'Select a shelf to view its parts. Parts without a shelf are shown separately.',
+    backToZone: 'Back to zone',
+    locationUnavailable: 'Location unavailable or belongs to another section.',
+    zoneActive: 'Active',
+    zoneArchived: 'Archived',
+    zoneStructure: 'Sections and shelves',
+    locationHierarchy: 'Warehouse → Zone → Section → Shelf',
+    zoneStructureHint:
+      'Create sections within a zone, then shelves within each section. Parts can also be placed in a section without a shelf.',
+    backToWarehouse: 'Back to warehouse',
+    allZoneParts: 'All parts in zone',
+    systemZoneStructure:
+      '“No zone” holds unplaced parts. Sections and shelves cannot be created here.',
+    archivedZoneStructure:
+      'This zone is archived. Creating sections and shelves is unavailable.',
     printBlocked: 'The browser blocked the print window.',
     printFailed: 'Couldn’t prepare the QR labels.',
     zoneRunning: 'in progress',
@@ -210,6 +248,26 @@ export const warehouseMessages = defineMessages({
       'The code follows the name automatically. You can change it if needed.',
   },
   pl: {
+    allSectionParts: 'Wszystkie części sekcji',
+    zoneBrowseHint:
+      'Wybierz sekcję, aby otworzyć jej półki. Wybierz półkę, aby zobaczyć części.',
+    sectionBrowseHint:
+      'Wybierz półkę, aby zobaczyć jej części. Części bez półki są pokazane osobno.',
+    backToZone: 'Do strefy',
+    locationUnavailable:
+      'Lokalizacja jest niedostępna lub należy do innej sekcji.',
+    zoneActive: 'Aktywna',
+    zoneArchived: 'Zarchiwizowana',
+    zoneStructure: 'Sekcje i półki',
+    locationHierarchy: 'Magazyn → Strefa → Sekcja → Półka',
+    zoneStructureHint:
+      'W strefie tworzysz sekcje, a w sekcjach — półki. Część możesz też umieścić w sekcji bez półki.',
+    backToWarehouse: 'Do magazynu',
+    allZoneParts: 'Wszystkie części w strefie',
+    systemZoneStructure:
+      '„Bez strefy” zawiera nieprzypisane części. Nie można tu tworzyć sekcji ani półek.',
+    archivedZoneStructure:
+      'Strefa jest zarchiwizowana. Tworzenie sekcji i półek jest niedostępne.',
     printBlocked: 'Przeglądarka zablokowała okno drukowania.',
     printFailed: 'Nie udało się przygotować etykiet QR.',
     zoneRunning: 'w toku',
