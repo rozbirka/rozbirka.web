@@ -378,6 +378,15 @@ html {
 }
 
 /* Reusable motion keyframes */
+@keyframes location-filter-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @keyframes fade-up {
   from {
     opacity: 0;

@@ -94,3 +94,19 @@ it('exposes scans as read-only management data without scan mutations', () => {
   expect(inventoryApi).not.toHaveProperty('acquireLease')
   expect(inventoryApi).not.toHaveProperty('completeZone')
 })
+
+it('reads one location and scopes shelf listing by its section and zone', async () => {
+  const requests = capture()
+  await inventoryApi.getSection('section/1')
+  await inventoryApi.getShelf('shelf/1')
+  await inventoryApi.getShelves('zone-1', {}, 'section-1')
+  expect(requests.map(({ url }) => url)).toEqual([
+    '/inventory/sections/section%2F1',
+    '/inventory/shelves/shelf%2F1',
+    '/inventory/shelves',
+  ])
+  expect(requests[2]?.params).toEqual({
+    zoneId: 'zone-1',
+    sectionId: 'section-1',
+  })
+})

@@ -128,6 +128,10 @@ export interface PartSearchRequest {
   carIds?: string[]
   warehouseIds?: string[]
   zoneIds?: string[]
+  sectionIds?: string[]
+  shelfIds?: string[]
+  missingShelf?: boolean | null
+  missingSection?: boolean | null
   conditions?: PartCondition[]
   originTypes?: PartOrigin[]
   compatibility?: PartCompatibilityFilter

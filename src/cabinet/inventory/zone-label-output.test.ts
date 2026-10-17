@@ -20,7 +20,11 @@ it('encodes the raw zone code and renders a thermal-label print sheet', async ()
 
   expect(qr.toString).toHaveBeenCalledWith(
     'ZONE-1',
-    expect.objectContaining({ type: 'svg', errorCorrectionLevel: 'M' }),
+    expect.objectContaining({
+      type: 'svg',
+      errorCorrectionLevel: 'H',
+      margin: 0,
+    }),
   )
   expect(html).toContain('@page { size: 40mm 58mm; margin: 0; }')
   expect(html).toContain('A &lt; 1')
@@ -49,4 +53,61 @@ it('prints label text in the given document language', async () => {
 
   const polish = await buildZoneLabelHtml([zone], 'pl')
   expect(polish).toContain('<title>Etykiety QR stref</title>')
+})
+
+it('prints the type and full location path like the mobile label', async () => {
+  qr.toString.mockClear()
+  qr.toString.mockResolvedValue('<svg>qr</svg>')
+  const html = await buildZoneLabelHtml([
+    {
+      id: 'w',
+      qrCode: 'inventory-warehouse:1',
+      zoneName: 'Основний',
+      zoneCode: 'main',
+      warehouseName: 'Основний',
+      kind: 'warehouse',
+      path: ['Основний'],
+    },
+    {
+      id: 'z',
+      qrCode: 'inventory-zone:2',
+      zoneName: 'A',
+      zoneCode: 'a',
+      warehouseName: 'Основний',
+      kind: 'zone',
+      path: ['Основний', 'A'],
+    },
+    {
+      id: 's',
+      qrCode: 'inventory-section:3',
+      zoneName: 'Стелаж',
+      zoneCode: 'rack',
+      warehouseName: 'Основний',
+      kind: 'section',
+      path: ['Основний', 'A', 'Стелаж'],
+    },
+    {
+      id: 'h',
+      qrCode: 'inventory-shelf:4',
+      zoneName: 'Полиця',
+      zoneCode: 'shelf',
+      warehouseName: 'Основний',
+      kind: 'shelf',
+      path: ['Основний', 'A', 'Стелаж', 'Полиця'],
+    },
+  ])
+
+  expect(qr.toString).toHaveBeenCalledTimes(4)
+  expect(html).toContain('Склад')
+  expect(html).toContain('Зона')
+  expect(html).toContain('Секція')
+  expect(html).toContain('Полиця')
+  expect(html).toContain('<small>Основний · A · Стелаж · Полиця</small>')
+  const labels = new DOMParser()
+    .parseFromString(html, 'text/html')
+    .querySelectorAll('.label')
+  expect(labels.item(0)?.querySelector('small')?.textContent).toBe('Основний')
+  expect(labels.item(1)?.querySelector('small')?.textContent).toBe(
+    'Основний · A',
+  )
 })

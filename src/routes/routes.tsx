@@ -120,6 +120,8 @@ const releasedCabinetRoutes: Partial<Record<CabinetModuleKey, RouteObject>> = {
 const commerceDetailRoutes: RouteObject[] = [
   ...[
     'inventory/warehouses/:warehouseId',
+    'inventory/zones/:zoneId',
+    'inventory/sections/:sectionId',
     'inventory/sessions/new',
     'inventory/sessions/:sessionId',
     'inventory/sessions/:sessionId/results',

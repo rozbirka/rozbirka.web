@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import {
   Link,
   useLocation,
@@ -63,6 +71,7 @@ import {
   type Translate,
 } from '@/i18n'
 import { partsListMessages } from './parts-list-messages'
+import { PartLocationFilters, WITHOUT_LOCATION } from './PartLocationFilters'
 import { partDetailMessages } from './part-detail-messages'
 import { partFormMessages } from './part-form-messages'
 import { CompatibilityRowCard, ConditionTile } from './PartFormChoices'
@@ -105,6 +114,14 @@ import {
 } from '../module-registry'
 import { evaluateModuleAccess, type ModuleAccessDecision } from '../policy'
 import { inventoryApi, type PartInventoryZone } from '@/api/inventory'
+import { PartPlacementPicker } from '../inventory/PartPlacementPicker'
+import {
+  emptyPartPlacement,
+  type PartPlacement,
+} from '../inventory/part-placement-state'
+import { usePlacementOptions } from '../inventory/usePlacementOptions'
+import { placementMessages } from '../inventory/part-placement-messages'
+import { placementMessages as movePlacementMessages } from '../inventory/placement-messages'
 import { normalizeApiProblem } from '@/api/errors'
 import type { ApiProblem } from '@/api/contracts'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
@@ -134,6 +151,12 @@ import { usePriceSlots, type PriceSlots } from '../currency/use-price-slots'
 import { amountPrecisionError } from '../currency/amount-precision'
 import { isLostResponse, lostResponseMessages } from '../lost-response'
 
+const PartPlacementDrawer = lazy(() =>
+  import('../inventory/InventoryScreen').then((module) => ({
+    default: module.PartPlacementDrawer,
+  })),
+)
+
 const partStatuses = new Set(['available', 'reserved', 'sold'])
 /** Every group the filter panel draws; the server counts each one for us. */
 const FACET_DIMENSIONS = [
@@ -151,7 +174,7 @@ const positiveInteger = (value: string | null, fallback: number) => {
 }
 const pageSizeParam = (value: string | null, fallback: number) => {
   const parsed = positiveInteger(value, fallback)
-  return parsed <= 100 ? parsed : fallback
+  return parsed !== 10 && parsed <= 100 ? parsed : fallback
 }
 const statusPresentation = (
   status: string,
@@ -356,6 +379,14 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       modelId: one('model'),
       warehouseId: one('warehouse'),
       zoneId: one('zone'),
+      sectionId: one('without_section') === '1' ? '' : one('section'),
+      shelfId:
+        one('without_section') === '1' || one('without_shelf') === '1'
+          ? ''
+          : one('shelf'),
+      withoutSection: one('without_section') === '1',
+      withoutShelf:
+        one('without_section') !== '1' && one('without_shelf') === '1',
       page: positiveInteger(searchParams.get('page'), 1),
       pageSize: pageSizeParam(searchParams.get('per_page'), 30),
       carIds: normalizedIds(searchParams.getAll('car_ids')),
@@ -376,6 +407,10 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         : {}),
       ...(filters.warehouseId ? { warehouseIds: [filters.warehouseId] } : {}),
       ...(filters.zoneId ? { zoneIds: [filters.zoneId] } : {}),
+      ...(filters.sectionId ? { sectionIds: [filters.sectionId] } : {}),
+      ...(filters.shelfId ? { shelfIds: [filters.shelfId] } : {}),
+      ...(filters.withoutSection ? { missingSection: true } : {}),
+      ...(filters.withoutShelf ? { missingShelf: true } : {}),
       ...(filters.carIds.length > 0 ? { carIds: filters.carIds } : {}),
       ...(filters.makeId || filters.modelId
         ? {
@@ -476,6 +511,8 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       'model',
       'warehouse',
       'zone',
+      'section',
+      'shelf',
     ] as const) {
       const raw = searchParams.get(name)
       if (raw === null) continue
@@ -487,6 +524,14 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       next.delete('origin')
       next.set('page', '1')
     }
+    for (const name of ['without_section', 'without_shelf']) {
+      if (next.has(name) && next.get(name) !== '1') next.delete(name)
+    }
+    if (filters.withoutSection) {
+      next.delete('section')
+      next.delete('shelf')
+      next.delete('without_shelf')
+    } else if (filters.withoutShelf) next.delete('shelf')
     const rawStatus = searchParams.get('status')
     if (rawStatus !== null && !partStatuses.has(rawStatus))
       next.delete('status')
@@ -583,6 +628,8 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
             links={links}
             requireLatestMutation={requireLatestMutation}
             tenantSlug={cabinet.targetTenant?.slug ?? ''}
+            onPlacementSaved={() => setReloadToken((value) => value + 1)}
+            placementRevision={reloadToken}
           />
         ) : null}
         <PartEdit
@@ -604,6 +651,8 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         links={links}
         requireLatestMutation={requireLatestMutation}
         tenantSlug={cabinet.targetTenant?.slug ?? ''}
+        onPlacementSaved={() => setReloadToken((value) => value + 1)}
+        placementRevision={reloadToken}
       />
     )
 
@@ -651,6 +700,10 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       ['model', filters.modelId],
       ['warehouse', filters.warehouseId],
       ['zone', filters.zoneId],
+      ['section', filters.sectionId],
+      ['shelf', filters.shelfId],
+      ['without_section', filters.withoutSection ? '1' : ''],
+      ['without_shelf', filters.withoutShelf ? '1' : ''],
     ] as const
   )
     .filter(([, value]) => value !== '')
@@ -810,37 +863,60 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
             </FilterGroup>
 
             <FilterGroup label={t('filterPlacement')}>
-              <SelectInput
-                aria-label={t('warehouse')}
-                name="warehouse"
-                onChange={(event) => {
+              <PartLocationFilters
+                owner={`${cabinet.snapshot?.tenantId}:${cabinet.snapshot?.userId}:${cabinet.snapshot?.generation}`}
+                enabled={links.inventory}
+                warehouseId={filters.warehouseId}
+                fallbackWarehouses={facets?.warehouses ?? []}
+                fallbackZones={facets?.zones ?? []}
+                zoneId={filters.zoneId}
+                sectionId={filters.sectionId}
+                shelfId={filters.shelfId}
+                withoutSection={filters.withoutSection}
+                withoutShelf={filters.withoutShelf}
+                onChange={(level, value) => {
                   const next = new URLSearchParams(searchParams)
-                  if (event.target.value)
-                    next.set('warehouse', event.target.value)
-                  else next.delete('warehouse')
-                  next.delete('zone')
+                  if (level === 'warehouse' || level === 'zone') {
+                    const descendants =
+                      level === 'warehouse'
+                        ? [
+                            'zone',
+                            'section',
+                            'shelf',
+                            'without_section',
+                            'without_shelf',
+                          ]
+                        : [
+                            'section',
+                            'shelf',
+                            'without_section',
+                            'without_shelf',
+                          ]
+                    for (const name of descendants) next.delete(name)
+                    if (value) next.set(level, value)
+                    else next.delete(level)
+                  } else if (level === 'section') {
+                    for (const name of [
+                      'section',
+                      'shelf',
+                      'without_section',
+                      'without_shelf',
+                    ])
+                      next.delete(name)
+                    if (value === WITHOUT_LOCATION)
+                      next.set('without_section', '1')
+                    else if (value) next.set('section', value)
+                  } else {
+                    next.delete('shelf')
+                    next.delete('without_shelf')
+                    if (value === WITHOUT_LOCATION)
+                      next.set('without_shelf', '1')
+                    else if (value) next.set('shelf', value)
+                  }
                   next.delete('page')
                   setSearchParams(next)
                 }}
-                value={filters.warehouseId}
-              >
-                <option value="">{t('warehouseAll')}</option>
-                {facetOptions('warehouses')}
-              </SelectInput>
-              <SelectInput
-                aria-label={t('zone')}
-                className={filters.warehouseId ? undefined : 'opacity-55'}
-                disabled={!filters.warehouseId}
-                name="zone"
-                onChange={(event) => updateFilter('zone', event.target.value)}
-                title={
-                  filters.warehouseId ? undefined : t('chooseWarehouseFirst')
-                }
-                value={filters.zoneId}
-              >
-                <option value="">{t('zoneAll')}</option>
-                {facetOptions('zones')}
-              </SelectInput>
+              />
             </FilterGroup>
 
             <FilterGroup label={t('filterCondition')}>
@@ -1218,6 +1294,8 @@ function PartDetailScreen({
   links,
   requireLatestMutation,
   tenantSlug,
+  onPlacementSaved,
+  placementRevision,
 }: {
   detail: PartDetail | null
   history: Awaited<ReturnType<typeof partsApi.history>> | null
@@ -1234,8 +1312,12 @@ function PartDetailScreen({
     typeof useLatestMutationGuard
   >['requireLatestMutation']
   tenantSlug: string
+  onPlacementSaved: () => void
+  placementRevision: number
 }) {
   const navigate = useNavigate()
+  const [placementOpen, setPlacementOpen] = useState(false)
+  const tPlacement = useT(movePlacementMessages)
   const t = useT(partDetailMessages)
   const tc = useT(commonMessages)
   const { locale } = useLocale()
@@ -1309,7 +1391,7 @@ function PartDetailScreen({
       },
     )
     return () => controller.abort()
-  }, [links.inventory, partId])
+  }, [links.inventory, partId, placementRevision])
   // Every order this part is promised to, the current one included: the card
   // shows one list rather than singling out the order that was opened last.
   const reservations = detail?.reservations ?? []
@@ -1396,6 +1478,27 @@ function PartDetailScreen({
 
   return (
     <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+      {placementOpen && links.inventory ? (
+        <Suspense
+          fallback={
+            <Sheet
+              open
+              title={tPlacement('title')}
+              onOpenChange={(open) => {
+                if (!open) setPlacementOpen(false)
+              }}
+            >
+              <SkeletonRows rows={3} />
+            </Sheet>
+          }
+        >
+          <PartPlacementDrawer
+            partId={partId}
+            onClose={() => setPlacementOpen(false)}
+            onSaved={onPlacementSaved}
+          />
+        </Suspense>
+      ) : null}
       <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
         <div className="flex min-w-0 items-center gap-5">
           <Link
@@ -1542,7 +1645,7 @@ function PartDetailScreen({
         ) : (
           <>
             <div className="mt-4 flex flex-wrap items-start gap-6">
-              <div className="flex min-w-[320px] flex-[1_1_560px] flex-col gap-6">
+              <div className="flex min-w-0 sm:min-w-[320px] flex-[1_1_560px] flex-col gap-6">
                 <Card
                   aside={
                     <span className="text-app-dim font-mono text-[12px] tracking-[0.1em] uppercase">
@@ -1550,7 +1653,7 @@ function PartDetailScreen({
                     </span>
                   }
                   bodyClassName="p-0"
-                  className="min-w-[320px] flex-[1_1_620px]"
+                  className="min-w-0 sm:min-w-[320px] flex-[1_1_620px]"
                   headerClassName="pb-4"
                   title={t('photos')}
                 >
@@ -1572,7 +1675,7 @@ function PartDetailScreen({
                   />
                 </Card>
               </div>
-              <div className="flex min-w-[320px] flex-[1_1_440px] flex-col gap-6">
+              <div className="flex min-w-0 sm:min-w-[320px] flex-[1_1_440px] flex-col gap-6">
                 <Card
                   aside={
                     canManage && detail.effectiveSalePrice !== null ? (
@@ -1744,12 +1847,10 @@ function PartDetailScreen({
                     </div>
                     {links.inventory ? (
                       <Button
-                        asChild
                         className="min-h-9 px-3 text-[12px] font-bold"
+                        onClick={() => setPlacementOpen(true)}
                       >
-                        <Link to={`${base}/${partId}/inventory`}>
-                          {t('move')}
-                        </Link>
+                        {t('move')}
                       </Button>
                     ) : null}
                   </div>
@@ -2051,7 +2152,7 @@ function PartDetailScreen({
             ) : null}
 
             <div className="flex flex-wrap items-start gap-6">
-              <div className="flex min-w-[320px] flex-[1_1_440px] flex-col gap-6">
+              <div className="flex min-w-0 sm:min-w-[320px] flex-[1_1_440px] flex-col gap-6">
                 <Card
                   aside={
                     compat === null ? null : (
@@ -2130,7 +2231,7 @@ function PartDetailScreen({
                   ) : null}
                 </Card>
               </div>
-              <div className="flex min-w-[320px] flex-[1_1_440px] flex-col gap-6">
+              <div className="flex min-w-0 sm:min-w-[320px] flex-[1_1_440px] flex-col gap-6">
                 <Card
                   aside={
                     history === null || history.events.length === 0 ? null : (
@@ -2320,6 +2421,7 @@ interface PartFormValues {
   oemCode: string
   partType: string
   desiredSalePrice: string
+  placement?: PartPlacement
 }
 
 const emptyPartForm: PartFormValues = {
@@ -3355,10 +3457,18 @@ function PartForm({
   const [searchParams] = useSearchParams()
   const cabinet = useCabinet()
   const t = useT(partFormMessages)
+  const tPlacement = useT(placementMessages)
   const tc = useT(commonMessages)
   const toast = useOptionalToast()
   const { locale } = useLocale()
   const base = `/app/${cabinet.targetTenant?.slug ?? ''}/parts`
+  const canPlace =
+    allowedToView(cabinetModules.inventory, cabinet) &&
+    Boolean(cabinet.snapshot?.permissions.has('inventory.zones.manage'))
+  const placementOptions = usePlacementOptions(
+    canPlace,
+    cabinet.targetTenant?.id,
+  )
   // Coming back from creating a car or intake restores what was typed.
   const [draft] = useState(() =>
     searchParams.get(DRAFT_PARAM) === '1'
@@ -3587,8 +3697,26 @@ function PartForm({
           resolved.items,
         )
       }
+      const placement = values.placement
+      let placementFailed = false
+      if (canPlace && placement?.zoneId) {
+        try {
+          await inventoryApi.replacePartZones(
+            created.id,
+            [placement.zoneId],
+            { signal: scope.signal },
+            placement.shelfId || undefined,
+            placement.sectionId || undefined,
+          )
+        } catch {
+          placementFailed = true
+        }
+      }
       guard.afterSave(pricing)
-      toast?.show({ tone: 'ok', message: t('created') })
+      toast?.show({
+        tone: placementFailed ? 'danger' : 'ok',
+        message: placementFailed ? tPlacement('saveFailed') : t('created'),
+      })
       void navigate(
         cabinetPath(cabinet.targetTenant!.slug, 'parts', created.id),
         {
@@ -3690,6 +3818,24 @@ function PartForm({
           values={values}
           variant="plain"
         />
+        {canPlace ? (
+          <SectionPanel
+            title={
+              <span className="flex items-baseline gap-2.5">
+                <span className="text-app-dim font-mono text-[11px]">06</span>
+                {tPlacement('title')}
+              </span>
+            }
+            description={tPlacement('hint')}
+            variant="plain"
+          >
+            <PartPlacementPicker
+              value={values.placement ?? emptyPartPlacement}
+              onChange={(placement) => setValues({ ...values, placement })}
+              options={placementOptions}
+            />
+          </SectionPanel>
+        ) : null}
         <PartMediaFields
           deferUploads
           items={mediaItems}
@@ -3697,7 +3843,9 @@ function PartForm({
           setItems={setMediaItems}
           title={
             <span className="flex items-baseline gap-2.5">
-              <span className="text-app-dim font-mono text-[11px]">06</span>
+              <span className="text-app-dim font-mono text-[11px]">
+                {canPlace ? '07' : '06'}
+              </span>
               {t('photos')}
             </span>
           }
