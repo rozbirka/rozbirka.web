@@ -15,7 +15,7 @@ export interface InventorySection {
   code: string
   qrCode: string
   isActive: boolean
-  partCount: number
+  partCount: number | null
 }
 export interface InventoryShelf {
   id: string
@@ -29,7 +29,7 @@ export interface InventoryShelf {
   isActive: boolean
   sectionId: string
   sectionName: string
-  partCount: number
+  partCount: number | null
 }
 export type InventorySession = components['schemas']['InventorySessionDto']
 export type InventorySessionResults =
@@ -75,6 +75,8 @@ export interface InventoryZoneQuery extends RequestOptions {
   warehouseId?: string
   activeOnly?: boolean
 }
+
+type LocationListOptions = RequestOptions & { includePartCounts?: boolean }
 
 const config = ({ signal }: RequestOptions = {}) =>
   signal ? { signal } : undefined
@@ -179,7 +181,7 @@ export const inventoryApi = {
   },
   async getShelves(
     zoneId?: string,
-    options: RequestOptions = {},
+    options: LocationListOptions = {},
     sectionId?: string,
   ): Promise<InventoryShelf[]> {
     return (
@@ -188,6 +190,7 @@ export const inventoryApi = {
         params: {
           ...(zoneId ? { zoneId } : {}),
           ...(sectionId ? { sectionId } : {}),
+          includePartCounts: options.includePartCounts ?? false,
         },
       })
     ).data
@@ -216,12 +219,15 @@ export const inventoryApi = {
   },
   async getSections(
     zoneId?: string,
-    options: RequestOptions = {},
+    options: LocationListOptions = {},
   ): Promise<InventorySection[]> {
     return (
       await apiClient.get<InventorySection[]>('/inventory/sections', {
         ...config(options),
-        params: zoneId ? { zoneId } : undefined,
+        params: {
+          ...(zoneId ? { zoneId } : {}),
+          includePartCounts: options.includePartCounts ?? false,
+        },
       })
     ).data
   },
