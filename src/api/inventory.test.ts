@@ -108,5 +108,24 @@ it('reads one location and scopes shelf listing by its section and zone', async 
   expect(requests[2]?.params).toEqual({
     zoneId: 'zone-1',
     sectionId: 'section-1',
+    includePartCounts: false,
   })
+})
+
+it('omits part counts for every location list and allows explicit detail consumers to opt in', async () => {
+  const requests = capture()
+  await inventoryApi.getSections('zone-1', { includePartCounts: false })
+  await inventoryApi.getShelves(
+    'zone-1',
+    { includePartCounts: false },
+    'section-1',
+  )
+  await inventoryApi.getSections('zone-1')
+  await inventoryApi.getShelves(undefined, { includePartCounts: true })
+  expect(requests.map(({ params }) => params as unknown)).toEqual([
+    { zoneId: 'zone-1', includePartCounts: false },
+    { zoneId: 'zone-1', sectionId: 'section-1', includePartCounts: false },
+    { zoneId: 'zone-1', includePartCounts: false },
+    { includePartCounts: true },
+  ])
 })

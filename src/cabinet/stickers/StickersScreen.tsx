@@ -2,13 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Download, Minus, Plus, Printer, Share2 } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { partsApi, type PartListItem } from '@/api/parts'
-import {
-  Button,
-  Notice,
-  PageBody,
-  Pagination,
-  SearchInput,
-} from '@/components/app'
+import { Button, Notice, Pagination, SearchInput } from '@/components/app'
 import { stickersApi } from '@/api/stickers'
 import { useTenantSettings } from '@/auth/useTenantSettings'
 import { useT } from '@/i18n'
@@ -24,6 +18,12 @@ import {
   type RenderedSticker,
 } from './sticker-output'
 import { stickersMessages } from './messages'
+import {
+  StickerWorkspace,
+  StickerListPanel,
+  StickerSelectionRow,
+} from './StickerWorkspace'
+import { StickerSheetPreview } from './StickerSheetPreview'
 
 interface QueueItem {
   id: string
@@ -484,19 +484,13 @@ function TenantStickerQueue({
     setPreview([])
   }
   return (
-    <PageBody className="gap-6 pb-8">
-      <header>
-        <h1 className="text-[clamp(34px,4vw,48px)] leading-none font-extrabold tracking-[-0.035em] text-white">
-          {t('title')}
-        </h1>
-        <p className="text-app-muted mt-3 max-w-3xl text-[14px] leading-6">
-          {t('subtitle')}
-        </p>
-      </header>
-      {!scope ? <Notice tone="danger">{t('noScope')}</Notice> : null}
-      <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border">
-          <div className="border-app-line border-b p-4 sm:p-5">
+    <StickerWorkspace
+      title={t('title')}
+      subtitle={t('subtitle')}
+      notice={!scope ? <Notice tone="danger">{t('noScope')}</Notice> : null}
+      list={
+        <StickerListPanel
+          search={
             <SearchInput
               aria-label={t('searchLabel')}
               className="min-h-14 rounded-[16px]"
@@ -508,13 +502,14 @@ function TenantStickerQueue({
               placeholder={t('searchPlaceholder')}
               value={search}
             />
-          </div>
-
-          <div className="border-app-line flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5">
-            <p className="text-app-muted text-[13px] tabular-nums">
-              {t('selectedSummary', { objects: queue.length, stickers: total })}
-            </p>
-            <div className="flex flex-wrap gap-2">
+          }
+          summary={t('selectedSummary', {
+            objects: queue.length,
+            stickers: total,
+          })}
+          actions={
+            <>
+              {' '}
               <Button
                 className="min-h-9 px-3 text-[12.5px]"
                 disabled={
@@ -531,9 +526,19 @@ function TenantStickerQueue({
               >
                 {t('clear')}
               </Button>
-            </div>
-          </div>
-
+            </>
+          }
+          footer={
+            <Pagination
+              label={t('pagination')}
+              onPage={setPartsPage}
+              page={partsPage}
+              pageSize={PARTS_PAGE_SIZE}
+              total={partsTotal}
+              totalPages={partsTotalPages}
+            />
+          }
+        >
           {partsUnavailable ? (
             <div className="p-5">
               <Notice tone="danger">{t('partsLoadFailed')}</Notice>
@@ -550,43 +555,31 @@ function TenantStickerQueue({
                 ? `${part.car.make} ${part.car.model} · ${String(part.car.year)}`
                 : t('noCar')
               return (
-                <li
-                  aria-label={t('partItem', { name: part.name })}
-                  className={
-                    selected
-                      ? 'cursor-pointer bg-white/[0.035] shadow-[inset_2px_0_0_var(--color-brand)]'
-                      : 'cursor-pointer transition-colors hover:bg-white/[0.025]'
-                  }
+                <StickerSelectionRow
                   key={part.id}
-                  onClick={() => togglePart(part)}
-                >
-                  <div className="grid min-h-[72px] grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:px-5">
-                    <input
-                      aria-label={part.name}
-                      checked={selected}
-                      className="accent-brand pointer-events-none size-[18px]"
-                      disabled={!canGenerate || partsUnavailable}
-                      readOnly
-                      type="checkbox"
-                    />
-                    <div className="min-w-0">
-                      <p className="truncate text-[14px] font-bold text-white">
-                        {part.name}
-                      </p>
-                      <p className="text-app-muted mt-1 truncate text-[12.5px]">
-                        {vehicle}
-                        <span
-                          className={
-                            part.quantityAvailable > 0
-                              ? 'text-state-ok ml-2'
-                              : 'text-state-danger ml-2'
-                          }
-                        >
-                          {t('available', { count: part.quantityAvailable })}
-                        </span>
-                      </p>
-                    </div>
-                    {selected && queued ? (
+                  label={t('partItem', { name: part.name })}
+                  checkboxLabel={part.name}
+                  selected={selected}
+                  disabled={!canGenerate || partsUnavailable}
+                  onToggle={() => togglePart(part)}
+                  name={part.name}
+                  code={part.externalCode ?? null}
+                  detail={
+                    <>
+                      {vehicle}
+                      <span
+                        className={
+                          part.quantityAvailable > 0
+                            ? 'text-state-ok ml-2'
+                            : 'text-state-danger ml-2'
+                        }
+                      >
+                        {t('available', { count: part.quantityAvailable })}
+                      </span>
+                    </>
+                  }
+                  controls={
+                    selected && queued ? (
                       <div
                         className="border-app-line-2 bg-app-canvas col-start-2 flex h-9 w-fit items-center rounded-[10px] border sm:col-start-auto"
                         onClick={(event) => event.stopPropagation()}
@@ -616,134 +609,63 @@ function TenantStickerQueue({
                           <Plus aria-hidden className="size-3.5" />
                         </button>
                       </div>
-                    ) : (
-                      <span className="hidden sm:block" />
-                    )}
-                    <span className="text-app-dim hidden max-w-28 truncate text-right font-mono text-[12.5px] sm:block">
-                      {part.externalCode ?? '—'}
-                    </span>
-                  </div>
-                </li>
+                    ) : null
+                  }
+                />
               )
             })}
           </ul>
-          <Pagination
-            label={t('pagination')}
-            onPage={setPartsPage}
-            page={partsPage}
-            pageSize={PARTS_PAGE_SIZE}
-            total={partsTotal}
-            totalPages={partsTotalPages}
-          />
-        </section>
-
-        <section
-          aria-label={t('sheetLabel')}
-          className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border xl:sticky xl:top-5"
-        >
-          <div className="border-app-line flex items-center justify-between gap-3 border-b px-5 py-4">
-            <h2 className="font-mono text-[11.5px] tracking-[0.14em] text-white uppercase">
-              {t('sheet')}
-            </h2>
-            <span className="text-app-dim text-[12px]">{t('preview')}</span>
-          </div>
-          <div className="p-5">
-            <div className="grid min-h-[310px] grid-cols-2 gap-1.5 rounded-[16px] bg-[#eee] p-3">
-              {Array.from({ length: 6 }, (_, index) => {
-                const sticker = previewCards[index]
-                return sticker ? (
-                  <article
-                    aria-label={t('previewSticker', { name: sticker.name })}
-                    className="grid min-h-[88px] grid-cols-[42px_minmax(0,1fr)] content-center gap-2 overflow-hidden rounded-[7px] border border-black/10 bg-white p-2 text-black"
-                    key={`${sticker.id}-${String(index)}`}
+        </StickerListPanel>
+      }
+      preview={
+        <StickerSheetPreview
+          cards={previewCards}
+          objects={queue.length}
+          total={total}
+          actions={
+            <>
+              {' '}
+              <Button
+                aria-busy={busy}
+                className="mt-5 w-full justify-center"
+                disabled={!queue.length || !canGenerate || busy}
+                onClick={() =>
+                  preview.length ? void print() : void generate()
+                }
+                variant="primary"
+              >
+                <Printer aria-hidden />
+                {busy
+                  ? t('preparing')
+                  : preview.length
+                    ? t('print', { count: total })
+                    : t('prepare', { count: total })}
+              </Button>
+              {preview.length ? (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <Button
+                    className="min-w-0 px-2.5 text-[12.5px]"
+                    disabled={busy}
+                    onClick={() => void download()}
                   >
-                    {sticker.qrSvg ? (
-                      <div
-                        aria-label={t('qrCode', { name: sticker.name })}
-                        className="grid size-[42px] place-items-center overflow-hidden bg-white [&>svg]:block [&>svg]:size-full"
-                        dangerouslySetInnerHTML={{ __html: sticker.qrSvg }}
-                        role="img"
-                      />
-                    ) : (
-                      <div className="grid size-[42px] place-items-center rounded-[3px] bg-black font-mono text-[8px] text-white">
-                        QR
-                      </div>
-                    )}
-                    <div className="min-w-0 self-center">
-                      <p className="line-clamp-2 text-[9.5px] leading-[1.2] font-extrabold">
-                        {sticker.name}
-                      </p>
-                      {sticker.detail ? (
-                        <p className="mt-1 line-clamp-2 text-[7.5px] leading-[1.25] text-black/55">
-                          {sticker.detail}
-                        </p>
-                      ) : null}
-                    </div>
-                  </article>
-                ) : (
-                  <div
-                    className="min-h-[88px] rounded-[7px] border border-dashed border-black/10 bg-black/[0.025]"
-                    key={`empty-${String(index)}`}
-                  />
-                )
-              })}
-            </div>
-
-            <p className="text-app-dim mt-3 text-center text-[12px] leading-5">
-              {t('sheetHint')}
-            </p>
-
-            <dl className="mt-5 grid gap-2.5 text-[13px]">
-              <div className="flex items-center justify-between gap-4">
-                <dt className="text-app-muted">{t('selectedObjects')}</dt>
-                <dd className="font-mono text-white tabular-nums">
-                  {queue.length}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <dt className="text-app-muted">{t('stickersCount')}</dt>
-                <dd className="font-mono text-white tabular-nums">{total}</dd>
-              </div>
-            </dl>
-
-            <Button
-              aria-busy={busy}
-              className="mt-5 w-full justify-center"
-              disabled={!queue.length || !canGenerate || busy}
-              onClick={() => (preview.length ? void print() : void generate())}
-              variant="primary"
-            >
-              <Printer aria-hidden />
-              {busy
-                ? t('preparing')
-                : preview.length
-                  ? t('print', { count: total })
-                  : t('prepare', { count: total })}
-            </Button>
-            {preview.length ? (
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <Button
-                  className="min-w-0 px-2.5 text-[12.5px]"
-                  disabled={busy}
-                  onClick={() => void download()}
-                >
-                  <Download aria-hidden />
-                  {t('download')}
-                </Button>
-                <Button
-                  className="min-w-0 px-2.5 text-[12.5px]"
-                  disabled={busy}
-                  onClick={() => void share()}
-                >
-                  <Share2 aria-hidden />
-                  {t('share')}
-                </Button>
-              </div>
-            ) : null}
-          </div>
-        </section>
-      </div>
-
+                    <Download aria-hidden />
+                    {t('download')}
+                  </Button>
+                  <Button
+                    className="min-w-0 px-2.5 text-[12.5px]"
+                    disabled={busy}
+                    onClick={() => void share()}
+                  >
+                    <Share2 aria-hidden />
+                    {t('share')}
+                  </Button>
+                </div>
+              ) : null}
+            </>
+          }
+        />
+      }
+    >
       {!canGenerate ? (
         <p className="text-app-dim text-[13.5px]" role="status">
           {generationDecision === 'subscription-blocked'
@@ -756,6 +678,6 @@ function TenantStickerQueue({
         </p>
       ) : null}
       {error ? <Notice tone="danger">{error}</Notice> : null}
-    </PageBody>
+    </StickerWorkspace>
   )
 }

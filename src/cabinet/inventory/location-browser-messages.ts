@@ -1,6 +1,13 @@
 import { defineMessages } from '@/i18n'
 export const locationBrowserMessages = defineMessages({
   uk: {
+    printSections: 'Друк стікерів секцій',
+    printShelves: 'Друк стікерів полиць',
+    zoneActions: 'Дії із зоною {name}',
+    chooseShelfToEdit: 'Натисніть на полицю у списку, щоб відредагувати її.',
+    editShelfName: 'Редагувати полицю: {name}',
+    renameShelf: 'Перейменувати полицю',
+    shelvesCount: 'Полиць: {count}',
     sectionPagination: 'Сторінки секцій',
     sectionParts: 'Переглянути запчастини секції: {name}',
     positionsLabel: 'Позицій',
@@ -38,6 +45,13 @@ export const locationBrowserMessages = defineMessages({
     sectionView: 'Вміст секції',
   },
   'en-GB': {
+    printSections: 'Print section stickers',
+    printShelves: 'Print shelf stickers',
+    zoneActions: 'Actions for zone {name}',
+    chooseShelfToEdit: 'Select a shelf in the list to edit it.',
+    editShelfName: 'Edit shelf: {name}',
+    renameShelf: 'Rename shelf',
+    shelvesCount: 'Shelves: {count}',
     sectionPagination: 'Section pages',
     sectionParts: 'View section parts: {name}',
     positionsLabel: 'Positions',
@@ -75,6 +89,13 @@ export const locationBrowserMessages = defineMessages({
     sectionView: 'Section contents',
   },
   pl: {
+    printSections: 'Drukuj naklejki sekcji',
+    printShelves: 'Drukuj naklejki półek',
+    zoneActions: 'Działania dla strefy {name}',
+    chooseShelfToEdit: 'Wybierz półkę na liście, aby ją edytować.',
+    editShelfName: 'Edytuj półkę: {name}',
+    renameShelf: 'Zmień nazwę półki',
+    shelvesCount: 'Półek: {count}',
     sectionPagination: 'Strony sekcji',
     sectionParts: 'Zobacz części sekcji: {name}',
     positionsLabel: 'Pozycji',

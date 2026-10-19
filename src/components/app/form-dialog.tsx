@@ -154,7 +154,7 @@ export function Sheet({
   children: ReactNode
   footer?: ReactNode
   /** Wider panel for a form that carries its own sections. */
-  size?: 'md' | 'lg'
+  size?: 'md' | 'lg' | 'workspace'
   /** Optional bounded layout for a list with its own fixed search and pager. */
   bodyClassName?: string
 }) {
@@ -168,7 +168,11 @@ export function Sheet({
           // Clip the shell without making it scrollable; only the body scrolls.
           className={cn(
             'bg-app-canvas border-app-line fixed inset-x-0 bottom-0 z-50 grid max-h-[92dvh] grid-rows-[auto_1fr_auto] overflow-clip rounded-t-[24px] border-t text-white shadow-2xl sm:inset-y-0 sm:right-0 sm:left-auto sm:h-dvh sm:max-h-none sm:w-full sm:rounded-none sm:border-t-0 sm:border-l',
-            size === 'lg' ? 'sm:max-w-[640px]' : 'sm:max-w-[600px]',
+            size === 'workspace'
+              ? 'sm:w-[calc(100vw-24px)] sm:max-w-[1440px] lg:w-[90vw]'
+              : size === 'lg'
+                ? 'sm:max-w-[640px]'
+                : 'sm:max-w-[600px]',
           )}
         >
           <header className="border-app-line flex items-start justify-between gap-4 border-b px-5 pt-5 pb-5 sm:px-7 sm:pt-6 sm:pb-5">
@@ -182,6 +186,8 @@ export function Sheet({
                 className={cn(
                   'text-[26px] leading-[1.1] font-extrabold tracking-[-0.02em] text-balance',
                   eyebrow === undefined ? '' : 'mt-2',
+                  size === 'workspace' &&
+                    'text-[clamp(34px,4vw,48px)] leading-none tracking-[-0.035em]',
                 )}
               >
                 {title}

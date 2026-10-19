@@ -57,7 +57,6 @@ function Url() {
 function mount(
   section = false,
   initial = '/warehouse',
-  count: number | null = 2,
   access = true,
   data = shelves,
 ) {
@@ -76,21 +75,45 @@ function mount(
         {...(section ? { section: sections[0] } : {})}
         sections={sections}
         shelves={data}
-        directCount={count}
         base="/inventory"
         canManage={false}
         canViewParts={access}
         partsBase="/parts"
         onAddSection={() => undefined}
         onAddShelf={() => undefined}
-        sectionActions={() => null}
-        shelfActions={() => null}
       />
       <Url />
     </MemoryRouter>,
   )
 }
 describe('location resource navigation', () => {
+  it('shows active shelf totals per section independently of search and other zones', async () => {
+    const user = userEvent.setup()
+    const first = shelves[0]!
+    mount(false, '/warehouse', true, [
+      first,
+      { ...first, id: 'second' },
+      { ...first, id: 'inactive', isActive: false },
+      { ...first, id: 'foreign-zone', zoneId: 'other' },
+      { ...first, id: 'foreign-warehouse', warehouseId: 'other' },
+    ])
+    expect(
+      within(screen.getByRole('group', { name: 'Секція: Секція 1' })).getByText(
+        /Полиць: 2/,
+      ),
+    ).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('group', { name: 'Секція: Секція 2' })).getByText(
+        /Полиць: 0/,
+      ),
+    ).toBeInTheDocument()
+    await user.type(screen.getByRole('searchbox'), 'S1')
+    expect(
+      within(screen.getByRole('group', { name: 'Секція: Секція 1' })).getByText(
+        /Полиць: 2/,
+      ),
+    ).toBeInTheDocument()
+  })
   it('pages sections by ten and restores page from the URL', async () => {
     const user = userEvent.setup()
     mount()
@@ -146,16 +169,16 @@ describe('location resource navigation', () => {
     )
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
-  it('links zone-direct and section-direct parts using distinct filters', () => {
+  it('links direct zone parts without a separate per-section count link', () => {
     mount()
     expect(
       screen.getByRole('link', { name: /У зоні без секції/ }),
     ).toHaveAttribute('href', '/parts?warehouse=w&zone=z&without_section=1')
     expect(
-      screen.getByRole('link', {
+      screen.queryByRole('link', {
         name: 'Переглянути запчастини секції: Секція 1',
       }),
-    ).toHaveAttribute('href', '/parts?warehouse=w&zone=z&section=s0')
+    ).not.toBeInTheDocument()
   })
   it('links direct section parts without creating a fake shelf', () => {
     mount(true)
@@ -166,17 +189,17 @@ describe('location resource navigation', () => {
       '/parts?warehouse=w&zone=z&section=s0&without_shelf=1',
     )
   })
-  it('hides an empty direct-parts row and unavailable management actions', () => {
-    mount(true, '/section', 0)
+  it('keeps the uncounted direct-parts link and hides unavailable management actions', () => {
+    mount(true, '/section')
     expect(
-      screen.queryByRole('link', { name: /У секції без полиці/ }),
-    ).not.toBeInTheDocument()
+      screen.getByRole('link', { name: /У секції без полиці/ }),
+    ).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: 'Додати полицю' }),
     ).not.toBeInTheDocument()
   })
   it('keeps structure readable without parts permission and does not open URL contents', () => {
-    mount(true, '/section?locationContents=s0-p0', 2, false)
+    mount(true, '/section?locationContents=s0-p0', false)
     expect(screen.getByText('S1-P1')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(
@@ -185,7 +208,7 @@ describe('location resource navigation', () => {
   })
   it('shows an empty section and no matching shelves separately', async () => {
     const user = userEvent.setup()
-    mount(true, '/section', 0, true, [])
+    mount(true, '/section', true, [])
     expect(screen.getByText('Полиць поки немає')).toBeInTheDocument()
     await user.type(screen.getByRole('searchbox'), 'missing')
     expect(screen.getByText('Місць не знайдено')).toBeInTheDocument()
