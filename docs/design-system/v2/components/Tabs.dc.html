@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}button,input{font:inherit;color:inherit}a{color:#f77425;text-decoration:none}a:hover{color:#ff8430}button:focus-visible,a:focus-visible{outline:none;box-shadow:var(--rz-focus)}input::placeholder{color:var(--rz-text-dim)}</style>
+</helmet>
+<div data-theme="dark" data-density="{{ density }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
+  <div style="max-width:1280px;margin:0 auto;display:grid;gap:24px">
+    <header style="display:grid;gap:8px">
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">v2 · B3 · Навігація</p>
+      <h1 style="margin:0;font-size:var(--rz-fs-page);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">Tabs · Segmented · CommandPalette</h1>
+      <p style="margin:0;max-width:72ch;color:var(--rz-text-muted)">Tabs перемикають розділи сторінки, і кожна вкладка — окремий маршрут. Segmented фільтрує або перемикає вигляд у межах блоку. CommandPalette (⌘K) — пошук по розділах і записах, лише на desktop.</p>
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">as-is: segmented.tsx, pill-group.tsx, CommandPalette.tsx, 7 ручних груп вкладок (DRIFT.md, розділ D)</p>
+    </header>
+
+    <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+      <section data-theme="{{ t.id }}" style="display:grid;gap:24px;padding:24px;background:var(--rz-bg);color:var(--rz-text);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-lg)">
+        <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">{{ t.label }}</p>
+
+        <div style="display:grid;gap:10px">
+          <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">Tabs · underline · розділи сторінки (маршрути)</span>
+          <nav aria-label="Підписка" style="display:flex;gap:4px;border-bottom:1px solid var(--rz-border);overflow-x:auto">
+            <sc-for list="{{ pageTabs }}" as="tb" hint-placeholder-count="3">
+              <a href="#" aria-current="{{ tb.current }}" onClick="{{ tb.onClick }}" style="position:relative;display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 10px;color:{{ tb.color }};font-weight:{{ tb.weight }};white-space:nowrap;box-shadow:{{ tb.line }}" style-hover="color:var(--rz-text-strong)">{{ tb.label }}<sc-if value="{{ tb.count }}" hint-placeholder-val="{{ false }}"><span style="min-width:18px;height:18px;padding:0 5px;display:inline-grid;place-items:center;border-radius:var(--rz-r-full);background:var(--rz-fill-active);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-muted)">{{ tb.count }}</span></sc-if></a>
+            </sc-for>
+          </nav>
+          <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Активна — текст strong + лінія 2px brand знизу. Лічильник — демо.</span>
+        </div>
+
+        <div style="display:grid;gap:10px;padding-top:20px;border-top:1px solid var(--rz-border)">
+          <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">Segmented · radio (стрілки) · фільтр у межах блоку</span>
+          <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:center">
+            <div role="radiogroup" aria-label="Що показати в продажах" style="display:inline-flex;gap:2px;padding:2px;border:1px solid var(--rz-border);background:var(--rz-surface);border-radius:var(--rz-r-sm)">
+              <sc-for list="{{ seg }}" as="s" hint-placeholder-count="3">
+                <button type="button" role="radio" aria-checked="{{ s.checked }}" onClick="{{ s.onClick }}" style="height:calc(var(--rz-control-h) - 6px);padding:0 10px;border:0;border-radius:var(--rz-r-xs);background:{{ s.bg }};color:{{ s.color }};font-weight:500;cursor:pointer;white-space:nowrap" style-hover="color:var(--rz-text-strong)">{{ s.label }}</button>
+              </sc-for>
+            </div>
+            <div role="radiogroup" aria-label="Що показати в історії" style="display:inline-flex;gap:2px;padding:2px;border:1px solid var(--rz-border);background:var(--rz-surface);border-radius:var(--rz-r-sm)">
+              <button type="button" role="radio" aria-checked="true" style="height:calc(var(--rz-control-h) - 6px);padding:0 10px;border:0;border-radius:var(--rz-r-xs);background:var(--rz-fill-selected);color:var(--rz-text-strong);font-weight:500">Усе</button>
+              <button type="button" role="radio" aria-checked="false" style="height:calc(var(--rz-control-h) - 6px);padding:0 10px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-muted);font-weight:500">Продажі</button>
+              <button type="button" role="radio" aria-checked="false" style="height:calc(var(--rz-control-h) - 6px);padding:0 10px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-muted);font-weight:500">Ціна</button>
+              <button type="button" role="radio" aria-checked="false" disabled style="height:calc(var(--rz-control-h) - 6px);padding:0 10px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-muted);font-weight:500;opacity:0.4;cursor:not-allowed">Склад</button>
+            </div>
+            <div role="radiogroup" aria-label="Метод" style="display:inline-flex;gap:2px;padding:2px;border:1px solid var(--rz-border);background:var(--rz-surface);border-radius:var(--rz-r-sm)">
+              <button type="button" role="radio" aria-checked="true" style="height:calc(var(--rz-control-h-lg) - 6px);min-width:64px;padding:0 12px;border:0;border-radius:var(--rz-r-xs);background:var(--rz-fill-selected);color:var(--rz-text-strong);font-family:var(--rz-font-mono);font-weight:500;box-shadow:inset 0 0 0 1px var(--rz-brand)">UAH</button>
+              <button type="button" role="radio" aria-checked="false" style="height:calc(var(--rz-control-h-lg) - 6px);min-width:64px;padding:0 12px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-muted);font-family:var(--rz-font-mono);font-weight:500">EUR</button>
+              <button type="button" role="radio" aria-checked="false" style="height:calc(var(--rz-control-h-lg) - 6px);min-width:64px;padding:0 12px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-muted);font-family:var(--rz-font-mono);font-weight:500">USD</button>
+            </div>
+          </div>
+          <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Три варіанти: звичайний · з вимкненою опцією · lg з selectionTone="brand" (обвідка brand у формах грошей — як у коді). Замінює всі 7 ручних груп вкладок і PillGroup.</span>
+        </div>
+
+        <div style="display:grid;gap:10px;padding-top:20px;border-top:1px solid var(--rz-border)">
+          <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">CommandPalette · ⌘K · введіть «фа», «зам» або «zzz»</span>
+          <div style="position:relative;height:480px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);overflow:hidden;background:var(--rz-bg)">
+            <div style="position:absolute;inset:0;background:var(--rz-scrim)"></div>
+            <div role="dialog" aria-label="Пошук по кабінету" style="position:absolute;top:40px;left:50%;transform:translateX(-50%);width:min(600px,calc(100% - 32px));max-height:400px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-lg);background:var(--rz-overlay);box-shadow:var(--rz-shadow-dialog);overflow:hidden">
+              <div style="display:flex;align-items:center;gap:10px;height:48px;padding:0 14px;border-bottom:1px solid var(--rz-border)">
+                <i class="icon-search" style="font-size:16px;color:var(--rz-text-dim)"></i>
+                <input role="combobox" aria-label="Пошук по кабінету" aria-expanded="true" value="{{ query }}" onChange="{{ onQuery }}" placeholder="Розділ, деталь, авто, клієнт або замовлення" style="flex:1;min-width:0;border:0;background:transparent;color:var(--rz-text-strong);font-size:var(--rz-fs-input);outline:none">
+                <span style="height:18px;padding:0 4px;display:inline-grid;place-items:center;border:1px solid var(--rz-border-strong);border-bottom-width:2px;border-radius:var(--rz-r-xs);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">Esc</span>
+              </div>
+              <div role="listbox" style="overflow-y:auto;padding:6px">
+                <sc-if value="{{ emptyText }}" hint-placeholder-val="{{ false }}"><p style="margin:0;padding:32px 12px;text-align:center;color:var(--rz-text-muted)">{{ emptyText }}</p></sc-if>
+                <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+                  <div style="margin-bottom:4px">
+                    <p style="margin:0;padding:8px 8px 4px;font-size:var(--rz-fs-micro);font-weight:600;color:var(--rz-text-dim)">{{ g.label }}</p>
+                    <sc-for list="{{ g.items }}" as="c" hint-placeholder-count="3">
+                      <div role="option" aria-selected="{{ c.selected }}" onMouseEnter="{{ c.onHover }}" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:var(--rz-r-sm);background:{{ c.bg }};color:{{ c.color }};cursor:pointer">
+                        <i class="{{ c.icon }}" style="font-size:15px;color:var(--rz-text-dim)"></i>
+                        <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.label }}</span>
+                        <span style="flex:none;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">{{ c.detail }}</span>
+                        <sc-if value="{{ c.isSel }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">↵</span></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;gap:14px;align-items:center;height:32px;padding:0 14px;border-top:1px solid var(--rz-border);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)"><span>↑↓ вибір</span><span>↵ відкрити</span><span>Esc закрити</span></div>
+            </div>
+          </div>
+          <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Стани з коду: менше двох літер → «Наберіть принаймні дві літери.», пошук → «Шукаємо…», порожньо → «Нічого не знайшли.». Розділи фільтруються локально, записи — з API (≤5 на джерело). Записи — демо. Нижній рядок підказок — пропозиція v2.</span>
+        </div>
+      </section>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;, &quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+const MODULES = [['Головна', 'icon-layout-dashboard'], ['Автомобілі', 'icon-car'], ['Запчастини', 'icon-package'], ['Інвентаризація', 'icon-clipboard-check'], ['Приймання', 'icon-scan-line'], ['Стікери', 'icon-sticker'], ['Замовлення', 'icon-clipboard-list'], ['Клієнти', 'icon-users'], ['Фінанси', 'icon-wallet-cards'], ['Звіти', 'icon-chart-column']];
+const RECORDS = [
+  { group: 'Деталі', label: 'Фара передня ліва', detail: 'VW Passat', icon: 'icon-package' },
+  { group: 'Деталі', label: 'Фара задня права', detail: '5E5945112', icon: 'icon-package' },
+  { group: 'Автомобілі', label: 'Volkswagen Passat B8', detail: 'A-0142', icon: 'icon-car' },
+  { group: 'Клієнти', label: 'Фастов Андрій', detail: '+380 67 000 00 00', icon: 'icon-user-round' },
+  { group: 'Замовлення', label: 'Замовлення №358', detail: 'Олена Коваль', icon: 'icon-clipboard-list' },
+  { group: 'Замовлення', label: 'Замовлення №341', detail: 'без клієнта', icon: 'icon-clipboard-list' },
+];
+class Component extends DCLogic {
+  state = { tab: 0, seg: 0, query: 'фа', active: 0 };
+  renderVals() {
+    const { tab, seg, query, active } = this.state;
+    const q = query.trim().toLowerCase();
+    let groups = [];
+    let emptyText = null;
+    if (q.length < 2) emptyText = 'Наберіть принаймні дві літери.';
+    else {
+      const mods = MODULES.filter(([l]) => l.toLowerCase().includes(q)).map(([label, icon]) => ({ label, icon, detail: '' }));
+      if (mods.length) groups.push({ label: 'Розділи', items: mods });
+      const recs = RECORDS.filter((r) => (r.label + ' ' + r.detail).toLowerCase().includes(q));
+      ['Деталі', 'Автомобілі', 'Клієнти', 'Замовлення'].forEach((g) => { const it = recs.filter((r) => r.group === g); if (it.length) groups.push({ label: g, items: it }); });
+      if (!groups.length) emptyText = 'Нічого не знайшли.';
+    }
+    let i = 0;
+    groups = groups.map((g) => ({ label: g.label, items: g.items.map((c) => { const idx = i++; const sel = idx === active; return { ...c, selected: sel ? 'true' : 'false', isSel: sel, bg: sel ? 'var(--rz-fill-selected)' : 'transparent', color: sel ? 'var(--rz-text-strong)' : 'var(--rz-text)', onHover: () => this.setState({ active: idx }) }; }) }));
+    return {
+      density: this.props.density ?? 'compact',
+      themes: [{ id: 'dark', label: 'Темна тема' }, { id: 'light', label: 'Світла тема' }],
+      pageTabs: [['Підписка', null], ['Тарифи', null], ['Платежі', '3']].map(([label, count], k) => ({ label, count, current: tab === k ? 'page' : 'false', color: tab === k ? 'var(--rz-text-strong)' : 'var(--rz-text-muted)', weight: tab === k ? 600 : 500, line: tab === k ? 'inset 0 -2px 0 var(--rz-brand)' : 'none', onClick: (e) => { e.preventDefault(); this.setState({ tab: k }); } })),
+      seg: ['Усі', 'У резерві', 'Продано'].map((label, k) => ({ label, checked: seg === k ? 'true' : 'false', bg: seg === k ? 'var(--rz-fill-selected)' : 'transparent', color: seg === k ? 'var(--rz-text-strong)' : 'var(--rz-text-muted)', onClick: () => this.setState({ seg: k }) })),
+      query, onQuery: (e) => this.setState({ query: e.target.value, active: 0 }),
+      groups, emptyText,
+    };
+  }
+}
+</script>
+</body>
+</html>

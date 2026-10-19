@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}button,input{font:inherit;color:inherit}a{color:#f77425;text-decoration:none}a:hover{color:#ff8430}button:focus-visible{outline:none;box-shadow:var(--rz-focus)}input::placeholder{color:var(--rz-text-dim)}</style>
+</helmet>
+<div data-theme="{{ theme }}" data-density="{{ density }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
+  <div style="max-width:1280px;margin:0 auto;display:grid;gap:24px">
+    <header style="display:grid;gap:8px">
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">v2 · B4 · Дані</p>
+      <h1 style="margin:0;font-size:var(--rz-fs-page);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">StateScreen · Empty · Error · Denied · Quota · Plan · 404 · Read-only</h1>
+      <p style="margin:0;max-width:76ch;color:var(--rz-text-muted)">Один каркас для всіх станів «замість вмісту»: іконка 32px у тоні, заголовок 16/600, опис до 48 символів у рядку, до двох дій, службова мітка mono. Стоїть на місці таблиці або всієї сторінки. Усі тексти — з access-messages.ts, parts-list-messages.ts, app-messages.ts.</p>
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">as-is: state-screen.tsx (StateScreen, EmptyState, ErrorState, DeniedState), cabinet/screens/module-unavailable.tsx, not-found.tsx</p>
+    </header>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px">
+      <section role="status" aria-label="Порожньо" style="display:grid;justify-items:center;align-content:center;gap:8px;min-height:280px;padding:32px 24px;text-align:center;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-brand-soft);color:var(--rz-brand-text)"><i class="icon-package" style="font-size:16px"></i></span>
+        <h2 style="margin:4px 0 0;font-size:var(--rz-fs-title);font-weight:600;color:var(--rz-text-strong)">Тут поки порожньо</h2>
+        <p style="margin:0;max-width:48ch;color:var(--rz-text-muted)">Додайте першу деталь або розберіть авто — позиції з’являться тут.</p>
+        <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:6px">
+          <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)"><i class="icon-upload" style="font-size:14px;color:var(--rz-text-muted)"></i>Імпорт запчастин</button>
+          <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:0;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;cursor:pointer" style-hover="background:var(--rz-brand-hover)"><i class="icon-plus" style="font-size:14px"></i>Додати деталь</button>
+        </div>
+        <span style="margin-top:6px;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">empty · перший запуск · tone brand</span>
+      </section>
+
+      <section role="status" aria-label="Нічого не знайдено" style="display:grid;justify-items:center;align-content:center;gap:8px;min-height:280px;padding:32px 24px;text-align:center;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-neutral-soft);color:var(--rz-text-muted)"><i class="icon-search-x" style="font-size:16px"></i></span>
+        <h2 style="margin:4px 0 0;font-size:var(--rz-fs-title);font-weight:600;color:var(--rz-text-strong)">Нічого не знайдено</h2>
+        <p style="margin:0;max-width:48ch;color:var(--rz-text-muted)">За цими фільтрами нічого немає. Спробуйте прибрати частину умов.</p>
+        <div style="margin-top:6px"><button type="button" style="height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)">Скинути фільтри</button></div>
+        <span style="margin-top:6px;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">empty · після фільтрів · tone neutral</span>
+      </section>
+
+      <section role="alert" aria-label="Помилка завантаження" style="display:grid;justify-items:center;align-content:center;gap:8px;min-height:280px;padding:32px 24px;text-align:center;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-danger-soft);color:var(--rz-danger)"><i class="icon-wifi-off" style="font-size:16px"></i></span>
+        <h2 style="margin:4px 0 0;font-size:var(--rz-fs-title);font-weight:600;color:var(--rz-text-strong)">Склад не відповідає</h2>
+        <p style="margin:0;max-width:48ch;color:var(--rz-text-muted)">Немає звʼязку з сервером. Фільтри лишилися на місці — повторіть, коли мережа повернеться.</p>
+        <div style="margin-top:6px"><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)"><i class="icon-refresh-cw" style="font-size:14px;color:var(--rz-text-muted)"></i>Спробувати ще раз</button></div>
+        <span style="margin-top:2px;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">звернення 7f3a9c21-b4e0</span>
+        <span style="margin-top:4px;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">error · мережа · tone danger</span>
+      </section>
+
+      <section role="alert" aria-label="Помилка сервера" style="display:grid;justify-items:center;align-content:center;gap:8px;min-height:280px;padding:32px 24px;text-align:center;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-danger-soft);color:var(--rz-danger)"><i class="icon-triangle-alert" style="font-size:16px"></i></span>
+        <h2 style="margin:4px 0 0;font-size:var(--rz-fs-title);font-weight:600;color:var(--rz-text-strong)">Склад не завантажився</h2>
+        <p style="margin:0;max-width:48ch;color:var(--rz-text-muted)">Не вдалося завантажити склад. Дані на місці — потрібно лише повторити запит.</p>
+        <div style="margin-top:6px"><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)"><i class="icon-refresh-cw" style="font-size:14px;color:var(--rz-text-muted)"></i>Спробувати ще раз</button></div>
+        <span style="margin-top:2px;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">звернення 0c51e8aa-91f2</span>
+        <span style="margin-top:4px;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">error · сервер · tone danger</span>
+      </section>
+
+      <section role="status" aria-label="Недостатньо прав" style="display:grid;justify-items:center;align-content:center;gap:8px;min-height:280px;padding:32px 24px;text-align:center;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-neutral-soft);color:var(--rz-text-muted)"><i class="icon-lock" style="font-size:16px"></i></span>
+        <h2 style="margin:4px 0 0;font-size:var(--rz-fs-title);font-weight:600;color:var(--rz-text-strong)">Недостатньо прав</h2>
+        <p style="margin:0;max-width:48ch;color:var(--rz-text-muted)">Доступ до цього розділу відкриває власник розбірки в «Команді».</p>
+        <div style="margin-top:6px"><button type="button" style="height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)">До головної</button></div>
+        <span style="margin-top:6px;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">denied · permission · tone neutral</span>
+      </section>
+
+      <section role="status" aria-label="Ліміт вичерпано" style="display:grid;justify-items:center;align-content:center;gap:8px;min-height:280px;padding:32px 24px;text-align:center;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-warn-soft);color:var(--rz-warn)"><i class="icon-gauge" style="font-size:16px"></i></span>
+        <h2 style="margin:4px 0 0;font-size:var(--rz-fs-title);font-weight:600;color:var(--rz-text-strong)">Ліміт вичерпано</h2>
+        <p style="margin:0;max-width:48ch;color:var(--rz-text-muted)">Ліміт тарифу вичерпано: 1 500 з 1 500. Підвищте тариф або звільніть місце.</p>
+        <span role="progressbar" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100" style="display:flex;width:160px;height:4px;margin:4px 0;border-radius:var(--rz-r-full);background:var(--rz-border-strong);overflow:hidden"><span style="width:100%;background:var(--rz-warn)"></span></span>
+        <div><button type="button" style="height:var(--rz-control-h);padding:0 10px;border:0;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;cursor:pointer" style-hover="background:var(--rz-brand-hover)">Порівняти тарифи</button></div>
+        <span style="margin-top:6px;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">quota · tone warn</span>
+      </section>
+
+      <section role="status" aria-label="Розділ не входить у тариф" style="display:grid;justify-items:center;align-content:center;gap:8px;min-height:280px;padding:32px 24px;text-align:center;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+        <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:var(--rz-r-full);background:var(--rz-neutral-soft);color:var(--rz-text-muted);font-size:var(--rz-fs-caption);font-weight:500"><i class="icon-lock" style="font-size:11px"></i>Недоступно у поточному тарифі</span>
+        <h2 style="margin:4px 0 0;font-size:var(--rz-fs-title);font-weight:600;color:var(--rz-text-strong)">Розділ «Звіти» не входить у ваш тариф</h2>
+        <p style="margin:0;max-width:48ch;color:var(--rz-text-muted)">Розділ вимкнений тарифом — дані розбірки від цього не змінюються й нікуди не зникають. Щойно тариф дозволить, усе буде на місці.</p>
+        <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:6px">
+          <button type="button" style="height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)">Порівняти тарифи</button>
+          <button type="button" style="height:var(--rz-control-h);padding:0 10px;border:0;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;cursor:pointer" style-hover="background:var(--rz-brand-hover)">Тариф із цим модулем</button>
+        </div>
+        <span style="margin-top:6px;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">plan-locked · requiredFeature</span>
+      </section>
+
+      <section role="status" aria-label="Сторінку не знайдено" style="display:grid;justify-items:center;align-content:center;gap:8px;min-height:280px;padding:32px 24px;text-align:center;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+        <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">Помилка 404</span>
+        <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:600;color:var(--rz-text-strong)">Сторінку не знайдено</h2>
+        <p style="margin:0;max-width:48ch;color:var(--rz-text-muted)">Можливо, запис видалили або посилання неповне. Спробуйте знайти деталь за номером — або поверніться на головну.</p>
+        <form role="search" style="display:flex;gap:6px;width:100%;max-width:320px;margin-top:6px">
+          <label style="flex:1;display:flex;align-items:center;gap:8px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:var(--rz-surface-2)"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">Пошук запчастин</span><i class="icon-search" style="font-size:14px;color:var(--rz-text-dim)"></i><input placeholder="Номер деталі, назва, VIN" style="flex:1;min-width:0;border:0;background:transparent;color:var(--rz-text);outline:none"></label>
+          <button type="button" style="height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer">Знайти</button>
+        </form>
+        <a href="#" style="font-size:var(--rz-fs-caption);font-weight:500;color:var(--rz-brand-text)">На головну</a>
+      </section>
+    </div>
+
+    <section style="display:grid;gap:10px">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Режим «лише перегляд» · стан підписки над усім модулем</h2>
+      <div style="border:1px solid var(--rz-border);border-radius:var(--rz-r-md);overflow:hidden">
+        <div role="status" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;min-height:40px;padding:8px 16px;background:var(--rz-warn-soft);border-bottom:1px solid var(--rz-border)">
+          <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:var(--rz-r-full);background:var(--rz-warn-soft);color:var(--rz-warn);font-size:var(--rz-fs-caption);font-weight:600;white-space:nowrap"><i class="icon-eye" style="font-size:11px"></i>Кабінет у режимі перегляду</span>
+          <span style="flex:1;min-width:260px;color:var(--rz-text)"><strong style="font-weight:600;color:var(--rz-text-strong)">Підписка неактивна — дані лише для читання.</strong> <span style="color:var(--rz-text-muted)">Склад, замовлення й історія грошей збереглися повністю, але створювати й змінювати записи не можна, доки підписка не відновиться.</span></span>
+          <a href="#" style="font-weight:500;color:var(--rz-brand-text);white-space:nowrap">Перейти до підписки</a>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;background:var(--rz-bg)">
+          <span style="font-weight:700;color:var(--rz-text-strong);font-size:var(--rz-fs-page)">Деталі</span>
+          <div style="margin-left:auto;display:flex;gap:6px">
+            <button type="button" disabled title="Поточна підписка не дозволяє цю дію." style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;opacity:0.5;cursor:not-allowed"><i class="icon-upload" style="font-size:14px"></i>Імпорт запчастин</button>
+            <button type="button" disabled title="Поточна підписка не дозволяє цю дію." style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:0;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;opacity:0.5;cursor:not-allowed"><i class="icon-plus" style="font-size:14px"></i>Додати деталь</button>
+          </div>
+        </div>
+      </div>
+      <p style="margin:0;font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Інші стани підписки — та сама смуга з іншим текстом і тоном: pastDue (danger) «Оплата прострочена», cancelled (info) «Підписку скасовано», none (neutral) «Підписки ще немає».</p>
+    </section>
+
+    <section style="display:grid;gap:8px">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Правила</h2>
+      <ul style="margin:0;padding-left:18px;display:grid;gap:4px;color:var(--rz-text-muted)">
+        <li>Порожньо, бо ще нічого немає → brand-тон і дія створення. Порожньо після фільтрів → neutral і «Скинути фільтри».</li>
+        <li>Помилка → role="alert", кнопка «Спробувати ще раз», мітка «звернення {id}» для підтримки. Фільтри й введене не скидаються.</li>
+        <li>Немає прав / тариф / ліміт — три різні стани з різними текстами; не зводити до одного «Недоступно».</li>
+        <li>Зміна v2: рамка суцільна border, без пунктиру (у коді — border-dashed); іконка 32px замість 44px.</li>
+        <li>Номери звернень і «Звіти» в заголовку тарифу — демо-значення плейсхолдерів.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dark&quot;, &quot;light&quot;], &quot;default&quot;: &quot;dark&quot;, &quot;tsType&quot;: &quot;'dark' | 'light'&quot;}, &quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;, &quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return { theme: this.props.theme ?? 'dark', density: this.props.density ?? 'compact' };
+  }
+}
+</script>
+</body>
+</html>

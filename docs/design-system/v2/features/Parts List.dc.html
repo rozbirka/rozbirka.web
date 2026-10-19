@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../kit.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}</style>
+</helmet>
+<div class="rz" data-theme="{{ theme }}" data-density="{{ density }}" style="min-height:100vh">
+  
+
+  <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+    <div style="display:grid;place-items:center;padding:24px">
+      <div style="position:relative;width:375px;height:780px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-lg);background:var(--rz-bg);overflow:hidden;display:grid;grid-template-rows:auto auto minmax(0,1fr)">
+        <header style="display:flex;align-items:center;gap:8px;height:48px;padding:0 12px;border-bottom:1px solid var(--rz-border)"><span class="rz-avatar">Р</span><h1 class="rz-h-title" style="flex:1">Деталі</h1><button class="rz-btn rz-btn--primary rz-btn--icon" type="button" aria-label="Додати деталь" style="width:44px;height:44px"><i class="icon-plus"></i></button></header>
+        <div style="display:grid;gap:8px;padding:10px 12px;border-bottom:1px solid var(--rz-border)">
+          <label class="rz-search" style="height:44px"><i class="icon-search"></i><input aria-label="Пошук деталей" placeholder="Пошук: назва, OEM, QR або VIN" style="font-size:16px"></label>
+          <div class="rz-seg" role="radiogroup" aria-label="Статус" style="overflow-x:auto;max-width:100%"><sc-for list="{{ statusTabs }}" as="t" hint-placeholder-count="4"><button type="button" role="radio" aria-checked="{{ t.checked }}" onClick="{{ t.onClick }}" style="height:36px">{{ t.label }}</button></sc-for></div>
+        </div>
+        <div class="rz-stack" style="overflow-y:auto;padding:10px 12px 84px">
+          <sc-for list="{{ rows }}" as="r" hint-placeholder-count="6">
+            <a href="#" class="rz-card" style="display:grid;gap:6px;padding:12px;color:var(--rz-text)">
+              <span style="display:flex;gap:8px;align-items:flex-start"><span style="flex:1;min-width:0;display:grid"><span class="rz-strong" style="font-weight:600">{{ r.name }}</span><span class="rz-mono rz-dim" style="font-size:var(--rz-fs-caption)">{{ r.oem }}</span></span><span class="{{ r.pillClass }}">{{ r.statusLabel }}</span></span>
+              <span style="display:flex;justify-content:space-between;gap:12px" class="rz-caption"><span>Авто-джерело</span><span class="rz-muted">{{ r.car }}</span></span>
+              <span style="display:flex;justify-content:space-between;gap:12px" class="rz-caption"><span>Доступно · Резерв · Всього</span><span class="rz-mono" style="color:var(--rz-text)">{{ r.available }} · {{ r.reserved }} · {{ r.total }}</span></span>
+            </a>
+          </sc-for>
+        </div>
+        <nav class="rz-tabbar" aria-label="Мобільна навігація" style="position:absolute"><a href="#"><i class="icon-layout-dashboard"></i>Головна</a><a href="#" aria-current="page"><i class="icon-package"></i>Запчастини</a><a href="#"><i class="icon-clipboard-list"></i>Замовлення</a><a href="#"><i class="icon-wallet-cards"></i>Фінанси</a><a href="#"><i class="icon-ellipsis"></i>Ще</a></nav>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+    <div class="rz-app">
+      <dc-import name="Sidebar" active="parts" hint-size="232px,100vh" style="flex:0 0 232px"></dc-import>
+
+      <div class="rz-main">
+        <header class="rz-topbar">
+          <nav class="rz-crumbs" aria-label="Навігаційний ланцюжок"><a href="#">Склад</a><i class="icon-chevron-right" style="font-size:12px"></i><span aria-current="page">Деталі</span></nav>
+          <sc-if value="{{ showActions }}" hint-placeholder-val="{{ true }}">
+            <div class="rz-topbar__actions">
+              <sc-if value="{{ importFlag }}" hint-placeholder-val="{{ true }}"><button class="rz-btn" type="button" disabled="{{ mutationsOff }}" title="{{ mutationReason }}"><i class="icon-upload"></i>Імпорт запчастин</button></sc-if>
+              <button class="rz-btn rz-btn--primary" type="button" disabled="{{ addOff }}" title="{{ addReason }}"><i class="{{ addIcon }}"></i>Додати деталь</button>
+            </div>
+          </sc-if>
+        </header>
+
+        <sc-if value="{{ readOnly }}" hint-placeholder-val="{{ false }}">
+          <div class="rz-banner rz-banner--warn" role="status"><span class="rz-pill rz-pill--warn">Кабінет у режимі перегляду</span><span style="flex:1;min-width:260px"><strong class="rz-strong">Підписка неактивна — дані лише для читання.</strong> <span class="rz-muted">Склад, замовлення й історія грошей збереглися повністю, але створювати й змінювати записи не можна, доки підписка не відновиться.</span></span><a href="#">Перейти до підписки</a></div>
+        </sc-if>
+
+        <sc-if value="{{ denied }}" hint-placeholder-val="{{ false }}">
+          <main class="rz-page"><section class="rz-card"><div class="rz-state" role="status" style="min-height:420px"><span class="rz-state__icon"><i class="icon-lock"></i></span><h1 class="rz-state__title">Недостатньо прав</h1><p class="rz-state__body">Доступ до цього розділу відкриває власник розбірки в «Команді».</p><div class="rz-btn-row"><a class="rz-btn" href="#">До головної</a></div></div></section></main>
+        </sc-if>
+
+        <sc-if value="{{ notDenied }}" hint-placeholder-val="{{ true }}">
+          <div class="rz-split">
+            <main class="rz-page">
+              <div class="rz-page-head">
+                <h1 class="rz-h-page">Деталі</h1>
+                <sc-if value="{{ showTotals }}" hint-placeholder-val="{{ true }}">
+                  <dl class="rz-totals"><sc-for list="{{ totals }}" as="t" hint-placeholder-count="4"><div style="display:flex;gap:5px;align-items:baseline"><dd>{{ t.value }}</dd><dt>{{ t.label }}</dt></div></sc-for></dl>
+                </sc-if>
+              </div>
+
+              <sc-if value="{{ quota }}" hint-placeholder-val="{{ false }}">
+                <div class="rz-notice rz-notice--warn" role="status"><i class="icon-gauge"></i><span class="rz-notice__body">Ліміт тарифу вичерпано: 1 500 з 1 500. Підвищте тариф або звільніть місце.</span><a class="rz-btn rz-btn--sm" href="#">Порівняти тарифи</a></div>
+              </sc-if>
+              <sc-if value="{{ originReset }}" hint-placeholder-val="{{ false }}">
+                <div class="rz-notice rz-notice--info" role="status"><i class="icon-info"></i><span class="rz-notice__body">Фільтр «Вільні запчастини» скинуто: кожна деталь має автомобіль або партію.</span></div>
+              </sc-if>
+
+              <sc-if value="{{ showToolbar }}" hint-placeholder-val="{{ true }}">
+                <div class="rz-toolbar" role="search">
+                  <label class="rz-search"><i class="icon-search"></i><input aria-label="Пошук деталей" placeholder="Пошук: назва, OEM, QR або VIN" value="{{ query }}" onChange="{{ onQuery }}"></label>
+                  <div class="rz-seg" role="radiogroup" aria-label="Статус"><sc-for list="{{ statusTabs }}" as="t" hint-placeholder-count="4"><button type="button" role="radio" aria-checked="{{ t.checked }}" onClick="{{ t.onClick }}"><sc-if value="{{ t.dot }}" hint-placeholder-val="{{ false }}"><span class="{{ t.dot }}"></span></sc-if>{{ t.label }}</button></sc-for></div>
+                  <button class="{{ makeClass }}" type="button" onClick="{{ toggleMake }}"><span class="rz-filter__key">{{ makeKey }}</span>{{ makeValue }}<i class="icon-chevron-down" style="font-size:12px"></i></button>
+                  <button class="rz-filter" type="button">Склад: усі<i class="icon-chevron-down" style="font-size:12px"></i></button>
+                  <button class="rz-filter" type="button">Стан деталі<i class="icon-chevron-down" style="font-size:12px"></i></button>
+                  <button class="rz-filter" type="button">Походження<i class="icon-chevron-down" style="font-size:12px"></i></button>
+                  <sc-if value="{{ hasFilters }}" hint-placeholder-val="{{ false }}"><button class="rz-btn rz-btn--ghost" type="button" onClick="{{ resetFilters }}">Скинути фільтри</button></sc-if>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+                <div class="rz-bulk" role="region" aria-label="Дії над обраними">
+                  <span style="white-space:nowrap"><span class="rz-bulk__count">{{ selCount }}</span> {{ selLabel }}</span>
+                  <sc-if value="{{ canSelectPage }}" hint-placeholder-val="{{ true }}"><button class="rz-btn rz-btn--ghost rz-btn--sm" type="button" onClick="{{ toggleAll }}" style="text-decoration:underline;text-underline-offset:3px">{{ selectPageLabel }}</button></sc-if>
+                  <div class="rz-bulk__actions"><button class="rz-btn" type="button"><i class="icon-printer"></i>Друк стікера</button><button class="rz-btn rz-btn--icon" type="button" aria-label="Зняти вибір" onClick="{{ clearSelection }}"><i class="icon-x"></i></button></div>
+                </div>
+              </sc-if>
+
+              <div class="rz-table-wrap">
+                <sc-if value="{{ showTable }}" hint-placeholder-val="{{ true }}">
+                  <div class="rz-table-scroll">
+                    <table class="rz-table" style="min-width:720px"><caption>Деталі на складі</caption>
+                      <thead><tr>
+                        <th class="rz-col-check"><input class="rz-check" type="checkbox" aria-label="Обрати всі на сторінці" checked="{{ allChecked }}" ref="{{ headRef }}" onChange="{{ toggleAll }}" disabled="{{ loading }}"></th>
+                        <th>Деталь</th><th>Авто-джерело</th><th>Стан</th><th class="rz-num">Всього</th><th class="rz-num">Доступно</th><th class="rz-num">Резерв</th>
+                      </tr></thead>
+                      <tbody>
+                        <sc-if value="{{ loading }}" hint-placeholder-val="{{ false }}">
+                          <sc-for list="{{ skeleton }}" as="k" hint-placeholder-count="8">
+                            <tr><td class="rz-col-check"><span class="rz-skel" style="width:14px;height:14px"></span></td><td><span class="rz-skel" style="width:{{ k.a }}"></span></td><td><span class="rz-skel" style="width:{{ k.b }}"></span></td><td><span class="rz-skel" style="width:72px;height:16px;border-radius:var(--rz-r-full)"></span></td><td></td><td><span class="rz-skel" style="width:20px;margin-left:auto"></span></td><td></td></tr>
+                          </sc-for>
+                        </sc-if>
+                        <sc-for list="{{ rows }}" as="r" hint-placeholder-count="10">
+                          <tr aria-selected="{{ r.selected }}" data-active="{{ r.active }}" onClick="{{ r.onOpen }}" style="cursor:pointer">
+                            <td class="rz-col-check" onClick="{{ stop }}"><input class="rz-check" type="checkbox" aria-label="{{ r.selectLabel }}" checked="{{ r.checked }}" disabled="{{ r.lockedOrRO }}" title="{{ r.lockReason }}" onChange="{{ r.onToggle }}"></td>
+                            <th scope="row"><span class="rz-cell-main"><span>{{ r.name }}</span><span class="rz-mono">{{ r.oem }}</span></span></th>
+                            <td data-label="Авто-джерело" style="white-space:nowrap">{{ r.car }}</td>
+                            <td data-label="Стан"><span class="{{ r.pillClass }}">{{ r.statusLabel }}</span></td>
+                            <td class="rz-num" data-label="Всього" style="color:var(--rz-text-muted)">{{ r.total }}</td>
+                            <td class="rz-num" data-label="Доступно"><span style="display:inline-flex;align-items:center;gap:6px"><sc-if value="{{ r.locked }}" hint-placeholder-val="{{ false }}"><i class="icon-lock rz-dim" style="font-size:11px" title="{{ r.lockReason }}"></i></sc-if>{{ r.available }}</span></td>
+                            <td class="rz-num" data-label="Резерв" style="color:var(--rz-text-muted)">{{ r.reserved }}</td>
+                          </tr>
+                        </sc-for>
+                      </tbody>
+                    </table>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ emptyFirst }}" hint-placeholder-val="{{ false }}">
+                  <div class="rz-state rz-state--brand" role="status" style="min-height:360px"><span class="rz-state__icon"><i class="icon-package"></i></span><h2 class="rz-state__title">Тут поки порожньо</h2><p class="rz-state__body">Додайте першу деталь або розберіть авто — позиції з’являться тут.</p><div class="rz-btn-row"><button class="rz-btn" type="button"><i class="icon-upload"></i>Імпорт запчастин</button><button class="rz-btn rz-btn--primary" type="button"><i class="icon-plus"></i>Додати деталь</button></div></div>
+                </sc-if>
+                <sc-if value="{{ emptyFiltered }}" hint-placeholder-val="{{ false }}">
+                  <div class="rz-state" role="status" style="min-height:300px"><span class="rz-state__icon"><i class="icon-search-x"></i></span><h2 class="rz-state__title">Нічого не знайдено</h2><p class="rz-state__body">За цими фільтрами нічого немає. Спробуйте прибрати частину умов.</p><button class="rz-btn" type="button" onClick="{{ resetFilters }}">Скинути фільтри</button></div>
+                </sc-if>
+                <sc-if value="{{ errNetwork }}" hint-placeholder-val="{{ false }}">
+                  <div class="rz-state rz-state--danger" role="alert" style="min-height:300px"><span class="rz-state__icon"><i class="icon-wifi-off"></i></span><h2 class="rz-state__title">Склад не відповідає</h2><p class="rz-state__body">Немає звʼязку з сервером. Фільтри лишилися на місці — повторіть, коли мережа повернеться.</p><button class="rz-btn" type="button" onClick="{{ retry }}"><i class="icon-refresh-cw"></i>Спробувати ще раз</button><span class="rz-state__meta">звернення 7f3a9c21-b4e0</span></div>
+                </sc-if>
+                <sc-if value="{{ errServer }}" hint-placeholder-val="{{ false }}">
+                  <div class="rz-state rz-state--danger" role="alert" style="min-height:300px"><span class="rz-state__icon"><i class="icon-triangle-alert"></i></span><h2 class="rz-state__title">Склад не завантажився</h2><p class="rz-state__body">Не вдалося завантажити склад. Дані на місці — потрібно лише повторити запит.</p><button class="rz-btn" type="button" onClick="{{ retry }}"><i class="icon-refresh-cw"></i>Спробувати ще раз</button><span class="rz-state__meta">звернення 0c51e8aa-91f2</span></div>
+                </sc-if>
+                <sc-if value="{{ showPager }}" hint-placeholder-val="{{ true }}">
+                  <nav class="rz-pager" aria-label="Пагінація деталей"><span class="rz-mono">{{ range }}</span><span>25 на сторінці</span><div class="rz-pager__nav"><span>{{ pageOf }}</span><button class="rz-btn rz-btn--icon" type="button" aria-label="Попередня сторінка" disabled="disabled"><i class="icon-chevron-left"></i></button><button class="rz-btn rz-btn--icon" type="button" aria-label="Наступна сторінка" disabled="{{ singlePage }}"><i class="icon-chevron-right"></i></button></div></nav>
+                </sc-if>
+              </div>
+              <p class="rz-caption">Демо-дані. Рядки інтерфейсу — parts-list-messages.ts, part-detail-messages.ts, part-labels-messages.ts, access-messages.ts, app-messages.ts.</p>
+            </main>
+
+            <sc-if value="{{ peekOpen }}" hint-placeholder-val="{{ false }}">
+              <aside class="rz-peek" aria-label="Деталь" onKeyDown="{{ onPeekKey }}" tabIndex="-1">
+                <div class="rz-peek__head">
+                  <div style="display:flex;align-items:center;gap:4px"><span class="rz-eyebrow">Деталь</span><span style="margin-left:auto;display:flex;gap:2px"><button class="rz-btn rz-btn--ghost rz-btn--icon" type="button" aria-label="Попередній запис" onClick="{{ prevPart }}"><i class="icon-chevron-up"></i></button><button class="rz-btn rz-btn--ghost rz-btn--icon" type="button" aria-label="Наступний запис" onClick="{{ nextPart }}"><i class="icon-chevron-down"></i></button><a class="rz-btn rz-btn--ghost rz-btn--icon" href="#" aria-label="Відкрити на всю сторінку"><i class="icon-maximize-2"></i></a><button class="rz-btn rz-btn--ghost rz-btn--icon" type="button" aria-label="Закрити" onClick="{{ closePeek }}"><i class="icon-x"></i></button></span></div>
+                  <h2 class="rz-h-title">{{ act.name }}</h2>
+                  <div class="rz-btn-row" style="align-items:center"><span class="rz-code">OEM {{ act.oem }}<button type="button" aria-label="Копіювати код"><i class="icon-copy" style="font-size:12px"></i></button></span><span class="{{ act.pillClass }}">{{ act.statusLabel }}</span><span class="rz-dim">{{ act.condition }}</span></div>
+                  <div class="rz-btn-row"><button class="rz-btn" type="button" disabled="{{ readOnly }}"><i class="icon-printer"></i>Друк стікера</button><button class="rz-btn" type="button" disabled="disabled" title="Додавання деталі в замовлення з її картки ще не підключене — відкрийте замовлення й додайте позицію там."><i class="icon-clipboard-plus"></i>Додати в замовлення</button></div>
+                </div>
+                <sc-if value="{{ act.locked }}" hint-placeholder-val="{{ false }}">
+                  <div style="padding:10px 16px 0"><div class="rz-notice rz-notice--info" role="status"><i class="icon-lock"></i><span class="rz-notice__body">Деталь у відкритій інвентаризації — кількість рахує сесія.</span></div></div>
+                </sc-if>
+                <div class="rz-peek__section">
+                  <span class="rz-label">Наявність</span>
+                  <div class="rz-kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+                    <div class="rz-kpi" style="padding:10px 12px"><span class="rz-kpi__label">Доступно</span><span class="rz-mono rz-strong" style="font-size:var(--rz-fs-page)">{{ act.available }}</span><span class="rz-kpi__meta">{{ act.availMeta }}</span></div>
+                    <div class="rz-kpi" style="padding:10px 12px"><span class="rz-kpi__label">У резерві</span><span class="rz-mono rz-strong" style="font-size:var(--rz-fs-page)">{{ act.reserved }}</span><span class="rz-kpi__meta">{{ act.resMeta }}</span></div>
+                    <div class="rz-kpi" style="padding:10px 12px"><span class="rz-kpi__label">Продано</span><span class="rz-mono rz-strong" style="font-size:var(--rz-fs-page)">{{ act.sold }}</span><span class="rz-kpi__meta">{{ act.soldMeta }}</span></div>
+                  </div>
+                </div>
+                <dl class="rz-facts" style="border-bottom:1px solid var(--rz-border)">
+                  <div><dt>Ціна продажу</dt><dd><span class="rz-mono rz-strong">{{ act.price }}</span> <span class="rz-caption">за 1 шт</span></dd></div>
+                  <div><dt>Місце на складі</dt><dd>{{ act.place }}</dd></div>
+                  <div><dt>Авто-джерело</dt><dd><a href="#">{{ act.car }}</a></dd></div>
+                  <div><dt>Сумісність</dt><dd>{{ act.compat }}</dd></div>
+                </dl>
+                <div class="rz-peek__section" style="border-bottom:0">
+                  <span class="rz-label">Історія</span>
+                  <ol class="rz-timeline" style="margin:0 -12px"><sc-for list="{{ act.history }}" as="h" hint-placeholder-count="3"><li><span class="rz-timeline__icon"><i class="{{ h.icon }}"></i></span><span><span class="rz-strong">{{ h.event }}</span> <span class="rz-dim">{{ h.detail }}</span></span><span class="rz-timeline__date">{{ h.date }}</span></li></sc-for></ol>
+                </div>
+              </aside>
+            </sc-if>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+  <dc-import name="StateBar" title="C1 · Запчастини" file="Parts List.dc.html" current="{{ view }}" states="{{ stateList }}" on-change="{{ setView }}" hint-size="400px,40px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;state&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;data&quot;, &quot;peek&quot;, &quot;selection&quot;, &quot;loading&quot;, &quot;empty&quot;, &quot;filtered&quot;, &quot;network&quot;, &quot;server&quot;, &quot;denied&quot;, &quot;quota&quot;, &quot;readonly&quot;, &quot;origin&quot;, &quot;noflag&quot;, &quot;mobile&quot;], &quot;default&quot;: &quot;data&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dark&quot;, &quot;light&quot;], &quot;default&quot;: &quot;dark&quot;, &quot;tsType&quot;: &quot;'dark' | 'light'&quot;}, &quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;, &quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+const PARTS = [
+  { id: 'p1', name: 'Фара передня ліва', oem: '3G1941005', car: 'VW Passat B8 · 2016', make: 'Volkswagen', condition: 'Хороший стан', status: 'available', total: 1, available: 1, reserved: 0, sold: 0, price: '4 800 ₴', place: 'Склад 1 · Зона A · Полиця 04', compat: 'VW Passat B8, 2015 – 2019' },
+  { id: 'p2', name: 'Двері задні праві', oem: '5E5833052', car: 'Skoda Octavia A7 · 2018', make: 'Skoda', condition: 'Задовільний стан', status: 'reserved', total: 1, available: 0, reserved: 1, sold: 0, price: '6 200 ₴', place: 'Склад 1 · Зона C · Місце 11', compat: 'Skoda Octavia A7, 2013 – 2020' },
+  { id: 'p3', name: 'Генератор', oem: '03L903023F', car: 'VW Passat B8 · 2016', make: 'Volkswagen', condition: 'Хороший стан', status: 'available', total: 2, available: 2, reserved: 0, sold: 0, price: '3 900 ₴', place: 'Склад 1 · Зона B · Полиця 02', compat: 'VW / Skoda / Audi 2.0 TDI' },
+  { id: 'p4', name: 'Дзеркало бічне праве', oem: '87910-33D10', car: 'Toyota Camry XV70 · 2019', make: 'Toyota', condition: 'Хороший стан', status: 'sold', total: 1, available: 0, reserved: 0, sold: 1, price: '5 400 ₴', place: 'Не розміщена', compat: 'Toyota Camry XV70, 2017 – 2023' },
+  { id: 'p5', name: 'Кермова рейка', oem: '8200675422', car: 'Renault Megane III · 2014', make: 'Renault', condition: 'Відновлена', status: 'available', total: 1, available: 1, reserved: 0, sold: 0, price: '7 500 ₴', place: 'Склад 2 · Зона A · Стелаж 1', compat: 'Renault Megane III, 2008 – 2016', locked: true },
+  { id: 'p6', name: 'Бампер передній', oem: '5E0807221', car: 'Skoda Octavia A7 · 2018', make: 'Skoda', condition: 'Пошкоджена', status: 'available', total: 1, available: 1, reserved: 0, sold: 0, price: '2 100 ₴', place: 'Склад 1 · Зона D · Підлога', compat: 'Skoda Octavia A7, 2013 – 2017' },
+  { id: 'p7', name: 'Компресор кондиціонера', oem: '5Q0816803', car: 'VW Passat B8 · 2016', make: 'Volkswagen', condition: 'Хороший стан', status: 'reserved', total: 1, available: 0, reserved: 1, sold: 0, price: '8 900 ₴', place: 'Склад 1 · Зона B · Полиця 05', compat: 'VW Passat B8, Golf VII' },
+  { id: 'p8', name: 'Блок ABS', oem: '44050-33K10', car: 'Toyota Camry XV70 · 2019', make: 'Toyota', condition: 'Хороший стан', status: 'available', total: 1, available: 1, reserved: 0, sold: 0, price: '6 700 ₴', place: 'Склад 1 · Зона B · Полиця 01', compat: 'Toyota Camry XV70, 2017 – 2021' },
+  { id: 'p9', name: 'Стартер', oem: '02M911024A', car: 'Skoda Octavia A7 · 2018', make: 'Skoda', condition: 'Вживана', status: 'sold', total: 1, available: 0, reserved: 0, sold: 1, price: '2 600 ₴', place: 'Не розміщена', compat: 'VW / Skoda 1.6 TDI' },
+  { id: 'p10', name: 'Радіатор охолодження', oem: '214104EA0A', car: 'Nissan Qashqai J11 · 2017', make: 'Nissan', condition: 'Задовільний стан', status: 'available', total: 2, available: 1, reserved: 1, sold: 0, price: '2 900 ₴', place: 'Склад 2 · Зона B · Стелаж 3', compat: 'Nissan Qashqai J11, 2014 – 2021' },
+  { id: 'p11', name: 'Колісний диск R17', oem: '5G0601025', car: 'VW Passat B8 · 2016', make: 'Volkswagen', condition: 'Хороший стан', status: 'available', total: 4, available: 3, reserved: 1, sold: 0, price: '1 800 ₴', place: 'Склад 2 · Зона C · Стелаж 2', compat: 'VW 5×112, ET 47' },
+  { id: 'p12', name: 'Панель приладів', oem: '83800-33A30', car: 'Toyota Camry XV70 · 2019', make: 'Toyota', condition: 'Хороший стан', status: 'available', total: 1, available: 1, reserved: 0, sold: 0, price: '5 100 ₴', place: 'Склад 1 · Зона A · Полиця 07', compat: 'Toyota Camry XV70, 2017 – 2020' },
+];
+const ST = { available: ['Доступна', 'rz-pill rz-pill--ok'], reserved: ['У резерві', 'rz-pill rz-pill--warn'], sold: ['Продана', 'rz-pill rz-pill--danger'] };
+const HIST = {
+  available: [{ event: 'Розміщено', detail: 'зона A', date: '14.10', icon: 'icon-map-pin' }, { event: 'Змінено', detail: 'ціна', date: '12.10', icon: 'icon-tag' }, { event: 'Створено', detail: '', date: '09.10', icon: 'icon-plus' }],
+  reserved: [{ event: 'Зарезервовано', detail: '№ 358', date: '17.10', icon: 'icon-bookmark' }, { event: 'Розміщено', detail: 'зона C', date: '11.10', icon: 'icon-map-pin' }, { event: 'Створено', detail: '', date: '08.10', icon: 'icon-plus' }],
+  sold: [{ event: 'Продано', detail: '№ 341', date: '15.10', icon: 'icon-check' }, { event: 'Зарезервовано', detail: '№ 341', date: '13.10', icon: 'icon-bookmark' }, { event: 'Створено', detail: '', date: '02.10', icon: 'icon-plus' }],
+};
+const LOCK = 'Деталь у відкритій інвентаризації — кількість рахує сесія.';
+const STATES = [['data', 'Дані'], ['peek', 'Peek'], ['selection', 'Вибір'], ['loading', 'Завантаження'], ['empty', 'Порожньо'], ['filtered', 'Нічого не знайдено'], ['network', 'Немає мережі'], ['server', 'Помилка сервера'], ['denied', 'Немає прав'], ['quota', 'Ліміт'], ['readonly', 'Лише перегляд'], ['origin', 'Скинутий фільтр'], ['noflag', 'Без імпорту (флаг)'], ['mobile', 'Mobile']];
+const noun = (n) => { const a = n % 10, b = n % 100; if (a === 1 && b !== 11) return 'деталь'; if (a >= 2 && a <= 4 && (b < 12 || b > 14)) return 'деталі'; return 'деталей'; };
+const fmt = (n) => new Intl.NumberFormat('uk-UA').format(n);
+
+class Component extends DCLogic {
+  state = { view: null, selected: {}, activeId: null, status: 'all', query: '', make: false };
+  headRef = React.createRef();
+  setView = (k) => {
+    try { const u = new URL(location.href); u.searchParams.set('state', k); history.replaceState(null, '', u); } catch (e) {}
+    const base = { view: k, selected: {}, activeId: null, status: 'all', query: '', make: false };
+    if (k === 'peek') base.activeId = 'p11';
+    if (k === 'selection') base.selected = { p1: true, p3: true, p6: true };
+    if (k === 'filtered') { base.query = 'zzz'; base.make = true; }
+    this.setState(base);
+  };
+  componentDidUpdate() { const el = this.headRef.current; if (el) el.indeterminate = this._mixed; }
+  componentDidMount() { let k = null; try { k = new URLSearchParams(location.search).get('state'); } catch (e) {} if (k && STATES.some((x) => x[0] === k)) this.setView(k); this.componentDidUpdate(); }
+  renderVals() {
+    const view = this.state.view ?? this.props.state ?? 'data';
+    const { selected, activeId, status, query, make } = this.state;
+    const ro = view === 'readonly';
+    const q = query.trim().toLowerCase();
+    const filtered = PARTS.filter((p) => (status === 'all' || p.status === status) && (!make || p.make === 'Volkswagen') && (!q || (p.name + ' ' + p.oem + ' ' + p.car).toLowerCase().includes(q)));
+    const tableStates = ['data', 'peek', 'selection', 'quota', 'readonly', 'origin', 'noflag', 'filtered', 'mobile'];
+    const loading = view === 'loading';
+    const list = tableStates.includes(view) ? filtered : [];
+    const pickable = list.filter((p) => !p.locked && !ro);
+    const pickedOnPage = pickable.filter((p) => selected[p.id]).length;
+    const selCount = Object.values(selected).filter(Boolean).length;
+    this._mixed = pickedOnPage > 0 && pickedOnPage < pickable.length;
+    const peekId = activeId && list.some((p) => p.id === activeId) ? activeId : null;
+    const idx = list.findIndex((p) => p.id === peekId);
+    const a = PARTS.find((p) => p.id === peekId) || PARTS[0];
+    const sum = (k) => PARTS.reduce((n, p) => n + p[k], 0);
+    const hasFilters = status !== 'all' || make || !!q;
+    const emptyFiltered = tableStates.includes(view) && view !== 'mobile' && list.length === 0;
+    const tabs = [['all', 'Усі', null], ['available', 'В наявності', 'rz-dot rz-dot--ok'], ['reserved', 'У резерві', 'rz-dot rz-dot--warn'], ['sold', 'Продано', 'rz-dot rz-dot--danger']];
+    return {
+      theme: this.props.theme ?? 'dark',
+      density: this.props.density ?? 'compact',
+      view, stateList: STATES, setView: this.setView,
+      isMobile: view === 'mobile', isDesktop: view !== 'mobile',
+      denied: view === 'denied', notDenied: view !== 'denied',
+      showActions: view !== 'denied',
+      importFlag: view !== 'noflag',
+      readOnly: ro, quota: view === 'quota', originReset: view === 'origin',
+      mutationsOff: ro, mutationReason: ro ? 'Поточна підписка не дозволяє цю дію.' : '',
+      addOff: ro || view === 'quota', addReason: ro ? 'Поточна підписка не дозволяє цю дію.' : view === 'quota' ? 'Ліміт деталей вичерпано.' : '', addIcon: ro || view === 'quota' ? 'icon-lock' : 'icon-plus',
+      showTotals: !['loading', 'empty', 'network', 'server'].includes(view),
+      totals: [{ value: fmt(sum('total')), label: 'усього' }, { value: fmt(sum('available')), label: 'доступно' }, { value: fmt(sum('reserved')), label: 'у резерві' }, { value: fmt(sum('sold')), label: 'продано' }],
+      showToolbar: selCount === 0 && view !== 'empty',
+      query, onQuery: (e) => this.setState({ query: e.target.value }),
+      statusTabs: tabs.map(([k, label, dot]) => ({ label, dot, checked: status === k ? 'true' : 'false', onClick: () => this.setState({ status: k }) })),
+      makeClass: make ? 'rz-filter rz-filter--set' : 'rz-filter', makeKey: make ? 'Марка:' : '', makeValue: make ? 'Volkswagen' : 'Марка: будь-яка',
+      toggleMake: () => this.setState((s) => ({ make: !s.make })),
+      hasFilters, resetFilters: () => this.setState({ status: 'all', query: '', make: false }),
+      hasSelection: selCount > 0, selCount, selLabel: noun(selCount) + ' обрано',
+      canSelectPage: pickedOnPage < pickable.length, selectPageLabel: `Обрати всі на сторінці (${pickable.length})`,
+      clearSelection: () => this.setState({ selected: {} }),
+      toggleAll: () => this.setState((s) => { const next = { ...s.selected }; const all = pickedOnPage === pickable.length; pickable.forEach((p) => { next[p.id] = !all; }); return { selected: next }; }),
+      headRef: this.headRef, allChecked: pickable.length > 0 && pickedOnPage === pickable.length,
+      showTable: (tableStates.includes(view) && !emptyFiltered) || loading,
+      loading, skeleton: [['38%', '60%'], ['30%', '52%'], ['44%', '58%'], ['26%', '48%'], ['36%', '62%'], ['32%', '50%'], ['40%', '56%'], ['28%', '54%']].map(([x, y]) => ({ a: x, b: y })),
+      stop: (e) => e.stopPropagation(),
+      rows: list.map((p) => {
+        const on = !!selected[p.id];
+        return { ...p, statusLabel: ST[p.status][0], pillClass: ST[p.status][1], checked: on, selected: on ? 'true' : 'false', active: p.id === peekId ? 'true' : 'false', locked: !!p.locked, lockedOrRO: !!p.locked || ro, lockReason: p.locked ? LOCK : ro ? 'Поточна підписка не дозволяє цю дію.' : '', selectLabel: 'Обрати: ' + p.name,
+          onToggle: () => this.setState((s) => ({ selected: { ...s.selected, [p.id]: !s.selected[p.id] } })),
+          onOpen: () => this.setState({ activeId: p.id }) };
+      }),
+      emptyFirst: view === 'empty', emptyFiltered,
+      errNetwork: view === 'network', errServer: view === 'server',
+      retry: () => { this.setView('loading'); clearTimeout(this._t); this._t = setTimeout(() => this.setView('data'), 1200); },
+      showPager: (tableStates.includes(view) && !emptyFiltered) || loading,
+      range: loading ? '—' : `1–${list.length} з ${fmt(list.length === PARTS.length ? 1284 : list.length)}`,
+      pageOf: list.length === PARTS.length ? 'Сторінка 1 з 52' : 'Сторінка 1 з 1', singlePage: list.length !== PARTS.length,
+      peekOpen: !!peekId,
+      closePeek: () => this.setState({ activeId: null }),
+      prevPart: () => idx > 0 && this.setState({ activeId: list[idx - 1].id }),
+      nextPart: () => idx >= 0 && idx < list.length - 1 && this.setState({ activeId: list[idx + 1].id }),
+      onPeekKey: (e) => { if (e.key === 'Escape') this.setState({ activeId: null }); },
+      act: { ...a, statusLabel: ST[a.status][0], pillClass: ST[a.status][1], locked: !!a.locked, history: HIST[a.status],
+        availMeta: a.available > 0 ? 'можна продати' : 'немає вільних', resMeta: a.reserved > 0 ? `${a.reserved} замовлення` : 'немає', soldMeta: a.sold > 0 ? 'позиція закрита продажем' : 'ще не продавалась' },
+    };
+  }
+  componentWillUnmount() { clearTimeout(this._t); }
+}
+</script>
+</body>
+</html>

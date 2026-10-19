@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}button{font:inherit;color:inherit}a{color:#f77425;text-decoration:none}a:hover{color:#ff8430}button:focus-visible{outline:none;box-shadow:var(--rz-focus)}</style>
+</helmet>
+<div data-theme="{{ theme }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
+  <div style="max-width:1280px;margin:0 auto;display:grid;gap:28px">
+    <header style="display:grid;gap:8px">
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">v2 · B6 · ERP</p>
+      <h1 style="margin:0;font-size:var(--rz-fs-page);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">Друк · стікер · етикетка перевізника · документ замовлення</h1>
+      <p style="margin:0;max-width:76ch;color:var(--rz-text-muted)">Усе, що йде на папір, — чорне на білому незалежно від теми кабінету, шрифт Manrope + JetBrains Mono для кодів, без кольорових заливок. Екран друку — це превʼю на нейтральному тлі з панеллю дій.</p>
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">as-is: cabinet/stickers (40×58 мм), inventory/zone-label-output.ts (40×57 мм), orders/delivery/WaybillDrawers.tsx (етикетка НП), orders/messages.ts printUnavailable</p>
+    </header>
+
+    <section style="display:grid;gap:12px">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Стікер запчастини · 40×58 мм</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+        <div style="display:grid;place-items:center;padding:28px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface-2)">
+          <div aria-label="Попередній перегляд стікера Фара передня ліва" style="width:151px;height:219px;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px;background:#fff;color:#000;box-shadow:0 1px 3px rgb(0 0 0 / 0.25);font-family:'Manrope',sans-serif;text-align:center">
+            <div aria-label="QR-код Фара передня ліва" style="width:112px;height:112px;display:grid;place-items:center;border:1px dashed #999;font-family:'JetBrains Mono',monospace;font-size:10px;color:#666">QR</div>
+            <span style="font-size:12px;font-weight:700;line-height:1.15">Фара передня ліва</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10px">RZ-000482</span>
+            <span style="margin-top:auto;font-size:8px;color:#555">VW Passat B8 · 2016</span>
+          </div>
+        </div>
+        <div style="display:grid;gap:10px;align-content:start;flex:1 1 320px;max-width:420px">
+          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--rz-border);border:1px solid var(--rz-border);border-radius:var(--rz-r-md);overflow:hidden">
+            <div style="display:grid;gap:2px;padding:12px;background:var(--rz-surface)"><span style="font-size:var(--rz-fs-caption);color:var(--rz-text-muted)">Вибрано обʼєктів</span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-page);color:var(--rz-text-strong)">3</span></div>
+            <div style="display:grid;gap:2px;padding:12px;background:var(--rz-surface)"><span style="font-size:var(--rz-fs-caption);color:var(--rz-text-muted)">Стікерів</span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-page);color:var(--rz-text-strong)">5</span></div>
+          </div>
+          <p style="margin:0;color:var(--rz-text-dim);font-size:var(--rz-fs-caption)">Кожен стікер друкується на окремому аркуші 40×58 мм.</p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h-lg);padding:0 12px;border:0;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600"><i class="icon-printer" style="font-size:14px"></i>Друкувати 5</button>
+            <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h-lg);padding:0 12px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500"><i class="icon-download" style="font-size:14px;color:var(--rz-text-muted)"></i>Завантажити</button>
+            <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h-lg);padding:0 12px;border:1px solid transparent;border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text-muted);font-weight:500"><i class="icon-share" style="font-size:14px"></i>Поділитися</button>
+          </div>
+          <div role="status" style="display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1px solid color-mix(in srgb, var(--rz-warn) 30%, transparent);border-radius:var(--rz-r-sm);background:var(--rz-warn-soft)"><i class="icon-triangle-alert" style="font-size:14px;color:var(--rz-warn);margin-top:2px"></i><span>За один раз можна підготувати не більше 200 стікерів.</span></div>
+          <p style="margin:0;font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Склад стікера (назва, код, авто) і ліміт 200 — демо; точний макет генерує сервіс. Розмір і тексти кнопок — з stickers/messages.ts.</p>
+        </div>
+      </div>
+    </section>
+
+    <section style="display:grid;gap:12px;padding-top:20px;border-top:1px solid var(--rz-border)">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Етикетка перевізника · Друк етикетки</h2>
+      <div style="display:grid;grid-template-rows:auto minmax(0,1fr);max-width:640px;height:380px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-lg);background:var(--rz-overlay);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--rz-border)"><div style="flex:1;display:grid"><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">Замовлення №358 · накладна</span><span style="font-weight:700;color:var(--rz-text-strong);font-size:var(--rz-fs-title)">Друк етикетки</span></div><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:0;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600"><i class="icon-printer" style="font-size:14px"></i>Друк</button><button type="button" aria-label="Закрити" style="display:grid;place-items:center;width:28px;height:28px;border:0;background:transparent;color:var(--rz-text-muted)"><i class="icon-x" style="font-size:15px"></i></button></div>
+        <div style="margin:12px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:#e9e7e4;display:grid;place-items:center;color:#5c554f;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption)">PDF перевізника (iframe)</div>
+      </div>
+      <p style="margin:0;font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Документ формує перевізник; кабінет лише показує його у вікні й друкує. Стилізувати вміст не можна.</p>
+    </section>
+
+    <section style="display:grid;gap:12px;padding-top:20px;border-top:1px solid var(--rz-border)">
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px"><h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Документ замовлення · A4</h2><span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:var(--rz-r-full);background:var(--rz-info-soft);color:var(--rz-info);font-size:var(--rz-fs-caption);font-weight:500">пропозиція v2 · у коді немає</span></div>
+      <div role="status" style="display:flex;gap:8px;align-items:flex-start;max-width:720px;padding:8px 10px;border:1px solid color-mix(in srgb, var(--rz-info) 30%, transparent);border-radius:var(--rz-r-sm);background:var(--rz-info-soft)"><i class="icon-info" style="font-size:14px;color:var(--rz-info);margin-top:2px"></i><span>Друку замовлення поки немає: сервіс не формує документ.</span></div>
+      <div style="display:grid;place-items:center;padding:28px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface-2);overflow-x:auto">
+        <article aria-label="Документ замовлення" style="width:595px;min-height:842px;display:grid;align-content:start;gap:22px;padding:48px 44px;background:#fff;color:#111;box-shadow:0 2px 8px rgb(0 0 0 / 0.25);font-family:'Manrope',sans-serif;font-size:11px;line-height:1.45">
+          <header style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding-bottom:14px;border-bottom:1.5px solid #111">
+            <div style="display:grid;gap:2px"><span style="font-size:18px;font-weight:800;letter-spacing:-0.01em">Замовлення №358</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#555">17.10.2026</span></div>
+            <div style="display:grid;gap:2px;text-align:right"><strong style="font-size:12px">[Назва бізнесу]</strong><span style="color:#555">[Адреса · телефон]</span></div>
+          </header>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div style="display:grid;gap:2px"><span style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:#666">Клієнт і доставка</span><span>[Імʼя клієнта]</span><span style="color:#555">[Спосіб доставки · номер накладної]</span></div>
+            <div style="display:grid;gap:2px"><span style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:#666">Статус</span><span>[Статус замовлення]</span></div>
+          </div>
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr style="border-bottom:1px solid #111"><th style="text-align:left;padding:6px 0;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase">Деталь</th><th style="text-align:right;padding:6px 0;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase">К-сть</th><th style="text-align:right;padding:6px 0;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase">Ціна</th><th style="text-align:right;padding:6px 0;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase">Сума</th></tr></thead>
+            <tbody>
+              <tr style="border-bottom:0.5px solid #bbb"><td style="padding:7px 0"><div>Фара передня ліва</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#666">OEM 3G1941005</div></td><td style="text-align:right;font-family:'JetBrains Mono',monospace">1</td><td style="text-align:right;font-family:'JetBrains Mono',monospace">4 800</td><td style="text-align:right;font-family:'JetBrains Mono',monospace">4 800</td></tr>
+              <tr style="border-bottom:0.5px solid #bbb"><td style="padding:7px 0"><div>Колісний диск R17</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#666">OEM 5G0601025</div></td><td style="text-align:right;font-family:'JetBrains Mono',monospace">2</td><td style="text-align:right;font-family:'JetBrains Mono',monospace">1 800</td><td style="text-align:right;font-family:'JetBrains Mono',monospace">3 600</td></tr>
+            </tbody>
+          </table>
+          <div style="display:grid;gap:4px;justify-self:end;min-width:220px">
+            <div style="display:flex;justify-content:space-between;gap:16px;padding-top:6px;border-top:1.5px solid #111;font-size:13px;font-weight:700"><span>Разом</span><span style="font-family:'JetBrains Mono',monospace">8 400 ₴</span></div>
+          </div>
+          <footer style="margin-top:auto;padding-top:12px;border-top:0.5px solid #bbb;font-size:9px;color:#666">[Реквізити · підпис · примітки — визначити разом із бізнесом]</footer>
+        </article>
+      </div>
+      <p style="margin:0;font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Макет — лише візуальна мова друку (типографіка, сітка, лінії). Поля в квадратних дужках не вигадані свідомо: склад документа й юридичні реквізити — відкрите питання.</p>
+    </section>
+
+    <section style="display:grid;gap:8px">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Правила друку</h2>
+      <ul style="margin:0;padding-left:18px;display:grid;gap:4px;color:var(--rz-text-muted)">
+        <li>Папір: #fff фон, #111 текст, сірі #555/#666 лише для вторинного. Жодних brand- чи state-кольорів — друк буває ч/б.</li>
+        <li>Коди, суми, кількості — JetBrains Mono, праворуч. Лінії: 1.5px для меж розділів, 0.5px між рядками.</li>
+        <li>Розміри стікерів — у мм із коду; не масштабувати під екран.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dark&quot;, &quot;light&quot;], &quot;default&quot;: &quot;dark&quot;, &quot;tsType&quot;: &quot;'dark' | 'light'&quot;}}">
+class Component extends DCLogic {
+  renderVals() { return { theme: this.props.theme ?? 'dark' }; }
+}
+</script>
+</body>
+</html>

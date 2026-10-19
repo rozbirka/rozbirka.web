@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}button,input{font:inherit;color:inherit}a{color:#f77425;text-decoration:none}a:hover{color:#ff8430}button:focus-visible{outline:none;box-shadow:var(--rz-focus)}input::placeholder{color:var(--rz-text-dim)}</style>
+</helmet>
+<div data-theme="{{ theme }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
+  <div style="max-width:1280px;margin:0 auto;display:grid;gap:24px">
+    <header style="display:grid;gap:8px">
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">v2 · B6 · ERP</p>
+      <h1 style="margin:0;font-size:var(--rz-fs-page);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">Scanner · складський режим</h1>
+      <p style="margin:0;max-width:76ch;color:var(--rz-text-muted)">Телефон, одна рука, рукавиці. Розмір glove (56px) для всіх дій, текст 14–16px, одна головна дія внизу екрана під великим пальцем. Дані деталі не показуються до перевірки доступу. Усі тексти — з scanners/messages.ts.</p>
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">as-is: cabinet/scanners/ScannerScreen.tsx, маршрут /app/:tenant/scan, /scan/:qrCode</p>
+    </header>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px">
+      <sc-for list="{{ frames }}" as="f" hint-placeholder-count="6">
+        <div style="display:grid;gap:8px">
+          <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">{{ f.tag }}</span>
+          <div style="height:660px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-lg);background:var(--rz-bg);overflow:hidden">
+            <div style="display:flex;align-items:center;gap:8px;height:48px;padding:0 12px;border-bottom:1px solid var(--rz-border)">
+              <button type="button" aria-label="Назад" style="display:grid;place-items:center;width:44px;height:44px;border:0;background:transparent;color:var(--rz-text-muted)"><i class="icon-arrow-left" style="font-size:18px"></i></button>
+              <div style="display:grid;line-height:1.2"><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">Склад</span><span style="font-weight:700;color:var(--rz-text-strong);font-size:var(--rz-fs-title)">QR-сканер</span></div>
+            </div>
+
+            <div style="display:grid;align-content:start;gap:12px;padding:12px;overflow:hidden">
+              <div style="position:relative;aspect-ratio:1/1;max-height:260px;border-radius:var(--rz-r-md);background:{{ f.camBg }};display:grid;place-items:center;overflow:hidden">
+                <span style="width:58%;aspect-ratio:1/1;border:2px solid {{ f.frame }};border-radius:var(--rz-r-md)"></span>
+                <span style="position:absolute;left:12px;right:12px;bottom:10px;font-size:var(--rz-fs-caption);color:{{ f.camText }};text-align:center">{{ f.camHint }}</span>
+              </div>
+
+              <div role="{{ f.role }}" style="display:grid;gap:6px;padding:12px;border:1px solid {{ f.cardBorder }};border-radius:var(--rz-r-md);background:{{ f.cardBg }}">
+                <span style="display:flex;align-items:center;gap:8px;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)"><i class="{{ f.icon }}" style="font-size:18px;color:{{ f.iconColor }}"></i>{{ f.title }}</span>
+                <span style="font-size:var(--rz-fs-input);color:var(--rz-text-muted)">{{ f.body }}</span>
+                <sc-if value="{{ f.part }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:grid;gap:8px;margin-top:6px;padding-top:10px;border-top:1px solid var(--rz-border)">
+                    <span style="font-size:var(--rz-fs-title);font-weight:600;color:var(--rz-text-strong)">Фара передня ліва</span>
+                    <span style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><span style="display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:var(--rz-r-full);background:var(--rz-ok-soft);color:var(--rz-ok);font-size:var(--rz-fs-caption);font-weight:500"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:currentColor"></span>Доступна</span><span style="font-family:var(--rz-font-mono);color:var(--rz-text)">1 шт</span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">RZ-000482</span></span>
+                    <div style="display:flex;justify-content:space-between;gap:8px"><span style="color:var(--rz-text-dim)">Розміщення</span><span style="color:var(--rz-text)">Склад 1 · Зона A</span></div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                      <button type="button" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;height:var(--rz-target-glove);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:transparent;color:var(--rz-text);font-size:var(--rz-fs-input);font-weight:500"><i class="icon-arrow-right-left" style="font-size:16px;color:var(--rz-text-muted)"></i>Перемістити</button>
+                      <button type="button" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;height:var(--rz-target-glove);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:transparent;color:var(--rz-text);font-size:var(--rz-fs-input);font-weight:500"><i class="icon-printer" style="font-size:16px;color:var(--rz-text-muted)"></i>Надрукувати</button>
+                    </div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ f.manual }}" hint-placeholder-val="{{ false }}">
+                  <label style="display:grid;gap:6px;margin-top:6px"><span style="font-size:var(--rz-fs-caption);font-weight:500;color:var(--rz-text-muted)">QR-код</span><input placeholder="Напр. QR-123" style="height:var(--rz-target-touch);padding:0 12px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:var(--rz-surface-2);color:var(--rz-text);font-family:var(--rz-font-mono);font-size:16px;outline:none"><span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Код зі стікера або посилання виду /scan/…</span></label>
+                </sc-if>
+              </div>
+            </div>
+
+            <div style="display:grid;gap:6px;padding:10px 12px 14px;border-top:1px solid var(--rz-border);background:var(--rz-bg-sidebar)">
+              <button type="button" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;height:var(--rz-target-glove);border:0;border-radius:var(--rz-r-md);background:var(--rz-brand);color:var(--rz-on-brand);font-size:var(--rz-fs-title);font-weight:600"><i class="{{ f.ctaIcon }}" style="font-size:18px"></i>{{ f.cta }}</button>
+              <sc-if value="{{ f.secondary }}" hint-placeholder-val="{{ false }}"><button type="button" style="height:var(--rz-target-touch);border:0;background:transparent;color:var(--rz-text-muted);font-size:var(--rz-fs-input)">{{ f.secondary }}</button></sc-if>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <section style="display:grid;gap:8px">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Правила складського режиму</h2>
+      <ul style="margin:0;padding-left:18px;display:grid;gap:4px;color:var(--rz-text-muted)">
+        <li>Без sidebar і ⌘K: топбар 48 з «Назад», вміст, нижня панель дій. Нижня навігація кабінету на цьому екрані прихована — пропозиція v2.</li>
+        <li>Головна дія — glove 56, на всю ширину, внизу. Другорядна — текстова 44 під нею.</li>
+        <li>Поле вводу коду — 16px (без автозуму iOS), mono, висота 44.</li>
+        <li>Камера — нейтральний фон; рамка: neutral → brand (камера активна) → ok (зчитано) → danger (не знайдено).</li>
+        <li>Ручний ввід завжди доступний як запасний шлях.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dark&quot;, &quot;light&quot;], &quot;default&quot;: &quot;dark&quot;, &quot;tsType&quot;: &quot;'dark' | 'light'&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const base = { role: 'status', camBg: '#151413', camText: '#a29b93', frame: 'rgb(255 255 255 / 0.25)', cardBorder: 'var(--rz-border)', cardBg: 'var(--rz-surface)', iconColor: 'var(--rz-text-muted)', part: false, manual: false, secondary: null };
+    const frames = [
+      { ...base, tag: 'ready · готово', icon: 'icon-scan-line', title: 'Готово до сканування', body: 'Увімкніть камеру й наведіть її на QR-стікер деталі. Знайдену деталь покажемо тут — перед тим, як відкривати картку.', camHint: 'Камеру зупинено. Введіть код вручну або ввімкніть камеру знову.', cta: 'Увімкнути камеру', ctaIcon: 'icon-camera', secondary: 'Ввести код вручну' },
+      { ...base, tag: 'camera on · сканування', frame: '#f77425', icon: 'icon-scan-line', iconColor: 'var(--rz-brand-text)', title: 'Камера QR', body: 'Камера ввімкнена. Тримайте стікер у рамці, поки код не зчитається.', camHint: 'Зображення завмерло? Увімкніть камеру ще раз.', cta: 'Зупинити камеру', ctaIcon: 'icon-camera-off' },
+      { ...base, tag: 'checking · перевірка доступу', frame: '#4cc38a', icon: 'icon-loader-circle', iconColor: 'var(--rz-info)', title: 'Перевіряємо код…', body: 'Звіряємо стікер із деталями цієї розбірки. Це займає секунду.', camHint: 'Перевіряємо код у поточній розбірці…', cta: 'Сканувати ще раз', ctaIcon: 'icon-scan-line' },
+      { ...base, tag: 'recognised · знайдено', frame: '#4cc38a', cardBorder: 'color-mix(in srgb, var(--rz-ok) 35%, transparent)', icon: 'icon-circle-check', iconColor: 'var(--rz-ok)', title: 'Код розпізнано', body: 'Переконайтеся, що це та сама деталь, яку тримаєте в руках.', camHint: '', part: true, cta: 'Сканувати наступний код', ctaIcon: 'icon-scan-line', secondary: 'Відкрити картку деталі' },
+      { ...base, tag: 'not found · не знайдено', role: 'alert', frame: '#f2645a', cardBorder: 'color-mix(in srgb, var(--rz-danger) 35%, transparent)', cardBg: 'var(--rz-danger-soft)', icon: 'icon-circle-x', iconColor: 'var(--rz-danger)', title: 'Код не знайдено в цій розбірці', body: 'Стікер може належати іншій розбірці, або деталь уже видалено. Звірте код на стікері й спробуйте ще раз.', camHint: '', cta: 'Сканувати ще раз', ctaIcon: 'icon-scan-line', secondary: 'Ввести код вручну' },
+      { ...base, tag: 'camera denied · ручний ввід', role: 'alert', camBg: '#1f1e1d', cardBorder: 'color-mix(in srgb, var(--rz-warn) 35%, transparent)', icon: 'icon-camera-off', iconColor: 'var(--rz-warn)', title: 'Камера недоступна', body: 'Дозвольте доступ до камери в налаштуваннях браузера й увімкніть її ще раз. Поки що введіть код зі стікера вручну або виберіть його фото.', camHint: 'Цей браузер не читає QR із камери. Введіть код зі стікера вручну нижче.', manual: true, cta: 'Знайти деталь', ctaIcon: 'icon-search', secondary: 'Увімкнути камеру' },
+    ];
+    return { theme: this.props.theme ?? 'dark', frames };
+  }
+}
+</script>
+</body>
+</html>

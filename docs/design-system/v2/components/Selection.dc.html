@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}button{font:inherit;color:inherit}a{color:#f77425}a:hover{color:#ff8430}button:focus-visible{outline:none;box-shadow:var(--rz-focus)}</style>
+</helmet>
+<div data-theme="dark" data-density="{{ density }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
+  <div style="max-width:1280px;margin:0 auto;display:grid;gap:24px">
+    <header style="display:grid;gap:8px">
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">v2 · B1 · Базові контроли</p>
+      <h1 style="margin:0;font-size:var(--rz-fs-page);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">Checkbox · Radio · Switch</h1>
+      <p style="margin:0;max-width:72ch;color:var(--rz-text-muted)">Checkbox — вибір рядків і множинні фільтри. Radio — один варіант із 2–5 видимих. Switch — налаштування, що застосовується одразу, без кнопки «Зберегти».</p>
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">as-is: окремих компонентів у src/components/app немає; checkbox живе всередині data-table.tsx. У v2 — нові компоненти.</p>
+    </header>
+
+    <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+      <section data-theme="{{ t.id }}" style="display:grid;gap:24px;padding:24px;background:var(--rz-bg);color:var(--rz-text);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-lg)">
+        <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">{{ t.label }}</p>
+
+        <div style="display:grid;gap:12px">
+          <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">Checkbox · 14px, хітбокс 28 (44 на touch)</p>
+          <div style="display:flex;flex-wrap:wrap;gap:24px">
+            <div style="display:grid;gap:6px;justify-items:start"><span style="display:grid;place-items:center;width:14px;height:14px;border-radius:var(--rz-r-xs);border:1px solid var(--rz-border-strong);background:transparent"></span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">off</span></div>
+            <div style="display:grid;gap:6px;justify-items:start"><span style="display:grid;place-items:center;width:14px;height:14px;border-radius:var(--rz-r-xs);border:1px solid var(--rz-text-dim);background:var(--rz-fill-hover)"></span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">hover</span></div>
+            <div style="display:grid;gap:6px;justify-items:start"><span style="display:grid;place-items:center;width:14px;height:14px;border-radius:var(--rz-r-xs);border:1px solid var(--rz-brand);background:var(--rz-brand);color:var(--rz-on-brand)"><i class="icon-check" style="font-size:11px"></i></span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">on</span></div>
+            <div style="display:grid;gap:6px;justify-items:start"><span style="display:grid;place-items:center;width:14px;height:14px;border-radius:var(--rz-r-xs);border:1px solid var(--rz-brand);background:var(--rz-brand);color:var(--rz-on-brand)"><i class="icon-minus" style="font-size:11px"></i></span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">mixed</span></div>
+            <div style="display:grid;gap:6px;justify-items:start"><span style="display:grid;place-items:center;width:14px;height:14px;border-radius:var(--rz-r-xs);border:1px solid var(--rz-border-strong);background:transparent;box-shadow:var(--rz-focus)"></span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">focus</span></div>
+            <div style="display:grid;gap:6px;justify-items:start"><span style="display:grid;place-items:center;width:14px;height:14px;border-radius:var(--rz-r-xs);border:1px solid var(--rz-brand);background:var(--rz-brand);color:var(--rz-on-brand);opacity:0.5"><i class="icon-check" style="font-size:11px"></i></span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">disabled</span></div>
+          </div>
+          <div style="display:grid;gap:2px;max-width:320px;padding:4px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+            <sc-for list="{{ checks }}" as="c" hint-placeholder-count="3">
+              <button role="checkbox" aria-checked="{{ c.aria }}" onClick="{{ c.onClick }}" style="display:flex;align-items:center;gap:10px;height:var(--rz-control-h);padding:0 8px;border:0;border-radius:var(--rz-r-sm);background:transparent;cursor:pointer;text-align:left" style-hover="background:var(--rz-fill-hover)">
+                <span style="display:grid;place-items:center;width:14px;height:14px;border-radius:var(--rz-r-xs);border:1px solid {{ c.border }};background:{{ c.bg }};color:var(--rz-on-brand);font-size:10px;font-weight:700">{{ c.mark }}</span>
+                <span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:{{ c.dot }}"></span>
+                <span style="flex:1;color:var(--rz-text)">{{ c.label }}</span>
+                <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">{{ c.count }}</span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display:grid;gap:12px;padding-top:20px;border-top:1px solid var(--rz-border)">
+          <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">Radio group</p>
+          <div role="radiogroup" aria-label="Походження" style="display:grid;gap:4px;max-width:320px">
+            <span style="font-size:var(--rz-fs-caption);font-weight:500;color:var(--rz-text-muted)">Походження</span>
+            <sc-for list="{{ radios }}" as="r" hint-placeholder-count="2">
+              <button role="radio" aria-checked="{{ r.aria }}" onClick="{{ r.onClick }}" style="display:flex;align-items:center;gap:10px;height:var(--rz-control-h);padding:0 8px;border:0;border-radius:var(--rz-r-sm);background:transparent;cursor:pointer;text-align:left" style-hover="background:var(--rz-fill-hover)">
+                <span style="display:grid;place-items:center;width:14px;height:14px;border-radius:var(--rz-r-full);border:1px solid {{ r.border }}"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:{{ r.dot }}"></span></span>
+                <span style="color:var(--rz-text)">{{ r.label }}</span>
+              </button>
+            </sc-for>
+          </div>
+          <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">Radio card · вибір способу (оплата, доставка)</p>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;max-width:640px">
+            <div style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--rz-brand);border-radius:var(--rz-r-md);background:var(--rz-brand-soft)">
+              <span style="display:grid;place-items:center;width:14px;height:14px;margin-top:3px;border-radius:var(--rz-r-full);border:1px solid var(--rz-brand)"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:var(--rz-brand)"></span></span>
+              <span style="display:grid"><span style="color:var(--rz-text-strong);font-weight:500">З авто</span><span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">деталь знята з авто-джерела</span></span>
+            </div>
+            <div style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:transparent">
+              <span style="display:grid;place-items:center;width:14px;height:14px;margin-top:3px;border-radius:var(--rz-r-full);border:1px solid var(--rz-border-strong)"></span>
+              <span style="display:grid"><span style="color:var(--rz-text);font-weight:500">З партії</span><span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">деталь прийнята партією</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;gap:12px;padding-top:20px;border-top:1px solid var(--rz-border)">
+          <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">Switch · 28×16</p>
+          <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:center">
+            <button role="switch" aria-checked="{{ sw.aria }}" onClick="{{ sw.onClick }}" style="display:flex;align-items:center;gap:10px;padding:4px;border:0;background:transparent;border-radius:var(--rz-r-sm);cursor:pointer">
+              <span style="position:relative;width:28px;height:16px;border-radius:var(--rz-r-full);background:{{ sw.track }};transition:background var(--rz-dur) var(--rz-ease)"><span style="position:absolute;top:2px;left:{{ sw.left }};width:12px;height:12px;border-radius:var(--rz-r-full);background:#fff;box-shadow:0 1px 2px rgb(0 0 0 / 0.3);transition:left var(--rz-dur) var(--rz-ease)"></span></span>
+              <span style="color:var(--rz-text)">Показувати продані</span>
+            </button>
+            <div style="display:flex;align-items:center;gap:10px;opacity:0.5"><span style="position:relative;width:28px;height:16px;border-radius:var(--rz-r-full);background:var(--rz-brand)"><span style="position:absolute;top:2px;left:14px;width:12px;height:12px;border-radius:var(--rz-r-full);background:#fff"></span></span><span>disabled · on</span></div>
+            <div style="display:flex;align-items:center;gap:10px"><span style="position:relative;width:28px;height:16px;border-radius:var(--rz-r-full);background:var(--rz-border-strong);box-shadow:var(--rz-focus)"><span style="position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:var(--rz-r-full);background:#fff"></span></span><span>focus · off</span></div>
+          </div>
+        </div>
+      </section>
+    </sc-for>
+
+    <section style="display:grid;gap:8px">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Правила</h2>
+      <ul style="margin:0;padding-left:18px;display:grid;gap:4px;color:var(--rz-text-muted)">
+        <li>Увімкнений стан — завжди brand. Інших кольорів для вибору немає.</li>
+        <li>Checkbox у заголовку таблиці має стан mixed, коли обрано частину рядків сторінки.</li>
+        <li>Клікабельний увесь рядок з підписом, а не лише квадрат.</li>
+        <li>Switch не використовується у формах із кнопкою «Зберегти» — там Checkbox.</li>
+        <li>Підпис «Показувати продані» — демо; реального перемикача в коді поки немає.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;, &quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+class Component extends DCLogic {
+  state = { checks: { available: true, reserved: false, sold: false }, origin: 'car', sw: true };
+  renderVals() {
+    const { checks, origin, sw } = this.state;
+    const items = [['available', 'В наявності', 'var(--rz-ok)', 1102], ['reserved', 'У резерві', 'var(--rz-warn)', 96], ['sold', 'Продано', 'var(--rz-danger)', 86]];
+    return {
+      density: this.props.density ?? 'compact',
+      themes: [{ id: 'dark', label: 'Темна тема' }, { id: 'light', label: 'Світла тема' }],
+      checks: items.map(([k, label, dot, n]) => { const on = checks[k]; return { label, dot, count: new Intl.NumberFormat('uk-UA').format(n), aria: on ? 'true' : 'false', mark: on ? '✓' : '', bg: on ? 'var(--rz-brand)' : 'transparent', border: on ? 'var(--rz-brand)' : 'var(--rz-border-strong)', onClick: () => this.setState((s) => ({ checks: { ...s.checks, [k]: !s.checks[k] } })) }; }),
+      radios: [['car', 'З авто'], ['batch', 'З партії']].map(([k, label]) => { const on = origin === k; return { label, aria: on ? 'true' : 'false', border: on ? 'var(--rz-brand)' : 'var(--rz-border-strong)', dot: on ? 'var(--rz-brand)' : 'transparent', onClick: () => this.setState({ origin: k }) }; }),
+      sw: { aria: sw ? 'true' : 'false', track: sw ? 'var(--rz-brand)' : 'var(--rz-border-strong)', left: sw ? '14px' : '2px', onClick: () => this.setState((s) => ({ sw: !s.sw })) },
+    };
+  }
+}
+</script>
+</body>
+</html>

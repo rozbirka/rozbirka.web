@@ -1,0 +1,90 @@
+{
+ "id": "C23",
+ "module": "cars",
+ "crumbs": [
+  "Склад",
+  "Автомобілі"
+ ],
+ "title": "Новий автомобіль",
+ "route": "/app/:tenant/cars/new · /:carId/edit",
+ "source": "car-form-messages.ts",
+ "unverified": "підписи полів",
+ "actions": [
+  {
+   "label": "Скасувати",
+   "icon": "icon-x"
+  },
+  {
+   "label": "Створити автомобіль",
+   "icon": "icon-check",
+   "variant": "primary"
+  }
+ ],
+ "states": [
+  [
+   "data",
+   "Нова"
+  ],
+  [
+   "loading",
+   "Завантаження"
+  ],
+  [
+   "error",
+   "Помилка"
+  ]
+ ],
+ "main": [
+  {
+   "type": "form",
+   "title": "Автомобіль",
+   "fields": [
+    {
+     "label": "Марка",
+     "placeholder": "Volkswagen",
+     "cls": "rz-input"
+    },
+    {
+     "label": "Модель",
+     "placeholder": "Passat B8",
+     "cls": "rz-input"
+    },
+    {
+     "label": "Рік",
+     "placeholder": "2016",
+     "cls": "rz-input rz-input--num"
+    },
+    {
+     "label": "VIN",
+     "placeholder": "17 символів",
+     "cls": "rz-input rz-input--num",
+     "hint": "VIN та OEM-декодування поки недоступні."
+    }
+   ]
+  },
+  {
+   "type": "form",
+   "title": "Купівля",
+   "fields": [
+    {
+     "label": "Сума",
+     "placeholder": "0",
+     "cls": "rz-input rz-input--num",
+     "hint": "₴"
+    },
+    {
+     "label": "Дата",
+     "placeholder": "дд.мм.рррр",
+     "cls": "rz-input rz-input--num"
+    }
+   ]
+  },
+  {
+   "type": "text",
+   "title": "Фото",
+   "action": "Додати фото",
+   "text": "Додавання, видалення й вибір обкладинки зберігаються як чернетка до «Зберегти зміни»."
+  }
+ ],
+ "aside": []
+}
