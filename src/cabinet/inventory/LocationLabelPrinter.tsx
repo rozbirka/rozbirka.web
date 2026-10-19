@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { FileDown, LayoutGrid, Printer, Rows3, X } from 'lucide-react'
+import { FileDown, LayoutGrid, Printer, X } from 'lucide-react'
 import QRCode from 'qrcode'
 import {
   Button,
@@ -11,7 +11,7 @@ import {
   SkeletonRows,
 } from '@/components/app'
 import { useTenantSettings } from '@/auth/useTenantSettings'
-import { useT } from '@/i18n'
+import { useFormat, useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import { cabinetModules } from '../module-registry'
 import { tenantResetRegistry } from '../tenant-reset-registry'
@@ -22,6 +22,8 @@ import {
 } from './zone-label-output'
 import { loadLocationLabels } from './location-label-data'
 import { locationLabelMessages } from './location-label-messages'
+import { locationBrowserMessages } from './location-browser-messages'
+import { warehouseMessages } from './warehouse-messages'
 import { stickersMessages } from '../stickers/messages'
 import {
   StickerWorkspace,
@@ -42,6 +44,7 @@ import {
   type LocationLabelQueue,
   type LocationLabelTarget,
 } from './location-label-queue'
+import './location-labels.css'
 
 // Register outside the workspace lifecycle so logout also clears a closed/unmounted queue.
 tenantResetRegistry.register(({ userId, tenantId }) =>
@@ -75,10 +78,14 @@ export function LocationLabelsPage({
   target,
   inventoryBase,
   returnFocusRef,
+  sectionShelfCounts,
+  flush = false,
 }: {
   target: LocationLabelTarget
   inventoryBase: string
   returnFocusRef?: RefObject<HTMLButtonElement | null> | undefined
+  sectionShelfCounts?: ReadonlyMap<string, number> | undefined
+  flush?: boolean
 }) {
   const cabinet = useCabinet()
   const [params] = useSearchParams()
@@ -98,6 +105,8 @@ export function LocationLabelsPage({
       target={target}
       inventoryBase={inventoryBase}
       returnFocusRef={returnFocusRef}
+      sectionShelfCounts={sectionShelfCounts}
+      flush={flush}
       storageKey={labelQueueKey(snapshot.userId, snapshot.tenantId)}
     />
   )
@@ -109,15 +118,23 @@ function ScopedLocationLabels({
   returnFocusRef,
   storageKey,
   initialIds,
+  sectionShelfCounts,
+  flush,
 }: {
   target: LocationLabelTarget
   inventoryBase: string
   returnFocusRef?: RefObject<HTMLButtonElement | null> | undefined
   storageKey: string
   initialIds: string[]
+  sectionShelfCounts?: ReadonlyMap<string, number> | undefined
+  flush: boolean
 }) {
   const t = useT(locationLabelMessages)
   const ts = useT(stickersMessages)
+  const tw = useT(warehouseMessages)
+  const tb = useT(locationBrowserMessages)
+  const f = useFormat()
+  const redesigned = target.kind === 'section' || target.kind === 'shelf'
   const documentLocale = useTenantSettings().documentLanguage ?? 'uk'
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.inventory,
@@ -395,6 +412,11 @@ function ScopedLocationLabels({
 
   return (
     <StickerWorkspace
+      className={
+        redesigned
+          ? `location-labels location-labels--${target.kind}${flush ? ' location-labels--flush' : ''}`
+          : undefined
+      }
       embedded
       showHeader={false}
       back={
@@ -498,6 +520,15 @@ function ScopedLocationLabels({
             ) : null
           }
         >
+          {redesigned ? (
+            <div className="location-labels__columns" aria-hidden>
+              <span />
+              <span>
+                {tw(target.kind === 'shelf' ? 'shelfType' : 'sectionType')}
+              </span>
+              {target.kind === 'section' ? <span>{tb('shelves')}</span> : null}
+            </div>
+          ) : null}
           {loading ? (
             <div className="p-5">
               <SkeletonRows rows={4} />
@@ -524,31 +555,51 @@ function ScopedLocationLabels({
             >
               {visible
                 .slice((currentPage - 1) * 10, currentPage * 10)
-                .map((label) => (
-                  <StickerSelectionRow
-                    key={label.id}
-                    appearance="location"
-                    icon={
-                      target.kind === 'shelf' ? (
-                        <Rows3 aria-hidden className="size-5" />
-                      ) : (
-                        <LayoutGrid aria-hidden className="size-5" />
-                      )
-                    }
-                    label={label.zoneName}
-                    checkboxLabel={t('select', { name: label.zoneName })}
-                    selected={selection.has(label.id)}
-                    disabled={locked}
-                    onToggle={() => {
-                      const next = new Set(selection)
-                      if (next.has(label.id)) next.delete(label.id)
-                      else next.add(label.id)
-                      updateSelection(next)
-                    }}
-                    name={label.zoneName}
-                    detail={label.zoneCode}
-                  />
-                ))}
+                .map((label) => {
+                  const shelfCount = sectionShelfCounts?.get(label.id)
+                  const formattedShelfCount =
+                    shelfCount === undefined
+                      ? '—'
+                      : (f.number(shelfCount) ?? String(shelfCount))
+                  return (
+                    <StickerSelectionRow
+                      key={label.id}
+                      appearance="location"
+                      icon={
+                        redesigned ? null : (
+                          <LayoutGrid aria-hidden className="size-5" />
+                        )
+                      }
+                      label={label.zoneName}
+                      checkboxLabel={t('select', { name: label.zoneName })}
+                      selected={selection.has(label.id)}
+                      disabled={locked}
+                      onToggle={() => {
+                        const next = new Set(selection)
+                        if (next.has(label.id)) next.delete(label.id)
+                        else next.add(label.id)
+                        updateSelection(next)
+                      }}
+                      name={label.zoneName}
+                      detail={label.zoneCode}
+                      trailing={
+                        target.kind === 'section' ? (
+                          <span
+                            aria-label={
+                              shelfCount === undefined
+                                ? undefined
+                                : tb('shelvesCount', {
+                                    count: formattedShelfCount,
+                                  })
+                            }
+                          >
+                            {formattedShelfCount}
+                          </span>
+                        ) : null
+                      }
+                    />
+                  )
+                })}
               {!visible.length ? (
                 <li className="text-app-muted p-5">
                   {t(needle ? 'noMatches' : 'empty')}

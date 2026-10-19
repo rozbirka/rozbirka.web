@@ -1765,9 +1765,6 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
               section?.isActive !== false &&
               !zone.isSystemUnassigned ? (
                 <>
-                  <p className="text-app-muted max-w-3xl text-base leading-6">
-                    {t(section ? 'sectionBrowseHint' : 'zoneBrowseHint')}
-                  </p>
                   <ZoneLocations
                     zone={zone}
                     {...(section ? { section } : {})}
@@ -1884,6 +1881,18 @@ function ZoneLocations({
     resource.state.kind === 'ready' ? resource.state.data.shelves : []
   const loadedSections =
     resource.state.kind === 'ready' ? resource.state.data.sections : []
+  const sectionShelfCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    if (resource.state.kind !== 'ready') return counts
+    for (const item of resource.state.data.sections) {
+      if (item.isActive) counts.set(item.id, 0)
+    }
+    for (const shelf of resource.state.data.shelves) {
+      if (shelf.isActive && counts.has(shelf.sectionId))
+        counts.set(shelf.sectionId, (counts.get(shelf.sectionId) ?? 0) + 1)
+    }
+    return counts
+  }, [resource.state])
 
   const write = async (action: (signal: AbortSignal) => Promise<unknown>) => {
     setBusy(true)
@@ -1967,12 +1976,24 @@ function ZoneLocations({
   return (
     <section
       aria-label={t(section ? 'shelfType' : 'sectionType')}
-      className="border-app-line bg-app-raised min-w-0 rounded-[20px] border p-4 sm:p-6"
+      className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
     >
-      {error ? <Notice tone="danger">{error}</Notice> : null}
-      {resource.state.kind === 'loading' ? <SkeletonRows rows={3} /> : null}
+      {error ? (
+        <div className="p-4 sm:p-6">
+          <Notice tone="danger">{error}</Notice>
+        </div>
+      ) : null}
+      {resource.state.kind === 'loading' ? (
+        <div className="p-4 sm:p-6">
+          <SkeletonRows rows={3} />
+        </div>
+      ) : null}
       {resource.state.kind === 'error' ? (
-        <Button onClick={resource.reload} variant="ghost">
+        <Button
+          className="m-4 sm:m-6"
+          onClick={resource.reload}
+          variant="ghost"
+        >
           {tc('retry')}
         </Button>
       ) : null}
@@ -2020,6 +2041,8 @@ function ZoneLocations({
           printWorkspace={
             labelsOpen ? (
               <LocationLabelsPage
+                flush
+                sectionShelfCounts={sectionShelfCounts}
                 target={{
                   kind: section ? 'shelf' : 'section',
                   parentId: section?.id ?? zone.id,

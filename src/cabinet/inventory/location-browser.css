@@ -1,0 +1,332 @@
+.location-browser {
+  min-width: 0;
+}
+
+.location-browser__toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px 12px;
+  padding: 24px;
+}
+
+.location-browser__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-app-ink);
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.location-browser__total {
+  padding: 3px 7px;
+  border: 1px solid var(--color-app-line);
+  border-radius: 7px;
+  background: rgb(255 255 255 / 0.03);
+  color: var(--color-app-muted);
+  font: 12px/1.5 var(--font-mono);
+}
+
+.location-browser__lead {
+  margin-top: 8px;
+  color: var(--color-app-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.location-browser__search {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-width: 0;
+}
+
+.location-browser__actions {
+  display: flex;
+  grid-column: 2;
+  grid-row: 1;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.location-browser__direct,
+.location-browser__list {
+  padding-inline: 12px;
+}
+
+.location-browser__direct {
+  border-top: 1px solid var(--color-app-line);
+}
+
+.location-browser__columns,
+.location-browser__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 5rem 1.25rem;
+  align-items: center;
+  gap: 18px;
+}
+
+.location-browser__columns {
+  padding: 14px 32px;
+  border-block: 1px solid var(--color-app-line);
+  color: var(--color-app-dim);
+  font: 10px/1.5 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.location-browser__columns--shelves,
+.location-browser__row--shelf {
+  grid-template-columns: minmax(0, 1fr) 1.25rem;
+}
+
+.location-browser__row {
+  width: 100%;
+  min-width: 0;
+  min-height: 88px;
+  padding: 20px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-app-ink);
+  text-align: left;
+  white-space: normal;
+}
+
+.location-browser__row:is(a, button) {
+  cursor: pointer;
+}
+
+.location-browser__row:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.location-browser__row:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: -3px;
+}
+
+.location-browser__name {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.5;
+  transition: color 180ms ease;
+}
+
+.location-browser__code {
+  display: block;
+  max-width: 100%;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  color: var(--color-app-muted);
+  font: 12px/1.5 var(--font-mono);
+  letter-spacing: 0.01em;
+}
+
+.location-browser__hint {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-app-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.location-browser__count {
+  color: var(--color-app-ink);
+  font: 14px/1.5 var(--font-mono);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.location-browser__count-label {
+  display: none;
+}
+
+.location-browser__arrow {
+  width: 17px;
+  height: 17px;
+  justify-self: end;
+  color: var(--color-app-muted);
+  transition: color 180ms ease;
+}
+
+.location-browser__row:is(a, button):hover
+  :is(.location-browser__name, .location-browser__arrow),
+.location-browser__row:is(a, button):focus-visible
+  :is(.location-browser__name, .location-browser__arrow) {
+  color: var(--color-brand);
+}
+
+.location-browser__section:not(:last-child) {
+  border-bottom: 1px solid var(--color-app-line);
+}
+
+.location-browser__empty {
+  padding: 32px 12px;
+  color: var(--color-app-muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+/* Keep the shared table's semantics without its extra mobile card frame. */
+.location-browser__shelves .data-table {
+  table-layout: fixed;
+}
+
+.location-browser__shelves thead {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.location-browser__shelves tbody th {
+  padding: 0;
+}
+
+.location-browser__shelves tbody tr {
+  border: 0;
+  border-bottom: 1px solid var(--color-app-line);
+  border-radius: 0;
+  padding: 0;
+}
+
+.location-browser__shelves tbody tr:last-child {
+  border-bottom: 0;
+}
+
+.location-browser__shelves tbody tr + tr {
+  margin-top: 0;
+}
+
+.location-browser__pagination > nav {
+  padding: 20px 32px;
+}
+
+@media (min-width: 640px) {
+  .location-browser__toolbar {
+    padding: 26px 32px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .location-browser__toolbar {
+    grid-template-columns: minmax(0, 1fr) 252px auto;
+    column-gap: 16px;
+  }
+
+  .location-browser__search {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .location-browser__actions {
+    grid-column: 3;
+  }
+}
+
+@media (max-width: 767px) {
+  .location-browser__toolbar {
+    padding: 22px 16px;
+    column-gap: 8px;
+  }
+
+  .location-browser__heading {
+    flex-wrap: nowrap;
+    gap: 6px;
+    font-size: 19px;
+  }
+
+  .location-browser__total {
+    padding: 2px 5px;
+    font-size: 11px;
+  }
+
+  .location-browser__actions {
+    gap: 6px;
+  }
+
+  .location-browser__lead,
+  .location-browser__columns {
+    display: none;
+  }
+
+  .location-browser__direct,
+  .location-browser__list {
+    padding-inline: 8px;
+  }
+
+  .location-browser__row {
+    grid-template-columns: minmax(0, 1fr) 43px 14px;
+    gap: 10px;
+    min-height: 88px;
+    padding: 18px 8px;
+  }
+
+  .location-browser__row--shelf {
+    grid-template-columns: minmax(0, 1fr) 14px;
+  }
+
+  .location-browser__shelves tbody th {
+    display: block;
+    width: 100%;
+  }
+
+  .location-browser__name {
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .location-browser__code {
+    font-size: 11.5px;
+  }
+
+  .location-browser__count-label {
+    display: block;
+    margin-top: 1px;
+    color: var(--color-app-muted);
+    font: 11px/1.5 var(--font-sans);
+    text-transform: lowercase;
+  }
+
+  .location-browser__arrow {
+    width: 14px;
+    height: 14px;
+  }
+
+  .location-browser__pagination > nav {
+    padding: 12px 16px;
+  }
+}
+
+@media (max-width: 359px) {
+  .location-browser__toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .location-browser__actions {
+    grid-column: 1;
+    grid-row: 2;
+    justify-content: flex-start;
+  }
+
+  .location-browser__search {
+    grid-row: 3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .location-browser__name,
+  .location-browser__arrow {
+    transition: none;
+  }
+}

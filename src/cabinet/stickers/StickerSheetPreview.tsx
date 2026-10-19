@@ -25,16 +25,20 @@ export function StickerSheetPreview({
   const t = useT(stickersMessages)
   return (
     <section
+      data-slot="sticker-sheet-preview"
       aria-label={t('sheetLabel')}
       className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border xl:sticky xl:top-5"
     >
-      <div className="border-app-line flex items-center justify-between gap-3 border-b px-5 py-4">
+      <div
+        data-slot="sticker-sheet-header"
+        className="border-app-line flex items-center justify-between gap-3 border-b px-5 py-4"
+      >
         <h2 className="font-mono text-[11.5px] tracking-[0.14em] text-white uppercase">
           {t('sheet')}
         </h2>
         <span className="text-app-dim text-[12px]">{t('preview')}</span>
       </div>
-      <div className="p-5">
+      <div data-slot="sticker-sheet-body" className="p-5">
         <div className="grid min-h-[310px] grid-cols-2 gap-1.5 rounded-[16px] bg-[#eee] p-3">
           {Array.from({ length: 6 }, (_, index) => {
             const sticker = cards[index]
