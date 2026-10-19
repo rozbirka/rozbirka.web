@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}button{font:inherit;color:inherit}a{color:#f77425;text-decoration:none}a:hover{color:#ff8430}button:focus-visible{outline:none;box-shadow:var(--rz-focus)}</style>
+</helmet>
+<div data-theme="{{ theme }}" data-density="{{ density }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
+  <div style="max-width:1280px;margin:0 auto;display:grid;gap:28px">
+    <header style="display:grid;gap:8px">
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">v2 · B5 · Контейнери</p>
+      <h1 style="margin:0;font-size:var(--rz-fs-page);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">Card · FactList · KpiStrip · Peek</h1>
+      <p style="margin:0;max-width:76ch;color:var(--rz-text-muted)">Один контейнер замість трьох поколінь (Card 20px, SectionPanel, ручні секції 14/16/18/20). Радіус 8, одна лінія, заголовок 13/600 з aside праворуч. Peek — панель запису праворуч від списку (master-detail).</p>
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">as-is: card.tsx, section-panel.tsx, panel.tsx, fact-rows.tsx, spec-grid.tsx, cabinet/redesign-kpi.tsx · тексти — part-detail-messages.ts</p>
+    </header>
+
+    <section style="display:grid;gap:10px">
+      <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">KpiStrip · hairline-сітка, auto-fit від 180px</span>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:1px;background:var(--rz-border);border:1px solid var(--rz-border);border-radius:var(--rz-r-md);overflow:hidden">
+        <div style="display:grid;gap:6px;padding:var(--rz-card-p);background:var(--rz-surface)"><span style="font-size:var(--rz-fs-caption);color:var(--rz-text-muted)">Доступно</span><span style="display:flex;align-items:baseline;gap:6px"><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-display);line-height:1;font-weight:500;color:var(--rz-text-strong);font-variant-numeric:tabular-nums">3</span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">шт</span></span><span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">можна продати</span></div>
+        <div style="display:grid;gap:6px;padding:var(--rz-card-p);background:var(--rz-surface)"><span style="font-size:var(--rz-fs-caption);color:var(--rz-text-muted)">У резерві</span><span style="display:flex;align-items:baseline;gap:6px"><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-display);line-height:1;font-weight:500;color:var(--rz-warn);font-variant-numeric:tabular-nums">1</span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">шт</span></span><span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">1 замовлення</span></div>
+        <div style="display:grid;gap:6px;padding:var(--rz-card-p);background:var(--rz-surface)"><span style="font-size:var(--rz-fs-caption);color:var(--rz-text-muted)">Продано</span><span style="display:flex;align-items:baseline;gap:6px"><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-display);line-height:1;font-weight:500;color:var(--rz-text-dim);font-variant-numeric:tabular-nums">0</span></span><span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">ще не продавалась</span></div>
+        <div style="display:grid;gap:6px;padding:var(--rz-card-p);background:var(--rz-surface)"><span style="font-size:var(--rz-fs-caption);color:var(--rz-text-muted)">Вільний залишок на</span><span style="display:flex;align-items:baseline;gap:6px"><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-display);line-height:1;font-weight:500;color:var(--rz-text-strong);font-variant-numeric:tabular-nums">5 400</span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">₴</span></span><span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">за 1 шт · 1 800 ₴</span></div>
+      </div>
+      <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Тони значення як у коді: plain · warn · dim. Мітка — 12px sans замість mono 10px uppercase. Значення KPI — демо.</span>
+    </section>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));gap:16px;align-items:start">
+      <section aria-labelledby="c1" style="border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+        <header style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;min-height:44px;padding:0 var(--rz-card-p);border-bottom:1px solid var(--rz-border)">
+          <h2 id="c1" style="margin:0;font-size:var(--rz-fs-body);font-weight:600;color:var(--rz-text-strong)">Місце на складі</h2>
+          <button type="button" style="display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text);font-size:var(--rz-fs-caption);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)">Перемістити</button>
+        </header>
+        <dl style="margin:0;padding:4px var(--rz-card-p)">
+          <div style="display:grid;grid-template-columns:140px minmax(0,1fr);gap:12px;padding:8px 0;align-items:baseline"><dt style="color:var(--rz-text-dim)">Склад</dt><dd style="margin:0;color:var(--rz-text)">Склад 1</dd></div>
+          <div style="display:grid;grid-template-columns:140px minmax(0,1fr);gap:12px;padding:8px 0;align-items:baseline;border-top:1px solid var(--rz-border)"><dt style="color:var(--rz-text-dim)">Зона</dt><dd style="margin:0;color:var(--rz-text)">A</dd></div>
+          <div style="display:grid;grid-template-columns:140px minmax(0,1fr);gap:12px;padding:8px 0;align-items:baseline;border-top:1px solid var(--rz-border)"><dt style="color:var(--rz-text-dim)">QR</dt><dd style="margin:0;display:flex;gap:8px;align-items:center"><span style="display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 2px 0 8px;border:1px solid var(--rz-border);border-radius:var(--rz-r-xs);background:var(--rz-surface-2);font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption)">RZ-000482<i class="icon-copy" aria-label="Копіювати код" style="font-size:12px;color:var(--rz-text-dim);padding:0 4px"></i></span></dd></div>
+          <div style="display:grid;grid-template-columns:140px minmax(0,1fr);gap:12px;padding:8px 0;align-items:baseline;border-top:1px solid var(--rz-border)"><dt style="color:var(--rz-text-dim)">Нотатки</dt><dd style="margin:0;color:var(--rz-text-dim)">Нотаток немає. Їх можна додати в редагуванні деталі.</dd></div>
+        </dl>
+        <p style="margin:0;padding:0 var(--rz-card-p) 12px;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">Card + FactList · label 140px ліворуч · порожнє значення — текстом</p>
+      </section>
+
+      <section aria-labelledby="c2" style="border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface);overflow:hidden">
+        <header style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;min-height:44px;padding:0 var(--rz-card-p);border-bottom:1px solid var(--rz-border)">
+          <h2 id="c2" style="margin:0;display:flex;align-items:center;gap:8px;font-size:var(--rz-fs-body);font-weight:600;color:var(--rz-text-strong)">Продажі<span style="min-width:18px;height:18px;padding:0 5px;display:inline-grid;place-items:center;border-radius:var(--rz-r-full);background:var(--rz-fill-active);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);font-weight:400;color:var(--rz-text-muted)">2</span></h2>
+          <div role="radiogroup" aria-label="Що показати в продажах" style="display:inline-flex;gap:2px;padding:2px;border:1px solid var(--rz-border);border-radius:var(--rz-r-sm)"><button type="button" role="radio" aria-checked="true" style="height:20px;padding:0 8px;border:0;border-radius:var(--rz-r-xs);background:var(--rz-fill-selected);color:var(--rz-text-strong);font-size:var(--rz-fs-caption);font-weight:500">Усі</button><button type="button" role="radio" aria-checked="false" style="height:20px;padding:0 8px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-muted);font-size:var(--rz-fs-caption);font-weight:500">У резерві</button><button type="button" role="radio" aria-checked="false" style="height:20px;padding:0 8px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-muted);font-size:var(--rz-fs-caption);font-weight:500">Продано</button></div>
+        </header>
+        <table style="width:100%;border-collapse:collapse">
+          <caption style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">Замовлення, у яких стоїть ця деталь</caption>
+          <thead><tr style="height:30px"><th style="text-align:left;padding:0 var(--rz-card-p);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);font-weight:400;letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">Замовлення</th><th style="text-align:left;padding:0 8px;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);font-weight:400;letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">Статус</th><th style="text-align:right;padding:0 var(--rz-card-p);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);font-weight:400;letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">Сума</th></tr></thead>
+          <tbody>
+            <tr style="height:var(--rz-row-h);border-top:1px solid var(--rz-border)"><td style="padding:0 var(--rz-card-p)"><a href="#" style="font-family:var(--rz-font-mono)">№ 358</a> <span style="color:var(--rz-text-dim)">· без клієнта</span></td><td style="padding:0 8px"><span style="display:inline-flex;align-items:center;gap:6px;color:var(--rz-text)"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:var(--rz-warn)"></span>Резерв</span></td><td style="padding:0 var(--rz-card-p);text-align:right;font-family:var(--rz-font-mono);color:var(--rz-text-strong)">1 800 ₴</td></tr>
+            <tr style="height:var(--rz-row-h);border-top:1px solid var(--rz-border)"><td style="padding:0 var(--rz-card-p)"><a href="#" style="font-family:var(--rz-font-mono)">№ 341</a> <span style="color:var(--rz-text-dim)">· Олена Коваль</span></td><td style="padding:0 8px"><span style="display:inline-flex;align-items:center;gap:6px;color:var(--rz-text)"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:var(--rz-danger)"></span>Продано</span></td><td style="padding:0 var(--rz-card-p);text-align:right;font-family:var(--rz-font-mono);color:var(--rz-text-strong)">1 800 ₴</td></tr>
+          </tbody>
+        </table>
+        <div style="display:flex;justify-content:space-between;gap:12px;padding:10px var(--rz-card-p);border-top:1px solid var(--rz-border);background:var(--rz-surface-2)"><span style="color:var(--rz-text-muted)">Разом продано</span><span style="font-family:var(--rz-font-mono);color:var(--rz-text-strong)">1 800 ₴</span></div>
+        <p style="margin:0;padding:8px var(--rz-card-p);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">Card flush · таблиця до країв · footer-підсумок на surface-2</p>
+      </section>
+    </div>
+
+    <section style="display:grid;gap:10px">
+      <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">Peek · 400px праворуч від списку · sticky під topbar · Esc закриває, ↑↓ — сусідній запис</span>
+      <div style="display:flex;flex-wrap:wrap;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);overflow:hidden;background:var(--rz-bg)">
+        <div style="flex:1 1 320px;min-width:0;display:grid;align-content:start">
+          <div style="display:flex;align-items:center;gap:8px;height:var(--rz-row-h);padding:0 12px;border-bottom:1px solid var(--rz-border);color:var(--rz-text-muted)"><span style="color:var(--rz-text-strong)">Генератор</span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">03L903023F</span></div>
+          <div style="display:flex;align-items:center;gap:8px;height:var(--rz-row-h);padding:0 12px;border-bottom:1px solid var(--rz-border);background:var(--rz-fill-selected);box-shadow:inset 2px 0 0 var(--rz-brand)"><span style="color:var(--rz-text-strong);font-weight:500">Колісний диск R17</span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">5G0601025</span></div>
+          <div style="display:flex;align-items:center;gap:8px;height:var(--rz-row-h);padding:0 12px;border-bottom:1px solid var(--rz-border)"><span style="color:var(--rz-text-strong)">Панель приладів</span><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">83800-33A30</span></div>
+        </div>
+        <aside aria-label="Деталь" style="flex:0 1 400px;min-width:300px;border-left:1px solid var(--rz-border);background:var(--rz-surface)">
+          <div style="display:grid;gap:10px;padding:14px 16px;border-bottom:1px solid var(--rz-border)">
+            <div style="display:flex;align-items:center;gap:6px"><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">Деталь</span><span style="margin-left:auto;display:flex;gap:2px"><button type="button" aria-label="Попередній запис" style="display:grid;place-items:center;width:24px;height:24px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-muted)"><i class="icon-chevron-up" style="font-size:14px"></i></button><button type="button" aria-label="Наступний запис" style="display:grid;place-items:center;width:24px;height:24px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-muted)"><i class="icon-chevron-down" style="font-size:14px"></i></button><button type="button" aria-label="Відкрити на всю сторінку" style="display:grid;place-items:center;width:24px;height:24px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-muted)"><i class="icon-maximize-2" style="font-size:13px"></i></button><button type="button" aria-label="Закрити" style="display:grid;place-items:center;width:24px;height:24px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-muted)"><i class="icon-x" style="font-size:14px"></i></button></span></div>
+            <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">Колісний диск R17</h2>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center"><span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:var(--rz-r-full);background:var(--rz-ok-soft);color:var(--rz-ok);font-size:var(--rz-fs-caption);font-weight:500"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:currentColor"></span>Доступна</span><span style="color:var(--rz-text-dim)">Хороший стан</span><span style="color:var(--rz-text-dim)">· 1 у резерві</span></div>
+          </div>
+          <dl style="margin:0;padding:4px 16px 12px">
+            <div style="display:grid;grid-template-columns:120px minmax(0,1fr);gap:12px;padding:8px 0"><dt style="color:var(--rz-text-dim)">Ціна продажу</dt><dd style="margin:0;font-family:var(--rz-font-mono);color:var(--rz-text-strong)">1 800 ₴</dd></div>
+            <div style="display:grid;grid-template-columns:120px minmax(0,1fr);gap:12px;padding:8px 0;border-top:1px solid var(--rz-border)"><dt style="color:var(--rz-text-dim)">Авто-джерело</dt><dd style="margin:0"><a href="#">VW Passat B8 · 2016</a></dd></div>
+            <div style="display:grid;grid-template-columns:120px minmax(0,1fr);gap:12px;padding:8px 0;border-top:1px solid var(--rz-border)"><dt style="color:var(--rz-text-dim)">Місце на складі</dt><dd style="margin:0;color:var(--rz-text)">Склад 2 · Зона C · Стелаж 2</dd></div>
+          </dl>
+        </aside>
+      </div>
+      <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Нове у v2: у коді клік по рядку відкриває окрему сторінку. Peek лишає список на місці; «Відкрити на всю сторінку» веде на маршрут запису. Нижче 1024 — peek стає Sheet.</span>
+    </section>
+
+    <section style="display:grid;gap:8px">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Правила</h2>
+      <ul style="margin:0;padding-left:18px;display:grid;gap:4px;color:var(--rz-text-muted)">
+        <li>Card: радіус md (8), border, surface; header 44px з border-bottom; padding — --rz-card-p (16 / 20).</li>
+        <li>Вкладені блоки всередині картки — surface-2 без власної тіні; радіус sm (6). Картка в картці заборонена.</li>
+        <li>FactList: label ліворуч (dim, 12–13px sans), значення праворуч. Порожнє значення — текстом із повідомлень («Нотаток немає…»), не тире.</li>
+        <li>KpiStrip: значення mono 28/500, одиниця mono 12 dim; не більше 4–5 клітинок у рядку.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dark&quot;, &quot;light&quot;], &quot;default&quot;: &quot;dark&quot;, &quot;tsType&quot;: &quot;'dark' | 'light'&quot;}, &quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;, &quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return { theme: this.props.theme ?? 'dark', density: this.props.density ?? 'compact' };
+  }
+}
+</script>
+</body>
+</html>

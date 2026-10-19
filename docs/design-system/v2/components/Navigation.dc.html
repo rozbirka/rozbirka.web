@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}button{font:inherit;color:inherit}a{color:#f77425;text-decoration:none}a:hover{color:#ff8430}button:focus-visible,a:focus-visible{outline:none;box-shadow:var(--rz-focus)}</style>
+</helmet>
+<div data-theme="dark" data-density="{{ density }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
+  <div style="max-width:1280px;margin:0 auto;display:grid;gap:24px">
+    <header style="display:grid;gap:8px">
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">v2 · B3 · Навігація</p>
+      <h1 style="margin:0;font-size:var(--rz-fs-page);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">Sidebar · Rail · Mobile tab bar · Topbar</h1>
+      <p style="margin:0;max-width:72ch;color:var(--rz-text-muted)">Три подачі однієї навігації: desktop ≥1024 — sidebar 232px (згортається), tablet 768–1023 — rail 56px з підказками, mobile — нижня панель на 4 вкладки + «Ще». Склад і порядок — з module-registry.ts; пункти без права перегляду не показуються.</p>
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">as-is: CabinetNavigation.tsx (280 / 72 / bottom), TenantSwitcher.tsx, module-registry.ts, module-messages.ts, shell-messages.ts</p>
+    </header>
+
+    <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+      <section data-theme="{{ t.id }}" style="display:grid;gap:24px;padding:24px;background:var(--rz-bg);color:var(--rz-text);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-lg)">
+        <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">{{ t.label }}</p>
+
+        <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+          <div style="display:grid;gap:8px">
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">Sidebar · 232</span>
+            <nav aria-label="Навігація кабінету" style="width:232px;height:780px;overflow-y:auto;scrollbar-width:none;display:flex;flex-direction:column;gap:2px;padding:8px;background:var(--rz-bg-sidebar);border:1px solid var(--rz-border);border-radius:var(--rz-r-md)">
+              <button type="button" aria-label="Перемкнути розбірку" style="display:flex;align-items:center;gap:8px;height:36px;padding:0 8px;border:0;background:transparent;border-radius:var(--rz-r-sm);cursor:pointer;text-align:left" style-hover="background:var(--rz-fill-hover)">
+                <span style="display:grid;place-items:center;width:20px;height:20px;border-radius:var(--rz-r-xs);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:700;font-size:11px">Р</span>
+                <span style="flex:1;min-width:0;font-weight:600;color:var(--rz-text-strong);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Демо-розбірка</span>
+                <i class="icon-chevrons-up-down" style="font-size:14px;color:var(--rz-text-dim)"></i>
+              </button>
+              <div style="height:8px"></div>
+              <sc-for list="{{ primary }}" as="g" hint-placeholder-count="4">
+                <div style="display:grid;gap:1px;margin-bottom:8px">
+                  <sc-if value="{{ g.title }}" hint-placeholder-val="{{ true }}"><p style="margin:0;padding:6px 8px 4px;font-size:var(--rz-fs-micro);font-weight:600;color:var(--rz-text-dim)">{{ g.title }}</p></sc-if>
+                  <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="3">
+                    <a href="#" aria-current="{{ it.current }}" style="display:flex;align-items:center;gap:10px;height:30px;padding:0 8px;border-radius:var(--rz-r-sm);color:{{ it.color }};background:{{ it.bg }};font-weight:{{ it.weight }}" style-hover="background:var(--rz-fill-hover);color:var(--rz-text-strong)">
+                      <i class="{{ it.icon }}" style="font-size:15px;width:16px;text-align:center;color:{{ it.iconColor }}"></i><span style="flex:1">{{ it.label }}</span>
+                    </a>
+                  </sc-for>
+                </div>
+              </sc-for>
+              <div style="margin-top:auto;display:grid;gap:1px">
+                <p style="margin:0;padding:6px 8px 4px;font-size:var(--rz-fs-micro);font-weight:600;color:var(--rz-text-dim)">Налаштування</p>
+                <sc-for list="{{ account }}" as="it" hint-placeholder-count="4">
+                  <a href="#" style="display:flex;align-items:center;gap:10px;height:30px;padding:0 8px;border-radius:var(--rz-r-sm);color:var(--rz-text-muted)" style-hover="background:var(--rz-fill-hover);color:var(--rz-text-strong)"><i class="{{ it.icon }}" style="font-size:15px;width:16px;text-align:center;color:var(--rz-text-dim)"></i><span>{{ it.label }}</span></a>
+                </sc-for>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;padding:8px 8px 4px;margin-top:6px;border-top:1px solid var(--rz-border)">
+                <span style="display:grid;place-items:center;width:24px;height:24px;border-radius:var(--rz-r-full);background:var(--rz-surface-2);color:var(--rz-text-muted);font-size:11px;font-weight:600">ОК</span>
+                <span style="flex:1;min-width:0;color:var(--rz-text-muted)">Особистий акаунт</span>
+                <button type="button" aria-label="Сховати меню" style="display:grid;place-items:center;width:24px;height:24px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-dim);cursor:pointer" style-hover="background:var(--rz-fill-hover)"><i class="icon-panel-left-close" style="font-size:14px"></i></button>
+              </div>
+            </nav>
+          </div>
+
+          <div style="display:grid;gap:8px">
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">Rail · 56 · tablet і згорнутий desktop</span>
+            <nav aria-label="Навігація планшета" style="position:relative;width:56px;height:780px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0;background:var(--rz-bg-sidebar);border:1px solid var(--rz-border);border-radius:var(--rz-r-md)">
+              <span style="display:grid;place-items:center;width:28px;height:28px;margin-bottom:12px;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:700;font-size:12px">Р</span>
+              <sc-for list="{{ railItems }}" as="it" hint-placeholder-count="10">
+                <a href="#" aria-label="{{ it.label }}" style="display:grid;place-items:center;width:36px;height:32px;border-radius:var(--rz-r-sm);background:{{ it.bg }};color:{{ it.iconColor }}" style-hover="background:var(--rz-fill-hover);color:var(--rz-text-strong)"><i class="{{ it.icon }}" style="font-size:16px"></i></a>
+              </sc-for>
+              <span role="tooltip" style="position:absolute;left:52px;top:148px;padding:4px 8px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:var(--rz-overlay);box-shadow:var(--rz-shadow-popover);font-size:var(--rz-fs-caption);color:var(--rz-text-strong);white-space:nowrap">Запчастини</span>
+            </nav>
+          </div>
+
+          <div style="display:grid;gap:8px">
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">Mobile · 375 · нижня панель</span>
+            <div style="position:relative;width:375px;height:640px;border:1px solid var(--rz-border);border-radius:var(--rz-r-lg);background:var(--rz-bg);overflow:hidden">
+              <div style="position:absolute;inset:0 0 auto;height:44px;display:flex;align-items:center;padding:0 16px;border-bottom:1px solid var(--rz-border);font-weight:600;color:var(--rz-text-strong)">Деталі</div>
+              <div style="position:absolute;inset:0;background:var(--rz-scrim)"></div>
+              <div role="dialog" aria-label="Меню кабінету" style="position:absolute;left:8px;right:8px;bottom:72px;display:grid;gap:12px;padding:14px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-lg);background:var(--rz-overlay);box-shadow:var(--rz-shadow-dialog)">
+                <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Меню кабінету</span><button type="button" aria-label="Закрити меню" style="display:grid;place-items:center;width:44px;height:44px;border:0;border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text-muted)"><i class="icon-x" style="font-size:18px"></i></button></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+                  <sc-for list="{{ more }}" as="it" hint-placeholder-count="8">
+                    <a href="#" style="display:flex;align-items:center;gap:10px;height:44px;padding:0 10px;border-radius:var(--rz-r-sm);color:var(--rz-text)" style-hover="background:var(--rz-fill-hover)"><i class="{{ it.icon }}" style="font-size:16px;color:var(--rz-text-dim)"></i>{{ it.label }}</a>
+                  </sc-for>
+                </div>
+                <div style="display:grid;gap:4px;padding-top:10px;border-top:1px solid var(--rz-border)">
+                  <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Поточна розбірка</span>
+                  <div style="display:flex;align-items:center;gap:8px;height:44px;padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm)"><span style="display:grid;place-items:center;width:20px;height:20px;border-radius:var(--rz-r-xs);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:700;font-size:11px">Р</span><span style="flex:1;font-weight:600;color:var(--rz-text-strong)">Демо-розбірка</span><i class="icon-chevrons-up-down" style="font-size:14px;color:var(--rz-text-dim)"></i></div>
+                  <a href="#" style="display:flex;align-items:center;gap:10px;height:44px;padding:0 10px;color:var(--rz-text-muted)"><i class="icon-log-out" style="font-size:16px"></i>Вийти</a>
+                </div>
+              </div>
+              <nav aria-label="Мобільна навігація" style="position:absolute;inset:auto 0 0;height:64px;display:flex;justify-content:space-around;align-items:flex-start;padding:6px 4px 0;border-top:1px solid var(--rz-border);background:var(--rz-bg-sidebar)">
+                <sc-for list="{{ tabs }}" as="it" hint-placeholder-count="5">
+                  <a href="#" aria-current="{{ it.current }}" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:56px;height:48px;border-radius:var(--rz-r-sm);font-size:11px;font-weight:500;color:{{ it.color }}"><i class="{{ it.icon }}" style="font-size:20px"></i>{{ it.label }}</a>
+                </sc-for>
+              </nav>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;gap:12px;padding-top:20px;border-top:1px solid var(--rz-border)">
+          <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">Topbar · 44 · sticky · breadcrumb ліворуч, дії сторінки праворуч</span>
+          <div style="border:1px solid var(--rz-border);border-radius:var(--rz-r-md);overflow:hidden;background:var(--rz-bg)">
+            <div style="display:flex;align-items:center;gap:12px;height:var(--rz-topbar-h);padding:0 16px;border-bottom:1px solid var(--rz-border)">
+              <nav aria-label="Навігаційний ланцюжок" style="display:flex;align-items:center;gap:6px;min-width:0;color:var(--rz-text-dim)"><a href="#" style="color:var(--rz-text-muted)">Склад</a><i class="icon-chevron-right" style="font-size:12px"></i><a href="#" style="color:var(--rz-text-muted)">Деталі</a><i class="icon-chevron-right" style="font-size:12px"></i><span style="color:var(--rz-text-strong);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Фара передня ліва</span></nav>
+              <div style="margin-left:auto;display:flex;gap:6px">
+                <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer;white-space:nowrap" style-hover="background:var(--rz-fill-hover)"><i class="icon-printer" style="font-size:14px;color:var(--rz-text-muted)"></i>Друк стікера</button>
+                <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer;white-space:nowrap" style-hover="background:var(--rz-fill-hover)">Редагувати</button>
+                <button type="button" aria-label="Інші дії з деталлю" style="display:grid;place-items:center;width:var(--rz-control-h);height:var(--rz-control-h);border:1px solid transparent;border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text-muted);cursor:pointer" style-hover="background:var(--rz-fill-hover)"><i class="icon-ellipsis" style="font-size:15px"></i></button>
+              </div>
+            </div>
+            <div role="status" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;min-height:36px;padding:6px 16px;background:var(--rz-warn-soft);border-bottom:1px solid var(--rz-border)">
+              <i class="icon-wifi-off" style="font-size:14px;color:var(--rz-warn)"></i>
+              <strong style="font-weight:600;color:var(--rz-text-strong)">Немає звʼязку</strong>
+              <span style="flex:1;min-width:240px;color:var(--rz-text-muted)">Уже відкрите лишається на екрані, а введене — у формі. Надсилання не пройде, доки мережа не повернеться.</span>
+            </div>
+            <div style="padding:16px;color:var(--rz-text-dim);font-size:var(--rz-fs-caption)">Вміст сторінки. Банер офлайну — під topbar, над вмістом; зникає сам, коли мережа повертається.</div>
+          </div>
+        </div>
+      </section>
+    </sc-for>
+
+    <section style="display:grid;gap:8px">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Правила</h2>
+      <ul style="margin:0;padding-left:18px;display:grid;gap:4px;color:var(--rz-text-muted)">
+        <li>Активний пункт: заливка fill-selected, текст strong, іконка brand. Без помаранчевого фону.</li>
+        <li>Групи: без заголовка (Головна) → Склад → Продажі → Гроші; Налаштування (account) — внизу. Порядок як у коді.</li>
+        <li>Mobile: 4 вкладки за mobilePriority (Головна 1, Запчастини 2, Замовлення 3, Фінанси 4) + «Ще». Активна вкладка — колір brand.</li>
+        <li>Rail: кожна іконка має aria-label і tooltip при наведенні/фокусі.</li>
+        <li>Topbar: одна primary-дія максимум; решта — secondary і меню «…».</li>
+        <li>Зміна v2: перемикач розбірки переїхав наверх sidebar (у коді — внизу). Вихід — у меню розбірки / акаунта.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;, &quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+const PRIMARY = [
+  { title: null, items: [['Головна', 'icon-layout-dashboard']] },
+  { title: 'Склад', items: [['Автомобілі', 'icon-car'], ['Запчастини', 'icon-package'], ['Інвентаризація', 'icon-clipboard-check'], ['Приймання', 'icon-scan-line'], ['Стікери', 'icon-sticker']] },
+  { title: 'Продажі', items: [['Замовлення', 'icon-clipboard-list'], ['Клієнти', 'icon-users']] },
+  { title: 'Гроші', items: [['Фінанси', 'icon-wallet-cards'], ['Звіти', 'icon-chart-column']] },
+];
+const ACCOUNT = [['Команда', 'icon-user-round-cog'], ['Підписка', 'icon-credit-card'], ['Тарифи', 'icon-badge-dollar-sign'], ['Платежі', 'icon-receipt-text'], ['Профіль', 'icon-user-round'], ['Інтеграції', 'icon-plug'], ['Бізнес', 'icon-building-2']];
+const ACTIVE = 'Запчастини';
+const item = ([label, icon]) => {
+  const cur = label === ACTIVE;
+  return { label, icon, current: cur ? 'page' : 'false', color: cur ? 'var(--rz-text-strong)' : 'var(--rz-text-muted)', bg: cur ? 'var(--rz-fill-selected)' : 'transparent', weight: cur ? 600 : 500, iconColor: cur ? 'var(--rz-brand)' : 'var(--rz-text-dim)' };
+};
+class Component extends DCLogic {
+  renderVals() {
+    const tabs = [['Головна', 'icon-layout-dashboard'], ['Запчастини', 'icon-package'], ['Замовлення', 'icon-clipboard-list'], ['Фінанси', 'icon-wallet-cards'], ['Ще', 'icon-ellipsis']];
+    const tabKeys = new Set(tabs.map((x) => x[0]));
+    const all = PRIMARY.flatMap((g) => g.items).concat(ACCOUNT);
+    return {
+      density: this.props.density ?? 'compact',
+      themes: [{ id: 'dark', label: 'Темна тема' }, { id: 'light', label: 'Світла тема' }],
+      primary: PRIMARY.map((g) => ({ title: g.title, items: g.items.map(item) })),
+      account: ACCOUNT.map(([label, icon]) => ({ label, icon })),
+      railItems: PRIMARY.flatMap((g) => g.items).map(item),
+      more: all.filter(([l]) => !tabKeys.has(l)).slice(0, 8).map(([label, icon]) => ({ label, icon })),
+      tabs: tabs.map(([label, icon]) => ({ label, icon, current: label === ACTIVE ? 'page' : 'false', color: label === ACTIVE ? 'var(--rz-brand-text)' : 'var(--rz-text-muted)' })),
+    };
+  }
+}
+</script>
+</body>
+</html>

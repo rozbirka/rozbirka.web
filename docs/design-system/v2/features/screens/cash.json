@@ -1,0 +1,92 @@
+{
+ "id": "C12",
+ "module": "cash",
+ "eyebrow": "Гроші",
+ "title": "Каси",
+ "icon": "icon-wallet-cards",
+ "route": "/app/:tenant/cash",
+ "source": "cash/cash-messages.ts",
+ "unverified": "колонки, KPI, emptyBody, searchPlaceholder/дії, яких немає в пошуку по коду",
+ "searchLabel": "Пошук кас",
+ "searchPlaceholder": "Назва каси",
+ "emptyTitle": "Кас поки немає",
+ "emptyBody": "Створіть касу, щоб вести готівку й безготівкові надходження.",
+ "actions": [
+  {
+   "label": "Переказ",
+   "icon": "icon-arrow-right-left",
+   "href": "#"
+  },
+  {
+   "label": "Створити касу",
+   "icon": "icon-plus",
+   "href": "#"
+  }
+ ],
+ "filters": [],
+ "kpis": [
+  {
+   "label": "Залишок у касах",
+   "value": "48 250",
+   "unit": "₴",
+   "meta": "3 каси"
+  },
+  {
+   "label": "Надійшло за тиждень",
+   "value": "21 400",
+   "unit": "₴",
+   "meta": ""
+  },
+  {
+   "label": "Витрачено",
+   "value": "6 900",
+   "unit": "₴",
+   "meta": ""
+  }
+ ],
+ "columns": [
+  {
+   "key": "name",
+   "label": "Каса",
+   "sub": "kind"
+  },
+  {
+   "key": "currency",
+   "label": "Валюта",
+   "mono": true
+  },
+  {
+   "key": "balance",
+   "label": "Залишок",
+   "align": "end"
+  },
+  {
+   "key": "moves",
+   "label": "Рухів",
+   "align": "end"
+  }
+ ],
+ "rows": [
+  {
+   "name": "Готівка, склад",
+   "kind": "Готівка",
+   "currency": "UAH",
+   "balance": "18 250 ₴",
+   "moves": 64
+  },
+  {
+   "name": "ФОП, рахунок",
+   "kind": "Безготівкова",
+   "currency": "UAH",
+   "balance": "29 400 ₴",
+   "moves": 31
+  },
+  {
+   "name": "Валютна",
+   "kind": "Готівка",
+   "currency": "EUR",
+   "balance": "€ 140",
+   "moves": 3
+  }
+ ]
+}

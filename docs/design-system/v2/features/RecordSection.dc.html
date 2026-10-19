@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<sc-if value="{{ isNotice }}" hint-placeholder-val="{{ false }}"><div class="{{ noticeCls }}" role="status"><i class="{{ s.icon }}"></i><span class="rz-notice__body">{{ s.text }}</span><sc-if value="{{ s.action }}" hint-placeholder-val="{{ false }}"><button class="rz-btn rz-btn--sm" type="button">{{ s.action }}</button></sc-if></div></sc-if>
+<sc-if value="{{ isCard }}" hint-placeholder-val="{{ true }}">
+  <section class="rz-card">
+    <div class="rz-card__head"><h2 class="rz-h-card">{{ s.title }} <span class="rz-dim" style="font-weight:400">{{ s.count }}</span></h2><sc-if value="{{ s.action }}" hint-placeholder-val="{{ false }}"><button class="rz-btn rz-btn--sm" type="button">{{ s.action }}</button></sc-if></div>
+    <sc-if value="{{ isFacts }}" hint-placeholder-val="{{ true }}"><dl class="rz-facts"><sc-for list="{{ facts }}" as="f" hint-placeholder-count="3"><div><dt>{{ f.k }}</dt><dd class="{{ f.cls }}">{{ f.v }}</dd></div></sc-for></dl></sc-if>
+    <sc-if value="{{ isTable }}" hint-placeholder-val="{{ false }}"><div class="rz-table-scroll"><table class="rz-table"><caption>{{ s.title }}</caption><thead><tr><sc-for list="{{ cols }}" as="h" hint-placeholder-count="4"><th class="{{ h.cls }}">{{ h.label }}</th></sc-for></tr></thead><tbody><sc-for list="{{ rows }}" as="r" hint-placeholder-count="3"><tr><sc-for list="{{ r }}" as="x" hint-placeholder-count="4"><td class="{{ x.cls }}" data-label="{{ x.label }}"><span class="{{ x.inner }}">{{ x.v }}</span></td></sc-for></tr></sc-for></tbody></table></div><sc-if value="{{ s.total }}" hint-placeholder-val="{{ false }}"><div class="rz-card__foot"><span class="rz-muted">{{ s.total.label }}</span><span class="rz-mono rz-strong">{{ s.total.value }}</span></div></sc-if></sc-if>
+    <sc-if value="{{ isTimeline }}" hint-placeholder-val="{{ false }}"><ol class="rz-timeline"><sc-for list="{{ s.items }}" as="h" hint-placeholder-count="3"><li><span class="rz-timeline__icon"><i class="{{ h.icon }}"></i></span><span><span class="rz-strong">{{ h.event }}</span> <span class="rz-dim">{{ h.detail }}</span></span><span class="rz-timeline__date">{{ h.date }}</span></li></sc-for></ol></sc-if>
+    <sc-if value="{{ isText }}" hint-placeholder-val="{{ false }}"><div class="rz-card__body"><p class="rz-dim" style="margin:0">{{ s.text }}</p></div></sc-if>
+    <sc-if value="{{ isForm }}" hint-placeholder-val="{{ false }}"><div class="rz-card__body"><div class="rz-form-grid"><sc-for list="{{ s.fields }}" as="f" hint-placeholder-count="3"><label class="rz-field"><span class="rz-label">{{ f.label }}</span><input class="{{ f.cls }}" value="{{ f.value }}" placeholder="{{ f.placeholder }}"><sc-if value="{{ f.hint }}" hint-placeholder-val="{{ false }}"><span class="rz-hint">{{ f.hint }}</span></sc-if></label></sc-for></div></div></sc-if>
+    <sc-if value="{{ isBars }}" hint-placeholder-val="{{ false }}"><div class="rz-card__body" style="display:flex;align-items:flex-end;gap:6px;height:180px"><sc-for list="{{ bars }}" as="b" hint-placeholder-count="7"><div style="flex:1;display:grid;gap:4px;justify-items:center;align-self:stretch;align-content:end"><span style="width:100%;height:{{ b.h }};border-radius:var(--rz-r-xs) var(--rz-r-xs) 0 0;background:{{ b.bg }}"></span><span class="rz-mono rz-dim" style="font-size:var(--rz-fs-micro)">{{ b.l }}</span></div></sc-for></div></sc-if>
+  </section>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;sec&quot;: {&quot;editor&quot;: null, &quot;tsType&quot;: &quot;object&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.props.sec || {};
+    const t = s.type || 'facts';
+    const cols = (s.columns || []).map((h) => ({ label: h.label || h, cls: h.align === 'end' ? 'rz-num' : '' }));
+    return {
+      s, isNotice: t === 'notice', isCard: t !== 'notice', noticeCls: 'rz-notice rz-notice--' + (s.tone || 'info'),
+      isFacts: t === 'facts', isTable: t === 'table', isTimeline: t === 'timeline', isText: t === 'text', isForm: t === 'form', isBars: t === 'bars',
+      facts: (s.rows || []).map(([k, v, mono]) => ({ k, v, cls: mono ? 'rz-mono rz-strong' : '' })),
+      cols,
+      rows: t === 'table' ? (s.rows || []).map((r) => r.map((v, i) => { const h = (s.columns || [])[i] || {}; return { v, label: h.label || h, cls: h.align === 'end' ? 'rz-num' : '', inner: h.pill ? (h.pill[v] || 'rz-pill') : i === 0 ? 'rz-strong' : h.mono ? 'rz-mono' : '' }; })) : [],
+      bars: (s.bars || []).map(([l, n], i, arr) => { const max = Math.max(...arr.map((x) => x[1])); return { l, h: Math.round((n / max) * 140) + 'px', bg: i === arr.length - 1 ? 'var(--rz-brand)' : 'var(--rz-fill-selected)' }; }),
+    };
+  }
+}
+</script>
+</body>
+</html>

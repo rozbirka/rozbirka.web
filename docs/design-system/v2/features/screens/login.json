@@ -1,0 +1,64 @@
+{
+ "id": "C20",
+ "layout": "auth",
+ "title": "Вхід",
+ "eyebrow": "Кабінет",
+ "subtitle": "",
+ "route": "/login",
+ "source": "screens/login-messages.ts (не прочитано)",
+ "unverified": "усі рядки входу",
+ "submit": "Далі",
+ "pendingLabel": "Завантаження…",
+ "links": [
+  "English (UK)",
+  "Polski"
+ ],
+ "fields": [
+  {
+   "label": "Телефон",
+   "placeholder": "+380",
+   "mode": "tel"
+  }
+ ],
+ "states": [
+  [
+   "data",
+   "Телефон"
+  ],
+  [
+   "code",
+   "Код"
+  ],
+  [
+   "pending",
+   "Надсилання"
+  ],
+  [
+   "error",
+   "Помилка"
+  ],
+  [
+   "network",
+   "Немає мережі"
+  ]
+ ],
+ "stateNotices": {
+  "error": {
+   "text": "Щось пішло не так. Спробуйте ще раз."
+  },
+  "network": {
+   "tone": "warn",
+   "icon": "icon-wifi-off",
+   "text": "Немає зʼєднання. Перевірте мережу й спробуйте ще раз."
+  }
+ },
+ "overrides": {
+  "code": {
+   "fields": {
+    "Телефон": {
+     "value": "+380 67 000 00 10"
+    }
+   }
+  }
+ }
+}

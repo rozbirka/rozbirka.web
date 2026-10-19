@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens/tokens.css">
+<style>body{margin:0;background:#0b0b0b;color:#f6f4f2;font-family:'Manrope',system-ui,sans-serif}a{color:#f77425}a:hover{color:#ff8430}</style>
+</helmet>
+<div style="max-width:1240px;margin:0 auto;padding:40px 24px 64px;display:grid;gap:40px">
+  <div style="display:grid;gap:12px">
+    <p style="margin:0;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#8a847c">Rozbirka · tokens · main@5d46b1f</p>
+    <h1 style="margin:0;font-size:46px;line-height:1;font-weight:800;letter-spacing:-0.03em;color:#fff">Токени</h1>
+    <p style="margin:0;font-size:15px;line-height:24px;color:#a29b93;max-width:62ch">Точні значення з src/index.css і найчастіші захардкоджені значення (позначені «observed»). Розбіжності — у tokens/DRIFT.md.</p>
+  </div>
+
+  <sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+    <section style="display:grid;gap:14px">
+      <h2 style="margin:0;font-size:18px;font-weight:700;letter-spacing:-0.01em;color:#fff">{{ g.title }}</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px">
+        <sc-for list="{{ g.items }}" as="c" hint-placeholder-count="6">
+          <div style="border:1px solid rgb(255 255 255 / 0.07);background:#121212;border-radius:14px;overflow:hidden">
+            <div style="height:64px;background:{{ c.value }};border-bottom:1px solid rgb(255 255 255 / 0.07)"></div>
+            <div style="padding:10px 12px;display:grid;gap:2px">
+              <span style="font-size:13.5px;color:#fff">{{ c.name }}</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#8a847c">{{ c.value }}</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#a29b93">{{ c.css }}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+
+  <section style="display:grid;gap:14px">
+    <h2 style="margin:0;font-size:18px;font-weight:700;letter-spacing:-0.01em;color:#fff">Типографічні ролі (кабінет)</h2>
+    <div style="border:1px solid rgb(255 255 255 / 0.07);background:#121212;border-radius:20px;padding:8px 20px">
+      <div style="display:grid;grid-template-columns:160px minmax(0,1fr);gap:16px;align-items:baseline;padding:14px 0;border-bottom:1px solid rgb(255 255 255 / 0.07)"><span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:0.08em;text-transform:uppercase;color:#8a847c">display 46/800</span><span style="font-size:46px;line-height:1;font-weight:800;letter-spacing:-0.03em;color:#fff">Замовлення</span></div>
+      <div style="display:grid;grid-template-columns:160px minmax(0,1fr);gap:16px;align-items:baseline;padding:14px 0;border-bottom:1px solid rgb(255 255 255 / 0.07)"><span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:0.08em;text-transform:uppercase;color:#8a847c">sheet 26/800</span><span style="font-size:26px;line-height:1.1;font-weight:800;letter-spacing:-0.02em;color:#fff">Нове замовлення</span></div>
+      <div style="display:grid;grid-template-columns:160px minmax(0,1fr);gap:16px;align-items:baseline;padding:14px 0;border-bottom:1px solid rgb(255 255 255 / 0.07)"><span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:0.08em;text-transform:uppercase;color:#8a847c">card 18/700</span><span style="font-size:18px;font-weight:700;letter-spacing:-0.01em;color:#fff">Останні замовлення</span></div>
+      <div style="display:grid;grid-template-columns:160px minmax(0,1fr);gap:16px;align-items:baseline;padding:14px 0;border-bottom:1px solid rgb(255 255 255 / 0.07)"><span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:0.08em;text-transform:uppercase;color:#8a847c">stat 25/300</span><span style="font-size:25px;font-weight:300;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;color:#fff">48 250 ₴</span></div>
+      <div style="display:grid;grid-template-columns:160px minmax(0,1fr);gap:16px;align-items:baseline;padding:14px 0;border-bottom:1px solid rgb(255 255 255 / 0.07)"><span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:0.08em;text-transform:uppercase;color:#8a847c">body 14.5</span><span style="font-size:14.5px;color:#f6f4f2">Основний текст таблиць, повідомлень і кнопок</span></div>
+      <div style="display:grid;grid-template-columns:160px minmax(0,1fr);gap:16px;align-items:baseline;padding:14px 0;border-bottom:1px solid rgb(255 255 255 / 0.07)"><span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:0.08em;text-transform:uppercase;color:#8a847c">body-sm 13.5</span><span style="font-size:13.5px;color:#a29b93">Підпис поля, вкладки, пагінація</span></div>
+      <div style="display:grid;grid-template-columns:160px minmax(0,1fr);gap:16px;align-items:baseline;padding:14px 0"><span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:0.08em;text-transform:uppercase;color:#8a847c">label-mono 11.5</span><span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;letter-spacing:0.08em;text-transform:uppercase;color:#8a847c">Заголовок колонки</span></div>
+    </div>
+  </section>
+
+  <section style="display:grid;gap:14px">
+    <h2 style="margin:0;font-size:18px;font-weight:700;letter-spacing:-0.01em;color:#fff">Радіуси</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:16px">
+      <sc-for list="{{ radii }}" as="r" hint-placeholder-count="8">
+        <div style="display:grid;gap:8px;justify-items:center">
+          <div style="width:88px;height:64px;background:#191919;border:1px solid rgb(255 255 255 / 0.13);border-radius:{{ r.value }}"></div>
+          <span style="font-size:12.5px;color:#fff">{{ r.name }}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8a847c">{{ r.value }} · {{ r.status }}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const c = (name, value, css) => ({ name, value, css: css || 'observed' });
+    return {
+      groups: [
+        { title: 'Brand', items: [c('brand', '#f77425', '--color-brand'), c('brand-hover', '#ff8430', '--color-brand-hover'), c('brand-foreground', '#000000', '--color-brand-foreground'), c('brand-tint', 'rgb(247 116 37 / 0.12)')] },
+        { title: 'Поверхні кабінету', items: [c('canvas', '#0b0b0b', '--color-app-canvas'), c('raised', '#121212', '--color-app-raised'), c('input', '#191919', '--color-app-input'), c('overlay', '#1f1e1d', '--color-app-overlay'), c('line', 'rgb(255 255 255 / 0.07)', '--color-app-line'), c('line-2', 'rgb(255 255 255 / 0.13)', '--color-app-line-2')] },
+        { title: 'Текст', items: [c('strong', '#ffffff'), c('ink', '#f6f4f2', '--color-app-ink'), c('muted', '#a29b93', '--color-app-muted'), c('dim', '#8a847c', '--color-app-dim')] },
+        { title: 'Стани', items: [c('ok', '#4cc38a', '--color-state-ok'), c('ok-soft', 'rgb(76 195 138 / 0.13)', '--color-state-ok-soft'), c('warn', '#e8b13c', '--color-state-warn'), c('warn-soft', 'rgb(232 177 60 / 0.13)', '--color-state-warn-soft'), c('danger', '#f2645a', '--color-state-danger'), c('danger-soft', 'rgb(242 100 90 / 0.13)', '--color-state-danger-soft'), c('info', '#6ea8fe', '--color-state-info'), c('info-soft', 'rgb(110 168 254 / 0.13)', '--color-state-info-soft')] },
+        { title: 'Заливки взаємодії (observed)', items: [c('row-hover', 'rgb(255 255 255 / 0.025)'), c('subtle', 'rgb(255 255 255 / 0.03)'), c('hover', 'rgb(255 255 255 / 0.04)'), c('highlight', 'rgb(255 255 255 / 0.06)'), c('pressed', 'rgb(255 255 255 / 0.07)'), c('selected', 'rgb(255 255 255 / 0.09)')] },
+        { title: 'Лендинг', items: [c('surface-1', '#0b0b0b', '--color-surface-1'), c('surface-2', '#161616', '--color-surface-2'), c('surface-3', '#1a1a1a', '--color-surface-3')] },
+      ],
+      radii: [
+        { name: 'xs', value: '6px', status: 'obs' }, { name: 'chip', value: '8px', status: 'obs' }, { name: 'control', value: '10px', status: 'token' }, { name: 'panel', value: '12px', status: 'token' }, { name: 'inset', value: '14px', status: 'obs' }, { name: 'sheet', value: '16px', status: 'token' }, { name: 'card-sm', value: '18px', status: 'obs' }, { name: 'card', value: '20px', status: 'obs' }, { name: 'bottom-sheet', value: '24px', status: 'obs' }, { name: 'landing-card', value: '32px', status: 'token' }, { name: 'pill', value: '9999px', status: 'token' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

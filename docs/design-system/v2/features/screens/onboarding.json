@@ -1,0 +1,71 @@
+{
+ "id": "C32",
+ "module": "dashboard",
+ "crumbs": [],
+ "title": "Нова розбірка",
+ "route": "/app (без розбірок) · OnboardingChecklist",
+ "source": "screens/tenant-onboarding-messages.ts, onboarding/* (не прочитано)",
+ "unverified": "усі рядки",
+ "states": [
+  [
+   "data",
+   "Дані"
+  ],
+  [
+   "loading",
+   "Завантаження"
+  ],
+  [
+   "error",
+   "Помилка"
+  ]
+ ],
+ "actions": [
+  {
+   "label": "Створити розбірку",
+   "icon": "icon-check",
+   "variant": "primary"
+  }
+ ],
+ "main": [
+  {
+   "type": "form",
+   "title": "Розбірка",
+   "fields": [
+    {
+     "label": "Назва",
+     "cls": "rz-input"
+    },
+    {
+     "label": "Місто",
+     "cls": "rz-input"
+    }
+   ]
+  },
+  {
+   "type": "timeline",
+   "title": "Перші кроки",
+   "items": [
+    {
+     "icon": "icon-building-2",
+     "event": "Бізнес",
+     "detail": "назва й склад",
+     "date": ""
+    },
+    {
+     "icon": "icon-car",
+     "event": "Перше авто",
+     "detail": "",
+     "date": ""
+    },
+    {
+     "icon": "icon-package",
+     "event": "Перша деталь",
+     "detail": "",
+     "date": ""
+    }
+   ]
+  }
+ ],
+ "aside": []
+}

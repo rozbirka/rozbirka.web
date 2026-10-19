@@ -1,0 +1,134 @@
+{
+ "id": "C29",
+ "module": "integrations",
+ "crumbs": [
+  "Налаштування",
+  "Інтеграції"
+ ],
+ "title": "Нова пошта",
+ "route": "/app/:tenant/settings/integrations/:id[/dispatch-points|/webhook|/settings]",
+ "source": "integrations/*, orders/delivery/drawer-messages.ts",
+ "unverified": "назви вкладок і полів",
+ "chips": [
+  {
+   "cls": "rz-pill rz-pill--ok",
+   "text": "Підключено"
+  }
+ ],
+ "actions": [
+  {
+   "label": "Перевірити зʼєднання",
+   "icon": "icon-refresh-cw"
+  }
+ ],
+ "states": [
+  [
+   "data",
+   "Огляд"
+  ],
+  [
+   "points",
+   "Точки відправлення"
+  ],
+  [
+   "nopoints",
+   "Без точок"
+  ],
+  [
+   "webhook",
+   "Webhook"
+  ],
+  [
+   "error",
+   "Помилка"
+  ]
+ ],
+ "main": [
+  {
+   "type": "facts",
+   "title": "Підключення",
+   "rows": [
+    [
+     "Ключ API",
+     "•••• 7f3a",
+     true
+    ],
+    [
+     "Відправник",
+     "ФОП Коваленко О."
+    ]
+   ]
+  }
+ ],
+ "aside": [
+  {
+   "type": "facts",
+   "title": "Стан",
+   "rows": [
+    [
+     "Останній обмін",
+     "17.10 14:00",
+     true
+    ]
+   ]
+  }
+ ],
+ "overrides": {
+  "points": {
+   "main": [
+    {
+     "type": "table",
+     "title": "Точки відправлення",
+     "columns": [
+      {
+       "label": "Точка"
+      },
+      {
+       "label": "Місто"
+      }
+     ],
+     "rows": [
+      [
+       "Відділення 4",
+       "Київ"
+      ],
+      [
+       "Склад",
+       "Київ"
+      ]
+     ]
+    }
+   ]
+  },
+  "nopoints": {
+   "main": [
+    {
+     "type": "notice",
+     "tone": "warn",
+     "icon": "icon-map-pin-off",
+     "text": "Немає жодної точки відправлення. Додайте її в налаштуваннях інтеграції — без неї накладну не створити."
+    }
+   ]
+  },
+  "webhook": {
+   "main": [
+    {
+     "type": "facts",
+     "title": "Webhook",
+     "rows": [
+      [
+       "Адреса",
+       "https://…/np/webhook",
+       true
+      ],
+      [
+       "Остання подія",
+       "17.10 13:58",
+       true
+      ]
+     ]
+    }
+   ]
+  }
+ }
+}

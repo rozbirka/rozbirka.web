@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./tokens.css">
+<link rel="stylesheet" href="./kit.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}</style>
+</helmet>
+<div class="rz" data-theme="{{ theme }}" data-density="{{ density }}">
+  <div class="rz-app">
+    <nav class="rz-sidebar" aria-label="Навігація кабінету">
+      <button class="rz-sidebar__tenant" type="button" aria-label="Перемкнути розбірку"><span class="rz-avatar">Р</span><span style="flex:1">Демо-розбірка</span><i class="icon-chevrons-up-down rz-dim"></i></button>
+      <div class="rz-nav-group" style="margin-top:8px"><a class="rz-nav-item" href="#"><i class="icon-layout-dashboard"></i>Головна</a></div>
+      <div class="rz-nav-group"><p class="rz-nav-group__title">Склад</p><a class="rz-nav-item" href="#"><i class="icon-car"></i>Автомобілі</a><a class="rz-nav-item" href="#" aria-current="page"><i class="icon-package"></i>Запчастини</a><a class="rz-nav-item" href="#"><i class="icon-clipboard-check"></i>Інвентаризація</a></div>
+      <div class="rz-nav-group"><p class="rz-nav-group__title">Продажі</p><a class="rz-nav-item" href="#"><i class="icon-clipboard-list"></i>Замовлення</a><a class="rz-nav-item" href="#"><i class="icon-users"></i>Клієнти</a></div>
+    </nav>
+    <div class="rz-main">
+      <header class="rz-topbar">
+        <nav class="rz-crumbs" aria-label="Навігаційний ланцюжок"><a href="#">Склад</a><i class="icon-chevron-right" style="font-size:12px"></i><span aria-current="page">Деталі</span></nav>
+        <div class="rz-topbar__actions"><button class="rz-btn" type="button"><i class="icon-upload"></i>Імпорт запчастин</button><button class="rz-btn rz-btn--primary" type="button"><i class="icon-plus"></i>Додати деталь</button></div>
+      </header>
+      <div class="rz-banner rz-banner--warn"><span class="rz-pill rz-pill--warn">Оплата прострочена</span><span>Списання за підписку не вдалося.</span></div>
+      <div class="rz-split">
+        <main class="rz-page">
+          <div class="rz-page-head"><h1 class="rz-h-page">Деталі</h1><dl class="rz-totals"><div style="display:flex;gap:5px"><dd>12</dd><dt>усього</dt></div><div style="display:flex;gap:5px"><dd>9</dd><dt>доступно</dt></div></dl></div>
+          <div class="rz-toolbar" role="search">
+            <label class="rz-search"><i class="icon-search"></i><input aria-label="Пошук деталей" placeholder="Пошук: назва, OEM, QR або VIN"></label>
+            <div class="rz-seg" role="radiogroup" aria-label="Статус"><button role="radio" aria-checked="true" type="button">Усі</button><button role="radio" aria-checked="false" type="button"><span class="rz-dot rz-dot--ok"></span>В наявності</button><button role="radio" aria-checked="false" type="button">У резерві</button></div>
+            <button class="rz-filter rz-filter--set" type="button"><span class="rz-filter__key">Марка:</span>Volkswagen<i class="icon-chevron-down" style="font-size:12px"></i></button>
+            <button class="rz-filter" type="button">Склад: усі<i class="icon-chevron-down" style="font-size:12px"></i></button>
+          </div>
+          <div class="rz-table-wrap"><div class="rz-table-scroll">
+            <table class="rz-table"><caption>Деталі на складі</caption>
+              <thead><tr><th class="rz-col-check"><input class="rz-check" type="checkbox" aria-label="Обрати всі на сторінці"></th><th>Деталь</th><th>Авто-джерело</th><th>Стан</th><th class="rz-num">Доступно</th></tr></thead>
+              <tbody>
+                <tr data-active="true"><td class="rz-col-check"><input class="rz-check" type="checkbox" aria-label="Обрати: Фара передня ліва"></td><th scope="row"><span class="rz-cell-main"><span>Фара передня ліва</span><span class="rz-mono">3G1941005</span></span></th><td data-label="Авто-джерело">VW Passat B8 · 2016</td><td data-label="Стан"><span class="rz-pill rz-pill--ok">Доступна</span></td><td class="rz-num" data-label="Доступно">1</td></tr>
+                <tr aria-selected="true"><td class="rz-col-check"><input class="rz-check" type="checkbox" checked="checked" aria-label="Обрати: Двері задні праві"></td><th scope="row"><span class="rz-cell-main"><span>Двері задні праві</span><span class="rz-mono">5E5833052</span></span></th><td data-label="Авто-джерело">Skoda Octavia A7 · 2018</td><td data-label="Стан"><span class="rz-pill rz-pill--warn">У резерві</span></td><td class="rz-num" data-label="Доступно">0</td></tr>
+                <tr><td class="rz-col-check"><input class="rz-check" type="checkbox" disabled="disabled" aria-label="Обрати: Кермова рейка"></td><th scope="row"><span class="rz-cell-main"><span>Кермова рейка</span><span class="rz-mono">8200675422</span></span></th><td data-label="Авто-джерело">Renault Megane III · 2014</td><td data-label="Стан"><span class="rz-pill rz-pill--danger">Продана</span></td><td class="rz-num" data-label="Доступно">0</td></tr>
+              </tbody>
+            </table></div>
+            <nav class="rz-pager" aria-label="Пагінація деталей"><span class="rz-mono">1–3 з 1 284</span><div class="rz-pager__nav"><span>Сторінка 1 з 52</span><button class="rz-btn rz-btn--icon" type="button" aria-label="Наступна сторінка"><i class="icon-chevron-right"></i></button></div></nav>
+          </div>
+          <div class="rz-notice rz-notice--danger" role="alert"><i class="icon-triangle-alert"></i><span class="rz-notice__body">Не вдалося зберегти. Спробуйте ще раз.</span><button class="rz-btn rz-btn--sm" type="button">Спробувати ще раз</button></div>
+          <div class="rz-kpis"><div class="rz-kpi"><span class="rz-kpi__label">Доступно</span><span class="rz-kpi__value"><span class="rz-display">3</span><span class="rz-kpi__unit">шт</span></span><span class="rz-kpi__meta">можна продати</span></div><div class="rz-kpi rz-kpi--warn"><span class="rz-kpi__label">У резерві</span><span class="rz-kpi__value"><span class="rz-display">1</span></span><span class="rz-kpi__meta">1 замовлення</span></div></div>
+          <section class="rz-card"><div class="rz-state rz-state--brand"><span class="rz-state__icon"><i class="icon-package"></i></span><h2 class="rz-state__title">Тут поки порожньо</h2><p class="rz-state__body">Додайте першу деталь або розберіть авто — позиції з’являться тут.</p><div class="rz-btn-row"><button class="rz-btn rz-btn--primary" type="button"><i class="icon-plus"></i>Додати деталь</button></div></div></section>
+          <p class="rz-caption">Kit Check — та сама розмітка, яку пишуть агенти: лише класи з kit.css, без inline-стилів компонентів.</p>
+        </main>
+        <aside class="rz-peek" aria-label="Деталь">
+          <div class="rz-peek__head"><span class="rz-eyebrow">Деталь</span><h2 class="rz-h-title">Фара передня ліва</h2><div class="rz-btn-row"><span class="rz-code">OEM 3G1941005<button type="button" aria-label="Копіювати код"><i class="icon-copy" style="font-size:12px"></i></button></span><span class="rz-pill rz-pill--ok">Доступна</span></div></div>
+          <dl class="rz-facts"><div><dt>Ціна продажу</dt><dd class="rz-mono rz-strong">4 800 ₴</dd></div><div><dt>Місце на складі</dt><dd>Склад 1 · Зона A</dd></div></dl>
+          <div class="rz-peek__section"><span class="rz-label">Історія</span><ol class="rz-timeline"><li><span class="rz-timeline__icon"><i class="icon-tag"></i></span><div><span class="rz-strong">Змінено</span><div class="rz-change"><s>4 500</s><i class="icon-arrow-right" style="font-size:11px"></i><span>4 800</span></div></div><span class="rz-timeline__date">12.10</span></li></ol></div>
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dark&quot;, &quot;light&quot;], &quot;default&quot;: &quot;dark&quot;, &quot;tsType&quot;: &quot;'dark' | 'light'&quot;}, &quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;, &quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+class Component extends DCLogic {
+  renderVals() { return { theme: this.props.theme ?? 'dark', density: this.props.density ?? 'compact' }; }
+}
+</script>
+</body>
+</html>

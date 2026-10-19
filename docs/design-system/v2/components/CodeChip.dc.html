@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}button{font:inherit;color:inherit}a{color:#f77425}a:hover{color:#ff8430}button:focus-visible{outline:none;box-shadow:var(--rz-focus)}</style>
+</helmet>
+<div data-theme="dark" data-density="{{ density }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
+  <div style="max-width:1280px;margin:0 auto;display:grid;gap:24px">
+    <header style="display:grid;gap:8px">
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">v2 · B1 · Базові контроли</p>
+      <h1 style="margin:0;font-size:var(--rz-fs-page);font-weight:700;letter-spacing:var(--rz-ls-title);color:var(--rz-text-strong)">CodeChip · Kbd</h1>
+      <p style="margin:0;max-width:72ch;color:var(--rz-text-muted)">CodeChip — код із кнопкою копіювання (OEM, VIN, QR, номер накладної). Kbd — підказка клавіатурного скорочення; на touch-пристроях не показується.</p>
+      <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">as-is: src/components/app/code-chip.tsx · kbd — локально в CommandPalette.tsx, DashboardScreen.tsx</p>
+    </header>
+
+    <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+      <section data-theme="{{ t.id }}" style="display:grid;gap:24px;padding:24px;background:var(--rz-bg);color:var(--rz-text);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-lg)">
+        <p style="margin:0;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);letter-spacing:var(--rz-ls-mono);text-transform:uppercase;color:var(--rz-text-dim)">{{ t.label }}</p>
+
+        <div style="display:grid;gap:12px">
+          <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">CodeChip · md 24 / sm 20</p>
+          <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-end">
+            <div style="display:grid;gap:6px;justify-items:start">
+              <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 2px 0 8px;border:1px solid var(--rz-border);border-radius:var(--rz-r-xs);background:var(--rz-surface-2)">
+                <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text);white-space:nowrap">OEM 3G1941005</span>
+                <button aria-label="Копіювати код" title="Копіювати код" onClick="{{ copy }}" style="display:grid;place-items:center;width:20px;height:20px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:{{ copyColor }};cursor:pointer" style-hover="background:var(--rz-fill-active);color:var(--rz-text)"><i class="{{ copyIcon }}" style="font-size:12px"></i></button>
+              </span>
+              <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">клікніть копіювання</span>
+            </div>
+            <div style="display:grid;gap:6px;justify-items:start">
+              <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 2px 0 8px;border:1px solid var(--rz-border);border-radius:var(--rz-r-xs);background:var(--rz-surface-2)">
+                <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text);white-space:nowrap">VIN WVWZZZ3CZGE012345</span>
+                <span style="display:grid;place-items:center;width:20px;height:20px;border-radius:var(--rz-r-xs);background:var(--rz-fill-active);color:var(--rz-text)"><i class="icon-copy" style="font-size:12px"></i></span>
+              </span>
+              <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">hover</span>
+            </div>
+            <div style="display:grid;gap:6px;justify-items:start">
+              <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 2px 0 8px;border:1px solid var(--rz-border);border-radius:var(--rz-r-xs);background:var(--rz-surface-2)">
+                <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text);white-space:nowrap">QR RZ-000482</span>
+                <span style="display:grid;place-items:center;width:20px;height:20px;border-radius:var(--rz-r-xs);color:var(--rz-ok)"><i class="icon-check" style="font-size:12px"></i></span>
+              </span>
+              <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">скопійовано · 1.5 с</span>
+            </div>
+            <div style="display:grid;gap:6px;justify-items:start">
+              <span style="display:inline-flex;align-items:center;height:20px;padding:0 6px;border:1px solid var(--rz-border);border-radius:var(--rz-r-xs);background:var(--rz-surface-2);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-muted);white-space:nowrap">5E5833052</span>
+              <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">sm · без копіювання, у рядку</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;max-width:360px;height:36px;padding:0 12px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-overlay);box-shadow:var(--rz-shadow-popover)">
+            <i class="icon-circle-check" style="font-size:14px;color:var(--rz-ok)"></i><span style="color:var(--rz-text)">Код скопійовано.</span>
+          </div>
+          <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Повідомлення після копіювання — Toast (B2). Помилка: «Не вдалося скопіювати код.»</span>
+        </div>
+
+        <div style="display:grid;gap:12px;padding-top:20px;border-top:1px solid var(--rz-border)">
+          <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">Kbd</p>
+          <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center">
+            <span style="display:flex;gap:3px"><span style="min-width:18px;height:18px;padding:0 4px;display:inline-grid;place-items:center;border:1px solid var(--rz-border-strong);border-bottom-width:2px;border-radius:var(--rz-r-xs);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-muted)">⌘</span><span style="min-width:18px;height:18px;padding:0 4px;display:inline-grid;place-items:center;border:1px solid var(--rz-border-strong);border-bottom-width:2px;border-radius:var(--rz-r-xs);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-muted)">K</span></span>
+            <span style="min-width:18px;height:18px;padding:0 4px;display:inline-grid;place-items:center;border:1px solid var(--rz-border-strong);border-bottom-width:2px;border-radius:var(--rz-r-xs);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-muted)">Esc</span>
+            <span style="min-width:18px;height:18px;padding:0 4px;display:inline-grid;place-items:center;border:1px solid var(--rz-border-strong);border-bottom-width:2px;border-radius:var(--rz-r-xs);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-muted)">/</span>
+            <span style="display:flex;gap:3px"><span style="min-width:18px;height:18px;padding:0 4px;display:inline-grid;place-items:center;border:1px solid var(--rz-border-strong);border-bottom-width:2px;border-radius:var(--rz-r-xs);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-muted)">↑</span><span style="min-width:18px;height:18px;padding:0 4px;display:inline-grid;place-items:center;border:1px solid var(--rz-border-strong);border-bottom-width:2px;border-radius:var(--rz-r-xs);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-muted)">↓</span></span>
+            <span style="display:flex;gap:6px;align-items:center;color:var(--rz-text-dim)">у меню<span style="height:16px;padding:0 4px;display:inline-grid;place-items:center;border-radius:var(--rz-r-xs);background:var(--rz-fill-active);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-muted)">G P</span></span>
+          </div>
+          <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">На Windows/Linux ⌘ рендериться як Ctrl. Скорочення G P тощо — пропозиція v2, у коді є лише ⌘K.</span>
+        </div>
+      </section>
+    </sc-for>
+
+    <section style="display:grid;gap:8px">
+      <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Props · CodeChip</h2>
+      <div style="border:1px solid var(--rz-border);border-radius:var(--rz-r-md);overflow:hidden">
+        <sc-for list="{{ props }}" as="p" hint-placeholder-count="4">
+          <div style="display:grid;grid-template-columns:140px 220px minmax(0,1fr);gap:16px;padding:8px 12px;border-top:1px solid var(--rz-border);background:var(--rz-surface)">
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-strong)">{{ p.name }}</span>
+            <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-muted)">{{ p.type }}</span>
+            <span style="color:var(--rz-text-muted)">{{ p.note }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;, &quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+class Component extends DCLogic {
+  state = { copied: false };
+  renderVals() {
+    const copied = this.state.copied;
+    return {
+      density: this.props.density ?? 'compact',
+      themes: [{ id: 'dark', label: 'Темна тема' }, { id: 'light', label: 'Світла тема' }],
+      copyIcon: copied ? 'icon-check' : 'icon-copy',
+      copyColor: copied ? 'var(--rz-ok)' : 'var(--rz-text-dim)',
+      copy: () => { this.setState({ copied: true }); clearTimeout(this._t); this._t = setTimeout(() => this.setState({ copied: false }), 1500); },
+      props: [
+        { name: 'code', type: 'string', note: 'Значення, що копіюється. Mono, nowrap.' },
+        { name: 'prefix', type: 'string', note: 'Нове у v2: «OEM», «VIN», «QR» перед кодом, теж mono.' },
+        { name: 'label', type: 'string', note: 'aria-label кнопки: «Копіювати код».' },
+        { name: 'size', type: "'sm' | 'md'", note: 'sm — без кнопки, для таблиць.' },
+        { name: 'onCopy', type: '() => void', note: 'Іконка → check на 1.5 с + Toast.' },
+      ],
+    };
+  }
+  componentWillUnmount() { clearTimeout(this._t); }
+}
+</script>
+</body>
+</html>
