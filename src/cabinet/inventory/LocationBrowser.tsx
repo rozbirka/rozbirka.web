@@ -1,7 +1,13 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { ChevronRight, Plus, Pencil } from 'lucide-react'
-import { Button, DataTable, Pagination, SearchInput } from '@/components/app'
+import { ChevronRight, Plus, Pencil, Rows3 } from 'lucide-react'
+import {
+  Button,
+  DataTable,
+  Pagination,
+  SearchInput,
+  StateScreen,
+} from '@/components/app'
 import type {
   InventorySection,
   InventoryShelf,
@@ -18,26 +24,80 @@ const PAGE_SIZE = 10
 const matches = (query: string, name: string, code: string) =>
   !query || `${name} ${code}`.toLocaleLowerCase().includes(query)
 
+/**
+ * The head row of a location card: title with its count, a hint under it and
+ * the card's own actions opposite (`.rz-card__head` in the v2 reference).
+ */
 export function LocationBrowserHeader({
   title,
+  count,
   lead,
-  search,
   actions,
 }: {
   title: string
-  lead: string
-  search?: ReactNode
+  /** Shown dim beside the title: "Секції 3". */
+  count?: ReactNode
+  lead?: string | undefined
   actions: ReactNode
 }) {
   return (
     <header className="location-browser__toolbar">
       <div className="min-w-0">
-        <h2 className="location-browser__heading">{title}</h2>
-        <p className="location-browser__lead">{lead}</p>
+        <div className="location-browser__heading">
+          <h2 className="rz-h-card">{title}</h2>
+          {count === undefined || count === null ? null : (
+            <span className="location-browser__count-total rz-mono">
+              {count}
+            </span>
+          )}
+        </div>
+        {lead ? <p className="location-browser__lead">{lead}</p> : null}
       </div>
-      {search ? <div className="location-browser__search">{search}</div> : null}
       <div className="location-browser__actions">{actions}</div>
     </header>
+  )
+}
+
+/**
+ * The page toolbar search that filters the location list below it. The query
+ * lives in the URL (`locationSearch`), so the list and the search can sit in
+ * different places on the page and still agree.
+ */
+export function LocationSearch({
+  label,
+  placeholder,
+  end,
+}: {
+  label: string
+  placeholder: string
+  /** A caption at the far end of the toolbar. */
+  end?: ReactNode
+}) {
+  const [params, setParams] = useSearchParams()
+  const navigationState = useLocation().state as unknown
+  return (
+    <div className="rz-toolbar" role="search">
+      <SearchInput
+        aria-label={label}
+        className="flex-[0_1_320px]"
+        placeholder={placeholder}
+        value={params.get('locationSearch') ?? ''}
+        onChange={(event) =>
+          setParams(
+            (current) => {
+              const next = new URLSearchParams(current)
+              if (event.target.value)
+                next.set('locationSearch', event.target.value)
+              else next.delete('locationSearch')
+              next.delete('locationPage')
+              return next
+            },
+            { replace: true, preventScrollReset: true, state: navigationState },
+          )
+        }
+      />
+      {end ? <span className="rz-toolbar__end rz-caption">{end}</span> : null}
+    </div>
   )
 }
 
@@ -92,6 +152,15 @@ export function LocationBrowser({
       matches(needle, item.name, item.code),
   )
   const total = section ? visibleShelves.length : visibleSections.length
+  /** Everything the card holds, before the search narrows it. */
+  const allCount = section
+    ? shelves.filter(
+        (item) =>
+          item.isActive &&
+          item.zoneId === zone.id &&
+          item.sectionId === section.id,
+      ).length
+    : sections.filter((item) => item.isActive && item.zoneId === zone.id).length
   const requestedPage = Number.parseInt(params.get('locationPage') ?? '1', 10)
   const page = Math.min(
     Math.max(Number.isFinite(requestedPage) ? requestedPage : 1, 1),
@@ -114,35 +183,16 @@ export function LocationBrowser({
     <div className="location-browser">
       <LocationBrowserHeader
         title={t(section ? 'shelves' : 'sections')}
-        lead={t(
+        count={printWorkspace ? undefined : allCount}
+        lead={
           section
-            ? onEditShelf
-              ? 'chooseShelfToEdit'
-              : 'chooseShelf'
-            : 'chooseSection',
-        )}
-        search={
-          printWorkspace ? null : (
-            <SearchInput
-              className="min-h-control text-sm"
-              aria-label={t(section ? 'searchShelves' : 'searchSections')}
-              placeholder={t('nameOrCode')}
-              value={query}
-              onChange={(event) =>
-                update({
-                  locationSearch: event.target.value,
-                  locationPage: null,
-                })
-              }
-            />
-          )
+            ? t(onEditShelf ? 'chooseShelfToEdit' : 'chooseShelf')
+            : undefined
         }
         actions={
           <>
-            {canManage ? (
+            {canManage && (section || allCount > 0 || needle) ? (
               <Button
-                className="px-3 text-body sm:px-4 sm:text-sm"
-                variant="primary"
                 onClick={() =>
                   section ? onAddShelf(section) : onAddSection(zone)
                 }
@@ -156,17 +206,41 @@ export function LocationBrowser({
         }
       />
       {printWorkspace != null ? (
-        <div className="px-4 pb-4 sm:px-6 sm:pb-6">{printWorkspace}</div>
+        <div className="p-[var(--rz-card-p)]">{printWorkspace}</div>
+      ) : allCount === 0 && !needle ? (
+        <StateScreen
+          className="location-browser__placeholder"
+          icon={<Rows3 aria-hidden />}
+          title={t(section ? 'noShelves' : 'noSections')}
+          {...(!section
+            ? {
+                tone: 'brand' as const,
+                className: 'location-browser__placeholder min-h-[360px]',
+              }
+            : {})}
+          {...(!section && canManage
+            ? {
+                actions: (
+                  <Button onClick={() => onAddSection(zone)} variant="primary">
+                    <Plus aria-hidden />
+                    {tw('addSection')}
+                  </Button>
+                ),
+              }
+            : {})}
+        />
       ) : (
         <>
           {selectionNotice ? (
-            <div className="px-4 pb-4 sm:px-6">{selectionNotice}</div>
+            <div className="px-[var(--rz-card-p)] pt-3 pb-1">
+              {selectionNotice}
+            </div>
           ) : null}
           <div
             aria-hidden
             className="location-browser__columns location-browser__columns--plain"
           >
-            <span>{t(section ? 'shelfName' : 'sections')}</span>
+            <span>{t('name')}</span>
             <span />
           </div>
           {section ? (
@@ -317,11 +391,12 @@ export function LocationBrowser({
   )
 }
 
+/** A location's name with its mono code on the same line. */
 export function LocationName({ name, code }: { name: string; code: string }) {
   return (
-    <span className="min-w-0">
+    <span className="location-browser__label">
       <strong className="location-browser__name">{name}</strong>
-      <span className="location-browser__code">{code}</span>
+      {code ? <span className="location-browser__code">{code}</span> : null}
     </span>
   )
 }

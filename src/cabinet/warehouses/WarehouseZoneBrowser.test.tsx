@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router'
 import { expect, it, vi } from 'vitest'
 import { WarehouseZoneBrowser } from './WarehouseZoneBrowser'
+import { LocationSearch } from '../inventory/LocationBrowser'
 
 const physical = Array.from({ length: 12 }, (_, index) => ({
   id: `zone-${index + 1}`,
@@ -28,6 +29,7 @@ function mount(canManage = true) {
   const onArchive = vi.fn()
   render(
     <MemoryRouter initialEntries={['/warehouses/wh?locationPage=2&keep=1']}>
+      <LocationSearch label="Пошук зони" placeholder="Назва або код" />
       <WarehouseZoneBrowser
         zones={[unassigned, ...physical]}
         base="/warehouses"

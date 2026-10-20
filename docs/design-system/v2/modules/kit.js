@@ -3,7 +3,7 @@ export const RO = 'Поточна підписка не дозволяє цю д
 export const READONLY = { chip: 'Кабінет у режимі перегляду', title: 'Підписка неактивна — дані лише для читання.', body: 'Склад, замовлення й історія грошей збереглися повністю, але створювати й змінювати записи не можна, доки підписка не відновиться.', link: 'Перейти до підписки' };
 const NAV = [
   ['', [['Головна', 'icon-layout-dashboard']]],
-  ['Склад', [['Автомобілі', 'icon-car'], ['Запчастини', 'icon-package'], ['Інвентаризація', 'icon-clipboard-check'], ['Приймання', 'icon-scan-line'], ['Стікери', 'icon-sticker']]],
+  ['Склад', [['Автомобілі', 'icon-car'], ['Запчастини', 'icon-package'], ['Склади', 'icon-warehouse'], ['Інвентаризація', 'icon-clipboard-check'], ['Приймання', 'icon-scan-line'], ['Стікери', 'icon-sticker']]],
   ['Продажі', [['Замовлення', 'icon-clipboard-list'], ['Клієнти', 'icon-users']]],
   ['Гроші', [['Фінанси', 'icon-wallet-cards'], ['Звіти', 'icon-chart-column']]],
   ['Налаштування', [['Команда', 'icon-user-round-cog'], ['Підписка', 'icon-credit-card'], ['Інтеграції', 'icon-plug'], ['Бізнес', 'icon-building-2'], ['Профіль', 'icon-circle-user']]],

@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router'
 import { describe, expect, it } from 'vitest'
-import { LocationBrowser } from './LocationBrowser'
+import { LocationBrowser, LocationSearch } from './LocationBrowser'
 import type { InventorySection, InventoryShelf } from '@/api/inventory'
 
 const zoneFixture = {
@@ -70,6 +70,7 @@ function mount(
         },
       ]}
     >
+      <LocationSearch label="Пошук місця" placeholder="Назва або код" />
       <LocationBrowser
         zone={{ ...zoneFixture, warehouseId: 'w', warehouseName: 'Склад' }}
         {...(section ? { section: sections[0] } : {})}

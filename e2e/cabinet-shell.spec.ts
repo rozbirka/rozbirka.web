@@ -1993,19 +1993,8 @@ test('compact location browser searches and pages large shelf lists @location-br
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true)
-    await page.goto('/app/koval/warehouses/sections/section-6')
-    await page.getByRole('link', { name: /У секції без полиці/ }).click()
-    await page.getByRole('button', { name: /^Склад:/ }).click()
-    await expect(
-      page.getByRole('combobox', { name: 'Полиця', exact: true }),
-    ).toHaveValue('__without__')
-    await expect
-      .poll(() => contentRequests.at(-1))
-      .toMatchObject({
-        sectionIds: ['section-6'],
-        missingShelf: true,
-        pageSize: 30,
-      })
+    // Direct "without shelf / without section" rows were removed from the
+    // location lists (3928f0c); the section's all-parts link stays.
     await page.goto('/app/koval/warehouses/sections/section-6')
     await page
       .getByRole('link', { name: 'Усі запчастини секції', exact: true })
@@ -2023,28 +2012,6 @@ test('compact location browser searches and pages large shelf lists @location-br
         }
       })
       .toEqual({ sectionIds: ['section-6'], hasMissingShelf: false })
-    await page.goto('/app/koval/warehouses/zones/zone-1')
-    await page.getByRole('link', { name: /У зоні без секції/ }).click()
-    await page.getByRole('button', { name: /^Склад:/ }).click()
-    await expect(
-      page.getByRole('combobox', { name: 'Секція', exact: true }),
-    ).toHaveValue('__without__')
-    await expect
-      .poll(() => {
-        const request = contentRequests.at(-1)
-        return {
-          zoneIds: request?.zoneIds,
-          missingSection: request?.missingSection,
-          pageSize: request?.pageSize,
-          hasSectionIds: Object.hasOwn(request ?? {}, 'sectionIds'),
-        }
-      })
-      .toEqual({
-        zoneIds: ['zone-1'],
-        missingSection: true,
-        pageSize: 30,
-        hasSectionIds: false,
-      })
   }
 })
 

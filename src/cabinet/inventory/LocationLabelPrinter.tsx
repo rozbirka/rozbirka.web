@@ -1,15 +1,29 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { FileDown, Printer, X } from 'lucide-react'
-import QRCode from 'qrcode'
+import {
+  Check,
+  FileDown,
+  LoaderCircle,
+  Play,
+  Printer,
+  QrCode,
+  X,
+} from 'lucide-react'
 import {
   Button,
   ConfirmDialog,
+  DataTable,
+  EmptyState,
+  ErrorState,
   Notice,
   SearchInput,
   Pagination,
   SkeletonRows,
+  StatusPill,
+  type DataColumn,
+  type NoticeTone,
 } from '@/components/app'
+import { appMessages } from '@/components/app/app-messages'
 import { useTenantSettings } from '@/auth/useTenantSettings'
 import { useFormat, useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
@@ -23,17 +37,6 @@ import {
 import { loadLocationLabels } from './location-label-data'
 import { locationLabelMessages } from './location-label-messages'
 import { locationBrowserMessages } from './location-browser-messages'
-import { warehouseMessages } from './warehouse-messages'
-import { stickersMessages } from '../stickers/messages'
-import {
-  StickerWorkspace,
-  StickerListPanel,
-  StickerSelectionRow,
-} from '../stickers/StickerWorkspace'
-import {
-  StickerSheetPreview,
-  type StickerPreviewCard,
-} from '../stickers/StickerSheetPreview'
 import {
   createLabelQueue,
   labelQueueKey,
@@ -79,12 +82,12 @@ export function LocationLabelsPage({
   inventoryBase,
   returnFocusRef,
   sectionShelfCounts,
-  flush = false,
 }: {
   target: LocationLabelTarget
   inventoryBase: string
   returnFocusRef?: RefObject<HTMLButtonElement | null> | undefined
   sectionShelfCounts?: ReadonlyMap<string, number> | undefined
+  /** Kept for callers; the list now draws its own cards at every width. */
   flush?: boolean
 }) {
   const cabinet = useCabinet()
@@ -106,7 +109,6 @@ export function LocationLabelsPage({
       inventoryBase={inventoryBase}
       returnFocusRef={returnFocusRef}
       sectionShelfCounts={sectionShelfCounts}
-      flush={flush}
       storageKey={labelQueueKey(snapshot.userId, snapshot.tenantId)}
     />
   )
@@ -119,7 +121,6 @@ function ScopedLocationLabels({
   storageKey,
   initialIds,
   sectionShelfCounts,
-  flush,
 }: {
   target: LocationLabelTarget
   inventoryBase: string
@@ -127,11 +128,9 @@ function ScopedLocationLabels({
   storageKey: string
   initialIds: string[]
   sectionShelfCounts?: ReadonlyMap<string, number> | undefined
-  flush: boolean
 }) {
   const t = useT(locationLabelMessages)
-  const ts = useT(stickersMessages)
-  const tw = useT(warehouseMessages)
+  const ta = useT(appMessages)
   const tb = useT(locationBrowserMessages)
   const f = useFormat()
   const documentLocale = useTenantSettings().documentLanguage ?? 'uk'
@@ -168,7 +167,10 @@ function ScopedLocationLabels({
   )
   const [queue, setQueue] = useState(() => readLabelQueue(storageKey))
   const queueRef = useRef(queue)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<{
+    text: string
+    tone: NoticeTone
+  } | null>(null)
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
   const [cancelQueue, setCancelQueue] = useState<LocationLabelQueue | null>(
@@ -254,60 +256,6 @@ function ScopedLocationLabels({
     target.parentName ||
     (labels[0]?.path?.slice(0, -1).join(' → ') ??
       (sameQueue ? queue.target.parentName : ''))
-  const previewLabels = [...selection].flatMap((id) => {
-    const label = labels.find((item) => item.id === id)
-    return label ? [label] : []
-  })
-  const previewSource = JSON.stringify(
-    previewLabels.slice(0, 6).map((label) => ({
-      id: label.id,
-      name: label.zoneName,
-      detail: label.zoneCode,
-      qrCode: label.qrCode,
-    })),
-  )
-  const [renderedPreview, setRenderedPreview] = useState<{
-    source: string
-    cards: StickerPreviewCard[]
-  } | null>(null)
-  useEffect(() => {
-    if (!sameQueue) return
-    let cancelled = false
-    const cards = JSON.parse(previewSource) as {
-      id: string
-      name: string
-      detail: string
-      qrCode: string
-    }[]
-    void Promise.all(
-      cards.map(async (card) => ({
-        ...card,
-        qrSvg: await QRCode.toString(card.qrCode, {
-          type: 'svg',
-          margin: 0,
-          errorCorrectionLevel: 'H',
-        }),
-      })),
-    ).then(
-      (cards) => {
-        if (!cancelled) setRenderedPreview({ source: previewSource, cards })
-      },
-      () => {
-        /* Actual print preparation reports QR errors and preserves the queue. */
-      },
-    )
-    return () => {
-      cancelled = true
-    }
-  }, [previewSource, sameQueue])
-  const previewCards =
-    sameQueue && renderedPreview?.source === previewSource
-      ? renderedPreview.cards
-      : previewLabels.slice(0, 6).map((label) => ({
-          id: label.id,
-          name: label.zoneName,
-          detail: label.zoneCode,
-        }))
   const pageCount = Math.max(1, Math.ceil(visible.length / 10))
   const currentPage = Math.min(page, pageCount)
 
@@ -319,7 +267,10 @@ function ScopedLocationLabels({
     if (sameQueue) {
       if (queueRef.current !== queue) return
       if (next.size > MAX_LOCATION_LABELS) {
-        setError(t('limit', { max: MAX_LOCATION_LABELS }))
+        setError({
+          text: t('limit', { max: MAX_LOCATION_LABELS }),
+          tone: 'warn',
+        })
         return
       }
       setSelected(new Set())
@@ -341,7 +292,7 @@ function ScopedLocationLabels({
     if (locked || sameQueue || !selection.size) return
     const ids = [...selection]
     if (ids.length > MAX_LOCATION_LABELS) {
-      setError(t('limit', { max: MAX_LOCATION_LABELS }))
+      setError({ text: t('limit', { max: MAX_LOCATION_LABELS }), tone: 'warn' })
       return
     }
     commit(createLabelQueue({ ...target, parentName: contextName }, ids))
@@ -361,7 +312,7 @@ function ScopedLocationLabels({
       // Open synchronously on the user's click, before network/QR rendering awaits.
       printWindow = window.open('', '_blank')
       if (!printWindow) {
-        setError(t('blocked'))
+        setError({ text: t('blocked'), tone: 'danger' })
         return
       }
       printWindow.opener = null
@@ -380,7 +331,7 @@ function ScopedLocationLabels({
       setLabels(fresh)
       const resolved = ids.map((id) => fresh.find((label) => label.id === id))
       if (resolved.some((label) => !label?.qrCode)) {
-        setError(t('missing'))
+        setError({ text: t('missing'), tone: 'warn' })
         printWindow.close()
         return
       }
@@ -402,255 +353,286 @@ function ScopedLocationLabels({
       // Browsers cannot tell cancellation, PDF export or physical printing apart.
     } catch {
       printWindow?.close()
-      if (alive.current) setError(t('failed'))
+      if (alive.current) setError({ text: t('failed'), tone: 'danger' })
     } finally {
       busyRef.current = false
       if (alive.current) setBusy(false)
     }
   }
 
-  return (
-    <StickerWorkspace
-      className={`location-labels location-labels--${target.kind}${flush ? ' location-labels--flush' : ''}`}
-      embedded
-      showHeader={false}
-      back={
-        <>
-          <SearchInput
-            className="min-h-12 text-base"
-            aria-label={t('search')}
-            placeholder={t('search')}
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value)
-              setPage(1)
-            }}
-          />
-        </>
-      }
-      title={t(target.kind)}
-      label={t(target.kind)}
-      subtitle={
-        <>
-          {contextName ? `${contextName} · ` : ''}
-          {t('subtitle')}
-        </>
-      }
-      notice={
-        <>
-          {error ? <Notice tone="danger">{error}</Notice> : null}
-          {queue && !sameQueue ? (
-            <Notice block className="gap-3 px-4 py-4 sm:px-5">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between xl:gap-6">
-                <p className="min-w-0 flex-1 break-words leading-6">
-                  {t('otherQueue', { name: queue.target.parentName })}
-                </p>
-                <div className="flex flex-wrap items-center gap-3 xl:shrink-0">
-                  <Button asChild>
-                    <Link to={continuation}>{t('continue')}</Link>
-                  </Button>
-                  <Button onClick={() => setCancelQueue(queue)}>
-                    {t('cancelQueue')}
-                  </Button>
-                </div>
-              </div>
-            </Notice>
-          ) : null}
-        </>
-      }
-      list={
-        <StickerListPanel
-          embedded
-          search={null}
-          summary={ts('selectedSummary', {
-            objects: selection.size,
-            stickers: selection.size,
-          })}
-          actions={
-            <>
-              <Button
-                className="min-h-9 px-3 text-caption"
-                disabled={locked || loading || loadFailed || !visible.length}
-                onClick={() =>
-                  updateSelection(
-                    new Set([
-                      ...selection,
-                      ...visible.map((label) => label.id),
-                    ]),
-                  )
-                }
-              >
-                {t(needle ? 'selectResults' : 'selectAll', {
-                  count: visible.length,
-                })}
-              </Button>
-              <Button
-                className="min-h-9 px-3 text-caption"
-                disabled={locked || !selection.size}
-                onClick={() => updateSelection(new Set())}
-              >
-                {ts('clear')}
-              </Button>
-              <Button
-                variant="quiet"
-                className="min-h-9 px-3 text-caption"
-                disabled={busy}
-                onClick={() => setOpen(false)}
-              >
-                <X aria-hidden />
-                {t('finishSelection')}
-              </Button>
-            </>
-          }
-          footer={
-            !loading && !loadFailed ? (
-              <Pagination
-                label={t('pagination')}
-                page={currentPage}
-                pageSize={10}
-                total={visible.length}
-                totalPages={pageCount}
-                onPage={setPage}
-              />
-            ) : null
-          }
+  const queued = new Set(batch)
+  const lockReason = busy
+    ? t('printing')
+    : queue !== null && !sameQueue
+      ? t('otherQueue', { name: queue.target.parentName })
+      : undefined
+  const columns: DataColumn<LabelRow>[] = [
+    {
+      key: 'name',
+      label: t('name'),
+      variant: 'primary',
+      cell: (label) => label.zoneName,
+    },
+    {
+      key: 'code',
+      label: t('code'),
+      cell: (label) => <span className="font-mono">{label.zoneCode}</span>,
+    },
+  ]
+  if (target.kind === 'section')
+    columns.push({
+      key: 'shelves',
+      label: tb('shelves'),
+      align: 'end',
+      cell: (label) => {
+        const count = sectionShelfCounts?.get(label.id)
+        return (
+          <span className="font-mono tabular-nums">
+            {count === undefined ? '—' : (f.number(count) ?? String(count))}
+          </span>
+        )
+      },
+    })
+  if (sameQueue)
+    columns.push({
+      key: 'queued',
+      label: t('queue'),
+      align: 'end',
+      headerHidden: true,
+      cell: (label) =>
+        queued.has(label.id) ? (
+          // The end column is mono for numbers; the status reads as text.
+          <span className="font-sans">
+            <StatusPill tone="info">{t('queued')}</StatusPill>
+          </span>
+        ) : null,
+    })
+  const selectVisible = () =>
+    updateSelection(
+      new Set([...selection, ...visible.map((label) => label.id)]),
+    )
+  const everythingVisibleSelected =
+    visible.length > 0 && visible.every((label) => selection.has(label.id))
+  const selectAllLabel = t(needle ? 'selectResults' : 'selectAll', {
+    count: visible.length,
+  })
+
+  const toolbar = (
+    <div className="rz-toolbar" role="search">
+      <SearchInput
+        aria-label={t('search')}
+        placeholder={t('search')}
+        value={search}
+        onChange={(event) => {
+          setSearch(event.target.value)
+          setPage(1)
+        }}
+      />
+      <div className="rz-toolbar__end flex-wrap items-center">
+        {sameQueue ? (
+          <Button
+            disabled={locked || loading || loadFailed || !visible.length}
+            onClick={selectVisible}
+            variant="quiet"
+          >
+            {selectAllLabel}
+          </Button>
+        ) : null}
+        <Button disabled={busy} onClick={() => setOpen(false)}>
+          <Check aria-hidden />
+          {t('finishSelection')}
+        </Button>
+      </div>
+    </div>
+  )
+
+  const bulk = (
+    <div aria-label={ta('bulkRegion')} className="rz-bulk" role="region">
+      <p className="text-app-ink flex items-baseline gap-1.5">
+        <span className="rz-bulk__count">{selection.size}</span>
+        <span>{ta('bulkSelected', { noun: '' }).trim()}</span>
+      </p>
+      {everythingVisibleSelected ? null : (
+        <button
+          className="text-app-muted hover:text-app-ink cursor-pointer text-caption underline underline-offset-2 disabled:cursor-not-allowed"
+          disabled={locked || loading || loadFailed}
+          onClick={selectVisible}
+          type="button"
         >
-          <div className="location-labels__columns" aria-hidden>
-            <span />
-            <span>
-              {tw(
-                target.kind === 'shelf'
-                  ? 'shelfType'
-                  : target.kind === 'section'
-                    ? 'sectionType'
-                    : 'zoneType',
-              )}
-            </span>
-            {target.kind === 'section' ? <span>{tb('shelves')}</span> : null}
-          </div>
-          {loading ? (
-            <div className="p-5">
-              <SkeletonRows rows={4} />
-            </div>
-          ) : loadFailed ? (
-            <div className="p-5">
-              <Notice tone="danger">
-                {t('loadFailed')}{' '}
-                <Button
-                  onClick={() => {
-                    setLoading(true)
-                    setLoadFailed(false)
-                    setRevision((value) => value + 1)
-                  }}
-                >
-                  {t('retry')}
-                </Button>
-              </Notice>
-            </div>
-          ) : (
-            <ul
-              className="divide-app-line grid divide-y"
-              aria-label={t(target.kind)}
-            >
-              {visible
-                .slice((currentPage - 1) * 10, currentPage * 10)
-                .map((label) => {
-                  const shelfCount = sectionShelfCounts?.get(label.id)
-                  const formattedShelfCount =
-                    shelfCount === undefined
-                      ? '—'
-                      : (f.number(shelfCount) ?? String(shelfCount))
-                  return (
-                    <StickerSelectionRow
-                      key={label.id}
-                      appearance="location"
-                      icon={null}
-                      label={label.zoneName}
-                      checkboxLabel={t('select', { name: label.zoneName })}
-                      selected={selection.has(label.id)}
-                      disabled={locked}
-                      onToggle={() => {
-                        const next = new Set(selection)
-                        if (next.has(label.id)) next.delete(label.id)
-                        else next.add(label.id)
-                        updateSelection(next)
-                      }}
-                      name={label.zoneName}
-                      detail={label.zoneCode}
-                      trailing={
-                        target.kind === 'section' ? (
-                          <span
-                            aria-label={
-                              shelfCount === undefined
-                                ? undefined
-                                : tb('shelvesCount', {
-                                    count: formattedShelfCount,
-                                  })
-                            }
-                          >
-                            {formattedShelfCount}
-                          </span>
-                        ) : null
-                      }
-                    />
-                  )
-                })}
-              {!visible.length ? (
-                <li className="text-app-muted p-5">
-                  {t(needle ? 'noMatches' : 'empty')}
-                </li>
-              ) : null}
-            </ul>
-          )}
-        </StickerListPanel>
+          {selectAllLabel}
+        </button>
+      )}
+      <div className="rz-bulk__actions items-center">
+        <Button
+          disabled={locked || loading || loadFailed}
+          onClick={prepareSelection}
+        >
+          <Printer aria-hidden />
+          {t('create', { count: selection.size })}
+        </Button>
+        <Button
+          aria-label={ta('clearSelection')}
+          disabled={locked}
+          onClick={() => updateSelection(new Set())}
+          size="icon"
+        >
+          <X aria-hidden />
+        </Button>
+      </div>
+    </div>
+  )
+
+  const list = loading ? (
+    <SkeletonRows columns={2} rows={4} />
+  ) : loadFailed ? (
+    <ErrorState
+      title={t('loadFailed')}
+      retryLabel={t('retry')}
+      onRetry={() => {
+        setLoading(true)
+        setLoadFailed(false)
+        setRevision((value) => value + 1)
+      }}
+    />
+  ) : !visible.length ? (
+    <EmptyState
+      icon={<QrCode aria-hidden />}
+      title={t(needle ? 'noMatches' : 'empty')}
+      tone="neutral"
+    />
+  ) : (
+    <DataTable<LabelRow>
+      caption={t(target.kind)}
+      columns={columns}
+      rowKey={(label) => label.id}
+      rows={visible.slice((currentPage - 1) * 10, currentPage * 10)}
+      selection={{
+        selected: selection,
+        onChange: updateSelection,
+        rowLabel: (label) => t('select', { name: label.zoneName }),
+        unavailable: () => lockReason,
+      }}
+      footer={
+        pageCount > 1 ? (
+          <Pagination
+            label={t('pagination')}
+            page={currentPage}
+            pageSize={10}
+            total={visible.length}
+            totalPages={pageCount}
+            onPage={setPage}
+          />
+        ) : null
       }
-      preview={
-        <StickerSheetPreview
-          cards={previewCards}
-          objects={selection.size}
-          total={selection.size}
-          actions={
-            <>
-              {!sameQueue ? (
-                <Button
-                  className="mt-5 w-full justify-center"
-                  variant="primary"
-                  disabled={locked || !selection.size || loading || loadFailed}
-                  onClick={prepareSelection}
-                >
-                  <Printer aria-hidden />
-                  {ts('prepare', { count: selection.size })}
-                </Button>
-              ) : null}
-              {sameQueue ? (
-                <>
-                  <Button
-                    className="mt-5 w-full justify-center"
-                    variant="primary"
-                    disabled={locked || loading || loadFailed}
-                    onClick={() => void output(batch)}
-                  >
-                    <Printer aria-hidden />
-                    {busy ? t('printing') : t('print', { count: batch.length })}
-                  </Button>
-                  <Button
-                    className="mt-2 w-full justify-center text-caption"
-                    disabled={locked || loading || loadFailed}
-                    onClick={() => void output(batch)}
-                  >
-                    <FileDown aria-hidden />
-                    {t('pdf', { count: batch.length })}
-                  </Button>
-                  <p className="text-app-dim mt-3 text-xs leading-5">
-                    {t('pdfHint')}
-                  </p>
-                </>
-              ) : null}
-            </>
-          }
-        />
-      }
+    />
+  )
+
+  const notice = error ? <Notice tone={error.tone}>{error.text}</Notice> : null
+
+  return (
+    <section
+      aria-label={t(target.kind)}
+      className={`location-labels location-labels--${target.kind} grid min-w-0 content-start gap-4`}
     >
+      {queue && !sameQueue ? (
+        <div className="rz-card rz-card__body grid gap-3">
+          <Notice tone="warn">
+            {t('otherQueue', { name: queue.target.parentName })}
+          </Notice>
+          <div className="rz-btn-row flex-wrap">
+            <Button asChild>
+              <Link to={continuation}>
+                <Play aria-hidden />
+                {t('continue')}
+              </Link>
+            </Button>
+            <Button onClick={() => setCancelQueue(queue)} variant="quiet">
+              <X aria-hidden />
+              {t('cancelQueue')}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {sameQueue ? (
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="grid min-w-0 content-start gap-4">
+            {toolbar}
+            {list}
+          </div>
+          <section aria-label={t('queue')} className="rz-card min-w-0">
+            <header className="rz-card__head py-2.5">
+              <div className="min-w-0">
+                <h2 className="rz-h-card">{t('queue')}</h2>
+                <p className="rz-caption mt-0.5">
+                  {t('queueCount', { count: queue.totalCount })}
+                </p>
+              </div>
+            </header>
+            <div className="rz-card__body grid gap-3">
+              {notice}
+              <p className="text-app-muted text-caption">
+                {t('progress', {
+                  printed: queue.printedCount,
+                  total: queue.totalCount,
+                  remaining: batch.length,
+                })}
+              </p>
+              {busy ? (
+                <div className="location-labels__row">
+                  <Button aria-busy disabled variant="primary">
+                    <LoaderCircle aria-hidden className="rz-spin" />
+                    {t('printing')}
+                  </Button>
+                  <p className="rz-caption">{t('pdfHint')}</p>
+                </div>
+              ) : (
+                <>
+                  <div className="rz-btn-row flex-wrap">
+                    <Button
+                      disabled={locked || loading || loadFailed}
+                      onClick={() => void output(batch)}
+                      variant="primary"
+                    >
+                      <Printer aria-hidden />
+                      {t('print', { count: batch.length })}
+                    </Button>
+                    <Button
+                      disabled={locked || loading || loadFailed}
+                      onClick={() => void output(batch)}
+                    >
+                      <FileDown aria-hidden />
+                      {t('pdf', { count: batch.length })}
+                    </Button>
+                  </div>
+                  <div className="location-labels__row">
+                    <Button
+                      onClick={() => setCancelQueue(queue)}
+                      variant="quiet"
+                    >
+                      <X aria-hidden />
+                      {t('cancelQueue')}
+                    </Button>
+                    <p className="rz-caption">{t('pdfHint')}</p>
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+        </div>
+      ) : (
+        <>
+          {notice}
+          {selection.size > 0 && queue === null ? bulk : toolbar}
+          <div className="rz-card location-labels__head">
+            <h2 className="rz-h-card">{t(target.kind)}</h2>
+            <p className="rz-caption mt-0.5">
+              {contextName ? `${contextName} · ` : ''}
+              {t('subtitle')}
+            </p>
+          </div>
+          {list}
+        </>
+      )}
       <ConfirmDialog
         open={cancelQueue !== null}
         onOpenChange={(next) => {
@@ -659,12 +641,19 @@ function ScopedLocationLabels({
         title={t('cancelTitle')}
         consequence={t('cancelHint')}
         confirmLabel={t('cancelQueue')}
+        destructive
         onConfirm={() => {
           if (queueRef.current === cancelQueue) commit(null)
           setCancelQueue(null)
           setError(null)
         }}
       />
-    </StickerWorkspace>
+    </section>
   )
+}
+
+interface LabelRow {
+  id: string
+  zoneName: string
+  zoneCode: string
 }

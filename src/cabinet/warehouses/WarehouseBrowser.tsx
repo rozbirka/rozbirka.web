@@ -1,7 +1,7 @@
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { ChevronRight } from 'lucide-react'
-import { EmptyState, Pagination, SearchInput } from '@/components/app'
-import type { Warehouse } from '@/api/inventory'
+import { ChevronRight, Plus, SearchX, Warehouse } from 'lucide-react'
+import { Button, EmptyState, Pagination, StateScreen } from '@/components/app'
+import type { Warehouse as WarehouseRecord } from '@/api/inventory'
 import { useFormat, useT } from '@/i18n'
 import {
   LocationBrowserHeader,
@@ -9,7 +9,6 @@ import {
 } from '../inventory/LocationBrowser'
 import { overviewMessages } from '../inventory/overview-messages'
 import { inventoryMessages } from '../inventory/messages'
-import { locationBrowserMessages } from '../inventory/location-browser-messages'
 
 const PAGE_SIZE = 10
 
@@ -17,14 +16,16 @@ export function WarehouseBrowser({
   warehouses,
   stock,
   base,
+  onAdd,
 }: {
-  warehouses: Warehouse[]
+  warehouses: WarehouseRecord[]
   stock: ReadonlyMap<string, number> | null
   base: string
+  /** Offered from the empty state; absent without the permission. */
+  onAdd?: (() => void) | undefined
 }) {
   const t = useT(overviewMessages)
   const ti = useT(inventoryMessages)
-  const tb = useT(locationBrowserMessages)
   const f = useFormat()
   const [params, setParams] = useSearchParams()
   const navigationState = useLocation().state as unknown
@@ -52,125 +53,115 @@ export function WarehouseBrowser({
       { replace: true, preventScrollReset: true, state: navigationState },
     )
 
+  if (warehouses.length === 0)
+    return (
+      <EmptyState
+        icon={<Warehouse aria-hidden />}
+        title={t('noWarehousesTitle')}
+        description={t('noWarehousesHint')}
+        {...(onAdd
+          ? {
+              actions: (
+                <Button onClick={onAdd} variant="primary">
+                  <Plus aria-hidden />
+                  {t('addWarehouse')}
+                </Button>
+              ),
+            }
+          : {})}
+      />
+    )
+
+  if (visible.length === 0)
+    return (
+      <StateScreen
+        icon={<SearchX aria-hidden />}
+        label={t('warehouses')}
+        title={t('noWarehouseMatches')}
+        className="min-h-[240px]"
+      />
+    )
+
   return (
-    <section
-      aria-label={t('warehouses')}
-      className="location-browser border-app-line bg-app-raised min-w-0 overflow-hidden rounded-panel border"
-    >
+    <section aria-label={t('warehouses')} className="location-browser rz-card">
       <LocationBrowserHeader
         title={t('warehousesList')}
         lead={t('warehousesLead')}
-        search={
-          <SearchInput
-            className="min-h-control text-sm"
-            aria-label={t('searchWarehouses')}
-            placeholder={tb('nameOrCode')}
-            value={query}
-            onChange={(event) =>
-              update({ locationSearch: event.target.value, locationPage: null })
-            }
-          />
-        }
         actions={null}
       />
-      {warehouses.length === 0 ? (
-        <EmptyState
-          title={t('noWarehousesTitle')}
-          description={t('noWarehousesHint')}
-        />
-      ) : (
-        <>
-          <div
-            aria-hidden
-            className="location-browser__columns location-browser__columns--warehouse"
-          >
-            <span>{t('columnWarehouse')}</span>
-            <div className="location-browser__warehouse-counts text-right">
-              <span>{t('columnParts')}</span>
-              <span>{t('columnZones')}</span>
-            </div>
-            <span />
-          </div>
-          <ul className="location-browser__list">
-            {visible.length ? (
-              visible
-                .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-                .map((item) => {
-                  const parts =
-                    stock === null ? null : (stock.get(item.id) ?? 0)
-                  return (
-                    <li key={item.id} className="location-browser__section">
-                      <Link
-                        className="location-browser__row location-browser__row--warehouse"
-                        to={`${base}/${encodeURIComponent(item.id)}`}
-                        aria-label={t('openWarehouseLabel', {
-                          name: item.name,
-                        })}
-                      >
-                        <LocationName
-                          name={item.name}
-                          code={[
-                            item.code,
-                            item.isSystemDefault ? t('defaultTag') : null,
-                            item.isActive ? null : t('archivedTag'),
-                          ]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        />
-                        <dl className="location-browser__warehouse-counts">
-                          <div className="location-browser__count">
-                            <dt className="text-app-muted text-micro lowercase md:sr-only">
-                              {t('columnParts')}
-                            </dt>
-                            <dd
-                              className={
-                                parts === null
-                                  ? 'text-app-muted font-sans text-micro'
-                                  : undefined
-                              }
-                            >
-                              {parts === null
-                                ? ti('stockUnavailable')
-                                : f.number(parts)}
-                            </dd>
-                          </div>
-                          <div className="location-browser__count">
-                            <dt className="text-app-muted text-micro lowercase md:sr-only">
-                              {t('columnZones')}
-                            </dt>
-                            <dd>{f.number(item.zoneCount)}</dd>
-                          </div>
-                        </dl>
-                        <ChevronRight
-                          aria-hidden
-                          className="location-browser__arrow"
-                        />
-                      </Link>
-                    </li>
-                  )
-                })
-            ) : (
-              <li className="location-browser__empty">
-                {t('noWarehouseMatches')}
-              </li>
-            )}
-          </ul>
-          {totalPages > 1 ? (
-            <div className="location-browser__pagination">
-              <Pagination
-                label={t('warehousePagination')}
-                page={page}
-                pageSize={PAGE_SIZE}
-                total={visible.length}
-                totalPages={totalPages}
-                onPage={(next) =>
-                  update({ locationPage: next === 1 ? null : String(next) })
-                }
-              />
-            </div>
-          ) : null}
-        </>
-      )}
+      <div
+        aria-hidden
+        className="location-browser__columns location-browser__columns--warehouse"
+      >
+        <span>{t('columnWarehouse')}</span>
+        <div className="location-browser__warehouse-counts text-right">
+          <span>{t('columnParts')}</span>
+          <span>{t('columnZones')}</span>
+        </div>
+        <span />
+      </div>
+      <ul className="location-browser__list m-0 list-none p-0">
+        {visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((item) => {
+          const parts = stock === null ? null : (stock.get(item.id) ?? 0)
+          return (
+            <li key={item.id} className="location-browser__section">
+              <Link
+                className={`location-browser__row location-browser__row--warehouse${item.isActive ? '' : ' location-browser__row--muted'}`}
+                to={`${base}/${encodeURIComponent(item.id)}`}
+                aria-label={t('openWarehouseLabel', {
+                  name: item.name,
+                })}
+              >
+                <LocationName
+                  name={item.name}
+                  code={[
+                    item.code,
+                    item.isSystemDefault ? t('defaultTag') : null,
+                    item.isActive ? null : t('archivedTag'),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                />
+                <dl className="location-browser__warehouse-counts">
+                  <div className="location-browser__count">
+                    <dt className="md:sr-only">{t('columnParts')}</dt>
+                    <dd
+                      className={
+                        parts === null
+                          ? 'text-app-dim font-sans text-caption'
+                          : undefined
+                      }
+                    >
+                      {parts === null
+                        ? ti('stockUnavailable')
+                        : f.number(parts)}
+                    </dd>
+                  </div>
+                  <div className="location-browser__count">
+                    <dt className="md:sr-only">{t('columnZones')}</dt>
+                    <dd>{f.number(item.zoneCount)}</dd>
+                  </div>
+                </dl>
+                <ChevronRight aria-hidden className="location-browser__arrow" />
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+      {totalPages > 1 ? (
+        <div className="location-browser__pagination">
+          <Pagination
+            label={t('warehousePagination')}
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={visible.length}
+            totalPages={totalPages}
+            onPage={(next) =>
+              update({ locationPage: next === 1 ? null : String(next) })
+            }
+          />
+        </div>
+      ) : null}
     </section>
   )
 }

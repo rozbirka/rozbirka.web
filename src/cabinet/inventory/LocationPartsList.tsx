@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { Package } from 'lucide-react'
+import { CircleCheck } from 'lucide-react'
 import {
   Button,
   DataTable,
+  EmptyState,
   Notice,
   Pagination,
   SearchInput,
@@ -27,6 +28,10 @@ interface Props {
   onPlace?: ((part: PartSearchItem) => void) | undefined
   refreshKey?: number
   emptyText?: string
+  /** The card title; the target's own name when absent. */
+  title?: string
+  /** A caption at the far end of the search toolbar. */
+  searchHint?: ReactNode
   selection?:
     | {
         parts: ReadonlyMap<string, PartSearchItem>
@@ -39,28 +44,6 @@ interface ResultState {
   key: string
   data?: Page<PartSearchItem>
   error?: boolean
-}
-
-function LocationPartThumbnail({ source }: { source: string | null }) {
-  const [failed, setFailed] = useState(false)
-  return (
-    <span
-      aria-hidden
-      className="bg-app-input text-app-dim grid size-8 shrink-0 place-items-center overflow-hidden rounded-control"
-    >
-      {source && !failed ? (
-        <img
-          src={source}
-          alt=""
-          loading="lazy"
-          className="size-full object-cover"
-          onError={() => setFailed(true)}
-        />
-      ) : (
-        <Package className="size-5" />
-      )}
-    </span>
-  )
 }
 
 export function LocationPartsList(props: Props) {
@@ -92,6 +75,8 @@ function OwnedLocationPartsList({
   refreshKey = 0,
   emptyText,
   selection,
+  title,
+  searchHint,
 }: Props & { owner: string; slug: string }) {
   const t = useT(locationContentsMessages)
   const tc = useT(commonMessages)
@@ -151,28 +136,42 @@ function OwnedLocationPartsList({
   }, [filter, key, page, prefix, query, debounced, setParams, navigationState])
   const current = state.key === key && query === debounced ? state : undefined
   const data = current?.data
+  const setQuery = (value: string) =>
+    setParams(
+      (currentParams) => {
+        const next = new URLSearchParams(currentParams)
+        next.set(`${prefix}Search`, value)
+        next.delete(`${prefix}Page`)
+        return next
+      },
+      { replace: true, preventScrollReset: true, state: navigationState },
+    )
+  /* Nothing to place at all: the list gives way to one calm state, without a
+     search that could only ever find nothing. */
+  const settledEmpty =
+    context === 'unassigned' &&
+    data?.total === 0 &&
+    query.trim() === '' &&
+    page === 1
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
-      <SearchInput
-        className="min-h-12 text-base"
-        aria-label={t('search')}
-        placeholder={t('search')}
-        value={query}
-        onChange={(event) =>
-          setParams(
-            (currentParams) => {
-              const next = new URLSearchParams(currentParams)
-              next.set(`${prefix}Search`, event.target.value)
-              next.delete(`${prefix}Page`)
-              return next
-            },
-            { replace: true, preventScrollReset: true, state: navigationState },
-          )
-        }
-      />
+    <div className="grid min-w-0 content-start gap-[14px]">
       {selection?.actions}
+      <div className="rz-toolbar" hidden={settledEmpty} role="search">
+        <SearchInput
+          className="flex-[0_1_320px]"
+          aria-label={t('search')}
+          placeholder={t('search')}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        {searchHint ? (
+          <span className="rz-toolbar__end rz-caption">{searchHint}</span>
+        ) : null}
+      </div>
       {!current ? (
-        <SkeletonRows rows={3} />
+        <div className="rz-card p-[var(--rz-card-p)]">
+          <SkeletonRows rows={3} />
+        </div>
       ) : current.error ? (
         <Notice tone="danger">
           {t('failed')}{' '}
@@ -180,167 +179,166 @@ function OwnedLocationPartsList({
             {tc('retry')}
           </Button>
         </Notice>
+      ) : settledEmpty ? (
+        <EmptyState
+          icon={<CircleCheck aria-hidden />}
+          title={emptyText ?? t('empty')}
+        />
       ) : data ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-4">
-          <p className="text-app-ink bg-app-raised border-app-line shrink-0 rounded-control border px-4 py-3 text-base font-semibold tabular-nums">
-            {t('positions', { count: data.total })}
-          </p>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable] [&_thead_th]:bg-app-raised [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10">
-            <DataTable
-              embedded
-              caption={target.name}
-              rows={data.items}
-              rowKey={(part) => part.id}
-              {...(selection
-                ? {
-                    selection: {
-                      selected: new Set(selection.parts.keys()),
-                      rowLabel: (part: PartSearchItem) =>
-                        t('selectPart', { name: part.name }),
-                      unavailable: (part: PartSearchItem) =>
-                        part.isInventoryLocked
-                          ? t('placementLocked')
-                          : undefined,
-                      onChange: (ids: ReadonlySet<string>) => {
-                        const next = new Map(selection.parts)
-                        for (const id of next.keys())
-                          if (!ids.has(id)) next.delete(id)
-                        for (const part of data.items) {
-                          if (ids.has(part.id) && !part.isInventoryLocked)
-                            next.set(part.id, part)
-                        }
-                        selection.onChange(next)
-                      },
-                    },
-                  }
-                : {})}
-              columns={[
-                {
-                  key: 'name',
-                  label: t('name'),
-                  variant: 'primary',
-                  cell: (part) => (
-                    <Link
-                      to={cabinetPath(slug, 'parts', part.id)}
-                      className="focus-visible:outline-brand hover:text-brand flex min-h-14 items-center gap-3 rounded-control py-1"
-                    >
-                      <LocationPartThumbnail
-                        key={part.thumbnailUrl ?? ''}
-                        source={part.thumbnailUrl}
-                      />
-                      <span className="min-w-0">
-                        <strong className="text-app-ink block break-words text-body font-semibold">
-                          {part.name}
-                        </strong>
-                        {part.car ? (
-                          <span className="text-app-muted mt-1 block text-sm">
-                            {part.car.make} {part.car.model} · {part.car.year}
-                          </span>
-                        ) : null}
-                        {part.oemCode ? (
-                          <span className="text-app-muted mt-0.5 block break-all font-mono text-sm">
-                            {part.oemCode}
-                          </span>
-                        ) : null}
-                      </span>
-                    </Link>
-                  ),
-                },
-                {
-                  key: 'quantity',
-                  label: t('quantity'),
-                  align: 'end',
-                  cell: (part) => (
-                    <span className="text-app-ink text-base font-semibold tabular-nums">
-                      {f.number(part.quantity)}
-                    </span>
-                  ),
-                },
-                {
-                  key: 'status',
-                  label: t('status'),
-                  cell: (part) => (
-                    <StatusPill
-                      tone={
-                        part.status === 'reserved'
-                          ? 'warn'
-                          : part.status === 'sold'
-                            ? 'danger'
-                            : 'ok'
+        <section aria-label={title ?? target.name} className="rz-card">
+          <header className="rz-card__head">
+            <h2 className="rz-h-card flex flex-wrap items-baseline gap-1">
+              {title ?? target.name}
+              <span className="rz-dim rz-mono font-normal">
+                {title
+                  ? f.number(data.total)
+                  : t('positions', { count: data.total })}
+              </span>
+            </h2>
+          </header>
+          <DataTable
+            embedded
+            caption={target.name}
+            rows={data.items}
+            rowKey={(part) => part.id}
+            {...(selection
+              ? {
+                  selection: {
+                    selected: new Set(selection.parts.keys()),
+                    rowLabel: (part: PartSearchItem) =>
+                      t('selectPart', { name: part.name }),
+                    unavailable: (part: PartSearchItem) =>
+                      part.isInventoryLocked ? t('placementLocked') : undefined,
+                    onChange: (ids: ReadonlySet<string>) => {
+                      const next = new Map(selection.parts)
+                      for (const id of next.keys())
+                        if (!ids.has(id)) next.delete(id)
+                      for (const part of data.items) {
+                        if (ids.has(part.id) && !part.isInventoryLocked)
+                          next.set(part.id, part)
                       }
-                    >
-                      {t(
-                        part.status === 'reserved'
-                          ? 'reserved'
-                          : part.status === 'sold'
-                            ? 'sold'
-                            : 'available',
-                      )}
-                    </StatusPill>
-                  ),
-                },
-                ...(onPlace
-                  ? [
-                      {
-                        key: 'place',
-                        label: t('place'),
-                        headerHidden: true,
-                        cell: (part: PartSearchItem) => (
-                          <div className="grid justify-items-start gap-1.5 md:justify-items-end">
-                            <Button
-                              size={context === 'unassigned' ? 'glove' : 'md'}
-                              onClick={() => onPlace(part)}
-                              disabled={part.isInventoryLocked}
-                              aria-label={t('placePart', { name: part.name })}
-                            >
-                              {t('place')}
-                            </Button>
-                            {part.isInventoryLocked ? (
-                              <span className="text-app-muted max-w-52 text-xs">
-                                {t('placementLocked')}
-                              </span>
-                            ) : null}
-                          </div>
-                        ),
-                      },
-                    ]
-                  : []),
-              ]}
-              empty={
-                <p className="text-app-muted py-5">
-                  {context === 'unassigned' && query.trim()
-                    ? t('noMatches')
-                    : (emptyText ?? t('empty'))}
-                </p>
-              }
-            />
-          </div>
-          {data.total > 10 ? (
-            <div className="shrink-0">
-              <Pagination
-                page={page}
-                totalPages={Math.ceil(data.total / 10)}
-                total={data.total}
-                pageSize={10}
-                label={t('pages')}
-                onPage={(nextPage) =>
-                  setParams(
-                    (currentParams) => {
-                      const next = new URLSearchParams(currentParams)
-                      next.set(`${prefix}Page`, String(nextPage))
-                      return next
+                      selection.onChange(next)
                     },
-                    {
-                      replace: true,
-                      preventScrollReset: true,
-                      state: navigationState,
-                    },
-                  )
+                  },
                 }
-              />
-            </div>
-          ) : null}
-        </div>
+              : {})}
+            columns={[
+              {
+                key: 'name',
+                label: t('name'),
+                variant: 'primary',
+                cell: (part) => (
+                  <Link
+                    to={cabinetPath(slug, 'parts', part.id)}
+                    className="focus-visible:outline-brand flex min-w-0 flex-wrap items-baseline gap-x-2 py-2 hover:underline"
+                  >
+                    <span className="rz-strong font-medium break-words whitespace-normal">
+                      {part.name}
+                    </span>
+                    {part.oemCode ? (
+                      <span className="rz-mono rz-dim text-caption break-all whitespace-normal">
+                        {part.oemCode}
+                      </span>
+                    ) : null}
+                  </Link>
+                ),
+              },
+              {
+                key: 'quantity',
+                label: t('quantity'),
+                align: 'end',
+                cell: (part) => (
+                  <span className="rz-mono">{f.number(part.quantity)}</span>
+                ),
+              },
+              {
+                key: 'status',
+                label: t('status'),
+                cell: (part) => (
+                  <StatusPill
+                    tone={
+                      part.status === 'reserved'
+                        ? 'warn'
+                        : part.status === 'sold'
+                          ? 'danger'
+                          : 'ok'
+                    }
+                  >
+                    {t(
+                      part.status === 'reserved'
+                        ? 'reserved'
+                        : part.status === 'sold'
+                          ? 'sold'
+                          : 'available',
+                    )}
+                  </StatusPill>
+                ),
+              },
+              ...(onPlace
+                ? [
+                    {
+                      key: 'place',
+                      label: t('place'),
+                      headerHidden: true,
+                      align: 'end' as const,
+                      cell: (part: PartSearchItem) => (
+                        <span className="inline-grid justify-items-end gap-1">
+                          <Button
+                            className="rz-mono text-brand-text px-0"
+                            variant="quiet"
+                            onClick={() => onPlace(part)}
+                            disabled={part.isInventoryLocked}
+                            aria-label={t('placePart', { name: part.name })}
+                          >
+                            {t('place')}
+                          </Button>
+                          {part.isInventoryLocked ? (
+                            <span className="rz-caption max-w-52 whitespace-normal">
+                              {t('placementLocked')}
+                            </span>
+                          ) : null}
+                        </span>
+                      ),
+                    },
+                  ]
+                : []),
+            ]}
+            empty={
+              <p className="text-app-muted m-0 px-[var(--rz-card-p)] py-5">
+                {context === 'unassigned' && query.trim()
+                  ? t('noMatches')
+                  : (emptyText ?? t('empty'))}
+              </p>
+            }
+            footer={
+              data.total > 10 ? (
+                <div className="border-app-line border-t px-[var(--rz-card-p)] py-2.5">
+                  <Pagination
+                    page={page}
+                    totalPages={Math.ceil(data.total / 10)}
+                    total={data.total}
+                    pageSize={10}
+                    label={t('pages')}
+                    onPage={(nextPage) =>
+                      setParams(
+                        (currentParams) => {
+                          const next = new URLSearchParams(currentParams)
+                          next.set(`${prefix}Page`, String(nextPage))
+                          return next
+                        },
+                        {
+                          replace: true,
+                          preventScrollReset: true,
+                          state: navigationState,
+                        },
+                      )
+                    }
+                  />
+                </div>
+              ) : undefined
+            }
+          />
+        </section>
       ) : null}
     </div>
   )

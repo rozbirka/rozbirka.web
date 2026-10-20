@@ -161,21 +161,22 @@ it('waits for the search debounce without requesting the previous filter again',
   })
 })
 
-it('replaces a failed thumbnail with a fixed-size placeholder', async () => {
+it('lists a part as its name with the OEM code on the same row', async () => {
   mocked.search.mockResolvedValue({
     ...result,
-    items: [{ ...result.items[0], thumbnailUrl: '/missing-photo.jpg' }],
+    items: [
+      { ...result.items[0], thumbnailUrl: '/photo.jpg', oemCode: '3G1941005' },
+    ],
   })
   const { container } = render(
     <MemoryRouter>
       <LocationPartsList target={target} context="section" />
     </MemoryRouter>,
   )
-  await screen.findByRole('link', { name: /Фара/ })
-  const image = container.querySelector('img')
-  expect(image).not.toBeNull()
-  if (!image) throw new Error('Missing test thumbnail')
-  fireEvent.error(image)
+  const link = await screen.findByRole('link', { name: /Фара/ })
+  expect(link).toHaveTextContent('Фара3G1941005')
   expect(container.querySelector('img')).toBeNull()
-  expect(screen.getByRole('link', { name: /Фара/ })).toBeInTheDocument()
+  expect(screen.getByRole('region', { name: 'Секція' })).toHaveTextContent(
+    'Позицій: 12',
+  )
 })

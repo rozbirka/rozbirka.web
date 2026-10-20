@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { Archive, ChevronRight, Pencil, Plus } from 'lucide-react'
-import { ActionMenu, Button, Pagination, SearchInput } from '@/components/app'
+import { Archive, ChevronRight, LayoutGrid, Pencil, Plus } from 'lucide-react'
+import { ActionMenu, Button, EmptyState, Pagination } from '@/components/app'
 import type { WarehouseDetail } from '@/api/inventory'
 import { useT } from '@/i18n'
 import {
@@ -89,146 +89,160 @@ export function WarehouseZoneBrowser({
     )
   }
 
+  const zoneMenu = (zone: Zone) => (
+    <ActionMenu
+      label={tb('zoneActions', { name: zone.name })}
+      actions={[
+        {
+          key: 'edit',
+          label: t('editZone', { name: zone.name }),
+          icon: <Pencil aria-hidden />,
+          onSelect: () => onEdit(zone),
+        },
+        {
+          key: 'archive',
+          label: t('archiveZoneLabel', { name: zone.name }),
+          icon: <Archive aria-hidden />,
+          destructive: true,
+          onSelect: () => onArchive(zone),
+        },
+      ]}
+    />
+  )
+  const noZones = physical.length === 0 && !printWorkspace
+
   return (
-    <section
-      aria-label={t('zonesTitle')}
-      className="location-browser border-app-line bg-app-raised min-w-0 overflow-hidden rounded-panel border"
-    >
-      <LocationBrowserHeader
-        title={t('zonesTitle')}
-        lead={tb('chooseZone')}
-        search={
-          printWorkspace ? null : (
-            <SearchInput
-              className="min-h-control text-sm"
-              aria-label={tb('searchZones')}
-              placeholder={tb('nameOrCode')}
-              value={query}
-              onChange={(event) =>
-                update({
-                  locationSearch: event.target.value,
-                  locationPage: null,
-                })
-              }
-            />
-          )
-        }
-        actions={
+    <>
+      <section
+        aria-label={t('zonesTitle')}
+        className="location-browser rz-card"
+      >
+        <LocationBrowserHeader
+          title={t('zonesTitle')}
+          lead={noZones || printWorkspace ? undefined : tb('chooseZone')}
+          actions={
+            <>
+              {canManage ? (
+                <Button onClick={onAdd}>
+                  <Plus aria-hidden />
+                  {t('addZone')}
+                </Button>
+              ) : null}
+              {headerActions}
+            </>
+          }
+        />
+        {printWorkspace ? (
+          <div className="p-[var(--rz-card-p)]">{printWorkspace}</div>
+        ) : (
           <>
-            {canManage ? (
-              <Button
-                className="px-3 text-body sm:px-4 sm:text-sm"
-                onClick={onAdd}
-                variant="primary"
-              >
-                <Plus aria-hidden />
-                {t('addZone')}
-              </Button>
-            ) : null}
-            {headerActions}
-          </>
-        }
-      />
-      {printWorkspace ? (
-        <div className="px-4 pb-4 sm:px-6 sm:pb-6">{printWorkspace}</div>
-      ) : (
-        <>
-          {unassigned.length ? (
-            <div className="location-browser__direct">
-              {unassigned.map((zone) =>
-                partsBase ? (
-                  <Link
-                    key={zone.id}
-                    aria-label={zone.name}
-                    className="location-browser__row location-browser__row--plain location-browser__row--direct"
-                    to={unassignedHref}
-                  >
-                    {zoneContents(zone)}
-                  </Link>
-                ) : (
-                  <div
-                    key={zone.id}
-                    className="location-browser__row location-browser__row--plain"
-                  >
-                    {zoneContents(zone, false)}
-                  </div>
-                ),
-              )}
+            <div
+              aria-hidden
+              className={`location-browser__columns ${canManage ? 'location-browser__columns--zone-actions' : 'location-browser__columns--plain'}`}
+            >
+              <span>{t('colZone')}</span>
+              <span />
+              {canManage ? <span /> : null}
             </div>
-          ) : null}
-          <div
-            aria-hidden
-            className={`location-browser__columns ${canManage ? 'location-browser__columns--zone-actions' : 'location-browser__columns--plain'}`}
-          >
-            <span>{t('colZone')}</span>
-            <span />
-            {canManage ? <span /> : null}
-          </div>
-          <div
-            role="group"
-            aria-label={tb('zoneList')}
-            tabIndex={0}
-            className="location-browser__list"
-          >
-            {visible.length ? (
-              visible
-                .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-                .map((zone) => (
-                  <div
-                    className={`location-browser__section${canManage ? ' location-browser__zone' : ''}`}
-                    key={zone.id}
-                  >
+            {unassigned.length ? (
+              <div className="location-browser__direct">
+                {unassigned.map((zone) => {
+                  const row = partsBase ? (
                     <Link
+                      key={zone.id}
                       aria-label={zone.name}
-                      className="location-browser__row location-browser__row--plain"
-                      to={`${base}/zones/${encodeURIComponent(zone.id)}`}
+                      className="location-browser__row location-browser__row--plain location-browser__row--direct"
+                      to={unassignedHref}
                     >
                       {zoneContents(zone)}
                     </Link>
-                    {canManage ? (
-                      <ActionMenu
-                        label={tb('zoneActions', { name: zone.name })}
-                        actions={[
-                          {
-                            key: 'edit',
-                            label: t('editZone', { name: zone.name }),
-                            icon: <Pencil aria-hidden />,
-                            onSelect: () => onEdit(zone),
-                          },
-                          {
-                            key: 'archive',
-                            label: t('archiveZoneLabel', { name: zone.name }),
-                            icon: <Archive aria-hidden />,
-                            destructive: true,
-                            onSelect: () => onArchive(zone),
-                          },
-                        ]}
-                      />
-                    ) : null}
-                  </div>
-                ))
-            ) : (
-              <p className="location-browser__empty">
-                {needle ? tb('noMatches') : t('noZones')}
-              </p>
+                  ) : (
+                    <div
+                      key={zone.id}
+                      className="location-browser__row location-browser__row--plain"
+                    >
+                      {zoneContents(zone, false)}
+                    </div>
+                  )
+                  return canManage ? (
+                    <div
+                      className="location-browser__section location-browser__zone"
+                      key={zone.id}
+                    >
+                      {row}
+                      <span aria-hidden />
+                    </div>
+                  ) : (
+                    row
+                  )
+                })}
+              </div>
+            ) : null}
+            {noZones ? null : (
+              <div
+                role="group"
+                aria-label={tb('zoneList')}
+                tabIndex={0}
+                className="location-browser__list"
+              >
+                {visible.length ? (
+                  visible
+                    .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+                    .map((zone) => (
+                      <div
+                        className={`location-browser__section${canManage ? ' location-browser__zone' : ''}`}
+                        key={zone.id}
+                      >
+                        <Link
+                          aria-label={zone.name}
+                          className={`location-browser__row location-browser__row--plain${zone.isActive ? '' : ' location-browser__row--muted'}`}
+                          to={`${base}/zones/${encodeURIComponent(zone.id)}`}
+                        >
+                          {zoneContents(zone)}
+                        </Link>
+                        {canManage ? zoneMenu(zone) : null}
+                      </div>
+                    ))
+                ) : (
+                  <p className="location-browser__empty">
+                    {needle ? tb('noMatches') : t('noZones')}
+                  </p>
+                )}
+              </div>
             )}
-          </div>
-          {totalPages > 1 ? (
-            <div className="location-browser__pagination">
-              <Pagination
-                label={tb('zonePagination')}
-                page={page}
-                pageSize={PAGE_SIZE}
-                total={visible.length}
-                totalPages={totalPages}
-                onPage={(next) =>
-                  update({ locationPage: next === 1 ? null : String(next) })
-                }
-              />
-            </div>
-          ) : null}
-        </>
-      )}
-    </section>
+            {totalPages > 1 ? (
+              <div className="location-browser__pagination">
+                <Pagination
+                  label={tb('zonePagination')}
+                  page={page}
+                  pageSize={PAGE_SIZE}
+                  total={visible.length}
+                  totalPages={totalPages}
+                  onPage={(next) =>
+                    update({ locationPage: next === 1 ? null : String(next) })
+                  }
+                />
+              </div>
+            ) : null}
+          </>
+        )}
+      </section>
+      {noZones ? (
+        <EmptyState
+          icon={<LayoutGrid aria-hidden />}
+          title={t('noZones')}
+          {...(canManage
+            ? {
+                actions: (
+                  <Button onClick={onAdd} variant="primary">
+                    <Plus aria-hidden />
+                    {t('addZone')}
+                  </Button>
+                ),
+              }
+            : {})}
+        />
+      ) : null}
+    </>
   )
 }

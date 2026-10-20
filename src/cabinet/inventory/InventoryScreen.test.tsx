@@ -1626,7 +1626,7 @@ it('offers warehouse and zone management and prints actual zone QR labels', asyn
   )
   expect(print).not.toHaveBeenCalled()
   await user.click(
-    within(picker).getByRole('button', { name: 'Підготувати 1' }),
+    within(picker).getByRole('button', { name: 'Створити чергу · 1' }),
   )
   await user.click(within(picker).getByRole('button', { name: 'Друк · 1' }))
   await waitFor(() => expect(print).toHaveBeenCalled())
@@ -1714,7 +1714,7 @@ it('browses locations without row actions or part counts and prints selected she
     await within(picker).findByRole('checkbox', { name: 'Обрати: Полиця 1' }),
   )
   await user.click(
-    within(picker).getByRole('button', { name: 'Підготувати 1' }),
+    within(picker).getByRole('button', { name: 'Створити чергу · 1' }),
   )
   await user.click(within(picker).getByRole('button', { name: 'Друк · 1' }))
   await waitFor(() => expect(print).toHaveBeenCalled())
@@ -2556,7 +2556,7 @@ it.each([
       path + '?labels=1',
     )
     expect(
-      within(workspace).getByRole('region', { name: 'Аркуш стікерів' }),
+      within(workspace).getByRole('searchbox', { name: 'Назва або код' }),
     ).toBeInTheDocument()
     await user.click(
       within(workspace).getByRole('button', { name: 'Завершити вибір' }),
@@ -2628,7 +2628,14 @@ it.each(['missing-section', 'archived-section', 'missing-warehouse'])(
         ? '/app/yard/warehouses/wh-1?labels=1'
         : '/app/yard/warehouses/sections/section-1?labels=1',
     )
-    await user.click(await screen.findByRole('button', { name: 'Зняти' }))
+    await user.click(
+      await screen.findByRole('button', { name: 'Скасувати чергу' }),
+    )
+    await user.click(
+      within(
+        screen.getByRole('dialog', { name: 'Скасувати чергу друку?' }),
+      ).getByRole('button', { name: 'Скасувати чергу' }),
+    )
     await waitFor(() => expect(readLabelQueue(key)).toBeNull())
   },
 )

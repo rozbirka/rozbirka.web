@@ -77,19 +77,24 @@ beforeEach(() => {
     close: vi.fn(),
   } as unknown as Window)
 })
-it('preserves selection across search, selects all and restores the queue after closing', async () => {
+it('preserves selection across pages, then restores the queue after closing', async () => {
   const user = userEvent.setup()
   mount()
   await user.click(screen.getByRole('button', { name: 'Етикетки секцій' }))
   await user.click(
     await screen.findByRole('checkbox', { name: 'Обрати: Section 1' }),
   )
-  await user.type(screen.getByRole('searchbox'), 'A25')
+  // The bulk bar takes the toolbar's place while a selection exists.
+  expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Наступна сторінка' }))
+  await user.click(screen.getByRole('button', { name: 'Наступна сторінка' }))
   await user.click(
     await screen.findByRole('checkbox', { name: 'Обрати: Section 25' }),
   )
-  await user.clear(screen.getByRole('searchbox'))
-  await user.click(screen.getByRole('button', { name: 'Підготувати 2' }))
+  expect(
+    screen.getByRole('region', { name: 'Дії над обраними' }),
+  ).toHaveTextContent('2')
+  await user.click(screen.getByRole('button', { name: 'Створити чергу · 2' }))
   expect(readLabelQueue(labelQueueKey('u', 't'))?.remainingIds).toEqual([
     's0',
     's24',
@@ -109,9 +114,10 @@ it('prints the entire prepared queue without a follow-up dialog and preserves it
   mount()
   await user.click(screen.getByRole('button', { name: 'Етикетки секцій' }))
   await user.click(
-    await screen.findByRole('button', { name: 'Обрати всі · 25' }),
+    await screen.findByRole('checkbox', { name: 'Обрати всі на сторінці' }),
   )
-  await user.click(screen.getByRole('button', { name: 'Підготувати 25' }))
+  await user.click(screen.getByRole('button', { name: 'Обрати всі · 25' }))
+  await user.click(screen.getByRole('button', { name: 'Створити чергу · 25' }))
   await user.click(screen.getByRole('button', { name: 'PDF · 25' }))
   await waitFor(() => expect(openPrint).toHaveBeenCalledTimes(1))
   expect(screen.queryByText('Що вдалося надрукувати?')).not.toBeInTheDocument()
@@ -134,7 +140,7 @@ it('blocks a stale missing label and preserves the queue when printing fails', a
   await user.click(
     await screen.findByRole('checkbox', { name: 'Обрати: Section 1' }),
   )
-  await user.click(screen.getByRole('button', { name: 'Підготувати 1' }))
+  await user.click(screen.getByRole('button', { name: 'Створити чергу · 1' }))
   api.getSections.mockResolvedValue([])
   await user.click(screen.getByRole('button', { name: 'Друк · 1' }))
   expect(
@@ -156,7 +162,7 @@ it('clears persisted state on tenant reset', async () => {
   await user.click(
     await screen.findByRole('checkbox', { name: 'Обрати: Section 1' }),
   )
-  await user.click(screen.getByRole('button', { name: 'Підготувати 1' }))
+  await user.click(screen.getByRole('button', { name: 'Створити чергу · 1' }))
   await act(async () =>
     tenantResetRegistry.clear({ userId: 'u', tenantId: 't' }),
   )
@@ -180,7 +186,9 @@ it('does not expose a reset before selection, keeps another collection queue sep
   expect(
     screen.getByRole('link', { name: 'Продовжити чергу' }),
   ).toHaveAttribute('href', '/inventory/sections/section-x?labels=1')
-  expect(screen.getByRole('button', { name: 'Зняти' })).toBeDisabled()
+  expect(
+    screen.queryByRole('button', { name: 'Зняти вибір' }),
+  ).not.toBeInTheDocument()
   expect(
     await screen.findByRole('checkbox', { name: 'Обрати: Section 1' }),
   ).toBeDisabled()
@@ -199,7 +207,7 @@ it('keeps labels queued after blocked printing and closing the browser print dia
   await user.click(
     await screen.findByRole('checkbox', { name: 'Обрати: Section 1' }),
   )
-  await user.click(screen.getByRole('button', { name: 'Підготувати 1' }))
+  await user.click(screen.getByRole('button', { name: 'Створити чергу · 1' }))
   vi.mocked(window.open).mockReturnValueOnce(null)
   await user.click(screen.getByRole('button', { name: 'Друк · 1' }))
   expect(await screen.findByText(/Браузер заблокував/)).toBeInTheDocument()
@@ -223,7 +231,7 @@ it('does not print a prepared artifact after switching tenant', async () => {
   await user.click(
     await screen.findByRole('checkbox', { name: 'Обрати: Section 1' }),
   )
-  await user.click(screen.getByRole('button', { name: 'Підготувати 1' }))
+  await user.click(screen.getByRole('button', { name: 'Створити чергу · 1' }))
   await user.click(screen.getByRole('button', { name: 'Друк · 1' }))
   await waitFor(() => expect(renderer.buildZoneLabelHtml).toHaveBeenCalled())
   context.tenantId = 'other-tenant'
@@ -276,7 +284,7 @@ it('updates the selected checkboxes when another tab replaces the prepared selec
   await user.click(
     await screen.findByRole('checkbox', { name: 'Обрати: Section 1' }),
   )
-  await user.click(screen.getByRole('button', { name: 'Підготувати 1' }))
+  await user.click(screen.getByRole('button', { name: 'Створити чергу · 1' }))
   const { createLabelQueue, writeLabelQueue } =
     await import('./location-label-queue')
   const replacement = createLabelQueue(
@@ -301,7 +309,7 @@ it('updates the selected checkboxes when another tab replaces the prepared selec
   ).toBeChecked()
 })
 
-it('keeps the sticker list and sheet preview inline without a drawer', async () => {
+it('keeps the label list and the active queue inline without a drawer', async () => {
   const user = userEvent.setup()
   mount()
   await user.click(screen.getByRole('button', { name: 'Етикетки секцій' }))
@@ -310,20 +318,24 @@ it('keeps the sticker list and sheet preview inline without a drawer', async () 
   ).toBeInTheDocument()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(
-    screen.getByRole('region', { name: 'Аркуш стікерів' }),
-  ).toBeInTheDocument()
+    screen.queryByRole('region', { name: 'Активна черга' }),
+  ).not.toBeInTheDocument()
   await user.click(
     await screen.findByRole('checkbox', { name: 'Обрати: Section 1' }),
   )
   expect(
-    screen.getByRole('article', {
-      name: 'Попередній перегляд стікера Section 1',
-    }),
-  ).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Підготувати 1' })).toBeEnabled()
+    screen.getByRole('button', { name: 'Створити чергу · 1' }),
+  ).toBeEnabled()
   expect(
     screen.getByRole('checkbox', { name: 'Обрати: Section 1' }),
   ).toBeChecked()
+  await user.click(screen.getByRole('button', { name: 'Створити чергу · 1' }))
+  const queue = screen.getByRole('region', { name: 'Активна черга' })
+  expect(within(queue).getByText('Етикеток у черзі: 1')).toBeInTheDocument()
+  expect(
+    within(queue).getByText('0 з 1 надруковано · 1 залишилось'),
+  ).toBeInTheDocument()
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 })
 
 it('edits prepared labels directly through list checkboxes and prints the current preview', async () => {
@@ -333,30 +345,12 @@ it('edits prepared labels directly through list checkboxes and prints the curren
   await user.click(
     await screen.findByRole('checkbox', { name: 'Обрати: Section 1' }),
   )
-  await user.click(screen.getByRole('button', { name: 'Підготувати 1' }))
+  await user.click(screen.getByRole('button', { name: 'Створити чергу · 1' }))
   await user.click(screen.getByRole('checkbox', { name: 'Обрати: Section 2' }))
-  expect(
-    screen.getByRole('article', {
-      name: 'Попередній перегляд стікера Section 2',
-    }),
-  ).toBeInTheDocument()
-  expect(
-    screen.getByRole('article', {
-      name: 'Попередній перегляд стікера Section 1',
-    }),
-  ).toBeInTheDocument()
+  expect(screen.getAllByText('У черзі')).toHaveLength(2)
+  expect(screen.getByText('Етикеток у черзі: 2')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Друк · 2' })).toBeEnabled()
   expect(screen.getByRole('button', { name: 'PDF · 2' })).toBeEnabled()
-  expect(
-    screen.queryByRole('button', { name: 'Скасувати чергу' }),
-  ).not.toBeInTheDocument()
-  expect(screen.queryByText(/Етикеток у черзі:/)).not.toBeInTheDocument()
-  expect(
-    await screen.findByRole('img', { name: 'QR-код Section 2' }),
-  ).toBeInTheDocument()
-  expect(
-    screen.queryByRole('button', { name: 'Змінити чергу' }),
-  ).not.toBeInTheDocument()
   await user.click(screen.getByRole('checkbox', { name: 'Обрати: Section 1' }))
   expect(
     screen.getByRole('checkbox', { name: 'Обрати: Section 1' }),
@@ -364,11 +358,7 @@ it('edits prepared labels directly through list checkboxes and prints the curren
   expect(
     screen.getByRole('checkbox', { name: 'Обрати: Section 2' }),
   ).toBeChecked()
-  expect(
-    screen.queryByRole('article', {
-      name: 'Попередній перегляд стікера Section 1',
-    }),
-  ).not.toBeInTheDocument()
+  expect(screen.getAllByText('У черзі')).toHaveLength(1)
   expect(readLabelQueue(labelQueueKey('u', 't'))?.remainingIds).toEqual(['s1'])
   await user.click(screen.getByRole('button', { name: 'Друк · 1' }))
   await waitFor(() => expect(renderer.buildZoneLabelHtml).toHaveBeenCalled())
@@ -384,7 +374,7 @@ it('selects all prepared labels and clears the entire selection even through a s
   await user.click(
     await screen.findByRole('checkbox', { name: 'Обрати: Section 1' }),
   )
-  await user.click(screen.getByRole('button', { name: 'Підготувати 1' }))
+  await user.click(screen.getByRole('button', { name: 'Створити чергу · 1' }))
   await user.click(screen.getByRole('button', { name: 'Обрати всі · 25' }))
   expect(screen.getByRole('button', { name: 'Друк · 25' })).toBeEnabled()
   expect(readLabelQueue(labelQueueKey('u', 't'))?.remainingIds).toHaveLength(25)
@@ -395,11 +385,22 @@ it('selects all prepared labels and clears the entire selection even through a s
   expect(screen.getByRole('button', { name: 'Друк · 24' })).toBeEnabled()
   await user.click(screen.getByRole('button', { name: 'Обрати знайдені · 1' }))
   expect(last).toBeChecked()
-  await user.click(screen.getByRole('button', { name: 'Зняти' }))
+  await user.click(screen.getByRole('button', { name: 'Скасувати чергу' }))
+  await user.click(
+    within(
+      screen.getByRole('dialog', { name: 'Скасувати чергу друку?' }),
+    ).getByRole('button', { name: 'Скасувати чергу' }),
+  )
   expect(readLabelQueue(labelQueueKey('u', 't'))).toBeNull()
-  expect(last).not.toBeChecked()
-  expect(screen.getByRole('button', { name: 'Підготувати 0' })).toBeDisabled()
-  expect(screen.queryByRole('article')).not.toBeInTheDocument()
+  expect(
+    screen.getByRole('checkbox', { name: 'Обрати: Section 25' }),
+  ).not.toBeChecked()
+  expect(
+    screen.queryByRole('region', { name: 'Активна черга' }),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: /Створити чергу/ }),
+  ).not.toBeInTheDocument()
 })
 
 it('preserves the prepared selection when adding all would exceed the queue limit', async () => {
@@ -417,7 +418,7 @@ it('preserves the prepared selection when adding all would exceed the queue limi
   await user.click(
     await screen.findByRole('checkbox', { name: 'Обрати: Section 1' }),
   )
-  await user.click(screen.getByRole('button', { name: 'Підготувати 1' }))
+  await user.click(screen.getByRole('button', { name: 'Створити чергу · 1' }))
   await user.click(screen.getByRole('button', { name: 'Обрати всі · 201' }))
   expect(
     await screen.findByText(/В одній черзі може бути не більше 200/),

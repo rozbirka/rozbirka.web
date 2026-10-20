@@ -3,12 +3,15 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import {
   Archive,
   ArrowRight,
-  Check,
-  ChevronLeft,
   Download,
+  LayoutGrid,
   Pencil,
   Plus,
+  MousePointerClick,
   Printer,
+  RefreshCw,
+  TriangleAlert,
+  Warehouse as WarehouseIcon,
 } from 'lucide-react'
 import {
   ActionMenu,
@@ -17,11 +20,11 @@ import {
   Card,
   ConfirmDialog,
   Field,
-  FormDialog,
   Notice,
   SearchInput,
   Sheet,
   SkeletonRows,
+  StateScreen,
   StatusPill,
   TextInput,
 } from '@/components/app'
@@ -41,6 +44,7 @@ import {
   type PartSearchItem,
 } from '@/api/parts'
 import { historyDetails, historyLabel, unitLabel } from '../parts/part-labels'
+import { partsListMessages } from '../parts/parts-list-messages'
 import { normalizeApiProblem } from '@/api/errors'
 import { cn } from '@/lib/utils'
 import { cabinetPath } from '../cabinet-paths'
@@ -54,15 +58,20 @@ import { inventoryMessages } from '../inventory/messages'
 import { overviewMessages } from '../inventory/overview-messages'
 import { placementMessages } from '../inventory/placement-messages'
 import { LocationSelect } from '../inventory/LocationSelect'
-import { LocationBrowser } from '../inventory/LocationBrowser'
+import {
+  LocationBrowser,
+  LocationBrowserHeader,
+  LocationSearch,
+} from '../inventory/LocationBrowser'
 import { LocationLabelsPage } from '../inventory/LocationLabelPrinter'
 import { locationPartsHref } from '../inventory/location-contents'
 import { locationBrowserMessages } from '../inventory/location-browser-messages'
 import { warehouseMessages } from '../inventory/warehouse-messages'
-import { RedesignShell, RedesignTitle } from '../redesign-shell'
+import { Crumbs, RedesignShell } from '../redesign-shell'
+import { BackAction, WarehousePageHead } from './warehouse-page'
 import { inventoryCodeFromName } from '../inventory/inventory-code'
 import { ZoneEditorSheet, type ZoneDraft } from '../inventory/ZoneEditorSheet'
-import { InventoryLoadError, Resource } from '../inventory/InventoryResource'
+import { Resource } from '../inventory/InventoryResource'
 import { LocationPartsList } from '../inventory/LocationPartsList'
 import { unassignedMessages } from './unassigned-messages'
 import { BulkPlacementSheet } from './BulkPlacementSheet'
@@ -100,6 +109,10 @@ function useWarehouseBase() {
 function UnassignedPartsView({ id }: { id: string }) {
   const t = useT(unassignedMessages)
   const tw = useT(warehouseMessages)
+  const ti = useT(inventoryMessages)
+  const tp = useT(partsListMessages)
+  const { targetTenant } = useCabinet()
+  const navigate = useNavigate()
   const base = useWarehouseBase()
   const canManage = usePermission('inventory.zones.manage')
   const canSeeParts = usePermission('parts.view')
@@ -122,88 +135,120 @@ function UnassignedPartsView({ id }: { id: string }) {
         return (
           <RedesignShell
             crumb={
-              <span className="flex min-h-control flex-wrap items-center gap-3">
-                <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 font-sans text-sm font-semibold tracking-normal normal-case hover:bg-app-hover"
-                  to={`${base}/${encodeURIComponent(warehouse.id)}`}
-                >
-                  <ChevronLeft aria-hidden className="size-3.5" />
-                  {tw('backToWarehouse')}
-                </Link>
-                <span>{warehouse.name}</span>
-                <span aria-hidden>/</span>
-                <span>{t('title')}</span>
-              </span>
+              <Crumbs
+                items={[
+                  ti('crumbWarehouse'),
+                  <Link key="warehouses" to={base}>
+                    {ti('crumbWarehouses')}
+                  </Link>,
+                  <Link
+                    key="warehouse"
+                    to={`${base}/${encodeURIComponent(warehouse.id)}`}
+                  >
+                    {warehouse.name}
+                  </Link>,
+                  t('title'),
+                ]}
+              />
+            }
+            actions={
+              <BackAction
+                to={`${base}/${encodeURIComponent(warehouse.id)}`}
+                label={tw('backToWarehouse')}
+              />
             }
           >
-            <RedesignTitle
+            <WarehousePageHead
               title={t('title')}
-              lead={t('lead', { warehouse: warehouse.name })}
+              sub={t('lead', { warehouse: warehouse.name })}
             />
             {placedName ? (
               <Notice tone="ok">{t('placed', { name: placedName })}</Notice>
             ) : null}
             {!warehouse.isActive ? <Notice>{t('archived')}</Notice> : null}
             {zone ? (
-              <section
-                className="rz-card p-[var(--rz-card-p)]"
-                aria-label={t('list')}
-              >
-                <LocationPartsList
-                  target={{
-                    kind: 'zone',
-                    warehouseId: warehouse.id,
-                    zoneId: zone.id,
-                    name: t('title'),
-                    path: [warehouse.name, t('title')],
-                  }}
-                  context="unassigned"
-                  refreshKey={revision}
-                  emptyText={t('empty')}
-                  selection={
-                    canManage && warehouse.isActive
-                      ? {
-                          parts: selectedParts,
-                          onChange: setSelectedParts,
-                          actions: selectedParts.size ? (
-                            <div className="grid gap-2">
-                              <BulkBar
-                                count={selectedParts.size}
-                                noun={t('partsNoun')}
-                                actions={[
-                                  {
-                                    key: 'place',
-                                    label: t('placeSelected'),
-                                    onRun: () => {
-                                      setPlacedName(null)
-                                      setBulkParts([...selectedParts.values()])
+              <LocationPartsList
+                target={{
+                  kind: 'zone',
+                  warehouseId: warehouse.id,
+                  zoneId: zone.id,
+                  name: t('title'),
+                  path: [warehouse.name, t('title')],
+                }}
+                context="unassigned"
+                title={t('list')}
+                refreshKey={revision}
+                emptyText={t('empty')}
+                searchHint={
+                  canManage && warehouse.isActive
+                    ? t('selectionHint')
+                    : undefined
+                }
+                selection={
+                  canManage && warehouse.isActive
+                    ? {
+                        parts: selectedParts,
+                        onChange: setSelectedParts,
+                        actions: selectedParts.size ? (
+                          <BulkBar
+                            count={selectedParts.size}
+                            noun={t('partsNoun')}
+                            actions={[
+                              {
+                                key: 'place',
+                                label: t('placeSelected'),
+                                onRun: () => {
+                                  setPlacedName(null)
+                                  setBulkParts([...selectedParts.values()])
+                                },
+                              },
+                              ...(targetTenant
+                                ? [
+                                    {
+                                      key: 'stickers',
+                                      label: tp('bulkPrintStickers'),
+                                      onRun: () =>
+                                        void navigate(
+                                          `${cabinetPath(targetTenant.slug, 'stickers')}?${[
+                                            ...selectedParts.keys(),
+                                          ]
+                                            .map(
+                                              (partId) =>
+                                                `part=${encodeURIComponent(partId)}`,
+                                            )
+                                            .join('&')}`,
+                                        ),
                                     },
-                                  },
-                                ]}
-                                onClear={() => setSelectedParts(new Map())}
-                              />
-                              <p className="text-app-muted text-xs">
-                                {t('selectionHint')}
-                              </p>
-                            </div>
-                          ) : null,
-                        }
-                      : undefined
-                  }
-                  onPlace={
-                    canManage && warehouse.isActive
-                      ? (part) => {
-                          setPlacedName(null)
-                          setPlacing(part)
-                        }
-                      : undefined
-                  }
-                />
-              </section>
+                                  ]
+                                : []),
+                            ]}
+                            onClear={() => setSelectedParts(new Map())}
+                          />
+                        ) : null,
+                      }
+                    : undefined
+                }
+                onPlace={
+                  canManage && warehouse.isActive
+                    ? (part) => {
+                        setPlacedName(null)
+                        setPlacing(part)
+                      }
+                    : undefined
+                }
+              />
             ) : (
-              <InventoryLoadError
-                message={t('missingZone')}
-                onRetry={resource.reload}
+              <StateScreen
+                icon={<TriangleAlert aria-hidden />}
+                role="alert"
+                title={t('missingZone')}
+                tone="danger"
+                actions={
+                  <Button onClick={resource.reload}>
+                    <RefreshCw aria-hidden />
+                    {ti('retry')}
+                  </Button>
+                }
               />
             )}
             {placing ? (
@@ -261,6 +306,7 @@ interface WarehousesOverviewData {
 function WarehousesOverview() {
   const t = useT(overviewMessages)
   const ti = useT(inventoryMessages)
+  const tb = useT(locationBrowserMessages)
   const format = useFormat()
   const base = useWarehouseBase()
   const canZones = usePermission('inventory.zones.manage')
@@ -332,18 +378,11 @@ function WarehousesOverview() {
         return (
           <RedesignShell
             crumb={
-              <span className="flex min-h-control items-center gap-2.5 text-caption">
-                <span className="hidden sm:inline">{ti('crumbWarehouse')}</span>
-                <span aria-hidden className="hidden text-app-dim sm:inline">
-                  /
-                </span>
-                <span className="text-app-muted">{ti('crumbWarehouses')}</span>
-              </span>
+              <Crumbs items={[ti('crumbWarehouse'), ti('crumbWarehouses')]} />
             }
             actions={
-              canZones ? (
+              canZones && warehouses.length > 0 ? (
                 <Button
-                  className="px-[18px] text-sm font-semibold"
                   onClick={() => {
                     setDraft({ name: '', code: '' })
                     setAdding(true)
@@ -356,29 +395,39 @@ function WarehousesOverview() {
               ) : undefined
             }
           >
-            <RedesignTitle
+            <WarehousePageHead
               title={ti('crumbWarehouses')}
-              lead={t('warehousesPageLead')}
+              sub={t('warehousesPageLead')}
             />
-            <div className="rz-kpis">
-              <StockStat
-                label={t('statWarehouses')}
-                value={format.number(warehouses.length) ?? '0'}
-                unit=""
-                meta={t('warehouseStatusSummary', {
-                  active: activeCount,
-                  archived: warehouses.length - activeCount,
-                })}
-              />
-              <StockStat
-                label={t('statWarehouseParts')}
-                value={
-                  partsTotal === null ? '—' : (format.number(partsTotal) ?? '0')
-                }
-                unit=""
-                meta={partsTotal === null ? ti('stockUnavailable') : ''}
-              />
-            </div>
+            {warehouses.length ? (
+              <>
+                <LocationSearch
+                  label={t('searchWarehouses')}
+                  placeholder={tb('nameOrCode')}
+                />
+                <div className="rz-kpis">
+                  <StockStat
+                    label={t('statWarehouses')}
+                    value={format.number(warehouses.length) ?? '0'}
+                    unit=""
+                    meta={t('warehouseStatusSummary', {
+                      active: activeCount,
+                      archived: warehouses.length - activeCount,
+                    })}
+                  />
+                  <StockStat
+                    label={t('statWarehouseParts')}
+                    value={
+                      partsTotal === null
+                        ? '—'
+                        : (format.number(partsTotal) ?? '0')
+                    }
+                    unit=""
+                    meta={partsTotal === null ? ti('stockUnavailable') : ''}
+                  />
+                </div>
+              </>
+            ) : null}
             {operationError ? (
               <Notice tone="danger">{operationError}</Notice>
             ) : null}
@@ -386,6 +435,14 @@ function WarehousesOverview() {
               warehouses={warehouses}
               stock={byWarehouse}
               base={base}
+              onAdd={
+                canZones
+                  ? () => {
+                      setDraft({ name: '', code: '' })
+                      setAdding(true)
+                    }
+                  : undefined
+              }
             />
             <WarehouseEditorSheet
               open={adding}
@@ -411,6 +468,7 @@ function WarehouseEditorSheet({
   onSubmit,
   pending,
   error,
+  edit,
 }: {
   open: boolean
   draft: { name: string; code: string }
@@ -419,15 +477,19 @@ function WarehouseEditorSheet({
   onSubmit: () => void
   pending: boolean
   error: string | null
+  /** Editing an existing warehouse: its code, so the code keeps following
+   * the name until someone types their own. */
+  edit?: { initialCode: string } | undefined
 }) {
   const t = useT(overviewMessages)
+  const tw = useT(warehouseMessages)
   const tc = useT(commonMessages)
   const formId = useId()
   return (
     <Sheet
       open={open}
-      title={t('newWarehouseTitle')}
-      description={t('newWarehouseHint')}
+      title={edit ? tw('editWarehouseTitle') : t('newWarehouseTitle')}
+      description={edit ? tw('editWarehouseHint') : t('newWarehouseHint')}
       onOpenChange={(next) => {
         if (!next && !pending) onClose()
       }}
@@ -443,7 +505,7 @@ function WarehouseEditorSheet({
             type="submit"
             variant="primary"
           >
-            {t('addWarehouse')}
+            {edit ? tc('save') : t('addWarehouse')}
           </Button>
         </>
       }
@@ -451,14 +513,19 @@ function WarehouseEditorSheet({
       <form
         id={formId}
         aria-busy={pending}
-        className="grid content-start gap-5"
+        className="grid content-start gap-4"
         onSubmit={(event) => {
           event.preventDefault()
           if (!pending && draft.name.trim() && draft.code.trim()) onSubmit()
         }}
       >
         {error ? <Notice tone="danger">{error}</Notice> : null}
-        <NameAndCode draft={draft} onChange={onChange} />
+        <NameAndCode
+          autoHint
+          draft={draft}
+          initialCode={edit?.initialCode}
+          onChange={onChange}
+        />
       </form>
     </Sheet>
   )
@@ -510,7 +577,6 @@ async function loadWarehouseStock(
 function WarehouseView({ id }: { id: string }) {
   const t = useT(warehouseMessages)
   const ti = useT(inventoryMessages)
-  const tc = useT(commonMessages)
   const tb = useT(locationBrowserMessages)
   const base = useWarehouseBase()
   const { targetTenant } = useCabinet()
@@ -660,35 +726,25 @@ function WarehouseView({ id }: { id: string }) {
             : Math.round((filled / real.length) * 100)
 
         return (
-          <div className="grid content-start">
-            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
-              <div className="flex min-w-0 items-center gap-5">
-                <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-app-hover"
-                  to={base}
-                >
-                  <ChevronLeft aria-hidden className="size-3.5" />
-                  {ti('backToWarehouses')}
-                </Link>
-                <p className="rz-crumbs hidden sm:flex">
-                  <span>{ti('crumbWarehouse')}</span>
-                  <span aria-hidden className="text-app-dim">
-                    /
-                  </span>
-                  <span>{ti('crumbWarehouses')}</span>
-                  <span aria-hidden className="text-app-dim">
-                    /
-                  </span>
-                  <span className="text-app-muted truncate">
-                    {warehouse.name}
-                  </span>
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2.5">
+          <RedesignShell
+            crumb={
+              <Crumbs
+                items={[
+                  ti('crumbWarehouse'),
+                  <Link key="warehouses" to={base}>
+                    {ti('crumbWarehouses')}
+                  </Link>,
+                  warehouse.name,
+                ]}
+              />
+            }
+            actions={
+              <>
+                <BackAction to={base} label={ti('backToWarehouses')} />
                 {canManage ? (
                   <Button
-                    className="px-[18px] text-sm font-semibold"
                     onClick={() => {
+                      setOperationError(null)
                       setDraft({ name: warehouse.name, code: warehouse.code })
                       setEditingWarehouse(true)
                     }}
@@ -721,140 +777,120 @@ function WarehouseView({ id }: { id: string }) {
                   ]}
                   label={t('moreActions')}
                 />
-              </div>
-            </div>
-
-            <div className="rz-page">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-4">
-                  <h1 className="rz-h-page break-words">{warehouse.name}</h1>
-                  {warehouse.isActive ? (
-                    <span className="border-state-ok/30 bg-state-ok-soft text-state-ok inline-flex h-[30px] items-center gap-2 rounded-full border pr-3.5 pl-3 text-body font-bold">
-                      <span
-                        aria-hidden
-                        className="bg-state-ok size-1.5 rounded-full"
-                      />
-                      {t('active')}
-                    </span>
-                  ) : (
-                    <StatusPill tone="neutral">{t('archived')}</StatusPill>
-                  )}
-                </div>
-                <p className="rz-caption mt-1">
-                  {[
-                    t('code', { code: warehouse.code }),
-                    ti('zones', { count: real.length }),
-                    stock.total === null
-                      ? null
-                      : ti('positions', { count: stock.total }),
-                    t('unassigned', { count: warehouse.unassignedPartCount }),
-                    warehouse.isSystemDefault ? t('defaultWarehouse') : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </p>
-              </div>
-
-              {operationError ? (
-                <Notice tone="danger">{operationError}</Notice>
-              ) : null}
-
-              <div className="rz-kpis">
-                <StockStat
-                  label={t('statPositions')}
-                  meta={`${ti('zones', { count: real.length })} · ${t('unassigned', { count: warehouse.unassignedPartCount })}`}
-                  unit={ti('positionsUnit')}
-                  value={stock.total == null ? '—' : String(stock.total)}
-                />
-                <StockStat
-                  label={t('statFilled')}
-                  meta={stock.total === null ? t('needsPartsView') : ''}
-                  tone={
-                    occupancy !== null && occupancy >= 80 ? 'warn' : 'plain'
-                  }
-                  unit={
-                    stock.total === null
-                      ? ''
-                      : t('filledTotal', { count: real.length })
-                  }
-                  value={stock.total === null ? '—' : String(filled)}
-                />
-              </div>
-
-              <WarehouseZoneBrowser
-                zones={zones}
-                base={base}
-                partsBase={partsBase}
-                unassignedHref={`${base}/${encodeURIComponent(warehouse.id)}/unassigned`}
-                canManage={canManage}
-                onAdd={startAddingZone}
-                onEdit={(zone) => {
-                  setOperationError(null)
-                  setEditingZone(zone)
-                }}
-                onArchive={setArchivingZone}
-                headerActions={
-                  <ActionMenu
-                    triggerRef={labelTriggerRef}
-                    label={tb('zonesActions')}
-                    actions={[
-                      {
-                        key: 'print',
-                        label: t('printZones'),
-                        icon: <Printer aria-hidden />,
-                        onSelect: () =>
-                          setLabelParams(
-                            (current) => {
-                              const next = new URLSearchParams(current)
-                              next.set('labels', '1')
-                              return next
-                            },
-                            { preventScrollReset: true },
-                          ),
-                      },
-                    ]}
-                  />
-                }
-                printWorkspace={
-                  labelsOpen ? (
-                    <LocationLabelsPage
-                      flush
-                      target={{
-                        kind: 'zone',
-                        parentId: id,
-                        parentName: warehouse.name,
-                      }}
-                      inventoryBase={base}
-                      returnFocusRef={labelTriggerRef}
-                    />
-                  ) : null
-                }
-              />
-            </div>
-
-            <FormDialog
-              description={t('editWarehouseHint')}
-              onOpenChange={(next) => {
-                if (!next) setEditingWarehouse(false)
-              }}
-              onSubmit={(event) => {
-                event.preventDefault()
-                void saveWarehouse(warehouse)
-              }}
-              open={editingWarehouse}
-              pending={busy}
-              submitDisabled={
-                draft.name.trim() === '' || draft.code.trim() === ''
+              </>
+            }
+          >
+            <WarehousePageHead
+              title={warehouse.name}
+              sub={[
+                t('code', { code: warehouse.code }),
+                ti('zones', { count: real.length }),
+                stock.total === null
+                  ? null
+                  : ti('positions', { count: stock.total }),
+                t('unassigned', { count: warehouse.unassignedPartCount }),
+                warehouse.isSystemDefault ? t('defaultWarehouse') : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+              chips={
+                <StatusPill tone={warehouse.isActive ? 'ok' : 'neutral'}>
+                  {t(warehouse.isActive ? 'active' : 'archived')}
+                </StatusPill>
               }
-              submitLabel={tc('save')}
-              title={t('editWarehouseTitle')}
-            >
-              <NameAndCode
-                draft={draft}
-                initialCode={warehouse.code}
-                onChange={setDraft}
+            />
+
+            {labelsOpen ? null : (
+              <LocationSearch
+                label={tb('searchZones')}
+                placeholder={tb('nameOrCode')}
               />
-            </FormDialog>
+            )}
+
+            {operationError ? (
+              <Notice tone="danger">{operationError}</Notice>
+            ) : null}
+
+            <div className="rz-kpis">
+              <StockStat
+                label={t('statPositions')}
+                meta={`${ti('zones', { count: real.length })} · ${t('unassigned', { count: warehouse.unassignedPartCount })}`}
+                unit={ti('positionsUnit')}
+                value={stock.total == null ? '—' : String(stock.total)}
+              />
+              <StockStat
+                label={t('statFilled')}
+                meta={stock.total === null ? t('needsPartsView') : ''}
+                tone={occupancy !== null && occupancy >= 80 ? 'warn' : 'plain'}
+                unit={
+                  stock.total === null
+                    ? ''
+                    : t('filledTotal', { count: real.length })
+                }
+                value={stock.total === null ? '—' : String(filled)}
+              />
+            </div>
+
+            <WarehouseZoneBrowser
+              zones={zones}
+              base={base}
+              partsBase={partsBase}
+              unassignedHref={`${base}/${encodeURIComponent(warehouse.id)}/unassigned`}
+              canManage={canManage}
+              onAdd={startAddingZone}
+              onEdit={(zone) => {
+                setOperationError(null)
+                setEditingZone(zone)
+              }}
+              onArchive={setArchivingZone}
+              headerActions={
+                <ActionMenu
+                  triggerRef={labelTriggerRef}
+                  label={tb('zonesActions')}
+                  actions={[
+                    {
+                      key: 'print',
+                      label: t('printZones'),
+                      icon: <Printer aria-hidden />,
+                      onSelect: () =>
+                        setLabelParams(
+                          (current) => {
+                            const next = new URLSearchParams(current)
+                            next.set('labels', '1')
+                            return next
+                          },
+                          { preventScrollReset: true },
+                        ),
+                    },
+                  ]}
+                />
+              }
+              printWorkspace={
+                labelsOpen ? (
+                  <LocationLabelsPage
+                    flush
+                    target={{
+                      kind: 'zone',
+                      parentId: id,
+                      parentName: warehouse.name,
+                    }}
+                    inventoryBase={base}
+                    returnFocusRef={labelTriggerRef}
+                  />
+                ) : null
+              }
+            />
+
+            <WarehouseEditorSheet
+              open={editingWarehouse}
+              draft={draft}
+              onChange={setDraft}
+              onClose={() => setEditingWarehouse(false)}
+              onSubmit={() => void saveWarehouse(warehouse)}
+              pending={busy}
+              error={operationError}
+              edit={{ initialCode: warehouse.code }}
+            />
 
             {addingZone ? (
               <ZoneEditorSheet
@@ -915,7 +951,7 @@ function WarehouseView({ id }: { id: string }) {
               pending={busy}
               title={t('archiveZoneTitle')}
             />
-          </div>
+          </RedesignShell>
         )
       }}
     </Resource>
@@ -985,79 +1021,82 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
             : zoneSearch
               ? `?${new URLSearchParams({ locationSearch: zoneSearch }).toString()}`
               : ''
+        const warehouseHref = `${base}/${encodeURIComponent(zone.warehouseId)}`
+        const zoneHref = `${base}/zones/${encodeURIComponent(zone.id)}${returnQuery}`
+        const usable =
+          zone.isActive &&
+          section?.isActive !== false &&
+          !zone.isSystemUnassigned
         return (
-          <div className="grid content-start">
-            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
-              <div className="flex min-w-0 items-center gap-5">
-                <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex min-h-control shrink-0 items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-app-hover"
-                  to={
-                    section
-                      ? `${base}/zones/${zone.id}${returnQuery}`
-                      : `${base}/${zone.warehouseId}`
-                  }
-                >
-                  <ChevronLeft aria-hidden className="size-3.5" />
-                  {t(section ? 'backToZone' : 'backToWarehouse')}
-                </Link>
-                <p className="text-app-muted hidden min-w-0 items-center gap-2 text-sm sm:flex">
-                  <span>{ti('crumbWarehouse')}</span>
-                  <span aria-hidden className="text-app-dim">
-                    /
-                  </span>
-                  <span className="text-app-muted truncate">
+          <RedesignShell
+            crumb={
+              <Crumbs
+                items={[
+                  ti('crumbWarehouse'),
+                  <Link key="warehouses" to={base}>
+                    {ti('crumbWarehouses')}
+                  </Link>,
+                  <Link key="warehouse" to={warehouseHref}>
                     {zone.warehouseName}
-                  </span>
-                  <span aria-hidden className="text-app-dim">
-                    /
-                  </span>
-                  {section ? (
-                    <>
-                      <span className="text-app-muted truncate">
-                        {zone.name}
-                      </span>
-                      <span aria-hidden className="text-app-dim">
-                        /
-                      </span>
-                    </>
-                  ) : null}
-                  <span>{t(section ? 'sectionType' : 'zoneType')}</span>
-                </p>
-              </div>
-              {canViewParts && targetTenant ? (
-                <Button asChild className="px-4 text-sm font-semibold">
-                  <Link
-                    to={locationPartsHref(
-                      cabinetPath(targetTenant.slug, 'parts'),
-                      zone.warehouseId,
-                      section
-                        ? {
-                            kind: 'section',
-                            zoneId: zone.id,
-                            sectionId: section.id,
-                            name: section.name,
-                            path: [],
-                          }
-                        : {
-                            kind: 'zone',
-                            zoneId: zone.id,
-                            name: zone.name,
-                            path: [],
-                          },
-                    )}
-                  >
-                    {t(section ? 'allSectionParts' : 'allZoneParts')}
-                    <ArrowRight aria-hidden className="size-4" />
-                  </Link>
-                </Button>
-              ) : null}
-            </div>
-            <div className="rz-page">
-              <header className="min-w-0">
-                <h1 className="rz-h-page break-words">
-                  {section?.name ?? zone.name}
-                </h1>
-                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  </Link>,
+                  ...(section
+                    ? [
+                        <Link key="zone" to={zoneHref}>
+                          {zone.name}
+                        </Link>,
+                        section.name,
+                      ]
+                    : [zone.name]),
+                ]}
+              />
+            }
+            actions={
+              <>
+                <BackAction
+                  to={section ? zoneHref : warehouseHref}
+                  label={t(section ? 'backToZone' : 'backToWarehouse')}
+                />
+                {canViewParts && targetTenant ? (
+                  <Button asChild>
+                    <Link
+                      to={locationPartsHref(
+                        cabinetPath(targetTenant.slug, 'parts'),
+                        zone.warehouseId,
+                        section
+                          ? {
+                              kind: 'section',
+                              zoneId: zone.id,
+                              sectionId: section.id,
+                              name: section.name,
+                              path: [],
+                            }
+                          : {
+                              kind: 'zone',
+                              zoneId: zone.id,
+                              name: zone.name,
+                              path: [],
+                            },
+                      )}
+                    >
+                      {t(section ? 'allSectionParts' : 'allZoneParts')}
+                      <ArrowRight aria-hidden />
+                    </Link>
+                  </Button>
+                ) : null}
+              </>
+            }
+          >
+            <WarehousePageHead
+              title={section?.name ?? zone.name}
+              sub={
+                zone.isSystemUnassigned
+                  ? zone.code
+                  : `${t('code', { code: section?.code ?? zone.code })} · ${t('locationHierarchy')}`
+              }
+              chips={
+                zone.isSystemUnassigned ? (
+                  <StatusPill tone="neutral">{t('systemTag')}</StatusPill>
+                ) : (
                   <StatusPill
                     tone={
                       zone.isActive && section?.isActive !== false
@@ -1071,46 +1110,39 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
                         : 'zoneArchived',
                     )}
                   </StatusPill>
-                  <p className="text-app-muted min-w-0 break-all font-mono text-body">
-                    {t('code', { code: section?.code ?? zone.code })}
-                  </p>
-                </div>
-              </header>
-              {zone.isActive &&
-              section?.isActive !== false &&
-              !zone.isSystemUnassigned ? (
-                <>
-                  <ZoneLocations
-                    zone={zone}
-                    {...(section ? { section } : {})}
-                    onStructureChange={resource.refresh}
-                  />
-                </>
-              ) : (
-                <>
-                  <Notice>
-                    {t(
-                      zone.isSystemUnassigned
-                        ? 'systemZoneStructure'
-                        : 'archivedZoneStructure',
-                    )}
-                  </Notice>
-                  {labelsOpen && !zone.isSystemUnassigned ? (
-                    <div className="rz-card p-[var(--rz-card-p)]">
-                      <LocationLabelsPage
-                        target={{
-                          kind: section ? 'shelf' : 'section',
-                          parentId: section?.id ?? zone.id,
-                          parentName: section?.name ?? zone.name,
-                        }}
-                        inventoryBase={base}
-                      />
-                    </div>
-                  ) : null}
-                </>
-              )}
-            </div>
-          </div>
+                )
+              }
+            />
+            {usable ? (
+              <ZoneLocations
+                zone={zone}
+                {...(section ? { section } : {})}
+                onStructureChange={resource.refresh}
+              />
+            ) : (
+              <>
+                <Notice tone={zone.isSystemUnassigned ? 'info' : 'warn'}>
+                  {t(
+                    zone.isSystemUnassigned
+                      ? 'systemZoneStructure'
+                      : 'archivedZoneStructure',
+                  )}
+                </Notice>
+                {labelsOpen && !zone.isSystemUnassigned ? (
+                  <div className="rz-card p-[var(--rz-card-p)]">
+                    <LocationLabelsPage
+                      target={{
+                        kind: section ? 'shelf' : 'section',
+                        parentId: section?.id ?? zone.id,
+                        parentName: section?.name ?? zone.name,
+                      }}
+                      inventoryBase={base}
+                    />
+                  </div>
+                ) : null}
+              </>
+            )}
+          </RedesignShell>
         )
       }}
     </Resource>
@@ -1288,241 +1320,293 @@ function ZoneLocations({
     setAddingTo(section)
   }
 
+  const ready = resource.state.kind === 'ready'
+  const noSections =
+    ready &&
+    !section &&
+    !loadedSections.some((item) => item.isActive && item.zoneId === zone.id)
   return (
-    <section
-      aria-label={t(section ? 'shelfType' : 'sectionType')}
-      className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-panel border"
-    >
-      {error ? (
-        <div className="p-4 sm:p-6">
-          <Notice tone="danger">{error}</Notice>
-        </div>
-      ) : null}
-      {resource.state.kind === 'loading' ? (
-        <div className="p-4 sm:p-6">
-          <SkeletonRows rows={3} />
-        </div>
-      ) : null}
-      {resource.state.kind === 'error' ? (
-        <Button
-          className="m-4 sm:m-6"
-          onClick={resource.reload}
-          variant="ghost"
-        >
-          {tc('retry')}
-        </Button>
-      ) : null}
-      {resource.state.kind === 'ready' ? (
-        <LocationBrowser
-          zone={zone}
-          {...(section ? { section } : {})}
-          base={base}
-          sections={loadedSections}
-          shelves={loadedShelves}
-          canManage={canManage}
-          canViewParts={canViewParts}
-          partsBase={base.replace(/\/warehouses$/, '/parts')}
-          onAddSection={(zone) => {
-            setError(null)
-            setDraft({ name: '', code: '' })
-            setAddingSectionTo(zone)
-          }}
-          onAddShelf={startAddingShelf}
-          onEditShelf={
-            choosingShelf && canManage
-              ? (shelf) => {
-                  setChoosingShelf(false)
-                  setError(null)
-                  setDraft({ name: shelf.name, code: shelf.code })
-                  setEditing(shelf)
-                }
-              : undefined
-          }
-          selectionNotice={
-            choosingShelf ? (
-              <Notice
-                block
-                className="items-center gap-3"
-                action={
-                  <Button onClick={() => setChoosingShelf(false)}>
-                    {tc('cancel')}
-                  </Button>
-                }
-              >
-                {tb('chooseShelfToEdit')}
-              </Notice>
-            ) : null
-          }
-          printWorkspace={
-            labelsOpen ? (
-              <LocationLabelsPage
-                flush
-                sectionShelfCounts={sectionShelfCounts}
-                target={{
-                  kind: section ? 'shelf' : 'section',
-                  parentId: section?.id ?? zone.id,
-                  parentName: section?.name ?? zone.name,
-                }}
-                inventoryBase={base}
-                returnFocusRef={labelTriggerRef}
-              />
-            ) : null
-          }
-          headerActions={
-            <ActionMenu
-              triggerRef={labelTriggerRef}
-              label={
-                section
-                  ? t('sectionActions', { name: section.name })
-                  : tb('zoneActions', { name: zone.name })
-              }
-              actions={[
-                {
-                  key: 'print',
-                  label: tb(section ? 'printShelves' : 'printSections'),
-                  icon: <Printer aria-hidden />,
-                  onSelect: () => {
-                    setChoosingShelf(false)
-                    const params = new URLSearchParams(location.search)
-                    params.set('labels', '1')
-                    void navigate(
-                      { search: `?${params}` },
-                      {
-                        state: location.state as unknown,
-                        preventScrollReset: true,
-                      },
-                    )
-                  },
-                },
-                ...(canManage && section
-                  ? [
-                      {
-                        key: 'edit',
-                        label: t('editSection'),
-                        icon: <Pencil aria-hidden />,
-                        onSelect: () => {
-                          setError(null)
-                          setDraft({ name: section.name, code: section.code })
-                          setEditingSection(section)
-                        },
-                      },
-                      {
-                        key: 'edit-shelf',
-                        label: t('editShelf'),
-                        icon: <Pencil aria-hidden />,
-                        disabled: !loadedShelves.some(
-                          (shelf) => shelf.isActive,
-                        ),
-                        onSelect: () => {
-                          setChoosingShelf(true)
-                        },
-                      },
-                      {
-                        key: 'archive',
-                        label: t('archiveSection'),
-                        icon: <Archive aria-hidden />,
-                        destructive: true,
-                        onSelect: () => setArchivingSection(section),
-                      },
-                    ]
-                  : []),
-              ]}
-            />
-          }
+    <>
+      {ready && !labelsOpen && !noSections ? (
+        <LocationSearch
+          label={tb(section ? 'searchShelves' : 'searchSections')}
+          placeholder={tb(
+            section ? 'searchShelfPlaceholder' : 'searchSectionPlaceholder',
+          )}
         />
       ) : null}
-      <Sheet
-        open={
-          addingTo !== null ||
-          editing !== null ||
-          addingSectionTo !== null ||
-          editingSection !== null
-        }
-        title={
-          addingSectionTo
-            ? t('newSectionTitle')
-            : editingSection
-              ? t('editSection')
-              : addingTo
-                ? t('newShelfTitle')
-                : t('editShelf')
-        }
-        eyebrow={
-          addingSectionTo?.name ??
-          editingSection?.zoneName ??
-          addingTo?.name ??
-          editing?.zoneName
-        }
-        onOpenChange={(open) => {
-          if (!open && !busy) {
-            setEditingSection(null)
-            setAddingTo(null)
-            setAddingSectionTo(null)
-            setEditing(null)
-          }
-        }}
-        footer={
-          <>
+      {noSections && !labelsOpen ? (
+        <Notice tone="info">{t('zoneStructureHint')}</Notice>
+      ) : null}
+      <div
+        className={cn(
+          'grid min-w-0 items-start gap-[14px]',
+          !section && ready && !labelsOpen && !noSections && 'lg:grid-cols-2',
+        )}
+      >
+        <section
+          aria-label={t(section ? 'shelfType' : 'sectionType')}
+          className="rz-card min-w-0"
+        >
+          {error ? (
+            <div className="p-[var(--rz-card-p)]">
+              <Notice tone="danger">{error}</Notice>
+            </div>
+          ) : null}
+          {resource.state.kind === 'loading' ? (
+            <div className="p-[var(--rz-card-p)]">
+              <SkeletonRows rows={3} />
+            </div>
+          ) : null}
+          {resource.state.kind === 'error' ? (
             <Button
-              disabled={busy}
-              onClick={() => {
+              className="m-[var(--rz-card-p)]"
+              onClick={resource.reload}
+              variant="ghost"
+            >
+              {tc('retry')}
+            </Button>
+          ) : null}
+          {resource.state.kind === 'ready' ? (
+            <LocationBrowser
+              zone={zone}
+              {...(section ? { section } : {})}
+              base={base}
+              sections={loadedSections}
+              shelves={loadedShelves}
+              canManage={canManage}
+              canViewParts={canViewParts}
+              partsBase={base.replace(/\/warehouses$/, '/parts')}
+              onAddSection={(zone) => {
+                setError(null)
+                setDraft({ name: '', code: '' })
+                setAddingSectionTo(zone)
+              }}
+              onAddShelf={startAddingShelf}
+              onEditShelf={
+                choosingShelf && canManage
+                  ? (shelf) => {
+                      setChoosingShelf(false)
+                      setError(null)
+                      setDraft({ name: shelf.name, code: shelf.code })
+                      setEditing(shelf)
+                    }
+                  : undefined
+              }
+              selectionNotice={
+                choosingShelf ? (
+                  <Notice
+                    block
+                    className="items-center gap-3"
+                    action={
+                      <Button onClick={() => setChoosingShelf(false)}>
+                        {tc('cancel')}
+                      </Button>
+                    }
+                  >
+                    {tb('chooseShelfToEdit')}
+                  </Notice>
+                ) : null
+              }
+              printWorkspace={
+                labelsOpen ? (
+                  <LocationLabelsPage
+                    flush
+                    sectionShelfCounts={sectionShelfCounts}
+                    target={{
+                      kind: section ? 'shelf' : 'section',
+                      parentId: section?.id ?? zone.id,
+                      parentName: section?.name ?? zone.name,
+                    }}
+                    inventoryBase={base}
+                    returnFocusRef={labelTriggerRef}
+                  />
+                ) : null
+              }
+              headerActions={
+                <ActionMenu
+                  triggerRef={labelTriggerRef}
+                  label={
+                    section
+                      ? t('sectionActions', { name: section.name })
+                      : tb('zoneActions', { name: zone.name })
+                  }
+                  actions={[
+                    {
+                      key: 'print',
+                      label: tb(section ? 'printShelves' : 'printSections'),
+                      icon: <Printer aria-hidden />,
+                      onSelect: () => {
+                        setChoosingShelf(false)
+                        const params = new URLSearchParams(location.search)
+                        params.set('labels', '1')
+                        void navigate(
+                          { search: `?${params}` },
+                          {
+                            state: location.state as unknown,
+                            preventScrollReset: true,
+                          },
+                        )
+                      },
+                    },
+                    ...(canManage && section
+                      ? [
+                          {
+                            key: 'edit',
+                            label: t('editSection'),
+                            icon: <Pencil aria-hidden />,
+                            onSelect: () => {
+                              setError(null)
+                              setDraft({
+                                name: section.name,
+                                code: section.code,
+                              })
+                              setEditingSection(section)
+                            },
+                          },
+                          {
+                            key: 'edit-shelf',
+                            label: t('editShelf'),
+                            icon: <Pencil aria-hidden />,
+                            disabled: !loadedShelves.some(
+                              (shelf) => shelf.isActive,
+                            ),
+                            onSelect: () => {
+                              setChoosingShelf(true)
+                            },
+                          },
+                          {
+                            key: 'archive',
+                            label: t('archiveSection'),
+                            icon: <Archive aria-hidden />,
+                            destructive: true,
+                            onSelect: () => setArchivingSection(section),
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              }
+            />
+          ) : null}
+          <Sheet
+            open={
+              addingTo !== null ||
+              editing !== null ||
+              addingSectionTo !== null ||
+              editingSection !== null
+            }
+            title={
+              addingSectionTo
+                ? t('newSectionTitle')
+                : editingSection
+                  ? t('editSection')
+                  : addingTo
+                    ? t('newShelfTitle')
+                    : t('editShelf')
+            }
+            eyebrow={
+              addingSectionTo ? (
+                <>
+                  <span>{addingSectionTo.name}</span> ·{' '}
+                  <span className="font-mono">{addingSectionTo.code}</span>
+                </>
+              ) : editingSection ? (
+                <span>{editingSection.zoneName}</span>
+              ) : addingTo ? (
+                <>
+                  <span>{addingTo.zoneName}</span> ·{' '}
+                  <span>{addingTo.name}</span>
+                </>
+              ) : editing ? (
+                <>
+                  <span>{editing.zoneName}</span> ·{' '}
+                  <span>{editing.sectionName}</span>
+                </>
+              ) : undefined
+            }
+            onOpenChange={(open) => {
+              if (!open && !busy) {
                 setEditingSection(null)
                 setAddingTo(null)
                 setAddingSectionTo(null)
                 setEditing(null)
+              }
+            }}
+            footer={
+              <>
+                <Button
+                  disabled={busy}
+                  onClick={() => {
+                    setEditingSection(null)
+                    setAddingTo(null)
+                    setAddingSectionTo(null)
+                    setEditing(null)
+                  }}
+                  type="button"
+                >
+                  {tc('cancel')}
+                </Button>
+                <Button
+                  aria-busy={busy}
+                  disabled={busy || !draft.name.trim() || !draft.code.trim()}
+                  form={formId}
+                  type="submit"
+                  variant="primary"
+                >
+                  {tc('save')}
+                </Button>
+              </>
+            }
+          >
+            <form
+              className="grid content-start gap-4"
+              id={formId}
+              onSubmit={(event) => {
+                event.preventDefault()
+                void save()
               }}
-              type="button"
             >
-              {tc('cancel')}
-            </Button>
-            <Button
-              aria-busy={busy}
-              disabled={busy || !draft.name.trim() || !draft.code.trim()}
-              form={formId}
-              type="submit"
-              variant="primary"
-            >
-              {tc('save')}
-            </Button>
-          </>
-        }
-      >
-        <form
-          className="grid content-start gap-5"
-          id={formId}
-          onSubmit={(event) => {
-            event.preventDefault()
-            void save()
-          }}
-        >
-          {error ? <Notice tone="danger">{error}</Notice> : null}
-          <NameAndCode
-            draft={draft}
-            initialCode={editingSection?.code ?? editing?.code}
-            onChange={setDraft}
+              {error ? <Notice tone="danger">{error}</Notice> : null}
+              <NameAndCode
+                draft={draft}
+                initialCode={editingSection?.code ?? editing?.code}
+                onChange={setDraft}
+              />
+            </form>
+          </Sheet>
+          <ConfirmDialog
+            open={archivingSection !== null}
+            title={t('archiveSection')}
+            confirmLabel={t('archiveSection')}
+            consequence={t('archiveSectionHint')}
+            destructive
+            pending={busy}
+            onOpenChange={(open) => {
+              if (!open && !busy) setArchivingSection(null)
+            }}
+            onConfirm={() => {
+              if (archivingSection)
+                void write((signal) =>
+                  inventoryApi.archiveSection(archivingSection.id, { signal }),
+                ).then((ok) => {
+                  if (ok) setArchivingSection(null)
+                })
+            }}
           />
-        </form>
-      </Sheet>
-      <ConfirmDialog
-        open={archivingSection !== null}
-        title={t('archiveSection')}
-        confirmLabel={t('archiveSection')}
-        consequence={t('archiveSectionHint')}
-        destructive
-        pending={busy}
-        onOpenChange={(open) => {
-          if (!open && !busy) setArchivingSection(null)
-        }}
-        onConfirm={() => {
-          if (archivingSection)
-            void write((signal) =>
-              inventoryApi.archiveSection(archivingSection.id, { signal }),
-            ).then((ok) => {
-              if (ok) setArchivingSection(null)
-            })
-        }}
-      />
-    </section>
+        </section>
+        {!section && ready && !labelsOpen && !noSections ? (
+          <section aria-label={tb('shelves')} className="rz-card min-w-0">
+            <LocationBrowserHeader title={tb('shelves')} actions={null} />
+            <StateScreen
+              className="location-browser__placeholder min-h-[176px]"
+              icon={<MousePointerClick aria-hidden />}
+              title={tb('chooseSection')}
+            />
+          </section>
+        ) : null}
+      </div>
+    </>
   )
 }
 
@@ -1531,10 +1615,13 @@ function NameAndCode({
   draft,
   initialCode,
   onChange,
+  autoHint = false,
 }: {
   draft: { name: string; code: string }
   initialCode?: string | undefined
   onChange: (draft: { name: string; code: string }) => void
+  /** Warehouses and zones explain that the code follows the name. */
+  autoHint?: boolean
 }) {
   const t = useT(warehouseMessages)
   return (
@@ -1554,8 +1641,13 @@ function NameAndCode({
           value={draft.name}
         />
       </Field>
-      <Field hint={t('codeHint')} label={t('codeLabel')} required>
+      <Field
+        hint={t(autoHint ? 'codeAutoHint' : 'codeHint')}
+        label={t('codeLabel')}
+        required
+      >
         <TextInput
+          className="font-mono"
           onChange={(event) => onChange({ ...draft, code: event.target.value })}
           value={draft.code}
         />
@@ -1945,6 +2037,22 @@ function PartPlacementView({
           })
         }
 
+        const levelOf = (zone: (typeof zones)[number]) =>
+          [
+            zone.warehouseName,
+            zone.isSystemUnassigned ? t('warehouseLevel') : zone.name,
+            ...(selectedSection?.zoneId === zone.id
+              ? [
+                  selectedSection.name,
+                  ...(selectedShelf ? [selectedShelf.name] : []),
+                ]
+              : []),
+          ].join(' → ')
+        const warehouseOnlyChecked =
+          warehouseOnly !== undefined &&
+          selected.length === 1 &&
+          selected[0] === warehouseOnly.id
+
         return (
           <div
             className={
@@ -1953,35 +2061,24 @@ function PartPlacementView({
           >
             {!drawer ? (
               <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
-                <div className="flex min-w-0 items-center gap-5">
-                  <Link
-                    className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-app-hover"
-                    to={back}
-                  >
-                    <ChevronLeft aria-hidden className="size-3.5" />
-                    {t('backToPart')}
-                  </Link>
-                  <p className="rz-crumbs hidden sm:flex">
-                    <span>{ti('crumbWarehouse')}</span>
-                    <span aria-hidden className="text-app-dim">
-                      /
-                    </span>
-                    <span>{t('crumbParts')}</span>
-                    {part === null ? null : (
-                      <>
-                        <span aria-hidden className="text-app-dim">
-                          /
-                        </span>
-                        <span className="text-app-muted">{part.qrCode}</span>
-                      </>
-                    )}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2.5">
+                <Crumbs
+                  items={[
+                    ti('crumbWarehouse'),
+                    t('crumbParts'),
+                    ...(part === null
+                      ? []
+                      : [
+                          <Link key="part" to={back}>
+                            {part.name}
+                          </Link>,
+                        ]),
+                  ]}
+                />
+                <div className="rz-topbar__actions flex-wrap items-center">
+                  <BackAction to={back} label={t('backToPart')} />
                   {canManage ? (
                     <Button
                       aria-busy={saving}
-                      className="px-5 text-sm font-bold"
                       disabled={saving || selected.length === 0}
                       onClick={() => void save()}
                       variant="primary"
@@ -1993,57 +2090,62 @@ function PartPlacementView({
               </div>
             ) : null}
 
-            <div className={drawer ? 'grid min-w-0 gap-5' : 'rz-page'}>
-              <div className="min-w-0">
-                {!drawer ? (
-                  <h1 className="rz-h-page break-words">{t('title')}</h1>
-                ) : null}
-                <p className="text-app-muted mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-body">
-                  {part === null ? (
-                    <span>{t('partHidden')}</span>
-                  ) : (
-                    <>
-                      <span className="text-app-ink font-semibold">
-                        {part.name}
-                      </span>
-                      <span aria-hidden className="text-app-dim">
-                        ·
-                      </span>
-                      <span className="max-w-full break-all font-mono">
-                        {part.qrCode}
-                      </span>
-                      <span aria-hidden className="text-app-dim">
-                        ·
-                      </span>
-                      <span>
+            <div className={drawer ? 'grid min-w-0 gap-[14px]' : 'rz-page'}>
+              {drawer ? (
+                part === null ? (
+                  <p className="rz-caption m-0">{t('partHidden')}</p>
+                ) : (
+                  <p className="rz-caption m-0 flex flex-wrap items-baseline gap-x-2">
+                    <span className="rz-strong font-semibold">{part.name}</span>
+                    <span className="max-w-full font-mono break-all">
+                      {part.qrCode}
+                    </span>
+                    <span>
+                      {t('inStock', {
+                        count: part.quantityTotal,
+                        unit: unitLabel(part.unit, locale),
+                      })}
+                    </span>
+                  </p>
+                )
+              ) : (
+                <WarehousePageHead
+                  title={t('title')}
+                  sub={
+                    part === null ? (
+                      t('partHidden')
+                    ) : (
+                      <>
+                        <span className="max-w-full font-mono break-all">
+                          {part.qrCode}
+                        </span>
+                        <span aria-hidden> · </span>
                         {t('inStock', {
                           count: part.quantityTotal,
                           unit: unitLabel(part.unit, locale),
                         })}
-                      </span>
-                    </>
-                  )}
-                </p>
-              </div>
+                      </>
+                    )
+                  }
+                />
+              )}
 
               {operationError ? (
                 <Notice tone="danger">{operationError}</Notice>
               ) : null}
               {saved ? <Notice tone="ok">{t('saved')}</Notice> : null}
               {drawer?.requirePhysicalZone ? (
-                <p className="text-app-muted text-sm">
-                  {t('pickPhysicalZone')}
-                </p>
+                <Notice tone="info">{t('pickPhysicalZone')}</Notice>
               ) : null}
 
-              <div className="flex flex-wrap items-start gap-6">
-                <div
-                  className={
-                    drawer
-                      ? 'grid min-w-0 w-full gap-5'
-                      : 'flex min-w-0 flex-[2_1_34rem] flex-col gap-5'
-                  }
-                >
+              <div
+                className={
+                  drawer
+                    ? 'grid min-w-0 gap-[14px]'
+                    : 'grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]'
+                }
+              >
+                <div className="grid min-w-0 gap-[14px]">
                   <Step
                     hint={t('warehouseHint')}
                     number="01"
@@ -2051,19 +2153,27 @@ function PartPlacementView({
                   >
                     <div
                       aria-label={t('warehouse')}
-                      className="flex flex-wrap gap-2"
+                      className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,180px),1fr))] gap-2"
                       role="radiogroup"
                     >
                       {houses.length === 0 ? (
-                        <div className="border-app-line-2 text-app-muted grid w-full gap-3 rounded-panel border border-dashed bg-app-hover p-4.5 text-sm">
-                          <p>{t('noActiveWarehouses')}</p>
-                          {canManage ? (
-                            <Button onClick={() => openCreate('warehouse')}>
-                              <Plus aria-hidden />
-                              {to('addWarehouse')}
-                            </Button>
-                          ) : null}
-                        </div>
+                        <StateScreen
+                          className="location-browser__placeholder col-span-full min-h-[160px]"
+                          icon={<WarehouseIcon aria-hidden />}
+                          title={t('noActiveWarehouses')}
+                          {...(canManage
+                            ? {
+                                actions: (
+                                  <Button
+                                    onClick={() => openCreate('warehouse')}
+                                  >
+                                    <Plus aria-hidden />
+                                    {to('addWarehouse')}
+                                  </Button>
+                                ),
+                              }
+                            : {})}
+                        />
                       ) : null}
                       {houses.map((item) => {
                         const active = item.id === house
@@ -2074,10 +2184,8 @@ function PartPlacementView({
                           <button
                             aria-checked={active}
                             className={cn(
-                              'focus-visible:outline-brand min-h-[66px] flex-[1_1_10rem] cursor-pointer rounded-panel border px-3.5 py-3 text-left hover:border-app-line-2',
-                              active
-                                ? 'border-app-line-2 bg-app-hover'
-                                : 'border-app-line bg-transparent',
+                              'rz-choice-card focus-visible:outline-brand min-w-0 bg-transparent text-left',
+                              active && 'border-brand bg-brand-soft',
                             )}
                             key={item.id}
                             onClick={() => {
@@ -2088,71 +2196,36 @@ function PartPlacementView({
                             type="button"
                           >
                             <span
+                              aria-hidden
                               className={cn(
-                                'block text-title font-bold',
-                                active ? 'text-app-ink' : 'text-app-muted',
+                                'mt-0.5 grid size-3.5 shrink-0 place-items-center rounded-full border',
+                                active ? 'border-brand' : 'border-app-line-2',
                               )}
                             >
-                              {item.name}
+                              {active ? (
+                                <span className="bg-brand size-1.5 rounded-full" />
+                              ) : null}
                             </span>
-                            <span className="text-app-muted mt-1 block text-caption font-medium">
-                              {ti('zones', { count })}
+                            <span className="grid min-w-0 gap-0.5">
+                              <span className="rz-strong font-semibold break-words">
+                                {item.name}
+                              </span>
+                              <span className="rz-caption">
+                                {ti('zones', { count })}
+                              </span>
                             </span>
                           </button>
                         )
                       })}
                     </div>
-                  </Step>
-
-                  <Step
-                    aside={
-                      <p className="text-app-muted flex flex-wrap items-center gap-3.5 text-caption">
-                        <span className="flex items-center gap-1.5">
-                          <span
-                            aria-hidden
-                            className="bg-app-line-2 size-2 rounded-control"
-                          />
-                          {t('legendEmpty')}
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                          <span
-                            aria-hidden
-                            className="bg-state-warn/50 size-2 rounded-control"
-                          />
-                          {t('legendFilled')}
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                          <span
-                            aria-hidden
-                            className="bg-state-danger/50 size-2 rounded-control"
-                          />
-                          {t('legendBusiest')}
-                        </span>
-                      </p>
-                    }
-                    hint={t('zoneHint')}
-                    number="02"
-                    title={t('zone')}
-                  >
                     {warehouseOnly && !drawer?.requirePhysicalZone ? (
-                      <label
-                        className={cn(
-                          'mb-3 flex cursor-pointer items-center justify-between gap-3 rounded-panel border p-3 text-sm transition-colors',
-                          selected.length === 1 &&
-                            selected[0] === warehouseOnly.id
-                            ? 'border-brand bg-brand/[0.08]'
-                            : 'border-app-line hover:border-app-line-2',
-                        )}
-                      >
+                      <label className="rz-choice w-fit">
                         <input
                           type="radio"
                           name="placement-location"
-                          className="peer sr-only"
+                          className="rz-radio"
                           disabled={!canManage}
-                          checked={
-                            selected.length === 1 &&
-                            selected[0] === warehouseOnly.id
-                          }
+                          checked={warehouseOnlyChecked}
                           onChange={() => {
                             setSelection([warehouseOnly.id])
                             setSectionSelection(null)
@@ -2160,334 +2233,280 @@ function PartPlacementView({
                             setSaved(false)
                           }}
                         />
-                        <span>{t('warehouseOnly')}</span>
-                        <span
-                          aria-hidden="true"
-                          className={cn(
-                            'flex size-5 shrink-0 items-center justify-center rounded-control border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
-                            selected.length === 1 &&
-                              selected[0] === warehouseOnly.id
-                              ? 'border-brand bg-brand text-app-canvas'
-                              : 'border-app-line-2',
-                          )}
-                        >
-                          {selected.length === 1 &&
-                          selected[0] === warehouseOnly.id ? (
-                            <Check size={15} strokeWidth={3} />
-                          ) : null}
+                        <span className="rz-caption text-app-muted">
+                          {t('warehouseOnly')}
                         </span>
                       </label>
                     ) : null}
-                    {house === null ? null : (
-                      <div className="flex flex-wrap items-center gap-3">
-                        <SearchInput
-                          aria-label={t('zoneSearch')}
-                          className="min-w-0 flex-1"
-                          onChange={(event) => setQuery(event.target.value)}
-                          placeholder={t('zoneSearchPlaceholder')}
-                          value={query}
-                        />
-                        {canManage ? (
-                          <Button onClick={() => openCreate('zone')}>
-                            <Plus aria-hidden />
-                            {tw('addZone')}
-                          </Button>
-                        ) : null}
-                      </div>
-                    )}
-                    {house !== null && shown.length === 0 ? (
-                      <p className="border-app-line-2 text-app-muted mt-3.5 rounded-panel border border-dashed bg-app-hover p-4.5 text-sm">
-                        {inHouse.length === 0
-                          ? t('noActiveZones')
-                          : t('noZonesFound')}
-                      </p>
-                    ) : house !== null ? (
-                      <ul
-                        className={
-                          drawer
-                            ? 'mt-3.5 grid gap-2'
-                            : 'mt-3.5 grid grid-cols-[repeat(auto-fill,minmax(min(100%,8rem),1fr))] gap-2'
-                        }
-                      >
-                        {shown.map((zone) => {
-                          const on = selected.includes(zone.id)
-                          const count = partsIn(zone.id)
-                          const load =
-                            count === null
-                              ? 0
-                              : Math.round((count / busiest) * 100)
-                          return (
-                            <li key={zone.id}>
-                              <label
-                                className={cn(
-                                  'block cursor-pointer rounded-panel border px-3 pt-2.5 pb-3 hover:border-app-line-2',
-                                  on
-                                    ? 'border-brand bg-brand/[0.08]'
-                                    : 'border-app-line bg-app-canvas',
-                                )}
-                              >
-                                <span className="flex items-start justify-between gap-2">
-                                  <span className="min-w-0">
-                                    <span
-                                      className={cn(
-                                        drawer
-                                          ? 'block break-words text-body font-bold'
-                                          : 'block truncate text-body font-bold',
-                                        on ? 'text-app-ink' : 'text-app-muted',
-                                      )}
-                                    >
-                                      {zone.name}
-                                    </span>
-                                    <span className="text-app-muted block font-mono text-caption">
-                                      {zone.code}
-                                    </span>
-                                  </span>
-                                  <input
-                                    aria-label={`${zone.warehouseName} · ${zone.name}`}
-                                    checked={on}
-                                    className="peer sr-only"
-                                    disabled={!canManage}
-                                    onChange={() => toggleZone(zone.id)}
-                                    type="checkbox"
-                                  />
-                                  <span
-                                    aria-hidden="true"
-                                    className={cn(
-                                      'flex size-5 shrink-0 items-center justify-center rounded-control border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
-                                      on
-                                        ? 'border-brand bg-brand text-app-canvas'
-                                        : 'border-app-line-2',
-                                    )}
-                                  >
-                                    {on ? (
-                                      <Check size={15} strokeWidth={3} />
-                                    ) : null}
-                                  </span>
-                                </span>
-                                <span
-                                  aria-hidden
-                                  className="mt-2.5 block h-1 overflow-hidden rounded-full bg-app-hover"
-                                >
-                                  <span
-                                    className={cn(
-                                      'block h-full rounded-full',
-                                      load >= 100
-                                        ? 'bg-state-danger/60'
-                                        : load > 0
-                                          ? 'bg-state-warn/60'
-                                          : 'bg-transparent',
-                                    )}
-                                    style={{ width: `${String(load)}%` }}
-                                  />
-                                </span>
-                                <span className="text-app-muted mt-1.5 block text-micro font-semibold">
-                                  {count === null
-                                    ? ti('stockUnavailable')
-                                    : ti('positions', { count })}
-                                </span>
-                              </label>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    ) : null}
                   </Step>
 
-                  {hasPhysicalZone ? (
+                  {house === null ? null : (
                     <Step
-                      number="03"
-                      title={t('section')}
-                      hint={t('sectionHint')}
+                      aside={
+                        <p className="rz-caption m-0 flex flex-wrap items-center gap-3">
+                          <span className="flex items-center gap-1.5">
+                            <span
+                              aria-hidden
+                              className="bg-app-line-2 size-2 rounded-control"
+                            />
+                            {t('legendEmpty')}
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <span
+                              aria-hidden
+                              className="bg-state-warn size-2 rounded-control"
+                            />
+                            {t('legendFilled')}
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <span
+                              aria-hidden
+                              className="bg-state-danger size-2 rounded-control"
+                            />
+                            {t('legendBusiest')}
+                          </span>
+                        </p>
+                      }
+                      hint={inHouse.length === 0 ? undefined : t('zoneHint')}
+                      number="02"
+                      title={t('zone')}
                     >
-                      {drawer ? (
-                        <LocationSelect
-                          label={t('section')}
-                          searchLabel={t('sectionSearch')}
-                          noneLabel={t('noSection')}
-                          value={selectedSectionId}
-                          options={availableSections.map((section) => ({
-                            id: section.id,
-                            name: section.name,
-                            code: section.code,
-                            ...(chosen.length > 1
-                              ? { context: section.zoneName }
-                              : {}),
-                          }))}
-                          disabled={!canManage || saving || creating}
-                          onChange={(id) => {
-                            setSectionSelection(id)
-                            setShelfSelection(null)
-                          }}
+                      {inHouse.length === 0 ? (
+                        <StateScreen
+                          className="location-browser__placeholder min-h-[160px]"
+                          icon={<LayoutGrid aria-hidden />}
+                          title={t('noActiveZones')}
+                          {...(canManage
+                            ? {
+                                actions: (
+                                  <Button onClick={() => openCreate('zone')}>
+                                    <Plus aria-hidden />
+                                    {tw('addZone')}
+                                  </Button>
+                                ),
+                              }
+                            : {})}
                         />
                       ) : (
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <label
-                            className={cn(
-                              'flex cursor-pointer items-center justify-between gap-3 rounded-panel border p-3 text-sm transition-colors',
-                              !selectedSectionId
-                                ? 'border-brand bg-brand/[0.08]'
-                                : 'border-app-line hover:border-app-line-2',
-                            )}
-                          >
-                            <input
-                              type="radio"
-                              name="placement-section"
-                              className="peer sr-only"
-                              disabled={!canManage || selected.length === 0}
-                              checked={!selectedSectionId}
-                              onChange={() => {
-                                setSectionSelection(null)
-                                setShelfSelection(null)
-                              }}
+                        <>
+                          {shown.length === 0 ? (
+                            <p className="rz-caption m-0 py-3 text-center">
+                              {t('noZonesFound')}
+                            </p>
+                          ) : (
+                            <ul
+                              className={cn(
+                                'm-0 grid list-none gap-2 p-0',
+                                !drawer &&
+                                  'grid-cols-[repeat(auto-fit,minmax(min(100%,180px),1fr))]',
+                              )}
+                            >
+                              {shown.map((zone) => {
+                                const on = selected.includes(zone.id)
+                                const count = partsIn(zone.id)
+                                const load =
+                                  count === null
+                                    ? 0
+                                    : Math.round((count / busiest) * 100)
+                                return (
+                                  <li className="min-w-0" key={zone.id}>
+                                    <label className="rz-choice-card min-w-0">
+                                      <input
+                                        aria-label={`${zone.warehouseName} · ${zone.name}`}
+                                        checked={on}
+                                        className="rz-check mt-0.5"
+                                        disabled={!canManage}
+                                        onChange={() => toggleZone(zone.id)}
+                                        type="checkbox"
+                                      />
+                                      <span className="grid min-w-0 flex-1 gap-0.5">
+                                        <span className="rz-strong font-semibold break-words">
+                                          {zone.name}
+                                        </span>
+                                        <span className="rz-caption">
+                                          <span className="font-mono">
+                                            {zone.code}
+                                          </span>
+                                          {' · '}
+                                          {count === null
+                                            ? ti('stockUnavailable')
+                                            : ti('positions', { count })}
+                                        </span>
+                                        <span
+                                          aria-hidden
+                                          className="bg-app-hover mt-1 block h-1 overflow-hidden rounded-full"
+                                        >
+                                          <span
+                                            className={cn(
+                                              'block h-full rounded-full',
+                                              load >= 100
+                                                ? 'bg-state-danger'
+                                                : load > 0
+                                                  ? 'bg-state-warn'
+                                                  : 'bg-transparent',
+                                            )}
+                                            style={{
+                                              width: `${String(load)}%`,
+                                            }}
+                                          />
+                                        </span>
+                                      </span>
+                                    </label>
+                                  </li>
+                                )
+                              })}
+                            </ul>
+                          )}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <SearchInput
+                              aria-label={t('zoneSearch')}
+                              className="min-w-0 flex-1"
+                              onChange={(event) => setQuery(event.target.value)}
+                              placeholder={t('zoneSearchPlaceholder')}
+                              value={query}
                             />
-                            <span>{t('noSection')}</span>
-                            <span
-                              aria-hidden="true"
-                              className={cn(
-                                'flex size-5 shrink-0 items-center justify-center rounded-control border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
-                                !selectedSectionId
-                                  ? 'border-brand bg-brand text-app-canvas'
-                                  : 'border-app-line-2',
-                              )}
-                            >
-                              {!selectedSectionId ? (
-                                <Check size={15} strokeWidth={3} />
-                              ) : null}
-                            </span>
-                          </label>
-                          {availableSections.map((section) => (
-                            <label
-                              className={cn(
-                                'flex cursor-pointer items-center justify-between gap-3 rounded-panel border p-3 text-sm transition-colors',
-                                selectedSectionId === section.id
-                                  ? 'border-brand bg-brand/[0.08]'
-                                  : 'border-app-line hover:border-app-line-2',
-                              )}
-                              key={section.id}
-                            >
+                            {canManage ? (
+                              <Button onClick={() => openCreate('zone')}>
+                                <Plus aria-hidden />
+                                {tw('addZone')}
+                              </Button>
+                            ) : null}
+                          </div>
+                        </>
+                      )}
+                    </Step>
+                  )}
+
+                  {hasPhysicalZone ? (
+                    <div
+                      className={cn(
+                        'grid min-w-0 items-start gap-[14px]',
+                        !drawer && selectedSectionId && 'md:grid-cols-2',
+                      )}
+                    >
+                      <Step
+                        number="03"
+                        title={t('section')}
+                        hint={t('sectionHint')}
+                      >
+                        {drawer ? (
+                          <LocationSelect
+                            label={t('section')}
+                            searchLabel={t('sectionSearch')}
+                            noneLabel={t('noSection')}
+                            value={selectedSectionId}
+                            options={availableSections.map((section) => ({
+                              id: section.id,
+                              name: section.name,
+                              code: section.code,
+                              ...(chosen.length > 1
+                                ? { context: section.zoneName }
+                                : {}),
+                            }))}
+                            disabled={!canManage || saving || creating}
+                            onChange={(id) => {
+                              setSectionSelection(id)
+                              setShelfSelection(null)
+                            }}
+                          />
+                        ) : (
+                          <div className="grid gap-2">
+                            <label className="rz-choice-card">
                               <input
                                 type="radio"
                                 name="placement-section"
-                                className="peer sr-only"
-                                disabled={!canManage}
-                                checked={selectedSectionId === section.id}
+                                className="rz-radio mt-0.5"
+                                disabled={!canManage || selected.length === 0}
+                                checked={!selectedSectionId}
                                 onChange={() => {
-                                  setSectionSelection(section.id)
+                                  setSectionSelection(null)
                                   setShelfSelection(null)
                                 }}
                               />
-                              <span>
-                                {section.zoneName} · {section.name}
-                              </span>
-                              <span
-                                aria-hidden="true"
-                                className={cn(
-                                  'flex size-5 shrink-0 items-center justify-center rounded-control border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
-                                  selectedSectionId === section.id
-                                    ? 'border-brand bg-brand text-app-canvas'
-                                    : 'border-app-line-2',
-                                )}
-                              >
-                                {selectedSectionId === section.id ? (
-                                  <Check size={15} strokeWidth={3} />
-                                ) : null}
-                              </span>
+                              <span className="min-w-0">{t('noSection')}</span>
                             </label>
-                          ))}
-                        </div>
-                      )}
-                    </Step>
-                  ) : null}
+                            {availableSections.map((section) => (
+                              <label
+                                className="rz-choice-card"
+                                key={section.id}
+                              >
+                                <input
+                                  type="radio"
+                                  name="placement-section"
+                                  className="rz-radio mt-0.5"
+                                  disabled={!canManage}
+                                  checked={selectedSectionId === section.id}
+                                  onChange={() => {
+                                    setSectionSelection(section.id)
+                                    setShelfSelection(null)
+                                  }}
+                                />
+                                <span className="min-w-0 break-words">
+                                  {section.zoneName} · {section.name}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </Step>
 
-                  {hasPhysicalZone && selectedSectionId ? (
-                    <Step number="04" title={t('shelf')} hint={t('shelfHint')}>
-                      {drawer ? (
-                        <LocationSelect
-                          label={t('shelf')}
-                          searchLabel={t('shelfSearch')}
-                          noneLabel={t('noShelf')}
-                          value={selectedShelfId}
-                          options={availableShelves.map((shelf) => ({
-                            id: shelf.id,
-                            name: shelf.name,
-                            code: shelf.code,
-                          }))}
-                          disabled={!canManage || saving || creating}
-                          onChange={setShelfSelection}
-                        />
-                      ) : (
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <label
-                            className={cn(
-                              'flex cursor-pointer items-center justify-between gap-3 rounded-panel border p-3 text-sm transition-colors',
-                              !selectedShelfId
-                                ? 'border-brand bg-brand/[0.08]'
-                                : 'border-app-line hover:border-app-line-2',
-                            )}
-                          >
-                            <input
-                              type="radio"
-                              name="placement-shelf"
-                              className="peer sr-only"
-                              disabled={!canManage || !selectedSectionId}
-                              checked={!selectedShelfId}
-                              onChange={() => setShelfSelection(null)}
+                      {selectedSectionId ? (
+                        <Step
+                          number="04"
+                          title={t('shelf')}
+                          hint={t('shelfHint')}
+                        >
+                          {drawer ? (
+                            <LocationSelect
+                              label={t('shelf')}
+                              searchLabel={t('shelfSearch')}
+                              noneLabel={t('noShelf')}
+                              value={selectedShelfId}
+                              options={availableShelves.map((shelf) => ({
+                                id: shelf.id,
+                                name: shelf.name,
+                                code: shelf.code,
+                              }))}
+                              disabled={!canManage || saving || creating}
+                              onChange={setShelfSelection}
                             />
-                            <span>{t('noShelf')}</span>
-                            <span
-                              aria-hidden="true"
-                              className={cn(
-                                'flex size-5 shrink-0 items-center justify-center rounded-control border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
-                                !selectedShelfId
-                                  ? 'border-brand bg-brand text-app-canvas'
-                                  : 'border-app-line-2',
-                              )}
-                            >
-                              {!selectedShelfId ? (
-                                <Check size={15} strokeWidth={3} />
-                              ) : null}
-                            </span>
-                          </label>
-                          {availableShelves.map((shelf) => (
-                            <label
-                              className={cn(
-                                'flex cursor-pointer items-center justify-between gap-3 rounded-panel border p-3 text-sm transition-colors',
-                                selectedShelfId === shelf.id
-                                  ? 'border-brand bg-brand/[0.08]'
-                                  : 'border-app-line hover:border-app-line-2',
-                              )}
-                              key={shelf.id}
-                            >
-                              <input
-                                type="radio"
-                                name="placement-shelf"
-                                className="peer sr-only"
-                                disabled={!canManage}
-                                checked={selectedShelfId === shelf.id}
-                                onChange={() => setShelfSelection(shelf.id)}
-                              />
-                              <span>
-                                {shelf.zoneName} · {shelf.sectionName} ·{' '}
-                                {shelf.name}
-                              </span>
-                              <span
-                                aria-hidden="true"
-                                className={cn(
-                                  'flex size-5 shrink-0 items-center justify-center rounded-control border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
-                                  selectedShelfId === shelf.id
-                                    ? 'border-brand bg-brand text-app-canvas'
-                                    : 'border-app-line-2',
-                                )}
-                              >
-                                {selectedShelfId === shelf.id ? (
-                                  <Check size={15} strokeWidth={3} />
-                                ) : null}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                    </Step>
+                          ) : (
+                            <div className="grid gap-2">
+                              <label className="rz-choice-card">
+                                <input
+                                  type="radio"
+                                  name="placement-shelf"
+                                  className="rz-radio mt-0.5"
+                                  disabled={!canManage || !selectedSectionId}
+                                  checked={!selectedShelfId}
+                                  onChange={() => setShelfSelection(null)}
+                                />
+                                <span className="min-w-0">{t('noShelf')}</span>
+                              </label>
+                              {availableShelves.map((shelf) => (
+                                <label
+                                  className="rz-choice-card"
+                                  key={shelf.id}
+                                >
+                                  <input
+                                    type="radio"
+                                    name="placement-shelf"
+                                    className="rz-radio mt-0.5"
+                                    disabled={!canManage}
+                                    checked={selectedShelfId === shelf.id}
+                                    onChange={() => setShelfSelection(shelf.id)}
+                                  />
+                                  <span className="min-w-0 break-words">
+                                    {shelf.zoneName} · {shelf.sectionName} ·{' '}
+                                    {shelf.name}
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </Step>
+                      ) : null}
+                    </div>
                   ) : null}
 
                   <Step
@@ -2497,28 +2516,28 @@ function PartPlacementView({
                     }
                     title={t('quantity')}
                   >
-                    <div className="flex flex-wrap items-center gap-4.5">
+                    <div className="flex flex-wrap items-center gap-4">
                       <span
-                        className="border-app-line bg-app-canvas text-app-muted flex items-center gap-1 rounded-panel border p-[3px]"
+                        className="border-app-line text-app-muted flex items-center gap-1 rounded-control border p-0.5"
                         title={t('notSplitTitle')}
                       >
                         <span
                           aria-hidden
-                          className="flex size-9.5 items-center justify-center rounded-control text-title font-bold opacity-40"
+                          className="grid size-7 place-items-center opacity-40"
                         >
                           −
                         </span>
-                        <span className="w-13 text-center font-mono text-title text-app-strong">
+                        <span className="rz-mono rz-strong w-10 text-center">
                           {part?.quantityTotal ?? '—'}
                         </span>
                         <span
                           aria-hidden
-                          className="flex size-9.5 items-center justify-center rounded-control text-title font-bold opacity-40"
+                          className="grid size-7 place-items-center opacity-40"
                         >
                           +
                         </span>
                       </span>
-                      <p className="text-app-muted min-w-[12rem] flex-1 text-body">
+                      <p className="rz-caption m-0 min-w-[12rem] flex-1">
                         {t('notSplit')}
                       </p>
                     </div>
@@ -2527,7 +2546,7 @@ function PartPlacementView({
                   {!drawer ? (
                     <Card
                       aside={
-                        <span className="text-app-muted font-mono text-micro tracking-[0.1em] uppercase">
+                        <span className="rz-th-label">
                           {t('records', { count: moves.length })}
                         </span>
                       }
@@ -2536,25 +2555,28 @@ function PartPlacementView({
                       title={t('historyTitle')}
                     >
                       {moves.length === 0 ? (
-                        <p className="text-app-muted px-6 pt-4 pb-6 text-sm">
+                        <p className="rz-caption m-0 px-[var(--rz-card-p)] py-4">
                           {history === null
                             ? t('historyHidden')
                             : t('neverMoved')}
                         </p>
                       ) : (
-                        <ul className="grid">
-                          {moves.slice(0, 8).map((event) => (
+                        <ul className="m-0 grid list-none p-0">
+                          {moves.slice(0, 8).map((event, index) => (
                             <li
-                              className="border-app-line flex flex-wrap items-center gap-x-3.5 gap-y-1 border-t px-6 py-3"
+                              className={cn(
+                                'flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-[var(--rz-card-p)] py-2',
+                                index > 0 && 'border-app-line border-t',
+                              )}
                               key={event.id}
                             >
-                              <span className="text-app-ink w-28 shrink-0 text-body font-semibold">
+                              <span className="rz-strong w-28 shrink-0 font-medium">
                                 {historyLabel(event.eventType, locale)}
                               </span>
-                              <span className="text-app-muted min-w-0 flex-1 text-body">
+                              <span className="text-app-muted min-w-0 flex-1">
                                 {historyDetails(event.data, locale).join(' · ')}
                               </span>
-                              <span className="text-app-dim font-mono text-body whitespace-nowrap">
+                              <span className="rz-mono rz-dim whitespace-nowrap">
                                 {date(event.createdAt)}
                               </span>
                             </li>
@@ -2568,57 +2590,68 @@ function PartPlacementView({
                 {!drawer ? (
                   <section
                     aria-label={t('newPlacement')}
-                    className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-panel border px-5.5 pt-[22px] pb-6"
+                    className="rz-card min-w-0 lg:sticky lg:top-[calc(var(--rz-topbar-h)+16px)]"
                   >
-                    <h2 className="text-app-dim font-mono text-micro tracking-[var(--rz-ls-mono)] uppercase">
-                      {t('newPlacement')}
-                    </h2>
-                    <div className="border-app-line bg-app-canvas mt-4 rounded-panel border p-4">
-                      {chosen.length > 0 ? (
-                        <ul className="grid gap-3 text-body">
-                          {chosen.map((zone) => (
-                            <li className="min-w-0" key={zone.id}>
-                              <span className="text-app-ink font-semibold">
-                                {zone.warehouseName} ·{' '}
-                                {zone.isSystemUnassigned
-                                  ? t('warehouseLevel')
-                                  : zone.name}
-                              </span>
-                              {selectedSection?.zoneId === zone.id ? (
-                                <span className="text-app-muted block">
-                                  {selectedSection.name}
-                                  {selectedShelf
-                                    ? ` · ${selectedShelf.name}`
-                                    : ''}
-                                </span>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="text-app-muted text-body">
-                          {t('noLocationSelected')}
-                        </p>
-                      )}
+                    <header className="rz-card__head py-2.5">
+                      <h2 className="rz-h-card">{t('newPlacement')}</h2>
+                    </header>
+                    <dl className="m-0 px-[var(--rz-card-p)] py-1">
+                      <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2">
+                        <dt className="text-app-muted">{t('locationLevel')}</dt>
+                        <dd className="rz-strong m-0 font-semibold">
+                          {chosen.length > 0 ? (
+                            <ul className="m-0 grid list-none gap-1 p-0">
+                              {chosen.map((zone) => (
+                                <li
+                                  className="min-w-0 break-words"
+                                  key={zone.id}
+                                >
+                                  {levelOf(zone)}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <span className="text-app-muted font-normal">
+                              {t('noLocationSelected')}
+                            </span>
+                          )}
+                        </dd>
+                      </div>
+                      {placement.length > 0 ? (
+                        <div className="border-app-line grid grid-cols-[120px_minmax(0,1fr)] gap-3 border-t py-2">
+                          <dt className="text-app-muted">{t('before')}</dt>
+                          <dd className="text-app-muted m-0 break-words">
+                            {placement
+                              .map((zone) =>
+                                zone.isSystemUnassigned
+                                  ? `${zone.warehouseName} → ${t('warehouseLevel')}`
+                                  : `${zone.warehouseName} → ${zone.zoneName}`,
+                              )
+                              .join(', ')}
+                          </dd>
+                        </div>
+                      ) : null}
+                    </dl>
+                    <div className="grid gap-3 px-[var(--rz-card-p)] pt-3.5 pb-4">
+                      <p className="rz-caption m-0 text-pretty">
+                        {selected.length === 0
+                          ? t('pickOne')
+                          : changed
+                            ? t('replacesAll')
+                            : t('unchanged')}
+                      </p>
+                      {canManage ? (
+                        <Button
+                          aria-busy={saving}
+                          className="w-full"
+                          disabled={saving || selected.length === 0}
+                          onClick={() => void save()}
+                          variant="primary"
+                        >
+                          {saving ? t('saving') : t('savePlacement')}
+                        </Button>
+                      ) : null}
                     </div>
-                    {canManage ? (
-                      <Button
-                        aria-busy={saving}
-                        className="mt-5.5 min-h-control-lg w-full text-title font-bold"
-                        disabled={saving || selected.length === 0}
-                        onClick={() => void save()}
-                        variant="primary"
-                      >
-                        {saving ? t('saving') : t('savePlacement')}
-                      </Button>
-                    ) : null}
-                    <p className="text-app-dim mt-3 text-caption leading-[1.5]">
-                      {selected.length === 0
-                        ? t('pickOne')
-                        : changed
-                          ? t('replacesAll')
-                          : t('unchanged')}
-                    </p>
                   </section>
                 ) : null}
               </div>

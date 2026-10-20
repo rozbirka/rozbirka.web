@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { Popover } from 'radix-ui'
 import { Check, ChevronDown } from 'lucide-react'
-import { Button, SearchInput } from '@/components/app'
+import { SearchInput } from '@/components/app'
 import { useT } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { locationBrowserMessages } from './location-browser-messages'
@@ -99,16 +99,17 @@ export function LocationSelect({
       }}
     >
       <Popover.Trigger asChild>
-        <Button
+        <button
+          type="button"
           disabled={disabled}
           aria-haspopup="listbox"
           aria-controls={`${id}-list`}
           aria-label={`${label}: ${selectedName}`}
-          className="bg-app-input text-app-ink min-h-12 w-full justify-between gap-3 px-3.5 text-left font-medium"
+          className="rz-select flex h-auto min-h-[var(--rz-control-h-lg)] items-center justify-between gap-3 pr-2.5 text-left"
         >
           <span className="min-w-0 break-words">{selectedName}</span>
-          <ChevronDown aria-hidden className="text-app-muted size-4 shrink-0" />
-        </Button>
+          <ChevronDown aria-hidden className="text-app-dim size-3.5 shrink-0" />
+        </button>
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content

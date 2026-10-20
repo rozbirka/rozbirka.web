@@ -2,9 +2,9 @@ import { nav, frame, crumbs, one, two, card, stateCard, sb, notice, table, dialo
 export default async function build() {
   const D = await loadDrawers();
   const S = {};
-  for (const id of ["intakes","intake"]) S[id] = await loadScreen(id);
+  for (const id of ["inventory","session"]) S[id] = await loadScreen(id);
   const sections = [
-    { num: '1', title: 'Список', route: '/app/:tenant/intakes', source: 'IntakesScreen.tsx', unverified: "", frames: listFrames(S.intakes) },
-    { num: '2', title: 'Картка партії', route: '/app/:tenant/intakes/:intakeId', source: 'IntakesScreen.tsx', unverified: "", frames: recordFrames(S.intake, "Склад") }];
-  return { module: { num: '13', group: 'Склад', title: 'Приймання', intro: "Партії від постачальників: список, картка партії, додавання деталей партією.", sources: "intakes/messages.ts" }, nav: nav('Приймання'), sections: finalize(sections) };
+    { num: '1', title: 'Список сесій', route: '/app/:tenant/inventory', source: 'InventoryScreen.tsx', unverified: "", frames: listFrames(S.inventory) },
+    { num: '2', title: 'Сесія', route: '/app/:tenant/inventory/sessions/:sessionId', source: 'InventoryScreen.tsx', unverified: "", frames: recordFrames(S.session, "Інвентаризація") }];
+  return { module: { num: '13', group: 'Склад', title: 'Інвентаризація', intro: "Сесії інвентаризації, журнал сканувань, результати й аудит. Склади, зони й розміщення — модуль 12 Склади. Сканер — окремий компонент components/Scanner.", sources: "inventory/*messages.ts, scanners/messages.ts" }, nav: nav('Інвентаризація'), sections: finalize(sections) };
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Check, Minus, X } from 'lucide-react'
 import { inventoryApi } from '@/api/inventory'
 import type { PartSearchItem } from '@/api/parts'
 import { normalizeApiProblem } from '@/api/errors'
@@ -159,23 +160,23 @@ export function BulkPlacementSheet({
         </>
       }
     >
-      <div className="grid gap-5">
-        <p className="text-app-ink text-base font-semibold">
-          {t('selectedCount', { count: parts.length })}
-        </p>
-        <p className="text-app-muted text-sm">{t('bulkHint')}</p>
+      <div className="grid gap-4">
+        <div className="grid gap-1.5">
+          <h3 className="rz-h-card">
+            {t('selectedCount', { count: parts.length })}
+          </h3>
+          <p className="text-app-muted m-0 text-pretty">{t('bulkHint')}</p>
+        </div>
         <Resource state={resource.state} retry={resource.reload} framed={false}>
           {() => (
             <>
               {!zones.length ? (
-                <Notice>
+                <Notice tone="info">
                   {t(warehouse?.isActive ? 'noActiveZones' : 'archived')}
                 </Notice>
               ) : (
-                <div className="grid gap-2">
-                  <p className="text-app-muted text-sm font-semibold">
-                    {t('zone')}
-                  </p>
+                <div className="grid gap-1.5">
+                  <p className="rz-label m-0">{t('zone')}</p>
                   <LocationSelect
                     label={t('zone')}
                     searchLabel={t('searchZone')}
@@ -201,26 +202,50 @@ export function BulkPlacementSheet({
               {item.part.name}: {item.message}
             </Notice>
           ) : item.kind === 'skipped' ? (
-            <p key={item.part.id} className="text-app-muted text-sm">
+            <p key={item.part.id} className="text-app-muted m-0">
               {t('skipped', { name: item.part.name })}
             </p>
           ) : null,
         )}
-        <ul
-          className="border-app-line divide-app-line divide-y border-y"
-          aria-label={t('selectedParts')}
-        >
-          {parts.map((part) => (
-            <li key={part.id} className="py-3 text-sm">
-              <span className="text-app-ink font-semibold">{part.name}</span>
-              {part.oemCode ? (
-                <span className="text-app-muted ml-3 font-mono">
-                  {part.oemCode}
-                </span>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+        <div className="grid gap-1.5">
+          <p className="rz-label m-0" aria-hidden>
+            {t('selectedParts')}
+          </p>
+          <ul
+            className="border-app-line divide-app-line bg-app-raised m-0 list-none divide-y overflow-hidden rounded-panel border p-0"
+            aria-label={t('selectedParts')}
+          >
+            {parts.map((part) => {
+              const outcome = outcomes.find((item) => item.part.id === part.id)
+              return (
+                <li
+                  key={part.id}
+                  className="flex min-h-11 items-center gap-3 px-3 py-2"
+                >
+                  <span className="grid min-w-0 flex-1 gap-0.5">
+                    <span className="rz-strong font-semibold break-words">
+                      {part.name}
+                    </span>
+                    {part.oemCode ? (
+                      <span className="rz-mono rz-dim text-caption break-all">
+                        {part.oemCode}
+                      </span>
+                    ) : null}
+                  </span>
+                  {outcome ? (
+                    outcome.kind === 'placed' ? (
+                      <Check aria-hidden className="text-state-ok size-3.5" />
+                    ) : outcome.kind === 'failed' ? (
+                      <X aria-hidden className="text-state-danger size-3.5" />
+                    ) : (
+                      <Minus aria-hidden className="text-app-dim size-3.5" />
+                    )
+                  ) : null}
+                </li>
+              )
+            })}
+          </ul>
+        </div>
       </div>
     </Sheet>
   )
