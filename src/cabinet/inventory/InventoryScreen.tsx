@@ -6,7 +6,6 @@ import {
   ChevronLeft,
   ClipboardList,
   Pause,
-  RefreshCw,
 } from 'lucide-react'
 import {
   ActionMenu,
@@ -52,7 +51,13 @@ import { overviewMessages } from './overview-messages'
 import { resultsMessages } from './results-messages'
 import { sessionMessages } from './session-messages'
 import { InventoryLoadError, Resource } from './InventoryResource'
-import { useLoad, usePermission } from './use-stock-resource'
+import {
+  optionalInventoryData,
+  useLoad,
+  usePermission,
+} from './use-stock-resource'
+import { useInventoryRefresh } from './use-inventory-refresh'
+import { InventoryRefreshStatus } from './InventoryRefreshStatus'
 import { StockStat } from './StockStat'
 import { Step } from './StockStep'
 
@@ -1001,6 +1006,10 @@ interface SessionData {
   people: { userId: string; name: string }[]
 }
 
+const sessionDataComplete = (data: SessionData) =>
+  (data.session.status === 'draft' || data.results !== null) &&
+  data.scans !== null
+
 /** Two initials for the worker chip; a single word gives one. */
 const initials = (name: string) =>
   name
@@ -1031,15 +1040,14 @@ function SessionView({ id }: { id: string }) {
       const [results, scanLists, people] = await Promise.all([
         session.status === 'draft'
           ? Promise.resolve(null)
-          : inventoryApi.getResults(id, { signal }).then(
-              (data) => data,
-              () => null,
-            ),
+          : inventoryApi
+              .getResults(id, { signal })
+              .then((data) => data, optionalInventoryData),
         Promise.all(
           session.zones.map((zone) =>
             inventoryApi.getScans(id, zone.zoneId, { signal }),
           ),
-        ).catch(() => null),
+        ).catch(optionalInventoryData),
         canSeeTeam
           ? teamApi.listMembers({ signal }).then(
               (members) =>
@@ -1063,7 +1071,8 @@ function SessionView({ id }: { id: string }) {
     },
     [canSeeTeam, id],
   )
-  const resource = useLoad(loader, id)
+  const resource = useLoad(loader, id, sessionDataComplete)
+  useInventoryRefresh(resource.refresh)
   const [operationError, setOperationError] = useState<string | null>(() =>
     typeof startError === 'string' ? startError : null,
   )
@@ -1088,17 +1097,6 @@ function SessionView({ id }: { id: string }) {
   )
   const [cancelling, setCancelling] = useState(false)
   const [reason, setReason] = useState('')
-  const isInProgress =
-    resource.state.kind === 'ready' &&
-    resource.state.data.session.status === 'inProgress'
-  useEffect(() => {
-    if (!isInProgress) return
-    const timer = window.setInterval(
-      () => document.visibilityState === 'visible' && resource.refresh(),
-      10_000,
-    )
-    return () => window.clearInterval(timer)
-  }, [isInProgress, resource])
 
   const act = async (action: 'start' | 'complete' | 'reopen' | 'cancel') => {
     if (acting) return
@@ -1230,12 +1228,6 @@ function SessionView({ id }: { id: string }) {
                         void navigate(`${base}/sessions/${id}/audit`),
                     },
                     {
-                      key: 'refresh',
-                      label: t('refresh'),
-                      icon: <RefreshCw aria-hidden />,
-                      onSelect: resource.reload,
-                    },
-                    {
                       key: 'pause',
                       label: t('pause'),
                       icon: <Pause aria-hidden />,
@@ -1293,6 +1285,11 @@ function SessionView({ id }: { id: string }) {
                 <Notice tone="danger">{operationError}</Notice>
               ) : null}
 
+              <InventoryRefreshStatus
+                state={resource.state}
+                refresh={resource.refresh}
+              />
+
               <div className="flex flex-wrap-reverse items-end gap-6">
                 <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-5">
                   <Card
@@ -1346,7 +1343,7 @@ function SessionView({ id }: { id: string }) {
                       <div className="p-4 sm:p-6">
                         <InventoryLoadError
                           message={ti('resultsLoadFailed')}
-                          onRetry={resource.reload}
+                          onRetry={resource.refresh}
                         />
                       </div>
                     ) : rows.length === 0 ? (
@@ -1430,7 +1427,7 @@ function SessionView({ id }: { id: string }) {
                       <div className="p-4 sm:p-6">
                         <InventoryLoadError
                           message={ti('scansLoadFailed')}
-                          onRetry={resource.reload}
+                          onRetry={resource.refresh}
                         />
                       </div>
                     ) : scans.length === 0 ? (
@@ -1867,6 +1864,7 @@ function ResultsView({ id }: { id: string }) {
     [canSeeTeam, id],
   )
   const resource = useLoad(loader, id)
+  useInventoryRefresh(resource.refresh)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [filter, setFilter] = useState<ResultFilter>('diff')
   /** The parts a reason is being asked for: one row, or every undecided row. */
@@ -2025,6 +2023,11 @@ function ResultsView({ id }: { id: string }) {
               {operationError ? (
                 <Notice tone="danger">{operationError}</Notice>
               ) : null}
+
+              <InventoryRefreshStatus
+                state={resource.state}
+                refresh={resource.refresh}
+              />
 
               <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-px overflow-hidden rounded-[20px] border">
                 <JournalStat
@@ -2755,6 +2758,8 @@ interface JournalData {
   people: { userId: string; name: string }[]
 }
 
+const journalDataComplete = (data: JournalData) => data.results !== null
+
 function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
   const t = useT(journalMessages)
   const ti = useT(inventoryMessages)
@@ -2772,10 +2777,9 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
         inventoryApi.getScans(id, zoneId, { signal }),
         session.status === 'draft'
           ? Promise.resolve([])
-          : inventoryApi.getResults(id, { signal }).then(
-              (data) => data.parts,
-              () => null,
-            ),
+          : inventoryApi
+              .getResults(id, { signal })
+              .then((data) => data.parts, optionalInventoryData),
         canSeeTeam
           ? teamApi.listMembers({ signal }).then(
               (members) =>
@@ -2791,7 +2795,8 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
     },
     [canSeeTeam, id, zoneId],
   )
-  const resource = useLoad(loader, `${id}:${zoneId}`)
+  const resource = useLoad(loader, `${id}:${zoneId}`, journalDataComplete)
+  useInventoryRefresh(resource.refresh)
 
   return (
     <Resource retry={resource.reload} state={resource.state}>
@@ -2898,10 +2903,15 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
 
               <Notice tone="info">{t('readOnly')}</Notice>
 
+              <InventoryRefreshStatus
+                state={resource.state}
+                refresh={resource.refresh}
+              />
+
               {results === null ? (
                 <InventoryLoadError
                   message={ti('resultsLoadFailed')}
-                  onRetry={resource.reload}
+                  onRetry={resource.refresh}
                 />
               ) : null}
 

@@ -669,6 +669,78 @@ it('does not show failed zone loading as a zero-zone overview', async () => {
   expect(screen.queryByText('Не вдалося завантажити перелік зон.')).toBeNull()
 })
 
+it('keeps session rows after a failed manual refresh and recovers without reloading the page', async () => {
+  const user = userEvent.setup()
+  renderAt('/app/yard/inventory/sessions/session-1')
+  const refresh = await screen.findByRole('button', { name: 'Оновити' })
+  const updated = screen.getByText(/Оновлено:/).textContent
+  api.getSession.mockRejectedValueOnce(new Error('Offline'))
+  await user.click(refresh)
+  expect(
+    await screen.findByText(/Показуємо останні завантажені дані/),
+  ).toBeVisible()
+  expect(
+    within(screen.getByRole('region', { name: 'Позиції' })).getByText('Крило'),
+  ).toBeVisible()
+  expect(screen.getByText(/Оновлено:/)).toHaveTextContent(updated)
+  await user.click(screen.getByRole('button', { name: 'Повторити' }))
+  await waitFor(() =>
+    expect(screen.queryByText(/Показуємо останні завантажені дані/)).toBeNull(),
+  )
+})
+
+it('keeps counted parts when only the results request fails during refresh', async () => {
+  const user = userEvent.setup()
+  renderAt('/app/yard/inventory/sessions/session-1')
+  const refresh = await screen.findByRole('button', { name: 'Оновити' })
+  api.getResults.mockRejectedValueOnce(new Error('Results offline'))
+  await user.click(refresh)
+  expect(
+    await screen.findByText(/Показуємо останні завантажені дані/),
+  ).toBeVisible()
+  expect(
+    within(screen.getByRole('region', { name: 'Позиції' })).getByText('Крило'),
+  ).toBeVisible()
+})
+
+it('refreshes results when the window regains focus', async () => {
+  api.getSession.mockResolvedValue({ ...session, status: 'review' })
+  renderAt('/app/yard/inventory/sessions/session-1/results')
+  expect(await screen.findByText('Крило')).toBeVisible()
+  api.getResults.mockResolvedValue({
+    inventorySessionId: 'session-1',
+    number: 'INV-001',
+    parts: [],
+  })
+  fireEvent.focus(window)
+  await waitFor(() => expect(screen.queryByText('Крило')).toBeNull())
+  expect(
+    screen.getByText('Розходжень немає — застосовувати нічого.'),
+  ).toBeVisible()
+})
+
+it('refreshes the journal when the document becomes visible', async () => {
+  renderAt('/app/yard/inventory/sessions/session-1/journal/zone-1')
+  expect(await screen.findByText('Крило')).toBeVisible()
+  api.getScans.mockResolvedValue([])
+  fireEvent(document, new Event('visibilitychange'))
+  await waitFor(() => expect(screen.queryByText('Крило')).toBeNull())
+  expect(screen.getByRole('button', { name: 'Оновити' })).toBeVisible()
+})
+
+it('keeps journal rows when comparison loading fails during refresh', async () => {
+  const user = userEvent.setup()
+  renderAt('/app/yard/inventory/sessions/session-1/journal/zone-1')
+  expect(await screen.findByText('Крило')).toBeVisible()
+  api.getResults.mockRejectedValueOnce(new Error('Comparison offline'))
+  await user.click(screen.getByRole('button', { name: 'Оновити' }))
+  expect(
+    await screen.findByText(/Показуємо останні завантажені дані/),
+  ).toBeVisible()
+  expect(within(screen.getByRole('table')).getByText('Крило')).toBeVisible()
+  expect(screen.getByRole('radio', { name: 'Розходження 1' })).toBeEnabled()
+})
+
 it('renders discrepancy results and adjustment affordance', async () => {
   api.getSession.mockResolvedValue({ ...session, status: 'review' })
   renderAt('/app/yard/inventory/sessions/session-1/results')
