@@ -644,12 +644,12 @@ function WarehouseView({ id }: { id: string }) {
                   tone={
                     occupancy !== null && occupancy >= 80 ? 'warn' : 'plain'
                   }
-                  unit=""
-                  value={
+                  unit={
                     stock.total === null
-                      ? '—'
-                      : t('filledRatio', { filled, count: real.length })
+                      ? ''
+                      : t('filledTotal', { count: real.length })
                   }
+                  value={stock.total === null ? '—' : String(filled)}
                 />
               </div>
 
