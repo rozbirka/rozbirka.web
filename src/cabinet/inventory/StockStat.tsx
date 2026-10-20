@@ -37,7 +37,7 @@ export function StockStat({
           {unit}
         </span>
       </p>
-      <p className="text-app-dim mt-3.5 text-[13px]">{meta}</p>
+      {meta ? <p className="text-app-dim mt-3.5 text-[13px]">{meta}</p> : null}
     </div>
   )
 }
