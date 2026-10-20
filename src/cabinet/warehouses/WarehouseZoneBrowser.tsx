@@ -3,22 +3,19 @@ import { Link, useLocation, useSearchParams } from 'react-router'
 import { Archive, ChevronRight, Pencil, Plus } from 'lucide-react'
 import { ActionMenu, Button, Pagination, SearchInput } from '@/components/app'
 import type { WarehouseDetail } from '@/api/inventory'
-import { useFormat, useT } from '@/i18n'
+import { useT } from '@/i18n'
 import {
   LocationBrowserHeader,
   LocationName,
 } from '../inventory/LocationBrowser'
 import { locationBrowserMessages } from '../inventory/location-browser-messages'
 import { warehouseMessages } from '../inventory/warehouse-messages'
-import { inventoryMessages } from '../inventory/messages'
 
 type Zone = WarehouseDetail['zones'][number]
 const PAGE_SIZE = 10
 
 export function WarehouseZoneBrowser({
   zones,
-  stock,
-  stockTotal,
   base,
   partsBase,
   canManage,
@@ -29,8 +26,6 @@ export function WarehouseZoneBrowser({
   printWorkspace,
 }: {
   zones: Zone[]
-  stock: ReadonlyMap<string, number> | null
-  stockTotal: number | null
   base: string
   partsBase: string | null
   canManage: boolean
@@ -42,8 +37,6 @@ export function WarehouseZoneBrowser({
 }) {
   const t = useT(warehouseMessages)
   const tb = useT(locationBrowserMessages)
-  const ti = useT(inventoryMessages)
-  const f = useFormat()
   const [params, setParams] = useSearchParams()
   const navigationState = useLocation().state as unknown
   const query = params.get('locationSearch') ?? ''
@@ -73,11 +66,6 @@ export function WarehouseZoneBrowser({
     )
 
   const zoneContents = (zone: Zone, navigable = true) => {
-    const count = stock?.get(zone.id) ?? 0
-    const share =
-      stockTotal === null || stockTotal === 0
-        ? 0
-        : Math.round((count / stockTotal) * 100)
     return (
       <>
         <LocationName
@@ -90,49 +78,6 @@ export function WarehouseZoneBrowser({
             .filter(Boolean)
             .join(' · ')}
         />
-        <span className="location-browser__count">
-          <span className="sr-only">
-            {tb('zonePartsCount', {
-              count:
-                stock === null
-                  ? '—'
-                  : (f.number(stock.get(zone.id) ?? 0) ?? '0'),
-            })}
-          </span>
-          <span aria-hidden>
-            {stock === null ? '—' : f.number(stock.get(zone.id) ?? 0)}
-          </span>
-          <span aria-hidden className="location-browser__count-label">
-            {tb('zoneParts')}
-          </span>
-        </span>
-        <span className="location-browser__zone-fill">
-          {stock === null || stockTotal === null ? (
-            <span className="location-browser__hint">
-              {ti('stockUnavailable')}
-            </span>
-          ) : (
-            <>
-              <span
-                role="meter"
-                aria-label={`${zone.name} · ${t('colFill')}`}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={share}
-                aria-valuetext={t('shareOfWarehouse', { share })}
-                className="bg-app-line-2 block h-1.5 overflow-hidden rounded-full"
-              >
-                <span
-                  className="bg-state-ok block h-full rounded-full"
-                  style={{ width: `${String(share)}%` }}
-                />
-              </span>
-              <span className="location-browser__hint mt-2 font-mono">
-                {t('shareOfWarehouse', { share })}
-              </span>
-            </>
-          )}
-        </span>
         {navigable ? (
           <ChevronRight aria-hidden className="location-browser__arrow" />
         ) : (
@@ -193,7 +138,7 @@ export function WarehouseZoneBrowser({
                   <Link
                     key={zone.id}
                     aria-label={zone.name}
-                    className="location-browser__row location-browser__row--zone location-browser__row--direct"
+                    className="location-browser__row location-browser__row--plain location-browser__row--direct"
                     to={`${partsBase}?zone=${encodeURIComponent(zone.id)}`}
                   >
                     {zoneContents(zone)}
@@ -201,7 +146,7 @@ export function WarehouseZoneBrowser({
                 ) : (
                   <div
                     key={zone.id}
-                    className="location-browser__row location-browser__row--zone"
+                    className="location-browser__row location-browser__row--plain"
                   >
                     {zoneContents(zone, false)}
                   </div>
@@ -211,11 +156,9 @@ export function WarehouseZoneBrowser({
           ) : null}
           <div
             aria-hidden
-            className={`location-browser__columns location-browser__columns--zone-fill${canManage ? ' location-browser__columns--zones' : ''}`}
+            className={`location-browser__columns ${canManage ? 'location-browser__columns--zone-actions' : 'location-browser__columns--plain'}`}
           >
             <span>{t('colZone')}</span>
-            <span className="text-right">{tb('zoneParts')}</span>
-            <span>{t('colFill')}</span>
             <span />
             {canManage ? <span /> : null}
           </div>
@@ -235,7 +178,7 @@ export function WarehouseZoneBrowser({
                   >
                     <Link
                       aria-label={zone.name}
-                      className="location-browser__row location-browser__row--zone"
+                      className="location-browser__row location-browser__row--plain"
                       to={`${base}/zones/${encodeURIComponent(zone.id)}`}
                     >
                       {zoneContents(zone)}

@@ -619,8 +619,6 @@ function WarehouseView({ id }: { id: string }) {
 
               <WarehouseZoneBrowser
                 zones={zones}
-                stock={stock.total === null ? null : stock.byZone}
-                stockTotal={stock.total}
                 base={base}
                 partsBase={partsBase}
                 canManage={canManage}

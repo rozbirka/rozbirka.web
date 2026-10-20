@@ -23,18 +23,13 @@ function Url() {
   return <output data-testid="url">{useLocation().search}</output>
 }
 
-function mount(
-  canManage = true,
-  stock: Map<string, number> | null = new Map([['zone-1', 18]]),
-) {
+function mount(canManage = true) {
   const onEdit = vi.fn()
   const onArchive = vi.fn()
   render(
     <MemoryRouter initialEntries={['/warehouses/wh?locationPage=2&keep=1']}>
       <WarehouseZoneBrowser
         zones={[unassigned, ...physical]}
-        stock={stock}
-        stockTotal={stock === null ? null : 20}
         base="/warehouses"
         partsBase={canManage ? '/parts' : null}
         canManage={canManage}
@@ -61,13 +56,10 @@ it('searches physical zones by code, resets pagination and keeps unassigned sepa
     '/warehouses/zones/zone-11',
   )
   await user.type(screen.getByRole('searchbox', { name: 'Пошук зони' }), 'Z1')
-  expect(screen.getByRole('link', { name: 'Зона 1' })).toHaveTextContent('18')
-  expect(
-    screen.getByRole('meter', { name: 'Зона 1 · Заповнення' }),
-  ).toHaveAttribute('aria-valuenow', '90')
-  expect(screen.getByRole('link', { name: 'Зона 1' })).toHaveTextContent(
-    '90% складу',
-  )
+  expect(screen.getByRole('link', { name: 'Зона 1' })).toHaveTextContent('Z1')
+  expect(screen.queryByRole('meter')).toBeNull()
+  expect(screen.queryByText('Запчастин')).toBeNull()
+  expect(screen.queryByText('Заповнення')).toBeNull()
   expect(screen.queryByRole('link', { name: 'Зона 2' })).toBeNull()
   const list = screen.getByRole('group', { name: 'Список зон' })
   expect(within(list).queryByRole('link', { name: 'Без зони' })).toBeNull()
@@ -97,9 +89,9 @@ it('keeps edit and archive actions independent of opening a zone', async () => {
   expect(onArchive).toHaveBeenCalledWith(physical[10])
 })
 
-it('shows unavailable figures without management or parts links', () => {
-  mount(false, null)
-  expect(screen.getByRole('link', { name: 'Зона 11' })).toHaveTextContent('—')
+it('keeps zone navigation without management or parts links', () => {
+  mount(false)
+  expect(screen.getByRole('link', { name: 'Зона 11' })).toHaveTextContent('Z11')
   expect(screen.queryByRole('meter')).toBeNull()
   expect(screen.queryByRole('link', { name: 'Без зони' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'Додати зону' })).toBeNull()

@@ -1626,8 +1626,10 @@ it('counts the warehouse stock from the parts module', async () => {
   const stock = screen.getByText('Запчастин на складі').closest('div')
   expect(within(stock as HTMLElement).getByText('20')).toBeInTheDocument()
   expect(screen.queryByText('Розходження')).toBeNull()
-  // The zone facet says how much of that stock sits in each zone.
-  expect(screen.getByText('18')).toBeInTheDocument()
+  // Stock totals stay above the list; zone rows no longer repeat counts.
+  expect(
+    within(screen.getByRole('region', { name: 'Зони' })).queryByText('18'),
+  ).toBeNull()
 })
 
 it('asks for a reason before booking the counted quantity', async () => {
