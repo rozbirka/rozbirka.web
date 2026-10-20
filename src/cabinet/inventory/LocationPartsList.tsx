@@ -23,7 +23,10 @@ import {
 
 interface Props {
   target: LocationContentsTarget
-  context: 'sheet' | 'section'
+  context: 'sheet' | 'section' | 'unassigned'
+  onPlace?: ((part: PartSearchItem) => void) | undefined
+  refreshKey?: number
+  emptyText?: string
 }
 interface ResultState {
   key: string
@@ -78,13 +81,21 @@ function OwnedLocationPartsList({
   context,
   owner,
   slug,
+  onPlace,
+  refreshKey = 0,
+  emptyText,
 }: Props & { owner: string; slug: string }) {
   const t = useT(locationContentsMessages)
   const tc = useT(commonMessages)
   const f = useFormat()
   const [params, setParams] = useSearchParams()
   const navigationState = useLocation().state as unknown
-  const prefix = context === 'sheet' ? 'locationContents' : 'locationParts'
+  const prefix =
+    context === 'sheet'
+      ? 'locationContents'
+      : context === 'unassigned'
+        ? 'unassigned'
+        : 'locationParts'
   const query = params.get(`${prefix}Search`) ?? ''
   const requestedPage = Number.parseInt(params.get(`${prefix}Page`) ?? '1', 10)
   const page = Math.max(1, Number.isFinite(requestedPage) ? requestedPage : 1)
@@ -103,7 +114,7 @@ function OwnedLocationPartsList({
       JSON.parse(serializedFilter) as ReturnType<typeof locationPartsFilter>,
     [serializedFilter],
   )
-  const key = JSON.stringify([owner, filter, revision])
+  const key = JSON.stringify([owner, filter, revision, refreshKey])
   useEffect(() => {
     if (query !== debounced) return
     const controller = new AbortController()
@@ -236,8 +247,39 @@ function OwnedLocationPartsList({
                     </StatusPill>
                   ),
                 },
+                ...(onPlace
+                  ? [
+                      {
+                        key: 'place',
+                        label: t('place'),
+                        headerHidden: true,
+                        cell: (part: PartSearchItem) => (
+                          <div className="grid justify-items-start gap-1.5 md:justify-items-end">
+                            <Button
+                              onClick={() => onPlace(part)}
+                              disabled={part.isInventoryLocked}
+                              aria-label={t('placePart', { name: part.name })}
+                            >
+                              {t('place')}
+                            </Button>
+                            {part.isInventoryLocked ? (
+                              <span className="text-app-muted max-w-52 text-xs">
+                                {t('placementLocked')}
+                              </span>
+                            ) : null}
+                          </div>
+                        ),
+                      },
+                    ]
+                  : []),
               ]}
-              empty={<p className="text-app-muted py-5">{t('empty')}</p>}
+              empty={
+                <p className="text-app-muted py-5">
+                  {context === 'unassigned' && query.trim()
+                    ? t('noMatches')
+                    : (emptyText ?? t('empty'))}
+                </p>
+              }
             />
           </div>
           {data.total > 10 ? (

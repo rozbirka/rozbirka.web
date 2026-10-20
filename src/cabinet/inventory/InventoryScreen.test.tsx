@@ -2919,3 +2919,410 @@ it('shows warehouse details without stocktake controls or requests', async () =>
   expect(screen.queryByRole('link', { name: 'Нова сесія' })).toBeNull()
   expect(screen.queryByText('Розходження')).toBeNull()
 })
+
+const unassignedPart = {
+  id: 'part-1',
+  name: 'Крило',
+  oemCode: 'OEM-123',
+  externalCode: null,
+  quantity: 2,
+  quantityAvailable: 2,
+  quantityReserved: 0,
+  unit: 'шт',
+  condition: 'used',
+  sourceType: 'manual',
+  status: 'available',
+  createdAt: '2026-09-02T10:00:00Z',
+  isInventoryLocked: false,
+  hasDiscrepancy: false,
+  thumbnailUrl: null,
+  car: null,
+}
+
+function setupUnassignedQueue() {
+  const physical = {
+    id: 'zone-1',
+    warehouseId: 'wh-1',
+    warehouseName: 'Основний склад',
+    name: 'Стелаж A1',
+    code: 'A1',
+    qrCode: 'ZONE-1',
+    isSystemUnassigned: false,
+    isActive: true,
+  }
+  const unassigned = {
+    ...physical,
+    id: 'system-zone-1',
+    name: 'Без зони',
+    code: 'unassigned',
+    qrCode: '',
+    isSystemUnassigned: true,
+  }
+  api.getWarehouse.mockResolvedValue({
+    id: 'wh-1',
+    name: 'Основний склад',
+    code: 'main',
+    isActive: true,
+    isSystemDefault: true,
+    tenantId: 'tenant-1',
+    createdAt: '',
+    updatedAt: '',
+    unassignedPartCount: 1,
+    zones: [unassigned, physical],
+  })
+  api.getZones.mockResolvedValue([unassigned, physical])
+  api.getPartZones.mockResolvedValue([
+    {
+      zoneId: unassigned.id,
+      zoneName: unassigned.name,
+      zoneCode: unassigned.code,
+      warehouseId: 'wh-1',
+      warehouseName: 'Основний склад',
+      isSystemUnassigned: true,
+      shelfId: null,
+      sectionId: null,
+    },
+  ])
+  parts.search.mockResolvedValue({
+    items: [unassignedPart],
+    page: 1,
+    pageSize: 10,
+    total: 1,
+    totalPages: 1,
+  })
+}
+
+it('opens the warehouse unassigned queue with a scoped search and quick placement', async () => {
+  const user = userEvent.setup()
+  setupUnassignedQueue()
+  renderAt('/app/yard/warehouses/wh-1')
+  const link = await screen.findByRole('link', { name: 'Без зони' })
+  expect(link).toHaveAttribute('href', '/app/yard/warehouses/wh-1/unassigned')
+  await user.click(link)
+  expect(await screen.findByRole('heading', { name: 'Без зони' })).toBeVisible()
+  expect(
+    await screen.findByRole('button', { name: 'Розмістити Крило' }),
+  ).toBeVisible()
+  expect(parts.search).toHaveBeenLastCalledWith(
+    {
+      warehouseIds: ['wh-1'],
+      zoneIds: ['system-zone-1'],
+      page: 1,
+      pageSize: 10,
+      sort: 'name_asc',
+    },
+    expect.any(Object),
+  )
+  await user.type(
+    screen.getByRole('searchbox', { name: 'Пошук запчастин' }),
+    'OEM-123',
+  )
+  await waitFor(() =>
+    expect(parts.search.mock.lastCall?.[0]).toMatchObject({
+      query: 'OEM-123',
+      warehouseIds: ['wh-1'],
+      zoneIds: ['system-zone-1'],
+    }),
+  )
+})
+
+it('places an unassigned part without leaving the queue and preserves its search', async () => {
+  const user = userEvent.setup()
+  setupUnassignedQueue()
+  api.replacePartZones.mockImplementationOnce(() => {
+    parts.search.mockResolvedValue({
+      items: [],
+      page: 1,
+      pageSize: 10,
+      total: 0,
+      totalPages: 0,
+    })
+    return Promise.resolve([])
+  })
+  renderAt(
+    '/app/yard/warehouses/wh-1/unassigned?unassignedSearch=OEM-123&keep=1',
+  )
+  await user.click(
+    await screen.findByRole('button', { name: 'Розмістити Крило' }),
+  )
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Розміщення на складі',
+  })
+  const save = within(dialog).getByRole('button', {
+    name: 'Зберегти розміщення',
+  })
+  expect(save).toBeDisabled()
+  await user.click(
+    await within(dialog).findByRole('checkbox', { name: /Стелаж A1/ }),
+  )
+  await user.click(save)
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(api.replacePartZones).toHaveBeenCalledWith(
+    'part-1',
+    ['zone-1'],
+    expect.any(Object),
+    undefined,
+    undefined,
+  )
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('button', { name: 'Розмістити Крило' }),
+    ).toBeNull(),
+  )
+  expect(
+    screen.getByRole('searchbox', { name: 'Пошук запчастин' }),
+  ).toHaveValue('OEM-123')
+  expect(screen.getByTestId('inventory-url')).toHaveTextContent('keep=1')
+  expect(screen.getByTestId('inventory-url')).toHaveTextContent(
+    '/warehouses/wh-1/unassigned',
+  )
+})
+
+it('keeps the placement choice on save failure and allows retry from the queue', async () => {
+  const user = userEvent.setup()
+  setupUnassignedQueue()
+  api.replacePartZones.mockRejectedValueOnce(new Error('Offline'))
+  renderAt('/app/yard/warehouses/wh-1/unassigned')
+  await user.click(
+    await screen.findByRole('button', { name: 'Розмістити Крило' }),
+  )
+  const dialog = await screen.findByRole('dialog')
+  const zone = await within(dialog).findByRole('checkbox', {
+    name: /Стелаж A1/,
+  })
+  await user.click(zone)
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Зберегти розміщення' }),
+  )
+  expect(await within(dialog).findByRole('alert')).toBeVisible()
+  expect(zone).toBeChecked()
+  expect(
+    screen.getByRole('button', { name: 'Розмістити Крило', hidden: true }),
+  ).toBeInTheDocument()
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Зберегти розміщення' }),
+  )
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(api.replacePartZones).toHaveBeenCalledTimes(2)
+})
+
+it('shows failed unassigned loading separately from an empty queue and retries', async () => {
+  const user = userEvent.setup()
+  setupUnassignedQueue()
+  parts.search.mockRejectedValueOnce(new Error('Offline'))
+  renderAt('/app/yard/warehouses/wh-1/unassigned')
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Не вдалося завантажити запчастини',
+  )
+  expect(
+    screen.queryByText('Усі запчастини цього складу вже мають зону.'),
+  ).toBeNull()
+  await user.click(screen.getByRole('button', { name: 'Спробувати ще раз' }))
+  expect(
+    await screen.findByRole('button', { name: 'Розмістити Крило' }),
+  ).toBeVisible()
+})
+
+it('disables quick placement for parts locked by stocktake', async () => {
+  setupUnassignedQueue()
+  parts.search.mockResolvedValue({
+    items: [{ ...unassignedPart, isInventoryLocked: true }],
+    page: 1,
+    pageSize: 10,
+    total: 1,
+    totalPages: 1,
+  })
+  renderAt('/app/yard/warehouses/wh-1/unassigned')
+  expect(
+    await screen.findByRole('button', { name: 'Розмістити Крило' }),
+  ).toBeDisabled()
+  expect(
+    screen.getByText('Розміщення заблоковано під час інвентаризації.'),
+  ).toBeVisible()
+})
+
+it('keeps the unassigned queue read-only without location management permission', async () => {
+  setupUnassignedQueue()
+  permissions.value.delete('inventory.zones.manage')
+  try {
+    renderAt('/app/yard/warehouses/wh-1/unassigned')
+    expect(await screen.findByRole('link', { name: /Крило/ })).toBeVisible()
+    expect(screen.queryByRole('button', { name: /Розмістити/ })).toBeNull()
+  } finally {
+    permissions.value.add('inventory.zones.manage')
+  }
+})
+
+it('does not query all parts if the warehouse system zone is absent', async () => {
+  renderAt('/app/yard/warehouses/wh-1/unassigned')
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Не вдалося визначити зону нерозміщених запчастин.',
+  )
+  expect(parts.search).not.toHaveBeenCalled()
+})
+
+it('prefills the queue warehouse and preserves other physical zones when placing', async () => {
+  const user = userEvent.setup()
+  setupUnassignedQueue()
+  api.getWarehouses.mockResolvedValue([
+    {
+      id: 'wh-other',
+      name: 'Інший склад',
+      code: 'other',
+      isActive: true,
+      isSystemDefault: false,
+      zoneCount: 1,
+    },
+    {
+      id: 'wh-1',
+      name: 'Основний склад',
+      code: 'main',
+      isActive: true,
+      isSystemDefault: true,
+      zoneCount: 2,
+    },
+  ])
+  const loadZones = api.getZones.getMockImplementation() as (
+    ...args: unknown[]
+  ) => Promise<InventoryZone[]>
+  const zones = await loadZones()
+  api.getZones.mockResolvedValue([
+    ...zones,
+    {
+      ...zones[1],
+      id: 'zone-other',
+      warehouseId: 'wh-other',
+      warehouseName: 'Інший склад',
+      name: 'Інша зона',
+      isSystemUnassigned: false,
+    },
+  ])
+  api.getPartZones.mockResolvedValue([
+    {
+      zoneId: 'zone-other',
+      zoneName: 'Інша зона',
+      warehouseId: 'wh-other',
+      isSystemUnassigned: false,
+    },
+    {
+      zoneId: 'system-zone-1',
+      zoneName: 'Без зони',
+      warehouseId: 'wh-1',
+      isSystemUnassigned: true,
+    },
+  ])
+  renderAt('/app/yard/warehouses/wh-1/unassigned')
+  await user.click(
+    await screen.findByRole('button', { name: 'Розмістити Крило' }),
+  )
+  const dialog = await screen.findByRole('dialog')
+  const checkbox = await within(dialog).findByRole('checkbox', {
+    name: /Стелаж A1/,
+  })
+  expect(
+    within(dialog).getByRole('radio', { name: /Основний склад/ }),
+  ).toBeChecked()
+  const save = within(dialog).getByRole('button', {
+    name: 'Зберегти розміщення',
+  })
+  expect(save).toBeDisabled()
+  await user.click(checkbox)
+  await user.click(save)
+  await waitFor(() =>
+    expect(api.replacePartZones).toHaveBeenCalledWith(
+      'part-1',
+      ['zone-other', 'zone-1'],
+      expect.any(Object),
+      undefined,
+      undefined,
+    ),
+  )
+})
+
+it('returns to the last remaining queue page after placement and keeps the search', async () => {
+  const user = userEvent.setup()
+  setupUnassignedQueue()
+  let placed = false
+  parts.search.mockImplementation((request: { page?: number }) =>
+    Promise.resolve({
+      items: !placed
+        ? [unassignedPart]
+        : request.page === 2
+          ? []
+          : Array.from({ length: 10 }, (_, index) => ({
+              ...unassignedPart,
+              id: `remaining-${index}`,
+              name: `Крило ${index + 2}`,
+            })),
+      page: request.page ?? 1,
+      pageSize: 10,
+      total: placed ? 10 : 11,
+      totalPages: placed ? 1 : 2,
+    }),
+  )
+  api.replacePartZones.mockImplementationOnce(() => {
+    placed = true
+    return Promise.resolve([])
+  })
+  renderAt(
+    '/app/yard/warehouses/wh-1/unassigned?unassignedSearch=Крило&unassignedPage=2&keep=1',
+  )
+  await user.click(
+    await screen.findByRole('button', { name: 'Розмістити Крило' }),
+  )
+  const dialog = await screen.findByRole('dialog')
+  await user.click(
+    await within(dialog).findByRole('checkbox', { name: /Стелаж A1/ }),
+  )
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Зберегти розміщення' }),
+  )
+  expect(
+    await screen.findByRole('button', { name: 'Розмістити Крило 2' }),
+  ).toBeVisible()
+  expect(screen.getByTestId('inventory-url')).toHaveTextContent(
+    'unassignedPage=1',
+  )
+  expect(screen.getByTestId('inventory-url')).toHaveTextContent('keep=1')
+  expect(
+    screen.getByRole('searchbox', { name: 'Пошук запчастин' }),
+  ).toHaveValue('Крило')
+})
+
+it('distinguishes a completed placement queue from an empty search', async () => {
+  const user = userEvent.setup()
+  setupUnassignedQueue()
+  parts.search.mockResolvedValue({
+    items: [],
+    page: 1,
+    pageSize: 10,
+    total: 0,
+    totalPages: 0,
+  })
+  renderAt('/app/yard/warehouses/wh-1/unassigned?unassignedSearch=absent')
+  expect(
+    await screen.findByText('Запчастин за цим запитом не знайдено.'),
+  ).toBeVisible()
+  expect(
+    screen.queryByText('Усі запчастини цього складу вже мають зону.'),
+  ).toBeNull()
+  await user.clear(screen.getByRole('searchbox', { name: 'Пошук запчастин' }))
+  expect(
+    await screen.findByText('Усі запчастини цього складу вже мають зону.'),
+  ).toBeVisible()
+})
+
+it('does not load unassigned parts without parts viewing permission', async () => {
+  setupUnassignedQueue()
+  permissions.value.delete('parts.view')
+  try {
+    renderAt('/app/yard/warehouses/wh-1/unassigned')
+    expect(
+      await screen.findByText('Для перегляду запчастин потрібне право доступу'),
+    ).toBeVisible()
+    expect(parts.search).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /Розмістити/ })).toBeNull()
+  } finally {
+    permissions.value.add('parts.view')
+  }
+})

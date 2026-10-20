@@ -32,6 +32,7 @@ function mount(canManage = true) {
         zones={[unassigned, ...physical]}
         base="/warehouses"
         partsBase={canManage ? '/parts' : null}
+        unassignedHref="/warehouses/wh/unassigned"
         canManage={canManage}
         onAdd={vi.fn()}
         onEdit={onEdit}
@@ -65,7 +66,7 @@ it('searches physical zones by code, resets pagination and keeps unassigned sepa
   expect(within(list).queryByRole('link', { name: 'Без зони' })).toBeNull()
   expect(screen.getByRole('link', { name: 'Без зони' })).toHaveAttribute(
     'href',
-    '/parts?zone=unassigned',
+    '/warehouses/wh/unassigned',
   )
   expect(
     screen.queryByRole('button', { name: 'Дії із зоною Без зони' }),

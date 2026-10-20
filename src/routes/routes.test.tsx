@@ -100,6 +100,7 @@ describe('production route boundary', () => {
     ['parts/:partId/inventory', 'WarehousesScreen'],
     ['warehouses', 'WarehousesScreen'],
     ['warehouses/:warehouseId', 'WarehousesScreen'],
+    ['warehouses/:warehouseId/unassigned', 'WarehousesScreen'],
     ['warehouses/zones/:zoneId', 'WarehousesScreen'],
     ['warehouses/sections/:sectionId', 'WarehousesScreen'],
     ['cars', 'CarsScreen'],

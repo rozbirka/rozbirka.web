@@ -33,7 +33,12 @@ import {
   type Warehouse,
   type WarehouseDetail,
 } from '@/api/inventory'
-import { partsApi, type PartDetail, type PartHistory } from '@/api/parts'
+import {
+  partsApi,
+  type PartDetail,
+  type PartHistory,
+  type PartSearchItem,
+} from '@/api/parts'
 import { historyDetails, historyLabel, unitLabel } from '../parts/part-labels'
 import { normalizeApiProblem } from '@/api/errors'
 import { cn } from '@/lib/utils'
@@ -56,7 +61,9 @@ import { warehouseMessages } from '../inventory/warehouse-messages'
 import { RedesignShell, RedesignTitle } from '../redesign-shell'
 import { inventoryCodeFromName } from '../inventory/inventory-code'
 import { ZoneEditorSheet, type ZoneDraft } from '../inventory/ZoneEditorSheet'
-import { Resource } from '../inventory/InventoryResource'
+import { InventoryLoadError, Resource } from '../inventory/InventoryResource'
+import { LocationPartsList } from '../inventory/LocationPartsList'
+import { unassignedMessages } from './unassigned-messages'
 import { useLoad, usePermission } from '../inventory/use-stock-resource'
 import { StockStat } from '../inventory/StockStat'
 import { Step } from '../inventory/StockStep'
@@ -71,6 +78,8 @@ export function WarehousesScreen({
   const route = segments[0] === 'app' ? segments.slice(2) : segments
   if (route[0] === 'parts' && route[1] && route[2] === 'inventory')
     return <PartPlacementView partId={route[1]} />
+  if (route[1] && route[2] === 'unassigned')
+    return <UnassignedPartsView key={route[1]} id={route[1]} />
   if (route[1] === 'zones' && route[2])
     return <LocationView key={`zone:${route[2]}`} id={route[2]} kind="zone" />
   if (route[1] === 'sections' && route[2])
@@ -84,6 +93,100 @@ export function WarehousesScreen({
 function useWarehouseBase() {
   const { targetTenant } = useCabinet()
   return targetTenant ? cabinetPath(targetTenant.slug, 'warehouses') : '/'
+}
+
+function UnassignedPartsView({ id }: { id: string }) {
+  const t = useT(unassignedMessages)
+  const tw = useT(warehouseMessages)
+  const base = useWarehouseBase()
+  const canManage = usePermission('inventory.zones.manage')
+  const loader = useCallback(
+    (signal: AbortSignal) => inventoryApi.getWarehouse(id, { signal }),
+    [id],
+  )
+  const resource = useLoad(loader, id)
+  const [placing, setPlacing] = useState<PartSearchItem | null>(null)
+  const [revision, setRevision] = useState(0)
+  const [placedName, setPlacedName] = useState<string | null>(null)
+  return (
+    <Resource state={resource.state} retry={resource.reload}>
+      {(warehouse: WarehouseDetail) => {
+        const zone = warehouse.zones.find((item) => item.isSystemUnassigned)
+        return (
+          <RedesignShell
+            crumb={
+              <span className="flex min-h-11 flex-wrap items-center gap-3">
+                <Link
+                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 font-sans text-sm font-semibold tracking-normal normal-case hover:bg-white/[0.05]"
+                  to={`${base}/${encodeURIComponent(warehouse.id)}`}
+                >
+                  <ChevronLeft aria-hidden className="size-3.5" />
+                  {tw('backToWarehouse')}
+                </Link>
+                <span>{warehouse.name}</span>
+                <span aria-hidden>/</span>
+                <span>{t('title')}</span>
+              </span>
+            }
+          >
+            <RedesignTitle
+              title={t('title')}
+              lead={t('lead', { warehouse: warehouse.name })}
+            />
+            {placedName ? (
+              <Notice tone="ok">{t('placed', { name: placedName })}</Notice>
+            ) : null}
+            {!warehouse.isActive ? <Notice>{t('archived')}</Notice> : null}
+            {zone ? (
+              <section
+                className="border-app-line bg-app-raised rounded-[20px] border p-4 sm:p-6"
+                aria-label={t('list')}
+              >
+                <LocationPartsList
+                  target={{
+                    kind: 'zone',
+                    warehouseId: warehouse.id,
+                    zoneId: zone.id,
+                    name: t('title'),
+                    path: [warehouse.name, t('title')],
+                  }}
+                  context="unassigned"
+                  refreshKey={revision}
+                  emptyText={t('empty')}
+                  onPlace={
+                    canManage && warehouse.isActive
+                      ? (part) => {
+                          setPlacedName(null)
+                          setPlacing(part)
+                        }
+                      : undefined
+                  }
+                />
+              </section>
+            ) : (
+              <InventoryLoadError
+                message={t('missingZone')}
+                onRetry={resource.reload}
+              />
+            )}
+            {placing ? (
+              <PartPlacementDrawer
+                key={placing.id}
+                partId={placing.id}
+                initialWarehouseId={warehouse.id}
+                requirePhysicalZone
+                onClose={() => setPlacing(null)}
+                onSaved={() => {
+                  setPlacedName(placing.name)
+                  setRevision((value) => value + 1)
+                }}
+              />
+            ) : null}
+          </RedesignShell>
+        )
+      }}
+    </Resource>
+  )
 }
 
 interface WarehousesOverviewData {
@@ -621,6 +724,7 @@ function WarehouseView({ id }: { id: string }) {
                 zones={zones}
                 base={base}
                 partsBase={partsBase}
+                unassignedHref={`${base}/${encodeURIComponent(warehouse.id)}/unassigned`}
                 canManage={canManage}
                 onAdd={startAddingZone}
                 onEdit={(zone) => {
@@ -1415,16 +1519,18 @@ interface PlacementData {
   byZone: Map<string, number> | null
 }
 
-export function PartPlacementDrawer({
-  partId,
-  onClose,
-  onSaved,
-}: {
-  partId: string
+interface PlacementDrawerOptions {
   onClose: () => void
   onSaved: () => void
-}) {
-  return <PartPlacementView partId={partId} drawer={{ onClose, onSaved }} />
+  initialWarehouseId?: string
+  requirePhysicalZone?: boolean
+}
+
+export function PartPlacementDrawer({
+  partId,
+  ...drawer
+}: { partId: string } & PlacementDrawerOptions) {
+  return <PartPlacementView partId={partId} drawer={drawer} />
 }
 
 function PartPlacementView({
@@ -1432,7 +1538,7 @@ function PartPlacementView({
   drawer,
 }: {
   partId: string
-  drawer?: { onClose: () => void; onSaved: () => void }
+  drawer?: PlacementDrawerOptions
 }) {
   const t = useT(placementMessages)
   const tc = useT(commonMessages)
@@ -1511,7 +1617,9 @@ function PartPlacementView({
   const [sectionSelection, setSectionSelection] = useState<
     string | null | undefined
   >(undefined)
-  const [warehouseId, setWarehouseId] = useState<string | null>(null)
+  const [warehouseId, setWarehouseId] = useState<string | null>(
+    drawer?.initialWarehouseId ?? null,
+  )
   const [query, setQuery] = useState('')
   const [saving, setSaving] = useState(false)
   const [operationError, setOperationError] = useState<string | null>(null)
@@ -1531,8 +1639,28 @@ function PartPlacementView({
     [resource.state, selection],
   )
 
+  const placementData =
+    resource.state.kind === 'ready' ? resource.state.data : null
+  const canSaveSelection =
+    selected.length > 0 &&
+    (!drawer?.requirePhysicalZone ||
+      (placementData !== null &&
+        !placementData.zones.some(
+          (zone) => selected.includes(zone.id) && zone.isSystemUnassigned,
+        ) &&
+        placementData.zones.some(
+          (zone) =>
+            selected.includes(zone.id) &&
+            zone.isActive &&
+            !zone.isSystemUnassigned &&
+            placementData.warehouses.some(
+              (warehouse) =>
+                warehouse.id === zone.warehouseId && warehouse.isActive,
+            ),
+        )))
+
   const save = async () => {
-    if (!canManage || saving || selected.length === 0) return
+    if (!canManage || saving || !canSaveSelection) return
     setSaving(true)
     try {
       setOperationError(null)
@@ -1743,7 +1871,16 @@ function PartPlacementView({
               currentSelection ?? placement.map((zone) => zone.zoneId)
             return current.includes(zoneId)
               ? current.filter((id) => id !== zoneId)
-              : [...current.filter((id) => id !== warehouseOnly?.id), zoneId]
+              : [
+                  ...current.filter((id) =>
+                    drawer?.requirePhysicalZone
+                      ? !zones.some(
+                          (zone) => zone.id === id && zone.isSystemUnassigned,
+                        )
+                      : id !== warehouseOnly?.id,
+                  ),
+                  zoneId,
+                ]
           })
         }
 
@@ -1842,6 +1979,11 @@ function PartPlacementView({
                 <Notice tone="danger">{operationError}</Notice>
               ) : null}
               {saved ? <Notice tone="ok">{t('saved')}</Notice> : null}
+              {drawer?.requirePhysicalZone ? (
+                <p className="text-app-muted text-sm">
+                  {t('pickPhysicalZone')}
+                </p>
+              ) : null}
 
               <div className="flex flex-wrap items-start gap-6">
                 <div
@@ -1941,7 +2083,7 @@ function PartPlacementView({
                     number="02"
                     title={t('zone')}
                   >
-                    {warehouseOnly ? (
+                    {warehouseOnly && !drawer?.requirePhysicalZone ? (
                       <label
                         className={cn(
                           'mb-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
@@ -2471,9 +2613,7 @@ function PartPlacementView({
             <Button
               aria-busy={saving}
               disabled={
-                pending ||
-                resource.state.kind !== 'ready' ||
-                selected.length === 0
+                pending || resource.state.kind !== 'ready' || !canSaveSelection
               }
               onClick={() => void save()}
               variant="primary"

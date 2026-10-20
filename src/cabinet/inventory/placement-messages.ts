@@ -63,6 +63,8 @@ export const placementMessages = defineMessages({
     capacityNotCounted: 'Місткість зони не рахується',
     capacity: 'Місткість зони',
     savePlacement: 'Зберегти розміщення',
+    pickPhysicalZone:
+      'Виберіть зону для запчастини. За потреби уточніть секцію та полицю.',
     pickOne:
       'Виберіть хоча б одну зону — запчастина не може лишитися без місця.',
     replacesAll:
@@ -127,6 +129,8 @@ export const placementMessages = defineMessages({
     capacityNotCounted: 'Zone capacity isn’t tracked',
     capacity: 'Zone capacity',
     savePlacement: 'Save location',
+    pickPhysicalZone:
+      'Choose a zone for the part. You can also specify a section and shelf.',
     pickOne: 'Select at least one zone — a part can’t be left without a place.',
     replacesAll:
       'Saving replaces this part’s whole set of zones, not just the selected warehouse.',
@@ -194,6 +198,8 @@ export const placementMessages = defineMessages({
     capacityNotCounted: 'Pojemność strefy nie jest liczona',
     capacity: 'Pojemność strefy',
     savePlacement: 'Zapisz lokalizację',
+    pickPhysicalZone:
+      'Wybierz strefę dla części. Możesz też wskazać sekcję i półkę.',
     pickOne:
       'Wybierz co najmniej jedną strefę — część nie może zostać bez miejsca.',
     replacesAll:

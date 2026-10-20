@@ -24,6 +24,7 @@ export function WarehouseZoneBrowser({
   onArchive,
   headerActions,
   printWorkspace,
+  unassignedHref,
 }: {
   zones: Zone[]
   base: string
@@ -34,6 +35,7 @@ export function WarehouseZoneBrowser({
   onArchive: (zone: Zone) => void
   headerActions: ReactNode
   printWorkspace: ReactNode
+  unassignedHref: string
 }) {
   const t = useT(warehouseMessages)
   const tb = useT(locationBrowserMessages)
@@ -139,7 +141,7 @@ export function WarehouseZoneBrowser({
                     key={zone.id}
                     aria-label={zone.name}
                     className="location-browser__row location-browser__row--plain location-browser__row--direct"
-                    to={`${partsBase}?zone=${encodeURIComponent(zone.id)}`}
+                    to={unassignedHref}
                   >
                     {zoneContents(zone)}
                   </Link>

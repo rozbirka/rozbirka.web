@@ -125,6 +125,7 @@ const releasedCabinetRoutes: Partial<Record<CabinetModuleKey, RouteObject>> = {
 const commerceDetailRoutes: RouteObject[] = [
   ...[
     'warehouses/:warehouseId',
+    'warehouses/:warehouseId/unassigned',
     'warehouses/zones/:zoneId',
     'warehouses/sections/:sectionId',
   ].map((path) =>
