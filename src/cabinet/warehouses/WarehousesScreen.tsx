@@ -44,7 +44,7 @@ import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
-import { commonMessages, useT } from '@/i18n'
+import { commonMessages, useFormat, useT } from '@/i18n'
 import { useInventoryFormat } from '../inventory/inventory-format'
 import { inventoryMessages } from '../inventory/messages'
 import { overviewMessages } from '../inventory/overview-messages'
@@ -94,6 +94,7 @@ interface WarehousesOverviewData {
 function WarehousesOverview() {
   const t = useT(overviewMessages)
   const ti = useT(inventoryMessages)
+  const format = useFormat()
   const base = useWarehouseBase()
   const canZones = usePermission('inventory.zones.manage')
   const canSeeParts = usePermission('parts.view')
@@ -150,102 +151,126 @@ function WarehousesOverview() {
     <Resource retry={resource.reload} state={resource.state}>
       {({ warehouses, byWarehouse }: WarehousesOverviewData) => {
         const stock = byWarehouse
-        const stockTotal =
-          stock === null
-            ? 0
-            : [...stock.values()].reduce((sum, value) => sum + value, 0)
 
         return (
           <RedesignShell crumb={ti('crumbWarehouses')}>
-            <RedesignTitle
-              title={ti('crumbWarehouses')}
-              lead={t('warehousesLead')}
-            />
+            <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-5">
+              <RedesignTitle
+                title={ti('crumbWarehouses')}
+                lead={t('warehousesLead')}
+                aside={
+                  <span className="border-app-line-2 text-app-muted rounded-full border px-3 py-1 font-mono text-[14px] tabular-nums">
+                    {format.number(warehouses.length)}
+                  </span>
+                }
+              />
+              {canZones ? (
+                <Button
+                  onClick={() => {
+                    setDraft({ name: '', code: '' })
+                    setAdding(true)
+                  }}
+                  variant="primary"
+                >
+                  <Plus aria-hidden />
+                  {t('addWarehouse')}
+                </Button>
+              ) : null}
+            </div>
             {operationError ? (
               <Notice tone="danger">{operationError}</Notice>
             ) : null}
-            <section aria-label={t('warehouses')} className="grid gap-4.5">
-              <div className="flex flex-wrap items-baseline gap-3.5">
-                <h2 className="text-app-muted font-mono text-[11px] tracking-[0.16em] uppercase">
-                  {t('warehouses')}
-                </h2>
-                <span aria-hidden className="bg-app-line h-px flex-1" />
-                {canZones ? (
-                  <Button
-                    className="text-[13px] font-semibold"
-                    onClick={() => {
-                      setDraft({ name: '', code: '' })
-                      setAdding(true)
-                    }}
-                    variant="ghost"
-                  >
-                    <Plus aria-hidden />
-                    {t('addWarehouse')}
-                  </Button>
-                ) : null}
-              </div>
+            <section
+              aria-label={t('warehouses')}
+              className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
+            >
               {warehouses.length === 0 ? (
                 <EmptyState
                   description={t('noWarehousesHint')}
                   title={t('noWarehousesTitle')}
                 />
               ) : (
-                <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-4">
-                  {warehouses.map((item) => {
-                    const parts = stock?.get(item.id) ?? null
-                    const share =
-                      parts === null || stockTotal === 0
-                        ? 0
-                        : Math.round((parts / stockTotal) * 100)
-                    return (
-                      <li key={item.id}>
-                        <Link
-                          className="border-app-line bg-app-raised block h-full rounded-[18px] border px-5.5 pt-5 pb-5.5 hover:border-white/20"
-                          to={`${base}/${item.id}`}
-                        >
-                          <span className="flex items-baseline justify-between gap-3">
-                            <span className="text-[17px] font-bold tracking-[-0.01em] text-white">
-                              {item.name}
-                            </span>
-                            <span className="text-app-muted font-mono text-[13px]">
-                              {ti('zones', { count: item.zoneCount })}
-                            </span>
-                          </span>
-                          <span className="text-app-muted mt-1 block text-[13px]">
-                            {[
-                              t('warehouseCode', { code: item.code }),
-                              item.isSystemDefault ? t('defaultTag') : null,
-                              item.isActive ? null : t('archivedTag'),
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </span>
-                          <span
-                            aria-hidden
-                            className="bg-app-line-2 mt-4 block h-1.5 overflow-hidden rounded-full"
+                <>
+                  <div
+                    aria-hidden
+                    className="border-app-line text-app-dim hidden grid-cols-[minmax(0,1fr)_16rem_7rem] gap-5 border-b px-6 py-3.5 font-mono text-[10px] tracking-[0.14em] uppercase md:grid"
+                  >
+                    <span>{t('columnWarehouse')}</span>
+                    <div className="grid grid-cols-[9rem_6rem] gap-4 text-right">
+                      <span>{t('columnParts')}</span>
+                      <span>{t('columnZones')}</span>
+                    </div>
+                    <span />
+                  </div>
+                  <ul className="divide-app-line divide-y">
+                    {warehouses.map((item) => {
+                      const parts =
+                        stock === null ? null : (stock.get(item.id) ?? 0)
+                      return (
+                        <li key={item.id}>
+                          <Link
+                            aria-label={t('openWarehouseLabel', {
+                              name: item.name,
+                            })}
+                            className="focus-visible:outline-brand group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-5 gap-y-5 px-5 py-5 transition-colors outline-offset-[-3px] hover:bg-white/[0.03] focus-visible:outline-2 md:grid-cols-[minmax(0,1fr)_16rem_7rem] md:px-6 md:py-6"
+                            to={`${base}/${item.id}`}
                           >
-                            <span
-                              className="bg-state-ok block h-full rounded-full"
-                              style={{ width: `${String(share)}%` }}
-                            />
-                          </span>
-                          <span className="text-app-muted mt-2.5 flex items-baseline justify-between gap-3 text-[13px]">
-                            <span>
-                              {parts === null
-                                ? ti('stockUnavailable')
-                                : t('shareOfYard', { share })}
+                            <div className="col-span-2 min-w-0 md:col-span-1">
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                                <h2 className="text-[18px] font-bold tracking-[-0.01em] break-words text-white [overflow-wrap:anywhere]">
+                                  {item.name}
+                                </h2>
+                                {item.isSystemDefault ? (
+                                  <StatusPill>{t('defaultTag')}</StatusPill>
+                                ) : null}
+                                {!item.isActive ? (
+                                  <StatusPill>{t('archivedTag')}</StatusPill>
+                                ) : null}
+                              </div>
+                              <p className="text-app-muted mt-1.5 font-mono text-[12px] break-words [overflow-wrap:anywhere]">
+                                {t('warehouseCode', { code: item.code })}
+                              </p>
+                            </div>
+                            <dl className="grid min-w-0 grid-cols-2 gap-4 md:grid-cols-[9rem_6rem]">
+                              <div className="min-w-0 md:text-right">
+                                <dt className="text-app-muted text-[12px] md:sr-only">
+                                  {t('columnParts')}
+                                </dt>
+                                <dd
+                                  className={cn(
+                                    'mt-1 tabular-nums md:mt-0',
+                                    parts === null
+                                      ? 'text-app-muted text-[12px]'
+                                      : 'text-[22px] leading-tight font-bold text-white',
+                                  )}
+                                >
+                                  {parts === null
+                                    ? ti('stockUnavailable')
+                                    : format.number(parts)}
+                                </dd>
+                              </div>
+                              <div className="md:text-right">
+                                <dt className="text-app-muted text-[12px] md:sr-only">
+                                  {t('columnZones')}
+                                </dt>
+                                <dd className="text-app-muted mt-1 text-[22px] leading-tight font-semibold tabular-nums md:mt-0">
+                                  {format.number(item.zoneCount)}
+                                </dd>
+                              </div>
+                            </dl>
+                            <span className="text-app-muted group-hover:text-app-ink flex items-center justify-end gap-2 text-[13px] font-semibold">
+                              {t('openWarehouse')}
+                              <ArrowRight
+                                aria-hidden
+                                className="size-4 shrink-0"
+                              />
                             </span>
-                            <span className="font-mono">
-                              {parts === null
-                                ? '—'
-                                : t('positionsShort', { count: parts })}
-                            </span>
-                          </span>
-                        </Link>
-                      </li>
-                    )
-                  })}
-                </ul>
+                          </Link>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </>
               )}
             </section>
             <WarehouseEditorSheet

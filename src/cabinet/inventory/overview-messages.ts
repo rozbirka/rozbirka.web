@@ -1,6 +1,6 @@
 import { defineMessages } from '@/i18n'
 
-/** The inventory overview: sessions, figures and the warehouse cards. */
+/** Copy for the stocktake overview and the separate warehouse directory. */
 export const overviewMessages = defineMessages({
   uk: {
     searchLabel: 'Пошук сесії',
@@ -45,7 +45,12 @@ export const overviewMessages = defineMessages({
       'Інвентаризацій ще немає — створіть сесію, і працівники порахують склад у застосунку.',
     noFiltered: 'За цим фільтром сесій немає.',
     warehouses: 'Склади',
-    warehousesLead: 'Місця зберігання та розміщення запчастин.',
+    warehousesLead: 'Виберіть склад, щоб переглянути його зони та запчастини.',
+    columnWarehouse: 'Склад',
+    columnParts: 'Запчастин',
+    columnZones: 'Зон',
+    openWarehouse: 'Відкрити',
+    openWarehouseLabel: 'Відкрити склад {name}',
     addWarehouse: 'Додати склад',
     noWarehousesTitle: 'Складів ще немає',
     noWarehousesHint:
@@ -53,8 +58,6 @@ export const overviewMessages = defineMessages({
     warehouseCode: 'код {code}',
     defaultTag: 'за замовчуванням',
     archivedTag: 'архівний',
-    shareOfYard: '{share}% складу розбірки',
-    positionsShort: '{count} поз.',
     newWarehouseHint:
       'Склад — це приміщення; зони додаються вже всередині нього.',
     newWarehouseTitle: 'Новий склад',
@@ -98,7 +101,12 @@ export const overviewMessages = defineMessages({
       'No stocktakes yet — create a session and your team will count the warehouse in the app.',
     noFiltered: 'No sessions match this filter.',
     warehouses: 'Warehouses',
-    warehousesLead: 'Storage locations and parts placement.',
+    warehousesLead: 'Choose a warehouse to view its zones and parts.',
+    columnWarehouse: 'Warehouse',
+    columnParts: 'Parts',
+    columnZones: 'Zones',
+    openWarehouse: 'Open',
+    openWarehouseLabel: 'Open warehouse {name}',
     addWarehouse: 'Add warehouse',
     noWarehousesTitle: 'No warehouses yet',
     noWarehousesHint:
@@ -106,8 +114,6 @@ export const overviewMessages = defineMessages({
     warehouseCode: 'code {code}',
     defaultTag: 'default',
     archivedTag: 'archived',
-    shareOfYard: '{share}% of the business’s stock',
-    positionsShort: { one: '{count} item', other: '{count} items' },
     newWarehouseHint:
       'A warehouse is a building or room; zones are added inside it.',
     newWarehouseTitle: 'New warehouse',
@@ -156,7 +162,12 @@ export const overviewMessages = defineMessages({
       'Nie ma jeszcze inwentaryzacji — utwórz sesję, a pracownicy policzą magazyn w aplikacji.',
     noFiltered: 'Brak sesji dla tego filtra.',
     warehouses: 'Magazyny',
-    warehousesLead: 'Miejsca przechowywania i rozmieszczenie części.',
+    warehousesLead: 'Wybierz magazyn, aby zobaczyć jego strefy i części.',
+    columnWarehouse: 'Magazyn',
+    columnParts: 'Części',
+    columnZones: 'Strefy',
+    openWarehouse: 'Otwórz',
+    openWarehouseLabel: 'Otwórz magazyn {name}',
     addWarehouse: 'Dodaj magazyn',
     noWarehousesTitle: 'Nie ma jeszcze magazynów',
     noWarehousesHint:
@@ -164,8 +175,6 @@ export const overviewMessages = defineMessages({
     warehouseCode: 'kod {code}',
     defaultTag: 'domyślny',
     archivedTag: 'zarchiwizowany',
-    shareOfYard: '{share}% stanu firmy',
-    positionsShort: '{count} poz.',
     newWarehouseHint:
       'Magazyn to pomieszczenie; strefy dodaje się już w jego obrębie.',
     newWarehouseTitle: 'Nowy magazyn',

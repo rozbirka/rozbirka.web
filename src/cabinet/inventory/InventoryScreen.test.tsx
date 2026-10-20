@@ -2158,6 +2158,69 @@ it('opens warehouses separately from stocktake sessions', async () => {
   expect(screen.queryByRole('link', { name: 'Нова сесія' })).toBeNull()
 })
 
+it('shows warehouse stock figures with a direct opening action', async () => {
+  parts.facets.mockResolvedValue({
+    warehouses: [{ id: 'wh-1', name: 'Основний склад', count: 1378 }],
+  })
+  renderAt('/app/yard/warehouses')
+  const warehouse = await screen.findByRole('link', {
+    name: 'Відкрити склад Основний склад',
+  })
+  expect(
+    within(warehouse).getByText('Запчастин').nextElementSibling,
+  ).toHaveTextContent(/1\s378/)
+  expect(
+    within(warehouse).getByText('Зон').nextElementSibling,
+  ).toHaveTextContent('4')
+  expect(within(warehouse).getByText('Відкрити')).toBeVisible()
+})
+
+it('shows an empty warehouse as zero parts in the warehouse directory', async () => {
+  renderAt('/app/yard/warehouses')
+  const warehouse = await screen.findByRole('link', {
+    name: 'Відкрити склад Основний склад',
+  })
+  expect(
+    within(warehouse).getByText('Запчастин').nextElementSibling,
+  ).toHaveTextContent('0')
+  expect(
+    within(warehouse).getByText('Зон').nextElementSibling,
+  ).toHaveTextContent('4')
+  expect(within(warehouse).getByText('Відкрити')).toBeVisible()
+})
+
+it('keeps warehouse navigation available when stock figures fail', async () => {
+  parts.facets.mockRejectedValue(new Error('unavailable'))
+  renderAt('/app/yard/warehouses')
+  const warehouse = await screen.findByRole('link', {
+    name: 'Відкрити склад Основний склад',
+  })
+  expect(warehouse).toHaveAttribute('href', '/app/yard/warehouses/wh-1')
+  expect(
+    within(warehouse).getByText('Запчастин').nextElementSibling,
+  ).toHaveTextContent('залишки недоступні')
+  expect(
+    within(warehouse).getByText('Зон').nextElementSibling,
+  ).toHaveTextContent('4')
+})
+
+it('keeps the warehouse directory available without stock or management permissions', async () => {
+  permissions.value.delete('parts.view')
+  permissions.value.delete('inventory.zones.manage')
+  try {
+    renderAt('/app/yard/warehouses')
+    const warehouse = await screen.findByRole('link', {
+      name: 'Відкрити склад Основний склад',
+    })
+    expect(within(warehouse).getByText('залишки недоступні')).toBeVisible()
+    expect(parts.facets).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Додати склад' })).toBeNull()
+  } finally {
+    permissions.value.add('parts.view')
+    permissions.value.add('inventory.zones.manage')
+  }
+})
+
 it('keeps stocktake usable when the warehouse list is unavailable', async () => {
   api.getWarehouses.mockRejectedValue(new Error('unavailable'))
   renderAt('/app/yard/inventory')
