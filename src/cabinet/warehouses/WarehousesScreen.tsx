@@ -42,7 +42,7 @@ import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
-import { commonMessages, useT } from '@/i18n'
+import { commonMessages, useFormat, useT } from '@/i18n'
 import { useInventoryFormat } from '../inventory/inventory-format'
 import { inventoryMessages } from '../inventory/messages'
 import { overviewMessages } from '../inventory/overview-messages'
@@ -53,7 +53,7 @@ import { LocationLabelsPage } from '../inventory/LocationLabelPrinter'
 import { locationPartsHref } from '../inventory/location-contents'
 import { locationBrowserMessages } from '../inventory/location-browser-messages'
 import { warehouseMessages } from '../inventory/warehouse-messages'
-import { RedesignShell } from '../redesign-shell'
+import { RedesignShell, RedesignTitle } from '../redesign-shell'
 import { inventoryCodeFromName } from '../inventory/inventory-code'
 import { ZoneEditorSheet, type ZoneDraft } from '../inventory/ZoneEditorSheet'
 import { Resource } from '../inventory/InventoryResource'
@@ -89,10 +89,13 @@ function useWarehouseBase() {
 interface WarehousesOverviewData {
   warehouses: Warehouse[]
   byWarehouse: Map<string, number> | null
+  partsTotal: number | null
 }
 
 function WarehousesOverview() {
+  const t = useT(overviewMessages)
   const ti = useT(inventoryMessages)
+  const format = useFormat()
   const base = useWarehouseBase()
   const canZones = usePermission('inventory.zones.manage')
   const canSeeParts = usePermission('parts.view')
@@ -101,8 +104,9 @@ function WarehousesOverview() {
   )
   const loader = useCallback(
     async (signal: AbortSignal): Promise<WarehousesOverviewData> => {
-      const [warehouses, byWarehouse] = await Promise.all([
-        inventoryApi.getWarehouses({ signal }),
+      const warehouses = await inventoryApi.getWarehouses({ signal })
+      const warehouseIds = warehouses.map((warehouse) => warehouse.id)
+      const [byWarehouse, partsTotal] = await Promise.all([
         canSeeParts
           ? partsApi.facets({}, ['warehouse'], { signal }).then(
               (facets) =>
@@ -110,8 +114,16 @@ function WarehousesOverview() {
               () => null,
             )
           : Promise.resolve(null),
+        canSeeParts
+          ? warehouseIds.length === 0
+            ? Promise.resolve(0)
+            : partsApi.search({ warehouseIds, pageSize: 1 }, { signal }).then(
+                (result) => result.total,
+                () => null,
+              )
+          : Promise.resolve(null),
       ])
-      return { warehouses, byWarehouse }
+      return { warehouses, byWarehouse, partsTotal }
     },
     [canSeeParts],
   )
@@ -147,9 +159,35 @@ function WarehousesOverview() {
 
   return (
     <Resource retry={resource.reload} state={resource.state}>
-      {({ warehouses, byWarehouse }: WarehousesOverviewData) => {
+      {({ warehouses, byWarehouse, partsTotal }: WarehousesOverviewData) => {
+        const activeCount = warehouses.filter(
+          (warehouse) => warehouse.isActive,
+        ).length
         return (
           <RedesignShell crumb={ti('crumbWarehouses')}>
+            <RedesignTitle
+              title={ti('crumbWarehouses')}
+              lead={t('warehousesPageLead')}
+            />
+            <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-px overflow-hidden rounded-[20px] border">
+              <StockStat
+                label={t('statWarehouses')}
+                value={format.number(warehouses.length) ?? '0'}
+                unit=""
+                meta={t('warehouseStatusSummary', {
+                  active: activeCount,
+                  archived: warehouses.length - activeCount,
+                })}
+              />
+              <StockStat
+                label={t('statWarehouseParts')}
+                value={
+                  partsTotal === null ? '—' : (format.number(partsTotal) ?? '0')
+                }
+                unit=""
+                meta={partsTotal === null ? ti('stockUnavailable') : ''}
+              />
+            </div>
             {operationError ? (
               <Notice tone="danger">{operationError}</Notice>
             ) : null}

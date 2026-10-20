@@ -2185,6 +2185,62 @@ it('shows warehouse stock figures with a direct opening action', async () => {
   expect(warehouse).toHaveAttribute('href', '/app/yard/warehouses/wh-1')
 })
 
+it('counts unique parts across warehouses instead of adding their facet counts', async () => {
+  api.getWarehouses.mockResolvedValue([
+    {
+      id: 'wh-1',
+      name: 'Основний склад',
+      code: 'main',
+      isSystemDefault: true,
+      isActive: true,
+      zoneCount: 2,
+    },
+    {
+      id: 'wh-2',
+      name: 'Другий склад',
+      code: 'second',
+      isSystemDefault: false,
+      isActive: false,
+      zoneCount: 1,
+    },
+  ])
+  parts.facets.mockResolvedValue({
+    warehouses: [
+      { id: 'wh-1', name: 'Основний склад', count: 20 },
+      { id: 'wh-2', name: 'Другий склад', count: 20 },
+    ],
+  })
+  parts.search.mockResolvedValue({
+    items: [],
+    page: 1,
+    pageSize: 1,
+    total: 25,
+    totalPages: 25,
+  })
+  renderAt('/app/yard/warehouses')
+  await screen.findByRole('heading', { level: 1, name: 'Склади' })
+  const stock = screen.getByText('Запчастин на складах').closest('div')
+  expect(within(stock as HTMLElement).getByText('25')).toBeVisible()
+  expect(screen.getByText('Активних: 1 · архівних: 1')).toBeVisible()
+  expect(parts.search).toHaveBeenCalledWith(
+    { warehouseIds: ['wh-1', 'wh-2'], pageSize: 1 },
+    expect.anything(),
+  )
+})
+
+it('keeps the warehouse list usable when the overview stock total is unavailable', async () => {
+  parts.search.mockRejectedValue(new Error('unavailable'))
+  renderAt('/app/yard/warehouses')
+  expect(
+    await screen.findByRole('link', { name: 'Відкрити склад Основний склад' }),
+  ).toBeVisible()
+  const stock = screen.getByText('Запчастин на складах').closest('div')
+  expect(within(stock as HTMLElement).getByText('—')).toBeVisible()
+  expect(
+    within(stock as HTMLElement).getByText('залишки недоступні'),
+  ).toBeVisible()
+})
+
 it('searches warehouse codes and resets the current page without losing other parameters', async () => {
   const user = userEvent.setup()
   api.getWarehouses.mockResolvedValue(
@@ -2273,6 +2329,7 @@ it('keeps the warehouse directory available without stock or management permissi
     })
     expect(within(warehouse).getByText('залишки недоступні')).toBeVisible()
     expect(parts.facets).not.toHaveBeenCalled()
+    expect(parts.search).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: 'Додати склад' })).toBeNull()
   } finally {
     permissions.value.add('parts.view')
@@ -2345,6 +2402,7 @@ it('shows an empty warehouse list with its creation action', async () => {
   renderAt('/app/yard/warehouses')
   expect(await screen.findByText('Складів ще немає')).toBeVisible()
   expect(screen.getByRole('button', { name: 'Додати склад' })).toBeVisible()
+  expect(parts.search).not.toHaveBeenCalled()
   expect(
     screen.queryByRole('region', { name: 'Сесії інвентаризації' }),
   ).toBeNull()

@@ -27,29 +27,24 @@ export function LocationBrowserHeader({
   lead,
   search,
   actions,
-  headingLevel = 2,
 }: {
   title: string
   total: number
   lead: string
   search?: ReactNode
   actions: ReactNode
-  headingLevel?: 1 | 2
 }) {
   const f = useFormat()
-  const Heading = headingLevel === 1 ? 'h1' : 'h2'
   return (
     <header className="location-browser__toolbar">
       <div className="min-w-0">
-        <Heading
+        <h2
           className="location-browser__heading"
-          aria-label={
-            headingLevel === 1 ? title : `${title} · ${f.number(total)}`
-          }
+          aria-label={`${title} · ${f.number(total)}`}
         >
           {title}
           <span className="location-browser__total">{f.number(total)}</span>
-        </Heading>
+        </h2>
         <p className="location-browser__lead">{lead}</p>
       </div>
       {search ? <div className="location-browser__search">{search}</div> : null}

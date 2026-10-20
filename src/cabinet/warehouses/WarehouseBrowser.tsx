@@ -62,8 +62,7 @@ export function WarehouseBrowser({
       className="location-browser border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
     >
       <LocationBrowserHeader
-        headingLevel={1}
-        title={t('warehouses')}
+        title={t('warehousesList')}
         total={warehouses.length}
         lead={t('warehousesLead')}
         search={
