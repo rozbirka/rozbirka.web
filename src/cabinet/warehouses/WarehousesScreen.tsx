@@ -164,7 +164,32 @@ function WarehousesOverview() {
           (warehouse) => warehouse.isActive,
         ).length
         return (
-          <RedesignShell crumb={ti('crumbWarehouses')}>
+          <RedesignShell
+            crumb={
+              <span className="flex min-h-11 items-center gap-2.5 text-[12px]">
+                <span className="hidden sm:inline">{ti('crumbWarehouse')}</span>
+                <span aria-hidden className="hidden text-white/20 sm:inline">
+                  /
+                </span>
+                <span className="text-app-muted">{ti('crumbWarehouses')}</span>
+              </span>
+            }
+            actions={
+              canZones ? (
+                <Button
+                  className="px-[18px] text-sm font-semibold"
+                  onClick={() => {
+                    setDraft({ name: '', code: '' })
+                    setAdding(true)
+                  }}
+                  variant="primary"
+                >
+                  <Plus aria-hidden />
+                  {t('addWarehouse')}
+                </Button>
+              ) : undefined
+            }
+          >
             <RedesignTitle
               title={ti('crumbWarehouses')}
               lead={t('warehousesPageLead')}
@@ -195,11 +220,6 @@ function WarehousesOverview() {
               warehouses={warehouses}
               stock={byWarehouse}
               base={base}
-              canManage={canZones}
-              onAdd={() => {
-                setDraft({ name: '', code: '' })
-                setAdding(true)
-              }}
             />
             <WarehouseEditorSheet
               open={adding}

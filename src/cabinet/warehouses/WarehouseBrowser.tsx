@@ -1,6 +1,6 @@
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { ChevronRight, Plus } from 'lucide-react'
-import { Button, EmptyState, Pagination, SearchInput } from '@/components/app'
+import { ChevronRight } from 'lucide-react'
+import { EmptyState, Pagination, SearchInput } from '@/components/app'
 import type { Warehouse } from '@/api/inventory'
 import { useFormat, useT } from '@/i18n'
 import {
@@ -17,14 +17,10 @@ export function WarehouseBrowser({
   warehouses,
   stock,
   base,
-  canManage,
-  onAdd,
 }: {
   warehouses: Warehouse[]
   stock: ReadonlyMap<string, number> | null
   base: string
-  canManage: boolean
-  onAdd: () => void
 }) {
   const t = useT(overviewMessages)
   const ti = useT(inventoryMessages)
@@ -76,18 +72,7 @@ export function WarehouseBrowser({
             }
           />
         }
-        actions={
-          canManage ? (
-            <Button
-              className="px-3 text-[13px] sm:px-4 sm:text-sm"
-              onClick={onAdd}
-              variant="primary"
-            >
-              <Plus aria-hidden />
-              {t('addWarehouse')}
-            </Button>
-          ) : null
-        }
+        actions={null}
       />
       {warehouses.length === 0 ? (
         <EmptyState
