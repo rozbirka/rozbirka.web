@@ -1,13 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import {
-  ChevronRight,
-  Plus,
-  LayoutGrid,
-  Rows3,
-  Package,
-  Pencil,
-} from 'lucide-react'
+import { ChevronRight, Plus, Pencil } from 'lucide-react'
 import { Button, DataTable, Pagination, SearchInput } from '@/components/app'
 import type {
   InventorySection,
@@ -21,6 +14,8 @@ import {
   locationPartsHref,
   type LocationContentsTarget,
 } from './location-contents'
+
+import './location-browser.css'
 
 const PAGE_SIZE = 10
 const matches = (query: string, name: string, code: string) =>
@@ -124,15 +119,46 @@ export function LocationBrowser({
       }
 
   return (
-    <div className="grid min-w-0 gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="rz-h-title">
-          {t(section ? 'shelves' : 'sections')} ·{' '}
-          {f.number(section ? visibleShelves.length : visibleSections.length)}
-        </h2>
-        <div className="rz-btn-row items-center">
+    <div className="location-browser">
+      <header className="location-browser__toolbar">
+        <div className="min-w-0">
+          <h2
+            className="location-browser__heading"
+            aria-label={`${t(section ? 'shelves' : 'sections')} · ${f.number(total)}`}
+          >
+            {t(section ? 'shelves' : 'sections')}
+            <span className="location-browser__total">{f.number(total)}</span>
+          </h2>
+          <p className="location-browser__lead">
+            {t(
+              section
+                ? onEditShelf
+                  ? 'chooseShelfToEdit'
+                  : 'chooseShelf'
+                : 'chooseSection',
+            )}
+          </p>
+        </div>
+        {printWorkspace ? null : (
+          <div className="location-browser__search">
+            <SearchInput
+              className="min-h-control-lg text-body"
+              aria-label={t(section ? 'searchShelves' : 'searchSections')}
+              placeholder={t('nameOrCode')}
+              value={query}
+              onChange={(event) =>
+                update({
+                  locationSearch: event.target.value,
+                  locationPage: null,
+                })
+              }
+            />
+          </div>
+        )}
+        <div className="location-browser__actions">
           {canManage ? (
             <Button
+              className="px-3 text-body sm:px-4 sm:text-body"
               variant="primary"
               onClick={() =>
                 section ? onAddShelf(section) : onAddSection(zone)
@@ -144,211 +170,209 @@ export function LocationBrowser({
           ) : null}
           {headerActions}
         </div>
-      </div>
-      {printWorkspace ?? (
+      </header>
+      {printWorkspace != null ? (
+        <div className="px-4 pb-4 sm:px-6 sm:pb-6">{printWorkspace}</div>
+      ) : (
         <>
-          <SearchInput
-            aria-label={t(section ? 'searchShelves' : 'searchSections')}
-            placeholder={t(
-              section ? 'searchShelfPlaceholder' : 'searchSectionPlaceholder',
-            )}
-            value={query}
-            onChange={(event) =>
-              update({ locationSearch: event.target.value, locationPage: null })
-            }
-          />
-          {selectionNotice}
-          {canViewParts ? (
-            <Link
-              className="group rz-inset hover:bg-app-hover flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left text-app-ink transition-colors motion-reduce:transition-none"
-              to={locationPartsHref(partsBase, zone.warehouseId, direct)}
-            >
-              <span className="text-app-muted hidden size-8 shrink-0 place-items-center sm:grid">
-                <Package aria-hidden className="size-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <strong className="rz-strong block font-semibold break-words">
-                  {direct.name}
-                </strong>
-                <span className="rz-muted mt-0.5 block text-caption">
-                  {t(section ? 'sectionDirectHint' : 'zoneDirectHint')}
-                </span>
-              </span>
-              <ChevronRight
-                aria-hidden
-                className="text-app-dim group-hover:text-app-ink size-4 shrink-0"
-              />
-            </Link>
+          {selectionNotice ? (
+            <div className="px-4 pb-4 sm:px-6">{selectionNotice}</div>
           ) : null}
-          {section ? (
-            <>
-              <div
-                key={`shelves:${page}:${needle}`}
-                role="group"
-                aria-label={t('shelfList')}
-                tabIndex={0}
-                className="rz-card min-w-0 max-h-[36rem] overflow-auto overscroll-contain [scrollbar-gutter:stable]"
+          {canViewParts ? (
+            <div className="location-browser__direct">
+              <Link
+                className="location-browser__row location-browser__row--direct"
+                to={locationPartsHref(partsBase, zone.warehouseId, direct)}
               >
-                <DataTable
-                  density="compact"
-                  embedded
-                  caption={`${t('shelves')}: ${section.name}`}
-                  columns={[
-                    {
-                      key: 'name',
-                      label: t('shelfName'),
-                      variant: 'primary',
-                      cell: (shelf) => {
-                        const content = (
-                          <>
-                            <span className="bg-app-input text-app-muted hidden size-8 shrink-0 place-items-center rounded-control sm:grid">
-                              <Rows3 aria-hidden className="size-4" />
-                            </span>
-                            <span className="min-w-0 flex-1">
-                              <strong className="rz-strong block font-semibold break-words">
-                                {shelf.name}
-                              </strong>
-                              <span className="rz-mono rz-caption mt-0.5 block break-all font-normal">
-                                {shelf.code}
-                              </span>
-                            </span>
-                            {onEditShelf ? (
-                              <Pencil
-                                aria-hidden
-                                className="text-app-dim group-hover:text-app-ink size-4 shrink-0"
-                              />
-                            ) : (
-                              <ChevronRight
-                                aria-hidden
-                                className="text-app-dim group-hover:text-app-ink size-4 shrink-0"
-                              />
-                            )}
-                          </>
-                        )
-                        const rowClassName =
-                          'group text-app-ink flex h-auto min-h-control-lg w-full cursor-pointer items-center gap-3 rounded-control py-1 text-left'
-                        if (onEditShelf)
-                          return (
-                            <Button
-                              variant="quiet"
-                              className={`${rowClassName} px-0 whitespace-normal`}
-                              aria-label={t('editShelfName', {
-                                name: shelf.name,
-                              })}
-                              onClick={() => onEditShelf(shelf)}
-                            >
-                              {content}
-                            </Button>
-                          )
-                        return canViewParts ? (
-                          <Link
-                            to={locationPartsHref(partsBase, zone.warehouseId, {
-                              kind: 'shelf',
-                              zoneId: zone.id,
-                              sectionId: section.id,
-                              shelfId: shelf.id,
-                              name: shelf.name,
-                              path: [],
-                            })}
-                            aria-label={t('shelfOpen', { name: shelf.name })}
+                <span className="min-w-0">
+                  <strong className="location-browser__name">
+                    {direct.name}
+                  </strong>
+                  <span className="location-browser__hint">
+                    {t(section ? 'sectionDirectHint' : 'zoneDirectHint')}
+                  </span>
+                </span>
+                <span aria-hidden />
+                <ChevronRight aria-hidden className="location-browser__arrow" />
+              </Link>
+            </div>
+          ) : null}
+          <div
+            aria-hidden
+            className={`location-browser__columns${section ? ' location-browser__columns--shelves' : ''}`}
+          >
+            <span>{t(section ? 'shelfName' : 'sections')}</span>
+            {section ? null : (
+              <span className="text-right">{t('shelves')}</span>
+            )}
+            <span />
+          </div>
+          {section ? (
+            <div
+              key={`shelves:${page}:${needle}`}
+              role="group"
+              aria-label={t('shelfList')}
+              tabIndex={0}
+              className="location-browser__list location-browser__shelves"
+            >
+              <DataTable
+                density="compact"
+                embedded
+                caption={`${t('shelves')}: ${section.name}`}
+                columns={[
+                  {
+                    key: 'name',
+                    label: t('shelfName'),
+                    variant: 'primary',
+                    cell: (shelf) => {
+                      const content = (
+                        <>
+                          <LocationName name={shelf.name} code={shelf.code} />
+                          {onEditShelf ? (
+                            <Pencil
+                              aria-hidden
+                              className="location-browser__arrow"
+                            />
+                          ) : (
+                            <ChevronRight
+                              aria-hidden
+                              className="location-browser__arrow"
+                            />
+                          )}
+                        </>
+                      )
+                      const rowClassName =
+                        'location-browser__row location-browser__row--shelf'
+                      if (onEditShelf)
+                        return (
+                          <Button
+                            variant="quiet"
                             className={rowClassName}
+                            aria-label={t('editShelfName', {
+                              name: shelf.name,
+                            })}
+                            onClick={() => onEditShelf(shelf)}
                           >
                             {content}
-                          </Link>
-                        ) : (
-                          <span className="text-app-ink block break-words">
-                            {shelf.name}
-                            <span className="rz-mono rz-caption block break-all">
-                              {shelf.code}
-                            </span>
-                          </span>
+                          </Button>
                         )
-                      },
+                      return canViewParts ? (
+                        <Link
+                          to={locationPartsHref(partsBase, zone.warehouseId, {
+                            kind: 'shelf',
+                            zoneId: zone.id,
+                            sectionId: section.id,
+                            shelfId: shelf.id,
+                            name: shelf.name,
+                            path: [],
+                          })}
+                          aria-label={t('shelfOpen', { name: shelf.name })}
+                          className={rowClassName}
+                        >
+                          {content}
+                        </Link>
+                      ) : (
+                        <span className={rowClassName}>
+                          <LocationName name={shelf.name} code={shelf.code} />
+                        </span>
+                      )
                     },
-                  ]}
-                  rows={visibleShelves.slice(
-                    (page - 1) * PAGE_SIZE,
-                    page * PAGE_SIZE,
-                  )}
-                  rowKey={(shelf) => shelf.id}
-                  empty={
-                    <p className="rz-muted m-0 px-4 py-6">
-                      {t(needle ? 'noMatches' : 'noShelves')}
-                    </p>
-                  }
-                />
-              </div>
-            </>
+                  },
+                ]}
+                rows={visibleShelves.slice(
+                  (page - 1) * PAGE_SIZE,
+                  page * PAGE_SIZE,
+                )}
+                rowKey={(shelf) => shelf.id}
+                empty={
+                  <p className="location-browser__empty">
+                    {t(needle ? 'noMatches' : 'noShelves')}
+                  </p>
+                }
+              />
+            </div>
           ) : (
             <div
               key={`sections:${page}:${needle}`}
               role="group"
               aria-label={t('sectionList')}
               tabIndex={0}
-              className="rz-card min-w-0 max-h-[36rem] overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+              className="location-browser__list"
             >
               {visibleSections.length ? (
                 visibleSections
                   .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-                  .map((item) => (
-                    <div
-                      key={item.id}
-                      role="group"
-                      aria-label={tw('sectionGroup', { name: item.name })}
-                      className="group border-app-line hover:bg-app-hover flex min-w-0 items-center gap-2 border-b pr-2 transition-colors last:border-0 motion-reduce:transition-none"
-                    >
-                      <Link
-                        className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-control px-3 py-2.5 text-app-ink sm:grid-cols-[auto_minmax(0,1fr)_auto]"
-                        to={`${base}/sections/${encodeURIComponent(item.id)}`}
-                        state={{
-                          zoneId: zone.id,
-                          zoneQuery: params.toString(),
-                        }}
-                        aria-label={`${item.name}, ${item.code}`}
+                  .map((item) => {
+                    const count = f.number(shelfCounts.get(item.id) ?? 0) ?? '0'
+                    return (
+                      <div
+                        key={item.id}
+                        role="group"
+                        aria-label={tw('sectionGroup', { name: item.name })}
+                        className="location-browser__section"
                       >
-                        <span className="bg-app-input text-app-muted hidden size-8 shrink-0 place-items-center rounded-control sm:grid">
-                          <LayoutGrid aria-hidden className="size-4" />
-                        </span>
-                        <span className="min-w-0">
-                          <strong className="rz-strong block font-semibold break-words">
-                            {item.name}
-                          </strong>
-                          <span className="rz-muted mt-0.5 block break-all text-caption">
-                            {item.code} ·{' '}
-                            {t('shelvesCount', {
-                              count:
-                                f.number(shelfCounts.get(item.id) ?? 0) ?? '0',
-                            })}
+                        <Link
+                          className="location-browser__row"
+                          to={`${base}/sections/${encodeURIComponent(item.id)}`}
+                          state={{
+                            zoneId: zone.id,
+                            zoneQuery: params.toString(),
+                          }}
+                          aria-label={`${item.name}, ${item.code}`}
+                        >
+                          <LocationName name={item.name} code={item.code} />
+                          <span className="location-browser__count">
+                            <span className="sr-only">
+                              {t('shelvesCount', { count })}
+                            </span>
+                            <span aria-hidden>{count}</span>
+                            <span
+                              aria-hidden
+                              className="location-browser__count-label"
+                            >
+                              {t('shelves')}
+                            </span>
                           </span>
-                        </span>
-                        <ChevronRight
-                          aria-hidden
-                          className="text-app-dim group-hover:text-app-ink size-4 shrink-0"
-                        />
-                      </Link>
-                    </div>
-                  ))
+                          <ChevronRight
+                            aria-hidden
+                            className="location-browser__arrow"
+                          />
+                        </Link>
+                      </div>
+                    )
+                  })
               ) : (
-                <p className="rz-muted m-0 px-3 py-6">
+                <p className="location-browser__empty">
                   {t(needle ? 'noMatches' : 'noSections')}
                 </p>
               )}
             </div>
           )}
           {total > PAGE_SIZE ? (
-            <Pagination
-              label={t(section ? 'shelfPagination' : 'sectionPagination')}
-              page={page}
-              pageSize={PAGE_SIZE}
-              total={total}
-              totalPages={Math.ceil(total / PAGE_SIZE)}
-              onPage={(next) =>
-                update({ locationPage: next === 1 ? null : String(next) })
-              }
-            />
+            <div className="location-browser__pagination">
+              <Pagination
+                label={t(section ? 'shelfPagination' : 'sectionPagination')}
+                page={page}
+                pageSize={PAGE_SIZE}
+                total={total}
+                totalPages={Math.ceil(total / PAGE_SIZE)}
+                onPage={(next) =>
+                  update({ locationPage: next === 1 ? null : String(next) })
+                }
+              />
+            </div>
           ) : null}
         </>
       )}
     </div>
+  )
+}
+
+function LocationName({ name, code }: { name: string; code: string }) {
+  return (
+    <span className="min-w-0">
+      <strong className="location-browser__name">{name}</strong>
+      <span className="location-browser__code">{code}</span>
+    </span>
   )
 }

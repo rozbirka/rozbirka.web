@@ -25,14 +25,15 @@ export function StickerSheetPreview({
   const t = useT(stickersMessages)
   return (
     <section
+      data-slot="sticker-sheet-preview"
       aria-label={t('sheetLabel')}
       className="rz-card xl:sticky xl:top-14"
     >
-      <div className="rz-card__head">
+      <div data-slot="sticker-sheet-header" className="rz-card__head">
         <h2 className="rz-h-card">{t('sheet')}</h2>
         <span className="rz-caption">{t('preview')}</span>
       </div>
-      <div className="rz-card__body grid gap-3">
+      <div data-slot="sticker-sheet-body" className="rz-card__body grid gap-3">
         {/* Paper is black on white whatever the cabinet theme (.rz-paper). */}
         <div className="rz-inset grid grid-cols-2 gap-1.5 p-3">
           {Array.from({ length: 6 }, (_, index) => {

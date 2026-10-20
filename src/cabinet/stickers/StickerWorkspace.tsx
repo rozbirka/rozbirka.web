@@ -13,6 +13,7 @@ export function StickerWorkspace({
   label,
   showHeader = true,
   embedded = false,
+  className,
 }: {
   title: string
   subtitle: ReactNode
@@ -24,11 +25,15 @@ export function StickerWorkspace({
   label?: string
   showHeader?: boolean
   embedded?: boolean
+  className?: string | undefined
 }) {
   const workspace = (
     <>
       {notice}
-      <div className="grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div
+        data-slot="sticker-workspace-columns"
+        className="grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_360px]"
+      >
         {list}
         {preview}
       </div>
@@ -38,7 +43,10 @@ export function StickerWorkspace({
   // Inside another screen (location labels) the host already draws the frame.
   if (embedded)
     return (
-      <section aria-label={label} className="grid min-w-0 gap-3">
+      <section
+        aria-label={label}
+        className={cn('grid min-w-0 gap-3', className)}
+      >
         {back}
         {showHeader ? (
           <div className="grid gap-1">
@@ -50,7 +58,10 @@ export function StickerWorkspace({
       </section>
     )
   return (
-    <section aria-label={label} className="grid min-w-0 content-start">
+    <section
+      aria-label={label}
+      className={cn('grid min-w-0 content-start', className)}
+    >
       <header className="rz-topbar">
         <p className="rz-crumbs m-0">
           <span aria-current="page">{title}</span>
@@ -87,11 +98,15 @@ export function StickerListPanel({
   embedded?: boolean
 }) {
   return (
-    <section className={cn('min-w-0', !embedded && 'rz-card')}>
+    <section
+      data-slot="sticker-list"
+      className={cn('min-w-0', !embedded && 'rz-card')}
+    >
       {search != null ? (
         <div className="border-app-line border-b p-3">{search}</div>
       ) : null}
       <div
+        data-slot="sticker-list-toolbar"
         className={cn(
           'rz-toolbar border-app-line justify-between border-b py-2',
           embedded ? 'px-3' : 'px-4',
@@ -117,6 +132,7 @@ export function StickerSelectionRow({
   code,
   appearance = 'sticker',
   icon,
+  trailing,
 }: {
   label: string
   checkboxLabel: string
@@ -129,9 +145,13 @@ export function StickerSelectionRow({
   code?: string | null
   appearance?: 'sticker' | 'location'
   icon?: ReactNode
+  trailing?: ReactNode
 }) {
   return (
     <li
+      data-slot="sticker-selection-row"
+      data-appearance={appearance}
+      data-selected={selected}
       aria-label={label}
       className={cn(
         'cursor-pointer transition-colors',
@@ -142,6 +162,7 @@ export function StickerSelectionRow({
       }}
     >
       <div
+        data-slot="sticker-selection-content"
         className={cn(
           appearance === 'location'
             ? 'flex min-w-0 items-center gap-3 px-3 py-2.5'
@@ -162,7 +183,10 @@ export function StickerSelectionRow({
             {icon}
           </span>
         ) : null}
-        <div className={cn('min-w-0', appearance === 'location' && 'flex-1')}>
+        <div
+          data-slot="sticker-selection-text"
+          className={cn('min-w-0', appearance === 'location' && 'flex-1')}
+        >
           <p
             className={
               appearance === 'location'
@@ -199,6 +223,9 @@ export function StickerSelectionRow({
           <span className="rz-mono rz-caption hidden max-w-28 truncate text-right sm:block">
             {code ?? '—'}
           </span>
+        ) : null}
+        {trailing != null ? (
+          <span data-slot="sticker-selection-trailing">{trailing}</span>
         ) : null}
       </div>
     </li>

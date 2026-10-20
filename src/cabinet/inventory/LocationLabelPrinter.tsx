@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { FileDown, LayoutGrid, Printer, Rows3, X } from 'lucide-react'
+import { FileDown, LayoutGrid, Printer, X } from 'lucide-react'
 import QRCode from 'qrcode'
 import {
   Button,
@@ -11,7 +11,7 @@ import {
   SkeletonRows,
 } from '@/components/app'
 import { useTenantSettings } from '@/auth/useTenantSettings'
-import { useT } from '@/i18n'
+import { useFormat, useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import { cabinetModules } from '../module-registry'
 import { tenantResetRegistry } from '../tenant-reset-registry'
@@ -22,6 +22,8 @@ import {
 } from './zone-label-output'
 import { loadLocationLabels } from './location-label-data'
 import { locationLabelMessages } from './location-label-messages'
+import { locationBrowserMessages } from './location-browser-messages'
+import { warehouseMessages } from './warehouse-messages'
 import { stickersMessages } from '../stickers/messages'
 import {
   StickerWorkspace,
@@ -42,6 +44,7 @@ import {
   type LocationLabelQueue,
   type LocationLabelTarget,
 } from './location-label-queue'
+import './location-labels.css'
 
 // Register outside the workspace lifecycle so logout also clears a closed/unmounted queue.
 tenantResetRegistry.register(({ userId, tenantId }) =>
@@ -75,10 +78,14 @@ export function LocationLabelsPage({
   target,
   inventoryBase,
   returnFocusRef,
+  sectionShelfCounts,
+  flush = false,
 }: {
   target: LocationLabelTarget
   inventoryBase: string
   returnFocusRef?: RefObject<HTMLButtonElement | null> | undefined
+  sectionShelfCounts?: ReadonlyMap<string, number> | undefined
+  flush?: boolean
 }) {
   const cabinet = useCabinet()
   const [params] = useSearchParams()
@@ -98,6 +105,8 @@ export function LocationLabelsPage({
       target={target}
       inventoryBase={inventoryBase}
       returnFocusRef={returnFocusRef}
+      sectionShelfCounts={sectionShelfCounts}
+      flush={flush}
       storageKey={labelQueueKey(snapshot.userId, snapshot.tenantId)}
     />
   )
@@ -109,15 +118,23 @@ function ScopedLocationLabels({
   returnFocusRef,
   storageKey,
   initialIds,
+  sectionShelfCounts,
+  flush,
 }: {
   target: LocationLabelTarget
   inventoryBase: string
   returnFocusRef?: RefObject<HTMLButtonElement | null> | undefined
   storageKey: string
   initialIds: string[]
+  sectionShelfCounts?: ReadonlyMap<string, number> | undefined
+  flush: boolean
 }) {
   const t = useT(locationLabelMessages)
   const ts = useT(stickersMessages)
+  const tw = useT(warehouseMessages)
+  const tb = useT(locationBrowserMessages)
+  const f = useFormat()
+  const redesigned = target.kind === 'section' || target.kind === 'shelf'
   const documentLocale = useTenantSettings().documentLanguage ?? 'uk'
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.inventory,
@@ -395,11 +412,17 @@ function ScopedLocationLabels({
 
   return (
     <StickerWorkspace
+      className={
+        redesigned
+          ? `location-labels location-labels--${target.kind}${flush ? ' location-labels--flush' : ''}`
+          : undefined
+      }
       embedded
       showHeader={false}
       back={
         <>
           <SearchInput
+            className="min-h-control-lg text-title"
             aria-label={t('search')}
             placeholder={t('search')}
             value={search}
@@ -422,12 +445,12 @@ function ScopedLocationLabels({
         <>
           {error ? <Notice tone="danger">{error}</Notice> : null}
           {queue && !sameQueue ? (
-            <Notice block>
-              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
-                <p className="m-0 min-w-0 flex-1 break-words">
+            <Notice block className="gap-3 px-4 py-4 sm:px-5">
+              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between xl:gap-6">
+                <p className="min-w-0 flex-1 break-words leading-6">
                   {t('otherQueue', { name: queue.target.parentName })}
                 </p>
-                <div className="rz-btn-row items-center xl:shrink-0">
+                <div className="flex flex-wrap items-center gap-3 xl:shrink-0">
                   <Button asChild>
                     <Link to={continuation}>{t('continue')}</Link>
                   </Button>
@@ -451,6 +474,7 @@ function ScopedLocationLabels({
           actions={
             <>
               <Button
+                className="min-h-9 px-3 text-caption"
                 disabled={locked || loading || loadFailed || !visible.length}
                 onClick={() =>
                   updateSelection(
@@ -466,6 +490,7 @@ function ScopedLocationLabels({
                 })}
               </Button>
               <Button
+                className="min-h-9 px-3 text-caption"
                 disabled={locked || !selection.size}
                 onClick={() => updateSelection(new Set())}
               >
@@ -473,6 +498,7 @@ function ScopedLocationLabels({
               </Button>
               <Button
                 variant="quiet"
+                className="min-h-9 px-3 text-caption"
                 disabled={busy}
                 onClick={() => setOpen(false)}
               >
@@ -494,12 +520,21 @@ function ScopedLocationLabels({
             ) : null
           }
         >
+          {redesigned ? (
+            <div className="location-labels__columns" aria-hidden>
+              <span />
+              <span>
+                {tw(target.kind === 'shelf' ? 'shelfType' : 'sectionType')}
+              </span>
+              {target.kind === 'section' ? <span>{tb('shelves')}</span> : null}
+            </div>
+          ) : null}
           {loading ? (
-            <div className="p-3">
+            <div className="p-5">
               <SkeletonRows rows={4} />
             </div>
           ) : loadFailed ? (
-            <div className="p-3">
+            <div className="p-5">
               <Notice tone="danger">
                 {t('loadFailed')}{' '}
                 <Button
@@ -515,38 +550,58 @@ function ScopedLocationLabels({
             </div>
           ) : (
             <ul
-              className="divide-app-line m-0 grid list-none divide-y p-0"
+              className="divide-app-line grid divide-y"
               aria-label={t(target.kind)}
             >
               {visible
                 .slice((currentPage - 1) * 10, currentPage * 10)
-                .map((label) => (
-                  <StickerSelectionRow
-                    key={label.id}
-                    appearance="location"
-                    icon={
-                      target.kind === 'shelf' ? (
-                        <Rows3 aria-hidden className="size-4" />
-                      ) : (
-                        <LayoutGrid aria-hidden className="size-4" />
-                      )
-                    }
-                    label={label.zoneName}
-                    checkboxLabel={t('select', { name: label.zoneName })}
-                    selected={selection.has(label.id)}
-                    disabled={locked}
-                    onToggle={() => {
-                      const next = new Set(selection)
-                      if (next.has(label.id)) next.delete(label.id)
-                      else next.add(label.id)
-                      updateSelection(next)
-                    }}
-                    name={label.zoneName}
-                    detail={label.zoneCode}
-                  />
-                ))}
+                .map((label) => {
+                  const shelfCount = sectionShelfCounts?.get(label.id)
+                  const formattedShelfCount =
+                    shelfCount === undefined
+                      ? '—'
+                      : (f.number(shelfCount) ?? String(shelfCount))
+                  return (
+                    <StickerSelectionRow
+                      key={label.id}
+                      appearance="location"
+                      icon={
+                        redesigned ? null : (
+                          <LayoutGrid aria-hidden className="size-5" />
+                        )
+                      }
+                      label={label.zoneName}
+                      checkboxLabel={t('select', { name: label.zoneName })}
+                      selected={selection.has(label.id)}
+                      disabled={locked}
+                      onToggle={() => {
+                        const next = new Set(selection)
+                        if (next.has(label.id)) next.delete(label.id)
+                        else next.add(label.id)
+                        updateSelection(next)
+                      }}
+                      name={label.zoneName}
+                      detail={label.zoneCode}
+                      trailing={
+                        target.kind === 'section' ? (
+                          <span
+                            aria-label={
+                              shelfCount === undefined
+                                ? undefined
+                                : tb('shelvesCount', {
+                                    count: formattedShelfCount,
+                                  })
+                            }
+                          >
+                            {formattedShelfCount}
+                          </span>
+                        ) : null
+                      }
+                    />
+                  )
+                })}
               {!visible.length ? (
-                <li className="rz-muted p-3">
+                <li className="text-app-muted p-5">
                   {t(needle ? 'noMatches' : 'empty')}
                 </li>
               ) : null}
@@ -563,8 +618,7 @@ function ScopedLocationLabels({
             <>
               {!sameQueue ? (
                 <Button
-                  className="w-full"
-                  size="lg"
+                  className="mt-5 w-full justify-center"
                   variant="primary"
                   disabled={locked || !selection.size || loading || loadFailed}
                   onClick={prepareSelection}
@@ -576,8 +630,7 @@ function ScopedLocationLabels({
               {sameQueue ? (
                 <>
                   <Button
-                    className="w-full"
-                    size="lg"
+                    className="mt-5 w-full justify-center"
                     variant="primary"
                     disabled={locked || loading || loadFailed}
                     onClick={() => void output(batch)}
@@ -586,14 +639,16 @@ function ScopedLocationLabels({
                     {busy ? t('printing') : t('print', { count: batch.length })}
                   </Button>
                   <Button
-                    className="w-full"
+                    className="mt-2 w-full justify-center text-caption"
                     disabled={locked || loading || loadFailed}
                     onClick={() => void output(batch)}
                   >
                     <FileDown aria-hidden />
                     {t('pdf', { count: batch.length })}
                   </Button>
-                  <p className="rz-caption m-0">{t('pdfHint')}</p>
+                  <p className="text-app-dim mt-3 text-caption leading-5">
+                    {t('pdfHint')}
+                  </p>
                 </>
               ) : null}
             </>
