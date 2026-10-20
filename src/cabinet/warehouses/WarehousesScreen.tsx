@@ -41,7 +41,6 @@ import { normalizeApiProblem } from '@/api/errors'
 import { cn } from '@/lib/utils'
 import { cabinetPath } from '../cabinet-paths'
 import { useCabinet } from '../CabinetContext'
-import { useAccountingCurrency } from '../currency/use-accounting-currency'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
@@ -373,7 +372,6 @@ function WarehouseView({ id }: { id: string }) {
   const t = useT(warehouseMessages)
   const ti = useT(inventoryMessages)
   const tc = useT(commonMessages)
-  const { currency: inventoryCurrency } = useAccountingCurrency()
   const base = useWarehouseBase()
   const { targetTenant } = useCabinet()
   const navigate = useNavigate()
@@ -652,12 +650,6 @@ function WarehouseView({ id }: { id: string }) {
                   }
                   unit="%"
                   value={occupancy == null ? '—' : String(occupancy)}
-                />
-                <StockStat
-                  label={t('statValue')}
-                  meta={t('valueNotCounted')}
-                  unit={inventoryCurrency ?? ''}
-                  value="—"
                 />
               </div>
 
