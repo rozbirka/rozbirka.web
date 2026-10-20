@@ -53,7 +53,9 @@ function mount(
 it('searches physical zones by code, resets pagination and keeps unassigned separate', async () => {
   const user = userEvent.setup()
   mount()
-  expect(screen.getByRole('heading', { name: 'Зони · 12' })).toBeVisible()
+  expect(screen.getByRole('heading', { name: 'Зони' })).toHaveTextContent(
+    /^Зони$/,
+  )
   expect(screen.getByRole('link', { name: 'Зона 11' })).toHaveAttribute(
     'href',
     '/warehouses/zones/zone-11',

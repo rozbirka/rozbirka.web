@@ -59,7 +59,6 @@ export function WarehouseBrowser({
     >
       <LocationBrowserHeader
         title={t('warehousesList')}
-        total={warehouses.length}
         lead={t('warehousesLead')}
         search={
           <SearchInput

@@ -149,7 +149,6 @@ export function WarehouseZoneBrowser({
     >
       <LocationBrowserHeader
         title={t('zonesTitle')}
-        total={physical.length}
         lead={tb('chooseZone')}
         search={
           printWorkspace ? null : (

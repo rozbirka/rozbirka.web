@@ -21,15 +21,6 @@
   letter-spacing: -0.02em;
 }
 
-.location-browser__total {
-  padding: 3px 7px;
-  border: 1px solid var(--color-app-line);
-  border-radius: 7px;
-  background: rgb(255 255 255 / 0.03);
-  color: var(--color-app-muted);
-  font: 12px/1.5 var(--font-mono);
-}
-
 .location-browser__lead {
   margin-top: 8px;
   color: var(--color-app-muted);
@@ -78,8 +69,8 @@
   text-transform: uppercase;
 }
 
-.location-browser__columns--shelves,
-.location-browser__row--shelf {
+.location-browser__columns--plain,
+.location-browser__row--plain {
   grid-template-columns: minmax(0, 1fr) 1.25rem;
 }
 
@@ -288,11 +279,6 @@
     font-size: 19px;
   }
 
-  .location-browser__total {
-    padding: 2px 5px;
-    font-size: 11px;
-  }
-
   .location-browser__actions {
     gap: 6px;
   }
@@ -314,7 +300,7 @@
     padding: 18px 8px;
   }
 
-  .location-browser__row--shelf {
+  .location-browser__row--plain {
     grid-template-columns: minmax(0, 1fr) 14px;
   }
 

@@ -1307,16 +1307,8 @@ it('keeps large section lists compact and opens shelves for one section at a tim
     expect.objectContaining({ includePartCounts: false }),
     undefined,
   )
-  expect(
-    within(screen.getByRole('group', { name: 'Секція: Секція B' })).getByText(
-      /Полиць: 1/,
-    ),
-  ).toBeInTheDocument()
-  expect(
-    within(screen.getByRole('group', { name: 'Секція: Секція C' })).getByText(
-      /Полиць: 1/,
-    ),
-  ).toBeInTheDocument()
+  expect(within(first).queryByText(/Полиць:/)).not.toBeInTheDocument()
+  expect(within(second).queryByText(/Полиць:/)).not.toBeInTheDocument()
   api.getSection.mockResolvedValue(
     ((await api.getSections()) as InventorySection[])[1],
   )
@@ -1610,7 +1602,7 @@ it('hides shelf rename for users without zone management permission', async () =
   permissions.value.delete('inventory.zones.manage')
   try {
     renderAt('/app/yard/warehouses/sections/section-1')
-    await screen.findByRole('heading', { name: /Полиці ·/, level: 2 })
+    await screen.findByRole('heading', { name: 'Полиці', level: 2 })
     await user.click(
       screen.getByRole('button', { name: 'Дії з секцією Секція B' }),
     )
@@ -1881,7 +1873,7 @@ it('opens one section and requests only shelves belonging to it', async () => {
     await screen.findByRole('heading', { name: 'Секція B', level: 1 }),
   ).toBeInTheDocument()
   expect(api.getSection).toHaveBeenCalledWith('section-1', expect.anything())
-  await screen.findByRole('heading', { name: /Полиці ·/, level: 2 })
+  await screen.findByRole('heading', { name: 'Полиці', level: 2 })
   expect(api.getShelves).toHaveBeenCalledWith(
     'zone-1',
     expect.anything(),
@@ -1894,14 +1886,12 @@ it('opens one section and requests only shelves belonging to it', async () => {
   )
 })
 
-it('links direct zone parts to the parts screen without fetching a drawer list', async () => {
+it('keeps zone navigation without a direct-parts row or drawer list', async () => {
   renderAt('/app/yard/warehouses/zones/zone-1')
   expect(
-    await screen.findByRole('link', { name: /У зоні без секції/ }),
-  ).toHaveAttribute(
-    'href',
-    '/app/yard/parts?warehouse=wh-1&zone=zone-1&without_section=1',
-  )
+    await screen.findByRole('link', { name: 'Усі запчастини зони' }),
+  ).toHaveAttribute('href', '/app/yard/parts?warehouse=wh-1&zone=zone-1')
+  expect(screen.queryByRole('link', { name: /У зоні без секції/ })).toBeNull()
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   expect(parts.search).not.toHaveBeenCalledWith(
     expect.objectContaining({ pageSize: 10 }),
@@ -1923,11 +1913,11 @@ it.each([
   ['/app/yard/warehouses/zones/zone-1', 'У зоні без секції'],
   ['/app/yard/warehouses/sections/section-1', 'У секції без полиці'],
 ])(
-  'keeps the direct-parts link without fetching its count at %s',
+  'omits the direct-parts row without fetching its count at %s',
   async (path, name) => {
     renderAt(path)
-    const direct = await screen.findByRole('link', { name: new RegExp(name) })
-    expect(within(direct).queryByText('Позицій')).not.toBeInTheDocument()
+    await screen.findByRole('heading', { level: 1 })
+    expect(screen.queryByRole('link', { name: new RegExp(name) })).toBeNull()
     expect(parts.search).not.toHaveBeenCalled()
   },
 )

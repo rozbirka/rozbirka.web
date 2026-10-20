@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { ChevronRight, Plus, Pencil } from 'lucide-react'
 import { Button, DataTable, Pagination, SearchInput } from '@/components/app'
@@ -7,13 +7,10 @@ import type {
   InventoryShelf,
   InventoryZone,
 } from '@/api/inventory'
-import { useFormat, useT } from '@/i18n'
+import { useT } from '@/i18n'
 import { warehouseMessages } from './warehouse-messages'
 import { locationBrowserMessages } from './location-browser-messages'
-import {
-  locationPartsHref,
-  type LocationContentsTarget,
-} from './location-contents'
+import { locationPartsHref } from './location-contents'
 
 import './location-browser.css'
 
@@ -23,28 +20,19 @@ const matches = (query: string, name: string, code: string) =>
 
 export function LocationBrowserHeader({
   title,
-  total,
   lead,
   search,
   actions,
 }: {
   title: string
-  total: number
   lead: string
   search?: ReactNode
   actions: ReactNode
 }) {
-  const f = useFormat()
   return (
     <header className="location-browser__toolbar">
       <div className="min-w-0">
-        <h2
-          className="location-browser__heading"
-          aria-label={`${title} · ${f.number(total)}`}
-        >
-          {title}
-          <span className="location-browser__total">{f.number(total)}</span>
-        </h2>
+        <h2 className="location-browser__heading">{title}</h2>
         <p className="location-browser__lead">{lead}</p>
       </div>
       {search ? <div className="location-browser__search">{search}</div> : null}
@@ -86,7 +74,6 @@ export function LocationBrowser({
 }) {
   const t = useT(locationBrowserMessages)
   const tw = useT(warehouseMessages)
-  const f = useFormat()
   const [params, setParams] = useSearchParams()
   const navigationState = useLocation().state as unknown
   const query = params.get('locationSearch') ?? ''
@@ -104,19 +91,6 @@ export function LocationBrowser({
       item.sectionId === section?.id &&
       matches(needle, item.name, item.code),
   )
-  const shelfCounts = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const shelf of shelves) {
-      if (
-        !shelf.isActive ||
-        shelf.zoneId !== zone.id ||
-        shelf.warehouseId !== zone.warehouseId
-      )
-        continue
-      counts.set(shelf.sectionId, (counts.get(shelf.sectionId) ?? 0) + 1)
-    }
-    return counts
-  }, [shelves, zone.id, zone.warehouseId])
   const total = section ? visibleShelves.length : visibleSections.length
   const requestedPage = Number.parseInt(params.get('locationPage') ?? '1', 10)
   const page = Math.min(
@@ -135,26 +109,11 @@ export function LocationBrowser({
       },
       { replace: true, preventScrollReset: true, state: navigationState },
     )
-  const direct: LocationContentsTarget = section
-    ? {
-        kind: 'direct',
-        zoneId: zone.id,
-        sectionId: section.id,
-        name: t('sectionDirect'),
-        path: [zone.warehouseName, zone.name, section.name],
-      }
-    : {
-        kind: 'zone-direct',
-        zoneId: zone.id,
-        name: t('zoneDirect'),
-        path: [zone.warehouseName, zone.name],
-      }
 
   return (
     <div className="location-browser">
       <LocationBrowserHeader
         title={t(section ? 'shelves' : 'sections')}
-        total={total}
         lead={t(
           section
             ? onEditShelf
@@ -203,33 +162,11 @@ export function LocationBrowser({
           {selectionNotice ? (
             <div className="px-4 pb-4 sm:px-6">{selectionNotice}</div>
           ) : null}
-          {canViewParts ? (
-            <div className="location-browser__direct">
-              <Link
-                className="location-browser__row location-browser__row--direct"
-                to={locationPartsHref(partsBase, zone.warehouseId, direct)}
-              >
-                <span className="min-w-0">
-                  <strong className="location-browser__name">
-                    {direct.name}
-                  </strong>
-                  <span className="location-browser__hint">
-                    {t(section ? 'sectionDirectHint' : 'zoneDirectHint')}
-                  </span>
-                </span>
-                <span aria-hidden />
-                <ChevronRight aria-hidden className="location-browser__arrow" />
-              </Link>
-            </div>
-          ) : null}
           <div
             aria-hidden
-            className={`location-browser__columns${section ? ' location-browser__columns--shelves' : ''}`}
+            className="location-browser__columns location-browser__columns--plain"
           >
             <span>{t(section ? 'shelfName' : 'sections')}</span>
-            {section ? null : (
-              <span className="text-right">{t('shelves')}</span>
-            )}
             <span />
           </div>
           {section ? (
@@ -267,7 +204,7 @@ export function LocationBrowser({
                         </>
                       )
                       const rowClassName =
-                        'location-browser__row location-browser__row--shelf'
+                        'location-browser__row location-browser__row--plain'
                       if (onEditShelf)
                         return (
                           <Button
@@ -328,7 +265,6 @@ export function LocationBrowser({
                 visibleSections
                   .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
                   .map((item) => {
-                    const count = f.number(shelfCounts.get(item.id) ?? 0) ?? '0'
                     return (
                       <div
                         key={item.id}
@@ -337,7 +273,7 @@ export function LocationBrowser({
                         className="location-browser__section"
                       >
                         <Link
-                          className="location-browser__row"
+                          className="location-browser__row location-browser__row--plain"
                           to={`${base}/sections/${encodeURIComponent(item.id)}`}
                           state={{
                             zoneId: zone.id,
@@ -346,18 +282,6 @@ export function LocationBrowser({
                           aria-label={`${item.name}, ${item.code}`}
                         >
                           <LocationName name={item.name} code={item.code} />
-                          <span className="location-browser__count">
-                            <span className="sr-only">
-                              {t('shelvesCount', { count })}
-                            </span>
-                            <span aria-hidden>{count}</span>
-                            <span
-                              aria-hidden
-                              className="location-browser__count-label"
-                            >
-                              {t('shelves')}
-                            </span>
-                          </span>
                           <ChevronRight
                             aria-hidden
                             className="location-browser__arrow"
