@@ -10,6 +10,7 @@ import {
 } from '../inventory/LocationBrowser'
 import { locationBrowserMessages } from '../inventory/location-browser-messages'
 import { warehouseMessages } from '../inventory/warehouse-messages'
+import { inventoryMessages } from '../inventory/messages'
 
 type Zone = WarehouseDetail['zones'][number]
 const PAGE_SIZE = 10
@@ -17,6 +18,7 @@ const PAGE_SIZE = 10
 export function WarehouseZoneBrowser({
   zones,
   stock,
+  stockTotal,
   base,
   partsBase,
   canManage,
@@ -28,6 +30,7 @@ export function WarehouseZoneBrowser({
 }: {
   zones: Zone[]
   stock: ReadonlyMap<string, number> | null
+  stockTotal: number | null
   base: string
   partsBase: string | null
   canManage: boolean
@@ -39,6 +42,7 @@ export function WarehouseZoneBrowser({
 }) {
   const t = useT(warehouseMessages)
   const tb = useT(locationBrowserMessages)
+  const ti = useT(inventoryMessages)
   const f = useFormat()
   const [params, setParams] = useSearchParams()
   const navigationState = useLocation().state as unknown
@@ -68,39 +72,75 @@ export function WarehouseZoneBrowser({
       { replace: true, preventScrollReset: true, state: navigationState },
     )
 
-  const zoneContents = (zone: Zone, navigable = true) => (
-    <>
-      <LocationName
-        name={zone.name}
-        code={[
-          zone.code,
-          zone.isSystemUnassigned ? t('systemTag') : null,
-          zone.isActive ? null : t('archivedZoneTag'),
-        ]
-          .filter(Boolean)
-          .join(' · ')}
-      />
-      <span className="location-browser__count">
-        <span className="sr-only">
-          {tb('zonePartsCount', {
-            count:
-              stock === null ? '—' : (f.number(stock.get(zone.id) ?? 0) ?? '0'),
-          })}
+  const zoneContents = (zone: Zone, navigable = true) => {
+    const count = stock?.get(zone.id) ?? 0
+    const share =
+      stockTotal === null || stockTotal === 0
+        ? 0
+        : Math.round((count / stockTotal) * 100)
+    return (
+      <>
+        <LocationName
+          name={zone.name}
+          code={[
+            zone.code,
+            zone.isSystemUnassigned ? t('systemTag') : null,
+            zone.isActive ? null : t('archivedZoneTag'),
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        />
+        <span className="location-browser__count">
+          <span className="sr-only">
+            {tb('zonePartsCount', {
+              count:
+                stock === null
+                  ? '—'
+                  : (f.number(stock.get(zone.id) ?? 0) ?? '0'),
+            })}
+          </span>
+          <span aria-hidden>
+            {stock === null ? '—' : f.number(stock.get(zone.id) ?? 0)}
+          </span>
+          <span aria-hidden className="location-browser__count-label">
+            {tb('zoneParts')}
+          </span>
         </span>
-        <span aria-hidden>
-          {stock === null ? '—' : f.number(stock.get(zone.id) ?? 0)}
+        <span className="location-browser__zone-fill">
+          {stock === null || stockTotal === null ? (
+            <span className="location-browser__hint">
+              {ti('stockUnavailable')}
+            </span>
+          ) : (
+            <>
+              <span
+                role="meter"
+                aria-label={`${zone.name} · ${t('colFill')}`}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={share}
+                aria-valuetext={t('shareOfWarehouse', { share })}
+                className="bg-app-line-2 block h-1.5 overflow-hidden rounded-full"
+              >
+                <span
+                  className="bg-state-ok block h-full rounded-full"
+                  style={{ width: `${String(share)}%` }}
+                />
+              </span>
+              <span className="location-browser__hint mt-2 font-mono">
+                {t('shareOfWarehouse', { share })}
+              </span>
+            </>
+          )}
         </span>
-        <span aria-hidden className="location-browser__count-label">
-          {tb('zoneParts')}
-        </span>
-      </span>
-      {navigable ? (
-        <ChevronRight aria-hidden className="location-browser__arrow" />
-      ) : (
-        <span aria-hidden />
-      )}
-    </>
-  )
+        {navigable ? (
+          <ChevronRight aria-hidden className="location-browser__arrow" />
+        ) : (
+          <span aria-hidden />
+        )}
+      </>
+    )
+  }
 
   return (
     <section
@@ -154,13 +194,16 @@ export function WarehouseZoneBrowser({
                   <Link
                     key={zone.id}
                     aria-label={zone.name}
-                    className="location-browser__row location-browser__row--direct"
+                    className="location-browser__row location-browser__row--zone location-browser__row--direct"
                     to={`${partsBase}?zone=${encodeURIComponent(zone.id)}`}
                   >
                     {zoneContents(zone)}
                   </Link>
                 ) : (
-                  <div key={zone.id} className="location-browser__row">
+                  <div
+                    key={zone.id}
+                    className="location-browser__row location-browser__row--zone"
+                  >
                     {zoneContents(zone, false)}
                   </div>
                 ),
@@ -169,10 +212,11 @@ export function WarehouseZoneBrowser({
           ) : null}
           <div
             aria-hidden
-            className={`location-browser__columns${canManage ? ' location-browser__columns--zones' : ''}`}
+            className={`location-browser__columns location-browser__columns--zone-fill${canManage ? ' location-browser__columns--zones' : ''}`}
           >
             <span>{t('colZone')}</span>
             <span className="text-right">{tb('zoneParts')}</span>
+            <span>{t('colFill')}</span>
             <span />
             {canManage ? <span /> : null}
           </div>
@@ -192,7 +236,7 @@ export function WarehouseZoneBrowser({
                   >
                     <Link
                       aria-label={zone.name}
-                      className="location-browser__row"
+                      className="location-browser__row location-browser__row--zone"
                       to={`${base}/zones/${encodeURIComponent(zone.id)}`}
                     >
                       {zoneContents(zone)}

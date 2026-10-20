@@ -34,6 +34,7 @@ function mount(
       <WarehouseZoneBrowser
         zones={[unassigned, ...physical]}
         stock={stock}
+        stockTotal={stock === null ? null : 20}
         base="/warehouses"
         partsBase={canManage ? '/parts' : null}
         canManage={canManage}
@@ -59,6 +60,12 @@ it('searches physical zones by code, resets pagination and keeps unassigned sepa
   )
   await user.type(screen.getByRole('searchbox', { name: 'Пошук зони' }), 'Z1')
   expect(screen.getByRole('link', { name: 'Зона 1' })).toHaveTextContent('18')
+  expect(
+    screen.getByRole('meter', { name: 'Зона 1 · Заповнення' }),
+  ).toHaveAttribute('aria-valuenow', '90')
+  expect(screen.getByRole('link', { name: 'Зона 1' })).toHaveTextContent(
+    '90% складу',
+  )
   expect(screen.queryByRole('link', { name: 'Зона 2' })).toBeNull()
   const list = screen.getByRole('group', { name: 'Список зон' })
   expect(within(list).queryByRole('link', { name: 'Без зони' })).toBeNull()
@@ -91,6 +98,7 @@ it('keeps edit and archive actions independent of opening a zone', async () => {
 it('shows unavailable figures without management or parts links', () => {
   mount(false, null)
   expect(screen.getByRole('link', { name: 'Зона 11' })).toHaveTextContent('—')
+  expect(screen.queryByRole('meter')).toBeNull()
   expect(screen.queryByRole('link', { name: 'Без зони' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'Додати зону' })).toBeNull()
   expect(
