@@ -1621,7 +1621,7 @@ it('counts the warehouse stock from the parts module', async () => {
     { warehouseIds: ['wh-1'], pageSize: 1 },
     expect.anything(),
   )
-  const stock = screen.getByText('Позицій на складі').closest('div')
+  const stock = screen.getByText('Запчастин на складі').closest('div')
   expect(within(stock as HTMLElement).getByText('20')).toBeInTheDocument()
   expect(screen.queryByText('Розходження')).toBeNull()
   // The zone facet says how much of that stock sits in each zone.
