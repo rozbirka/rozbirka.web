@@ -14,19 +14,23 @@ import {
   useSearchParams,
 } from 'react-router'
 import { sourceReturnPath } from '../parts/source-return'
-import { FeatureGate } from '../FeatureFlags'
+import { useFeatureFlag } from '../FeatureFlags'
 import { FEATURE_FLAGS } from '@/api/feature-flags'
 import {
+  ArrowLeft,
   Check,
   ChevronLeft,
   ChevronRight,
   Lock,
   Inbox,
-  PackagePlus,
+  Pencil,
   Plus,
   Printer,
+  RefreshCw,
+  Rows3,
   SearchX,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react'
 import {
@@ -44,6 +48,7 @@ import {
   SearchInput,
   SectionPanel,
   Sheet,
+  Skeleton,
   SkeletonRows,
   StateScreen,
   StatusPill,
@@ -77,7 +82,7 @@ import { intakeFormMessages } from './intake-form-messages'
 import { intakesMessages } from './messages'
 import { useCabinet } from '../CabinetContext'
 import { Kpi, KpiStrip } from '../redesign-kpi'
-import { RedesignShell } from '../redesign-shell'
+import { Crumbs, RedesignShell, RedesignTitle } from '../redesign-shell'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { MediaPicker } from '../cars/CarsScreen'
 import { CompatibilityRowCard, ConditionTile } from '../parts/PartFormChoices'
@@ -379,6 +384,7 @@ function IntakesList({ base }: { base: string }) {
     [searchParams],
   )
   const [query, setQuery] = useState(searchParams.get('search') ?? '')
+  const [attempt, setAttempt] = useState(0)
   const [state, setState] = useState<{
     page: Awaited<ReturnType<typeof intakesApi.list>> | null
     error: string | null
@@ -396,7 +402,7 @@ function IntakesList({ base }: { base: string }) {
       },
     )
     return () => controller.abort()
-  }, [selection])
+  }, [selection, attempt])
   const updateSearch = () => {
     const next = new URLSearchParams(searchParams)
     const value = query.trim()
@@ -416,9 +422,6 @@ function IntakesList({ base }: { base: string }) {
     state.page?.pageSize ?? selection.pageSize ?? defaultPageSize
   const totalPages = state.page?.totalPages ?? 1
   const items = state.page?.items ?? []
-  const positions = items.reduce((total, item) => total + item.partsCount, 0)
-  const sold = items.reduce((total, item) => total + item.soldCount, 0)
-  const cost = items.reduce((total, item) => total + (item.totalCost ?? 0), 0)
 
   const filtered =
     (selection.search ?? '') !== '' || selection.status !== undefined
@@ -443,39 +446,7 @@ function IntakesList({ base }: { base: string }) {
         </>
       }
     >
-      <div className="rz-page-head">
-        <h1 className="rz-h-page">{t('title')}</h1>
-        <span className="rz-muted">{t('subtitle')}</span>
-      </div>
-
-      {state.error ? <Notice tone="danger">{state.error}</Notice> : null}
-
-      <KpiStrip>
-        <Kpi
-          label={t('statIntakes')}
-          meta={t('statTotalFiltered')}
-          value={String(state.page?.total ?? 0)}
-        />
-        <Kpi
-          label={t('statPositions')}
-          meta={t('statThisPage')}
-          unit={t('pcs')}
-          value={String(positions)}
-        />
-        <Kpi
-          label={t('statSold')}
-          meta={t('statThisPage')}
-          unit={t('pcs')}
-          value={String(sold)}
-        />
-        {financeView ? (
-          <Kpi
-            label={t('statCost')}
-            meta={t('statThisPage')}
-            value={money(cost)}
-          />
-        ) : null}
-      </KpiStrip>
+      <RedesignTitle title={t('title')} />
 
       <div className="rz-toolbar" role="search">
         <form
@@ -525,94 +496,116 @@ function IntakesList({ base }: { base: string }) {
         </div>
       </div>
 
-      <section aria-label={t('listLabel')} className="min-w-0">
-        <DataTable
-          caption={t('listLabel')}
-          columns={[
-            {
-              key: 'name',
-              label: t('columnIntake'),
-              variant: 'primary',
-              cell: (intake) => (
-                <Link
-                  className="grid min-w-0 gap-0.5"
-                  to={`${base}/${intake.id}`}
-                >
-                  <span className="rz-strong truncate">
-                    {intake.name ?? t('untitled')}
-                  </span>
-                  <span className="rz-caption font-normal">
-                    {intake.createdBy.displayName}
-                  </span>
-                </Link>
-              ),
-            },
-            {
-              key: 'date',
-              label: t('columnDate'),
-              cell: (intake) => (
-                <span className="rz-mono">
-                  {day(intake.purchasedAt ?? intake.createdAt)}
-                </span>
-              ),
-            },
-            {
-              key: 'parts',
-              label: t('columnPositions'),
-              align: 'end',
-              cell: (intake) => intake.partsCount,
-            },
-            ...(financeView
-              ? [
-                  {
-                    key: 'cost',
-                    label: t('columnCost'),
-                    align: 'end' as const,
-                    cell: (intake: IntakeListItem) =>
-                      intake.totalCost === null ? '—' : money(intake.totalCost),
-                  },
-                ]
-              : []),
-            {
-              key: 'status',
-              label: t('columnStatus'),
-              align: 'end',
-              cell: (intake) => {
-                const sale = intakeSaleState(intake)
-                return <StatusPill tone={sale.tone}>{t(sale.label)}</StatusPill>
-              },
-            },
-          ]}
-          empty={
-            <StateScreen
-              className="border-0"
-              description={
-                filtered ? t('emptyFilteredDescription') : t('emptyDescription')
-              }
-              icon={filtered ? <SearchX aria-hidden /> : <Inbox aria-hidden />}
-              title={filtered ? t('emptyFilteredTitle') : t('emptyTitle')}
-              tone={filtered ? 'neutral' : 'brand'}
-            />
-          }
-          footer={
-            <ListFooter
-              summary={t('shownOfIntakes', {
-                shown: items.length,
-                count: state.page?.total ?? 0,
-              })}
-            >
-              <Pagination
-                label={t('paginationLabel')}
-                onPage={(nextPage) => updatePage(nextPage, currentPageSize)}
-                page={currentPage}
-                totalPages={totalPages}
-              />
-            </ListFooter>
-          }
-          rowKey={(intake) => intake.id}
-          rows={items}
+      {state.error !== null && state.page === null ? (
+        <ErrorState
+          description={state.error}
+          onRetry={() => {
+            setState({ page: null, error: null })
+            setAttempt((current) => current + 1)
+          }}
         />
-      </section>
+      ) : state.page === null ? (
+        <SkeletonRows label={t('listLabel')} rows={6} />
+      ) : (
+        <section aria-label={t('listLabel')} className="min-w-0">
+          {state.error ? <Notice tone="danger">{state.error}</Notice> : null}
+          <DataTable
+            caption={t('listLabel')}
+            columns={[
+              {
+                key: 'name',
+                label: t('columnIntake'),
+                variant: 'primary',
+                cell: (intake) => (
+                  <Link
+                    className="grid min-w-0 gap-0.5"
+                    to={`${base}/${intake.id}`}
+                  >
+                    <span className="rz-strong truncate">
+                      {intake.name ?? t('untitled')}
+                    </span>
+                    <span className="rz-caption font-normal">
+                      {intake.createdBy.displayName}
+                    </span>
+                  </Link>
+                ),
+              },
+              {
+                key: 'date',
+                label: t('columnDate'),
+                cell: (intake) => (
+                  <span className="rz-mono rz-dim text-caption">
+                    {day(intake.purchasedAt ?? intake.createdAt)}
+                  </span>
+                ),
+              },
+              {
+                key: 'parts',
+                label: t('columnPositions'),
+                align: 'end',
+                cell: (intake) => (
+                  <span className="rz-strong">{intake.partsCount}</span>
+                ),
+              },
+              ...(financeView
+                ? [
+                    {
+                      key: 'cost',
+                      label: t('columnCost'),
+                      align: 'end' as const,
+                      cell: (intake: IntakeListItem) =>
+                        intake.totalCost === null
+                          ? '—'
+                          : money(intake.totalCost),
+                    },
+                  ]
+                : []),
+              {
+                key: 'status',
+                label: t('columnStatus'),
+                cell: (intake) => {
+                  const sale = intakeSaleState(intake)
+                  return (
+                    <StatusPill tone={sale.tone}>{t(sale.label)}</StatusPill>
+                  )
+                },
+              },
+            ]}
+            empty={
+              <StateScreen
+                className="border-0"
+                description={
+                  filtered
+                    ? t('emptyFilteredDescription')
+                    : t('emptyDescription')
+                }
+                icon={
+                  filtered ? <SearchX aria-hidden /> : <Inbox aria-hidden />
+                }
+                title={filtered ? t('emptyFilteredTitle') : t('emptyTitle')}
+                tone={filtered ? 'neutral' : 'brand'}
+              />
+            }
+            footer={
+              <ListFooter
+                summary={t('shownOfIntakes', {
+                  shown: items.length,
+                  count: state.page?.total ?? 0,
+                })}
+              >
+                <Pagination
+                  label={t('paginationLabel')}
+                  onPage={(nextPage) => updatePage(nextPage, currentPageSize)}
+                  page={currentPage}
+                  totalPages={totalPages}
+                />
+              </ListFooter>
+            }
+            rowKey={(intake) => intake.id}
+            rows={items}
+          />
+        </section>
+      )}
     </RedesignShell>
   )
 }
@@ -676,6 +669,8 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [filter, setFilter] = useState<IntakePartFilter>('all')
   const [partsPage, setPartsPage] = useState(1)
+  const [attempt, setAttempt] = useState(0)
+  const importEnabled = useFeatureFlag(FEATURE_FLAGS.partsBulkImport)
   const canPrintStickers = allowedToView(cabinetModules.stickers, cabinet)
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.intakes,
@@ -689,7 +684,7 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
           setProblem(normalizeApiProblem(error).message)
       })
     return () => controller.abort()
-  }, [intakeId])
+  }, [intakeId, attempt])
   const remove = async () => {
     if (busy) return
     setConfirmDelete(false)
@@ -704,20 +699,48 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
     }
   }
   const crumb = (
-    <>
-      <span>{t('eyebrow')}</span>
-      <ChevronRight aria-hidden className="size-3" />
-      <Link to={base}>{t('title')}</Link>
-    </>
+    <Crumbs
+      items={[
+        t('eyebrow'),
+        <Link className="text-app-muted" key="list" to={base}>
+          {t('title')}
+        </Link>,
+        ...(intake
+          ? [
+              <span
+                className="inline-block max-w-[9rem] truncate align-bottom sm:max-w-none"
+                key="intake"
+              >
+                {intake.name ?? t('untitledIntake')}
+              </span>,
+            ]
+          : []),
+      ]}
+    />
   )
   if (!intake && problem)
     return (
-      <RedesignShell crumb={crumb}>
+      <RedesignShell crumb={crumb} width="record">
         <ErrorState
           actions={
-            <Button asChild>
-              <Link to={base}>{t('backToList')}</Link>
-            </Button>
+            <>
+              <Button asChild>
+                <Link to={base}>
+                  <ArrowLeft aria-hidden />
+                  {t('backToList')}
+                </Link>
+              </Button>
+              <Button
+                onClick={() => {
+                  setProblem(null)
+                  setAttempt((current) => current + 1)
+                }}
+                variant="primary"
+              >
+                <RefreshCw aria-hidden />
+                {tc('retry')}
+              </Button>
+            </>
           }
           description={problem}
           title={t('loadFailed')}
@@ -726,8 +749,18 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
     )
   if (!intake)
     return (
-      <RedesignShell crumb={crumb}>
-        <SkeletonRows label={t('loading')} rows={3} />
+      <RedesignShell crumb={crumb} width="record">
+        <div className="grid gap-3">
+          <p className="sr-only" role="status">
+            {t('loading')}
+          </p>
+          <Skeleton className="h-[22px] w-[36%]" />
+          <Skeleton className="w-[52%]" />
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <Skeleton className="h-[300px]" />
+            <Skeleton className="h-[200px]" />
+          </div>
+        </div>
       </RedesignShell>
     )
 
@@ -802,20 +835,13 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
         actions={
           manage ? (
             <>
-              <Button asChild>
-                <Link to={`${base}/${intake.id}/edit`}>{tc('edit')}</Link>
-              </Button>
-              {/* Import is a parts mutation, the same gate as the parts list. */}
-              {partCreateDecision.kind === 'allowed' && partsMediaManage ? (
-                <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
-                  <Button asChild>
-                    <Link
-                      to={`${base.replace(/\/intakes$/, '/parts')}/imports?intake_id=${encodeURIComponent(intake.id)}`}
-                    >
-                      {t('importParts')}
-                    </Link>
-                  </Button>
-                </FeatureGate>
+              {partCreateDecision.kind === 'allowed' ? (
+                <Button asChild>
+                  <Link to={`${base}/${intake.id}/parts/batch`}>
+                    <Rows3 aria-hidden />
+                    {t('addBatch')}
+                  </Link>
+                </Button>
               ) : null}
               {partCreateDecision.kind === 'allowed' ? (
                 <Button asChild variant="primary">
@@ -827,6 +853,28 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
               ) : null}
               <ActionMenu
                 actions={[
+                  {
+                    key: 'edit',
+                    label: tc('edit'),
+                    icon: <Pencil aria-hidden />,
+                    onSelect: () => void navigate(`${base}/${intake.id}/edit`),
+                  },
+                  // Import is a parts mutation, the same gate as the parts list.
+                  ...(partCreateDecision.kind === 'allowed' &&
+                  partsMediaManage &&
+                  importEnabled
+                    ? [
+                        {
+                          key: 'import',
+                          label: t('importParts'),
+                          icon: <Upload aria-hidden />,
+                          onSelect: () =>
+                            void navigate(
+                              `${base.replace(/\/intakes$/, '/parts')}/imports?intake_id=${encodeURIComponent(intake.id)}`,
+                            ),
+                        },
+                      ]
+                    : []),
                   ...(canPrintStickers
                     ? [
                         {
@@ -837,17 +885,6 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
                           onSelect: () => {
                             if (stickerHref !== null) void navigate(stickerHref)
                           },
-                        },
-                      ]
-                    : []),
-                  ...(partCreateDecision.kind === 'allowed'
-                    ? [
-                        {
-                          key: 'batch',
-                          label: t('addBatch'),
-                          icon: <PackagePlus aria-hidden />,
-                          onSelect: () =>
-                            void navigate(`${base}/${intake.id}/parts/batch`),
                         },
                       ]
                     : []),
@@ -865,43 +902,32 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
             </>
           ) : undefined
         }
-        crumb={
-          <>
-            <BackLink to={base}>{t('backToIntakes')}</BackLink>
-            <span className="hidden min-w-0 items-center gap-1.5 sm:flex">
-              <span>{t('eyebrow')}</span>
-              <ChevronRight aria-hidden className="size-3" />
-              <span>{t('title')}</span>
-            </span>
-          </>
-        }
+        crumb={crumb}
+        width="record"
       >
-        <div className="grid max-w-[1240px] gap-4">
+        <div className="grid gap-4">
           <div className="grid gap-2">
-            <div className="rz-page-head items-center">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <h1 className="rz-h-page">
                 {intake.name ?? t('untitledIntake')}
               </h1>
-              <StatusPill tone={saleState.tone}>
-                {t(saleState.label)}
-              </StatusPill>
-            </div>
-            <p className="rz-muted m-0 flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span>
-                {intake.purchasedAt === null
-                  ? t('noPurchaseDate')
-                  : day(intake.purchasedAt)}
-              </span>
-              <span aria-hidden className="rz-dim">
-                ·
-              </span>
-              <span>
+              <span className="rz-caption">
                 {t('createdBy', {
                   name: intake.createdBy.displayName,
                   date: day(intake.createdAt),
                 })}
               </span>
-            </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusPill tone={saleState.tone}>
+                {t(saleState.label)}
+              </StatusPill>
+              <span className="rz-caption">
+                {intake.purchasedAt === null
+                  ? t('noPurchaseDate')
+                  : day(intake.purchasedAt)}
+              </span>
+            </div>
           </div>
 
           {problem ? <Notice tone="danger">{problem}</Notice> : null}

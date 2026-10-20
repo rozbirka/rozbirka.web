@@ -27,7 +27,7 @@ export function PrivacyTranslationBody({
   translation: PrivacyTranslation
 }) {
   return (
-    <div className="prose-content text-input text-app-ink mt-6 space-y-8 leading-relaxed">
+    <div className="prose-content text-(length:--rz-fs-input) text-app-ink mt-6 space-y-8 leading-relaxed">
       {translation.sections.map((section) => (
         <section key={section.title}>
           <h2 className="rz-h-title mb-3">{section.title}</h2>

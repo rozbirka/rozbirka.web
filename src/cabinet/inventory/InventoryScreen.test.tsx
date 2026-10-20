@@ -1379,7 +1379,7 @@ it('creates a zone in a side drawer for its warehouse', async () => {
   await user.click(await screen.findByRole('button', { name: 'Додати зону' }))
   const drawer = screen.getByRole('dialog', { name: 'Нова зона' })
   expect(drawer).toHaveClass('rz-sheet')
-  expect(within(drawer).getByText('Основний склад')).toBeInTheDocument()
+  expect(within(drawer).getByText(/^Основний склад · /)).toBeInTheDocument()
 
   await user.type(
     within(drawer).getByRole('textbox', { name: 'Назва' }),

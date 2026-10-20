@@ -138,10 +138,9 @@ function OpenCashMovementDrawer({
           />
         </div>
 
-        <Field label={t('colAmount')}>
-          <div className="flex flex-wrap items-start gap-2">
+        <div className="grid items-start gap-3 sm:grid-cols-2">
+          <Field label={t('colAmount')}>
             <TextInput
-              className="min-w-0 flex-[1_1_8rem]"
               inputMode="decimal"
               min="0"
               numeric
@@ -152,8 +151,14 @@ function OpenCashMovementDrawer({
               type="number"
               value={amount}
             />
+          </Field>
+          <div className="rz-field">
+            {/* The group is named by its own legend; this is the visible label. */}
+            <span aria-hidden className="rz-label">
+              {t('movementCurrency')}
+            </span>
             <Segmented
-              className="max-w-full flex-none font-mono"
+              className="w-full font-mono"
               label={t('movementCurrency')}
               name="movement-currency"
               onChange={setCurrency}
@@ -164,7 +169,7 @@ function OpenCashMovementDrawer({
               value={selectedCurrency}
             />
           </div>
-        </Field>
+        </div>
 
         {amount !== '' && selectedCurrency !== '' ? (
           <div className="rz-inset flex flex-wrap items-center justify-between gap-3">

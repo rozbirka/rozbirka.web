@@ -5,7 +5,7 @@ import { carsApi, type CarProfitability } from '@/api/cars'
 import { LocaleProvider, type Locale } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import { CarPartsCard } from './CarPartsCard'
-import { CarProfitabilityCard } from './CarProfitabilityCard'
+import { CarPayoffPill, CarProfitabilityCard } from './CarProfitabilityCard'
 import { CarsScreen } from './CarsScreen'
 
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are invoked only through their owning singleton. */
@@ -141,8 +141,8 @@ it('renders the cars list in British English', async () => {
   ).toBeVisible()
   expect(screen.getByRole('link', { name: /Add car/ })).toBeVisible()
   expect(screen.getByRole('searchbox', { name: 'Search cars' })).toBeVisible()
-  expect(screen.getByRole('list', { name: 'Car list' })).toBeVisible()
-  expect(screen.getByText('BMW X5 (2020)')).toBeVisible()
+  expect(screen.getByRole('table', { name: 'Car list' })).toBeVisible()
+  expect(screen.getByText('BMW X5 · 2020')).toBeVisible()
   expect(screen.getByText('Active', { selector: 'span' })).toBeVisible()
   expect(screen.getByText('Page 1 of 1')).toBeVisible()
   expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled()
@@ -167,7 +167,7 @@ it('renders the car detail with English dates and plurals', async () => {
   renderAt('/app/demo/cars/car-1', 'en-GB')
 
   expect(await screen.findByText(/in stock since 1 Aug 2026/)).toBeVisible()
-  expect(screen.getByRole('link', { name: /Back to cars/ })).toBeVisible()
+  expect(screen.getByRole('link', { name: 'Cars' })).toBeVisible()
   expect(screen.getByText('0 photos')).toBeVisible()
   expect(screen.getByText('No photos of this car yet.')).toBeVisible()
   expect(
@@ -184,6 +184,7 @@ it('localizes the parts and profitability cards', () => {
     <LocaleProvider locale="en-GB" syncDocumentLang={false}>
       <MemoryRouter>
         <CarPartsCard partsHref="/app/demo/parts" profit={profit} />
+        <CarPayoffPill profit={profit} />
         <CarProfitabilityCard
           currency="GBP"
           expensesTotal={0}

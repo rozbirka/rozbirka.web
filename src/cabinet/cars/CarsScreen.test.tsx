@@ -1,11 +1,4 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router'
@@ -277,9 +270,7 @@ it('applies car quota only to create while allowing existing-car operations', as
   expect(
     within(summary).getByRole('button', { name: 'Додати витрату' }),
   ).toBeVisible()
-  expect(
-    screen.getByText('Витрат ще немає. Вкладене дорівнює ціні придбання.'),
-  ).toBeVisible()
+  expect(screen.getByText('Витрат ще немає')).toBeVisible()
 })
 
 it('does not reveal server financial values without finance.view', async () => {
@@ -293,7 +284,7 @@ it('does not reveal server financial values without finance.view', async () => {
   )
 
   expect(await screen.findByRole('heading', { name: /BMW X5/ })).toBeVisible()
-  expect(screen.getByText('CAR-001')).toBeVisible()
+  expect(screen.getAllByText('CAR-001').length).toBeGreaterThan(0)
   expect(screen.queryByText('Ціна придбання')).not.toBeInTheDocument()
   expect(screen.queryByText(/12\s000/)).not.toBeInTheDocument()
   expect(screen.queryByText('Інвестовано: 12 000')).not.toBeInTheDocument()
@@ -989,16 +980,17 @@ it('loads URL-backed car search and displays the server profitability unchanged'
   expect(
     await screen.findByRole('heading', { name: 'Автомобілі' }),
   ).toBeVisible()
-  // The card states what came back and how far that is in words and figures;
-  // the bar under them is decoration, so it carries no duplicate reading.
-  const card = within(
-    await screen.findByRole('list', { name: 'Список автомобілів' }),
-  ).getByRole('link', { name: /CAR-001/ })
-  expect(card).toHaveAttribute('href', '/app/demo/cars/car-1')
-  expect(card).toHaveTextContent(/5\s000/)
-  expect(card).toHaveTextContent('42%')
-  expect(card).toHaveTextContent('Запчастин 3')
-  expect(card).toHaveTextContent('Продано 1')
+  // The row states what came back and how far that is in figures; the bar
+  // beside the percentage is decoration, so it carries no duplicate reading.
+  const table = await screen.findByRole('table', { name: 'Список автомобілів' })
+  const link = within(table).getByRole('link', { name: 'BMW X5 · 2020' })
+  expect(link).toHaveAttribute('href', '/app/demo/cars/car-1')
+  const row = link.closest('tr')!
+  expect(row).toHaveTextContent('CAR-001')
+  expect(row).toHaveTextContent(/5\s000/)
+  expect(row).toHaveTextContent('42 %')
+  expect(within(row).getByRole('cell', { name: '3' })).toBeVisible()
+  expect(within(row).getByRole('cell', { name: '1' })).toBeVisible()
   expect(carsApi.list).toHaveBeenCalledWith(
     { search: 'BMW', status: 'active', page: 2, pageSize: 25 },
     expect.anything(),
@@ -1092,7 +1084,9 @@ it('keeps destructive car actions out of the header row', async () => {
   expect(
     within(menu).getByRole('menuitem', { name: 'Архівувати' }),
   ).toBeVisible()
-  expect(within(menu).getByRole('menuitem', { name: 'Видалити' })).toBeVisible()
+  expect(
+    within(menu).getByRole('menuitem', { name: 'Видалити автомобіль' }),
+  ).toBeVisible()
 })
 
 it('says which shots are missing when a car has no photos yet', async () => {
@@ -1355,21 +1349,16 @@ it('keeps server photos unchanged on cancel and rejects selection above ten phot
     'Максимум 10 фото.',
   )
   await user.click(screen.getByRole('button', { name: 'Прибрати фото 1' }))
-  await user.click(screen.getByRole('link', { name: 'Скасувати' }))
+  await user.click(screen.getByRole('link', { name: 'До автомобіля' }))
   expect(await screen.findByText('Cancelled')).toBeVisible()
   expect(carsApi.update).not.toHaveBeenCalled()
   expect(mediaApi.upload).not.toHaveBeenCalled()
   expect(mediaApi.remove).not.toHaveBeenCalled()
 })
 
-it('shows a fallback when the car list cover fails to load', async () => {
-  vi.mocked(carsApi.list).mockResolvedValue({
-    items: [{ ...car, coverPhotoUrl: '/missing-cover.jpg' }],
-    page: 1,
-    pageSize: 20,
-    total: 1,
-    totalPages: 1,
-  })
+it('replaces the list with an error and loads it again on retry', async () => {
+  const user = userEvent.setup()
+  vi.mocked(carsApi.list).mockRejectedValueOnce(new Error('Network down'))
   render(
     <MemoryRouter initialEntries={['/app/demo/cars']}>
       <Routes>
@@ -1377,10 +1366,14 @@ it('shows a fallback when the car list cover fails to load', async () => {
       </Routes>
     </MemoryRouter>,
   )
-  const list = await screen.findByRole('list', { name: 'Список автомобілів' })
-  const image = list.querySelector('img')!
-  fireEvent.error(image)
-  expect(within(list).getByText('Фото недоступне')).toBeVisible()
+
+  await user.click(
+    await screen.findByRole('button', { name: 'Спробувати ще раз' }),
+  )
+  expect(
+    await screen.findByRole('table', { name: 'Список автомобілів' }),
+  ).toBeVisible()
+  expect(carsApi.list).toHaveBeenCalledTimes(2)
 })
 
 it('does not save after cancellation while an edit photo upload is pending', async () => {
@@ -1414,7 +1407,7 @@ it('does not save after cancellation while an edit photo upload is pending', asy
     screen.getAllByRole('button', { name: 'Зберегти зміни' })[0]!,
   )
   await waitFor(() => expect(mediaApi.upload).toHaveBeenCalledTimes(1))
-  await user.click(screen.getByRole('link', { name: 'Скасувати' }))
+  await user.click(screen.getByRole('link', { name: 'До автомобіля' }))
   expect(await screen.findByText('Cancelled')).toBeVisible()
   await act(async () => {
     resolveUpload({ storageKey: 'cars/new', url: '/new.jpg' })

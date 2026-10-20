@@ -1,0 +1,70 @@
+{
+ "id": "C25",
+ "module": "customers",
+ "crumbs": [
+  "Продажі",
+  "Клієнти"
+ ],
+ "eyebrow": "Продажі · Клієнти",
+ "title": "Новий клієнт",
+ "route": "/app/:tenant/customers/new · /:id/edit",
+ "source": "customer-form-messages.ts",
+ "unverified": "підписи полів",
+ "actions": [
+  {
+   "label": "Скасувати",
+   "icon": "icon-x"
+  },
+  {
+   "label": "Створити клієнта",
+   "icon": "icon-check",
+   "variant": "primary"
+  }
+ ],
+ "states": [
+  [
+   "data",
+   "Нова"
+  ],
+  [
+   "loading",
+   "Завантаження"
+  ],
+  [
+   "error",
+   "Помилка"
+  ]
+ ],
+ "main": [
+  {
+   "type": "form",
+   "title": "Клієнт",
+   "fields": [
+    {
+     "label": "Імʼя",
+     "cls": "rz-input"
+    },
+    {
+     "label": "Телефон",
+     "placeholder": "+380",
+     "cls": "rz-input rz-input--num"
+    }
+   ]
+  },
+  {
+   "type": "form",
+   "title": "Адреса",
+   "fields": [
+    {
+     "label": "Місто",
+     "cls": "rz-input"
+    },
+    {
+     "label": "Відділення",
+     "cls": "rz-input"
+    }
+   ]
+  }
+ ],
+ "aside": []
+}

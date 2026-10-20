@@ -286,37 +286,44 @@ export function PaymentDrawer({
         )}
 
         {registers !== null && registers.length > 0 && (
-          <fieldset className="grid gap-2">
-            <legend className="rz-h-card mb-1 p-0">
+          <fieldset className="m-0 grid min-h-fit gap-2 border-0 p-0">
+            <legend className="rz-label mb-2 p-0">
               {mode === 'record' ? t('recordInto') : t('receiptTill')}
             </legend>
-            {registers.map((register) => {
-              const chosen = (registerId ?? registers[0]!.id) === register.id
-              return (
-                <label
-                  className="rz-choice-card items-center"
-                  key={register.id}
-                >
-                  <input
-                    checked={chosen}
-                    className="rz-radio shrink-0"
-                    name="delivery-payment-register"
-                    onChange={() => {
-                      setRegisterId(register.id)
-                      setReceiptId(null)
-                    }}
-                    type="radio"
-                    value={register.id}
-                  />
-                  <span className="rz-strong min-w-0 flex-1 truncate font-medium">
-                    {register.name}
-                  </span>
-                  <span className="rz-muted font-mono text-caption whitespace-nowrap tabular-nums">
-                    {held(register, locale)}
-                  </span>
-                </label>
-              )
-            })}
+            <div className="border-app-line grid overflow-hidden rounded-rz-md border bg-(--rz-sheet-field)">
+              {registers.map((register) => {
+                const chosen = (registerId ?? registers[0]!.id) === register.id
+                return (
+                  <label
+                    className={cn(
+                      'border-app-line flex min-h-11 cursor-pointer items-center gap-3 border-t px-3 py-2 first:border-t-0',
+                      chosen
+                        ? 'bg-(--rz-row-selected) shadow-[inset_2px_0_0_var(--rz-brand)]'
+                        : 'hover:bg-app-hover',
+                    )}
+                    key={register.id}
+                  >
+                    <input
+                      checked={chosen}
+                      className="rz-radio shrink-0"
+                      name="delivery-payment-register"
+                      onChange={() => {
+                        setRegisterId(register.id)
+                        setReceiptId(null)
+                      }}
+                      type="radio"
+                      value={register.id}
+                    />
+                    <span className="rz-strong min-w-0 flex-1 truncate font-semibold">
+                      {register.name}
+                    </span>
+                    <span className="rz-strong font-mono whitespace-nowrap tabular-nums">
+                      {held(register, locale)}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
           </fieldset>
         )}
 
@@ -324,7 +331,7 @@ export function PaymentDrawer({
           <>
             <Field label={t('grossAmount')}>
               <TextInput
-                className="text-title"
+                className="h-12 text-page"
                 inputMode="decimal"
                 numeric
                 onChange={(event) => setAmountDraft(event.target.value)}
@@ -366,8 +373,8 @@ export function PaymentDrawer({
           </>
         ) : (
           <>
-            <fieldset className="grid gap-2">
-              <legend className="rz-h-card mb-1 p-0">{t('receipts')}</legend>
+            <fieldset className="m-0 grid min-h-fit gap-2 border-0 p-0">
+              <legend className="rz-label mb-2 p-0">{t('receipts')}</legend>
               {receiptsError ? (
                 <Notice tone="danger">{t('receiptsFailed')}</Notice>
               ) : options.length === 0 ? (
@@ -381,8 +388,9 @@ export function PaymentDrawer({
                     <button
                       aria-pressed={chosen}
                       className={cn(
-                        'rz-choice-card items-center bg-transparent text-left',
-                        chosen && 'border-brand bg-brand-soft',
+                        'border-app-line flex min-h-11 w-full items-center gap-3 rounded-rz-md border bg-(--rz-sheet-field) px-3 py-2 text-left',
+                        chosen &&
+                          'border-brand bg-(--rz-row-selected) shadow-[inset_2px_0_0_var(--rz-brand)]',
                       )}
                       key={item.id}
                       onClick={() => setReceiptId(item.id)}
@@ -428,7 +436,7 @@ export function PaymentDrawer({
 
         {error !== null && <Notice tone="danger">{error}</Notice>}
 
-        <dl className="rz-inset m-0 grid grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-2 bg-app-raised">
+        <dl className="rz-inset m-0 grid min-h-fit grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-2">
           <dt className="text-app-muted">{t('agreed')}</dt>
           <dd className="rz-num m-0">{uah(delivery.agreedTotalUah, locale)}</dd>
           <dt className="text-app-muted">{t('due')}</dt>

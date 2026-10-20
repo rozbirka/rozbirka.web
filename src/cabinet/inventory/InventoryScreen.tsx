@@ -22,6 +22,10 @@ import {
   Plus,
   Printer,
   RefreshCw,
+  ScanLine,
+  SearchX,
+  ClipboardCheck,
+  Play,
 } from 'lucide-react'
 import {
   ActionMenu,
@@ -85,6 +89,8 @@ import { locationBrowserMessages } from './location-browser-messages'
 import { warehouseMessages } from './warehouse-messages'
 import { inventoryCodeFromName } from './inventory-code'
 import { ZoneEditorSheet, type ZoneDraft } from './ZoneEditorSheet'
+import { Crumbs } from '../redesign-shell'
+import { scannerMessages } from '../scanners/messages'
 
 type LoadState<T> =
   | { kind: 'loading' }
@@ -128,11 +134,20 @@ function Resource<T>({
   children: (data: T) => ReactNode
 }) {
   const t = useT(inventoryMessages)
+  const base = useInventoryBase()
+  /* Loading and failure keep the screen's frame, as the module page draws
+     them: the topbar with the trail back to the inventory stays in place. */
+  const frame = (content: ReactNode) => (
+    <div className="grid content-start">
+      <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
+        <InventoryCrumbs base={base} items={[]} />
+      </div>
+      <div className="rz-page">{content}</div>
+    </div>
+  )
   if (state.kind === 'loading')
     return framed ? (
-      <div className="rz-page">
-        <SkeletonRows label={t('loading')} />
-      </div>
+      frame(<SkeletonRows label={t('loading')} />)
     ) : (
       <SkeletonRows label={t('loading')} />
     )
@@ -154,9 +169,39 @@ function Resource<T>({
         {errorContent}
       </>
     )
-    return framed ? <div className="rz-page">{failed}</div> : failed
+    return framed ? frame(failed) : failed
   }
   return children(state.data)
+}
+
+/**
+ * The trail of an inventory screen: Склад › Інвентаризація › …, every part
+ * before the current one a way back.
+ */
+function InventoryCrumbs({
+  base,
+  items,
+}: {
+  base: string
+  /** What follows "Інвентаризація": links, then the current page last. */
+  items: readonly ReactNode[]
+}) {
+  const t = useT(inventoryMessages)
+  return (
+    <Crumbs
+      items={[
+        <span key="warehouse">{t('crumbWarehouse')}</span>,
+        items.length === 0 ? (
+          t('crumbInventory')
+        ) : (
+          <Link key="inventory" to={base}>
+            {t('crumbInventory')}
+          </Link>
+        ),
+        ...items,
+      ]}
+    />
+  )
 }
 
 export function InventoryScreen({
@@ -230,6 +275,8 @@ interface OverviewData {
 function Overview() {
   const t = useT(overviewMessages)
   const ti = useT(inventoryMessages)
+  const ts = useT(scannerMessages)
+  const { targetTenant } = useCabinet()
   const { date, day, sessionStatus, locale } = useInventoryFormat()
   const base = useInventoryBase()
   const navigate = useNavigate()
@@ -301,389 +348,441 @@ function Overview() {
     }
   }
 
+  const lastCompleted = (sessions: readonly InventorySession[]) =>
+    sessions
+      .filter((item) => item.status === 'completed')
+      .sort((left, right) =>
+        (right.completedAt ?? right.createdAt).localeCompare(
+          left.completedAt ?? left.createdAt,
+        ),
+      )[0] ?? null
+  const ready = resource.state.kind === 'ready' ? resource.state.data : null
+  const latest = ready === null ? null : lastCompleted(ready.sessions)
+  const scannerPath =
+    targetTenant === null || targetTenant === undefined
+      ? null
+      : `/app/${targetTenant.slug}/scan`
+
   return (
-    <Resource retry={resource.reload} state={resource.state}>
-      {({ warehouses, sessions, zones, byWarehouse, since }: OverviewData) => {
-        const zonesOf = (item: InventorySession) =>
-          [...new Set(item.zones.map((zone) => zone.zoneCode))].join(', ')
-        const houseOf = (item: InventorySession) =>
-          item.zones[0]?.warehouseName ?? '—'
-        const doneZones = (item: InventorySession) =>
-          item.zones.filter((zone) => zone.status === 'completed').length
-        const closedAt = (item: InventorySession) =>
-          item.completedAt ?? item.cancelledAt ?? item.createdAt
-        const counts: Record<OverviewSegment, number> = {
-          active: 0,
-          done: 0,
-          draft: 0,
-        }
-        for (const item of sessions) counts[segmentOf(item.status)] += 1
-        const needle = query.trim().toLowerCase()
-        const rows = sessions
-          .filter((item) => segmentOf(item.status) === segment)
-          .filter(
-            (item) =>
-              needle === '' ||
-              `${item.number} ${houseOf(item)} ${zonesOf(item)}`
-                .toLowerCase()
-                .includes(needle),
-          )
-          .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    <div className="grid content-start">
+      <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
+        <InventoryCrumbs base={base} items={[]} />
+        {canManage || (canSeeParts && scannerPath !== null) ? (
+          <div className="rz-topbar__actions flex-wrap items-center">
+            {canSeeParts && scannerPath !== null ? (
+              <Button asChild>
+                <Link to={scannerPath}>
+                  <ScanLine aria-hidden />
+                  {ts('title')}
+                </Link>
+              </Button>
+            ) : null}
+            {canManage ? (
+              <Button asChild variant="primary">
+                <Link to={`${base}/sessions/new`}>
+                  <Plus aria-hidden />
+                  {ti('newSession')}
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
-        const completedSessions = sessions
-          .filter((item) => item.status === 'completed')
-          .sort((left, right) => closedAt(right).localeCompare(closedAt(left)))
-        const last = completedSessions[0] ?? null
-        const accuracy =
-          last === null || last.preview.includedPartCount === 0
-            ? null
-            : Math.round(
-                ((last.preview.includedPartCount -
-                  last.preview.conflictingPartCount) /
-                  last.preview.includedPartCount) *
-                  1000,
-              ) / 10
-        const checkedZones = sessions
-          .filter((item) => new Date(closedAt(item)).getTime() >= since)
-          .reduce((sum, item) => sum + doneZones(item), 0)
-        const countable = zones.filter((zone) => !zone.isSystemUnassigned)
-        const running = sessions.filter(
-          (item) => segmentOf(item.status) === 'active',
-        )
-        const openDiffs = running.reduce(
-          (sum, item) => sum + item.preview.conflictingPartCount,
-          0,
-        )
-        /* The last time each warehouse was counted, and whether one is
-           running there right now. */
-        const checkOf = (warehouseId: string) => {
-          if (
-            running.some((item) =>
-              item.zones.some((zone) => zone.warehouseId === warehouseId),
+      <div className="rz-page">
+        <div className="min-w-0">
+          <div className="rz-page-head">
+            <h1 className="rz-h-page">{ti('crumbInventory')}</h1>
+          </div>
+          {ready === null ? null : (
+            <p className="rz-muted m-0 mt-1">
+              {latest === null
+                ? t('noCompletedYet')
+                : t('lastCompleted', {
+                    date: day(latest.completedAt),
+                    count: latest.preview.conflictingPartCount,
+                  })}
+            </p>
+          )}
+        </div>
+        <Resource framed={false} retry={resource.reload} state={resource.state}>
+          {({
+            warehouses,
+            sessions,
+            zones,
+            byWarehouse,
+            since,
+          }: OverviewData) => {
+            const zonesOf = (item: InventorySession) =>
+              [...new Set(item.zones.map((zone) => zone.zoneCode))].join(', ')
+            const houseOf = (item: InventorySession) =>
+              item.zones[0]?.warehouseName ?? '—'
+            const doneZones = (item: InventorySession) =>
+              item.zones.filter((zone) => zone.status === 'completed').length
+            const closedAt = (item: InventorySession) =>
+              item.completedAt ?? item.cancelledAt ?? item.createdAt
+            const counts: Record<OverviewSegment, number> = {
+              active: 0,
+              done: 0,
+              draft: 0,
+            }
+            for (const item of sessions) counts[segmentOf(item.status)] += 1
+            const needle = query.trim().toLowerCase()
+            const rows = sessions
+              .filter((item) => segmentOf(item.status) === segment)
+              .filter(
+                (item) =>
+                  needle === '' ||
+                  `${item.number} ${houseOf(item)} ${zonesOf(item)}`
+                    .toLowerCase()
+                    .includes(needle),
+              )
+              .sort((left, right) =>
+                right.createdAt.localeCompare(left.createdAt),
+              )
+
+            const completedSessions = sessions
+              .filter((item) => item.status === 'completed')
+              .sort((left, right) =>
+                closedAt(right).localeCompare(closedAt(left)),
+              )
+            const last = completedSessions[0] ?? null
+            const accuracy =
+              last === null || last.preview.includedPartCount === 0
+                ? null
+                : Math.round(
+                    ((last.preview.includedPartCount -
+                      last.preview.conflictingPartCount) /
+                      last.preview.includedPartCount) *
+                      1000,
+                  ) / 10
+            const checkedZones = sessions
+              .filter((item) => new Date(closedAt(item)).getTime() >= since)
+              .reduce((sum, item) => sum + doneZones(item), 0)
+            const countable = zones.filter((zone) => !zone.isSystemUnassigned)
+            const running = sessions.filter(
+              (item) => segmentOf(item.status) === 'active',
             )
-          )
-            return t('checkRunning')
-          const done = completedSessions.find((item) =>
-            item.zones.some((zone) => zone.warehouseId === warehouseId),
-          )
-          return done === undefined
-            ? t('neverChecked')
-            : t('checkedOn', { date: day(done.completedAt) })
-        }
-        const stock = byWarehouse
-        const stockTotal =
-          stock === null
-            ? 0
-            : [...stock.values()].reduce((sum, value) => sum + value, 0)
+            const openDiffs = running.reduce(
+              (sum, item) => sum + item.preview.conflictingPartCount,
+              0,
+            )
+            /* The last time each warehouse was counted, and whether one is
+           running there right now. */
+            const checkOf = (warehouseId: string) => {
+              if (
+                running.some((item) =>
+                  item.zones.some((zone) => zone.warehouseId === warehouseId),
+                )
+              )
+                return t('checkRunning')
+              const done = completedSessions.find((item) =>
+                item.zones.some((zone) => zone.warehouseId === warehouseId),
+              )
+              return done === undefined
+                ? t('neverChecked')
+                : t('checkedOn', { date: day(done.completedAt) })
+            }
+            const stock = byWarehouse
+            const stockTotal =
+              stock === null
+                ? 0
+                : [...stock.values()].reduce((sum, value) => sum + value, 0)
 
-        return (
-          <div className="grid content-start">
-            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
-              <p className="rz-crumbs m-0">
-                <span>{ti('crumbWarehouse')}</span>
-                <ChevronRight aria-hidden className="size-3" />
-                <span aria-current="page">{ti('crumbInventory')}</span>
-              </p>
-              {canManage ? (
-                <div className="rz-topbar__actions flex-wrap items-center">
-                  <Button asChild variant="primary">
-                    <Link to={`${base}/sessions/new`}>{ti('newSession')}</Link>
-                  </Button>
+            return (
+              <>
+                {operationError ? (
+                  <Notice tone="danger">{operationError}</Notice>
+                ) : null}
+
+                <div className="rz-kpis">
+                  <WarehouseStat
+                    label={t('statActive')}
+                    meta={
+                      running.length === 0
+                        ? t('nobodyCounting')
+                        : [
+                            ...new Set(running.map((item) => houseOf(item))),
+                          ].join(', ')
+                    }
+                    tone={running.length > 0 ? 'warn' : 'plain'}
+                    unit=""
+                    value={String(running.length)}
+                  />
+                  <WarehouseStat
+                    label={t('statZones')}
+                    meta={t('lastDays', { count: RECENT_DAYS })}
+                    unit={
+                      countable.length === 0
+                        ? t('zonesUnit')
+                        : t('ofTotal', { count: countable.length })
+                    }
+                    value={String(checkedZones)}
+                  />
+                  <WarehouseStat
+                    label={ti('discrepancies')}
+                    meta={t('inRunning')}
+                    tone={openDiffs > 0 ? 'danger' : 'plain'}
+                    unit={ti('positionsUnit')}
+                    value={String(openDiffs)}
+                  />
+                  <WarehouseStat
+                    label={t('statAccuracy')}
+                    meta={
+                      last === null
+                        ? t('noCompletedShort')
+                        : t('lastSession', { number: last.number })
+                    }
+                    tone={accuracy === null ? 'plain' : 'ok'}
+                    unit="%"
+                    value={
+                      accuracy === null
+                        ? '—'
+                        : (formatNumber(accuracy, locale, {
+                            maximumFractionDigits: 1,
+                          }) ?? '—')
+                    }
+                  />
                 </div>
-              ) : null}
-            </div>
 
-            <div className="rz-page">
-              <div className="min-w-0">
-                <div className="rz-page-head">
-                  <h1 className="rz-h-page">{ti('crumbInventory')}</h1>
-                </div>
-                <p className="rz-muted m-0 mt-1">
-                  {last === null
-                    ? t('noCompletedYet')
-                    : t('lastCompleted', {
-                        date: day(last.completedAt),
-                        count: last.preview.conflictingPartCount,
-                      })}
-                </p>
-              </div>
-
-              {operationError ? (
-                <Notice tone="danger">{operationError}</Notice>
-              ) : null}
-
-              <div className="rz-kpis">
-                <WarehouseStat
-                  label={t('statActive')}
-                  meta={
-                    running.length === 0
-                      ? t('nobodyCounting')
-                      : [...new Set(running.map((item) => houseOf(item)))].join(
-                          ', ',
-                        )
-                  }
-                  tone={running.length > 0 ? 'warn' : 'plain'}
-                  unit=""
-                  value={String(running.length)}
-                />
-                <WarehouseStat
-                  label={t('statZones')}
-                  meta={t('lastDays', { count: RECENT_DAYS })}
-                  unit={
-                    countable.length === 0
-                      ? t('zonesUnit')
-                      : t('ofTotal', { count: countable.length })
-                  }
-                  value={String(checkedZones)}
-                />
-                <WarehouseStat
-                  label={ti('discrepancies')}
-                  meta={t('inRunning')}
-                  tone={openDiffs > 0 ? 'danger' : 'plain'}
-                  unit={ti('positionsUnit')}
-                  value={String(openDiffs)}
-                />
-                <WarehouseStat
-                  label={t('statAccuracy')}
-                  meta={
-                    last === null
-                      ? t('noCompletedShort')
-                      : t('lastSession', { number: last.number })
-                  }
-                  tone={accuracy === null ? 'plain' : 'ok'}
-                  unit="%"
-                  value={
-                    accuracy === null
-                      ? '—'
-                      : (formatNumber(accuracy, locale, {
-                          maximumFractionDigits: 1,
-                        }) ?? '—')
-                  }
-                />
-              </div>
-
-              <div className="rz-toolbar" role="search">
-                <SearchInput
-                  aria-label={t('searchLabel')}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder={t('searchPlaceholder')}
-                  value={query}
-                />
-                <div
-                  aria-label={t('segmentsLabel')}
-                  className="rz-seg flex-wrap"
-                  role="radiogroup"
-                >
-                  {OVERVIEW_SEGMENTS.map((option) => (
-                    <button
-                      aria-checked={option.value === segment}
-                      key={option.value}
-                      onClick={() => setSegment(option.value)}
-                      role="radio"
-                      type="button"
-                    >
-                      {t(option.label)}{' '}
-                      <span className="rz-mono text-app-dim text-micro">
-                        {counts[option.value]}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                <p className="rz-toolbar__end rz-dim m-0">
-                  {t('rowsSummary', { count: rows.length })}
-                </p>
-              </div>
-
-              <section aria-label={t('sessionsLabel')}>
-                <DataTable
-                  caption={t('sessionsLabel')}
-                  rows={rows}
-                  rowKey={(item) => item.id}
-                  onRowClick={(item) =>
-                    void navigate(`${base}/sessions/${item.id}`)
-                  }
-                  empty={
-                    <p className="rz-muted m-0 px-4 py-8 text-center">
-                      {sessions.length === 0
-                        ? t('noSessions')
-                        : t('noFiltered')}
-                    </p>
-                  }
-                  columns={[
-                    {
-                      key: 'session',
-                      label: t('colSession'),
-                      variant: 'primary',
-                      cell: (item) => (
-                        <span className="grid min-w-0 py-1.5">
-                          <Link
-                            className="text-app-strong"
-                            onClick={(event) => event.stopPropagation()}
-                            to={`${base}/sessions/${item.id}`}
-                          >
-                            {item.number}
-                          </Link>
-                          <span className="rz-caption font-normal">
-                            {ti('created', { date: date(item.createdAt) })}
-                          </span>
+                <div className="rz-toolbar" role="search">
+                  <SearchInput
+                    aria-label={t('searchLabel')}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={t('searchPlaceholder')}
+                    value={query}
+                  />
+                  <div
+                    aria-label={t('segmentsLabel')}
+                    className="rz-seg flex-wrap"
+                    role="radiogroup"
+                  >
+                    {OVERVIEW_SEGMENTS.map((option) => (
+                      <button
+                        aria-checked={option.value === segment}
+                        key={option.value}
+                        onClick={() => setSegment(option.value)}
+                        role="radio"
+                        type="button"
+                      >
+                        {t(option.label)}{' '}
+                        <span className="rz-mono text-app-dim text-micro">
+                          {counts[option.value]}
                         </span>
-                      ),
-                    },
-                    {
-                      key: 'scope',
-                      label: t('colWarehouseZones'),
-                      cell: (item) =>
-                        `${houseOf(item)}${zonesOf(item) === '' ? '' : ` · ${zonesOf(item)}`}`,
-                    },
-                    {
-                      key: 'progress',
-                      label: t('colProgress'),
-                      cell: (item) => {
-                        const total = item.zones.length
-                        const done = doneZones(item)
-                        const percent =
-                          total === 0 ? 0 : Math.round((done / total) * 100)
-                        return (
-                          <span className="grid min-w-28 gap-1">
+                      </button>
+                    ))}
+                  </div>
+                  <p className="rz-toolbar__end rz-dim m-0">
+                    {t('rowsSummary', { count: rows.length })}
+                  </p>
+                </div>
+
+                <section aria-label={t('sessionsLabel')}>
+                  {sessions.length === 0 ? (
+                    <EmptyState
+                      actions={
+                        canManage ? (
+                          <Button asChild variant="primary">
+                            <Link to={`${base}/sessions/new`}>
+                              <Plus aria-hidden />
+                              {ti('newSession')}
+                            </Link>
+                          </Button>
+                        ) : undefined
+                      }
+                      icon={<ClipboardCheck aria-hidden />}
+                      title={t('noSessions')}
+                    />
+                  ) : rows.length === 0 ? (
+                    <EmptyState
+                      icon={<SearchX aria-hidden />}
+                      title={t('noFiltered')}
+                      tone="neutral"
+                    />
+                  ) : (
+                    <DataTable
+                      caption={t('sessionsLabel')}
+                      rows={rows}
+                      rowKey={(item) => item.id}
+                      onRowClick={(item) =>
+                        void navigate(`${base}/sessions/${item.id}`)
+                      }
+                      columns={[
+                        {
+                          key: 'session',
+                          label: t('colSession'),
+                          variant: 'primary',
+                          cell: (item) => (
+                            <span className="grid min-w-0 py-1.5">
+                              <Link
+                                className="text-app-strong"
+                                onClick={(event) => event.stopPropagation()}
+                                to={`${base}/sessions/${item.id}`}
+                              >
+                                {item.number}
+                              </Link>
+                              <span className="rz-caption font-normal">
+                                {ti('created', { date: date(item.createdAt) })}
+                              </span>
+                            </span>
+                          ),
+                        },
+                        {
+                          key: 'status',
+                          label: t('colStatus'),
+                          cell: (item) => {
+                            const [label, tone] = sessionStatus(item.status)
+                            return <StatusPill tone={tone}>{label}</StatusPill>
+                          },
+                        },
+                        {
+                          key: 'scope',
+                          label: t('colWarehouseZones'),
+                          cell: (item) =>
+                            `${houseOf(item)}${zonesOf(item) === '' ? '' : ` · ${zonesOf(item)}`}`,
+                        },
+                        {
+                          key: 'progress',
+                          label: t('colProgress'),
+                          cell: (item) => {
+                            const total = item.zones.length
+                            const done = doneZones(item)
+                            const percent =
+                              total === 0 ? 0 : Math.round((done / total) * 100)
+                            return (
+                              <span className="grid min-w-28 gap-1">
+                                <span
+                                  aria-hidden
+                                  className={cn(
+                                    'rz-meter',
+                                    percent < 100 && 'rz-meter--warn',
+                                  )}
+                                >
+                                  <span
+                                    style={{ width: `${String(percent)}%` }}
+                                  />
+                                </span>
+                                <span className="rz-mono rz-caption">
+                                  {ti('zonesProgress', { done, count: total })}
+                                </span>
+                              </span>
+                            )
+                          },
+                        },
+                        {
+                          key: 'diffs',
+                          label: ti('discrepancies'),
+                          align: 'end',
+                          cell: (item) => (
                             <span
-                              aria-hidden
                               className={cn(
-                                'rz-meter',
-                                percent < 100 && 'rz-meter--warn',
+                                'rz-num',
+                                item.status === 'draft' && 'text-app-dim',
                               )}
                             >
-                              <span style={{ width: `${String(percent)}%` }} />
+                              {item.status === 'draft'
+                                ? '—'
+                                : item.preview.conflictingPartCount}
                             </span>
-                            <span className="rz-mono rz-caption">
-                              {ti('zonesProgress', { done, count: total })}
-                            </span>
-                          </span>
+                          ),
+                        },
+                      ]}
+                    />
+                  )}
+                </section>
+
+                <section aria-label={t('warehouses')} className="grid gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h2 className="rz-h-title">{t('warehouses')}</h2>
+                    {canZones ? (
+                      <Button
+                        onClick={() => {
+                          setDraft({ name: '', code: '' })
+                          setAdding(true)
+                        }}
+                      >
+                        <Plus aria-hidden />
+                        {t('addWarehouse')}
+                      </Button>
+                    ) : null}
+                  </div>
+                  {warehouses.length === 0 ? (
+                    <EmptyState
+                      description={t('noWarehousesHint')}
+                      title={t('noWarehousesTitle')}
+                    />
+                  ) : (
+                    <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-3 p-0">
+                      {warehouses.map((item) => {
+                        const parts = stock?.get(item.id) ?? null
+                        const share =
+                          parts === null || stockTotal === 0
+                            ? 0
+                            : Math.round((parts / stockTotal) * 100)
+                        return (
+                          <li key={item.id}>
+                            <Link
+                              className="rz-card rz-card__body block h-full text-app-ink transition-colors hover:border-app-line-2"
+                              to={`${base}/warehouses/${item.id}`}
+                            >
+                              <span className="flex items-baseline justify-between gap-3">
+                                <span className="rz-strong font-semibold">
+                                  {item.name}
+                                </span>
+                                <span className="rz-mono rz-caption">
+                                  {ti('zones', { count: item.zoneCount })}
+                                </span>
+                              </span>
+                              <span className="rz-muted mt-0.5 block text-caption">
+                                {[
+                                  t('warehouseCode', { code: item.code }),
+                                  item.isSystemDefault ? t('defaultTag') : null,
+                                  item.isActive ? null : t('archivedTag'),
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </span>
+                              <span aria-hidden className="rz-meter mt-3">
+                                <span style={{ width: `${String(share)}%` }} />
+                              </span>
+                              <span className="rz-muted mt-2 flex items-baseline justify-between gap-3 text-caption">
+                                <span>
+                                  {parts === null
+                                    ? ti('stockUnavailable')
+                                    : t('shareOfYard', { share })}
+                                </span>
+                                <span className="rz-mono">
+                                  {parts === null
+                                    ? '—'
+                                    : t('positionsShort', { count: parts })}
+                                </span>
+                              </span>
+                              <span className="border-app-line rz-dim mt-3 block border-t pt-3 text-caption">
+                                {checkOf(item.id)}
+                              </span>
+                            </Link>
+                          </li>
                         )
-                      },
-                    },
-                    {
-                      key: 'diffs',
-                      label: ti('discrepancies'),
-                      align: 'end',
-                      cell: (item) => (
-                        <span
-                          className={cn(
-                            item.status === 'draft'
-                              ? 'text-app-dim'
-                              : item.preview.conflictingPartCount === 0
-                                ? 'text-state-ok'
-                                : 'text-state-danger',
-                          )}
-                        >
-                          {item.status === 'draft'
-                            ? '—'
-                            : item.preview.conflictingPartCount}
-                        </span>
-                      ),
-                    },
-                    {
-                      key: 'status',
-                      label: t('colStatus'),
-                      cell: (item) => {
-                        const [label, tone] = sessionStatus(item.status)
-                        return <StatusPill tone={tone}>{label}</StatusPill>
-                      },
-                    },
-                  ]}
-                />
-              </section>
+                      })}
+                    </ul>
+                  )}
+                </section>
+              </>
+            )
+          }}
+        </Resource>
+      </div>
 
-              <section aria-label={t('warehouses')} className="grid gap-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="rz-h-title">{t('warehouses')}</h2>
-                  {canZones ? (
-                    <Button
-                      onClick={() => {
-                        setDraft({ name: '', code: '' })
-                        setAdding(true)
-                      }}
-                    >
-                      <Plus aria-hidden />
-                      {t('addWarehouse')}
-                    </Button>
-                  ) : null}
-                </div>
-                {warehouses.length === 0 ? (
-                  <EmptyState
-                    description={t('noWarehousesHint')}
-                    title={t('noWarehousesTitle')}
-                  />
-                ) : (
-                  <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-3 p-0">
-                    {warehouses.map((item) => {
-                      const parts = stock?.get(item.id) ?? null
-                      const share =
-                        parts === null || stockTotal === 0
-                          ? 0
-                          : Math.round((parts / stockTotal) * 100)
-                      return (
-                        <li key={item.id}>
-                          <Link
-                            className="rz-card rz-card__body block h-full text-app-ink transition-colors hover:border-app-line-2"
-                            to={`${base}/warehouses/${item.id}`}
-                          >
-                            <span className="flex items-baseline justify-between gap-3">
-                              <span className="rz-strong font-semibold">
-                                {item.name}
-                              </span>
-                              <span className="rz-mono rz-caption">
-                                {ti('zones', { count: item.zoneCount })}
-                              </span>
-                            </span>
-                            <span className="rz-muted mt-0.5 block text-caption">
-                              {[
-                                t('warehouseCode', { code: item.code }),
-                                item.isSystemDefault ? t('defaultTag') : null,
-                                item.isActive ? null : t('archivedTag'),
-                              ]
-                                .filter(Boolean)
-                                .join(' · ')}
-                            </span>
-                            <span aria-hidden className="rz-meter mt-3">
-                              <span style={{ width: `${String(share)}%` }} />
-                            </span>
-                            <span className="rz-muted mt-2 flex items-baseline justify-between gap-3 text-caption">
-                              <span>
-                                {parts === null
-                                  ? ti('stockUnavailable')
-                                  : t('shareOfYard', { share })}
-                              </span>
-                              <span className="rz-mono">
-                                {parts === null
-                                  ? '—'
-                                  : t('positionsShort', { count: parts })}
-                              </span>
-                            </span>
-                            <span className="border-app-line rz-dim mt-3 block border-t pt-3 text-caption">
-                              {checkOf(item.id)}
-                            </span>
-                          </Link>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                )}
-              </section>
-            </div>
-
-            <WarehouseEditorSheet
-              open={adding}
-              draft={draft}
-              onChange={setDraft}
-              onClose={() => setAdding(false)}
-              onSubmit={() => void createWarehouse()}
-              pending={creating}
-              error={operationError}
-            />
-          </div>
-        )
-      }}
-    </Resource>
+      <WarehouseEditorSheet
+        open={adding}
+        draft={draft}
+        onChange={setDraft}
+        onClose={() => setAdding(false)}
+        onSubmit={() => void createWarehouse()}
+        pending={creating}
+        error={operationError}
+      />
+    </div>
   )
 }
 
@@ -2946,17 +3045,7 @@ function SessionView({ id }: { id: string }) {
         return (
           <div className="grid content-start">
             <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
-              <div className="flex min-w-0 items-center gap-3">
-                <Link className="rz-btn rz-btn--ghost" to={base}>
-                  <ChevronLeft aria-hidden className="size-3.5" />
-                  {ti('backToInventory')}
-                </Link>
-                <p className="rz-crumbs m-0 hidden sm:flex">
-                  <span>{ti('crumbInventory')}</span>
-                  <ChevronRight aria-hidden className="size-3" />
-                  <span aria-current="page">{session.number}</span>
-                </p>
-              </div>
+              <InventoryCrumbs base={base} items={[session.number]} />
               <div className="rz-topbar__actions flex-wrap items-center">
                 {session.status === 'draft' ? null : (
                   <Button asChild variant="quiet">
@@ -2966,9 +3055,30 @@ function SessionView({ id }: { id: string }) {
                   </Button>
                 )}
                 {/* Counting happens in the mobile app; the cabinet watches it. */}
-                <Button disabled title={t('scanUnavailable')} variant="primary">
+                <Button disabled title={t('scanUnavailable')}>
+                  <ScanLine aria-hidden />
                   {t('scan')}
                 </Button>
+                {canManage && session.status === 'draft' ? (
+                  <Button
+                    disabled={acting}
+                    onClick={() => setAsking('start')}
+                    variant="primary"
+                  >
+                    <Play aria-hidden />
+                    {t('start')}
+                  </Button>
+                ) : null}
+                {canManage && session.status === 'review' ? (
+                  <Button
+                    disabled={acting}
+                    onClick={() => setAsking('complete')}
+                    variant="primary"
+                  >
+                    <Check aria-hidden />
+                    {t('complete')}
+                  </Button>
+                ) : null}
                 <ActionMenu
                   actions={[
                     {
@@ -3040,8 +3150,9 @@ function SessionView({ id }: { id: string }) {
                 <Notice tone="danger">{operationError}</Notice>
               ) : null}
 
-              <div className="flex flex-wrap-reverse items-start gap-4">
-                <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-3">
+              {/* The aside leads on a narrow screen: progress before the lists. */}
+              <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_340px]">
+                <div className="order-2 flex min-w-0 flex-col gap-3 lg:order-none">
                   <Card
                     aside={
                       <div
@@ -3116,36 +3227,16 @@ function SessionView({ id }: { id: string }) {
                           key: 'actual',
                           label: t('colActual'),
                           align: 'end',
-                          cell: (part) => (
-                            <span
-                              className={cn(
-                                part.delta > 0 && 'text-state-warn',
-                                part.delta < 0 && 'text-state-danger',
-                              )}
-                            >
-                              {part.actualQuantity}
-                            </span>
-                          ),
+                          cell: (part) => part.actualQuantity,
                         },
                         {
                           key: 'delta',
                           label: t('colDelta'),
                           align: 'end',
-                          cell: (part) => (
-                            <StatusPill
-                              tone={
-                                part.delta === 0
-                                  ? 'ok'
-                                  : part.delta > 0
-                                    ? 'warn'
-                                    : 'danger'
-                              }
-                            >
-                              {part.delta > 0
-                                ? `+${String(part.delta)}`
-                                : String(part.delta)}
-                            </StatusPill>
-                          ),
+                          cell: (part) =>
+                            part.delta > 0
+                              ? `+${String(part.delta)}`
+                              : String(part.delta),
                         },
                       ]}
                     />
@@ -3168,14 +3259,9 @@ function SessionView({ id }: { id: string }) {
                       }
                       columns={[
                         {
-                          key: 'part',
-                          label: t('colPosition'),
-                          variant: 'primary',
-                          cell: (scan) => scan.partName,
-                        },
-                        {
                           key: 'time',
                           label: tj('colTime'),
+                          variant: 'primary',
                           cell: (scan) => (
                             <span className="rz-mono">
                               {timeOfDay(scan.scannedAt)}
@@ -3183,11 +3269,16 @@ function SessionView({ id }: { id: string }) {
                           ),
                         },
                         {
+                          key: 'part',
+                          label: t('colPosition'),
+                          cell: (scan) => scan.partName,
+                        },
+                        {
                           key: 'zone',
                           label: t('zones'),
                           cell: (scan) => (
                             <Link
-                              className="rz-mono"
+                              className="rz-mono text-app-ink"
                               to={`${base}/sessions/${id}/journal/${scan.zoneId}`}
                             >
                               {zoneName(scan.zoneId)}
@@ -3222,7 +3313,7 @@ function SessionView({ id }: { id: string }) {
                   </Card>
                 </div>
 
-                <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-3">
+                <div className="order-1 flex min-w-0 flex-col gap-3 lg:order-none">
                   <section
                     aria-label={t('progress')}
                     className="rz-card rz-card__body"
@@ -3268,34 +3359,13 @@ function SessionView({ id }: { id: string }) {
                     </dl>
                     {canManage ? (
                       <div className="mt-3 grid gap-2">
-                        {session.status === 'draft' ? (
-                          <Button
-                            className="rz-btn--lg w-full"
-                            disabled={acting}
-                            onClick={() => setAsking('start')}
-                            variant="primary"
-                          >
-                            {t('start')}
-                          </Button>
-                        ) : null}
                         {session.status === 'inProgress' ? (
                           <Button
                             className="rz-btn--lg w-full"
                             disabled
                             title={t('countingInApp')}
-                            variant="primary"
                           >
                             {t('continueScanning')}
-                          </Button>
-                        ) : null}
-                        {session.status === 'review' ? (
-                          <Button
-                            className="rz-btn--lg w-full"
-                            disabled={acting}
-                            onClick={() => setAsking('complete')}
-                            variant="primary"
-                          >
-                            {t('complete')}
                           </Button>
                         ) : null}
                         {session.status === 'review' ? (
@@ -3324,7 +3394,7 @@ function SessionView({ id }: { id: string }) {
                     <ul className="m-0 grid list-none p-0">
                       {session.zones.map((zone) => (
                         <li
-                          className="border-app-line grid gap-2 border-t px-4 py-2.5 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                          className="border-app-line grid gap-2 border-t px-4 py-2.5 first:border-t-0"
                           key={zone.zoneId}
                         >
                           <div className="min-w-0">
@@ -3702,22 +3772,15 @@ function ResultsView({ id }: { id: string }) {
         return (
           <div className="grid content-start">
             <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
-              <div className="flex min-w-0 items-center gap-3">
-                <Link
-                  className="rz-btn rz-btn--ghost"
-                  to={`${base}/sessions/${id}`}
-                >
-                  <ChevronLeft aria-hidden className="size-3.5" />
-                  {t('backToSession')}
-                </Link>
-                <p className="rz-crumbs m-0 hidden sm:flex">
-                  <span>{ti('crumbInventory')}</span>
-                  <ChevronRight aria-hidden className="size-3" />
-                  <span>{session.number}</span>
-                  <ChevronRight aria-hidden className="size-3" />
-                  <span aria-current="page">{t('crumbResults')}</span>
-                </p>
-              </div>
+              <InventoryCrumbs
+                base={base}
+                items={[
+                  <Link key="session" to={`${base}/sessions/${id}`}>
+                    {session.number}
+                  </Link>,
+                  t('crumbResults'),
+                ]}
+              />
               <div className="rz-topbar__actions flex-wrap items-center">
                 <Button asChild>
                   <Link to={`${base}/sessions/${id}/audit`}>{t('audit')}</Link>
@@ -3871,44 +3934,22 @@ function ResultsView({ id }: { id: string }) {
                       key: 'expected',
                       label: t('colExpected'),
                       align: 'end',
-                      cell: (part) => (
-                        <span className="text-app-muted">
-                          {part.expectedQuantity}
-                        </span>
-                      ),
+                      cell: (part) => part.expectedQuantity,
                     },
                     {
                       key: 'actual',
                       label: t('colActual'),
                       align: 'end',
-                      cell: (part) => (
-                        <span
-                          className={cn(
-                            part.delta === 0
-                              ? 'text-app-muted'
-                              : part.delta > 0
-                                ? 'text-state-warn'
-                                : 'text-state-danger',
-                          )}
-                        >
-                          {part.actualQuantity}
-                        </span>
-                      ),
+                      cell: (part) => part.actualQuantity,
                     },
                     {
                       key: 'delta',
                       label: t('colDelta'),
                       align: 'end',
                       cell: (part) =>
-                        part.delta === 0 ? (
-                          <span className="text-app-dim">0</span>
-                        ) : (
-                          <StatusPill tone={part.delta > 0 ? 'warn' : 'danger'}>
-                            {part.delta > 0
-                              ? `+${String(part.delta)}`
-                              : String(part.delta)}
-                          </StatusPill>
-                        ),
+                        part.delta > 0
+                          ? `+${String(part.delta)}`
+                          : String(part.delta),
                     },
                     {
                       key: 'decision',
@@ -4171,7 +4212,6 @@ interface AuditData {
 
 function AuditView({ id }: { id: string }) {
   const t = useT(auditMessages)
-  const ti = useT(inventoryMessages)
   const { date, locale } = useInventoryFormat()
   const base = useInventoryBase()
   const canSeeTeam = usePermission('team.view')
@@ -4231,22 +4271,15 @@ function AuditView({ id }: { id: string }) {
         return (
           <div className="grid content-start">
             <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
-              <div className="flex min-w-0 items-center gap-3">
-                <Link
-                  className="rz-btn rz-btn--ghost"
-                  to={`${base}/sessions/${id}`}
-                >
-                  <ChevronLeft aria-hidden className="size-3.5" />
-                  {t('backToSession')}
-                </Link>
-                <p className="rz-crumbs m-0 hidden sm:flex">
-                  <span>{ti('crumbInventory')}</span>
-                  <ChevronRight aria-hidden className="size-3" />
-                  <span>{session.number}</span>
-                  <ChevronRight aria-hidden className="size-3" />
-                  <span aria-current="page">{t('crumbAudit')}</span>
-                </p>
-              </div>
+              <InventoryCrumbs
+                base={base}
+                items={[
+                  <Link key="session" to={`${base}/sessions/${id}`}>
+                    {session.number}
+                  </Link>,
+                  t('crumbAudit'),
+                ]}
+              />
               <div className="rz-topbar__actions flex-wrap items-center">
                 <Button
                   aria-pressed={raw}
@@ -4332,16 +4365,16 @@ function AuditView({ id }: { id: string }) {
                             />
                           </span>
                           <span className="grid min-w-0 gap-1">
-                            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                              <span className="rz-strong font-semibold">
+                            <span className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
+                              <span className="rz-strong">
                                 {auditTitle(event.action, locale)}
                               </span>
-                              <StatusPill>
+                              <span className="rz-muted">
+                                {nameOf(event.actorUserId) ?? t('actorUnknown')}
+                              </span>
+                              <StatusPill className="self-center">
                                 {t(AUDIT_KINDS[kind].label)}
                               </StatusPill>
-                            </span>
-                            <span className="rz-muted block">
-                              {nameOf(event.actorUserId) ?? t('actorUnknown')}
                             </span>
                             {change === null ? null : (
                               <span className="rz-change">
@@ -4523,21 +4556,15 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
         return (
           <div className="grid content-start">
             <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
-              <div className="flex min-w-0 items-center gap-3">
-                <Link className="rz-btn rz-btn--ghost" to={backTo}>
-                  <ChevronLeft aria-hidden className="size-3.5" />
-                  {t('backToSession')}
-                </Link>
-                <p className="rz-crumbs m-0 hidden sm:flex">
-                  <span>{t('crumbSession', { number: session.number })}</span>
-                  {zone ? (
-                    <>
-                      <ChevronRight aria-hidden className="size-3" />
-                      <span aria-current="page">{zone.zoneCode}</span>
-                    </>
-                  ) : null}
-                </p>
-              </div>
+              <InventoryCrumbs
+                base={base}
+                items={[
+                  <Link key="session" to={backTo}>
+                    {t('crumbSession', { number: session.number })}
+                  </Link>,
+                  zone ? zone.zoneCode : t('title'),
+                ]}
+              />
               <div className="rz-topbar__actions flex-wrap items-center">
                 <Button asChild>
                   <Link to={`${base}/sessions/${id}/results`}>
@@ -4730,22 +4757,16 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                       key: 'expected',
                       label: t('colExpected'),
                       align: 'end',
-                      cell: (scan) => (
-                        <span className="text-app-muted">
-                          {resultOf(scan.partId)?.expectedQuantity ?? '—'}
-                        </span>
-                      ),
+                      cell: (scan) =>
+                        resultOf(scan.partId)?.expectedQuantity ?? '—',
                     },
                     {
                       key: 'actual',
                       label: t('colScan'),
                       align: 'end',
-                      cell: (scan) => (
-                        <span className="text-app-strong">
-                          {resultOf(scan.partId)?.actualQuantity ??
-                            scan.zonePartCount}
-                        </span>
-                      ),
+                      cell: (scan) =>
+                        resultOf(scan.partId)?.actualQuantity ??
+                        scan.zonePartCount,
                     },
                     {
                       key: 'delta',
@@ -4759,21 +4780,9 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                         const part = resultOf(scan.partId)
                         if (part === null)
                           return <span className="text-app-dim">—</span>
-                        return (
-                          <StatusPill
-                            tone={
-                              part.delta === 0
-                                ? 'ok'
-                                : part.delta > 0
-                                  ? 'warn'
-                                  : 'danger'
-                            }
-                          >
-                            {part.delta > 0
-                              ? `+${String(part.delta)}`
-                              : String(part.delta)}
-                          </StatusPill>
-                        )
+                        return part.delta > 0
+                          ? `+${String(part.delta)}`
+                          : String(part.delta)
                       },
                     },
                   ]}

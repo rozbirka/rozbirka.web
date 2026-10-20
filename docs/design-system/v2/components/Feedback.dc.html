@@ -10,7 +10,7 @@
 <helmet>
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
-<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}button{font:inherit;color:inherit}a{color:#f77425}a:hover{color:#ff8430}button:focus-visible{outline:none;box-shadow:var(--rz-focus)}@keyframes rz-pulse{0%,100%{opacity:1}50%{opacity:0.45}}</style>
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}button{font:inherit;color:inherit}a{color:var(--rz-brand-text)}a:hover{color:var(--rz-brand-hover)}button:focus-visible{outline:none;box-shadow:var(--rz-focus)}@keyframes rz-pulse{0%,100%{opacity:1}50%{opacity:0.45}}</style>
 </helmet>
 <div data-theme="dark" data-density="{{ density }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
   <div style="max-width:1280px;margin:0 auto;display:grid;gap:24px">
@@ -28,25 +28,25 @@
         <div style="display:grid;gap:10px;max-width:720px">
           <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">Notice · info / ok / warn / danger</p>
           <div role="status" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px;padding:8px 12px;border:1px solid color-mix(in srgb, var(--rz-info) 30%, transparent);border-radius:var(--rz-r-md);background:var(--rz-info-soft)">
-            <i class="icon-info" style="font-size:15px;color:var(--rz-info);margin-top:2px"></i>
+            <i class="icon-info" style="font-size:var(--rz-icon-md);color:var(--rz-info);margin-top:2px"></i>
             <span style="flex:1;min-width:0;color:var(--rz-text)">Фільтр «Вільні запчастини» скинуто: кожна деталь має автомобіль або партію.</span>
           </div>
           <div role="status" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px;padding:8px 12px;border:1px solid color-mix(in srgb, var(--rz-ok) 30%, transparent);border-radius:var(--rz-r-md);background:var(--rz-ok-soft)">
-            <i class="icon-circle-check" style="font-size:15px;color:var(--rz-ok);margin-top:2px"></i>
+            <i class="icon-circle-check" style="font-size:var(--rz-icon-md);color:var(--rz-ok);margin-top:2px"></i>
             <span style="flex:1;min-width:0;color:var(--rz-text)">Збережено</span>
           </div>
           <div role="status" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px 8px 8px 12px;border:1px solid color-mix(in srgb, var(--rz-warn) 30%, transparent);border-radius:var(--rz-r-md);background:var(--rz-warn-soft)">
-            <i class="icon-triangle-alert" style="font-size:15px;color:var(--rz-warn)"></i>
+            <i class="icon-triangle-alert" style="font-size:var(--rz-icon-md);color:var(--rz-warn)"></i>
             <span style="flex:1;min-width:0;color:var(--rz-text)">Ліміт деталей вичерпано.</span>
             <button type="button" style="height:24px;padding:0 8px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-xs);background:var(--rz-surface);color:var(--rz-text);font-size:var(--rz-fs-caption);font-weight:500;cursor:pointer" style-hover="background:var(--rz-surface-2)">Тарифи</button>
           </div>
           <div role="alert" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px 8px 8px 12px;border:1px solid color-mix(in srgb, var(--rz-danger) 30%, transparent);border-radius:var(--rz-r-md);background:var(--rz-danger-soft)">
-            <i class="icon-triangle-alert" style="font-size:15px;color:var(--rz-danger)"></i>
+            <i class="icon-triangle-alert" style="font-size:var(--rz-icon-md);color:var(--rz-danger)"></i>
             <span style="flex:1;min-width:0;color:var(--rz-text)">Не вдалося зберегти. Спробуйте ще раз.</span>
             <button type="button" style="height:24px;padding:0 8px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-xs);background:var(--rz-surface);color:var(--rz-text);font-size:var(--rz-fs-caption);font-weight:500;cursor:pointer" style-hover="background:var(--rz-surface-2)">Спробувати ще раз</button>
           </div>
           <div role="status" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1px solid color-mix(in srgb, var(--rz-warn) 30%, transparent);border-radius:var(--rz-r-md);background:var(--rz-warn-soft)">
-            <i class="icon-triangle-alert" style="font-size:15px;color:var(--rz-warn);margin-top:2px"></i>
+            <i class="icon-triangle-alert" style="font-size:var(--rz-icon-md);color:var(--rz-warn);margin-top:2px"></i>
             <div style="flex:1;min-width:0;display:grid;gap:4px;color:var(--rz-text)">
               <strong style="font-weight:600;color:var(--rz-text-strong)">Один файл не завантажився. Повторіть або приберіть його, щоб зберегти.</strong>
               <span style="color:var(--rz-text-muted)">block-варіант: заголовок і довільний вміст (список, кілька абзаців).</span>
@@ -57,7 +57,7 @@
         <div style="display:grid;gap:10px;padding-top:20px;border-top:1px solid var(--rz-border)">
           <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">Banner · смуга під topbar для стану всього модуля</p>
           <div role="status" style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;min-height:36px;padding:6px 20px;border-top:1px solid var(--rz-border);border-bottom:1px solid var(--rz-border);background:var(--rz-warn-soft)">
-            <i class="icon-lock" style="font-size:14px;color:var(--rz-warn)"></i>
+            <i class="icon-lock" style="font-size:var(--rz-icon);color:var(--rz-warn)"></i>
             <span style="flex:1;min-width:0;color:var(--rz-text)">Поточна підписка не дозволяє цю дію.</span>
             <a href="#" style="font-weight:500;color:var(--rz-brand-text)">Тарифи</a>
           </div>
@@ -68,18 +68,18 @@
           <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">Toast · ok / info / danger · знизу праворуч, до 3 одночасно, 6 с</p>
           <div style="display:grid;gap:8px;justify-items:start">
             <div role="status" style="display:flex;align-items:center;gap:10px;width:100%;max-width:400px;min-height:40px;padding:6px 6px 6px 12px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-overlay);box-shadow:var(--rz-shadow-popover)">
-              <i class="icon-circle-check" style="font-size:15px;color:var(--rz-ok)"></i><span style="flex:1;min-width:0;color:var(--rz-text)">Код скопійовано.</span>
-              <button type="button" aria-label="Закрити сповіщення" style="display:grid;place-items:center;width:24px;height:24px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-dim);cursor:pointer" style-hover="background:var(--rz-fill-hover);color:var(--rz-text)"><i class="icon-x" style="font-size:14px"></i></button>
+              <i class="icon-circle-check" style="font-size:var(--rz-icon-md);color:var(--rz-ok)"></i><span style="flex:1;min-width:0;color:var(--rz-text)">Код скопійовано.</span>
+              <button type="button" aria-label="Закрити сповіщення" style="display:grid;place-items:center;width:24px;height:24px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-dim);cursor:pointer" style-hover="background:var(--rz-fill-hover);color:var(--rz-text)"><i class="icon-x" style="font-size:var(--rz-icon)"></i></button>
             </div>
             <div role="status" style="display:flex;align-items:center;gap:10px;width:100%;max-width:400px;min-height:40px;padding:6px 6px 6px 12px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-overlay);box-shadow:var(--rz-shadow-popover)">
-              <i class="icon-info" style="font-size:15px;color:var(--rz-info)"></i><span style="flex:1;min-width:0;color:var(--rz-text)">Збережено</span>
+              <i class="icon-info" style="font-size:var(--rz-icon-md);color:var(--rz-info)"></i><span style="flex:1;min-width:0;color:var(--rz-text)">Збережено</span>
               <button type="button" style="height:24px;padding:0 8px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-brand-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)">Відкрити</button>
-              <button type="button" aria-label="Закрити сповіщення" style="display:grid;place-items:center;width:24px;height:24px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-dim);cursor:pointer" style-hover="background:var(--rz-fill-hover);color:var(--rz-text)"><i class="icon-x" style="font-size:14px"></i></button>
+              <button type="button" aria-label="Закрити сповіщення" style="display:grid;place-items:center;width:24px;height:24px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-dim);cursor:pointer" style-hover="background:var(--rz-fill-hover);color:var(--rz-text)"><i class="icon-x" style="font-size:var(--rz-icon)"></i></button>
             </div>
             <div role="alert" style="display:flex;align-items:center;gap:10px;width:100%;max-width:400px;min-height:40px;padding:6px 6px 6px 12px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-overlay);box-shadow:var(--rz-shadow-popover)">
-              <i class="icon-triangle-alert" style="font-size:15px;color:var(--rz-danger)"></i><span style="flex:1;min-width:0;color:var(--rz-text)">Не вдалося виконати дію. Спробуйте ще раз.</span>
+              <i class="icon-triangle-alert" style="font-size:var(--rz-icon-md);color:var(--rz-danger)"></i><span style="flex:1;min-width:0;color:var(--rz-text)">Не вдалося виконати дію. Спробуйте ще раз.</span>
               <button type="button" style="height:24px;padding:0 8px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-brand-text);font-weight:500;cursor:pointer;white-space:nowrap" style-hover="background:var(--rz-fill-hover)">Повторити</button>
-              <button type="button" aria-label="Закрити сповіщення" style="display:grid;place-items:center;width:24px;height:24px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-dim);cursor:pointer" style-hover="background:var(--rz-fill-hover);color:var(--rz-text)"><i class="icon-x" style="font-size:14px"></i></button>
+              <button type="button" aria-label="Закрити сповіщення" style="display:grid;place-items:center;width:24px;height:24px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:var(--rz-text-dim);cursor:pointer" style-hover="background:var(--rz-fill-hover);color:var(--rz-text)"><i class="icon-x" style="font-size:var(--rz-icon)"></i></button>
             </div>
           </div>
           <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Одна дія максимум («Відкрити», «Повторити», «Скасувати» — з toast-context.ts). Те, на що треба відреагувати, — Notice, не Toast.</span>

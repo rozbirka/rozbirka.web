@@ -35,12 +35,14 @@ export function RevenueChart({
   const money = (amount: number, code: string | null) =>
     wholeMoney(amount, code, locale)
 
-  // Bars follow the design system's chart: the latest bucket — the one the
-  // period is running in now — in the brand accent, every other bucket in the
-  // neutral selected fill, an empty bucket in the hover fill. Tokens only.
+  // Bars follow the design system's chart: every bucket in the brand's soft
+  // fill under a 2px brand edge, its amount above it and its label under it;
+  // an empty bucket stays a hairline in the hover fill. A month is too dense
+  // to label each bar, so it keeps only the first and last label. Tokens only.
+  const labelled = days <= LABELLED_BARS
   return (
     <section aria-label={t('receipts')} className="rz-card">
-      <header className="rz-card__head py-2.5">
+      <header className="rz-card__head">
         <h2 className="rz-h-card">{t('period', { period: periodLabel })}</h2>
         {average === null || currency === null ? null : (
           <span className="rz-muted text-caption">
@@ -67,41 +69,71 @@ export function RevenueChart({
         {days === 0 ? (
           <p className="rz-dim m-0">{t('noReceipts')}</p>
         ) : (
-          <div className="grid gap-1">
+          <div className="grid gap-1.5">
             <div
               className={cn(
-                'flex h-[140px] items-end',
-                days > 14 ? 'gap-0.5' : 'gap-1.5',
+                'flex h-[160px] items-end',
+                days > 14 ? 'gap-0.5' : 'gap-2.5',
               )}
             >
               {series.map((value, index) => (
                 <div
-                  className={cn(
-                    'min-w-0 flex-1 rounded-t-rz-xs',
-                    index === series.length - 1
-                      ? 'bg-brand'
-                      : value === 0
-                        ? 'bg-app-hover'
-                        : 'bg-app-selected',
-                  )}
+                  className="flex h-full min-w-0 flex-1 flex-col items-stretch justify-end gap-1"
                   key={data.labels[index] ?? index}
-                  style={{
-                    height: `${String(max === 0 ? 2 : Math.max((value / max) * 100, 2))}%`,
-                  }}
                   title={`${data.labels[index] ?? ''} · ${money(value, currency)}`}
-                />
+                >
+                  {labelled && value > 0 ? (
+                    <span className="rz-mono rz-dim truncate text-center text-micro">
+                      {wholeMoney(value, null, locale)}
+                    </span>
+                  ) : null}
+                  <div
+                    className={cn(
+                      'rounded-t-rz-xs',
+                      value === 0
+                        ? 'bg-app-hover'
+                        : 'bg-brand-soft border-brand border-t-2',
+                    )}
+                    style={{
+                      height: `${String(max === 0 ? 2 : Math.max((value / max) * BAR_MAX, 2))}%`,
+                    }}
+                  />
+                </div>
               ))}
             </div>
-            <p className="rz-mono rz-dim m-0 flex justify-between gap-2 text-micro">
-              <span>{first}</span>
-              <span>{last}</span>
-            </p>
+            {labelled ? (
+              <p
+                className={cn(
+                  'rz-muted m-0 flex text-caption',
+                  days > 14 ? 'gap-0.5' : 'gap-2.5',
+                )}
+              >
+                {series.map((_, index) => (
+                  <span
+                    className="min-w-0 flex-1 truncate text-center"
+                    key={data.labels[index] ?? index}
+                  >
+                    {data.labels[index] ?? ''}
+                  </span>
+                ))}
+              </p>
+            ) : (
+              <p className="rz-mono rz-dim m-0 flex justify-between gap-2 text-micro">
+                <span>{first}</span>
+                <span>{last}</span>
+              </p>
+            )}
           </div>
         )}
       </div>
     </section>
   )
 }
+
+/** Up to a fortnight of buckets each carry their amount and label. */
+const LABELLED_BARS = 14
+/** The tallest bar's share of the plot, leaving room for its amount above. */
+const BAR_MAX = 85
 
 /**
  * The currency the bars are in: the one the server names (pending contract),

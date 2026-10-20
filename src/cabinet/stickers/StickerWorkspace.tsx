@@ -1,10 +1,13 @@
 import type { ReactNode } from 'react'
+import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /** Shared desktop print workspace: selection on the left, sheet on the right. */
 export function StickerWorkspace({
   title,
   subtitle,
+  crumb,
+  actions,
   back,
   notice,
   list,
@@ -17,6 +20,10 @@ export function StickerWorkspace({
 }: {
   title: string
   subtitle: ReactNode
+  /** The trail before the title in the topbar, e.g. the sidebar section. */
+  crumb?: ReactNode
+  /** The page's own actions, at the right of the topbar. */
+  actions?: ReactNode
   back?: ReactNode
   notice?: ReactNode
   list: ReactNode
@@ -32,7 +39,7 @@ export function StickerWorkspace({
       {notice}
       <div
         data-slot="sticker-workspace-columns"
-        className="grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_360px]"
+        className="grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_340px]"
       >
         {list}
         {preview}
@@ -62,10 +69,21 @@ export function StickerWorkspace({
       aria-label={label}
       className={cn('grid min-w-0 content-start', className)}
     >
-      <header className="rz-topbar">
+      <header className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
         <p className="rz-crumbs m-0">
+          {crumb === undefined ? null : (
+            <>
+              <span>{crumb}</span>
+              <ChevronRight aria-hidden className="size-3 shrink-0" />
+            </>
+          )}
           <span aria-current="page">{title}</span>
         </p>
+        {actions === undefined ? null : (
+          <div className="rz-topbar__actions flex-wrap items-center">
+            {actions}
+          </div>
+        )}
       </header>
       <div className="rz-page">
         {back}

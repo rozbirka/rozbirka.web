@@ -173,7 +173,11 @@ describe('in British English', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Order #41' }),
     ).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Back to orders' })).toBeVisible()
+    // The breadcrumb's «Orders» leads back to the list.
+    expect(screen.getByRole('link', { name: 'Orders' })).toHaveAttribute(
+      'href',
+      '/app/garage/orders',
+    )
     expect(screen.getByText('Created 22/09/2026, 01:30 · Olena')).toBeVisible()
     const history = screen.getByRole('list', { name: 'Order history' })
     expect(within(history).getByText('Order created')).toBeVisible()
@@ -274,7 +278,7 @@ describe('pure helpers', () => {
     expect(orderStatusPresentation('refunded').label).toBe('Повернено')
     expect(orderStatusPresentation('refunded', 'en-GB')).toEqual({
       label: 'Refunded',
-      tone: 'info',
+      tone: 'danger',
     })
     expect(orderStatusPresentation('confirmed', 'pl').label).toBe(
       'Potwierdzone',

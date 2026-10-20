@@ -208,13 +208,18 @@ function OpenOrderCustomerDrawer({
         <Notice tone="danger">{searchError}</Notice>
       )}
 
-      <div className="rz-card" id={listId}>
+      <div
+        className="border-app-line min-h-fit overflow-hidden rounded-rz-md border bg-(--rz-sheet-field)"
+        id={listId}
+      >
         {results === null ? (
           <div className="p-3">
             <SkeletonRows label={t('searching')} rows={3} />
           </div>
         ) : results.length === 0 ? (
-          <p className="rz-muted m-0 px-4 py-5 text-center">{t('notFound')}</p>
+          <p className="rz-muted border-app-line m-0 border-b px-4 py-4 text-center">
+            {t('notFound')}
+          </p>
         ) : (
           <ul aria-label={t('foundLabel')} className="m-0 list-none p-0">
             {results.map((customer) => {
@@ -224,7 +229,7 @@ function OpenOrderCustomerDrawer({
                 <li key={customer.id}>
                   <button
                     className={cn(
-                      'border-app-line flex w-full cursor-pointer items-center gap-2.5 border-0 border-b bg-transparent px-3 py-2 text-left transition-colors',
+                      'border-app-line flex min-h-11 w-full cursor-pointer items-center gap-3 border-0 border-b bg-transparent px-3 py-2 text-left transition-colors',
                       active
                         ? 'bg-app-selected shadow-[inset_2px_0_0_var(--rz-brand)]'
                         : 'hover:bg-app-hover',
@@ -242,7 +247,7 @@ function OpenOrderCustomerDrawer({
                       {initials(customer.name)}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="rz-strong block truncate font-medium">
+                      <span className="rz-strong block truncate font-semibold">
                         {customer.name}
                       </span>
                       <span className="rz-dim block font-mono text-caption">
@@ -255,8 +260,8 @@ function OpenOrderCustomerDrawer({
                     {current || active ? (
                       <span
                         className={cn(
-                          'shrink-0 text-caption font-medium whitespace-nowrap',
-                          current ? 'text-app-muted' : 'text-app-strong',
+                          'shrink-0 text-caption font-semibold whitespace-nowrap',
+                          current ? 'text-app-muted' : 'text-brand-text',
                         )}
                       >
                         {current ? t('currentTag') : t('pickedTag')}
@@ -270,10 +275,10 @@ function OpenOrderCustomerDrawer({
         )}
         <button
           className={cn(
-            'flex w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3 py-2 text-left font-medium transition-colors',
+            'text-brand-text flex min-h-10 w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3 py-2 text-left font-semibold transition-colors',
             creating
-              ? 'bg-app-selected text-app-strong shadow-[inset_2px_0_0_var(--rz-brand)]'
-              : 'text-app-ink hover:bg-app-hover',
+              ? 'bg-app-selected shadow-[inset_2px_0_0_var(--rz-brand)]'
+              : 'hover:bg-app-hover',
           )}
           onClick={() => {
             setCreating((was) => !was)
@@ -284,18 +289,13 @@ function OpenOrderCustomerDrawer({
           }}
           type="button"
         >
-          <span
-            aria-hidden
-            className="border-app-line-2 text-app-muted grid size-8 shrink-0 place-items-center rounded-full border border-dashed"
-          >
-            <Plus className="size-3.5" />
-          </span>
+          <Plus aria-hidden className="size-3.5 shrink-0" />
           {t('newCustomer')}
         </button>
       </div>
 
       {creating ? (
-        <div className="rz-inset grid gap-3">
+        <div className="grid gap-3">
           <Field label={t('name')}>
             <TextInput
               autoComplete="off"

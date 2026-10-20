@@ -41,8 +41,11 @@ export function ZoneEditorSheet({
 
   return (
     <Sheet
-      description={description ?? t('newZoneHint')}
-      eyebrow={eyebrow}
+      /* Scheme 1b keeps one muted line under the title: the warehouse it
+         belongs to leads it, so the context is not lost with the eyebrow. */
+      description={
+        description ?? [eyebrow, t('newZoneHint')].filter(Boolean).join(' · ')
+      }
       footer={
         <>
           <Button disabled={pending} onClick={onClose} type="button">

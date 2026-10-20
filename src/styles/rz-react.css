@@ -17,8 +17,8 @@
 }
 
 .rz-btn svg {
-  width: 14px;
-  height: 14px;
+  width: var(--rz-icon);
+  height: var(--rz-icon);
   color: var(--rz-text-muted);
 }
 .rz-btn--primary svg {
@@ -29,32 +29,32 @@
 }
 .rz-btn--touch svg,
 .rz-btn--glove svg {
-  width: 16px;
-  height: 16px;
+  width: var(--rz-icon-md);
+  height: var(--rz-icon-md);
 }
 
 .rz-nav-item svg {
-  width: 16px;
-  height: 16px;
+  width: var(--rz-icon-md);
+  height: var(--rz-icon-md);
   color: var(--rz-text-dim);
 }
 .rz-nav-item[aria-current='page'] svg {
   color: var(--rz-brand);
 }
 .rz-tabbar a svg {
-  width: 20px;
-  height: 20px;
+  width: var(--rz-icon-lg);
+  height: var(--rz-icon-lg);
 }
 
 .rz-search svg {
-  width: 14px;
-  height: 14px;
+  width: var(--rz-icon);
+  height: var(--rz-icon);
   color: var(--rz-text-dim);
 }
 
 .rz-notice > svg {
-  width: 15px;
-  height: 15px;
+  width: var(--rz-icon-md);
+  height: var(--rz-icon-md);
 }
 .rz-notice--info > svg {
   color: var(--rz-info);
@@ -70,8 +70,8 @@
 }
 
 .rz-menu__item svg {
-  width: 14px;
-  height: 14px;
+  width: var(--rz-icon);
+  height: var(--rz-icon);
   color: var(--rz-text-muted);
 }
 .rz-menu__item--danger svg {
@@ -79,17 +79,17 @@
 }
 
 .rz-state__icon svg {
-  width: 16px;
-  height: 16px;
+  width: var(--rz-icon-md);
+  height: var(--rz-icon-md);
 }
 .rz-timeline__icon svg {
-  width: 11px;
-  height: 11px;
+  width: var(--rz-icon-sm);
+  height: var(--rz-icon-sm);
 }
 .rz-code button svg,
 .rz-stepper button svg {
-  width: 14px;
-  height: 14px;
+  width: var(--rz-icon);
+  height: var(--rz-icon);
 }
 
 /*
@@ -134,4 +134,12 @@
 .rz-choice-card:has(:checked)
   :is(.rz-caption, .rz-dim, .rz-hint, .text-app-dim) {
   color: var(--rz-text-muted);
+}
+
+/* A deep trail (session › journal) wraps on a phone instead of widening it. */
+@media (max-width: 767px) {
+  .rz-topbar .rz-crumbs {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
 }

@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ComponentType,
+  type ReactNode,
 } from 'react'
 import { Link } from 'react-router'
 import {
@@ -16,26 +17,29 @@ import {
   Trash2,
   UserPlus,
 } from 'lucide-react'
-import { AlertDialog } from 'radix-ui'
 import {
   ActionMenu,
   Button,
+  ConfirmDialog,
   DateValue,
   DeniedState,
-  Field,
+  EmptyState,
+  ErrorState,
   Notice,
   SearchInput,
   SelectInput,
+  Skeleton,
   SkeletonRows,
   StatusPill,
   useOperation,
+  useOptionalToast,
   type StatusTone,
   Sheet,
 } from '@/components/app'
 import { commonMessages, translate, useLocale, useT } from '@/i18n'
+import { cn } from '@/lib/utils'
 import { roleLabel, teamMessages } from './messages'
-import { Kpi, KpiStrip } from '../redesign-kpi'
-import { RedesignShell } from '../redesign-shell'
+import { Crumbs, RedesignShell } from '../redesign-shell'
 import { ALL_PERMISSIONS } from '../access-types'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
@@ -59,12 +63,19 @@ interface Confirmation {
   title: string
   /** What this action does, in the words of the person it happens to. */
   description: string
+  /** The verb on the confirm button, so the choice reads without the title. */
+  verb: string
+  /** Bringing someone back is not destructive; the rest is. */
+  destructive: boolean
   /** Shown inside the dialog when the action fails, so the retry is one click. */
   failure: string
   confirm(): Promise<boolean>
 }
 
 type AccessRefreshState = 'ready' | 'refreshing' | 'failed'
+
+/** The member's own permissions are read when the sheet opens, inside it. */
+type PermissionsLoad = 'loading' | 'ready' | 'failed'
 
 type TeamKey = keyof (typeof teamMessages)['uk']
 
@@ -104,15 +115,6 @@ const MEMBER_SEGMENTS = [
   { key: 'off', message: 'segmentOff' },
 ] as const
 
-/** Two letters standing in for a photo the API does not keep. */
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('')
-
 const isOwnerRole = (role: Pick<RoleDto, 'name' | 'isSystem'>) =>
   role.isSystem && role.name.trim().toLowerCase() === 'owner'
 
@@ -133,11 +135,11 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
   const { locale } = useLocale()
   const t = useT(teamMessages)
   const tc = useT(commonMessages)
+  const toast = useOptionalToast()
   const accessLostMessage = t('accessLost')
   const [data, setData] = useState<TeamData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [feedback, setFeedback] = useState<string | null>(null)
   const [accessWarning, setAccessWarning] = useState<string | null>(null)
   const [accessRefreshState, setAccessRefreshState] =
     useState<AccessRefreshState>('ready')
@@ -149,6 +151,9 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
   const [permissionMember, setPermissionMember] =
     useState<TeamMemberDto | null>(null)
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
+  const [permissionsLoad, setPermissionsLoad] =
+    useState<PermissionsLoad>('loading')
+  const permissionsRequestRef = useRef(0)
   const [invitationDrawerOpen, setInvitationDrawerOpen] = useState(false)
   const [invitationRoleId, setInvitationRoleId] = useState('')
   const [invitationHistoryOpen, setInvitationHistoryOpen] = useState(false)
@@ -225,7 +230,6 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
         return false
       }
       const signal = tenantRequestScope.signal
-      setFeedback(null)
       setError(null)
       try {
         await operation(signal)
@@ -237,11 +241,11 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       }
       if (signal.aborted) return false
 
-      setFeedback(successMessage)
+      toast?.show({ message: successMessage, tone: 'ok' })
       await refreshAccess()
       return true
     },
-    [accessLostMessage, canManage, locale, refreshAccess],
+    [accessLostMessage, canManage, locale, refreshAccess, toast],
   )
 
   const teamData =
@@ -278,7 +282,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
     },
     {
       errorMessage: () => t('permissionsSaveFailed'),
-      onSuccess: () => setPermissionMember(null),
+      onSuccess: () => closePermissions(),
     },
   )
 
@@ -329,19 +333,32 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       return
     }
     const signal = tenantRequestScope.signal
+    const request = ++permissionsRequestRef.current
+    // The sheet opens at once and loads inside, as the design draws it: the
+    // reader sees whose rights are coming, then the rights or the failure.
+    memberPermissions.reset()
+    setSelectedPermissions([])
+    setPermissionsLoad('loading')
+    setPermissionMember(member)
     try {
       const result = await teamApi.getUserPermissions(member.userId, { signal })
-      if (signal.aborted) return
+      if (signal.aborted || request !== permissionsRequestRef.current) return
       if (!canManage()) {
+        setPermissionMember(null)
         setError(accessLostMessage)
         return
       }
-      memberPermissions.reset()
-      setPermissionMember(member)
       setSelectedPermissions(result.permissions)
+      setPermissionsLoad('ready')
     } catch {
-      if (!signal.aborted) setError(t('permissionsLoadFailed'))
+      if (!signal.aborted && request === permissionsRequestRef.current)
+        setPermissionsLoad('failed')
     }
+  }
+
+  const closePermissions = () => {
+    permissionsRequestRef.current += 1
+    setPermissionMember(null)
   }
 
   const toggleUserPermission = (permission: string) => {
@@ -367,12 +384,13 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
 
   const restoreFocus = () => restoreFocusRef.current?.focus()
 
+  const crumbs = <Crumbs items={t('crumb').split(' · ')} />
+
   if (!canView) {
     return (
-      <RedesignShell crumb={t('accessEyebrow')}>
-        <div className="rz-page-head">
-          <h1 className="rz-h-page">{t('title')}</h1>
-        </div>
+      <RedesignShell crumb={crumbs}>
+        {/* The frame shows the state card alone; the page keeps its name. */}
+        <h1 className="sr-only">{t('title')}</h1>
         <DeniedState role="alert" title={t('noViewPermission')} />
       </RedesignShell>
     )
@@ -410,8 +428,11 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
     ? [...openInvitations, ...invitationHistory]
     : openInvitations
   const seats = cabinet.snapshot?.entitlement?.usage.users ?? null
-  const planName = cabinet.snapshot?.subscription?.planName ?? null
   const myUserId = cabinet.snapshot?.userId ?? null
+  // A failed first load has nothing to show around it: the whole list area
+  // becomes the error state with its retry. A failure after data arrived is a
+  // notice above the data that is still true.
+  const loadFailed = teamData === null && !loading && error !== null
 
   return (
     <>
@@ -428,15 +449,13 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
             </Button>
           ) : undefined
         }
-        crumb={t('crumb')}
+        crumb={crumbs}
       >
         <div className="rz-page-head">
           <h1 className="rz-h-page">{t('title')}</h1>
-          <span className="rz-muted text-pretty">{t('lead')}</span>
         </div>
 
-        {feedback && <Notice tone="ok">{feedback}</Notice>}
-        {pageError && <Notice tone="danger">{pageError}</Notice>}
+        {!loadFailed && pageError && <Notice tone="danger">{pageError}</Notice>}
         {accessWarning && (
           <Notice
             action={
@@ -455,58 +474,18 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
             {accessWarning}
           </Notice>
         )}
-        {loading && <SkeletonRows label={t('loading')} />}
+        {loading && teamData === null && (
+          <SkeletonRows columns={4} label={t('loading')} rows={6} />
+        )}
+        {loadFailed && (
+          <ErrorState
+            description={error}
+            onRetry={() => setRefreshNonce((current) => current + 1)}
+          />
+        )}
 
         {teamData && (
           <>
-            <KpiStrip>
-              <Kpi
-                label={t('kpiMembers')}
-                meta={`${t('activeCount', { count: activeMembers })}${
-                  offMembers === 0
-                    ? ''
-                    : ` · ${t('offCount', { count: offMembers })}`
-                }`}
-                value={String(teamData.members.length)}
-              />
-              <Kpi
-                label={t('kpiSeats')}
-                meta={
-                  seats === null
-                    ? t('seatsUnknown')
-                    : seats.max == null
-                      ? t('seatsUnlimited', {
-                          plan: planName ?? t('planFallback'),
-                        })
-                      : t('seatsFree', {
-                          plan: planName ?? t('planFallback'),
-                          count: Math.max(seats.max - seats.used, 0),
-                        })
-                }
-                tone={
-                  seats?.max != null && seats.used >= seats.max
-                    ? 'warn'
-                    : 'plain'
-                }
-                value={
-                  seats === null
-                    ? '—'
-                    : seats.max == null
-                      ? String(seats.used)
-                      : `${String(seats.used)} / ${String(seats.max)}`
-                }
-              />
-              <Kpi
-                label={t('kpiInvitations')}
-                meta={
-                  openInvitations.length === 0
-                    ? t('invitationsNone')
-                    : t('invitationsHint')
-                }
-                value={String(openInvitations.length)}
-              />
-            </KpiStrip>
-
             <div className="rz-toolbar" role="search">
               <SearchInput
                 aria-label={t('searchMembers')}
@@ -549,12 +528,12 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                 {t('members')}
               </h2>
               {shownMembers.length === 0 ? (
-                <div className="rz-state min-h-[200px]">
-                  <span className="rz-state__icon">
-                    <SearchX aria-hidden />
-                  </span>
-                  <p className="rz-state__title">{t('noMembersForFilter')}</p>
-                </div>
+                <EmptyState
+                  className="min-h-[200px] border-0"
+                  icon={<SearchX aria-hidden />}
+                  title={t('noMembersForFilter')}
+                  tone="neutral"
+                />
               ) : (
                 <div className="rz-table-scroll">
                   <table className="rz-table">
@@ -581,37 +560,29 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                     <tbody>
                       {shownMembers.map((member) => (
                         <tr key={member.id}>
-                          <th className="py-2" scope="row">
-                            <span className="flex min-w-0 items-center gap-2.5">
-                              <span
-                                aria-hidden
-                                className="rz-avatar rz-avatar--round"
-                              >
-                                {initials(member.name)}
-                              </span>
-                              <span className="grid min-w-0 gap-0.5">
-                                <span className="flex flex-wrap items-center gap-2">
-                                  {member.name}
-                                  {member.userId === myUserId && (
-                                    <StatusPill>{t('itsYou')}</StatusPill>
-                                  )}
-                                </span>
-                                {member.phone ? (
-                                  <span className="rz-caption rz-mono font-normal">
-                                    {member.phone}
-                                  </span>
-                                ) : (
-                                  <span
-                                    className="rz-caption font-normal"
-                                    title={t('noEmail')}
-                                  >
-                                    {t('noContact')}
-                                  </span>
+                          <th className="py-1.5" scope="row">
+                            <span className="grid min-w-0 gap-0.5">
+                              <span className="flex flex-wrap items-center gap-2">
+                                {member.name}
+                                {member.userId === myUserId && (
+                                  <StatusPill>{t('itsYou')}</StatusPill>
                                 )}
                               </span>
+                              {member.phone ? (
+                                <span className="rz-caption font-normal">
+                                  {member.phone}
+                                </span>
+                              ) : (
+                                <span
+                                  className="rz-caption font-normal"
+                                  title={t('noEmail')}
+                                >
+                                  {t('noContact')}
+                                </span>
+                              )}
                             </span>
                           </th>
-                          <td className="py-2" data-label={t('columnRole')}>
+                          <td className="py-1.5" data-label={t('columnRole')}>
                             {canManageAccess &&
                             member.userId !== myUserId &&
                             !isOwnerRole(member.role) ? (
@@ -638,11 +609,19 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                               <span>{roleLabel(member.role, locale)}</span>
                             )}
                           </td>
-                          <td className="py-2" data-label={t('columnActivity')}>
-                            {t('inTeamSince')}{' '}
-                            <DateValue value={member.joinedAt} />
+                          <td
+                            className="py-1.5"
+                            data-label={t('columnActivity')}
+                          >
+                            <span className="rz-muted">{t('inTeamSince')}</span>{' '}
+                            <span className="rz-mono">
+                              <DateValue
+                                value={member.joinedAt}
+                                withTime={false}
+                              />
+                            </span>
                           </td>
-                          <td className="py-2" data-label={t('columnStatus')}>
+                          <td className="py-1.5" data-label={t('columnStatus')}>
                             <StatusPill
                               tone={member.isActive ? 'ok' : 'neutral'}
                             >
@@ -652,7 +631,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                             </StatusPill>
                           </td>
                           {canManageAccess && (
-                            <td className="py-2">
+                            <td className="py-1.5">
                               <span className="flex justify-end">
                                 {!isOwnerRole(member.role) ? (
                                   <ActionMenu
@@ -690,6 +669,10 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                                                     locale,
                                                   ),
                                                 }),
+                                            verb: member.isActive
+                                              ? t('deactivate')
+                                              : t('activate'),
+                                            destructive: member.isActive,
                                             failure: member.isActive
                                               ? t('deactivateFailed')
                                               : t('activateFailed'),
@@ -725,6 +708,8 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                                                 name: member.name,
                                               },
                                             ),
+                                            verb: tc('delete'),
+                                            destructive: true,
                                             failure: t('deleteFailed'),
                                             confirm: () =>
                                               mutate(t('deleted'), (signal) =>
@@ -795,7 +780,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                   const status = invitationStatus(item)
                   return (
                     <li
-                      className="flex min-h-row min-w-0 max-w-full items-center gap-3 px-[var(--rz-card-p)] py-2"
+                      className="flex min-h-11 min-w-0 max-w-full items-center gap-3 px-[var(--rz-card-p)] py-2"
                       key={item.id}
                     >
                       <div className="min-w-0 flex-1 overflow-hidden">
@@ -830,6 +815,8 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                                     description: t('revokeDescription', {
                                       code: item.code,
                                     }),
+                                    verb: t('revoke'),
+                                    destructive: true,
                                     failure: t('revokeFailed'),
                                     confirm: () =>
                                       mutate(t('revoked'), (signal) =>
@@ -853,9 +840,8 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                   </li>
                 )}
               </ul>
-              <div className="rz-card__foot flex-wrap items-center">
-                <p className="rz-caption m-0">{t('noEmailInvite')}</p>
-                {invitationHistory.length > 0 && (
+              {invitationHistory.length > 0 && (
+                <div className="rz-card__foot flex-wrap items-center">
                   <Button
                     aria-expanded={invitationHistoryOpen}
                     onClick={() =>
@@ -869,8 +855,8 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                           count: invitationHistory.length,
                         })}
                   </Button>
-                )}
-              </div>
+                </div>
+              )}
             </section>
           </>
         )}
@@ -879,12 +865,12 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
       {invitationDrawerOpen && (
         <Sheet
           description={t('newInvitationDescription')}
-          eyebrow={t('crumb')}
           footer={
             <>
               <Button
                 disabled={invitationCreation.pending}
                 onClick={() => setInvitationDrawerOpen(false)}
+                size="lg"
                 type="button"
               >
                 {tc('cancel')}
@@ -897,6 +883,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                   !invitationRoleId
                 }
                 form={INVITATION_FORM}
+                size="lg"
                 type="submit"
                 variant="primary"
               >
@@ -913,7 +900,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
         >
           <form
             aria-busy={invitationCreation.pending}
-            className="grid content-start gap-5"
+            className="grid content-start gap-4"
             id={INVITATION_FORM}
             onSubmit={(event) => {
               event.preventDefault()
@@ -923,22 +910,39 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
             {invitationCreation.error !== null && (
               <Notice tone="danger">{invitationCreation.error}</Notice>
             )}
-            <Field
-              hint={t('invitationRoleHint')}
-              label={t('invitationRole')}
-              required
+            <fieldset
+              aria-describedby="team-invitation-role-hint"
+              className="m-0 grid min-w-0 gap-1.5 border-0 p-0"
             >
-              <SelectInput
-                onChange={(event) => setInvitationRoleId(event.target.value)}
-                value={invitationRoleId}
-              >
+              <legend className="rz-label mb-1.5 p-0">
+                {t('invitationRole')}
+                <span aria-hidden className="rz-req">
+                  *
+                </span>
+              </legend>
+              <div className="border-app-line bg-app-sheet-field overflow-hidden rounded-rz-sm border">
                 {assignableRoles.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {roleLabel(role, locale)}
-                  </option>
+                  <ItemRow checked={invitationRoleId === role.id} key={role.id}>
+                    <input
+                      checked={invitationRoleId === role.id}
+                      className="rz-radio shrink-0"
+                      name="team-invitation-role"
+                      onChange={() => setInvitationRoleId(role.id)}
+                      required
+                      type="radio"
+                      value={role.id}
+                    />
+                    <span className="rz-strong font-semibold">
+                      {roleLabel(role, locale)}
+                    </span>
+                  </ItemRow>
                 ))}
-              </SelectInput>
-            </Field>
+              </div>
+              <p className="rz-hint m-0" id="team-invitation-role-hint">
+                {t('invitationRoleHint')}
+              </p>
+            </fieldset>
+            <Notice>{t('noEmailInvite')}</Notice>
           </form>
         </Sheet>
       )}
@@ -949,20 +953,25 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
             name: permissionMember.name,
             role: roleLabel(permissionMember.role, locale),
           })}
-          eyebrow={t('permissionsEyebrow')}
           footer={
             <>
               <Button
                 disabled={memberPermissions.pending}
-                onClick={() => setPermissionMember(null)}
+                onClick={closePermissions}
+                size="lg"
                 type="button"
               >
                 {tc('cancel')}
               </Button>
               <Button
                 aria-busy={memberPermissions.pending}
-                disabled={memberPermissions.pending || !canManageAccess}
+                disabled={
+                  memberPermissions.pending ||
+                  !canManageAccess ||
+                  permissionsLoad !== 'ready'
+                }
                 form={MEMBER_PERMISSIONS_FORM}
+                size="lg"
                 type="submit"
                 variant="primary"
               >
@@ -971,14 +980,17 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
             </>
           }
           onOpenChange={(open) => {
-            if (!open && !memberPermissions.pending) setPermissionMember(null)
+            if (!open && !memberPermissions.pending) closePermissions()
           }}
           open
+          size="lg"
           title={t('permissionsTitle', { name: permissionMember.name })}
         >
           <form
-            aria-busy={memberPermissions.pending}
-            className="grid content-start gap-5"
+            aria-busy={
+              memberPermissions.pending || permissionsLoad === 'loading'
+            }
+            className="grid content-start gap-4"
             id={MEMBER_PERMISSIONS_FORM}
             noValidate
             onSubmit={(event) => {
@@ -989,65 +1001,72 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
             {memberPermissions.error === null ? null : (
               <Notice tone="danger">{memberPermissions.error}</Notice>
             )}
-            <PermissionChecklist
-              legend={t('userPermissions')}
-              onToggle={toggleUserPermission}
-              selected={selectedPermissions}
-            />
+            {permissionsLoad === 'failed' ? (
+              <Notice tone="danger">{t('permissionsLoadFailed')}</Notice>
+            ) : permissionsLoad === 'loading' ? (
+              <div className="grid gap-1.5">
+                <p className="rz-label m-0" role="status">
+                  {t('loading')}
+                </p>
+                <div className="border-app-line bg-app-sheet-field grid gap-2 rounded-rz-sm border p-3">
+                  <Skeleton className="h-[30px]" />
+                  <Skeleton className="h-[30px]" />
+                  <Skeleton className="h-[30px]" />
+                </div>
+              </div>
+            ) : (
+              <PermissionChecklist
+                legend={t('userPermissions')}
+                onToggle={toggleUserPermission}
+                selected={selectedPermissions}
+              />
+            )}
           </form>
         </Sheet>
       )}
 
-      <AlertDialog.Root
+      <ConfirmDialog
+        cancelLabel={tc('cancel')}
+        confirmDisabled={!canManageAccess}
+        confirmLabel={confirmation?.verb ?? t('confirm')}
+        consequence={confirmation?.description ?? ''}
+        destructive={confirmation?.destructive ?? true}
+        error={confirmedAction.error}
+        onCloseAutoFocus={restoreFocus}
+        onConfirm={confirmedAction.run}
         onOpenChange={(open) => {
           if (!open && !confirmedAction.pending) setConfirmation(null)
         }}
         open={confirmation !== null}
-      >
-        <AlertDialog.Portal>
-          <AlertDialog.Overlay className="rz-scrim">
-            {confirmation && (
-              <AlertDialog.Content
-                className="rz-confirm text-app-ink"
-                onCloseAutoFocus={restoreFocus}
-              >
-                <AlertDialog.Title className="rz-h-title">
-                  {confirmation.title}
-                </AlertDialog.Title>
-                <AlertDialog.Description className="text-app-muted m-0 text-pretty">
-                  {confirmation.description}
-                </AlertDialog.Description>
-                {confirmedAction.error !== null && (
-                  <Notice tone="danger">{confirmedAction.error}</Notice>
-                )}
-                <div className="mt-2 flex flex-wrap justify-end gap-2">
-                  {/* Cancel first, and focused on open: the way out of a
-                    destructive question is never the default. */}
-                  <AlertDialog.Cancel asChild>
-                    <Button disabled={confirmedAction.pending}>
-                      {tc('cancel')}
-                    </Button>
-                  </AlertDialog.Cancel>
-                  <AlertDialog.Action asChild>
-                    <Button
-                      aria-busy={confirmedAction.pending}
-                      disabled={!canManageAccess || confirmedAction.pending}
-                      onClick={(event) => {
-                        event.preventDefault()
-                        confirmedAction.run()
-                      }}
-                      variant="danger"
-                    >
-                      {t('confirm')}
-                    </Button>
-                  </AlertDialog.Action>
-                </div>
-              </AlertDialog.Content>
-            )}
-          </AlertDialog.Overlay>
-        </AlertDialog.Portal>
-      </AlertDialog.Root>
+        pending={confirmedAction.pending}
+        title={confirmation?.title ?? ''}
+      />
     </>
+  )
+}
+
+/**
+ * One row of a sheet's item list, as the module page draws it: 44px, a hair
+ * line between rows, and the chosen row tinted with a brand edge.
+ */
+function ItemRow({
+  checked,
+  children,
+}: {
+  checked: boolean
+  children: ReactNode
+}) {
+  return (
+    <label
+      className={cn(
+        'border-app-line flex min-h-11 min-w-0 cursor-pointer items-center gap-3 px-3 py-2 [&+&]:border-t',
+        checked
+          ? 'bg-app-row-selected shadow-[inset_2px_0_0_var(--rz-brand)]'
+          : 'hover:bg-app-hover',
+      )}
+    >
+      {children}
+    </label>
   )
 }
 
@@ -1062,8 +1081,8 @@ function PermissionChecklist({
 }) {
   const t = useT(teamMessages)
   return (
-    <fieldset className="grid min-w-0 gap-3">
-      <legend className="rz-label mb-1">
+    <fieldset className="m-0 grid min-w-0 gap-4 border-0 p-0">
+      <legend className="rz-label mb-1 p-0">
         {t('selectedCount', {
           legend: legend ?? t('rolePermissions'),
           selected: ALL_PERMISSIONS.filter((item) => selected.includes(item))
@@ -1072,16 +1091,25 @@ function PermissionChecklist({
         })}
       </legend>
       {permissionGroups.map((group) => (
-        <fieldset className="grid min-w-0 gap-1" key={group.prefix}>
-          <legend className="rz-eyebrow mb-1">
-            {group.title === null ? group.prefix : t(group.title)}
+        <fieldset
+          className="m-0 grid min-w-0 gap-2.5 border-0 p-0"
+          key={group.prefix}
+        >
+          <legend className="rz-h-card mb-2.5 p-0">
+            {t('selectedCount', {
+              legend: group.title === null ? group.prefix : t(group.title),
+              selected: group.permissions.filter((item) =>
+                selected.includes(item),
+              ).length,
+              total: group.permissions.length,
+            })}
           </legend>
-          <div className="grid min-w-0 gap-1 sm:grid-cols-2">
+          <div className="border-app-line bg-app-sheet-field overflow-hidden rounded-rz-sm border">
             {group.permissions.map((permission) => (
-              <label
-                className="text-app-muted rounded-control rz-mono flex min-h-control-lg items-center gap-2.5 px-2 hover:bg-app-hover"
-                key={permission}
-              >
+              <ItemRow checked={false} key={permission}>
+                <span className="rz-mono rz-strong min-w-0 flex-1 truncate">
+                  {permission}
+                </span>
                 <input
                   aria-label={permission}
                   checked={selected.includes(permission)}
@@ -1089,8 +1117,7 @@ function PermissionChecklist({
                   onChange={() => onToggle(permission)}
                   type="checkbox"
                 />
-                {permission}
-              </label>
+              </ItemRow>
             ))}
           </div>
         </fieldset>

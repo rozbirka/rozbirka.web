@@ -56,6 +56,10 @@
   --rz-shadow-popover: 0 8px 24px rgb(0 0 0 / 0.40), 0 0 0 1px rgb(255 255 255 / 0.06);
   --rz-shadow-dialog: 0 24px 64px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(255 255 255 / 0.08);
   --rz-scrim: rgb(0 0 0 / 0.55);
+  /* Dialogs & sheets (scheme 1b): bands = header/footer, body lighter, fields inset */
+  --rz-sheet-band: #121212;
+  --rz-sheet-body: #191919;
+  --rz-sheet-field: #0b0b0b;
 }
 
 [data-theme="light"] {
@@ -94,6 +98,9 @@
   --rz-shadow-popover: 0 8px 24px rgb(28 25 23 / 0.12), 0 0 0 1px rgb(28 25 23 / 0.08);
   --rz-shadow-dialog: 0 24px 64px rgb(28 25 23 / 0.18), 0 0 0 1px rgb(28 25 23 / 0.08);
   --rz-scrim: rgb(28 25 23 / 0.35);
+  --rz-sheet-band: #ffffff;
+  --rz-sheet-body: #f4f2ef;
+  --rz-sheet-field: #ffffff;
 }
 
 :root {
@@ -125,6 +132,13 @@
   --rz-r-md: 8px;   /* cards, panels, table container, popovers */
   --rz-r-lg: 12px;  /* dialogs, sheets */
   --rz-r-full: 9999px;
+
+  /* Icon scale (lucide font): 10 · 12 · 14 · 16 · 20 */
+  --rz-icon-xs: 10px; --rz-icon-sm: 12px; --rz-icon: 14px; --rz-icon-md: 16px; --rz-icon-lg: 20px;
+  /* Fixed colours that do not follow the theme */
+  --rz-on-solid: #ffffff;       /* text/knob on solid state or brand fills */
+  --rz-camera-bg: #151413;      /* scanner viewfinder, always dark */
+  --rz-camera-text: #a29b93;
 
   /* Layout */
   --rz-sidebar-w: 232px;

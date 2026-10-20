@@ -1,6 +1,6 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import { Circle, CreditCard, Plus } from 'lucide-react'
+import { ArrowRight, Circle, CircleDot, CreditCard, Plus } from 'lucide-react'
 import {
   Button,
   StatusPill,
@@ -98,27 +98,35 @@ export function OrderCard({
 export function OrderSteps({ steps }: { steps: readonly OrderStep[] }) {
   const t = useT(orderCardMessages)
   return (
-    <ol aria-label={t('stepsLabel')} className="rz-steps">
+    <ol
+      aria-label={t('stepsLabel')}
+      className="text-app-muted m-0 flex list-none flex-wrap items-center gap-x-1.5 gap-y-0.5 p-0 text-caption"
+    >
       {steps.map((step, index) => (
         <li
           {...(step.state === 'current'
             ? { 'aria-current': 'step' as const }
             : {})}
-          className="h-auto min-h-7 py-1"
-          data-state={step.state === 'done' ? 'done' : undefined}
+          className={cn(
+            'flex items-center gap-1.5 whitespace-nowrap',
+            step.state === 'current' && 'text-app-strong',
+          )}
+          data-state={step.state}
           key={step.key}
+          title={step.meta === '' ? undefined : step.meta}
         >
-          <span aria-hidden className="rz-steps__n">
-            {String(index + 1)}
-          </span>
-          <span className="grid min-w-0">
-            <span className="truncate">{step.label}</span>
-            {step.meta === '' ? null : (
-              <span className="rz-dim font-mono text-micro font-normal whitespace-nowrap">
-                {step.meta}
-              </span>
-            )}
-          </span>
+          {index === 0 ? null : (
+            <ArrowRight aria-hidden className="text-app-dim size-3" />
+          )}
+          {step.state === 'upcoming' ? (
+            <Circle aria-hidden className="size-2.5" />
+          ) : (
+            <CircleDot aria-hidden className="size-2.5" />
+          )}
+          <span>{step.label}</span>
+          {step.meta === '' ? null : (
+            <span className="sr-only">{step.meta}</span>
+          )}
         </li>
       ))}
     </ol>
@@ -203,7 +211,7 @@ export function OrderItemsCard({
               <tbody>
                 {items.map((item) => (
                   <tr className="h-auto" key={item.id}>
-                    <th className="py-2" scope="row">
+                    <th className="py-2 sm:max-w-64" scope="row">
                       <OrderItemLine item={item} partsPath={partsPath} />
                     </th>
                     <td className="rz-num" data-label={to('quantity')}>
@@ -301,9 +309,12 @@ function OrderItemLine({
 
 /** Money already taken against the order, one line per receipt. */
 export function OrderPaymentsCard({
+  action = null,
   paidLine,
   payments,
 }: {
+  /** The card-head control that records one more payment, when allowed. */
+  action?: ReactNode
   paidLine: string | null
   payments: OrderDetail['payments']
 }) {
@@ -311,8 +322,13 @@ export function OrderPaymentsCard({
   return (
     <OrderCard
       aside={
-        paidLine === null ? null : (
-          <span className="rz-mono rz-muted">{paidLine}</span>
+        paidLine === null && action === null ? null : (
+          <div className="flex flex-wrap items-center justify-end gap-2.5">
+            {paidLine === null ? null : (
+              <span className="rz-mono rz-muted">{paidLine}</span>
+            )}
+            {action}
+          </div>
         )
       }
       count={String(payments.length)}
@@ -571,7 +587,7 @@ export function OrderCustomerCard({
             label={customerId === null ? t('addCustomer') : t('changeCustomer')}
             onClick={onChange}
           >
-            {customerId === null ? t('add') : t('change')}
+            {customerId === null ? t('addCustomer') : t('change')}
           </SmallButton>
         )}
       </div>

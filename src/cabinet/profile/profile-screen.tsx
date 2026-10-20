@@ -114,7 +114,7 @@ export function ProfileScreen() {
   const phone = auth.user?.phone ?? null
   return (
     <RecordShell crumb={t('crumb')}>
-      <RecordHead lead={t('lead')} title={t('title')} />
+      <RecordHead title={t('title')} />
 
       {saveState === 'success' && <Notice tone="ok">{t('nameSaved')}</Notice>}
       {saveState === 'error' && <Notice tone="danger">{t('nameError')}</Notice>}

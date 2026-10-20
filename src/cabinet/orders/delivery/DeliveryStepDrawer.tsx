@@ -103,14 +103,14 @@ export function DeliveryStepDrawer({
     >
       <div className="grid gap-3">
         {error !== null && <Notice tone="danger">{error}</Notice>}
-        <dl className="rz-inset m-0 grid gap-2">
-          <div className="flex items-baseline justify-between gap-4">
+        <dl className="rz-inset m-0 grid gap-0 py-1">
+          <div className="flex items-baseline justify-between gap-4 py-1.5">
             <dt className="rz-muted">{t('orderTotal')}</dt>
             <dd className="rz-mono rz-strong m-0">
               {uah(delivery.agreedTotalUah, locale)}
             </dd>
           </div>
-          <div className="flex items-baseline justify-between gap-4">
+          <div className="border-app-line flex items-baseline justify-between gap-4 border-t py-1.5">
             <dt className="rz-muted">{t('balance')}</dt>
             <dd
               className={`rz-mono m-0 ${

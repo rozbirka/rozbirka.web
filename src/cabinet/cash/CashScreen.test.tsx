@@ -184,7 +184,7 @@ it('returns from a cash register card to the cash directory', async () => {
   const user = userEvent.setup()
   render(<RouterProvider router={router} />)
 
-  await user.click(await screen.findByRole('link', { name: 'Гроші · Каси' }))
+  await user.click(await screen.findByRole('link', { name: 'Каси' }))
 
   await waitFor(() =>
     expect(router.state.location.pathname).toBe('/app/garage/cash'),
@@ -864,7 +864,7 @@ it('rotates a movement key when client-side navigation changes the register reso
   await act(async () => {
     await router.navigate('/app/garage/cash/cash-2')
   })
-  await screen.findByText('Гроші · Резервна каса')
+  await screen.findAllByText('Резервна каса')
   await user.click(screen.getByRole('button', { name: 'Записати операцію' }))
 
   expect(cashMocks.createTransaction).toHaveBeenNthCalledWith(
@@ -1231,7 +1231,7 @@ it('creates a UAH-only bank after selecting currencies for a cash register', asy
 
   await user.type(screen.getByLabelText('Назва'), 'Банківський рахунок')
   await user.click(screen.getByRole('button', { name: /USD/ }))
-  await user.click(screen.getByRole('button', { name: /Безготівкова/ }))
+  await user.click(screen.getByRole('radio', { name: /Безготівкова/ }))
   expect(
     screen.queryByRole('group', { name: 'Валюти' }),
   ).not.toBeInTheDocument()
@@ -1627,10 +1627,7 @@ it('describes register form controls and offers a way out of the form', () => {
     screen.getByRole('textbox', { name: 'Назва' }),
   ).toHaveAccessibleDescription('Так каса підписана у звітах і переказах')
   expect(screen.getByRole('group', { name: 'Тип' })).toBeVisible()
-  expect(screen.getByRole('button', { name: /Готівкова/ })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  )
+  expect(screen.getByRole('radio', { name: /Готівкова/ })).toBeChecked()
   expect(screen.getByRole('button', { name: 'Скасувати' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Зберегти' })).toBeVisible()
   // Every supported currency, by ISO code and readable name, not ₴/$/€.

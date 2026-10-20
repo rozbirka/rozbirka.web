@@ -6,9 +6,9 @@ type OrderKey = MessageKey<typeof orderMessages>
 
 const STATUSES: Record<string, { key: OrderKey; tone: StatusTone }> = {
   confirmed: { key: 'statusConfirmed', tone: 'ok' },
-  pending: { key: 'statusPending', tone: 'warn' },
+  pending: { key: 'statusPending', tone: 'info' },
   cancelled: { key: 'statusCancelled', tone: 'neutral' },
-  refunded: { key: 'statusRefunded', tone: 'info' },
+  refunded: { key: 'statusRefunded', tone: 'danger' },
   // The dashboard summary speaks of an order's money rather than its state.
   paid: { key: 'statusPaid', tone: 'ok' },
   reserved: { key: 'statusReserved', tone: 'warn' },

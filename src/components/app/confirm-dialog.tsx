@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from 'react'
-import type { LucideIcon } from 'lucide-react'
+import { X, type LucideIcon } from 'lucide-react'
 import { Dialog } from 'radix-ui'
 import { cn } from '@/lib/utils'
 import { Button } from './button'
@@ -20,7 +20,7 @@ export interface ConfirmDialogProps {
   effects?: readonly ReactNode[]
   /** Anything the confirmation itself needs: a reason, a date, a choice. */
   children?: ReactNode
-  /** Names the action at a glance above the question. */
+  /** Ignored since v2 (scheme 1b has no icon square); kept for callers. */
   icon?: LucideIcon
   confirmLabel: string
   cancelLabel?: string
@@ -46,7 +46,6 @@ export function ConfirmDialog({
   consequence,
   effects,
   children,
-  icon: Icon,
   confirmLabel,
   cancelLabel,
   onConfirm,
@@ -76,52 +75,56 @@ export function ConfirmDialog({
               event.preventDefault()
               cancelRef.current?.focus()
             }}
-            className="rz-confirm text-app-ink"
+            className="rz-dialog text-app-ink grid-rows-[auto_minmax(0,1fr)_auto]"
           >
-            {Icon === undefined ? null : (
-              <span
-                aria-hidden
-                className={cn(
-                  'rounded-control grid size-8 place-items-center',
-                  destructive
-                    ? 'bg-state-danger-soft text-state-danger'
-                    : 'bg-brand-soft text-brand-text',
-                )}
-              >
-                <Icon className="size-4" />
-              </span>
-            )}
-            <Dialog.Title className="rz-h-title">{title}</Dialog.Title>
-            <Dialog.Description className="text-app-muted m-0 text-pretty">
-              {consequence}
-            </Dialog.Description>
-            {effects === undefined || effects.length === 0 ? null : (
-              <ul
-                className={cn(
-                  'rz-inset m-0 grid list-none gap-2',
-                  destructive && 'bg-state-danger-soft',
-                )}
-              >
-                {effects.map((effect, index) => (
-                  <li
-                    className="text-app-ink flex gap-2.5 text-pretty"
-                    key={index}
-                  >
-                    <span
-                      aria-hidden
-                      className={cn(
-                        'mt-[7px] size-[5px] shrink-0 rounded-full',
-                        destructive ? 'bg-state-danger' : 'bg-brand',
-                      )}
-                    />
-                    {effect}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {children}
-            {error === null ? null : <Notice tone="danger">{error}</Notice>}
-            <div className="mt-2 flex flex-wrap justify-end gap-2">
+            {/* Scheme 1b: a band with the question, the consequence in the
+                body, a band with the way out and the verb. The icon square
+                is gone from v2; `icon` is kept for callers and ignored. */}
+            <header className="rz-dialog__head items-center">
+              <Dialog.Title className="rz-h-title flex-1">{title}</Dialog.Title>
+              <Dialog.Close asChild>
+                <Button
+                  aria-label={tc('close')}
+                  disabled={pending}
+                  size="icon"
+                  variant="quiet"
+                >
+                  <X aria-hidden />
+                </Button>
+              </Dialog.Close>
+            </header>
+            <div className="rz-dialog__body">
+              <Dialog.Description className="text-app-ink m-0 text-pretty">
+                {consequence}
+              </Dialog.Description>
+              {effects === undefined || effects.length === 0 ? null : (
+                <ul
+                  className={cn(
+                    'rz-inset m-0 grid list-none gap-2',
+                    destructive && 'bg-state-danger-soft',
+                  )}
+                >
+                  {effects.map((effect, index) => (
+                    <li
+                      className="text-app-ink flex gap-2.5 text-pretty"
+                      key={index}
+                    >
+                      <span
+                        aria-hidden
+                        className={cn(
+                          'mt-[7px] size-[5px] shrink-0 rounded-full',
+                          destructive ? 'bg-state-danger' : 'bg-app-dim',
+                        )}
+                      />
+                      {effect}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {children}
+              {error === null ? null : <Notice tone="danger">{error}</Notice>}
+            </div>
+            <footer className="rz-dialog__foot">
               <Dialog.Close asChild>
                 <Button disabled={pending} ref={cancelRef} size="lg">
                   {cancelLabel ?? tc('cancel')}
@@ -136,7 +139,7 @@ export function ConfirmDialog({
               >
                 {confirmLabel}
               </Button>
-            </div>
+            </footer>
           </Dialog.Content>
         </Dialog.Overlay>
       </Dialog.Portal>

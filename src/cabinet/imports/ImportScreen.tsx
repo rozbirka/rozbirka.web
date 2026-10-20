@@ -708,7 +708,9 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
                 (step === 2 && !editable)
               }
               onClick={next}
-              variant="primary"
+              // On the result the page's own next step is the primary one;
+              // going back to the history is just a way out.
+              variant={step === 5 ? 'ghost' : 'primary'}
             >
               {primary}
             </Button>

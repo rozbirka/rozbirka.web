@@ -1,15 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
-import {
-  ArrowLeft,
-  ArrowRight,
-  Ban,
-  CheckCircle2,
-  Clock,
-  RefreshCw,
-  SearchX,
-  ShieldAlert,
-} from 'lucide-react'
+import { ArrowLeft, RefreshCw } from 'lucide-react'
 import { invitationsApi, type InvitationInfo } from '@/api/invitations'
 import { normalizeApiProblem } from '@/api/errors'
 import { tenantPreference } from '@/api/tenant-preference'
@@ -22,14 +13,13 @@ import { inviteMessages } from './invite-messages'
 import {
   Button,
   DateValue,
-  DeniedState,
   ErrorState,
   FactRows,
   Notice,
   SkeletonRows,
-  StateScreen,
   StatusPill,
   useOperation,
+  type NoticeTone,
   type StateTone,
 } from '@/components/app'
 
@@ -67,43 +57,35 @@ const stateContent: Record<
   InvitationState,
   {
     tone: StateTone
-    icon: ReactNode
     resolution: Resolution
   }
 > = {
   expired: {
     tone: 'warn',
-    icon: <Clock aria-hidden />,
     resolution: 'home',
   },
   used: {
     tone: 'neutral',
-    icon: <CheckCircle2 aria-hidden />,
     resolution: 'login',
   },
   revoked: {
     tone: 'warn',
-    icon: <Ban aria-hidden />,
     resolution: 'home',
   },
   'not-found': {
     tone: 'neutral',
-    icon: <SearchX aria-hidden />,
     resolution: 'home',
   },
   invalid: {
     tone: 'warn',
-    icon: <ShieldAlert aria-hidden />,
     resolution: 'home',
   },
   'wrong-account': {
     tone: 'neutral',
-    icon: <ShieldAlert aria-hidden />,
     resolution: 'login',
   },
   unknown: {
     tone: 'danger',
-    icon: <RefreshCw aria-hidden />,
     resolution: 'retry',
   },
 }
@@ -264,7 +246,7 @@ export function InviteScreen() {
         </Link>
       </header>
 
-      <main className="grid flex-1 place-items-center p-6 pt-2">
+      <main className="grid flex-1 content-start justify-items-center px-4 pt-2 pb-6 sm:pt-4">
         <div className="grid w-full max-w-[420px] min-w-0 gap-5">
           <AuthBrand />
           {loading && (
@@ -276,7 +258,9 @@ export function InviteScreen() {
 
           {!loading && errorState && (
             <>
-              <h1 className="sr-only">{t('heading')}</h1>
+              {stateContent[errorState].resolution === 'retry' ? (
+                <h1 className="sr-only">{t('heading')}</h1>
+              ) : null}
               <InvitationOutcome
                 loginHref={loginHref}
                 onRetry={reloadInvitation}
@@ -357,31 +341,15 @@ function InvitationCard({
       {authStatus === 'guest' ? (
         <>
           <Notice tone="info">{t('signInFirst')}</Notice>
-          <Button
-            asChild
-            className="rz-btn--block"
-            size="touch"
-            variant="primary"
-          >
-            <Link to={loginHref}>
-              {t('accept')}
-              <ArrowRight aria-hidden />
-            </Link>
+          <Button asChild className="rz-btn--block" size="lg" variant="primary">
+            <Link to={loginHref}>{t('accept')}</Link>
           </Button>
         </>
       ) : accepted ? (
         <>
           <Notice tone="ok">{t('accepted')}</Notice>
-          <Button
-            asChild
-            className="rz-btn--block"
-            size="touch"
-            variant="primary"
-          >
-            <Link to="/account">
-              {t('toCabinet')}
-              <ArrowRight aria-hidden />
-            </Link>
+          <Button asChild className="rz-btn--block" size="lg" variant="primary">
+            <Link to="/account">{t('toCabinet')}</Link>
           </Button>
         </>
       ) : (
@@ -394,8 +362,8 @@ function InvitationCard({
           )}
           <Button
             className="rz-btn--block"
+            size="lg"
             onClick={accepting.run}
-            size="touch"
             variant="primary"
             {...accepting.triggerProps}
             disabled={accepting.pending || busy || authStatus === 'loading'}
@@ -442,38 +410,36 @@ function InvitationOutcome({
     )
   }
 
+  // A dead end keeps the auth column's own layout: the heading names what
+  // happened, one notice says why, one action resolves it.
   const action =
     content.resolution === 'login' ? (
-      <Button asChild variant="primary">
+      <Button asChild className="rz-btn--block" size="lg" variant="primary">
         <Link to={loginHref}>
           {state === 'wrong-account' ? t('signInOther') : t('signInPhone')}
         </Link>
       </Button>
     ) : (
-      <Button asChild>
+      <Button asChild className="rz-btn--block" size="lg" variant="primary">
         <Link to="/">{t('backHome')}</Link>
       </Button>
     )
 
-  if (state === 'wrong-account') {
-    return (
-      <DeniedState
-        actions={action}
-        description={description}
-        label={t('state')}
-        title={title}
-      />
-    )
-  }
-
   return (
-    <StateScreen
-      actions={action}
-      description={description}
-      icon={content.icon}
-      label={t('state')}
-      title={title}
-      tone={content.tone}
-    />
+    <section aria-label={t('state')} className="grid gap-5">
+      <div className="grid gap-1.5">
+        <p className="rz-eyebrow m-0">{t('eyebrow')}</p>
+        <h1 className="rz-h-page break-words">{title}</h1>
+      </div>
+      <Notice tone={NOTICE_TONE[content.tone]}>{description}</Notice>
+      {action}
+    </section>
   )
 }
+
+const NOTICE_TONE = {
+  neutral: 'info',
+  brand: 'info',
+  warn: 'warn',
+  danger: 'danger',
+} as const satisfies Record<StateTone, NoticeTone>

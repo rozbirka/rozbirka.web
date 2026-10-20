@@ -4,13 +4,15 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
   UserRound,
   X,
 } from 'lucide-react'
 import { Dialog, DropdownMenu } from 'radix-ui'
 import { Link, NavLink, useLocation } from 'react-router'
 import type { Tenant } from '../api/types'
-import { useLocale, useT, type Locale } from '@/i18n'
+import { commonMessages, useLocale, useT, type Locale } from '@/i18n'
+import { commandPaletteHint, openCommandPalette } from './command-palette-open'
 import { cn } from '../lib/utils'
 import type { TenantAccessSnapshot } from './access-types'
 import { cabinetPath } from './cabinet-paths'
@@ -195,8 +197,8 @@ function DesktopNavigation({
         tenants={tenants}
         onSwitch={onSwitchTenant}
       />
-      <div aria-hidden className="h-2 shrink-0" />
-      <nav aria-label={t('nav.desktop')} className="flex flex-1 flex-col">
+      <SearchTrigger />
+      <nav aria-label={t('nav.desktop')} className="flex flex-col">
         {groupsOf(primary, locale).map((section) => (
           <NavigationList
             entries={section.entries}
@@ -207,14 +209,13 @@ function DesktopNavigation({
         ))}
         {account.length > 0 ? (
           <NavigationList
-            className="rz-sidebar__bottom mb-0"
             entries={account}
             label={navigationGroupLabel('settings', locale)}
             presentation="desktop"
           />
         ) : null}
       </nav>
-      <div className="border-app-line mt-1.5 flex items-center gap-2 border-t px-2 pt-2 pb-1">
+      <div className="border-app-line mt-auto flex items-center gap-2 border-t px-2 pt-2 pb-1">
         <AccountMenu onLogout={onLogout} userName={userName} />
         <button
           aria-controls="cabinet-navigation"
@@ -228,6 +229,22 @@ function DesktopNavigation({
         </button>
       </div>
     </aside>
+  )
+}
+
+/** The sidebar's way into Cmd+K, as v2 draws it under the business switcher. */
+function SearchTrigger() {
+  const tc = useT(commonMessages)
+  return (
+    <button
+      className="rz-search text-app-dim hover:text-app-muted mt-1 mb-2 w-full cursor-pointer text-left"
+      onClick={() => openCommandPalette()}
+      type="button"
+    >
+      <Search aria-hidden />
+      <span className="flex-1">{tc('search')}</span>
+      <kbd className="rz-kbd">{commandPaletteHint()}</kbd>
+    </button>
   )
 }
 
@@ -355,15 +372,13 @@ function Rail({
           />
         ))}
         {account.length > 0 ? (
-          <NavigationList
-            className="mt-auto"
-            entries={account}
-            presentation="rail"
-          />
+          <NavigationList entries={account} presentation="rail" />
         ) : null}
       </nav>
-      <LogoutButton onLogout={onLogout} presentation="rail" />
-      {toggle}
+      <div className="mt-auto grid justify-items-center gap-0.5">
+        <LogoutButton onLogout={onLogout} presentation="rail" />
+        {toggle}
+      </div>
     </aside>
   )
 }
@@ -380,7 +395,9 @@ function MobileNavigation({
     .sort(byMobilePriority)
     .slice(0, MOBILE_TAB_LIMIT)
   const mobileKeys = new Set(mobileEntries.map((entry) => entry.key))
-  const moreEntries = entries.filter((entry) => !mobileKeys.has(entry.key))
+  const moreEntries = entries.filter(
+    (entry) => entry.placement !== 'nested' && !mobileKeys.has(entry.key),
+  )
   const t = useT(shellMessages)
   // D17: the scanner owns the bottom of the screen for its glove dock.
   const scanning = /\/scan\/?$/.test(useLocation().pathname)

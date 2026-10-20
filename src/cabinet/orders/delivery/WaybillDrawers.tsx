@@ -32,7 +32,7 @@ function useEyebrow() {
 /** One line of a checklist: what was checked, what was found, and whether it passed. */
 function CheckRow({ check }: { check: ReadinessCheck }) {
   return (
-    <li className="border-app-line flex flex-wrap items-center gap-x-2.5 gap-y-1 border-t px-3 py-2 first:border-t-0">
+    <li className="border-app-line flex min-h-10 flex-wrap items-center gap-x-2.5 gap-y-1 border-t px-3 py-2 first:border-t-0">
       <span
         aria-hidden
         className={cn(
@@ -40,8 +40,8 @@ function CheckRow({ check }: { check: ReadinessCheck }) {
           check.deferred === true || check.pending === true
             ? 'text-app-dim'
             : check.ok
-              ? 'bg-state-ok-soft text-state-ok'
-              : 'bg-state-danger-soft text-state-danger',
+              ? 'bg-state-ok text-(--rz-on-brand)'
+              : 'border-state-danger text-state-danger border bg-transparent',
         )}
       >
         {check.deferred === true ? null : check.ok ? (
@@ -148,7 +148,7 @@ export function WaybillReadinessDrawer({
 
       <section className="grid gap-2">
         <h3 className="rz-h-card">{t('readinessChecks')}</h3>
-        <ul className="m-0 grid list-none overflow-hidden rounded-panel border border-app-line bg-app-raised p-0">
+        <ul className="border-app-line m-0 grid min-h-fit list-none overflow-hidden rounded-rz-md border bg-(--rz-sheet-field) p-0">
           {checks.map((check) => (
             <CheckRow check={check} key={check.key} />
           ))}
@@ -239,13 +239,16 @@ export function WaybillDataDrawer({
       title={t('waybillTitle')}
     >
       {codMatches ? null : <Notice tone="danger">{t('codMismatch')}</Notice>}
-      <dl className="rz-facts rz-card px-(--rz-card-p)">
+      <dl className="border-app-line m-0 grid min-h-fit rounded-rz-md border bg-(--rz-sheet-field) px-3 py-1">
         {rows.map((row) => (
-          <div key={row.label}>
-            <dt>{row.label}</dt>
+          <div
+            className="border-app-line grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] items-baseline gap-3 border-t py-2 first:border-t-0"
+            key={row.label}
+          >
+            <dt className="text-app-muted">{row.label}</dt>
             <dd
               className={cn(
-                'font-mono',
+                'm-0 text-right font-mono text-pretty',
                 row.tone === 'ok'
                   ? 'text-state-ok'
                   : row.tone === 'danger'
@@ -259,21 +262,29 @@ export function WaybillDataDrawer({
         ))}
       </dl>
       {shipment.events.length === 0 ? null : (
-        <ol aria-label={t('shipmentStatuses')} className="rz-timeline rz-card">
-          {shipment.events.map((event) => (
-            <li key={`${event.recordedAt}-${event.code}`}>
-              <span aria-hidden className="rz-timeline__icon">
-                <Dot />
-              </span>
-              <span className="text-app-ink min-w-0 text-pretty">
-                {event.name}
-              </span>
-              <span className="rz-timeline__date">
-                {when(event.occurredAt ?? event.recordedAt)}
-              </span>
-            </li>
-          ))}
-        </ol>
+        <section className="grid min-h-fit gap-2.5">
+          <h3 aria-hidden className="rz-h-card">
+            {t('shipmentStatuses')}
+          </h3>
+          <ol
+            aria-label={t('shipmentStatuses')}
+            className="border-app-line m-0 grid list-none rounded-rz-md border bg-(--rz-sheet-field) px-3 py-1"
+          >
+            {shipment.events.map((event) => (
+              <li
+                className="border-app-line flex items-baseline justify-between gap-3 border-t py-2 first:border-t-0"
+                key={`${event.recordedAt}-${event.code}`}
+              >
+                <span className="text-app-muted min-w-0 text-pretty">
+                  {event.name}
+                </span>
+                <span className="text-app-strong font-mono whitespace-nowrap">
+                  {when(event.occurredAt ?? event.recordedAt)}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
       )}
     </Sheet>
   )
@@ -354,7 +365,7 @@ export function WaybillAttachDrawer({
 
       <Field hint={t('attachHint')} label={t('attachNumber')} required>
         <TextInput
-          className="font-mono tabular-nums"
+          className="h-12 font-mono text-page tabular-nums"
           inputMode="numeric"
           onChange={(event) => setNumber(event.target.value)}
           placeholder="20451931 5540"
@@ -454,7 +465,7 @@ export function WaybillLabelDrawer({
       {url === null ? null : (
         <object
           aria-label={t('labelAria')}
-          className="border-app-line h-[60vh] w-full rounded-panel border"
+          className="border-app-line h-[60vh] w-full rounded-rz-md border"
           data={url}
           type="application/pdf"
         >

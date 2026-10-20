@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import { ChevronRight } from 'lucide-react'
 import { Button, Notice, StatusPill } from '@/components/app'
 import { cn } from '@/lib/utils'
 import { commonMessages, useT } from '@/i18n'
 import type { CashRegister, CashTransaction } from '@/api/cash'
 import { useCashText } from './cash-labels'
+import { CashCrumbs } from './cash-list'
 import { cashMessages } from './cash-messages'
 import { RedesignShell } from '../redesign-shell'
 
@@ -156,13 +156,7 @@ export function CashCard({
           ) : null}
         </>
       }
-      crumb={
-        <>
-          <Link to={cashHref}>{t('crumb')}</Link>
-          <ChevronRight aria-hidden className="size-3 shrink-0" />
-          <span aria-current="page">{register.name}</span>
-        </>
-      }
+      crumb={<CashCrumbs cashHref={cashHref} current={register.name} />}
     >
       <div className="rz-page-head items-center">
         <h1 className="rz-h-page">{register.name}</h1>

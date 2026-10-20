@@ -112,7 +112,7 @@ export function ConditionTile({
     >
       <span
         aria-hidden
-        className={cn('rz-radio mt-0.5', picked && 'border-brand')}
+        className={cn('rz-radio mt-0.5 shrink-0', picked && 'border-brand')}
       >
         {picked ? <span className="bg-brand size-1.5 rounded-full" /> : null}
       </span>

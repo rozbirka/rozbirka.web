@@ -20,16 +20,24 @@ import { FeatureGate } from '../FeatureFlags'
 import { FEATURE_FLAGS } from '@/api/feature-flags'
 import {
   Archive,
+  ArrowLeft,
   Check,
   ChevronLeft,
   ChevronRight,
+  Circle,
+  CircleCheck,
   Lock,
   CarFront,
+  Copy,
   ImagePlus,
   Pencil,
   Plus,
+  RefreshCw,
+  SearchX,
   Trash2,
+  Upload,
   Wallet,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -42,10 +50,10 @@ import {
 import {
   ActionMenu,
   Button,
-  Card,
   CodeChip,
   ConfirmDialog,
   DataTable,
+  type DataColumn,
   EmptyState,
   Field,
   ErrorState,
@@ -55,6 +63,7 @@ import {
   Thumbnail,
   PillGroup,
   SearchInput,
+  Skeleton,
   SkeletonRows,
   StateScreen,
   StatusPill,
@@ -79,7 +88,9 @@ import {
   type MediaUploadResult,
 } from '@/api/media'
 import { useCabinet } from '../CabinetContext'
-import { RedesignShell } from '../redesign-shell'
+import { appMessages } from '@/components/app/app-messages'
+import { Crumbs, RedesignShell, RedesignTitle } from '../redesign-shell'
+import { intakesMessages } from '../intakes/messages'
 import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import {
@@ -91,7 +102,8 @@ import type { ModuleAccessDecision } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { CarExpenseDrawer } from './CarExpenseDrawer'
 import { CarPartsCard } from './CarPartsCard'
-import { CarProfitabilityCard } from './CarProfitabilityCard'
+import { CarPayoffPill, CarProfitabilityCard } from './CarProfitabilityCard'
+import { carCardMessages } from './car-card-messages'
 import { carFormMessages } from './car-form-messages'
 import { formatDay } from './day'
 import { carsMessages } from './messages'
@@ -249,7 +261,7 @@ export function CarsScreen(_props: Partial<CabinetModuleScreenProps> = {}) {
   )
 }
 
-/** How the grid is ordered. The list endpoint has no sort yet, so this orders
+/** How the table is ordered. The list endpoint has no sort yet, so this orders
  *  the page that came back — the control says «на цій сторінці» when there is
  *  more than one, rather than pretending it reordered the whole yard. */
 type CarSort = 'payback' | 'parts'
@@ -264,99 +276,42 @@ const sortCars = (cars: readonly CarListItem[], sort: CarSort) =>
         (left.profitability?.recoupedPercent ?? -1),
   )
 
-/** One car in the grid: what it looks like, what came back, how far it is. */
-function CarCard({
-  car,
-  currency,
-  href,
-  showMoney,
-}: {
-  car: CarListItem
-  currency: string | null
-  href: string
-  showMoney: boolean
-}) {
-  const t = useT(carsMessages)
-  const money = useCarMoney(currency)
-  const percent = car.profitability?.recoupedPercent ?? null
-  const paidOff = percent !== null && percent >= 100
-
+/** How far a car has paid off: a short bar with the percentage beside it. */
+function PaybackCell({ percent }: { percent: number | null }) {
+  const value = percent ?? 0
   return (
-    <Link
-      className="rz-card hover:border-app-line-2 hover:bg-app-hover flex flex-col transition-colors"
-      to={href}
-    >
-      <span className="rz-photo rounded-none border-0 border-b border-app-line">
-        {car.coverPhotoUrl ? (
-          <Thumbnail
-            alt=""
-            className="absolute inset-0 h-full w-full rounded-none border-0"
-            photo={{ url: car.coverPhotoUrl }}
-            ratio="wide"
-          />
-        ) : (
-          <CarFront aria-hidden className="size-6" />
+    <span className="flex w-[120px] items-center gap-2">
+      <span
+        aria-hidden
+        className={cn(
+          'rz-meter flex-1',
+          value > 0 && value < 100 && 'rz-meter--warn',
         )}
+      >
+        <span style={{ width: `${String(Math.min(value, 100))}%` }} />
       </span>
-
-      <span className="grid gap-2 p-3">
-        <span className="flex min-w-0 items-center justify-between gap-2">
-          <span className="rz-strong min-w-0 truncate font-mono font-medium">
-            {car.code}
-          </span>
-          <StatusPill tone={car.status === 'active' ? 'ok' : 'neutral'}>
-            {car.status === 'active' ? t('cardActive') : t('cardArchived')}
-          </StatusPill>
-        </span>
-        <span className="rz-muted min-w-0 truncate">
-          {car.brand} {car.model} ({String(car.year)})
-        </span>
-        {showMoney ? (
-          <span className="grid gap-1.5">
-            <span className="flex items-baseline justify-between gap-3">
-              <span className="rz-eyebrow">{t('cardRecouped')}</span>
-              <span className="rz-mono rz-strong whitespace-nowrap">
-                {money(car.profitability?.recouped ?? 0)}
-                {percent === null ? null : (
-                  <span
-                    className={cn(
-                      'ml-2 text-caption',
-                      paidOff ? 'text-state-ok' : 'rz-dim',
-                    )}
-                  >
-                    {percent}%
-                  </span>
-                )}
-              </span>
-            </span>
-            <span aria-hidden className="rz-meter">
-              <span
-                className={paidOff ? undefined : 'bg-app-dim'}
-                style={{ width: `${String(Math.min(percent ?? 0, 100))}%` }}
-              />
-            </span>
-          </span>
-        ) : null}
-        <span className="rz-caption flex items-baseline justify-between gap-3">
-          <span>
-            {t('cardParts')}{' '}
-            <span className="rz-mono rz-strong">{car.partsCount}</span>
-          </span>
-          <span>
-            {t('cardSold')}{' '}
-            <span className="rz-mono rz-strong">{car.soldPartsCount}</span>
-          </span>
-        </span>
+      <span
+        className={cn(
+          'rz-mono w-11 shrink-0 text-right text-caption',
+          value >= 100 ? 'text-state-ok' : value > 0 ? 'rz-strong' : 'rz-dim',
+        )}
+      >
+        {percent === null ? '—' : `${String(percent)} %`}
       </span>
-    </Link>
+    </span>
   )
 }
 
 function CarsList({ base }: { base: string }) {
-  const { createDecision, financeView } = useAccess()
+  const { createDecision, financeView, partsManage } = useAccess()
   const t = useT(carsMessages)
-  const tc = useT(commonMessages)
+  const tf = useT(carFormMessages)
+  const tk = useT(carCardMessages)
+  const ti = useT(intakesMessages)
+  const ta = useT(appMessages)
   const accounting = useAccountingCurrency()
+  const number = useCarMoney(null)
+  const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const selected = useMemo<CarListParams>(
     () => ({
@@ -373,24 +328,28 @@ function CarsList({ base }: { base: string }) {
     ? (params.get('sort') as CarSort)
     : 'payback'
   const [query, setQuery] = useState(params.get('search') ?? '')
-  const [data, setData] = useState<Awaited<
-    ReturnType<typeof carsApi.list>
-  > | null>(null)
-  const [problem, setProblem] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  const requestKey = `${JSON.stringify(selected)}#${String(attempt)}`
+  const [result, setResult] = useState<{
+    key: string
+    page: Awaited<ReturnType<typeof carsApi.list>> | null
+    problem: string | null
+  } | null>(null)
   useEffect(() => {
     const controller = new AbortController()
     void carsApi.list(selected, { signal: controller.signal }).then(
-      (page) => {
-        setData(page)
-        setProblem(null)
-      },
+      (page) => setResult({ key: requestKey, page, problem: null }),
       (error: unknown) => {
         if (!controller.signal.aborted)
-          setProblem(normalizeApiProblem(error).message)
+          setResult({
+            key: requestKey,
+            page: null,
+            problem: normalizeApiProblem(error).message,
+          })
       },
     )
     return () => controller.abort()
-  }, [selected])
+  }, [selected, requestKey])
   const change = (values: Record<string, string | undefined>) => {
     const next = new URLSearchParams(params)
     Object.entries(values).forEach(([key, value]) =>
@@ -398,20 +357,155 @@ function CarsList({ base }: { base: string }) {
     )
     setParams(next)
   }
+  const loading = result?.key !== requestKey
+  const data = result?.page ?? null
+  const problem = loading ? null : (result?.problem ?? null)
   const page = data?.page ?? selected.page ?? 1
   const totalPages = data?.totalPages ?? 1
   const cars = sortCars(data?.items ?? [], sort)
+  const filtered =
+    selected.search !== undefined || selected.status !== undefined
+  const canCreate = createDecision.kind === 'allowed'
+  // Why the action is off — a limit or a lapsed plan says so on the button
+  // itself instead of the button silently disappearing.
+  const createBlocked =
+    createDecision.kind === 'quota-exhausted'
+      ? t('deniedQuota')
+      : createDecision.kind === 'subscription-blocked'
+        ? t('deniedSubscription')
+        : createDecision.kind === 'permission-denied'
+          ? t('deniedPermission')
+          : null
+  const unit = accounting.currency === null ? '' : `, ${accounting.currency}`
+  const partsBase = base.replace(/\/cars$/, '/parts')
+
+  const addCar = canCreate ? (
+    <Button asChild variant="primary">
+      <Link to={`${base}/new`}>
+        <Plus aria-hidden />
+        {t('addCar')}
+      </Link>
+    </Button>
+  ) : createBlocked === null ? null : (
+    <Button disabled title={createBlocked} variant="primary">
+      <Plus aria-hidden />
+      {t('addCar')}
+    </Button>
+  )
+
+  const columns: DataColumn<CarListItem>[] = [
+    {
+      key: 'code',
+      label: tf('codeLabel'),
+      cell: (car) => <span className="rz-code rz-code--sm">{car.code}</span>,
+    },
+    {
+      key: 'car',
+      label: tf('checkMakeModel'),
+      variant: 'primary',
+      cell: (car) => (
+        <Link
+          className="rz-strong font-medium whitespace-nowrap"
+          onClick={(event) => event.stopPropagation()}
+          to={`${base}/${car.id}`}
+        >
+          {car.brand} {car.model} · {String(car.year)}
+        </Link>
+      ),
+    },
+    {
+      key: 'status',
+      label: ti('columnStatus'),
+      cell: (car) => (
+        <StatusPill tone={car.status === 'active' ? 'ok' : 'neutral'}>
+          {car.status === 'active' ? t('cardActive') : t('cardArchived')}
+        </StatusPill>
+      ),
+    },
+    {
+      key: 'parts',
+      label: t('cardParts'),
+      align: 'end',
+      cell: (car) => <span className="rz-strong">{car.partsCount}</span>,
+    },
+    {
+      key: 'sold',
+      label: t('cardSold'),
+      align: 'end',
+      cell: (car) => <span className="rz-muted">{car.soldPartsCount}</span>,
+    },
+    ...(financeView
+      ? ([
+          {
+            key: 'invested',
+            label: `${tk('invested')}${unit}`,
+            align: 'end',
+            cell: (car) => (
+              <span className="rz-strong">
+                {car.profitability ? number(car.profitability.invested) : '—'}
+              </span>
+            ),
+          },
+          {
+            key: 'recouped',
+            label: `${t('cardRecouped')}${unit}`,
+            align: 'end',
+            cell: (car) => (
+              <span className="rz-strong">
+                {car.profitability ? number(car.profitability.recouped) : '—'}
+              </span>
+            ),
+          },
+          {
+            key: 'payback',
+            label: t('sortPayback'),
+            cell: (car) => (
+              <PaybackCell
+                percent={car.profitability?.recoupedPercent ?? null}
+              />
+            ),
+          },
+        ] satisfies DataColumn<CarListItem>[])
+      : []),
+    {
+      key: 'days',
+      label: tk('partsInStock'),
+      align: 'end',
+      cell: (car) => {
+        const days = daysOnStock(car.acquiredAt)
+        return (
+          <span className="rz-muted">
+            {days === null ? '—' : t('daysOnStock', { count: days })}
+          </span>
+        )
+      },
+    },
+  ]
 
   return (
     <RedesignShell
       actions={
-        createDecision.kind === 'allowed' ? (
-          <Button asChild variant="primary">
-            <Link to={`${base}/new`}>
-              <Plus aria-hidden />
-              {t('addCar')}
-            </Link>
-          </Button>
+        partsManage || addCar !== null ? (
+          <>
+            {partsManage ? (
+              <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
+                <Button asChild variant="quiet">
+                  <Link to={`${partsBase}/imports`}>
+                    <Upload aria-hidden />
+                    {t('importParts')}
+                  </Link>
+                </Button>
+              </FeatureGate>
+            ) : null}
+            {addCar}
+          </>
+        ) : undefined
+      }
+      banner={
+        createDecision.kind === 'quota-exhausted' ? (
+          <div className="rz-banner rz-banner--warn" role="status">
+            <strong className="rz-strong">{t('deniedQuota')}</strong>
+          </div>
         ) : undefined
       }
       crumb={
@@ -422,19 +516,18 @@ function CarsList({ base }: { base: string }) {
         </>
       }
     >
-      <div className="rz-page-head">
-        <h1 className="rz-h-page">{t('title')}</h1>
-        <p className="rz-totals">
-          <span>
-            <span className="rz-mono rz-strong">{data?.total ?? 0}</span>{' '}
-            {t('found')}
-          </span>
-        </p>
-      </div>
+      <RedesignTitle
+        aside={
+          problem === null ? (
+            <span className="rz-mono rz-dim">{data?.total ?? 0}</span>
+          ) : undefined
+        }
+        title={t('title')}
+      />
 
       <div className="rz-toolbar" role="search">
         <form
-          className="flex min-w-0 flex-[1_1_240px] sm:max-w-[360px]"
+          className="flex min-w-0 flex-[0_1_340px]"
           onSubmit={(event) => {
             event.preventDefault()
             change({ search: query.trim() || undefined, page: '1' })
@@ -460,6 +553,11 @@ function CarsList({ base }: { base: string }) {
           ]}
           value={selected.status ?? ''}
         />
+        {selected.search !== undefined && data !== null ? (
+          <span className="rz-caption">
+            {t('found')} <span className="rz-mono">{data.total}</span>
+          </span>
+        ) : null}
         {financeView ? (
           <div className="rz-toolbar__end">
             <PillGroup
@@ -475,73 +573,80 @@ function CarsList({ base }: { base: string }) {
         ) : null}
       </div>
 
-      {problem ? <Notice tone="danger">{problem}</Notice> : null}
-
-      {cars.length === 0 ? (
-        <EmptyState
-          description={t('emptyDescription')}
-          icon={<CarFront aria-hidden />}
-          title={t('emptyTitle')}
+      {loading ? (
+        <SkeletonRows columns={4} rows={9} />
+      ) : problem !== null ? (
+        <ErrorState
+          description={problem}
+          onRetry={() => setAttempt((current) => current + 1)}
         />
+      ) : cars.length === 0 && page <= 1 ? (
+        filtered ? (
+          <EmptyState
+            actions={
+              <Button
+                onClick={() => {
+                  setQuery('')
+                  change({ search: undefined, status: undefined, page: '1' })
+                }}
+              >
+                <X aria-hidden />
+                {ta('clearFilter')}
+              </Button>
+            }
+            icon={<SearchX aria-hidden />}
+            tone="neutral"
+            title={t('emptyTitle')}
+          />
+        ) : (
+          <EmptyState
+            actions={canCreate ? addCar : undefined}
+            description={t('emptyDescription')}
+            icon={<CarFront aria-hidden />}
+            title={t('emptyTitle')}
+          />
+        )
       ) : (
-        <ul
-          aria-label={t('listLabel')}
-          className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,240px),1fr))] gap-3 p-0"
-        >
-          {cars.map((car) => (
-            <li className="grid" key={car.id}>
-              <CarCard
-                car={car}
-                currency={accounting.currency}
-                href={`${base}/${car.id}`}
-                showMoney={financeView}
-              />
-            </li>
-          ))}
-        </ul>
+        // Headers may wrap, as v2 draws «Вкладено, ₴» over two lines, so the
+        // money columns fit beside the rest on a laptop.
+        <div className="[&_thead_th]:whitespace-normal">
+          <DataTable
+            caption={t('listLabel')}
+            columns={columns}
+            footer={
+              <nav aria-label={t('paginationLabel')} className="rz-pager">
+                <p className="m-0">
+                  {t('pageOf', { page, total: totalPages })}
+                </p>
+                <span className="rz-pager__nav">
+                  <Button
+                    aria-label={t('previousPage')}
+                    disabled={page <= 1}
+                    onClick={() => change({ page: String(page - 1) })}
+                    size="icon"
+                    className="rz-btn--sm"
+                  >
+                    <ChevronLeft aria-hidden />
+                  </Button>
+                  <Button
+                    aria-label={t('nextPage')}
+                    disabled={page >= totalPages}
+                    onClick={() => change({ page: String(page + 1) })}
+                    size="icon"
+                    className="rz-btn--sm"
+                  >
+                    <ChevronRight aria-hidden />
+                  </Button>
+                </span>
+              </nav>
+            }
+            onRowClick={(car) => void navigate(`${base}/${car.id}`)}
+            rowKey={(car) => car.id}
+            rows={cars}
+          />
+        </div>
       )}
-
-      <nav aria-label={t('paginationLabel')} className="rz-pager px-0">
-        <p className="rz-mono m-0">
-          {t('pageOf', { page, total: totalPages })}
-        </p>
-        <span className="rz-pager__nav">
-          <Button
-            aria-label={t('previousPage')}
-            disabled={page <= 1}
-            onClick={() => change({ page: String(page - 1) })}
-            size="sm"
-          >
-            <ChevronLeft aria-hidden />
-            {tc('back')}
-          </Button>
-          <Button
-            aria-label={t('nextPage')}
-            disabled={page >= totalPages}
-            onClick={() => change({ page: String(page + 1) })}
-            size="sm"
-          >
-            {tc('next')}
-            <ChevronRight aria-hidden />
-          </Button>
-        </span>
-      </nav>
     </RedesignShell>
-  )
-}
-
-/**
- * The way back, at the head of the breadcrumb: a quiet small button, so the
- * crumb trail after it still reads as the path.
- */
-function BackLink({ to, children }: { to: string; children: ReactNode }) {
-  return (
-    <Button asChild size="sm" variant="quiet">
-      <Link to={to}>
-        <ChevronLeft aria-hidden />
-        {children}
-      </Link>
-    </Button>
   )
 }
 
@@ -608,7 +713,9 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
     useAccess()
   const manage = manageDecision.kind === 'allowed'
   const t = useT(carsMessages)
+  const tf = useT(carFormMessages)
   const tc = useT(commonMessages)
+  const photosTitleId = useId()
   const day = useDay()
   const accounting = useAccountingCurrency()
   const navigate = useNavigate()
@@ -667,29 +774,59 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
     }
   }
   const crumb = (
-    <>
-      <BackLink to={base}>{t('backToCars')}</BackLink>
-      <span className="hidden min-w-0 items-center gap-1.5 sm:flex">
-        <span>{t('eyebrow')}</span>
-        <ChevronRight aria-hidden className="size-3" />
-        <span>{t('title')}</span>
-      </span>
-    </>
+    <Crumbs
+      items={[
+        t('eyebrow'),
+        <Link className="text-app-muted" key="cars" to={base}>
+          {t('title')}
+        </Link>,
+        ...(car ? [<span key="code">{car.code}</span>] : []),
+      ]}
+    />
   )
   if (!car)
     return (
-      <RedesignShell crumb={crumb}>
-        <div className="grid max-w-[1240px] gap-4">
-          {problem ? (
-            <ErrorState
-              description={problem}
-              onRetry={() => void load()}
-              title={t('loadFailed')}
-            />
-          ) : (
-            <SkeletonRows label={t('loading')} rows={4} />
-          )}
-        </div>
+      <RedesignShell crumb={crumb} width="record">
+        {problem ? (
+          <ErrorState
+            actions={
+              <>
+                <Button asChild>
+                  <Link to={base}>
+                    <ArrowLeft aria-hidden />
+                    {t('backToCars')}
+                  </Link>
+                </Button>
+                <Button onClick={() => void load()} variant="primary">
+                  <RefreshCw aria-hidden />
+                  {tc('retry')}
+                </Button>
+              </>
+            }
+            description={problem}
+            title={t('loadFailed')}
+          />
+        ) : (
+          <div className="grid gap-3">
+            <p className="sr-only" role="status">
+              {t('loading')}
+            </p>
+            <Skeleton className="h-[22px] w-[36%]" />
+            <Skeleton className="w-[52%]" />
+            <div className="grid gap-px sm:grid-cols-4">
+              {[0, 1, 2, 3].map((key) => (
+                <Skeleton className="h-[92px]" key={key} />
+              ))}
+            </div>
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+              <Skeleton className="h-[300px]" />
+              <Skeleton className="h-[300px]" />
+            </div>
+            <p aria-hidden className="rz-caption m-0">
+              {t('loading')}
+            </p>
+          </div>
+        )}
       </RedesignShell>
     )
   const profit = car.profitability
@@ -729,10 +866,11 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
             <>
               {partsManage && car.status !== 'archived' ? (
                 <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
-                  <Button asChild>
+                  <Button asChild variant="quiet">
                     <Link
                       to={`${partsBase}/imports?car_id=${encodeURIComponent(car.id)}`}
                     >
+                      <Upload aria-hidden />
                       {t('importParts')}
                     </Link>
                   </Button>
@@ -758,6 +896,16 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
               {manage ? (
                 <ActionMenu
                   actions={[
+                    ...(car.vin
+                      ? [
+                          {
+                            key: 'copy-vin',
+                            label: t('copyVin'),
+                            icon: <Copy aria-hidden />,
+                            onSelect: () => void copyVin(car.vin ?? ''),
+                          },
+                        ]
+                      : []),
                     {
                       key: 'archive',
                       label: t('archive'),
@@ -767,7 +915,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
                     },
                     {
                       key: 'delete',
-                      label: tc('delete'),
+                      label: tf('deleteCar'),
                       icon: <Trash2 aria-hidden />,
                       destructive: true,
                       disabled: busy,
@@ -781,29 +929,24 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
           ) : undefined
         }
         crumb={crumb}
+        width="record"
       >
-        <div className="grid max-w-[1240px] gap-4">
+        <div className="grid gap-4">
           {problem ? <Notice tone="danger">{problem}</Notice> : null}
           {copyStatus ? <Notice tone="ok">{copyStatus}</Notice> : null}
 
           <div className="grid gap-2">
             <div className="rz-page-head items-center">
               <h1 className="rz-h-page text-balance">
-                {car.brand} {car.model} <span className="rz-dim">·</span>{' '}
-                {String(car.year)}
+                {car.brand} {car.model} · {String(car.year)}
               </h1>
               <StatusPill tone={car.status === 'active' ? 'ok' : 'neutral'}>
                 {car.status === 'active'
                   ? t('statusActive')
                   : t('statusArchived')}
               </StatusPill>
+              {financeView && profit ? <CarPayoffPill profit={profit} /> : null}
             </div>
-            <p className="rz-muted m-0">
-              {t('onStockSince', { date: day(car.acquiredAt) })}
-              {onStock === null
-                ? ''
-                : ` · ${t('daysOnStock', { count: onStock })}`}
-            </p>
             <div className="flex flex-wrap items-center gap-2">
               <span className="rz-code pr-2">{car.code}</span>
               {car.vin ? (
@@ -815,8 +958,14 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
                   }}
                 />
               ) : null}
+              <span className="rz-caption">
+                {t('onStockSince', { date: day(car.acquiredAt) })}
+                {onStock === null
+                  ? ''
+                  : ` · ${t('daysOnStock', { count: onStock })}`}
+              </span>
               {car.color ? (
-                <span className="rz-muted flex items-center gap-1.5">
+                <span className="rz-caption flex items-center gap-1.5">
                   <span
                     aria-hidden
                     className="border-app-line-2 size-2.5 rounded-full border"
@@ -828,64 +977,21 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-start gap-4">
-            <section
-              aria-label={t('photosAndNotes')}
-              className="grid min-w-0 flex-[1.35_1_480px] gap-4"
-            >
-              <Card
-                aside={
-                  <span className="rz-eyebrow">
-                    {t('photoCount', { count: car.photos.length })}
-                  </span>
-                }
-                bodyClassName="p-0"
-                title={t('photosTitle')}
-              >
-                <Gallery
-                  emptyLabel={
-                    <span className="grid gap-1">
-                      <span>{t('photosEmpty')}</span>
-                      <span>
-                        {t('photosAdvice', {
-                          shots: CAR_SHOTS.slice(0, 3)
-                            .map((shot) => t(shot))
-                            .join(', ')
-                            .toLowerCase(),
-                        })}
-                      </span>
-                    </span>
-                  }
-                  label={t('galleryLabel', { code: car.code })}
-                  photos={photos}
-                  variant="framed"
-                />
-              </Card>
+          {financeView && profit ? (
+            <CarProfitabilityCard
+              currency={accounting.currency}
+              expensesTotal={expensesTotal}
+              profit={profit}
+              purchasePrice={car.purchasePrice}
+            />
+          ) : null}
 
-              <Card title={t('notesTitle')}>
-                {car.notes ? (
-                  <p className="m-0 whitespace-pre-line text-pretty">
-                    {car.notes}
-                  </p>
-                ) : (
-                  <p className="rz-dim m-0">{t('notesEmpty')}</p>
-                )}
-              </Card>
-            </section>
-
-            <aside
+          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+            <div
               aria-label={t('summaryLabel')}
-              className="grid min-w-0 flex-[1_1_360px] gap-4"
+              className="grid min-w-0 gap-4"
+              role="complementary"
             >
-              {financeView && profit ? (
-                <CarProfitabilityCard
-                  currency={accounting.currency}
-                  expensesTotal={expensesTotal}
-                  profit={profit}
-                  purchasePrice={car.purchasePrice}
-                />
-              ) : null}
-
               {profit ? (
                 <CarPartsCard
                   partsHref={partsView ? partsHref : null}
@@ -901,7 +1007,52 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
                   onProblem={setProblem}
                 />
               ) : null}
-            </aside>
+            </div>
+
+            <section
+              aria-labelledby={photosTitleId}
+              className="rz-card min-w-0"
+            >
+              <header className="rz-card__head py-2.5">
+                <h2 className="rz-h-card" id={photosTitleId}>
+                  {t('photosAndNotes')}
+                </h2>
+                <span className="rz-caption">
+                  {t('photoCount', { count: car.photos.length })}
+                </span>
+              </header>
+              <div className="rz-card__body grid gap-3.5">
+                <section aria-label={t('photosTitle')}>
+                  <Gallery
+                    emptyLabel={
+                      <span className="grid gap-1">
+                        <span className="rz-strong">{t('photosEmpty')}</span>
+                        <span className="rz-caption text-pretty">
+                          {t('photosAdvice', {
+                            shots: CAR_SHOTS.slice(0, 3)
+                              .map((shot) => t(shot))
+                              .join(', ')
+                              .toLowerCase(),
+                          })}
+                        </span>
+                      </span>
+                    }
+                    label={t('galleryLabel', { code: car.code })}
+                    photos={photos}
+                  />
+                </section>
+                <div className="border-app-line grid gap-1 border-t pt-3">
+                  <h3 className="rz-th-label m-0">{t('notesTitle')}</h3>
+                  {car.notes ? (
+                    <p className="m-0 whitespace-pre-line text-pretty">
+                      {car.notes}
+                    </p>
+                  ) : (
+                    <p className="rz-dim m-0 text-pretty">{t('notesEmpty')}</p>
+                  )}
+                </div>
+              </div>
+            </section>
           </div>
         </div>
       </RedesignShell>
@@ -980,7 +1131,12 @@ function Expenses({
   const [formOpen, setFormOpen] = useState(() => draft.initial !== null)
   const [pendingRemoval, setPendingRemoval] = useState<CarExpense | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<{
+    name: string | null
+    amount: string | null
+  }>({ name: null, amount: null })
   const [busy, setBusy] = useState(false)
+  const titleId = useId()
   const guard = useFirstPriceGuard()
   const money = useCarMoney(guard.currency)
   const price = usePriceSlots(guard, {
@@ -996,17 +1152,15 @@ function Expenses({
     event?.preventDefault()
     const value = Number(amount)
     if (!canManage || busy || price.disabled) return
-    if (!name.trim()) {
-      setFormError(t('expenseNameRequired'))
-      return
-    }
-    if (!Number.isFinite(value) || value <= 0) {
-      setFormError(t('expenseAmountInvalid'))
-      return
-    }
-    const precision = amountPrecisionError(value, guard.currency, locale)
-    if (precision !== null) {
-      setFormError(precision)
+    // Each problem goes under the field it is about, as v2 draws the sheet.
+    const nameError = name.trim() ? null : t('expenseNameRequired')
+    const amountError =
+      !Number.isFinite(value) || value <= 0
+        ? t('expenseAmountInvalid')
+        : amountPrecisionError(value, guard.currency, locale)
+    setFieldErrors({ name: nameError, amount: amountError })
+    if (nameError !== null || amountError !== null) {
+      setFormError(null)
       return
     }
     setFormError(null)
@@ -1075,108 +1229,108 @@ function Expenses({
   const total = expenses.reduce((sum, expense) => sum + expense.amount, 0)
   const openForm = (expense: CarExpense | null) => {
     setFormError(null)
+    setFieldErrors({ name: null, amount: null })
     setEditing(expense)
     setName(expense?.name ?? '')
     setAmount(expense === null ? '' : String(expense.amount))
     setFormOpen(true)
   }
   return (
-    <Card
-      aside={
-        canManage ? (
+    <section aria-labelledby={titleId} className="rz-card min-w-0">
+      <header className="rz-card__head py-2.5">
+        <span className="grid min-w-0 gap-0.5">
+          <h2 className="rz-h-card" id={titleId}>
+            {t('expensesTitle')}
+          </h2>
+          <span className="rz-caption text-pretty">{t('expensesIntro')}</span>
+        </span>
+        {canManage ? (
           <Button disabled={busy} onClick={() => openForm(null)} size="sm">
             <Plus aria-hidden />
             {t('addExpense')}
           </Button>
-        ) : undefined
-      }
-      bodyClassName="p-0"
-      title={t('expensesTitle')}
-    >
-      <p className="rz-caption m-0 px-(--rz-card-p) pt-3 text-pretty">
-        {t('expensesIntro')}
-      </p>
+        ) : null}
+      </header>
       {expenses.length === 0 ? (
-        <p className="rz-muted m-0 p-(--rz-card-p) text-pretty">
-          {t('expensesNone')}
-        </p>
+        <EmptyState
+          className="min-h-[160px] rounded-none border-0"
+          description={t('expensesEmptyDescription')}
+          icon={<Wallet aria-hidden />}
+          title={t('expensesEmptyTitle')}
+          tone="neutral"
+        />
       ) : (
-        <div className="pt-2">
-          <DataTable
-            caption={t('expensesCaption')}
-            columns={[
-              {
-                key: 'name',
-                label: t('columnExpense'),
-                variant: 'primary',
-                cell: (expense: CarExpense) => expense.name,
-              },
-              {
-                key: 'createdAt',
-                label: t('columnAdded'),
-                cell: (expense: CarExpense) => (
-                  <span className="rz-mono">{day(expense.createdAt)}</span>
-                ),
-              },
-              {
-                key: 'amount',
-                label: t('columnAmount'),
-                align: 'end',
-                cell: (expense: CarExpense) => money(expense.amount),
-              },
-              ...(canManage
-                ? [
-                    {
-                      key: 'actions',
-                      label: tc('actions'),
-                      align: 'end' as const,
-                      headerHidden: true,
-                      cell: (expense: CarExpense) => (
-                        <ActionMenu
-                          actions={[
-                            {
-                              key: 'edit',
-                              label: tc('edit'),
-                              icon: <Pencil aria-hidden />,
-                              disabled: busy,
-                              onSelect: () => openForm(expense),
-                            },
-                            {
-                              key: 'remove',
-                              label: tc('delete'),
-                              icon: <Trash2 aria-hidden />,
-                              destructive: true,
-                              disabled: busy,
-                              onSelect: () => setPendingRemoval(expense),
-                            },
-                          ]}
-                          label={t('expenseActions', { name: expense.name })}
-                        />
-                      ),
-                    },
-                  ]
-                : []),
-            ]}
-            embedded
-            empty={
-              <EmptyState
-                description={t('expensesEmptyDescription')}
-                icon={<Wallet aria-hidden />}
-                title={t('expensesEmptyTitle')}
-              />
-            }
-            footer={
-              <div className="rz-card__foot flex-wrap items-baseline">
-                <span className="rz-muted">
-                  {t('expensesTotal', { count: expenses.length })}
+        <DataTable
+          caption={t('expensesCaption')}
+          columns={[
+            {
+              key: 'name',
+              label: t('columnExpense'),
+              variant: 'primary',
+              cell: (expense: CarExpense) => expense.name,
+            },
+            {
+              key: 'createdAt',
+              label: t('columnAdded'),
+              cell: (expense: CarExpense) => (
+                <span className="rz-mono rz-dim text-caption">
+                  {day(expense.createdAt)}
                 </span>
-                <span className="rz-mono rz-strong">{money(total)}</span>
-              </div>
-            }
-            rowKey={(expense: CarExpense) => expense.id}
-            rows={expenses}
-          />
-        </div>
+              ),
+            },
+            {
+              key: 'amount',
+              label: t('columnAmount'),
+              align: 'end',
+              cell: (expense: CarExpense) => (
+                <span className="rz-strong">{money(expense.amount)}</span>
+              ),
+            },
+            ...(canManage
+              ? [
+                  {
+                    key: 'actions',
+                    label: tc('actions'),
+                    align: 'end' as const,
+                    headerHidden: true,
+                    cell: (expense: CarExpense) => (
+                      <ActionMenu
+                        actions={[
+                          {
+                            key: 'edit',
+                            label: tc('edit'),
+                            icon: <Pencil aria-hidden />,
+                            disabled: busy,
+                            onSelect: () => openForm(expense),
+                          },
+                          {
+                            key: 'remove',
+                            label: tc('delete'),
+                            icon: <Trash2 aria-hidden />,
+                            destructive: true,
+                            disabled: busy,
+                            onSelect: () => setPendingRemoval(expense),
+                          },
+                        ]}
+                        label={t('expenseActions', { name: expense.name })}
+                      />
+                    ),
+                  },
+                ]
+              : []),
+          ]}
+          embedded
+          footer={
+            <div className="rz-card__foot flex-wrap items-baseline">
+              <span className="rz-muted">
+                {t('expensesTotal', { count: expenses.length })}
+              </span>
+              <span className="rz-mono rz-strong">{money(total)}</span>
+            </div>
+          }
+          rowKey={(expense: CarExpense) => expense.id}
+          rows={expenses}
+        />
       )}
 
       <CarExpenseDrawer
@@ -1184,6 +1338,7 @@ function Expenses({
         busy={busy}
         editing={editing}
         error={formError}
+        fieldErrors={fieldErrors}
         name={name}
         onAmountChange={setAmount}
         onNameChange={setName}
@@ -1192,6 +1347,7 @@ function Expenses({
           if (!open) {
             setEditing(null)
             setFormError(null)
+            setFieldErrors({ name: null, amount: null })
           }
         }}
         onSubmit={(event) => void create(event)}
@@ -1217,7 +1373,7 @@ function Expenses({
         pending={busy}
         title={t('removeExpenseTitle')}
       />
-    </Card>
+    </section>
   )
 }
 
@@ -1579,6 +1735,8 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
   }
   const priceLocked = carId !== undefined && !financeManage
   const summaryId = useId()
+  const totalsId = useId()
+  const deleteId = useId()
   const remove = async () => {
     if (busy || !carId) return
     setBusy(true)
@@ -1630,31 +1788,48 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
   ]
 
   const crumb = (
-    <>
-      <BackLink to={backTo}>
-        {carId ? tf('backToCar') : t('backToCars')}
-      </BackLink>
-      <span className="hidden min-w-0 items-center gap-1.5 sm:flex">
-        <span>{t('eyebrow')}</span>
-        <ChevronRight aria-hidden className="size-3" />
-        <span>{t('title')}</span>
-        {values.code.trim() === '' ? null : (
-          <>
-            <ChevronRight aria-hidden className="size-3" />
-            <span aria-current="page" className="font-mono">
-              {values.code.trim()}
-            </span>
-          </>
-        )}
-      </span>
-    </>
+    <Crumbs
+      items={[
+        t('eyebrow'),
+        <Link className="text-app-muted" key="cars" to={base}>
+          {t('title')}
+        </Link>,
+        ...(carId && loaded !== null
+          ? [
+              <Link
+                className="text-app-muted"
+                key="car"
+                to={`${base}/${carId}`}
+              >
+                {loaded.code}
+              </Link>,
+            ]
+          : []),
+        <span
+          className="inline-block max-w-[6rem] truncate align-bottom sm:max-w-none"
+          key="title"
+        >
+          {title}
+        </span>,
+      ]}
+    />
   )
 
   if (loading)
     return (
-      <RedesignShell crumb={crumb}>
-        <div className="grid max-w-[1240px] gap-4">
-          <SkeletonRows columns={2} label={tf('loadingCar')} rows={5} />
+      <RedesignShell crumb={crumb} width="record">
+        <div className="grid gap-3">
+          <p className="sr-only" role="status">
+            {tf('loadingCar')}
+          </p>
+          <Skeleton className="h-[22px] w-[30%]" />
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+            <Skeleton className="h-[520px]" />
+            <Skeleton className="h-[260px]" />
+          </div>
+          <p aria-hidden className="rz-caption m-0">
+            {tf('loadingCar')}
+          </p>
         </div>
       </RedesignShell>
     )
@@ -1665,8 +1840,11 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
         <RedesignShell
           actions={
             <>
-              <Button asChild>
-                <Link to={backTo}>{tc('cancel')}</Link>
+              <Button asChild variant="quiet">
+                <Link to={backTo}>
+                  {carId ? <ArrowLeft aria-hidden /> : <X aria-hidden />}
+                  {carId ? tf('backToCar') : tc('cancel')}
+                </Link>
               </Button>
               <Button
                 aria-busy={busy}
@@ -1680,45 +1858,15 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
             </>
           }
           crumb={crumb}
+          width="record"
         >
-          <div className="grid max-w-[1240px] gap-4">
-            <div className="grid gap-2">
-              <h1 className="rz-h-page">
-                {carId
-                  ? `${values.brand.trim()} ${values.model.trim()}`.trim() ||
-                    title
-                  : title}
-              </h1>
-              <p className="rz-muted m-0 flex flex-wrap items-center gap-x-2 gap-y-1">
-                {values.code.trim() === '' ? null : (
-                  <>
-                    <span className="rz-mono rz-strong">
-                      {values.code.trim()}
-                    </span>
-                    <span aria-hidden className="rz-dim">
-                      ·
-                    </span>
-                  </>
-                )}
-                {values.year.trim() === '' ? null : (
-                  <>
-                    <span>{values.year.trim()}</span>
-                    <span aria-hidden className="rz-dim">
-                      ·
-                    </span>
-                  </>
-                )}
-                <span>
-                  {loaded === null ? (
-                    <>
-                      {tf('requiredMarked')}{' '}
-                      <span className="text-brand-text font-bold">*</span>.{' '}
-                      {tf('restLater')}
-                    </>
-                  ) : (
-                    tf('createdOn', { date: day(loaded.createdAt) })
-                  )}
-                </span>
+          <div className="grid gap-4">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h1 className="rz-h-page">{title}</h1>
+              <p className="rz-caption m-0">
+                {loaded === null
+                  ? tf('restLater')
+                  : tf('createdOn', { date: day(loaded.createdAt) })}
               </p>
             </div>
 
@@ -1730,14 +1878,13 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
               </Notice>
             ) : null}
 
-            <div className="flex flex-wrap items-start gap-4">
-              <div className="grid min-w-0 flex-[1_1_480px] gap-4">
+            <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+              <div className="grid min-w-0 gap-4">
                 <CarStep
                   hint={carId ? tf('identityHintEdit') : tf('identityHintNew')}
-                  number="01"
                   title={tf('identityTitle')}
                 >
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                     <Field
                       hint={tf('codeHint')}
                       label={tf('codeLabel')}
@@ -1791,45 +1938,29 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                       type="model"
                       value={values.model}
                     />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <p className="rz-label m-0">{tf('colorTitle')}</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {quickColors(tf).map((option) => {
-                        const active =
-                          values.color.trim().toLowerCase() ===
-                          option.label.toLowerCase()
-                        return (
-                          <button
-                            aria-pressed={active}
-                            className={cn(
-                              'rz-btn',
-                              active
-                                ? 'bg-app-selected text-app-strong'
-                                : 'rz-muted',
-                            )}
-                            disabled={busy}
-                            key={option.label}
-                            onClick={() =>
-                              setValues((current) => ({
-                                ...current,
-                                color: active ? '' : option.label,
-                              }))
-                            }
-                            type="button"
-                          >
-                            <span
-                              aria-hidden
-                              className="border-app-line-2 size-2.5 rounded-full border"
-                              style={{ background: option.swatch }}
-                            />
-                            {option.label}
-                          </button>
-                        )
-                      })}
+                    <div className="grid gap-1.5 sm:col-span-2">
+                      <Field hint={tf('vinHint')} label="VIN">
+                        <TextInput
+                          {...bind('vin')}
+                          className="font-mono uppercase"
+                          maxLength={17}
+                          placeholder="WVWD2468F220158A6"
+                        />
+                      </Field>
+                      <p
+                        className={cn(
+                          'm-0 text-right font-mono text-micro',
+                          vinLength === 0
+                            ? 'text-app-dim'
+                            : vinLength === 17
+                              ? 'text-state-ok'
+                              : 'text-state-warn',
+                        )}
+                      >
+                        {vinLength} / 17
+                      </p>
                     </div>
-                    <div className="mt-1">
+                    <div className="sm:col-span-2">
                       <Field
                         hint={tf('colorFreeHint')}
                         label={tf('colorFreeLabel')}
@@ -1843,38 +1974,41 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                   </div>
 
                   <div className="grid gap-1.5">
-                    <Field hint={tf('vinHint')} label="VIN">
-                      <TextInput
-                        {...bind('vin')}
-                        className="font-mono uppercase"
-                        maxLength={17}
-                        placeholder="WVWD2468F220158A6"
-                      />
-                    </Field>
-                    <p
-                      className={cn(
-                        'm-0 text-right font-mono text-micro',
-                        vinLength === 0
-                          ? 'text-app-dim'
-                          : vinLength === 17
-                            ? 'text-state-ok'
-                            : 'text-state-warn',
-                      )}
-                    >
-                      {vinLength} / 17
-                    </p>
+                    <p className="rz-label m-0">{tf('colorTitle')}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {quickColors(tf).map((option) => {
+                        const active =
+                          values.color.trim().toLowerCase() ===
+                          option.label.toLowerCase()
+                        return (
+                          <button
+                            aria-pressed={active}
+                            className={cn(
+                              'inline-flex h-[26px] cursor-pointer items-center rounded-full border px-2.5 text-caption disabled:pointer-events-none',
+                              active
+                                ? 'border-brand bg-brand-soft text-app-strong'
+                                : 'border-app-line-2 text-app-muted hover:bg-app-hover',
+                            )}
+                            disabled={busy}
+                            key={option.label}
+                            onClick={() =>
+                              setValues((current) => ({
+                                ...current,
+                                color: active ? '' : option.label,
+                              }))
+                            }
+                            type="button"
+                          >
+                            {option.label}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 </CarStep>
 
-                <CarStep
-                  hint={tf('purchaseHint')}
-                  number="02"
-                  title={tf('purchaseTitle')}
-                >
+                <CarStep hint={tf('purchaseHint')} title={tf('purchaseTitle')}>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label={tf('acquiredAt')}>
-                      <TextInput {...bind('acquiredAt')} type="date" />
-                    </Field>
                     <Field
                       hint={
                         priceLocked ? tf('purchasePriceLocked') : price.hint
@@ -1892,14 +2026,18 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                         required={!priceLocked && !price.disabled}
                       />
                     </Field>
+                    <Field label={tf('acquiredAt')}>
+                      <TextInput {...bind('acquiredAt')} type="date" />
+                    </Field>
                   </div>
                   {priceLocked ? null : price.note}
                 </CarStep>
 
                 {financeManage ? (
                   <CarStep
-                    hint={tf('extraExpensesHint')}
-                    number="03"
+                    hint={
+                      carId ? tf('expensesAffect') : tf('extraExpensesHint')
+                    }
                     title={tf('extraExpensesTitle')}
                   >
                     {carId ? (
@@ -1920,11 +2058,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                   </CarStep>
                 ) : null}
 
-                <CarStep
-                  hint={tf('photosHint')}
-                  number={financeManage ? '04' : '03'}
-                  title={tf('photosTitle')}
-                >
+                <CarStep hint={tf('photosHint')} title={tf('photosTitle')}>
                   {carId ? (
                     <fieldset className="grid gap-3" disabled={busy}>
                       <p className="rz-muted m-0">{tf('photosEditNote')}</p>
@@ -2043,11 +2177,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                   )}
                 </CarStep>
 
-                <CarStep
-                  hint={tf('notesHint')}
-                  number={financeManage ? '05' : '04'}
-                  title={tf('notesTitle')}
-                >
+                <CarStep hint={tf('notesHint')} title={tf('notesTitle')}>
                   <Field label={tf('notesTitle')}>
                     <TextArea
                       {...bind('notes')}
@@ -2056,119 +2186,16 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                     />
                   </Field>
                 </CarStep>
-              </div>
 
-              <section
-                aria-labelledby={summaryId}
-                className="rz-card min-w-0 flex-[1_1_280px] lg:max-w-[380px]"
-              >
-                <header className="rz-card__head py-2.5">
-                  <h2 className="rz-h-card" id={summaryId}>
-                    {carId ? tf('summaryTitle') : tf('beforeCreateTitle')}
-                  </h2>
-                </header>
-                <div className="rz-card__body grid gap-4">
-                  <div className="rz-inset grid gap-1">
-                    <p
-                      className={cn(
-                        'm-0 font-mono font-semibold',
-                        values.code.trim() === '' ? 'rz-dim' : 'rz-strong',
-                      )}
-                    >
-                      {values.code.trim() || tf('codeMissing')}
-                    </p>
-                    <p
-                      className={cn(
-                        'm-0',
-                        values.brand.trim() === '' && values.model.trim() === ''
-                          ? 'rz-dim'
-                          : 'rz-muted',
-                      )}
-                    >
-                      {`${values.brand.trim()} ${values.model.trim()}`.trim() ||
-                        tf('makeModelMissing')}
-                    </p>
-                    <p
-                      className={cn(
-                        'rz-caption m-0 font-mono break-all',
-                        vinLength === 17 && 'rz-muted',
-                      )}
-                    >
-                      {values.vin.trim().toUpperCase() || tf('vinMissing')}
-                    </p>
-                  </div>
-                  <dl className="m-0 grid grid-cols-[1fr_auto] items-baseline gap-y-2">
-                    <dt className="rz-muted">{tf('summaryPrice')}</dt>
-                    <dd
-                      className={cn(
-                        'rz-mono m-0',
-                        priceValid ? 'rz-strong' : 'rz-dim',
-                      )}
-                    >
-                      {priceValid ? money(priceNumber) : '—'}
-                    </dd>
-                    <dt className="rz-muted">{tf('summaryExpenses')}</dt>
-                    <dd
-                      className={cn(
-                        'rz-mono m-0',
-                        expensesTotal > 0 ? 'rz-strong' : 'rz-dim',
-                      )}
-                    >
-                      {expensesTotal > 0 ? money(expensesTotal) : '—'}
-                    </dd>
-                    <dd
-                      aria-hidden
-                      className="bg-app-line col-span-2 m-0 h-px"
-                    />
-                    <dt className="rz-strong font-semibold">
-                      {tf('summaryInvested')}
-                    </dt>
-                    <dd className="rz-mono rz-strong m-0 text-title">
-                      {invested > 0 ? money(invested) : '—'}
-                    </dd>
-                  </dl>
-                  <ul className="border-app-line m-0 grid list-none gap-2 border-t p-0 pt-3">
-                    {checks.map((check) => (
-                      <li
-                        className={cn(
-                          'flex items-center gap-2',
-                          check.done ? 'text-app-ink' : 'rz-muted',
-                        )}
-                        key={check.label}
-                      >
-                        <span
-                          aria-hidden
-                          className={cn(
-                            'grid size-4 shrink-0 place-items-center rounded-full',
-                            check.done
-                              ? 'bg-state-ok-soft text-state-ok'
-                              : 'bg-app-hover',
-                          )}
-                        >
-                          {check.done ? <Check className="size-3" /> : null}
-                        </span>
-                        {check.label}
-                        <span className="sr-only">
-                          {check.done ? tf('checkDone') : tf('checkNotDone')}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  {priceEditable ? (
-                    <div className="empty:hidden">{price.saveNotes}</div>
-                  ) : null}
-                  <Button
-                    aria-busy={busy}
-                    disabled={busy}
-                    size="wide"
-                    type="submit"
-                    variant="primary"
-                  >
-                    {carId ? tf('saveChanges') : tf('createCar')}
-                  </Button>
-                  {carId && loaded !== null ? (
-                    <div className="border-app-line grid gap-3 border-t pt-3">
-                      <p className="rz-muted m-0">
+                {carId && loaded !== null ? (
+                  <section aria-labelledby={deleteId} className="rz-card">
+                    <header className="rz-card__head py-2.5">
+                      <h2 className="rz-h-card" id={deleteId}>
+                        {tf('deleteCar')}
+                      </h2>
+                    </header>
+                    <div className="rz-card__body flex flex-wrap items-center gap-3">
+                      <p className="rz-muted m-0 min-w-[240px] flex-1 text-pretty">
                         {loaded.profitability == null
                           ? tf('deleteNoProfitability')
                           : loaded.profitability.partsTotal > 0
@@ -2182,16 +2209,94 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
                           busy || (loaded.profitability?.partsTotal ?? 0) > 0
                         }
                         onClick={() => setDeleting(true)}
-                        size="wide"
                         variant="danger"
                       >
                         <Trash2 aria-hidden />
                         {tf('deleteCar')}
                       </Button>
                     </div>
-                  ) : null}
-                </div>
-              </section>
+                  </section>
+                ) : null}
+              </div>
+
+              <aside className="grid min-w-0 gap-3">
+                <section aria-labelledby={summaryId} className="rz-card">
+                  <header className="rz-card__head py-2.5">
+                    <h2 className="rz-h-card" id={summaryId}>
+                      {carId ? t('summaryLabel') : tf('beforeCreateTitle')}
+                    </h2>
+                  </header>
+                  <ul className="m-0 grid list-none gap-0.5 px-3 py-2">
+                    {checks.map((check) => (
+                      <li
+                        className={cn(
+                          'flex min-h-7 items-center gap-2',
+                          check.done ? 'text-app-ink' : 'text-app-muted',
+                        )}
+                        key={check.label}
+                      >
+                        {check.done ? (
+                          <CircleCheck
+                            aria-hidden
+                            className="text-state-ok size-3.5 shrink-0"
+                          />
+                        ) : (
+                          <Circle
+                            aria-hidden
+                            className="text-app-dim size-3.5 shrink-0"
+                          />
+                        )}
+                        {check.label}
+                        <span className="sr-only">
+                          {check.done ? tf('checkDone') : tf('checkNotDone')}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+                <section aria-labelledby={totalsId} className="rz-card">
+                  <header className="rz-card__head py-2.5">
+                    <h2 className="rz-h-card" id={totalsId}>
+                      {tf('summaryTitle')}
+                    </h2>
+                  </header>
+                  <div className="grid gap-3 px-4 py-1">
+                    <dl className="m-0 grid grid-cols-[1fr_auto] items-baseline">
+                      <dt className="rz-muted py-2">{tf('summaryPrice')}</dt>
+                      <dd
+                        className={cn(
+                          'rz-mono m-0 py-2 text-right',
+                          priceValid ? 'text-app-ink' : 'rz-dim',
+                        )}
+                      >
+                        {priceValid ? money(priceNumber) : '—'}
+                      </dd>
+                      <dt className="rz-muted py-2">{tf('summaryExpenses')}</dt>
+                      <dd
+                        className={cn(
+                          'rz-mono m-0 py-2 text-right',
+                          expensesTotal > 0 ? 'text-app-ink' : 'rz-dim',
+                        )}
+                      >
+                        {expensesTotal > 0 ? money(expensesTotal) : '—'}
+                      </dd>
+                      <dt className="rz-muted border-app-line-2 border-t py-2">
+                        {tf('summaryInvested')}
+                      </dt>
+                      <dd className="rz-mono rz-strong border-app-line-2 m-0 border-t py-2 text-right font-semibold">
+                        {invested > 0 ? money(invested) : '—'}
+                      </dd>
+                    </dl>
+                    {priceEditable ? (
+                      <div className="pb-3 empty:hidden">{price.saveNotes}</div>
+                    ) : null}
+                  </div>
+                </section>
+                <p className="rz-caption m-0">
+                  {tf('requiredMarked')}{' '}
+                  <span className="text-brand-text">*</span>. {tf('restLater')}
+                </p>
+              </aside>
             </div>
           </div>
         </RedesignShell>
@@ -2213,14 +2318,12 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
   )
 }
 
-/** One numbered step of the car form, with its own explanation. */
+/** One card of the car form, with its own explanation under the title. */
 function CarStep({
-  number,
   title,
   hint,
   children,
 }: {
-  number: string
   title: string
   hint: string
   children: ReactNode
@@ -2228,16 +2331,15 @@ function CarStep({
   const titleId = useId()
   return (
     <section aria-labelledby={titleId} className="rz-card">
-      <header className="rz-card__head justify-start py-2.5">
-        <span aria-hidden className="rz-mono rz-dim text-caption">
-          {number}
+      <header className="rz-card__head py-2.5">
+        <span className="grid min-w-0 gap-0.5">
+          <h2 className="rz-h-card" id={titleId}>
+            {title}
+          </h2>
+          <p className="rz-caption m-0 text-pretty">{hint}</p>
         </span>
-        <h2 className="rz-h-card" id={titleId}>
-          {title}
-        </h2>
-        <p className="rz-caption m-0 w-full text-pretty">{hint}</p>
       </header>
-      <div className="rz-card__body grid gap-4">{children}</div>
+      <div className="rz-card__body grid gap-3">{children}</div>
     </section>
   )
 }
@@ -2269,9 +2371,8 @@ function CarFormExpenses({
           ))}
         </ul>
       )}
-      <div className="border-app-line flex flex-wrap items-center justify-between gap-3 border-t pt-3">
-        <p className="rz-muted m-0">{tf('expensesAffect')}</p>
-        <Button asChild>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button asChild size="sm">
           <Link to={to}>{tf('manageExpenses')}</Link>
         </Button>
       </div>

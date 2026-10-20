@@ -919,8 +919,13 @@ it('builds a multi-part order and shows its total in dollars', async () => {
 
   const summary = screen.getByLabelText('Підсумок замовлення')
   expect(within(summary).getByText('Разом за замовлення')).toBeVisible()
-  expect(within(summary).getByText('2 позиції')).toBeVisible()
-  expect(within(summary).getByText('175,00 USD')).toBeVisible()
+  // v2 summary: the item-count line and the total line both carry the sum.
+  expect(
+    within(summary).getByText('2 позиції').parentElement,
+  ).toHaveTextContent('175,00 USD')
+  expect(
+    within(summary).getByText('Разом за замовлення').parentElement,
+  ).toHaveTextContent('175,00 USD')
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
 
   expect(orderMocks.create).toHaveBeenCalledWith({
@@ -1698,16 +1703,18 @@ it('shows authoritative detail and lets orders.manage edit pending fields and ca
   const paymentSummary = screen
     .getByRole('heading', { name: 'Вартість замовлення' })
     .closest('section')
+  // v2 record: recording a payment is the payments card's own head action;
+  // the value card only reports.
   expect(
-    within(paymentsCard!).queryByRole('button', {
-      name: 'Додати платіж',
-    }),
-  ).not.toBeInTheDocument()
-  expect(
-    within(paymentSummary!).getByRole('button', {
+    within(paymentsCard!).getByRole('button', {
       name: 'Додати платіж',
     }),
   ).toBeVisible()
+  expect(
+    within(paymentSummary!).queryByRole('button', {
+      name: 'Додати платіж',
+    }),
+  ).not.toBeInTheDocument()
   const audit = screen.getByRole('list', { name: 'Історія замовлення' })
   expect(within(audit).getByText('Замовлення створено')).toBeVisible()
   expect(within(audit).getByText(/Олена/)).toBeVisible()

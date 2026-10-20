@@ -350,14 +350,13 @@ export function DispatchPointForm({
         if (!open && !pending) onClose()
       }}
       open
-      size="lg"
       title={
         point === null
           ? t('newPointTitle')
           : t('pointTitle', { name: point.name })
       }
     >
-      <form className="grid gap-3" id={FORM_ID} noValidate onSubmit={submit}>
+      <form className="grid gap-4" id={FORM_ID} noValidate onSubmit={submit}>
         {error !== null && <Notice tone="danger">{error}</Notice>}
         {lookupError !== null && (
           <Notice tone="warn">

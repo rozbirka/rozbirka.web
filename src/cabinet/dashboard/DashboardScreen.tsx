@@ -46,8 +46,27 @@ const PERIODS = {
 
 const PERIOD_OPTIONS = Object.keys(PERIODS) as DashboardPeriod[]
 
-/** One placeholder tile per KPI while the summary loads. */
-const KPI_SKELETON = ['a', 'b', 'c', 'd'] as const
+/** The main column's placeholder cards while the summary loads. */
+const SKELETON_MAIN = ['a', 'b'] as const
+/** Placeholder bars of uneven width, so the card reads as text loading. */
+const SKELETON_WIDTHS = [
+  'w-11/12',
+  'w-4/5',
+  'w-full',
+  'w-3/4',
+  'w-5/6',
+  'w-4/5',
+]
+
+function SkeletonCard({ lines }: { lines: number }) {
+  return (
+    <div className="rz-card rz-card__body grid gap-2.5">
+      {SKELETON_WIDTHS.slice(0, lines).map((width, index) => (
+        <Skeleton className={cn('h-7', width)} key={index} />
+      ))}
+    </div>
+  )
+}
 
 const DAY_NAME: Intl.DateTimeFormatOptions = {
   weekday: 'long',
@@ -279,18 +298,18 @@ export function DashboardScreen() {
           {summary === null && dashboard.summary.status === 'loading' ? (
             <div
               aria-label={t('summaryLoading')}
-              className="grid gap-4"
+              className="flex flex-wrap items-start gap-4"
               role="status"
             >
-              <div className="rz-kpis">
-                {KPI_SKELETON.map((key) => (
-                  <div className="rz-kpi" key={key}>
-                    <Skeleton className="w-1/2" />
-                    <Skeleton className="h-7 w-2/3" />
-                  </div>
+              {/* The board's own columns, each card a stack of bars. */}
+              <div className="grid min-w-0 flex-[1_1_480px] gap-4">
+                {SKELETON_MAIN.map((key) => (
+                  <SkeletonCard key={key} lines={6} />
                 ))}
               </div>
-              <div className="rz-card h-[260px]" />
+              <div className="grid min-w-0 flex-[1_1_280px] gap-4 xl:max-w-[380px]">
+                <SkeletonCard lines={4} />
+              </div>
             </div>
           ) : null}
 

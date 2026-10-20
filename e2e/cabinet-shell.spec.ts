@@ -3014,14 +3014,12 @@ for (const viewport of [
     page.on('pageerror', (error) => errors.push(error.message))
     await loginFrom(page)
     await page.goto('/app/koval/cars')
+    // v2: the list is a table without covers; photos live on the record.
     const card = page
-      .getByRole('list', { name: 'Список автомобілів' })
-      .getByRole('link')
+      .getByRole('table')
+      .getByRole('link', { name: /BMW X5/ })
       .first()
     await expect(card).toBeVisible()
-    const cardPhoto = await card.locator('img').boundingBox()
-    expect(cardPhoto).not.toBeNull()
-    expect(cardPhoto!.height / cardPhoto!.width).toBeCloseTo(0.75, 1)
     await card.click()
     const opener = page.getByRole('button', { name: /відкрити на весь екран/ })
     await opener.click()

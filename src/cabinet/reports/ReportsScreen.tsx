@@ -669,7 +669,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                 if (status === 'completed') {
                   const active = currentDownloading === report.id
                   return (
-                    <span className="flex w-full flex-wrap justify-end gap-2">
+                    <span className="flex w-full flex-wrap justify-end gap-2 font-(family-name:--rz-font)">
                       <Button
                         aria-busy={savePdf.pending && active}
                         disabled={transferBusy}
@@ -702,7 +702,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                   (status === 'failed' || status === 'expired')
                 ) {
                   return (
-                    <span className="flex w-full justify-end">
+                    <span className="flex w-full justify-end font-(family-name:--rz-font)">
                       <Button
                         disabled={isCreating || !rangeIsValid}
                         onClick={() => void createReport()}

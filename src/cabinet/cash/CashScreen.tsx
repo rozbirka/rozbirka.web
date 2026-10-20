@@ -13,7 +13,6 @@ import {
   Toolbar,
   useOptionalToast,
 } from '@/components/app'
-import { cn } from '@/lib/utils'
 import {
   commonMessages,
   currencyName,
@@ -36,7 +35,7 @@ import { RedesignShell } from '../redesign-shell'
 import { CashCard } from './cash-card'
 import { useCashText } from './cash-labels'
 import { cashMessages } from './cash-messages'
-import { CashList } from './cash-list'
+import { CashCrumbs, CashList } from './cash-list'
 import { readCashFeed, type CashFeedEntry } from './cash-feed'
 import { CashMovementDrawer } from './CashMovementDrawer'
 import { CashTransferDrawer } from './CashTransferDrawer'
@@ -178,6 +177,7 @@ function CashOverview({ definition }: CabinetModuleScreenProps) {
   const [feed, setFeed] = useState<CashFeedEntry[]>([])
   const [feedTruncated, setFeedTruncated] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
   const [transferBusy, setTransferBusy] = useState(false)
   const [transferError, setTransferError] = useState<string | null>(null)
@@ -192,6 +192,7 @@ function CashOverview({ definition }: CabinetModuleScreenProps) {
           setRegisters(list)
           setSummary(daily)
           setError(null)
+          setLoaded(true)
           const latest = await readCashFeed(
             list,
             signal ?? new AbortController().signal,
@@ -246,6 +247,11 @@ function CashOverview({ definition }: CabinetModuleScreenProps) {
         date={date}
         error={error}
         feed={feed}
+        loading={!loaded && error === null}
+        onRetry={() => {
+          setError(null)
+          void load()
+        }}
         feedTruncated={feedTruncated}
         onTransfer={() => {
           setTransferError(null)
@@ -377,13 +383,13 @@ function CashRegisterDetail({
   }
   if (error && !register)
     return (
-      <RedesignShell crumb={t('crumb')}>
+      <RedesignShell crumb={<CashCrumbs />}>
         <ErrorState description={error} title={t('loadFailed')} />
       </RedesignShell>
     )
   if (!register)
     return (
-      <RedesignShell crumb={t('crumb')}>
+      <RedesignShell crumb={<CashCrumbs />}>
         <SkeletonRows label={t('loadingTill')} rows={3} />
       </RedesignShell>
     )
@@ -485,7 +491,7 @@ function CashRegisterEdit({
   const t = useT(cashMessages)
   const tc = useT(commonMessages)
   const { locale } = useLocale()
-  const { money } = useCashText()
+  const { money, registerType } = useCashText()
   const cabinet = useCabinet()
   const location = useLocation()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
@@ -610,6 +616,7 @@ function CashRegisterEdit({
             error={named ? null : t('nameEmpty')}
             hint={t('nameHintEdit')}
             label={t('tillName')}
+            required
           >
             <TextInput
               disabled={!mutationsAllowed}
@@ -618,6 +625,12 @@ function CashRegisterEdit({
               value={name}
             />
           </Field>
+          <div className="rz-inset grid gap-1">
+            <p className="rz-muted m-0">
+              {t('tillType', { type: registerType(register.type) })}
+            </p>
+            <p className="rz-caption m-0">{t('typeFixed')}</p>
+          </div>
           {register.type === 'cash' && (
             <fieldset className="grid gap-3">
               <legend className="rz-label mb-2">{t('currencies')}</legend>
@@ -787,7 +800,7 @@ function CashRegisterForm({
         id={CASH_REGISTER_FORM}
         onSubmit={(event) => void save(event)}
       >
-        <Field hint={t('nameHint')} label={t('name')}>
+        <Field hint={t('nameHint')} label={t('name')} required>
           <TextInput
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -803,7 +816,7 @@ function CashRegisterForm({
           </div>
         ) : (
           <fieldset className="grid gap-2">
-            <legend className="rz-label mb-2">{t('colType')}</legend>
+            <legend className="rz-h-card mb-2">{t('colType')}</legend>
             <div className="grid gap-2 sm:grid-cols-2">
               {[
                 {
@@ -817,23 +830,22 @@ function CashRegisterForm({
                   hint: t('bankOptionHint'),
                 },
               ].map((option) => (
-                <button
-                  aria-pressed={type === option.value}
-                  className={cn(
-                    'rounded-control grid min-h-16 gap-1 border p-3 text-left transition-colors',
-                    type === option.value
-                      ? 'border-brand bg-brand-soft'
-                      : 'border-app-line bg-app-input hover:bg-app-hover',
-                  )}
-                  key={option.value}
-                  onClick={() => setType(option.value)}
-                  type="button"
-                >
-                  <span className="text-app-strong font-semibold">
-                    {option.label}
+                <label className="rz-choice-card" key={option.value}>
+                  <input
+                    checked={type === option.value}
+                    className="rz-radio mt-0.5 shrink-0"
+                    name="cash-register-type"
+                    onChange={() => setType(option.value)}
+                    type="radio"
+                    value={option.value}
+                  />
+                  <span className="grid min-w-0 gap-0.5">
+                    <span className="rz-strong font-semibold">
+                      {option.label}
+                    </span>
+                    <span className="rz-caption">{option.hint}</span>
                   </span>
-                  <span className="rz-caption">{option.hint}</span>
-                </button>
+                </label>
               ))}
             </div>
           </fieldset>
@@ -846,19 +858,14 @@ function CashRegisterForm({
                 {/* The supported catalog with ISO codes: symbols cannot tell
                   CAD from USD. A till may keep any of them; this is not the
                   accounting currency. */}
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                <div className="rz-seg grid w-full grid-cols-5">
                   {SUPPORTED_CURRENCIES.map((code) => {
                     const selected = currencies.includes(code)
                     return (
                       <button
                         aria-label={`${code} (${currencyName(code, locale)})`}
                         aria-pressed={selected}
-                        className={cn(
-                          'rounded-control grid min-h-12 content-center gap-0.5 border px-3 py-2 text-left transition-colors',
-                          selected
-                            ? 'border-brand bg-brand-soft text-app-strong'
-                            : 'border-app-line bg-app-input text-app-muted hover:bg-app-hover',
-                        )}
+                        className="justify-center px-1 font-mono font-semibold"
                         key={code}
                         onClick={() =>
                           setCurrencies((current) =>
@@ -869,12 +876,10 @@ function CashRegisterForm({
                               : [...current, code],
                           )
                         }
+                        title={currencyName(code, locale)}
                         type="button"
                       >
-                        <span className="rz-mono font-semibold">{code}</span>
-                        <span className="text-app-dim text-micro text-pretty">
-                          {currencyName(code, locale)}
-                        </span>
+                        {code}
                       </button>
                     )
                   })}
@@ -882,7 +887,7 @@ function CashRegisterForm({
               </fieldset>
             )}
             <fieldset className="grid gap-3">
-              <legend className="rz-label mb-2">{t('initialBalances')}</legend>
+              <legend className="rz-h-card mb-2">{t('initialBalances')}</legend>
               <p className="rz-hint m-0">{t('initialBalancesHint')}</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {effectiveCurrencies.map((code) => (

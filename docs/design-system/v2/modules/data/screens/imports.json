@@ -1,0 +1,73 @@
+{
+ "id": "C14",
+ "module": "parts",
+ "eyebrow": "Склад",
+ "title": "Імпорт запчастин",
+ "icon": "icon-upload",
+ "route": "/app/:tenant/parts/imports",
+ "source": "imports/import-history-messages.ts",
+ "unverified": "колонки, статуси, emptyBody, searchPlaceholder/дії, яких немає в пошуку по коду",
+ "searchLabel": "Пошук імпортів",
+ "searchPlaceholder": "Назва файлу",
+ "emptyTitle": "Імпортів ще немає",
+ "emptyBody": "Завантажте таблицю — ми зіставимо колонки й покажемо, що буде створено.",
+ "actions": [
+  {
+   "label": "Імпорт запчастин",
+   "icon": "icon-upload",
+   "href": "#"
+  }
+ ],
+ "filters": [],
+ "columns": [
+  {
+   "key": "file",
+   "label": "Файл",
+   "mono": true,
+   "sub": "by"
+  },
+  {
+   "key": "status",
+   "label": "Статус",
+   "pill": {
+    "Завершено": "rz-pill rz-pill--ok",
+    "Перевірка": "rz-pill rz-pill--warn",
+    "Помилка": "rz-pill rz-pill--danger"
+   }
+  },
+  {
+   "key": "rows",
+   "label": "Рядків",
+   "align": "end"
+  },
+  {
+   "key": "created",
+   "label": "Створено",
+   "align": "end"
+  }
+ ],
+ "rows": [
+  {
+   "file": "sklad_oct.xlsx",
+   "by": "Ірина М. · 15.10",
+   "status": "Завершено",
+   "rows": 412,
+   "created": "398"
+  },
+  {
+   "file": "auction-12.csv",
+   "by": "Олег К. · 14.10",
+   "status": "Перевірка",
+   "rows": 18,
+   "created": "—"
+  },
+  {
+   "file": "old-base.xlsx",
+   "by": "Олег К. · 01.10",
+   "status": "Помилка",
+   "rows": 1204,
+   "created": "0"
+  }
+ ],
+ "detailHref": "./Record.dc.html?screen=importflow"
+}

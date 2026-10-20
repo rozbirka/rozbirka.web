@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useAuth } from '@/auth/AuthContext'
 import { credentials } from '@/api/credentials'
 import { profileApi } from '@/api/profile'
 import { tenantPreference } from '@/api/tenant-preference'
 import { Button, Field, Notice, TextInput } from '@/components/app'
 import { commonMessages, useT } from '@/i18n'
+import { cn } from '@/lib/utils'
 import { accountMessages } from './account-messages'
 
 const CONFIRMATION_DELAY_SECONDS = 5
@@ -19,6 +20,7 @@ export function AccountDeletion({ compact = false }: { compact?: boolean }) {
   >('idle')
   const [confirmation, setConfirmation] = useState('')
   const [secondsLeft, setSecondsLeft] = useState(CONFIRMATION_DELAY_SECONDS)
+  const titleId = useId()
   const mounted = useRef(true)
   const active = useRef(false)
   useEffect(() => {
@@ -65,19 +67,34 @@ export function AccountDeletion({ compact = false }: { compact?: boolean }) {
       active.current = false
     }
   }
-  return (
-    <section
-      aria-label={t('deleteTitle')}
-      className={compact ? 'min-w-0' : 'rz-card rz-card__body min-w-0'}
+  const startButton = (
+    <Button
+      className={compact ? undefined : 'rz-btn--block mt-3'}
+      onClick={() => {
+        setConfirmation('')
+        setSecondsLeft(CONFIRMATION_DELAY_SECONDS)
+        setDeleteState('confirming')
+      }}
+      variant="danger"
     >
-      <h2 className={compact ? 'sr-only' : 'rz-h-card'}>{t('deleteTitle')}</h2>
+      {t('deleteTitle')}
+    </Button>
+  )
+  const flow = (
+    <>
       {(!compact || deleteState !== 'idle') && (
-        <p className="text-app-muted mt-2 mb-0 text-pretty">
+        <p
+          className={
+            compact
+              ? 'text-app-muted m-0 text-pretty'
+              : 'text-app-muted mt-2 mb-0 text-pretty'
+          }
+        >
           {t('deleteBody')}
         </p>
       )}
       {deleteState === 'error' && (
-        <div className="mt-3">
+        <div className={compact ? undefined : 'mt-3'}>
           <Notice tone="danger">{t('deleteFailed')}</Notice>
         </div>
       )}
@@ -85,7 +102,10 @@ export function AccountDeletion({ compact = false }: { compact?: boolean }) {
         <div
           aria-labelledby="delete-account-title"
           aria-live="polite"
-          className="rz-inset bg-state-danger-soft mt-3 grid gap-3"
+          className={cn(
+            'rz-inset bg-state-danger-soft grid gap-3',
+            !compact && 'mt-3',
+          )}
           role="group"
         >
           <p
@@ -135,19 +155,37 @@ export function AccountDeletion({ compact = false }: { compact?: boolean }) {
             </div>
           )}
         </div>
-      ) : (
-        <Button
-          className={compact ? 'rz-btn--block' : 'rz-btn--block mt-3'}
-          onClick={() => {
-            setConfirmation('')
-            setSecondsLeft(CONFIRMATION_DELAY_SECONDS)
-            setDeleteState('confirming')
-          }}
-          variant="danger"
-        >
-          {t('deleteTitle')}
-        </Button>
+      ) : compact ? null : (
+        startButton
       )}
+    </>
+  )
+
+  if (compact) {
+    // In the cabinet the deletion is an aside card, as the module page has
+    // it: the title and the way in on the head band, the consequence and the
+    // confirmation in the body only once it has been asked for.
+    const idle = deleteState === 'idle'
+    return (
+      <section aria-labelledby={titleId} className="rz-card min-w-0">
+        <header className="rz-card__head py-2.5">
+          <h2 className="rz-h-card" id={titleId}>
+            {t('deleteTitle')}
+          </h2>
+          {idle ? startButton : null}
+        </header>
+        {idle ? null : <div className="rz-card__body grid gap-3">{flow}</div>}
+      </section>
+    )
+  }
+
+  return (
+    <section
+      aria-label={t('deleteTitle')}
+      className="rz-card rz-card__body min-w-0"
+    >
+      <h2 className="rz-h-card">{t('deleteTitle')}</h2>
+      {flow}
     </section>
   )
 }

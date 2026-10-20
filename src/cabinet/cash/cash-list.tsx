@@ -1,9 +1,17 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { ArrowRightLeft, Plus, WalletCards } from 'lucide-react'
-import { Button, Notice, SearchInput, StatusPill } from '@/components/app'
+import { ArrowRightLeft, ChevronRight, Plus, WalletCards } from 'lucide-react'
+import {
+  Button,
+  ErrorState,
+  Notice,
+  SearchInput,
+  SkeletonRows,
+  StatusPill,
+} from '@/components/app'
 import { cn } from '@/lib/utils'
 import { useT } from '@/i18n'
+import { moduleMessages } from '../module-messages'
 import type { CashDailySummary, CashRegister } from '@/api/cash'
 import { useCashText } from './cash-labels'
 import { cashMessages } from './cash-messages'
@@ -32,6 +40,8 @@ export function CashList({
   canTransfer,
   onTransfer,
   error = null,
+  loading = false,
+  onRetry,
 }: {
   registers: readonly CashRegister[]
   summary: CashDailySummary | null
@@ -45,6 +55,10 @@ export function CashList({
   onTransfer: () => void
   /** A failed load, shown under the page title. */
   error?: string | null
+  /** The first load is still on its way: nothing to count or list yet. */
+  loading?: boolean
+  /** Reloads after a failed first load. */
+  onRetry?: () => void
 }) {
   const t = useT(cashMessages)
   const {
@@ -112,221 +126,271 @@ export function CashList({
           ) : null}
         </>
       }
-      crumb={t('crumb')}
+      crumb={<CashCrumbs />}
     >
       <div className="rz-page-head">
         <h1 className="rz-h-page">{t('title')}</h1>
         <span className="rz-muted text-pretty">{t('lead')}</span>
       </div>
 
-      {error === null ? null : <Notice tone="danger">{error}</Notice>}
-
-      <KpiStrip>
-        <Kpi
-          label={t('kpiTills')}
-          meta={
-            closed === 0
-              ? t('activeCount', { count: active })
-              : `${t('activeCount', { count: active })} · ${t('closedCount', { count: closed })}`
-          }
-          value={count(registers.length)}
+      {loading ? (
+        <SkeletonRows rows={10} />
+      ) : error !== null && registers.length === 0 ? (
+        // Nothing loaded at all: the failure is the page, with its retry.
+        <ErrorState
+          description={error}
+          {...(onRetry === undefined ? {} : { onRetry })}
         />
-        <Kpi
-          label={t('kpiDayOperations')}
-          meta={
-            summary === null
-              ? t('daySummaryPending')
-              : `${date} · ${t('tillsWithIncome', { count: income })}`
-          }
-          value={count(operations)}
-        />
-      </KpiStrip>
+      ) : (
+        board()
+      )}
+    </RedesignShell>
+  )
 
-      <div className="rz-toolbar" role="search">
-        <SearchInput
-          aria-label={t('searchLabel')}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={t('tillName')}
-          value={query}
-        />
-        <div aria-label={t('filterLabel')} className="rz-seg" role="group">
-          {SEGMENTS.map((one) => (
-            <button
-              aria-pressed={segment === one.key}
-              key={one.key}
-              onClick={() => setSegment(one.key)}
-              type="button"
-            >
-              {t(one.label)}
-              <span className="rz-mono rz-dim">{count(counts[one.key])}</span>
-            </button>
-          ))}
-        </div>
-        <p className="rz-toolbar__end rz-dim m-0">
-          {t('shownTills', { shown: shown.length, count: registers.length })}
-        </p>
-      </div>
+  function board() {
+    return (
+      <>
+        {error === null ? null : <Notice tone="danger">{error}</Notice>}
 
-      <div className="rz-table-wrap">
-        {shown.length === 0 ? (
-          <div className="rz-state">
-            <span className="rz-state__icon">
-              <WalletCards aria-hidden />
-            </span>
-            <h2 className="rz-state__title">{t('noTillsFiltered')}</h2>
+        <KpiStrip>
+          <Kpi
+            label={t('kpiTills')}
+            meta={
+              closed === 0
+                ? t('activeCount', { count: active })
+                : `${t('activeCount', { count: active })} · ${t('closedCount', { count: closed })}`
+            }
+            value={count(registers.length)}
+          />
+          <Kpi
+            label={t('kpiDayOperations')}
+            meta={
+              summary === null
+                ? t('daySummaryPending')
+                : `${date} · ${t('tillsWithIncome', { count: income })}`
+            }
+            value={count(operations)}
+          />
+        </KpiStrip>
+
+        <div className="rz-toolbar" role="search">
+          <SearchInput
+            aria-label={t('searchLabel')}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t('tillName')}
+            value={query}
+          />
+          <div aria-label={t('filterLabel')} className="rz-seg" role="group">
+            {SEGMENTS.map((one) => (
+              <button
+                aria-pressed={segment === one.key}
+                key={one.key}
+                onClick={() => setSegment(one.key)}
+                type="button"
+              >
+                {t(one.label)}
+                <span className="rz-mono rz-dim">{count(counts[one.key])}</span>
+              </button>
+            ))}
           </div>
-        ) : (
-          <div className="rz-table-scroll">
-            <table className="rz-table">
-              <caption>{t('title')}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t('colTill')}</th>
-                  <th scope="col">{t('currency')}</th>
-                  <th className="rz-num" scope="col">
-                    {t('balances')}
-                  </th>
-                  <th className="rz-num" scope="col">
-                    {t('kpiDayOperations')}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((register) => {
-                  const currencies = Object.entries(register.balances)
-                  const hint = registerHint(register.type)
-                  const operationCount = dayOf(register.id).reduce(
-                    (sum, one) => sum + one.operationCount,
-                    0,
-                  )
-                  return (
-                    <tr key={register.id}>
-                      <th className="py-2" scope="row">
-                        <span className="rz-cell-main">
-                          <Link
-                            className="text-app-strong hover:text-brand-text"
-                            to={register.id}
-                          >
-                            {register.name}
-                          </Link>
-                          <StatusPill
-                            className="shrink-0"
-                            tone={register.isActive ? 'ok' : 'neutral'}
-                          >
-                            {register.isActive ? t('active') : t('inactive')}
-                          </StatusPill>
-                        </span>
-                        <span className="rz-caption block font-normal">
-                          {registerType(register.type)}
-                          {hint === null ? '' : ` · ${hint}`}
-                        </span>
-                      </th>
-                      <td className="py-2" data-label={t('currency')}>
-                        {currencies.length === 0 ? (
-                          <span className="rz-dim">{t('noCurrencies')}</span>
-                        ) : (
-                          <span className="grid gap-0.5">
-                            {currencies.map(([currency]) => (
-                              <span className="rz-mono" key={currency}>
-                                {currency}
+          <p className="rz-toolbar__end rz-dim m-0">
+            {t('shownTills', { shown: shown.length, count: registers.length })}
+          </p>
+        </div>
+
+        <div className="rz-table-wrap">
+          {shown.length === 0 ? (
+            <div className="rz-state">
+              <span className="rz-state__icon">
+                <WalletCards aria-hidden />
+              </span>
+              <h2 className="rz-state__title">{t('noTillsFiltered')}</h2>
+            </div>
+          ) : (
+            <div className="rz-table-scroll">
+              <table className="rz-table">
+                <caption>{t('title')}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t('colTill')}</th>
+                    <th scope="col">{t('currency')}</th>
+                    <th className="rz-num" scope="col">
+                      {t('balances')}
+                    </th>
+                    <th className="rz-num" scope="col">
+                      {t('kpiDayOperations')}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map((register) => {
+                    const currencies = Object.entries(register.balances)
+                    const hint = registerHint(register.type)
+                    const operationCount = dayOf(register.id).reduce(
+                      (sum, one) => sum + one.operationCount,
+                      0,
+                    )
+                    return (
+                      <tr key={register.id}>
+                        <th className="py-1" scope="row">
+                          <span className="rz-cell-main">
+                            <Link
+                              className="text-app-strong hover:text-brand-text"
+                              to={register.id}
+                            >
+                              {register.name}
+                            </Link>
+                            <StatusPill
+                              className="shrink-0"
+                              tone={register.isActive ? 'ok' : 'neutral'}
+                            >
+                              {register.isActive ? t('active') : t('inactive')}
+                            </StatusPill>
+                          </span>
+                          <span className="rz-caption block font-normal">
+                            {registerType(register.type)}
+                            {hint === null ? '' : ` · ${hint}`}
+                          </span>
+                        </th>
+                        <td className="py-1" data-label={t('currency')}>
+                          {currencies.length === 0 ? (
+                            <span className="rz-dim">{t('noCurrencies')}</span>
+                          ) : (
+                            <span className="grid gap-0.5">
+                              {currencies.map(([currency]) => (
+                                <span className="rz-mono" key={currency}>
+                                  {currency}
+                                </span>
+                              ))}
+                            </span>
+                          )}
+                        </td>
+                        <td className="rz-num py-1" data-label={t('balances')}>
+                          <span className="grid justify-items-end gap-0.5">
+                            {currencies.map(([currency, balance]) => (
+                              <span
+                                className={cn(balance === 0 && 'rz-dim')}
+                                key={currency}
+                              >
+                                {money(balance, currency)}
                               </span>
                             ))}
                           </span>
-                        )}
-                      </td>
-                      <td className="rz-num py-2" data-label={t('balances')}>
-                        <span className="grid justify-items-end gap-0.5">
-                          {currencies.map(([currency, balance]) => (
-                            <span
-                              className={cn(balance === 0 && 'rz-dim')}
-                              key={currency}
-                            >
-                              {money(balance, currency)}
-                            </span>
-                          ))}
+                        </td>
+                        <td
+                          className="rz-num py-1"
+                          data-label={t('kpiDayOperations')}
+                        >
+                          {summary === null
+                            ? t('dayCounting')
+                            : t('operationsCount', { count: operationCount })}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <section aria-label={t('recent')} className="rz-card min-w-0">
+          <div className="rz-card__head">
+            <h2 className="rz-h-card">{t('recent')}</h2>
+          </div>
+          {feed.length === 0 ? (
+            <p className="rz-card__body rz-muted m-0">{t('noOperations')}</p>
+          ) : (
+            <div className="rz-table-scroll">
+              <table className="rz-table">
+                <caption>{t('recentCaption')}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t('colDate')}</th>
+                    <th scope="col">{t('colPurpose')}</th>
+                    <th scope="col">{t('colTill')}</th>
+                    <th className="rz-num" scope="col">
+                      {t('colAmount')}
+                    </th>
+                    <th scope="col">{t('colType')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {feed.map((entry) => (
+                    <tr key={entry.id}>
+                      <th className="py-1" scope="row">
+                        <span className="rz-mono rz-dim font-normal whitespace-nowrap">
+                          {moment(entry.createdAt)}
+                        </span>
+                      </th>
+                      <td className="py-1" data-label={t('colPurpose')}>
+                        <span className="text-app-ink block font-medium">
+                          {entry.note ?? movementText(entry.type)}
+                        </span>
+                        <span className="rz-caption block">
+                          {entry.createdByName}
                         </span>
                       </td>
+                      <td className="py-1" data-label={t('colTill')}>
+                        <Link to={entry.registerId}>{entry.registerName}</Link>
+                      </td>
                       <td
-                        className="rz-num py-2"
-                        data-label={t('kpiDayOperations')}
+                        className={cn(
+                          'rz-num py-1 whitespace-nowrap',
+                          entry.direction === 'out'
+                            ? 'text-app-strong'
+                            : 'text-state-ok',
+                        )}
+                        data-label={t('colAmount')}
                       >
-                        {summary === null
-                          ? t('dayCounting')
-                          : t('operationsCount', { count: operationCount })}
+                        {signedMoney(entry)}
+                      </td>
+                      <td className="py-1" data-label={t('colType')}>
+                        {movementText(entry.type)}
                       </td>
                     </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="rz-card__foot rz-dim m-0 block text-pretty">
+            {feedTruncated ? t('feedNoteTruncated') : t('feedNote')}
+          </p>
+        </section>
+      </>
+    )
+  }
+}
 
-      <section aria-label={t('recent')} className="rz-card min-w-0">
-        <div className="rz-card__head">
-          <h2 className="rz-h-card">{t('recent')}</h2>
-        </div>
-        {feed.length === 0 ? (
-          <p className="rz-card__body rz-muted m-0">{t('noOperations')}</p>
-        ) : (
-          <div className="rz-table-scroll">
-            <table className="rz-table">
-              <caption>{t('recentCaption')}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t('colDate')}</th>
-                  <th scope="col">{t('colPurpose')}</th>
-                  <th scope="col">{t('colTill')}</th>
-                  <th className="rz-num" scope="col">
-                    {t('colAmount')}
-                  </th>
-                  <th scope="col">{t('colType')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {feed.map((entry) => (
-                  <tr key={entry.id}>
-                    <th className="py-2" scope="row">
-                      <span className="rz-mono rz-dim font-normal whitespace-nowrap">
-                        {moment(entry.createdAt)}
-                      </span>
-                    </th>
-                    <td className="py-2" data-label={t('colPurpose')}>
-                      <span className="text-app-ink block font-medium">
-                        {entry.note ?? movementText(entry.type)}
-                      </span>
-                      <span className="rz-caption block">
-                        {entry.createdByName}
-                      </span>
-                    </td>
-                    <td className="py-2" data-label={t('colTill')}>
-                      <Link to={entry.registerId}>{entry.registerName}</Link>
-                    </td>
-                    <td
-                      className={cn(
-                        'rz-num py-2 whitespace-nowrap',
-                        entry.direction === 'out'
-                          ? 'text-app-strong'
-                          : 'text-state-ok',
-                      )}
-                      data-label={t('colAmount')}
-                    >
-                      {signedMoney(entry)}
-                    </td>
-                    <td className="py-2" data-label={t('colType')}>
-                      {movementText(entry.type)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <p className="rz-card__foot rz-dim m-0 block text-pretty">
-          {feedTruncated ? t('feedNoteTruncated') : t('feedNote')}
-        </p>
-      </section>
-    </RedesignShell>
+/**
+ * «Гроші › Каси» as v2 draws a trail: the section muted, a chevron, the
+ * screen strong. On a till's own card the screen becomes a link back and the
+ * till is the current page.
+ */
+export function CashCrumbs({
+  cashHref,
+  current,
+}: {
+  /** Links «Каси» back to the list when a till is the current page. */
+  cashHref?: string
+  current?: string
+}) {
+  const t = useT(cashMessages)
+  const tm = useT(moduleMessages)
+  return (
+    <>
+      <span>{tm('group.money')}</span>
+      <ChevronRight aria-hidden className="size-3 shrink-0" />
+      {current === undefined || cashHref === undefined ? (
+        <span aria-current="page">{t('title')}</span>
+      ) : (
+        <>
+          <Link to={cashHref}>{t('title')}</Link>
+          <ChevronRight aria-hidden className="size-3 shrink-0" />
+          <span aria-current="page">{current}</span>
+        </>
+      )}
+    </>
   )
 }

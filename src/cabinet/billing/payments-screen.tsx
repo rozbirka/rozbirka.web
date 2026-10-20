@@ -23,13 +23,7 @@ import { normalizeApiProblem } from '@/api/errors'
 import type { PagedResult, PaymentDto, SubscriptionDto } from '@/api/types'
 import { ModuleAccessDeniedError } from '../policy'
 import { tenantRequestScope } from '../tenant-request-scope'
-import { Kpi, KpiStrip } from '../redesign-kpi'
-import {
-  BillingCard,
-  BillingDead,
-  BillingShell,
-  RecordColumns,
-} from './billing-shell'
+import { BillingCard, BillingDead, BillingShell } from './billing-shell'
 import { commonMessages, translate, useLocale, useT, type Locale } from '@/i18n'
 import { paymentStatusMeta, paymentTypeLabel } from './billing-vocabulary'
 import { billingMessages } from './messages'
@@ -230,10 +224,6 @@ export function PaymentsScreen() {
 
   const items =
     currentPaymentsState.kind === 'ready' ? currentPaymentsState.page.items : []
-  const total =
-    currentPaymentsState.kind === 'ready'
-      ? currentPaymentsState.page.total
-      : items.length
   const guardCheckout = (
     event: { preventDefault: () => void },
     payment: PaymentDto,
@@ -277,15 +267,6 @@ export function PaymentsScreen() {
       return item.status === 'failed' || item.status === 'reversed'
     return item.status === segment
   })
-  const paid = items
-    .filter((item) => item.status === 'success')
-    .reduce((sum, item) => sum + item.amount, 0)
-  const paidCurrency = items.find((item) => item.status === 'success')?.currency
-  const mixedCurrency =
-    new Set(
-      items.filter((item) => item.status === 'success').map((i) => i.currency),
-    ).size > 1
-
   const columns: DataColumn<PaymentDto>[] = [
     {
       key: 'date',
@@ -312,12 +293,6 @@ export function PaymentsScreen() {
       ),
     },
     {
-      key: 'amount',
-      label: t('columnAmount'),
-      align: 'end',
-      cell: (item) => <Amount currency={item.currency} value={item.amount} />,
-    },
-    {
       key: 'status',
       label: t('columnStatus'),
       cell: (item) => {
@@ -326,13 +301,10 @@ export function PaymentsScreen() {
       },
     },
     {
-      key: 'receipt',
-      label: t('columnReceipt'),
-      cell: () => (
-        <span className="rz-dim" title={t('noReceiptFile')}>
-          —
-        </span>
-      ),
+      key: 'amount',
+      label: t('columnAmount'),
+      align: 'end',
+      cell: (item) => <Amount currency={item.currency} value={item.amount} />,
     },
     ...(actionable
       ? [
@@ -382,102 +354,65 @@ export function PaymentsScreen() {
         <Notice tone="danger">{mutationError}</Notice>
       )}
 
-      <KpiStrip>
-        <Kpi
-          label={t('kpiTotal')}
-          meta={
-            total === items.length
-              ? t('kpiTotalAll')
-              : t('kpiTotalNewest', { count: items.length })
-          }
-          value={String(total)}
-        />
-        <Kpi
-          label={t('kpiPaid')}
-          meta={mixedCurrency ? t('kpiPaidMixed') : t('kpiPaidMeta')}
-          value={
-            mixedCurrency || paidCurrency === undefined ? (
-              '—'
-            ) : (
-              <Amount currency={paidCurrency} value={paid} />
-            )
-          }
-        />
-        <Kpi
-          label={t('kpiPending')}
-          meta={
-            counts.pending === 0 ? t('kpiPendingNone') : t('kpiPendingSome')
-          }
-          tone={counts.pending === 0 ? 'plain' : 'warn'}
-          value={String(counts.pending)}
-        />
-      </KpiStrip>
-
-      <RecordColumns
-        aside={
-          <>
-            <PaymentMethod
-              subscription={cabinet.snapshot?.subscription ?? null}
-            />
-            <BillingCard
-              footer={t('noInvoiceDetails')}
-              title={t('invoiceDetails')}
-            >
-              <div className="rz-btn-row">
-                <BillingDead title={t('noInvoiceDetails')}>
-                  {t('changeInvoiceDetails')}
-                </BillingDead>
-              </div>
-            </BillingCard>
-          </>
-        }
-        main={
-          <section aria-label={t('history')} className="grid min-w-0 gap-3">
-            <div className="rz-toolbar">
-              <div
-                aria-label={t('paymentStatus')}
-                className="rz-seg flex-wrap"
-                role="group"
-                title={t('noStatusFilter')}
+      {/* The ledger runs the full width, as the module page draws it; the
+          card and receipt details sit under it. */}
+      <section aria-label={t('history')} className="grid min-w-0 gap-3">
+        <div className="rz-toolbar">
+          <div
+            aria-label={t('paymentStatus')}
+            className="rz-seg flex-wrap"
+            role="group"
+            title={t('noStatusFilter')}
+          >
+            {PAYMENT_SEGMENTS.map((one) => (
+              <button
+                aria-pressed={segment === one.key}
+                key={one.key}
+                onClick={() => setSegment(one.key)}
+                type="button"
               >
-                {PAYMENT_SEGMENTS.map((one) => (
-                  <button
-                    aria-pressed={segment === one.key}
-                    key={one.key}
-                    onClick={() => setSegment(one.key)}
-                    type="button"
-                  >
-                    {t(one.message)}
-                    <span className="rz-count">{counts[one.key]}</span>
-                  </button>
-                ))}
-              </div>
-              <p className="rz-toolbar__end rz-dim m-0">
-                {t('shownOnPage', { shown: shown.length, total: items.length })}
-              </p>
-            </div>
+                {t(one.message)}
+                <span className="rz-count">{counts[one.key]}</span>
+              </button>
+            ))}
+          </div>
+          <p className="rz-toolbar__end rz-dim m-0">
+            {t('shownOnPage', { shown: shown.length, total: items.length })}
+          </p>
+        </div>
 
-            <div className="rz-table-wrap">
-              {shown.length === 0 ? (
-                <p className="rz-muted m-0 px-[var(--rz-card-p)] py-8">
-                  {items.length === 0 ? tb('noPayments') : t('noneForFilter')}
-                </p>
-              ) : (
-                <DataTable
-                  caption={t('history')}
-                  columns={columns}
-                  embedded
-                  rowKey={(item) => item.id}
-                  rows={shown}
-                />
-              )}
-              <p className="rz-caption border-app-line m-0 border-t px-[var(--rz-card-p)] py-2.5 text-pretty">
-                {t('noReceiptFile')} {t('noStatusFilter')}
-              </p>
-            </div>
-          </section>
-        }
-      />
+        <div className="rz-table-wrap">
+          <div className="rz-card__head py-2.5">
+            <h2 className="rz-h-card">{t('history')}</h2>
+          </div>
+          {shown.length === 0 ? (
+            <p className="rz-muted m-0 px-[var(--rz-card-p)] py-8">
+              {items.length === 0 ? tb('noPayments') : t('noneForFilter')}
+            </p>
+          ) : (
+            <DataTable
+              caption={t('history')}
+              columns={columns}
+              embedded
+              rowKey={(item) => item.id}
+              rows={shown}
+            />
+          )}
+          <p className="rz-caption border-app-line m-0 border-t px-[var(--rz-card-p)] py-2.5 text-pretty">
+            {t('noReceiptFile')} {t('noStatusFilter')}
+          </p>
+        </div>
+      </section>
+      <div className="grid min-w-0 items-start gap-4 md:grid-cols-2">
+        <PaymentMethod subscription={cabinet.snapshot?.subscription ?? null} />
+        <BillingCard footer={t('noInvoiceDetails')} title={t('invoiceDetails')}>
+          <div className="rz-btn-row">
+            <BillingDead title={t('noInvoiceDetails')}>
+              {t('changeInvoiceDetails')}
+            </BillingDead>
+          </div>
+        </BillingCard>
+      </div>
     </PaymentsFrame>
   )
 }
@@ -491,12 +426,7 @@ function PaymentsFrame({
 }) {
   const t = useT(paymentsMessages)
   return (
-    <BillingShell
-      actions={actions}
-      crumb={t('crumb')}
-      lead={t('lead')}
-      title={t('title')}
-    >
+    <BillingShell actions={actions} crumb={t('crumb')} title={t('title')}>
       {children}
     </BillingShell>
   )

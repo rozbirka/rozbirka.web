@@ -126,7 +126,7 @@ it('shows and restores every tablet rail label on focus and hover', async () => 
   if (rail === null) throw new Error('Tablet rail was not rendered')
 
   const controls = [
-    ...['Головна', 'Підписка', 'Тарифи', 'Платежі', 'Профіль'].map(
+    ...['Головна', 'Підписка', 'Профіль'].map(
       (label) =>
         [
           within(tabletNavigation).getByRole('link', { name: label }),
@@ -311,4 +311,24 @@ it('names sections, groups and controls in English (UK)', () => {
   expect(
     screen.getByRole('navigation', { name: 'Mobile navigation' }),
   ).toHaveTextContent('More')
+})
+
+it('keeps billing sub-pages under Підписка and offers search in the sidebar', async () => {
+  const user = userEvent.setup()
+  const open = vi.fn()
+  window.addEventListener('cabinet:open-command-palette', open)
+  renderNavigation()
+  const desktop = screen.getByRole('navigation', { name: 'Навігація кабінету' })
+
+  expect(within(desktop).getByRole('link', { name: 'Підписка' })).toBeVisible()
+  expect(within(desktop).queryByRole('link', { name: 'Тарифи' })).toBeNull()
+  expect(within(desktop).queryByRole('link', { name: 'Платежі' })).toBeNull()
+
+  await user.click(
+    within(document.getElementById('cabinet-navigation')!).getByRole('button', {
+      name: /Пошук/,
+    }),
+  )
+  expect(open).toHaveBeenCalledOnce()
+  window.removeEventListener('cabinet:open-command-palette', open)
 })

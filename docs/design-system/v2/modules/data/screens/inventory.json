@@ -1,0 +1,91 @@
+{
+ "id": "C6",
+ "module": "inventory",
+ "eyebrow": "Склад",
+ "title": "Інвентаризація",
+ "icon": "icon-clipboard-check",
+ "route": "/app/:tenant/inventory",
+ "source": "inventory/*-messages.ts (journal, audit)",
+ "unverified": "колонки сесій, статуси, emptyBody, searchPlaceholder/дії, яких немає в пошуку по коду",
+ "searchLabel": "Пошук сесій",
+ "searchPlaceholder": "Склад або зона",
+ "emptyTitle": "Сесій ще немає",
+ "emptyBody": "Почніть інвентаризацію складу або зони — кількість рахуватиме сесія.",
+ "actions": [
+  {
+   "label": "Сканер",
+   "icon": "icon-scan-line",
+   "href": "../components/Scanner.dc.html"
+  },
+  {
+   "label": "Нова сесія",
+   "icon": "icon-plus",
+   "href": "#"
+  }
+ ],
+ "filters": [
+  "Склад: усі"
+ ],
+ "kpis": [
+  {
+   "label": "Відкрита сесія",
+   "value": "1",
+   "unit": "",
+   "meta": "Склад 1 · Зона A"
+  },
+  {
+   "label": "Відскановано",
+   "value": "214",
+   "unit": "з 260",
+   "meta": ""
+  },
+  {
+   "label": "Розбіжностей",
+   "value": "7",
+   "unit": "",
+   "meta": ""
+  }
+ ],
+ "columns": [
+  {
+   "key": "scope",
+   "label": "Сесія",
+   "sub": "by"
+  },
+  {
+   "key": "status",
+   "label": "Статус",
+   "pill": {
+    "Відкрита": "rz-pill rz-pill--warn",
+    "Завершена": "rz-pill rz-pill--ok"
+   }
+  },
+  {
+   "key": "scanned",
+   "label": "Скан",
+   "align": "end"
+  },
+  {
+   "key": "delta",
+   "label": "Різниця",
+   "align": "end"
+  }
+ ],
+ "rows": [
+  {
+   "scope": "Склад 1 · Зона A",
+   "by": "Олег К. · з 17.10",
+   "status": "Відкрита",
+   "scanned": "214 / 260",
+   "delta": "−7"
+  },
+  {
+   "scope": "Склад 2 · усі зони",
+   "by": "Ірина М. · 01.10",
+   "status": "Завершена",
+   "scanned": "1 102 / 1 102",
+   "delta": "0"
+  }
+ ],
+ "detailHref": "./Record.dc.html?screen=session"
+}

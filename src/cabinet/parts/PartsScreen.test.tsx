@@ -2349,6 +2349,23 @@ it('tells the operator that the parts search accepts a VIN', async () => {
   )
 })
 
+it('keeps the add button in place but switched off with the reason once the quota is spent', async () => {
+  cabinetMock.snapshot.entitlement = {
+    ...cabinetMock.snapshot.entitlement,
+    usage: {
+      ...cabinetMock.snapshot.entitlement.usage,
+      parts: { used: 10, max: 10 },
+    },
+  }
+  renderDirectory()
+
+  await screen.findByRole('link', { name: 'Фара ліва' })
+  expect(screen.queryByRole('link', { name: 'Додати деталь' })).toBeNull()
+  const add = screen.getByRole('button', { name: 'Додати деталь' })
+  expect(add).toBeDisabled()
+  expect(add).toHaveAttribute('title', 'Ліміт деталей вичерпано.')
+})
+
 it('does not show selection checkboxes or bulk actions in the parts directory', async () => {
   renderDirectory()
 
@@ -2907,10 +2924,14 @@ it('says the part cannot be ordered from its own page yet, instead of pretending
     </MemoryRouter>,
   )
 
-  const order = await screen.findByRole('button', {
+  // The action lives in the record's menu, switched off with its reason.
+  await userEvent
+    .setup()
+    .click(await screen.findByRole('button', { name: 'Інші дії з деталлю' }))
+  const order = await screen.findByRole('menuitem', {
     name: 'Додати в замовлення',
   })
-  expect(order).toBeDisabled()
+  expect(order).toHaveAttribute('aria-disabled', 'true')
   expect(order).toHaveAttribute(
     'title',
     expect.stringContaining('ще не підключене'),

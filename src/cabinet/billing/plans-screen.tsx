@@ -390,7 +390,7 @@ export function PlansScreen() {
 
       <BillingCard
         bodyClassName="p-0"
-        footer={`${t('noProration')} ${t('noPlanCopy')}`}
+        footer={t('noPlanCopy')}
         title={t('whatsIncluded')}
       >
         <DataTable
@@ -414,6 +414,7 @@ export function PlansScreen() {
           rows={comparisonRows}
         />
       </BillingCard>
+      <Notice>{t('noProration')}</Notice>
     </PlansFrame>
   )
 }
@@ -427,12 +428,7 @@ function PlansFrame({
 }) {
   const t = useT(plansMessages)
   return (
-    <BillingShell
-      actions={actions}
-      crumb={t('crumb')}
-      lead={t('lead')}
-      title={t('title')}
-    >
+    <BillingShell actions={actions} crumb={t('crumb')} title={t('title')}>
       {children}
     </BillingShell>
   )

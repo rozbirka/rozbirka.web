@@ -72,8 +72,11 @@ function Step({
   return (
     <section className="rz-card min-w-0">
       <header className="rz-card__head py-2.5">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="rz-code rz-code--sm">{number}</span>
+        <div className="flex min-w-0 items-baseline gap-2">
+          {/* The design's numbered group: a mono number in brand text. */}
+          <span aria-hidden className="rz-mono text-caption text-brand-text">
+            {number}
+          </span>
           <h2 className="rz-h-card">{title}</h2>
         </div>
         {action}
@@ -272,7 +275,7 @@ export function BusinessSettingsScreen() {
       }
       crumb={t('crumb')}
     >
-      <RecordHead lead={t('lead')} title={t('title')} />
+      <RecordHead title={t('title')} />
 
       {saveState === 'success' && <Notice tone="ok">{t('saved')}</Notice>}
       {saveState === 'denied' && <Notice tone="danger">{t('denied')}</Notice>}

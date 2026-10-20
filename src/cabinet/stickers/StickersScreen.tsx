@@ -2,10 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Download, Minus, Plus, Printer, Share2 } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { partsApi, type PartListItem } from '@/api/parts'
-import { Button, Notice, Pagination, SearchInput } from '@/components/app'
+import {
+  Button,
+  Notice,
+  Pagination,
+  SearchInput,
+  useOptionalToast,
+} from '@/components/app'
 import { stickersApi } from '@/api/stickers'
 import { useTenantSettings } from '@/auth/useTenantSettings'
-import { useT } from '@/i18n'
+import { useLocale, useT } from '@/i18n'
+import { navigationGroupLabel } from '../module-messages'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
@@ -161,6 +168,14 @@ function TenantStickerQueue({
   >['requireLatestMutation']
 }) {
   const t = useT(stickersMessages)
+  const { locale } = useLocale()
+  const toast = useOptionalToast()
+  /* A failed hand-off (print, download, share) is reported as a toast, as the
+     module page draws it; without a toast host it stays on the page. */
+  const failed = (message: string) => {
+    if (toast === null) setError(message)
+    else toast.show({ tone: 'danger', message })
+  }
   // Printed stickers follow the tenant document language, not the UI locale.
   const documentLocale = useTenantSettings().documentLanguage ?? 'uk'
   const [searchParams, setSearchParams] = useSearchParams()
@@ -396,7 +411,7 @@ function TenantStickerQueue({
         URL.revokeObjectURL(url)
       }
     } catch {
-      setError(t('downloadFailed'))
+      failed(t('downloadFailed'))
     }
   }
   const print = async () => {
@@ -410,7 +425,7 @@ function TenantStickerQueue({
       printWindow.focus()
       printWindow.print()
     } catch {
-      setError(t('printFailed'))
+      failed(t('printFailed'))
     }
   }
   const share = async () => {
@@ -428,7 +443,7 @@ function TenantStickerQueue({
         title: t('shareTitle'),
       })
     } catch {
-      setError(t('shareFailed'))
+      failed(t('shareFailed'))
     }
   }
 
@@ -487,6 +502,22 @@ function TenantStickerQueue({
     <StickerWorkspace
       title={t('title')}
       subtitle={t('subtitle')}
+      crumb={navigationGroupLabel('stock', locale)}
+      actions={
+        <Button
+          aria-busy={busy}
+          disabled={!queue.length || !canGenerate || busy}
+          onClick={() => (preview.length ? void print() : void generate())}
+          variant="primary"
+        >
+          <Printer aria-hidden />
+          {busy
+            ? t('preparing')
+            : preview.length
+              ? t('print', { count: total })
+              : t('prepare', { count: total })}
+        </Button>
+      }
       notice={!scope ? <Notice tone="danger">{t('noScope')}</Notice> : null}
       list={
         <StickerListPanel
@@ -616,24 +647,6 @@ function TenantStickerQueue({
           total={total}
           actions={
             <>
-              {' '}
-              <Button
-                aria-busy={busy}
-                className="w-full"
-                size="lg"
-                disabled={!queue.length || !canGenerate || busy}
-                onClick={() =>
-                  preview.length ? void print() : void generate()
-                }
-                variant="primary"
-              >
-                <Printer aria-hidden />
-                {busy
-                  ? t('preparing')
-                  : preview.length
-                    ? t('print', { count: total })
-                    : t('prepare', { count: total })}
-              </Button>
               {preview.length ? (
                 <div className="grid grid-cols-2 gap-2">
                   <Button

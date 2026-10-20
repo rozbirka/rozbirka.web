@@ -3,7 +3,6 @@ import {
   Button,
   Field,
   Notice,
-  SectionPanel,
   SelectInput,
   Sheet,
   TextInput,
@@ -34,6 +33,7 @@ import {
   type QuoteState,
 } from './delivery-labels'
 import { deliveryDrawerMessages } from './drawer-messages'
+import { SheetGroup } from '../sheet-group'
 import { uah, wholeUah } from './delivery-money'
 import {
   deliveryProblemMessage,
@@ -89,11 +89,11 @@ function Section({
   aside?: React.ReactNode
   children: React.ReactNode
 }) {
-  // The same divided sections as every other form drawer, not cards in a card.
+  // Scheme 1b: titled groups separated by the body's gap, no rules.
   return (
-    <SectionPanel aside={aside} headingLevel={3} title={title} variant="plain">
+    <SheetGroup aside={aside} className="gap-3" title={title}>
       {children}
-    </SectionPanel>
+    </SheetGroup>
   )
 }
 
@@ -389,7 +389,7 @@ export function DeliveryDrawer({
       {error !== null && <Notice tone="danger">{error}</Notice>}
       {lookupError !== null && <Notice tone="warn">{lookupError}</Notice>}
 
-      <div className="grid">
+      <div className="grid gap-5">
         <Section title={t('sectionDispatch')}>
           {dispatchPoints.length === 0 ? (
             <Notice tone="warn">{t('noDispatchPoints')}</Notice>

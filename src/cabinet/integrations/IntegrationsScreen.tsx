@@ -1,7 +1,13 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { ChevronRight } from 'lucide-react'
-import { Button, DateValue, Notice, StatusPill } from '@/components/app'
+import {
+  Button,
+  DateValue,
+  ErrorState,
+  Notice,
+  StatusPill,
+} from '@/components/app'
 import {
   integrationsApi,
   type Integration,
@@ -13,7 +19,6 @@ import { useLocale, useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import { cabinetPath } from '../cabinet-paths'
 import { RedesignShell, RedesignTitle } from '../redesign-shell'
-import { Kpi, KpiStrip } from '../redesign-kpi'
 import { moduleLabel, navigationGroupLabel } from '../module-messages'
 import {
   integrationErrorMessage,
@@ -105,6 +110,7 @@ export function IntegrationsScreen() {
     loaded?.key === scopeKey ? loaded.state : { kind: 'loading' }
   const [connecting, setConnecting] = useState<string | null>(null)
   const [connectError, setConnectError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
   const mountedRef = useRef(true)
 
   useEffect(() => {
@@ -134,7 +140,7 @@ export function IntegrationsScreen() {
       },
     )
     return () => controller.abort()
-  }, [scopeKey])
+  }, [scopeKey, attempt])
 
   if (tenant === null) {
     return (
@@ -158,13 +164,6 @@ export function IntegrationsScreen() {
   const catalogSize = novaPoshtaAvailable
     ? definitions.length
     : definitions.filter((item) => item.code !== NOVA_POSHTA).length
-  const failing = items.filter((item) => item.status === 'error')
-  const lastVerified = items
-    .map((item) => item.verifiedAt)
-    .filter((value): value is string => value !== null)
-    .sort()
-    .at(-1)
-
   const connect = async (definitionId: string) => {
     if (connecting !== null) return
     setConnecting(definitionId)
@@ -206,108 +205,86 @@ export function IntegrationsScreen() {
       />
 
       {state.kind === 'error' && (
-        <Notice tone="danger">{t('loadError')}</Notice>
+        <ErrorState
+          description={t('loadError')}
+          onRetry={() => {
+            setLoaded(null)
+            setAttempt((current) => current + 1)
+          }}
+        />
       )}
       {connectError !== null && <Notice tone="danger">{connectError}</Notice>}
 
-      <KpiStrip>
-        <Kpi
-          label={t('kpiConnected')}
-          meta={
-            state.kind !== 'ready'
-              ? t('kpiCatalogLoading')
-              : t('kpiCatalog', { count: catalogSize })
-          }
-          value={String(items.length)}
-        />
-        <Kpi
-          label={t('kpiAttention')}
-          meta={
-            failing.length > 0
-              ? failing.map((item) => item.displayName).join(', ')
-              : t('kpiNoErrors')
-          }
-          tone={failing.length > 0 ? 'warn' : 'plain'}
-          value={String(failing.length)}
-        />
-        <Kpi
-          label={t('kpiLastCheck')}
-          meta={
-            lastVerified === undefined ? t('kpiNeverChecked') : t('kpiFreshest')
-          }
-          value={
-            lastVerified === undefined ? (
-              <span className="text-app-dim">—</span>
-            ) : (
-              <DateValue value={lastVerified} withTime={false} />
-            )
-          }
-        />
-      </KpiStrip>
-
-      <section aria-label={t('connectedTitle')} className="rz-card">
-        <header className="rz-card__head">
-          <h2 className="rz-h-card">{t('connectedTitle')}</h2>
-          <p className="rz-caption m-0">{t('connectedHint')}</p>
-        </header>
-        {state.kind === 'loading' ? (
-          <p className="rz-muted rz-card__body m-0">{t('loading')}</p>
-        ) : items.length === 0 ? (
-          <p className="rz-muted rz-card__body m-0">{t('noneConnected')}</p>
-        ) : (
-          <ul className="divide-app-line m-0 grid list-none divide-y p-0">
-            {items.map((item) => {
-              const status = integrationStatusPresentation(item.status, locale)
-              // Outside Ukraine an NP connection stays readable as history,
-              // but there is nothing left to open or configure.
-              const locked = !novaPoshtaAvailable && item.code === NOVA_POSHTA
-              const rowClass =
-                'flex min-h-row flex-wrap items-center gap-x-3 gap-y-2 px-[var(--rz-card-p)] py-2 text-app-muted'
-              const row = (
-                <>
-                  <Mark code={item.code} />
-                  <span className="grid min-w-0 flex-1">
-                    <span className="truncate font-medium text-app-strong">
-                      {item.displayName}
+      {state.kind === 'error' ? null : (
+        <section aria-label={t('connectedTitle')} className="rz-card">
+          <header className="rz-card__head">
+            <h2 className="rz-h-card">{t('connectedTitle')}</h2>
+            <p className="rz-caption m-0">{t('connectedHint')}</p>
+          </header>
+          {state.kind === 'loading' ? (
+            <p className="rz-muted rz-card__body m-0">{t('loading')}</p>
+          ) : items.length === 0 ? (
+            <p className="rz-muted rz-card__body m-0">{t('noneConnected')}</p>
+          ) : (
+            <ul className="divide-app-line m-0 grid list-none divide-y p-0">
+              {items.map((item) => {
+                const status = integrationStatusPresentation(
+                  item.status,
+                  locale,
+                )
+                // Outside Ukraine an NP connection stays readable as history,
+                // but there is nothing left to open or configure.
+                const locked = !novaPoshtaAvailable && item.code === NOVA_POSHTA
+                const rowClass =
+                  'flex min-h-row flex-wrap items-center gap-x-3 gap-y-2 px-[var(--rz-card-p)] py-2 text-app-muted'
+                const row = (
+                  <>
+                    <Mark code={item.code} />
+                    <span className="grid min-w-0 flex-1">
+                      <span className="truncate font-medium text-app-strong">
+                        {item.displayName}
+                      </span>
+                      <span className="rz-caption truncate">
+                        {integrationKind(item.code, locale) ??
+                          t('serviceFallback')}
+                      </span>
                     </span>
-                    <span className="rz-caption truncate">
-                      {integrationKind(item.code, locale) ??
-                        t('serviceFallback')}
+                    <StatusPill tone={status.tone}>{status.label}</StatusPill>
+                    <span className="rz-num min-w-[104px] text-app-muted">
+                      {item.verifiedAt === null ? (
+                        <span className="text-app-dim">
+                          {t('neverChecked')}
+                        </span>
+                      ) : (
+                        <DateValue value={item.verifiedAt} withTime={false} />
+                      )}
                     </span>
-                  </span>
-                  <StatusPill tone={status.tone}>{status.label}</StatusPill>
-                  <span className="rz-num min-w-[104px] text-app-muted">
-                    {item.verifiedAt === null ? (
-                      <span className="text-app-dim">{t('neverChecked')}</span>
+                  </>
+                )
+                return (
+                  <li key={item.id}>
+                    {locked ? (
+                      <div className={rowClass}>{row}</div>
                     ) : (
-                      <DateValue value={item.verifiedAt} withTime={false} />
+                      <Link
+                        className={`${rowClass} hover:bg-app-hover`}
+                        to={cabinetPath(slug, 'integrations', item.id)}
+                      >
+                        {row}
+                      </Link>
                     )}
-                  </span>
-                </>
-              )
-              return (
-                <li key={item.id}>
-                  {locked ? (
-                    <div className={rowClass}>{row}</div>
-                  ) : (
-                    <Link
-                      className={`${rowClass} hover:bg-app-hover`}
-                      to={cabinetPath(slug, 'integrations', item.id)}
-                    >
-                      {row}
-                    </Link>
-                  )}
-                  {item.lastErrorCode !== null && (
-                    <p className="text-state-danger m-0 px-[var(--rz-card-p)] pb-2.5 text-pretty">
-                      {integrationErrorMessage(item.lastErrorCode, locale)}
-                    </p>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </section>
+                    {item.lastErrorCode !== null && (
+                      <p className="text-state-danger m-0 px-[var(--rz-card-p)] pb-2.5 text-pretty">
+                        {integrationErrorMessage(item.lastErrorCode, locale)}
+                      </p>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </section>
+      )}
 
       {!novaPoshtaAvailable && <NovaPoshtaUnavailable />}
 

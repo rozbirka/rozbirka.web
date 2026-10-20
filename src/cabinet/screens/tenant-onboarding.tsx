@@ -1,7 +1,7 @@
 import { useDesignSystemRoot } from '@/components/app/use-design-system-root'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { ArrowRight, Loader2, LogOut } from 'lucide-react'
+import { Loader2, LogOut } from 'lucide-react'
 import { normalizeApiProblem } from '@/api/errors'
 import { tenantsApi } from '@/api/tenants'
 import { tenantPreference } from '@/api/tenant-preference'
@@ -156,7 +156,7 @@ export function TenantOnboardingScreen() {
         </div>
       </header>
 
-      <main className="rz-page mx-auto max-w-[600px]">
+      <main className="rz-page mx-auto w-full max-w-[880px]">
         <div className="grid gap-2">
           <span className="rz-eyebrow">{t('step')}</span>
           <h1 className="rz-h-page">{t('title')}</h1>
@@ -171,7 +171,7 @@ export function TenantOnboardingScreen() {
           noValidate
           onSubmit={submit}
         >
-          <div className="rz-card__body grid gap-4">
+          <div className="rz-card__body grid items-start gap-4 sm:grid-cols-2">
             <Field
               error={touched ? nameIssue : null}
               hint={t('nameHint')}
@@ -198,6 +198,7 @@ export function TenantOnboardingScreen() {
 
             {create.error === null ? null : (
               <Notice
+                className="sm:col-span-2"
                 action={
                   <Button onClick={attemptCreate} {...create.triggerProps}>
                     {t('retry')}
@@ -224,10 +225,7 @@ export function TenantOnboardingScreen() {
                   {t('creating')}
                 </>
               ) : (
-                <>
-                  {t('create')}
-                  <ArrowRight aria-hidden />
-                </>
+                t('create')
               )}
             </Button>
           </div>

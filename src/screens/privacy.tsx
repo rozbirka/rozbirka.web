@@ -98,7 +98,7 @@ function UkrainianPolicy() {
       <h1 className="rz-h-page mt-1.5">Як ми поводимось з даними</h1>
       <p className="text-app-muted mt-1 mb-0">Версія від 19 вересня 2026 р.</p>
 
-      <div className="prose-content text-input text-app-ink mt-6 space-y-8 leading-relaxed">
+      <div className="prose-content text-(length:--rz-fs-input) text-app-ink mt-6 space-y-8 leading-relaxed">
         <section>
           <h2 className="rz-h-title mb-3">1. Хто ми</h2>
           <p>

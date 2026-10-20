@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
-import { ArrowLeft, ArrowRight, Check, ChevronDown } from 'lucide-react'
+import { ArrowLeft, ChevronDown } from 'lucide-react'
 import {
   Button,
   Field,
@@ -500,7 +500,7 @@ function LoginFlow() {
         </Link>
       </header>
 
-      <main className="grid flex-1 place-items-center p-6 pt-2">
+      <main className="grid flex-1 content-start justify-items-center px-4 pt-2 pb-6 sm:pt-4">
         <div className="grid w-full max-w-[420px] gap-5">
           <AuthBrand />
           {step === 'phone' && (
@@ -654,14 +654,22 @@ function PhoneStep({
       </StepHeader>
 
       <form className="grid gap-4" noValidate onSubmit={onSubmit}>
-        {error !== null && <Notice tone="danger">{error}</Notice>}
+        {error !== null && (
+          // Being offline is a condition to wait out, not a failure.
+          <Notice
+            role="alert"
+            tone={error === t('networkError') ? 'warn' : 'danger'}
+          >
+            {error}
+          </Notice>
+        )}
 
         <Field
           error={fieldError ?? undefined}
           hint={t('phoneHint', { pattern: PHONE_PATTERN[country] })}
           label={t('phoneLabel')}
         >
-          <div className="rz-input-group h-touch has-[input[aria-invalid=true]]:border-state-danger">
+          <div className="rz-input-group h-control-lg has-[input[aria-invalid=true]]:border-state-danger">
             <div className="border-app-line relative flex h-full shrink-0 items-center border-r">
               <span
                 aria-hidden
@@ -692,7 +700,7 @@ function PhoneStep({
               autoComplete="tel"
               autoFocus
               disabled={pending}
-              className="h-full min-w-0 flex-1 rounded-none border-0 bg-transparent px-2.5 font-mono text-[16px] tabular-nums shadow-none hover:border-0 focus:shadow-none"
+              className="h-full min-w-0 flex-1 rounded-none border-0 bg-transparent px-2.5 font-mono tabular-nums shadow-none hover:border-0 focus:shadow-none pointer-coarse:text-[16px]"
               inputMode="tel"
               maxLength={22}
               onChange={(e) => onChange(e.target.value)}
@@ -709,13 +717,12 @@ function PhoneStep({
         <Button
           aria-busy={pending}
           className="rz-btn--block"
+          size="lg"
           disabled={pending || resendIn > 0}
-          size="touch"
           type="submit"
           variant="primary"
         >
           {pending ? t('sending') : t('getCode')}
-          {!pending && <ArrowRight />}
         </Button>
 
         {resendIn > 0 && (
@@ -828,13 +835,12 @@ function OtpStep({
         <Button
           aria-busy={pending}
           className="rz-btn--block"
+          size="lg"
           disabled={pending}
-          size="touch"
           type="submit"
           variant="primary"
         >
           {pending ? t('verifying') : t('confirm')}
-          {!pending && <Check />}
         </Button>
 
         <div className="flex flex-col items-center gap-1.5">
@@ -899,7 +905,7 @@ function NameStep({
           <TextInput
             autoComplete="name"
             autoFocus
-            className="rz-input h-touch text-[16px]"
+            className="rz-input pointer-coarse:text-[16px]"
             inputMode="text"
             maxLength={64}
             onChange={(e) => onChange(e.target.value)}
@@ -912,13 +918,12 @@ function NameStep({
         <Button
           aria-busy={pending}
           className="rz-btn--block"
+          size="lg"
           disabled={busy}
-          size="touch"
           type="submit"
           variant="primary"
         >
           {pending ? t('savingName') : t('continue')}
-          {!pending && <ArrowRight />}
         </Button>
       </form>
     </div>
@@ -928,17 +933,10 @@ function NameStep({
 function SuccessStep({ returnTo }: { returnTo: string }) {
   const t = useT(loginMessages)
   return (
-    <div className="grid justify-items-center gap-5 text-center">
-      <div className="bg-state-ok-soft border-state-ok/30 grid size-16 place-items-center rounded-full border">
-        <Check className="text-state-ok size-8" />
-      </div>
-      <div className="flex flex-col gap-2">
-        <h1 className="rz-h-page">{t('signedIn')}</h1>
-        <p className="text-app-muted m-0" role="status">
-          {t('redirecting')}
-        </p>
-      </div>
-      <Button asChild className="rz-btn--block" size="touch" variant="primary">
+    <div className="grid gap-5">
+      <StepHeader eyebrow={t('eyebrowLogin')} title={t('signedIn')} />
+      <Notice tone="ok">{t('redirecting')}</Notice>
+      <Button asChild className="rz-btn--block" size="lg" variant="primary">
         <Link to={returnTo}>{t('continue')}</Link>
       </Button>
     </div>
@@ -1016,7 +1014,7 @@ function OtpInput({
           aria-describedby={describedBy}
           aria-invalid={invalid || undefined}
           autoComplete="one-time-code"
-          className="rz-input h-touch min-w-0 px-0 text-center font-mono text-page"
+          className="rz-input h-control-lg min-w-0 px-0 text-center font-mono pointer-coarse:text-[16px]"
           inputMode="numeric"
           key={i}
           aria-label={t('digit', { index: i + 1 })}

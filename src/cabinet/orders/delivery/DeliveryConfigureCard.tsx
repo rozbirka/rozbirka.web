@@ -55,22 +55,27 @@ export function DeliveryConfigureCard({
     )
 
   return (
-    <Card title={t('tabShipping')}>
-      <div className="grid gap-3">
-        <p className="text-app-muted m-0">{t('configureNote')}</p>
-        {error === null ? null : <Notice tone="danger">{error}</Notice>}
-        {mutationsAllowed && (
+    <Card
+      aside={
+        mutationsAllowed ? (
           <Button
             aria-busy={busy}
+            className="relative after:absolute after:-inset-2 after:content-['']"
             disabled={busy}
             onClick={configure}
-            size="wide"
-            variant="primary"
+            size="sm"
           >
             <Truck aria-hidden />
             {t('startDelivery')}
           </Button>
-        )}
+        ) : undefined
+      }
+      headerClassName="py-2"
+      title={t('tabShipping')}
+    >
+      <div className="grid gap-3">
+        <p className="text-app-muted m-0">{t('configureNote')}</p>
+        {error === null ? null : <Notice tone="danger">{error}</Notice>}
       </div>
     </Card>
   )

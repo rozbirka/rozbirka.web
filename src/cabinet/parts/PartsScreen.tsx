@@ -19,6 +19,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Copy,
   ExternalLink,
   Lock,
   Car as CarIcon,
@@ -30,9 +31,12 @@ import {
   Tag,
   Plus,
   Printer,
+  RefreshCw,
   SearchX,
   Trash2,
   Upload,
+  WifiOff,
+  X,
 } from 'lucide-react'
 import {
   ActionMenu,
@@ -776,12 +780,52 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     },
   ]
   const loading = pageMeta === null && error === null
+  // Out of quota or on a lapsed subscription the button stays in its place,
+  // switched off with the reason, so nobody wonders where it went.
+  const createBlockedReason =
+    createDecision.kind === 'quota-exhausted'
+      ? t('accessQuota')
+      : createDecision.kind === 'subscription-blocked'
+        ? t('accessSubscription')
+        : null
+  // An empty yard with no filters has nothing to search or narrow yet.
+  const emptyYard =
+    !loading &&
+    error === null &&
+    items.length === 0 &&
+    statusTotal === 0 &&
+    activeFilters.length === 0
+
+  const emptyActions =
+    manageDecision.kind === 'allowed' || createDecision.kind === 'allowed' ? (
+      <>
+        {manageDecision.kind === 'allowed' ? (
+          <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
+            <Button asChild>
+              <Link to="imports">
+                <Upload aria-hidden />
+                {t('importParts')}
+              </Link>
+            </Button>
+          </FeatureGate>
+        ) : null}
+        {createDecision.kind === 'allowed' ? (
+          <Button asChild variant="primary">
+            <Link to="new">
+              <Plus aria-hidden />
+              {t('addPart')}
+            </Link>
+          </Button>
+        ) : null}
+      </>
+    ) : null
 
   return (
     <RedesignShell
       actions={
         manageDecision.kind === 'allowed' ||
-        createDecision.kind === 'allowed' ? (
+        createDecision.kind === 'allowed' ||
+        createBlockedReason !== null ? (
           <>
             {manageDecision.kind === 'allowed' ? (
               <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
@@ -800,6 +844,11 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                   {t('addPart')}
                 </Link>
               </Button>
+            ) : createBlockedReason !== null ? (
+              <Button disabled title={createBlockedReason} variant="primary">
+                <Lock aria-hidden />
+                {t('addPart')}
+              </Button>
             ) : null}
           </>
         ) : undefined
@@ -814,7 +863,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     >
       <div className="rz-page-head">
         <h1 className="rz-h-page">{t('title')}</h1>
-        {facets === null ? null : (
+        {facets === null || emptyYard ? null : (
           <dl className="rz-totals">
             {totals.map((total) => (
               <div className="flex items-baseline gap-1" key={total.key}>
@@ -827,8 +876,11 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       </div>
 
       {removedOrigin ? <Notice tone="info">{t('removedOrigin')}</Notice> : null}
+      {createDecision.kind === 'quota-exhausted' ? (
+        <Notice tone="warn">{t('accessQuota')}</Notice>
+      ) : null}
 
-      <div className="rz-toolbar" role="search">
+      <div className="rz-toolbar" hidden={emptyYard} role="search">
         <SearchInput
           aria-label={t('searchLabel')}
           name="q"
@@ -1049,19 +1101,31 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
       </div>
 
       {error ? (
-        <ErrorState
-          description={
-            error.kind === 'network' || error.kind === 'timeout'
-              ? t('networkDescription')
-              : t('serverDescription')
-          }
-          onRetry={() => setSearchParams(new URLSearchParams(searchParams))}
-          title={
-            error.kind === 'network' || error.kind === 'timeout'
-              ? t('networkTitle')
-              : t('serverTitle')
-          }
-        />
+        error.kind === 'network' || error.kind === 'timeout' ? (
+          <StateScreen
+            actions={
+              <Button
+                onClick={() =>
+                  setSearchParams(new URLSearchParams(searchParams))
+                }
+              >
+                <RefreshCw aria-hidden />
+                {tc('retry')}
+              </Button>
+            }
+            description={t('networkDescription')}
+            icon={<WifiOff aria-hidden />}
+            role="alert"
+            title={t('networkTitle')}
+            tone="danger"
+          />
+        ) : (
+          <ErrorState
+            description={t('serverDescription')}
+            onRetry={() => setSearchParams(new URLSearchParams(searchParams))}
+            title={t('serverTitle')}
+          />
+        )
       ) : loading ? (
         <SkeletonRows columns={5} rows={8} />
       ) : (
@@ -1120,6 +1184,7 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
               align: 'end',
               cell: (part) => (
                 <InlineEdit
+                  className="text-app-muted"
                   inputMode="numeric"
                   label={t('quantityLabel', { name: part.name })}
                   onCommit={(next) =>
@@ -1197,11 +1262,14 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
                       <Button
                         onClick={() => setSearchParams(new URLSearchParams())}
                       >
+                        <X aria-hidden />
                         {t('resetFilters')}
                       </Button>
                     ),
                   }
-                : {})}
+                : !emptyYard || emptyActions === null
+                  ? {}
+                  : { actions: emptyActions })}
             />
           }
           footer={
@@ -1634,11 +1702,36 @@ function PartDetailScreen({
                   {tc('edit')}
                 </Link>
               </Button>
-              <Button disabled title={t('addToOrderHint')}>
-                {t('addToOrder')}
-              </Button>
               <ActionMenu
                 actions={[
+                  ...(links.inventory
+                    ? [
+                        {
+                          key: 'move',
+                          label: t('move'),
+                          icon: <MapPin aria-hidden />,
+                          onSelect: () => setPlacementOpen(true),
+                        },
+                      ]
+                    : []),
+                  ...(detail?.qrCode
+                    ? [
+                        {
+                          key: 'copy',
+                          label: t('copyCode'),
+                          icon: <Copy aria-hidden />,
+                          onSelect: () => void copyCode(detail.qrCode),
+                        },
+                      ]
+                    : []),
+                  {
+                    key: 'add-to-order',
+                    label: t('addToOrder'),
+                    icon: <ShoppingBag aria-hidden />,
+                    disabled: true,
+                    title: t('addToOrderHint'),
+                    onSelect: () => undefined,
+                  },
                   {
                     key: 'delete',
                     label: t('deletePart'),
@@ -1657,9 +1750,14 @@ function PartDetailScreen({
 
       <div className="rz-page max-w-[1240px]">
         <div className="grid min-w-0 gap-2">
-          <h1 className="rz-h-page text-balance">{name}</h1>
+          {error ? null : <h1 className="rz-h-page text-balance">{name}</h1>}
           {detail === null ? null : (
             <div className="rz-btn-row items-center">
+              {detail.oemCode ? (
+                <span className="rz-code pr-2">
+                  {t('oem', { code: detail.oemCode })}
+                </span>
+              ) : null}
               {detail.qrCode ? (
                 <CodeChip
                   code={detail.qrCode}
@@ -1668,11 +1766,6 @@ function PartDetailScreen({
                     void copyCode(detail.qrCode)
                   }}
                 />
-              ) : null}
-              {detail.oemCode ? (
-                <span className="rz-code pr-2">
-                  {t('oem', { code: detail.oemCode })}
-                </span>
               ) : null}
               <StatusPill tone={statusPresentation(detail.status, locale).tone}>
                 {statusPresentation(detail.status, locale).label}
@@ -1770,6 +1863,36 @@ function PartDetailScreen({
               {reservations.length > 0 || soldOrders.length > 0 ? (
                 <Card
                   aside={
+                    <div
+                      aria-label={t('salesTabs')}
+                      className="rz-seg max-w-full overflow-x-auto"
+                      role="group"
+                    >
+                      {SALES_TABS.map((tab) => {
+                        const count =
+                          tab.value === 'reserved'
+                            ? reservations.length
+                            : tab.value === 'sold'
+                              ? soldOrders.length
+                              : reservations.length + soldOrders.length
+                        return (
+                          <button
+                            aria-pressed={salesTab === tab.value}
+                            key={tab.value}
+                            onClick={() => setSalesTab(tab.value)}
+                            type="button"
+                          >
+                            {t(tab.label)}
+                            <span className="rz-count">{count}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  }
+                  bodyClassName="p-0"
+                  title={t('sales')}
+                >
+                  <div className="border-app-line border-b px-4 py-2">
                     <dl className="rz-totals">
                       <div className="flex items-baseline gap-1.5">
                         <dt>{t('revenue')}</dt>
@@ -1803,36 +1926,6 @@ function PartDetailScreen({
                         </dd>
                       </div>
                     </dl>
-                  }
-                  bodyClassName="p-0"
-                  title={t('sales')}
-                >
-                  <div className="border-app-line border-b px-4 py-2">
-                    <div
-                      aria-label={t('salesTabs')}
-                      className="rz-seg max-w-full overflow-x-auto"
-                      role="group"
-                    >
-                      {SALES_TABS.map((tab) => {
-                        const count =
-                          tab.value === 'reserved'
-                            ? reservations.length
-                            : tab.value === 'sold'
-                              ? soldOrders.length
-                              : reservations.length + soldOrders.length
-                        return (
-                          <button
-                            aria-pressed={salesTab === tab.value}
-                            key={tab.value}
-                            onClick={() => setSalesTab(tab.value)}
-                            type="button"
-                          >
-                            {t(tab.label)}
-                            <span className="rz-count">{count}</span>
-                          </button>
-                        )
-                      })}
-                    </div>
                   </div>
 
                   {salesRows.length === 0 ? (
@@ -1843,7 +1936,7 @@ function PartDetailScreen({
                     </p>
                   ) : (
                     <>
-                      <div className="rz-table-scroll">
+                      <div className="rz-table-scroll relative">
                         <table className="rz-table">
                           <caption>{t('salesCaption')}</caption>
                           <thead>
@@ -1853,9 +1946,6 @@ function PartDetailScreen({
                               <th scope="col">{t('colStatus')}</th>
                               <th className="rz-num" scope="col">
                                 {t('colQuantity')}
-                              </th>
-                              <th className="rz-num" scope="col">
-                                {t('colPrice')}
                               </th>
                               <th className="rz-num" scope="col">
                                 {t('colSum')}
@@ -1944,35 +2034,6 @@ function PartDetailScreen({
                                 </td>
                                 <td
                                   className="rz-num py-2 align-top"
-                                  data-label={t('colPrice')}
-                                >
-                                  {row.unitPrice === null ? (
-                                    <span
-                                      className="text-app-dim"
-                                      title={t('reserveNoPrice')}
-                                    >
-                                      —
-                                    </span>
-                                  ) : (
-                                    <Amount
-                                      currency={partCurrency}
-                                      currencyDisplay="code"
-                                      value={row.unitPrice}
-                                    />
-                                  )}
-                                  {row.discount > 0 ? (
-                                    <span className="text-state-warn block text-caption">
-                                      −
-                                      <Amount
-                                        currency={partCurrency}
-                                        currencyDisplay="code"
-                                        value={row.discount}
-                                      />
-                                    </span>
-                                  ) : null}
-                                </td>
-                                <td
-                                  className="rz-num py-2 align-top"
                                   data-label={t('colSum')}
                                 >
                                   {row.unitPrice === null ? (
@@ -1989,6 +2050,33 @@ function PartDetailScreen({
                                       value={row.unitPrice * row.quantity}
                                     />
                                   )}
+                                  {/* Five columns as on the reference: the
+                                      unit price and any discount ride under
+                                      the line total instead of a column. */}
+                                  {row.unitPrice === null ||
+                                  row.quantity === 1 ? null : (
+                                    <span
+                                      className="rz-caption block"
+                                      title={t('colPrice')}
+                                    >
+                                      {row.quantity} ×{' '}
+                                      <Amount
+                                        currency={partCurrency}
+                                        currencyDisplay="code"
+                                        value={row.unitPrice}
+                                      />
+                                    </span>
+                                  )}
+                                  {row.discount > 0 ? (
+                                    <span className="text-state-warn block text-caption">
+                                      −
+                                      <Amount
+                                        currency={partCurrency}
+                                        currencyDisplay="code"
+                                        value={row.discount}
+                                      />
+                                    </span>
+                                  ) : null}
                                 </td>
                                 <td className="py-2 text-right align-top">
                                   <Button
@@ -2421,6 +2509,7 @@ function PartDetailScreen({
       <ConfirmDialog
         confirmLabel={tc('delete')}
         consequence={t('deleteConsequence')}
+        destructive
         error={deleteError}
         onConfirm={() => void remove()}
         onOpenChange={setConfirmingDelete}
@@ -2927,14 +3016,22 @@ function SourceTile({
     <button
       aria-pressed={picked}
       className={cn(
-        'rz-choice-card grid w-full gap-1 bg-transparent text-left',
+        'rz-choice-card w-full bg-transparent text-left',
         picked && 'border-brand bg-brand-soft',
       )}
       onClick={onPick}
       type="button"
     >
-      <span className="font-semibold text-app-strong">{t(kind.label)}</span>
-      <span className="rz-caption text-pretty">{t(kind.hint)}</span>
+      <span
+        aria-hidden
+        className={cn('rz-radio mt-0.5 shrink-0', picked && 'border-brand')}
+      >
+        {picked ? <span className="bg-brand size-1.5 rounded-full" /> : null}
+      </span>
+      <span className="grid min-w-0 gap-1">
+        <span className="font-semibold text-app-strong">{t(kind.label)}</span>
+        <span className="rz-caption text-pretty">{t(kind.hint)}</span>
+      </span>
     </button>
   )
 }
@@ -3005,7 +3102,9 @@ function PartFields({
   const step = (number: string, title: string) =>
     variant === 'plain' ? (
       <span className="flex items-baseline gap-2.5">
-        <span className="text-app-dim font-mono text-micro">{number}</span>
+        <span aria-hidden className="text-brand-text font-mono text-micro">
+          {number}
+        </span>
         {title}
       </span>
     ) : (
@@ -3726,12 +3825,6 @@ function PartForm({
 
   return (
     <Sheet
-      description={
-        <>
-          {t('requiredFields')} <span className="text-brand-text">*</span>.{' '}
-          {t('restLater')}
-        </>
-      }
       footer={
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="basis-full empty:hidden">{price.saveNotes}</div>
@@ -3777,6 +3870,12 @@ function PartForm({
         noValidate
         onSubmit={(event) => void submit(event)}
       >
+        {/* Scheme 1b keeps the head to the title and where the sheet sits;
+            the hint about required fields opens the body instead. */}
+        <p className="rz-caption m-0 text-pretty">
+          {t('requiredFields')} <span className="text-brand-text">*</span>.{' '}
+          {t('restLater')}
+        </p>
         <PartFields
           canViewCars={canViewCars}
           canViewIntakes={canViewIntakes}
@@ -3794,7 +3893,12 @@ function PartForm({
           <SectionPanel
             title={
               <span className="flex items-baseline gap-2.5">
-                <span className="text-app-dim font-mono text-micro">06</span>
+                <span
+                  aria-hidden
+                  className="text-brand-text font-mono text-micro"
+                >
+                  06
+                </span>
                 {tPlacement('title')}
               </span>
             }
@@ -3815,7 +3919,10 @@ function PartForm({
           setItems={setMediaItems}
           title={
             <span className="flex items-baseline gap-2.5">
-              <span className="text-app-dim font-mono text-micro">
+              <span
+                aria-hidden
+                className="text-brand-text font-mono text-micro"
+              >
                 {canPlace ? '07' : '06'}
               </span>
               {t('photos')}
@@ -4045,6 +4152,15 @@ function PartEdit({
     }
   }
 
+  const editStep = (number: string, title: string) => (
+    <span className="flex items-baseline gap-2.5">
+      <span aria-hidden className="text-brand-text font-mono text-micro">
+        {number}
+      </span>
+      {title}
+    </span>
+  )
+
   return (
     <Sheet
       description={detail?.name ?? undefined}
@@ -4094,7 +4210,7 @@ function PartEdit({
                     {t('notEditable')}
                   </span>
                 }
-                title={t('sourceStep')}
+                title={editStep('01', t('sourceStep'))}
                 variant="plain"
               >
                 <div className="grid gap-4">
@@ -4137,7 +4253,10 @@ function PartEdit({
                 </div>
               </SectionPanel>
 
-              <SectionPanel title={t('describeStep')} variant="plain">
+              <SectionPanel
+                title={editStep('02', t('describeStep'))}
+                variant="plain"
+              >
                 <div className="grid gap-4">
                   <p className="text-app-muted text-body">
                     {t('describeEditDescription')}
@@ -4197,7 +4316,10 @@ function PartEdit({
                 </div>
               </SectionPanel>
 
-              <SectionPanel title={t('conditionStep')} variant="plain">
+              <SectionPanel
+                title={editStep('03', t('conditionStep'))}
+                variant="plain"
+              >
                 <div className="grid gap-4">
                   <p className="text-app-muted text-body">
                     {t('conditionDescription')}
@@ -4229,7 +4351,10 @@ function PartEdit({
                 </div>
               </SectionPanel>
 
-              <SectionPanel title={t('quantityStep')} variant="plain">
+              <SectionPanel
+                title={editStep('04', t('quantityStep'))}
+                variant="plain"
+              >
                 <div className="grid gap-4">
                   <p className="text-app-muted text-body">
                     {t('quantityDescription')}
@@ -4295,7 +4420,7 @@ function PartEdit({
                     {t('readOnly')}
                   </span>
                 }
-                title={t('compatStep')}
+                title={editStep('05', t('compatStep'))}
                 variant="plain"
               >
                 <p className="text-app-muted text-body">
@@ -4338,6 +4463,7 @@ function PartEdit({
 
               <PartMediaFields
                 description={t('photosUploadNow')}
+                title={editStep('06', t('photos'))}
                 items={mediaItems}
                 requireLatestMutation={requireLatestMutation}
                 setItems={setMediaItems}

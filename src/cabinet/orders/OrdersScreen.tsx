@@ -8,14 +8,18 @@ import {
 } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import {
-  ChevronLeft,
+  ArrowLeft,
+  Banknote,
+  Check,
   ChevronRight,
+  RefreshCw,
+  Undo2,
   ClipboardList,
   Plus,
   Printer,
-  RotateCcw,
   SearchX,
   Trash2,
+  X,
   XCircle,
 } from 'lucide-react'
 import {
@@ -117,6 +121,7 @@ import {
 import { useTenantSettings } from '@/auth/useTenantSettings'
 import { isPhoneCountry } from '@/lib/phone'
 import { OrderCustomerDrawer } from './OrderCustomerDrawer'
+import { SheetGroup, SheetList } from './sheet-group'
 import { OrderItemDrawer, type OrderItemDraft } from './OrderItemDrawer'
 import { OrderPaymentDrawer, type PaymentOutcome } from './OrderPaymentDrawer'
 
@@ -293,11 +298,16 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
   const createAllowed = canCreateOrder(definition, cabinet)
   const [params, setParams] = useSearchParams()
   const [orders, setOrders] = useState<OrderListItem[]>([])
+  /** False until the first answer: the list shows skeleton rows, not «empty». */
+  const [loaded, setLoaded] = useState(false)
   const [totalPages, setTotalPages] = useState(0)
   const [total, setTotal] = useState(0)
+  const [pageSize, setPageSize] = useState<number | undefined>(undefined)
   /** How many orders sit behind each status chip, under the same search. */
   const [counts, setCounts] = useState<Record<string, number> | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** Bumped by «Спробувати ще раз» to ask for the same page again. */
+  const [attempt, setAttempt] = useState(0)
   const search = params.get('q') ?? undefined
   const status = params.get('status') ?? undefined
   const customerId = params.get('customerId') ?? undefined
@@ -318,15 +328,19 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
         setOrders(result.items)
         setTotalPages(result.totalPages)
         setTotal(result.total)
+        setPageSize(result.pageSize)
         setError(null)
+        setLoaded(true)
       })
       .catch((error) => {
-        if (!controller.signal.aborted) setError(errorMessage(error))
+        if (controller.signal.aborted) return
+        setError(errorMessage(error))
+        setLoaded(true)
       })
     return () => controller.abort()
     // The message is chosen when the request fails, not re-run per locale.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerId, page, search, status])
+  }, [customerId, page, search, status, attempt])
 
   /* The endpoint reports a total per filter, not a breakdown, so each chip's
      count is its own one-row request under the current search. */
@@ -386,13 +400,15 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
       cell: (order) => (
         <span className="grid">
           <Link
-            className="text-app-strong font-mono"
+            className="rz-mono w-fit"
             onClick={(event) => event.stopPropagation()}
             to={order.id}
           >
             #{order.number}
           </Link>
-          <span className="rz-caption font-normal">{day(order.createdAt)}</span>
+          <span className="rz-caption rz-mono font-normal">
+            {day(order.createdAt)}
+          </span>
         </span>
       ),
     },
@@ -400,20 +416,13 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
       key: 'buyer',
       label: t('columnBuyer'),
       cell: (order) => (
-        <span className="grid min-w-0 max-w-72">
-          <span
-            className={cn(
-              'truncate',
-              order.customerName === null ? 'rz-dim' : 'rz-strong',
-            )}
-          >
-            {order.customerName ?? t('noBuyer')}
-          </span>
-          <span className="rz-caption truncate">
-            {order.paymentAccountNames.length === 0
-              ? t('noPayments')
-              : order.paymentAccountNames.join(', ')}
-          </span>
+        <span
+          className={cn(
+            'block max-w-72 truncate',
+            order.customerName === null ? 'rz-muted' : 'rz-strong',
+          )}
+        >
+          {order.customerName ?? t('noBuyer')}
         </span>
       ),
     },
@@ -421,10 +430,22 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
       key: 'items',
       label: t('columnItems'),
       cell: (order) => (
-        <span className="block max-w-72 truncate">
-          {order.partNames.length === 0
-            ? t('itemCount', { count: order.itemCount })
-            : order.partNames.join(', ')}
+        <span className="grid min-w-0 max-w-96 py-1.5">
+          <span
+            className="text-app-ink truncate"
+            title={
+              order.partNames.length === 0
+                ? undefined
+                : order.partNames.join(', ')
+            }
+          >
+            {t('itemCount', { count: order.itemCount })}
+          </span>
+          <span className="rz-caption truncate">
+            {order.paymentAccountNames.length === 0
+              ? t('noPayments')
+              : order.paymentAccountNames.join(', ')}
+          </span>
         </span>
       ),
     },
@@ -445,7 +466,7 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
       cell: (order) => (
         <span
           className={cn(
-            'whitespace-nowrap',
+            'rz-mono whitespace-nowrap',
             UNPAID_STATUSES.has(order.status) && 'rz-dim',
           )}
         >
@@ -454,19 +475,20 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
       ),
     },
   ]
+  const newOrderButton = createAllowed ? (
+    <Button asChild variant="primary">
+      <Link to="new">
+        <Plus aria-hidden />
+        {t('newOrder')}
+      </Link>
+    </Button>
+  ) : undefined
+  /** An account with no orders at all: the head and the filters say nothing. */
+  const firstRun = loaded && error === null && orders.length === 0 && !filtered
 
   return (
     <RedesignShell
-      actions={
-        createAllowed ? (
-          <Button asChild variant="primary">
-            <Link to="new">
-              <Plus aria-hidden />
-              {t('newOrder')}
-            </Link>
-          </Button>
-        ) : undefined
-      }
+      actions={newOrderButton}
       crumb={
         <>
           <span>{t('eyebrow')}</span>
@@ -477,84 +499,119 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
     >
       <div className="rz-page-head">
         <h1 className="rz-h-page">{t('title')}</h1>
-        <span className="rz-muted">{t('orderCount', { count: total })}</span>
-        <dl className="rz-totals">
-          <div className="flex items-baseline gap-1.5">
-            <dt>{t('pageSum')}</dt>
-            <dd>{listMoney(pageSum, accountingCurrency, locale)}</dd>
+        {loaded && error === null && !firstRun ? (
+          <>
+            <span className="rz-muted">
+              {t('orderCount', { count: total })}
+            </span>
+            <dl className="rz-totals">
+              <div className="flex items-baseline gap-1.5">
+                <dt>{t('pageSum')}</dt>
+                <dd className="rz-strong">
+                  {listMoney(pageSum, accountingCurrency, locale)}
+                </dd>
+              </div>
+            </dl>
+          </>
+        ) : null}
+      </div>
+
+      {firstRun ? null : (
+        <div className="rz-toolbar" role="search">
+          <SearchInput
+            aria-label={t('searchLabel')}
+            className="sm:max-w-80"
+            onChange={(event) => setParam('q', event.target.value)}
+            placeholder={t('searchPlaceholder')}
+            value={params.get('q') ?? ''}
+          />
+          <div
+            aria-label={t('statusFilter')}
+            className="rz-seg max-w-full flex-wrap"
+            role="radiogroup"
+          >
+            {ORDER_STATUS_FILTERS.map((option) => (
+              <button
+                aria-checked={(status ?? '') === option}
+                key={option}
+                onClick={() => setParam('status', option)}
+                role="radio"
+                type="button"
+              >
+                {option === ''
+                  ? t('filterAll')
+                  : orderStatusPresentation(option, locale).label}
+                {counts === null ? null : (
+                  <span className="rz-count">{counts[option] ?? 0}</span>
+                )}
+              </button>
+            ))}
           </div>
-        </dl>
-      </div>
-
-      <div className="rz-toolbar" role="search">
-        <SearchInput
-          aria-label={t('searchLabel')}
-          onChange={(event) => setParam('q', event.target.value)}
-          placeholder={t('searchPlaceholder')}
-          value={params.get('q') ?? ''}
-        />
-        <div
-          aria-label={t('statusFilter')}
-          className="rz-seg max-w-full flex-wrap"
-          role="radiogroup"
-        >
-          {ORDER_STATUS_FILTERS.map((option) => (
-            <button
-              aria-checked={(status ?? '') === option}
-              key={option}
-              onClick={() => setParam('status', option)}
-              role="radio"
-              type="button"
-            >
-              {option === ''
-                ? t('filterAll')
-                : orderStatusPresentation(option, locale).label}
-              {counts === null ? null : (
-                <span className="rz-count">{counts[option] ?? 0}</span>
-              )}
-            </button>
-          ))}
+          {filtered ? (
+            <Button onClick={resetFilters} variant="ghost">
+              {t('resetFilters')}
+            </Button>
+          ) : null}
         </div>
-      </div>
-
-      {error === null ? null : <Notice tone="danger">{error}</Notice>}
+      )}
 
       <section aria-label={t('listLabel')}>
-        <DataTable
-          caption={t('listLabel')}
-          columns={columns}
-          empty={
-            <div className="rz-state" role="status">
-              <span className="rz-state__icon">
+        {error !== null ? (
+          <ErrorState
+            description={error}
+            onRetry={() => setAttempt((value) => value + 1)}
+            title={t('loadFailed')}
+          />
+        ) : !loaded ? (
+          <SkeletonRows columns={5} label={t('loading')} rows={8} />
+        ) : (
+          <DataTable
+            caption={t('listLabel')}
+            columns={columns}
+            empty={
+              <div
+                className={cn('rz-state', !filtered && 'rz-state--brand')}
+                role="status"
+              >
+                <span className="rz-state__icon">
+                  {filtered ? (
+                    <SearchX aria-hidden />
+                  ) : (
+                    <ClipboardList aria-hidden />
+                  )}
+                </span>
+                <h2 className="rz-state__title">
+                  {filtered ? t('nothingFound') : t('noOrders')}
+                </h2>
+                <p className="rz-state__body">
+                  {filtered ? t('nothingFoundHint') : t('noOrdersHint')}
+                </p>
                 {filtered ? (
-                  <SearchX aria-hidden />
+                  <Button onClick={resetFilters}>
+                    <X aria-hidden />
+                    {t('resetFilters')}
+                  </Button>
                 ) : (
-                  <ClipboardList aria-hidden />
+                  newOrderButton
                 )}
-              </span>
-              <h2 className="rz-state__title">
-                {filtered ? t('nothingFound') : t('noOrders')}
-              </h2>
-              <p className="rz-state__body">
-                {filtered ? t('nothingFoundHint') : t('noOrdersHint')}
-              </p>
-              {filtered ? (
-                <Button onClick={resetFilters}>{t('resetFilters')}</Button>
-              ) : null}
-            </div>
-          }
-          footer={
-            <Pagination
-              label={t('pagesLabel')}
-              onPage={goToPage}
-              page={page}
-              totalPages={Math.max(totalPages, 1)}
-            />
-          }
-          onRowClick={(order) => void navigate(order.id)}
-          rowKey={(order) => order.id}
-          rows={orders}
-        />
+              </div>
+            }
+            footer={
+              <Pagination
+                label={t('pagesLabel')}
+                onPage={goToPage}
+                page={page}
+                totalPages={Math.max(totalPages, 1)}
+                {...(pageSize === undefined || total === 0
+                  ? {}
+                  : { pageSize, total })}
+              />
+            }
+            onRowClick={(order) => void navigate(order.id)}
+            rowKey={(order) => order.id}
+            rows={orders}
+          />
+        )}
       </section>
     </RedesignShell>
   )
@@ -945,16 +1002,12 @@ export function OrderForm({
     (draftItems.length === 0 && (!partId || !quantity || !unitPrice))
   const form = (
     <form
-      className="grid"
+      className="grid gap-5"
       id={ORDER_FORM}
       onSubmit={(event) => void submit(event)}
     >
       {error && <Notice tone="danger">{error}</Notice>}
-      <SectionPanel
-        description={t('itemDescription')}
-        title={t('itemTitle')}
-        variant="plain"
-      >
+      <SheetGroup hint={t('itemDescription')} title={t('itemTitle')}>
         <div className="grid gap-3">
           {partSearchAllowed && (
             <PartSearchPicker
@@ -1009,59 +1062,51 @@ export function OrderForm({
             <Plus aria-hidden />
             {t('addPart')}
           </Button>
-
-          {draftItems.length > 0 && (
-            <div
-              aria-label={t('orderItems')}
-              className="border-app-line grid gap-2 border-t pt-3"
-            >
-              {draftItems.map((item) => (
-                <div
-                  className="rz-inset grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-2"
-                  key={item.part.id}
-                >
-                  <div className="min-w-0">
-                    <p className="rz-strong m-0 truncate font-medium">
-                      {item.part.name}
-                    </p>
-                    <p className="rz-caption rz-mono m-0">
-                      {item.quantity} ×{' '}
-                      {money(item.unitPrice, guard.currency, locale)}
-                    </p>
-                  </div>
-                  <p className="rz-num rz-strong m-0 whitespace-nowrap">
-                    {money(
-                      item.quantity * item.unitPrice,
-                      guard.currency,
-                      locale,
-                    )}
-                  </p>
-                  <Button
-                    aria-label={t('removeItem', { name: item.part.name })}
-                    size="icon"
-                    onClick={() =>
-                      setDraftItems((current) =>
-                        current.filter(
-                          (draft) => draft.part.id !== item.part.id,
-                        ),
-                      )
-                    }
-                    variant="quiet"
-                  >
-                    <Trash2 aria-hidden />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
-      </SectionPanel>
+      </SheetGroup>
+      {draftItems.length > 0 && (
+        <SheetGroup>
+          <p aria-hidden className="rz-label m-0">
+            {t('orderItems')}
+          </p>
+          <SheetList label={t('orderItems')}>
+            {draftItems.map((item) => (
+              <li key={item.part.id}>
+                <div className="min-w-0 flex-1">
+                  <p className="rz-strong m-0 truncate font-semibold">
+                    {item.part.name}
+                  </p>
+                  <p className="rz-caption rz-mono m-0">
+                    {item.quantity} ×{' '}
+                    {money(item.unitPrice, guard.currency, locale)}
+                  </p>
+                </div>
+                <p className="rz-num rz-strong m-0 whitespace-nowrap">
+                  {money(
+                    item.quantity * item.unitPrice,
+                    guard.currency,
+                    locale,
+                  )}
+                </p>
+                <Button
+                  aria-label={t('removeItem', { name: item.part.name })}
+                  size="icon"
+                  onClick={() =>
+                    setDraftItems((current) =>
+                      current.filter((draft) => draft.part.id !== item.part.id),
+                    )
+                  }
+                  variant="quiet"
+                >
+                  <X aria-hidden />
+                </Button>
+              </li>
+            ))}
+          </SheetList>
+        </SheetGroup>
+      )}
       {customerSearchAllowed && (
-        <SectionPanel
-          variant="plain"
-          description={t('customerDescription')}
-          title={t('customerTitle')}
-        >
+        <SheetGroup hint={t('customerDescription')} title={t('customerTitle')}>
           <div className="grid gap-3" ref={customerPickerRef}>
             <Field
               hint={customerId ? undefined : t('noCustomerChosen')}
@@ -1207,33 +1252,34 @@ export function OrderForm({
               </Notice>
             )}
           </div>
-        </SectionPanel>
+        </SheetGroup>
       )}
-      <SectionPanel variant="plain" title={t('notes')}>
-        <div>
-          <Field hint={t('notesHint')} label={t('notes')}>
-            <TextArea
-              onChange={(event) => setNotes(event.target.value)}
-              value={notes}
-            />
-          </Field>
-        </div>
-      </SectionPanel>
+      <Field hint={t('notesHint')} label={t('notes')}>
+        <TextArea
+          onChange={(event) => setNotes(event.target.value)}
+          value={notes}
+        />
+      </Field>
 
       {draftItems.length > 0 && (
-        <div aria-label={t('summary')} className="rz-inset mt-3" role="group">
-          <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <div>
-              <p className="rz-muted m-0">{t('orderTotal')}</p>
-              <p className="rz-caption m-0">
+        <SheetGroup title={t('summary')}>
+          <div className="rz-inset grid gap-0 py-1">
+            <div className="flex items-baseline justify-between gap-3 py-1.5">
+              <span className="rz-muted">
                 {t('itemCount', { count: draftItems.length })}
-              </p>
+              </span>
+              <span className="rz-mono">
+                {money(draftItemsTotal, guard.currency, locale)}
+              </span>
             </div>
-            <p className="rz-mono rz-strong m-0 text-title">
-              {money(draftItemsTotal, guard.currency, locale)}
-            </p>
+            <div className="border-app-line flex items-baseline justify-between gap-3 border-t py-1.5">
+              <span className="rz-strong font-semibold">{t('orderTotal')}</span>
+              <span className="rz-mono rz-strong font-bold">
+                {money(draftItemsTotal, guard.currency, locale)}
+              </span>
+            </div>
           </div>
-        </div>
+        </SheetGroup>
       )}
     </form>
   )
@@ -1244,6 +1290,9 @@ export function OrderForm({
       footer={
         <div className="flex w-full flex-wrap items-center gap-2">
           <div className="basis-full empty:hidden">{itemPrices.saveNotes}</div>
+          <p className="rz-muted m-0 mr-auto">
+            {t('itemCount', { count: draftItems.length })}
+          </p>
           <div className="rz-btn-row ml-auto">
             <Button disabled={busy} onClick={closeCreate} type="button">
               {tc('cancel')}
@@ -1417,21 +1466,44 @@ function OrderDetailScreen({
       setBusy(false)
     }
   }
+  const ordersPath = location.pathname.replace(/\/orders\/.*$/, '/orders')
+  const crumbTrail = (current: string) => (
+    <>
+      <span className="max-sm:hidden">{t('eyebrow')}</span>
+      <ChevronRight aria-hidden className="size-3 max-sm:hidden" />
+      <Link to={ordersPath}>{t('title')}</Link>
+      <ChevronRight aria-hidden className="size-3" />
+      <span aria-current="page">{current}</span>
+    </>
+  )
   if (error && !order)
     return (
-      <div className="rz-page max-w-[1240px]">
+      <RedesignShell crumb={crumbTrail(t('title'))} width="record">
         <ErrorState
+          actions={
+            <>
+              <Button asChild>
+                <Link to={ordersPath}>
+                  <ArrowLeft aria-hidden />
+                  {t('backToOrders')}
+                </Link>
+              </Button>
+              <Button onClick={() => void reload()}>
+                <RefreshCw aria-hidden />
+                {tc('retry')}
+              </Button>
+            </>
+          }
           description={error}
-          onRetry={() => void reload()}
           title={t('loadFailed')}
         />
-      </div>
+      </RedesignShell>
     )
   if (!order)
     return (
-      <div className="rz-page max-w-[1240px]">
-        <SkeletonRows label={t('loading')} rows={4} />
-      </div>
+      <RedesignShell crumb={crumbTrail(t('title'))} width="record">
+        <SkeletonRows label={t('loading')} rows={8} />
+      </RedesignShell>
     )
   const status = orderStatusPresentation(order.status, locale)
   const orderEditable =
@@ -1475,7 +1547,6 @@ function OrderDetailScreen({
             Number.isFinite(order.totalAmount)
           ? order.totalAmount
           : null
-  const ordersPath = location.pathname.replace(/\/orders\/.*$/, '/orders')
   const moduleBase = location.pathname.replace(/\/orders\/.*$/, '')
   const partsPath =
     cabinet.snapshot?.permissions.has('parts.view') === true
@@ -1600,22 +1671,32 @@ function OrderDetailScreen({
   const visibleHistoryRows = historyExpanded
     ? historyRows
     : historyRows.slice(0, 3)
+  const canConfirm = ordinaryFinance && order.status === 'pending'
+  const canRefund = ordinaryFinance && order.status === 'confirmed'
+  const confirmOrder = () => {
+    const input = {
+      payments: order.payments.map(({ accountId, amount, currency }) => ({
+        accountId,
+        amount,
+        currency,
+      })),
+    }
+    void transition(
+      (idempotencyKey) =>
+        ordersApi.confirm(order.id, input, {
+          idempotencyKey: idempotencyKey!,
+        }),
+      {
+        operation: 'order-confirm',
+        payload: { orderId: order.id, input },
+      },
+      'finance.manage',
+    )
+  }
   return (
-    <div className="grid content-start">
-      <header className="rz-topbar h-auto min-h-topbar flex-wrap gap-y-1.5 py-1.5">
-        <p className="rz-crumbs m-0">
-          <Link className="flex items-center gap-1" to={ordersPath}>
-            <ChevronLeft aria-hidden className="size-3.5" />
-            {t('backToOrders')}
-          </Link>
-          <ChevronRight aria-hidden className="size-3" />
-          <span className="max-sm:hidden">{t('eyebrow')}</span>
-          <ChevronRight aria-hidden className="size-3 max-sm:hidden" />
-          <span aria-current="page">
-            {t('orderTitle', { number: String(order.number) })}
-          </span>
-        </p>
-        <div className="rz-topbar__actions flex-wrap items-center">
+    <RedesignShell
+      actions={
+        <>
           <Button disabled title={t('printUnavailable')}>
             <Printer aria-hidden />
             {t('print')}
@@ -1636,542 +1717,505 @@ function OrderDetailScreen({
               label={t('moreActions')}
             />
           ) : null}
-        </div>
-      </header>
-
-      <div className="rz-page max-w-[1240px]">
-        <div className="grid gap-2">
-          <div className="rz-page-head">
-            <h1 className="rz-h-page">
-              {t('orderTitle', { number: String(order.number) })}
-            </h1>
-            <StatusPill
-              tone={
-                deliveryMoney === null
-                  ? status.tone
-                  : orderChip(deliveryMoney, locale).tone
-              }
-            >
-              {deliveryMoney === null
-                ? status.label
-                : orderChip(deliveryMoney, locale).label}
-            </StatusPill>
-            <p className="rz-muted m-0">
-              {t('createdBy', {
-                when: formatTimestamp(order.createdAt),
-                who: order.createdByName,
-              })}
-            </p>
-          </div>
+          {/* Confirming is the operator's acknowledgement of full payment
+              (R-10): it does not wait for a payment and compares nothing
+              with the value. */}
+          {canConfirm ? (
+            <Button disabled={busy} onClick={confirmOrder} variant="primary">
+              <Check aria-hidden />
+              {t('confirmOrder')}
+            </Button>
+          ) : canRefund ? (
+            <Button onClick={() => changeRefundOpen(!refundOpen)}>
+              <Undo2 aria-hidden />
+              {t('startRefund')}
+            </Button>
+          ) : null}
+        </>
+      }
+      crumb={crumbTrail(`#${String(order.number)}`)}
+      width="record"
+    >
+      <div className="grid gap-1.5">
+        <div className="rz-page-head">
+          <h1 className="rz-h-page">
+            {t('orderTitle', { number: String(order.number) })}
+          </h1>
           {deliveryMoney === null ? (
             <OrderSteps steps={orderSteps(order, formatTimestamp, locale)} />
           ) : null}
         </div>
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <StatusPill
+            tone={
+              deliveryMoney === null
+                ? status.tone
+                : orderChip(deliveryMoney, locale).tone
+            }
+          >
+            {deliveryMoney === null
+              ? status.label
+              : orderChip(deliveryMoney, locale).label}
+          </StatusPill>
+          <p className="rz-caption m-0">
+            {t('createdBy', {
+              when: formatTimestamp(order.createdAt),
+              who: order.createdByName,
+            })}
+          </p>
+        </div>
+      </div>
 
-        {deliveryMoney === null ? null : (
-          <DeliveryOrderBody
-            countryCode={novaPoshta.countryCode}
-            accountingCurrency={currency}
-            customerPath={customerPath}
-            delivery={deliveryMoney}
-            financeAllowed={financeAllowed}
-            integrationsPath={integrationsPath}
-            load={deliveryLoad}
-            mutationsAllowed={mutationsAllowed}
-            novaPoshtaAvailable={novaPoshta.available}
-            order={order}
-            partsPath={partsPath}
-          />
-        )}
+      {deliveryMoney === null ? null : (
+        <DeliveryOrderBody
+          countryCode={novaPoshta.countryCode}
+          accountingCurrency={currency}
+          customerPath={customerPath}
+          delivery={deliveryMoney}
+          financeAllowed={financeAllowed}
+          integrationsPath={integrationsPath}
+          load={deliveryLoad}
+          mutationsAllowed={mutationsAllowed}
+          novaPoshtaAvailable={novaPoshta.available}
+          order={order}
+          partsPath={partsPath}
+        />
+      )}
 
-        {error && paymentOrderId !== order.id && !refundOpen ? (
-          <Notice tone="danger">{error}</Notice>
-        ) : null}
+      {error && paymentOrderId !== order.id && !refundOpen ? (
+        <Notice tone="danger">{error}</Notice>
+      ) : null}
 
-        {deliveryOrder ? null : (
-          <div className="flex flex-wrap items-start gap-4">
-            <div className="grid min-w-0 flex-[1_1_480px] gap-4">
-              {itemsEditable ? (
-                <SectionPanel
-                  aside={
-                    <span className="rz-mono">
-                      {t('itemsTotal', {
-                        amount: money(draftsTotal, currency, locale),
-                      })}
-                    </span>
-                  }
-                  description={
-                    itemDrafts.length === 1
-                      ? t('lastItemHint')
-                      : t('editItemsHint')
-                  }
-                  footer={
-                    <>
-                      <div className="basis-full empty:hidden">
-                        {itemPrices.saveNotes}
-                      </div>
-                      <Button
-                        disabled={
-                          busy || !itemDraftsValid || itemPrices.disabled
-                        }
-                        onClick={() => saveItemDrafts()}
-                        variant="primary"
+      {deliveryOrder ? null : (
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="grid min-w-0 gap-3.5">
+            {itemsEditable ? (
+              <SectionPanel
+                aside={
+                  <span className="rz-mono">
+                    {t('itemsTotal', {
+                      amount: money(draftsTotal, currency, locale),
+                    })}
+                  </span>
+                }
+                description={
+                  itemDrafts.length === 1
+                    ? t('lastItemHint')
+                    : t('editItemsHint')
+                }
+                footer={
+                  <>
+                    <div className="basis-full empty:hidden">
+                      {itemPrices.saveNotes}
+                    </div>
+                    <Button
+                      disabled={busy || !itemDraftsValid || itemPrices.disabled}
+                      onClick={() => saveItemDrafts()}
+                      variant="primary"
+                    >
+                      {t('saveItems')}
+                    </Button>
+                    <Button
+                      disabled={busy}
+                      onClick={() => {
+                        setItemDrafts(order.items)
+                        setEditingItems(false)
+                        setError(null)
+                      }}
+                      variant="ghost"
+                    >
+                      {tc('cancel')}
+                    </Button>
+                  </>
+                }
+                title={t('items')}
+              >
+                {itemDrafts.length === 0 && (
+                  <p className="text-app-muted m-0">{t('noItems')}</p>
+                )}
+                <ul className="m-0 grid list-none p-0">
+                  {visibleItems.map((item, visibleIndex) => {
+                    const index = (itemsPage - 1) * itemsPageSize + visibleIndex
+                    return (
+                      <li
+                        className="border-app-line grid gap-3 border-t py-2.5 first:border-t-0 first:pt-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+                        key={item.id}
                       >
-                        {t('saveItems')}
-                      </Button>
-                      <Button
-                        disabled={busy}
-                        onClick={() => {
-                          setItemDrafts(order.items)
-                          setEditingItems(false)
-                          setError(null)
-                        }}
-                        variant="ghost"
-                      >
-                        {tc('cancel')}
-                      </Button>
-                    </>
-                  }
-                  title={t('items')}
-                >
-                  {itemDrafts.length === 0 && (
-                    <p className="text-app-muted m-0">{t('noItems')}</p>
-                  )}
-                  <ul className="m-0 grid list-none p-0">
-                    {visibleItems.map((item, visibleIndex) => {
-                      const index =
-                        (itemsPage - 1) * itemsPageSize + visibleIndex
-                      return (
-                        <li
-                          className="border-app-line grid gap-3 border-t py-2.5 first:border-t-0 first:pt-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
-                          key={item.id}
-                        >
-                          <div className="min-w-0">
-                            <p className="rz-strong m-0 truncate font-medium">
-                              {item.partName}
-                            </p>
-                            <p className="rz-caption rz-mono m-0">
-                              {t('lineTotal', {
-                                amount: money(
-                                  lineTotal(item.quantity, item.unitPrice),
-                                  currency,
-                                  locale,
-                                ),
-                              })}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap items-end gap-2">
-                            <div className="rz-field w-20">
-                              <span aria-hidden className="rz-label">
-                                {t('quantity')}
-                              </span>
-                              <TextInput
-                                aria-label={t('quantityOf', {
-                                  name: item.partName,
-                                })}
-                                className="rz-input--sm"
-                                inputMode="numeric"
-                                numeric
-                                onChange={(event) =>
-                                  setItemDrafts((current) =>
-                                    current.map((draft, draftIndex) =>
-                                      draftIndex === index
-                                        ? {
-                                            ...draft,
-                                            quantity: Number(
-                                              event.target.value,
-                                            ),
-                                          }
-                                        : draft,
-                                    ),
-                                  )
-                                }
-                                value={item.quantity}
-                              />
-                            </div>
-                            <div className="rz-field w-28">
-                              <span aria-hidden className="rz-label">
-                                {t('price')}
-                              </span>
-                              <TextInput
-                                aria-label={
-                                  currency === null
-                                    ? t('priceOf', { name: item.partName })
-                                    : t('priceOfIn', {
-                                        name: item.partName,
-                                        code: currency,
-                                      })
-                                }
-                                className="rz-input--sm"
-                                inputMode="decimal"
-                                numeric
-                                onChange={(event) =>
-                                  setItemDrafts((current) =>
-                                    current.map((draft, draftIndex) =>
-                                      draftIndex === index
-                                        ? {
-                                            ...draft,
-                                            unitPrice: Number(
-                                              event.target.value,
-                                            ),
-                                          }
-                                        : draft,
-                                    ),
-                                  )
-                                }
-                                value={item.unitPrice}
-                              />
-                            </div>
-                            <Button
-                              aria-label={t('deleteItem', {
+                        <div className="min-w-0">
+                          <p className="rz-strong m-0 truncate font-medium">
+                            {item.partName}
+                          </p>
+                          <p className="rz-caption rz-mono m-0">
+                            {t('lineTotal', {
+                              amount: money(
+                                lineTotal(item.quantity, item.unitPrice),
+                                currency,
+                                locale,
+                              ),
+                            })}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-end gap-2">
+                          <div className="rz-field w-20">
+                            <span aria-hidden className="rz-label">
+                              {t('quantity')}
+                            </span>
+                            <TextInput
+                              aria-label={t('quantityOf', {
                                 name: item.partName,
                               })}
-                              disabled={busy}
-                              onClick={() =>
-                                void transition(() =>
-                                  itemDrafts.length === 1
-                                    ? ordersApi.cancel(order.id)
-                                    : ordersApi.updateItems(
-                                        order.id,
-                                        itemDrafts
-                                          .filter(
-                                            (_, draftIndex) =>
-                                              draftIndex !== index,
-                                          )
-                                          .map(
-                                            ({
-                                              partId,
-                                              quantity,
-                                              unitPrice,
-                                            }) => ({
-                                              partId,
-                                              quantity,
-                                              unitPrice,
-                                            }),
-                                          ),
-                                      ),
+                              className="rz-input--sm"
+                              inputMode="numeric"
+                              numeric
+                              onChange={(event) =>
+                                setItemDrafts((current) =>
+                                  current.map((draft, draftIndex) =>
+                                    draftIndex === index
+                                      ? {
+                                          ...draft,
+                                          quantity: Number(event.target.value),
+                                        }
+                                      : draft,
+                                  ),
                                 )
                               }
-                              size="icon"
-                              variant="danger"
-                            >
-                              <Trash2 aria-hidden />
-                            </Button>
+                              value={item.quantity}
+                            />
                           </div>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                  {itemDrafts.length > itemsPageSize ? (
-                    <Pagination
-                      label={t('itemsPages')}
-                      onPage={setItemsPage}
-                      page={itemsPage}
-                      totalPages={itemsTotalPages}
-                    />
-                  ) : null}
-                </SectionPanel>
-              ) : (
-                <OrderItemsCard
-                  addPath={
-                    orderEditable ? `${location.pathname}/items/new` : null
-                  }
-                  editable={orderEditable}
-                  items={order.items}
-                  onEdit={() => {
-                    setItemDrafts(order.items)
-                    setEditingItems(true)
-                    setError(null)
-                  }}
-                  currency={currency}
-                  partsPath={partsPath}
-                  total={orderTotalUsd}
-                />
-              )}
-
-              {deliveryOrder ? null : (
-                <OrderPaymentsCard
-                  paidLine={
-                    summary.paid.length === 0
-                      ? null
-                      : moneyList(summary.paid, ' · ', locale)
-                  }
-                  payments={order.payments}
-                />
-              )}
-
-              <OrderNotesCard
-                busy={busy}
-                editable={orderEditable}
-                notes={order.notes}
-                onSave={(value) =>
-                  void transition(() => ordersApi.updateNotes(order.id, value))
-                }
-              />
-            </div>
-
-            <aside className="grid max-w-full min-w-0 flex-[1_1_280px] gap-4 lg:sticky lg:top-(--rz-topbar-h) lg:max-w-95">
-              {deliveryOrder ? null : (
-                <OrderDueCard
-                  actions={
-                    ordinaryFinance && order.status === 'pending' ? (
-                      <>
-                        <Button
-                          disabled={busy}
-                          onClick={() => setPaymentOrderId(order.id)}
-                          size="wide"
-                          variant="primary"
-                        >
-                          {t('addPayment')}
-                        </Button>
-                        {/* Confirming is the operator's acknowledgement of
-                            full payment (R-10): it does not wait for a
-                            payment and compares nothing with the value. */}
-                        <Button
-                          disabled={busy}
-                          size="wide"
-                          onClick={() => {
-                            const input = {
-                              payments: order.payments.map(
-                                ({ accountId, amount, currency }) => ({
-                                  accountId,
-                                  amount,
-                                  currency,
-                                }),
-                              ),
+                          <div className="rz-field w-28">
+                            <span aria-hidden className="rz-label">
+                              {t('price')}
+                            </span>
+                            <TextInput
+                              aria-label={
+                                currency === null
+                                  ? t('priceOf', { name: item.partName })
+                                  : t('priceOfIn', {
+                                      name: item.partName,
+                                      code: currency,
+                                    })
+                              }
+                              className="rz-input--sm"
+                              inputMode="decimal"
+                              numeric
+                              onChange={(event) =>
+                                setItemDrafts((current) =>
+                                  current.map((draft, draftIndex) =>
+                                    draftIndex === index
+                                      ? {
+                                          ...draft,
+                                          unitPrice: Number(event.target.value),
+                                        }
+                                      : draft,
+                                  ),
+                                )
+                              }
+                              value={item.unitPrice}
+                            />
+                          </div>
+                          <Button
+                            aria-label={t('deleteItem', {
+                              name: item.partName,
+                            })}
+                            disabled={busy}
+                            onClick={() =>
+                              void transition(() =>
+                                itemDrafts.length === 1
+                                  ? ordersApi.cancel(order.id)
+                                  : ordersApi.updateItems(
+                                      order.id,
+                                      itemDrafts
+                                        .filter(
+                                          (_, draftIndex) =>
+                                            draftIndex !== index,
+                                        )
+                                        .map(
+                                          ({
+                                            partId,
+                                            quantity,
+                                            unitPrice,
+                                          }) => ({
+                                            partId,
+                                            quantity,
+                                            unitPrice,
+                                          }),
+                                        ),
+                                    ),
+                              )
                             }
-                            void transition(
-                              (idempotencyKey) =>
-                                ordersApi.confirm(order.id, input, {
-                                  idempotencyKey: idempotencyKey!,
-                                }),
-                              {
-                                operation: 'order-confirm',
-                                payload: { orderId: order.id, input },
-                              },
-                              'finance.manage',
-                            )
-                          }}
-                        >
-                          {t('confirmOrder')}
-                        </Button>
-                      </>
-                    ) : ordinaryFinance && order.status === 'confirmed' ? (
-                      <Button
-                        onClick={() => changeRefundOpen(!refundOpen)}
-                        size="wide"
-                        variant="danger"
-                      >
-                        {t('startRefund')}
-                      </Button>
-                    ) : null
-                  }
-                  accountingCurrency={currency}
-                  hint={
-                    ordinaryFinance && order.status === 'pending'
-                      ? tp('confirmNote')
-                      : ordinaryFinance && order.status === 'confirmed'
-                        ? t('refundHint')
-                        : null
-                  }
-                  summary={summary}
-                  tills={[
-                    ...new Set(
-                      order.payments.map((payment) => payment.accountName),
-                    ),
-                  ]}
-                />
-              )}
-
-              <OrderCustomerCard
-                accountingCurrency={currency}
-                customerId={order.customerId}
-                customerName={order.customerName}
-                initials={initials(order.customerName ?? '—')}
-                onChange={
-                  orderEditable ? () => setCustomerOpen(true) : undefined
+                            size="icon"
+                            variant="danger"
+                          >
+                            <Trash2 aria-hidden />
+                          </Button>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+                {itemDrafts.length > itemsPageSize ? (
+                  <Pagination
+                    label={t('itemsPages')}
+                    onPage={setItemsPage}
+                    page={itemsPage}
+                    totalPages={itemsTotalPages}
+                  />
+                ) : null}
+              </SectionPanel>
+            ) : (
+              <OrderItemsCard
+                addPath={
+                  orderEditable ? `${location.pathname}/items/new` : null
                 }
-                to={customerPath ?? '#'}
+                editable={orderEditable}
+                items={order.items}
+                onEdit={() => {
+                  setItemDrafts(order.items)
+                  setEditingItems(true)
+                  setError(null)
+                }}
+                currency={currency}
+                partsPath={partsPath}
+                total={orderTotalUsd}
               />
+            )}
 
-              {/* Whether an order ships is Core's decision, not the carrier's:
-                  offering it only while Nova Poshta answers made the order's
-                  kind depend on an integration that has nothing to do with it. */}
-              {deliveryLoad.state !== null && order.status === 'pending' ? (
-                <DeliveryConfigureCard
-                  mutationsAllowed={mutationsAllowed}
-                  novaPoshtaAvailable={novaPoshta.available}
-                  onConfigured={deliveryLoad.setMoney}
-                  orderId={order.id}
-                />
-              ) : null}
-
-              <section aria-labelledby={historyTitleId} className="rz-card">
-                <div className="rz-card__head py-2">
-                  <h2 className="rz-h-card" id={historyTitleId}>
-                    {t('history')}
-                  </h2>
-                </div>
-                {historyRows.length === 0 ? (
-                  <p className="rz-card__body text-app-muted m-0">
-                    {t('historyEmpty')}
-                  </p>
-                ) : (
-                  <>
-                    <OrderTimeline
-                      label={t('historyLabel')}
-                      rows={visibleHistoryRows}
-                      title={(eventType) => orderEventTitle(eventType, locale)}
-                      when={formatTimestamp}
-                    />
-                    {historyRows.length > 3 ? (
-                      <div className="rz-card__foot">
-                        <Button
-                          className="justify-center"
-                          onClick={() =>
-                            setHistoryExpanded((expanded) => !expanded)
-                          }
-                          size="wide"
-                          variant="quiet"
-                        >
-                          {historyExpanded
-                            ? t('historyCollapse')
-                            : t('historyExpand')}
-                        </Button>
-                      </div>
-                    ) : null}
-                  </>
-                )}
-              </section>
-            </aside>
-          </div>
-        )}
-        <ConfirmDialog
-          confirmLabel={
-            summary.paid.length === 0
-              ? tp('refundNothing')
-              : tp('refundLabel', {
-                  amounts: moneyList(summary.paid, tp('and'), locale),
-                })
-          }
-          confirmDisabled={!refundReason.trim()}
-          consequence={t('refundConsequence')}
-          destructive
-          effects={refundEffects(order, summary, locale)}
-          error={refundOpen ? error : null}
-          icon={RotateCcw}
-          onConfirm={() => {
-            const normalizedReason = refundReason.trim()
-            if (!normalizedReason) return
-            const input = { refundReason: normalizedReason }
-            void transition(
-              (idempotencyKey) =>
-                ordersApi.refund(order.id, input, {
-                  idempotencyKey: idempotencyKey!,
-                }),
-              {
-                operation: 'order-refund',
-                payload: { orderId: order.id, input },
-              },
-              'finance.manage',
-            ).then((done) => {
-              if (done) changeRefundOpen(false)
-            })
-          }}
-          onOpenChange={changeRefundOpen}
-          open={refundOpen && ordinaryFinance && order.status === 'confirmed'}
-          pending={busy}
-          title={t('refundTitle')}
-        >
-          <Field label={t('refundReason')}>
-            <TextInput
-              onChange={(event) => setRefundReason(event.target.value)}
-              placeholder={t('refundReasonPlaceholder')}
-              value={refundReason}
+            <OrderPaymentsCard
+              action={
+                canConfirm ? (
+                  <Button
+                    className="relative after:absolute after:-inset-2 after:content-['']"
+                    disabled={busy}
+                    onClick={() => setPaymentOrderId(order.id)}
+                    size="sm"
+                  >
+                    <Banknote aria-hidden />
+                    {t('addPayment')}
+                  </Button>
+                ) : null
+              }
+              paidLine={
+                summary.paid.length === 0
+                  ? null
+                  : moneyList(summary.paid, ' · ', locale)
+              }
+              payments={order.payments}
             />
-          </Field>
-        </ConfirmDialog>
 
-        <OrderItemDrawer
-          busy={busy}
-          draft={itemDraft.initial}
-          error={addingItem ? error : null}
-          guard={guard}
-          onKeepDraft={itemDraft.keep}
-          onOpenChange={(next) => {
-            if (!next) void navigate(`${ordersPath}/${order.id}`)
-          }}
-          onSubmit={(item, accepted) => {
-            const add = () =>
-              void transition(
-                () =>
-                  ordersApi.updateItems(order.id, [
-                    ...order.items.map(({ partId, quantity, unitPrice }) => ({
-                      partId,
-                      quantity,
-                      unitPrice,
-                    })),
-                    item,
-                  ]),
-                undefined,
-                // The part was chosen from the catalogue; losing the right to
-                // read it between opening the drawer and saving stops the save.
-                'parts.view',
-              ).then((saved) => {
-                if (saved) {
-                  guard.afterSave(true)
-                  toast?.show({ message: t('itemAdded'), tone: 'ok' })
-                  void navigate(`${ordersPath}/${order.id}`)
-                }
+            <section aria-labelledby={historyTitleId} className="rz-card">
+              <div className="rz-card__head py-2">
+                <h2 className="rz-h-card" id={historyTitleId}>
+                  {t('history')}
+                </h2>
+              </div>
+              {historyRows.length === 0 ? (
+                <p className="rz-card__body text-app-muted m-0">
+                  {t('historyEmpty')}
+                </p>
+              ) : (
+                <>
+                  <OrderTimeline
+                    label={t('historyLabel')}
+                    rows={visibleHistoryRows}
+                    title={(eventType) => orderEventTitle(eventType, locale)}
+                    when={formatTimestamp}
+                  />
+                  {historyRows.length > 3 ? (
+                    <div className="rz-card__foot">
+                      <Button
+                        className="justify-center"
+                        onClick={() =>
+                          setHistoryExpanded((expanded) => !expanded)
+                        }
+                        size="wide"
+                        variant="quiet"
+                      >
+                        {historyExpanded
+                          ? t('historyCollapse')
+                          : t('historyExpand')}
+                      </Button>
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </section>
+          </div>
+
+          <aside className="grid min-w-0 gap-3.5 lg:sticky lg:top-(--rz-topbar-h)">
+            <OrderDueCard
+              accountingCurrency={currency}
+              actions={null}
+              hint={
+                canConfirm
+                  ? tp('confirmNote')
+                  : canRefund
+                    ? t('refundHint')
+                    : null
+              }
+              summary={summary}
+              tills={[
+                ...new Set(
+                  order.payments.map((payment) => payment.accountName),
+                ),
+              ]}
+            />
+
+            <OrderCustomerCard
+              accountingCurrency={currency}
+              customerId={order.customerId}
+              customerName={order.customerName}
+              initials={initials(order.customerName ?? '—')}
+              onChange={orderEditable ? () => setCustomerOpen(true) : undefined}
+              to={customerPath ?? '#'}
+            />
+
+            {/* Whether an order ships is Core's decision, not the carrier's:
+                offering it only while Nova Poshta answers made the order's
+                kind depend on an integration that has nothing to do with it. */}
+            {deliveryLoad.state !== null && order.status === 'pending' ? (
+              <DeliveryConfigureCard
+                mutationsAllowed={mutationsAllowed}
+                novaPoshtaAvailable={novaPoshta.available}
+                onConfigured={deliveryLoad.setMoney}
+                orderId={order.id}
+              />
+            ) : null}
+
+            <OrderNotesCard
+              busy={busy}
+              editable={orderEditable}
+              notes={order.notes}
+              onSave={(value) =>
+                void transition(() => ordersApi.updateNotes(order.id, value))
+              }
+            />
+          </aside>
+        </div>
+      )}
+      <ConfirmDialog
+        confirmLabel={
+          summary.paid.length === 0
+            ? tp('refundNothing')
+            : tp('refundLabel', {
+                amounts: moneyList(summary.paid, tp('and'), locale),
               })
-            withPriceCheck(add, accepted)
-          }}
-          open={addingItem && orderEditable}
-          orderNumber={order.number}
-          orderTotal={orderTotalUsd}
-          takenPartIds={order.items.map((item) => item.partId)}
-        />
+        }
+        confirmDisabled={!refundReason.trim()}
+        consequence={t('refundConsequence')}
+        destructive
+        effects={refundEffects(order, summary, locale)}
+        error={refundOpen ? error : null}
+        onConfirm={() => {
+          const normalizedReason = refundReason.trim()
+          if (!normalizedReason) return
+          const input = { refundReason: normalizedReason }
+          void transition(
+            (idempotencyKey) =>
+              ordersApi.refund(order.id, input, {
+                idempotencyKey: idempotencyKey!,
+              }),
+            {
+              operation: 'order-refund',
+              payload: { orderId: order.id, input },
+            },
+            'finance.manage',
+          ).then((done) => {
+            if (done) changeRefundOpen(false)
+          })
+        }}
+        onOpenChange={changeRefundOpen}
+        open={refundOpen && ordinaryFinance && order.status === 'confirmed'}
+        pending={busy}
+        title={t('refundTitle')}
+      >
+        <Field label={t('refundReason')}>
+          <TextInput
+            onChange={(event) => setRefundReason(event.target.value)}
+            placeholder={t('refundReasonPlaceholder')}
+            value={refundReason}
+          />
+        </Field>
+      </ConfirmDialog>
 
-        <OrderCustomerDrawer
-          busy={busy}
-          currentId={order.customerId}
-          currentName={order.customerName}
-          error={customerOpen ? error : null}
-          onAssign={(customerId) => {
-            void transition(() =>
-              ordersApi.setCustomer(order.id, customerId),
+      <OrderItemDrawer
+        busy={busy}
+        draft={itemDraft.initial}
+        error={addingItem ? error : null}
+        guard={guard}
+        onKeepDraft={itemDraft.keep}
+        onOpenChange={(next) => {
+          if (!next) void navigate(`${ordersPath}/${order.id}`)
+        }}
+        onSubmit={(item, accepted) => {
+          const add = () =>
+            void transition(
+              () =>
+                ordersApi.updateItems(order.id, [
+                  ...order.items.map(({ partId, quantity, unitPrice }) => ({
+                    partId,
+                    quantity,
+                    unitPrice,
+                  })),
+                  item,
+                ]),
+              undefined,
+              // The part was chosen from the catalogue; losing the right to
+              // read it between opening the drawer and saving stops the save.
+              'parts.view',
             ).then((saved) => {
               if (saved) {
-                setCustomerOpen(false)
-                toast?.show({ message: t('customerAssigned'), tone: 'ok' })
+                guard.afterSave(true)
+                toast?.show({ message: t('itemAdded'), tone: 'ok' })
+                void navigate(`${ordersPath}/${order.id}`)
               }
             })
-          }}
-          onOpenChange={setCustomerOpen}
-          open={customerOpen && orderEditable}
-          orderNumber={order.number}
-        />
+          withPriceCheck(add, accepted)
+        }}
+        open={addingItem && orderEditable}
+        orderNumber={order.number}
+        orderTotal={orderTotalUsd}
+        takenPartIds={order.items.map((item) => item.partId)}
+      />
 
-        {ordinaryFinance &&
-        order.status === 'pending' &&
-        paymentOrderId === order.id ? (
-          <OrderPaymentDrawer
-            accountingCurrency={currency}
-            busy={busy}
-            existing={order.payments}
-            onOpenChange={(next) => {
-              setPaymentOutcome(null)
-              setPaymentOrderId(next ? order.id : null)
-            }}
-            onSave={(payments, added) => void savePayment(payments, added)}
-            open
-            orderNumber={order.number}
-            orderValue={summary.value}
-            outcome={paymentOutcome}
-          />
-        ) : null}
-      </div>
-    </div>
+      <OrderCustomerDrawer
+        busy={busy}
+        currentId={order.customerId}
+        currentName={order.customerName}
+        error={customerOpen ? error : null}
+        onAssign={(customerId) => {
+          void transition(() =>
+            ordersApi.setCustomer(order.id, customerId),
+          ).then((saved) => {
+            if (saved) {
+              setCustomerOpen(false)
+              toast?.show({ message: t('customerAssigned'), tone: 'ok' })
+            }
+          })
+        }}
+        onOpenChange={setCustomerOpen}
+        open={customerOpen && orderEditable}
+        orderNumber={order.number}
+      />
+
+      {ordinaryFinance &&
+      order.status === 'pending' &&
+      paymentOrderId === order.id ? (
+        <OrderPaymentDrawer
+          accountingCurrency={currency}
+          busy={busy}
+          existing={order.payments}
+          onOpenChange={(next) => {
+            setPaymentOutcome(null)
+            setPaymentOrderId(next ? order.id : null)
+          }}
+          onSave={(payments, added) => void savePayment(payments, added)}
+          open
+          orderNumber={order.number}
+          orderValue={summary.value}
+          outcome={paymentOutcome}
+        />
+      ) : null}
+    </RedesignShell>
   )
 }
 

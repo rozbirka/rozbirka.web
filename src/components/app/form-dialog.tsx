@@ -165,6 +165,12 @@ export function Sheet({
       <Dialog.Portal>
         <Dialog.Overlay className="bg-app-scrim fixed inset-0 z-50" />
         <Dialog.Content
+          // Land on the sheet itself, not its close button: the reference
+          // opens without a focus ring, and Tab still reaches every control.
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            ;(event.currentTarget as HTMLElement | null)?.focus()
+          }}
           // A hidden file input can receive focus when a photo is chosen.
           // Clip the shell without making it scrollable; only the body scrolls.
           className={cn(
@@ -176,18 +182,22 @@ export function Sheet({
                 : '',
           )}
         >
-          <header className="border-app-line flex items-start gap-3 border-b p-4">
-            <div className="grid min-w-0 flex-1 gap-1">
-              {eyebrow === undefined ? null : (
-                <p className="rz-eyebrow m-0">{eyebrow}</p>
-              )}
-              <Dialog.Title className="rz-h-page text-balance">
+          {/* Scheme 1b: header band with a 16px title and one muted line
+              under it — the description, or the eyebrow when there is none. */}
+          <header className="rz-sheet__head">
+            <div className="grid min-w-0 flex-1 gap-0.5">
+              <Dialog.Title className="rz-h-title text-balance">
                 {title}
               </Dialog.Title>
               {description === undefined ? (
-                <Dialog.Description className="sr-only">
-                  {title}
-                </Dialog.Description>
+                <>
+                  {eyebrow === undefined ? null : (
+                    <p className="text-app-muted m-0">{eyebrow}</p>
+                  )}
+                  <Dialog.Description className="sr-only">
+                    {title}
+                  </Dialog.Description>
+                </>
               ) : (
                 <Dialog.Description className="text-app-muted m-0 text-pretty">
                   {description}
@@ -197,7 +207,7 @@ export function Sheet({
             <Dialog.Close asChild>
               <button
                 aria-label={tc('close')}
-                className="rz-btn rz-btn--icon relative after:absolute after:-inset-2 after:content-['']"
+                className="rz-btn rz-btn--ghost rz-btn--icon relative after:absolute after:-inset-2 after:content-['']"
                 type="button"
               >
                 <X aria-hidden />

@@ -118,7 +118,6 @@ export function RecordColumns({
 export function BillingShell({
   crumb,
   title,
-  lead,
   chips,
   actions,
   banner,
@@ -126,7 +125,7 @@ export function BillingShell({
 }: {
   crumb: string
   title: string
-  lead: string
+  /** Status pills: on their own row under the title, as the module page has. */
   chips?: ReactNode
   actions?: ReactNode
   banner?: ReactNode
@@ -134,7 +133,12 @@ export function BillingShell({
 }) {
   return (
     <RecordShell actions={actions} banner={banner} crumb={crumb}>
-      <RecordHead chips={chips} lead={lead} title={title} />
+      <div className="grid min-w-0 gap-1.5">
+        <RecordHead title={title} />
+        {chips === undefined ? null : (
+          <div className="flex flex-wrap items-center gap-2">{chips}</div>
+        )}
+      </div>
       <BillingTabs />
       {children}
     </RecordShell>

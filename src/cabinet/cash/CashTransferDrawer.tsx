@@ -179,11 +179,11 @@ function OpenCashTransferDrawer({
           </Notice>
         ) : (
           <>
-            <section className="rz-inset grid gap-3">
-              <p className="rz-eyebrow m-0">{t('fromHeading')}</p>
+            <section className="grid gap-3">
+              <h3 className="rz-h-card">{t('fromHeading')}</h3>
               <Field label={t('sourceTill')}>
                 <Segmented
-                  className="w-fit max-w-full [&>label]:flex-none"
+                  className="w-full"
                   label={t('sourceTill')}
                   name="transfer-from-register"
                   onChange={(registerId) => {
@@ -197,13 +197,13 @@ function OpenCashTransferDrawer({
                     srLabel: t('sourceTillSr'),
                     value: register.id,
                   }))}
-                  selectionTone="brand"
                   value={selectedFromId}
                 />
               </Field>
               <Field label={t('amountOut')}>
                 <div className="grid gap-2">
                   <TextInput
+                    className="h-12 text-page"
                     inputMode="decimal"
                     min="0"
                     numeric
@@ -215,18 +215,22 @@ function OpenCashTransferDrawer({
                     value={amountOut}
                   />
                   <Segmented
-                    className="w-fit max-w-full font-mono [&>label]:flex-none"
+                    // Until a till is chosen the group stays (empty) but draws nothing.
+                    className={
+                      currencyOptions(source).length === 0
+                        ? 'border-0 p-0'
+                        : 'w-full font-mono'
+                    }
                     label={t('currencyOut')}
                     name="transfer-from-currency"
                     onChange={setFromCurrency}
                     options={currencyOptions(source)}
-                    selectionTone="brand"
                     value={fromCurrency}
                   />
                 </div>
               </Field>
               {source && fromCurrency ? (
-                <p className="rz-caption rz-mono m-0">
+                <p className="rz-caption m-0">
                   {t('availableHere', {
                     amount: `${source.balances[fromCurrency] ?? '—'} ${fromCurrency}`,
                   })}
@@ -234,17 +238,13 @@ function OpenCashTransferDrawer({
               ) : null}
             </section>
 
-            <div aria-hidden className="text-app-dim flex items-center gap-3">
-              <span className="bg-app-line h-px flex-1" />
-              <ArrowDown className="size-4 shrink-0" />
-              <span className="bg-app-line h-px flex-1" />
-            </div>
+            <ArrowDown aria-hidden className="text-app-dim size-3.5" />
 
-            <section className="rz-inset grid gap-3">
-              <p className="rz-eyebrow m-0">{t('toHeading')}</p>
+            <section className="grid gap-3">
+              <h3 className="rz-h-card">{t('toHeading')}</h3>
               <Field label={t('destinationTill')}>
                 <Segmented
-                  className="w-fit max-w-full [&>label]:flex-none"
+                  className="w-full"
                   label={t('destinationTill')}
                   name="transfer-to-register"
                   onChange={(registerId) => {
@@ -256,13 +256,13 @@ function OpenCashTransferDrawer({
                     srLabel: t('destinationTillSr'),
                     value: register.id,
                   }))}
-                  selectionTone="brand"
                   value={toRegisterId}
                 />
               </Field>
               <Field label={t('amountIn')}>
                 <div className="grid gap-2">
                   <TextInput
+                    className="h-12 text-page"
                     inputMode="decimal"
                     min="0"
                     numeric
@@ -274,18 +274,22 @@ function OpenCashTransferDrawer({
                     value={amountIn}
                   />
                   <Segmented
-                    className="w-fit max-w-full font-mono [&>label]:flex-none"
+                    // Until a till is chosen the group stays (empty) but draws nothing.
+                    className={
+                      currencyOptions(destination).length === 0
+                        ? 'border-0 p-0'
+                        : 'w-full font-mono'
+                    }
                     label={t('currencyIn')}
                     name="transfer-to-currency"
                     onChange={setToCurrency}
                     options={currencyOptions(destination)}
-                    selectionTone="brand"
                     value={toCurrency}
                   />
                 </div>
               </Field>
               {destination && toCurrency ? (
-                <p className="rz-caption rz-mono m-0">
+                <p className="rz-caption m-0">
                   {t('destinationBalance', {
                     amount: `${destination.balances[toCurrency] ?? '—'} ${toCurrency}`,
                   })}

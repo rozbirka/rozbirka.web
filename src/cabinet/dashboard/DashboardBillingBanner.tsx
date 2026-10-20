@@ -1,4 +1,5 @@
 import { Link } from 'react-router'
+import { StatusPill } from '@/components/app'
 import { cn } from '@/lib/utils'
 import type { Tenant } from '@/api/types'
 import {
@@ -53,13 +54,16 @@ export function DashboardBillingBanner({
       className={cn('rz-banner', BANNER_TONE[guidance.tone])}
       role={guidance.urgent ? 'alert' : 'status'}
     >
-      <p className="m-0 min-w-60 flex-1">
-        <strong className="rz-strong font-semibold">{guidance.title}</strong>{' '}
-        <span className="rz-muted">{guidance.message}</span>
+      {/* The state as a chip, then what it means — as the v2 banner reads. */}
+      <StatusPill className="shrink-0" tone={guidance.tone}>
+        {guidance.title}
+      </StatusPill>
+      <p className="rz-muted m-0 min-w-60 flex-1 text-pretty">
+        {guidance.message}
       </p>
       {billingPath === null ? null : (
         <Link
-          className="inline-flex min-h-control items-center font-medium whitespace-nowrap"
+          className="text-brand-text inline-flex min-h-control items-center font-medium whitespace-nowrap"
           to={billingPath}
         >
           {t('goToSubscription')}

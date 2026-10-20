@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Check } from 'lucide-react'
+import { BadgeDollarSign, Check, ReceiptText } from 'lucide-react'
 import {
   Amount,
   Button,
@@ -44,6 +44,7 @@ import {
 } from './billing-vocabulary'
 import { billingMessages } from './messages'
 import { paymentsMessages } from './payments-messages'
+import { plansMessages } from './plans-messages'
 import { subscriptionMessages } from './subscription-messages'
 import {
   billingManagementUnavailable,
@@ -189,7 +190,6 @@ export function SubscriptionScreen() {
     return (
       <BillingShell
         crumb={translate(subscriptionMessages, locale, 'crumb')}
-        lead={translate(subscriptionMessages, locale, 'lead')}
         title={translate(subscriptionMessages, locale, 'title')}
       >
         <EmptyBillingPanel />
@@ -262,6 +262,7 @@ function SubscriptionPanel({
   const t = useT(subscriptionMessages)
   const tb = useT(billingMessages)
   const tp = useT(paymentsMessages)
+  const tplans = useT(plansMessages)
   const accessEnded = subscription.state === 'blocked'
   const providerSubscription = subscription as ProviderAwareSubscriptionDto
   const management = resolveProviderManagement(providerSubscription)
@@ -296,6 +297,9 @@ function SubscriptionPanel({
   )
   const features = subscription.features
 
+  const changeCard = (
+    <BillingDead title={t('noCardManagement')}>{t('changeCard')}</BillingDead>
+  )
   const summary = (
     <>
       <div className="grid min-w-0 flex-[1_1_320px] gap-1">
@@ -339,9 +343,7 @@ function SubscriptionPanel({
         </p>
       </div>
       <div className="rz-btn-row">
-        <BillingDead title={t('noCardManagement')}>
-          {t('changeCard')}
-        </BillingDead>
+        {changeCard}
         {canCheckout && (
           <BillingMutationGate decision={manageDecision}>
             <Button aria-busy={busy} disabled={busy} onClick={onSubscribe}>
@@ -359,7 +361,16 @@ function SubscriptionPanel({
       actions={
         <>
           <Button asChild>
-            <Link to={paymentsPath}>{t('payments')}</Link>
+            <Link to={plansPath}>
+              <BadgeDollarSign aria-hidden />
+              {tplans('title')}
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link to={paymentsPath}>
+              <ReceiptText aria-hidden />
+              {t('payments')}
+            </Link>
           </Button>
           {canCheckout && (
             <BillingMutationGate decision={manageDecision}>
@@ -393,7 +404,6 @@ function SubscriptionPanel({
       }
       chips={<StatusPill tone={state.tone}>{stateLabel}</StatusPill>}
       crumb={t('crumb')}
-      lead={t('lead')}
       title={t('title')}
     >
       {mutationError === null ? null : (
@@ -412,32 +422,48 @@ function SubscriptionPanel({
         !canCheckout &&
         !contractManaged && <BillingUnavailableNotice />}
 
-      {alarming ? null : (
-        <section className="rz-card">
-          <div className="rz-card__body flex flex-wrap items-center gap-x-8 gap-y-3">
-            {summary}
-          </div>
-        </section>
-      )}
-
       <KpiStrip>
+        <Kpi label={t('currentPlan')} meta={null} value={planLabel} />
         <Kpi
           label={
-            subscription.state === 'trial'
-              ? t('kpiTrialDays')
-              : t('kpiDaysToCharge')
+            subscription.state === 'trial' ? t('kpiTrialDays') : t('nextCharge')
           }
           meta={
-            nextChargeAt === null
+            daysLeft === null
               ? t('kpiNoChargeDate')
-              : t('kpiUntilNextCharge')
+              : daysLeft >= 0
+                ? t('daysToCharge', { days: daysText(daysLeft, locale) })
+                : t('overdueBy', { days: daysText(-daysLeft, locale) })
           }
           tone={daysLeft !== null && daysLeft < 0 ? 'warn' : 'plain'}
-          value={daysLeft == null ? '—' : String(daysLeft)}
+          value={
+            subscription.state === 'trial' ? (
+              daysLeft == null ? (
+                '—'
+              ) : (
+                String(daysLeft)
+              )
+            ) : nextChargeAt === null ? (
+              '—'
+            ) : (
+              <DateValue value={nextChargeAt} withTime={false} />
+            )
+          }
         />
         <Kpi
           label={t('kpiPeriodPrice')}
-          meta={planLabel}
+          meta={
+            subscription.cardLast4 ? (
+              <>
+                {t('card', {
+                  brand: (subscription.cardBrand ?? 'Card').toUpperCase(),
+                })}{' '}
+                <span className="rz-mono">{subscription.cardLast4}</span>
+              </>
+            ) : (
+              t('noCardLinked')
+            )
+          }
           value={
             typeof subscription.amount === 'number' ? (
               <Amount
@@ -448,16 +474,6 @@ function SubscriptionPanel({
               '—'
             )
           }
-        />
-        <Kpi
-          label={t('kpiLimitsReached')}
-          meta={
-            overLimits.length === 0
-              ? t('kpiLimitsOk')
-              : overLimits.map((item) => item.label).join(', ')
-          }
-          tone={overLimits.length === 0 ? 'plain' : 'warn'}
-          value={String(overLimits.length)}
         />
       </KpiStrip>
 
@@ -507,6 +523,7 @@ function SubscriptionPanel({
               <Button asChild>
                 <Link to={plansPath}>{t('allPlans')}</Link>
               </Button>
+              {alarming ? null : changeCard}
               {isMono && subscription.canCancel && (
                 <BillingMutationGate decision={manageDecision}>
                   <Button
@@ -547,16 +564,10 @@ function SubscriptionPanel({
                 {limits.map((item) => {
                   const max = item.data.max
                   const over = max != null && item.data.used > max
-                  const ratio =
-                    max == null
-                      ? null
-                      : max === 0
-                        ? 0
-                        : Math.min(item.data.used / max, 1)
                   return (
                     <div key={item.label}>
                       <dt>{item.label}</dt>
-                      <dd className="grid gap-1.5">
+                      <dd>
                         <span className="flex items-baseline justify-between gap-3">
                           <span
                             className={cn(
@@ -574,21 +585,6 @@ function SubscriptionPanel({
                                 })}
                           </span>
                         </span>
-                        {ratio === null ? null : (
-                          <span
-                            aria-hidden
-                            className={cn(
-                              'rz-meter',
-                              ratio >= 1
-                                ? 'rz-meter--danger'
-                                : ratio >= 0.8 && 'rz-meter--warn',
-                            )}
-                          >
-                            <span
-                              style={{ width: `${String(ratio * 100)}%` }}
-                            />
-                          </span>
-                        )}
                       </dd>
                     </div>
                   )

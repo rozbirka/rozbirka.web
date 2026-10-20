@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import {
-  ChevronLeft,
+  ArrowLeft,
+  ChevronDown,
   ChevronRight,
   Copy,
   MessageSquare,
@@ -13,7 +14,9 @@ import {
   SearchX,
   ShoppingCart,
   Trash2,
+  UserPlus,
   Users,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -30,7 +33,6 @@ import {
   Notice,
   Pagination,
   SearchInput,
-  SectionPanel,
   SelectInput,
   Sheet,
   SkeletonRows,
@@ -56,6 +58,7 @@ import { normalizeApiProblem } from '@/api/errors'
 import { useTenantSettings } from '@/auth/useTenantSettings'
 import {
   commonMessages,
+  formatMoney,
   intlLocale,
   useFormat,
   useLocale,
@@ -64,6 +67,8 @@ import {
 } from '@/i18n'
 import { phoneExample } from '@/lib/phone'
 import { orderStatusPresentation } from '../orders/order-labels'
+import { orderMessages } from '../orders/messages'
+import { SheetGroup } from '../orders/sheet-group'
 import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { useCabinet } from '../CabinetContext'
@@ -163,15 +168,6 @@ function useDay() {
   return (value: string) => format.date(value) ?? value
 }
 
-/** Two initials for the avatar chip; a single word gives one. */
-const customerInitials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || '?'
-
 /** How a customer is grouped by how often they buy. */
 const CUSTOMER_SEGMENTS = [
   { value: 'all' as const, label: 'segmentAll' as const },
@@ -225,6 +221,10 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [error, setError] = useState(false)
+  /** False until the first answer: skeleton rows, not «no customers». */
+  const [loaded, setLoaded] = useState(false)
+  /** Bumped by «Спробувати ще раз» to ask for the same page again. */
+  const [attempt, setAttempt] = useState(0)
   const [segment, setSegment] = useState<CustomerSegment>('all')
   const [sort, setSort] = useState<CustomerSort>('sum')
 
@@ -237,12 +237,15 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
         setTotal(result.total)
         setTotalPages(result.totalPages)
         setError(false)
+        setLoaded(true)
       })
       .catch(() => {
-        if (!controller.signal.aborted) setError(true)
+        if (controller.signal.aborted) return
+        setError(true)
+        setLoaded(true)
       })
     return () => controller.abort()
-  }, [page, q])
+  }, [page, q, attempt])
 
   const counts: Record<CustomerSegment, number> = {
     all: customers.length,
@@ -269,26 +272,16 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
       label: t('columnCustomer'),
       variant: 'primary',
       cell: (customer) => (
-        <span className="rz-cell-main">
-          <span className="flex min-w-0 items-center gap-2.5">
-            <span
-              aria-hidden
-              className="rz-avatar rz-avatar--round size-7 shrink-0"
-            >
-              {customerInitials(customer.name)}
-            </span>
-            <span className="grid min-w-0">
-              <Link
-                className="text-app-strong truncate"
-                onClick={(event) => event.stopPropagation()}
-                to={customer.id}
-              >
-                {customer.name}
-              </Link>
-              <span className="rz-caption font-normal">
-                {t(segmentTag(customer.ordersCount))}
-              </span>
-            </span>
+        <span className="grid min-w-0 py-1">
+          <Link
+            className="text-app-strong truncate"
+            onClick={(event) => event.stopPropagation()}
+            to={customer.id}
+          >
+            {customer.name}
+          </Link>
+          <span className="rz-caption font-normal">
+            {t(segmentTag(customer.ordersCount))}
           </span>
         </span>
       ),
@@ -314,7 +307,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
         <span
           className={cn(
             'font-mono whitespace-nowrap',
-            customer.lastOrderAt === null && 'rz-dim',
+            customer.lastOrderAt === null ? 'rz-dim' : 'text-app-muted',
           )}
         >
           {customer.lastOrderAt === null ? '—' : day(customer.lastOrderAt)}
@@ -326,7 +319,9 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
       label: t('columnOrders'),
       align: 'end',
       cell: (customer) => (
-        <span className={cn(customer.ordersCount === 0 && 'rz-dim')}>
+        <span
+          className={cn('font-mono', customer.ordersCount === 0 && 'rz-dim')}
+        >
           {customer.ordersCount}
         </span>
       ),
@@ -360,18 +355,22 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
       : []),
   ]
 
+  const newCustomerButton = mutationsAllowed ? (
+    <Button asChild variant="primary">
+      <Link to="new">
+        <UserPlus aria-hidden />
+        {t('newCustomer')}
+      </Link>
+    </Button>
+  ) : undefined
+  const resetAll = () => {
+    setSegment('all')
+    setParams({})
+  }
+
   return (
     <RedesignShell
-      actions={
-        mutationsAllowed ? (
-          <Button asChild variant="primary">
-            <Link to="new">
-              <Plus aria-hidden />
-              {t('newCustomer')}
-            </Link>
-          </Button>
-        ) : undefined
-      }
+      actions={newCustomerButton}
       crumb={
         <>
           <span>{t('section')}</span>
@@ -418,75 +417,85 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
             </button>
           ))}
         </div>
-        <div className="rz-toolbar__end items-center gap-2">
-          <span className="rz-eyebrow" id="customer-sort-label">
-            {t('sortLabel')}
-          </span>
-          <div
-            aria-labelledby="customer-sort-label"
-            className="rz-seg"
-            role="radiogroup"
+        <label className="rz-filter rz-filter--set relative">
+          <span className="rz-filter__key">{t('sortLabel')}:</span>
+          <select
+            aria-label={t('sortLabel')}
+            className="cursor-pointer appearance-none border-0 bg-transparent pr-4 text-inherit outline-none focus-visible:underline"
+            onChange={(event) => setSort(event.target.value as CustomerSort)}
+            value={sort}
           >
             {CUSTOMER_SORTS.map((option) => (
-              <button
-                aria-checked={option.value === sort}
-                key={option.value}
-                onClick={() => setSort(option.value)}
-                role="radio"
-                type="button"
-              >
+              <option key={option.value} value={option.value}>
                 {t(option.label)}
-              </button>
+              </option>
             ))}
-          </div>
-        </div>
+          </select>
+          <ChevronDown
+            aria-hidden
+            className="pointer-events-none absolute right-2 size-3"
+          />
+        </label>
+        {filtered ? (
+          <Button onClick={resetAll} variant="ghost">
+            {t('resetFilters')}
+          </Button>
+        ) : null}
       </div>
 
-      {error ? <Notice tone="danger">{t('loadError')}</Notice> : null}
-
       <section aria-label={t('listLabel')}>
-        <DataTable
-          caption={t('listLabel')}
-          columns={columns}
-          empty={
-            <div className="rz-state" role="status">
-              <span className="rz-state__icon">
-                {filtered ? <SearchX aria-hidden /> : <Users aria-hidden />}
-              </span>
-              <h2 className="rz-state__title">
-                {filtered ? t('emptyFilteredTitle') : t('emptyTitle')}
-              </h2>
-              <p className="rz-state__body">
-                {filtered ? t('emptyFilteredHint') : t('emptyHint')}
-              </p>
-              {filtered ? (
-                <Button
-                  onClick={() => {
-                    setSegment('all')
-                    setParams({})
-                  }}
-                >
-                  {t('resetFilters')}
-                </Button>
-              ) : null}
-            </div>
-          }
-          footer={
-            <Pagination
-              label={t('pagesLabel')}
-              onPage={(nextPage) => {
-                const next = new URLSearchParams(params)
-                next.set('page', String(nextPage))
-                setParams(next)
-              }}
-              page={page}
-              totalPages={Math.max(totalPages, 1)}
-            />
-          }
-          onRowClick={(customer) => void navigate(customer.id)}
-          rowKey={(customer) => customer.id}
-          rows={rows}
-        />
+        {error ? (
+          <ErrorState
+            description={t('loadError')}
+            onRetry={() => setAttempt((value) => value + 1)}
+          />
+        ) : !loaded ? (
+          <SkeletonRows columns={5} rows={8} />
+        ) : (
+          <DataTable
+            caption={t('listLabel')}
+            columns={columns}
+            empty={
+              <div
+                className={cn('rz-state', !filtered && 'rz-state--brand')}
+                role="status"
+              >
+                <span className="rz-state__icon">
+                  {filtered ? <SearchX aria-hidden /> : <Users aria-hidden />}
+                </span>
+                <h2 className="rz-state__title">
+                  {filtered ? t('emptyFilteredTitle') : t('emptyTitle')}
+                </h2>
+                <p className="rz-state__body">
+                  {filtered ? t('emptyFilteredHint') : t('emptyHint')}
+                </p>
+                {filtered ? (
+                  <Button onClick={resetAll}>
+                    <X aria-hidden />
+                    {t('resetFilters')}
+                  </Button>
+                ) : (
+                  newCustomerButton
+                )}
+              </div>
+            }
+            footer={
+              <Pagination
+                label={t('pagesLabel')}
+                onPage={(nextPage) => {
+                  const next = new URLSearchParams(params)
+                  next.set('page', String(nextPage))
+                  setParams(next)
+                }}
+                page={page}
+                totalPages={Math.max(totalPages, 1)}
+              />
+            }
+            onRowClick={(customer) => void navigate(customer.id)}
+            rowKey={(customer) => customer.id}
+            rows={rows}
+          />
+        )}
       </section>
     </RedesignShell>
   )
@@ -497,6 +506,7 @@ function CustomerDetailScreen({
   customerId,
 }: CabinetModuleScreenProps & { customerId: string }) {
   const t = useT(customerMessages)
+  const to = useT(orderMessages)
   const tc = useT(commonMessages)
   const { locale } = useLocale()
   const day = useDay()
@@ -614,27 +624,47 @@ function CustomerDetailScreen({
       setBusy(false)
     }
   }
+  const crumbTrail = (current: string) => (
+    <>
+      <span className="max-sm:hidden">{t('section')}</span>
+      <ChevronRight aria-hidden className="size-3 max-sm:hidden" />
+      <Link to={directoryPath}>{t('title')}</Link>
+      <ChevronRight aria-hidden className="size-3" />
+      <span aria-current="page">{current}</span>
+    </>
+  )
   if (!ordersViewAllowed)
     return (
-      <div className="rz-page max-w-[1240px]">
+      <RedesignShell crumb={crumbTrail(t('title'))} width="record">
         <DeniedState
           description={t('deniedDescription')}
           role="alert"
           title={t('deniedTitle')}
         />
-      </div>
+      </RedesignShell>
     )
-  if (error)
+  if (error && !customer)
     return (
-      <div className="rz-page max-w-[1240px]">
-        <ErrorState description={t(error)} title={t('loadFailedTitle')} />
-      </div>
+      <RedesignShell crumb={crumbTrail(t('title'))} width="record">
+        <ErrorState
+          actions={
+            <Button asChild>
+              <Link to={directoryPath}>
+                <ArrowLeft aria-hidden />
+                {t('backToCustomers')}
+              </Link>
+            </Button>
+          }
+          description={t(error)}
+          title={t('loadFailedTitle')}
+        />
+      </RedesignShell>
     )
   if (!customer)
     return (
-      <div className="rz-page max-w-[1240px]">
-        <SkeletonRows label={t('loading')} rows={3} />
-      </div>
+      <RedesignShell crumb={crumbTrail(t('title'))} width="record">
+        <SkeletonRows label={t('loading')} rows={6} />
+      </RedesignShell>
     )
   const ordersPath = `/app/${cabinet.targetTenant?.slug ?? ''}/orders`
   const orderHref = (orderId: string) =>
@@ -650,43 +680,45 @@ function CustomerDetailScreen({
     currentOrdersPage * ordersPageSize,
   )
   const addressLines = customerAddressLines(customer, locale)
-  const money = (value: number | null | undefined) =>
-    typeof value === 'number' && Number.isFinite(value) ? (
-      <Amount
-        currency={accountingCurrency}
-        currencyDisplay="code"
-        value={value}
-      />
-    ) : (
-      '—'
-    )
-
+  /** A KPI figure: the number large, the ISO code as the strip's unit. */
+  const kpiMoney = (value: number | null | undefined) => {
+    const text =
+      typeof value === 'number' && Number.isFinite(value)
+        ? formatMoney(value, accountingCurrency, locale)
+        : null
+    if (text === null) return { value: '—' }
+    const code = accountingCurrency?.toUpperCase()
+    return code !== undefined && text.endsWith(`\u00a0${code}`)
+      ? { value: text.slice(0, -(code.length + 1)), unit: code }
+      : { value: text }
+  }
+  const canCreateOrder = orderCreateAllowed && customer.isActive
   return (
-    <div className="grid content-start">
-      <header className="rz-topbar h-auto min-h-topbar flex-wrap gap-y-1.5 py-1.5">
-        <p className="rz-crumbs m-0">
-          <Link className="flex items-center gap-1" to={directoryPath}>
-            <ChevronLeft aria-hidden className="size-3.5" />
-            {t('backToCustomers')}
-          </Link>
-          <ChevronRight aria-hidden className="size-3" />
-          <span className="max-sm:hidden">{t('section')}</span>
-          <ChevronRight aria-hidden className="size-3 max-sm:hidden" />
-          <span aria-current="page">{customer.name}</span>
-        </p>
-        <div className="rz-topbar__actions flex-wrap items-center">
+    <RedesignShell
+      actions={
+        <>
+          {customer.phone === null ? null : (
+            <>
+              <Button asChild>
+                <a href={`tel:${customer.phone}`}>
+                  <Phone aria-hidden />
+                  {t('call')}
+                </a>
+              </Button>
+              <Button asChild>
+                <a href={`sms:${customer.phone}`}>
+                  <MessageSquare aria-hidden />
+                  {t('sms')}
+                </a>
+              </Button>
+            </>
+          )}
           {mutationsAllowed ? (
             <Button asChild>
               <Link to="edit">
                 <Pencil aria-hidden />
                 {tc('edit')}
               </Link>
-            </Button>
-          ) : null}
-          {orderCreateAllowed && customer.isActive ? (
-            <Button onClick={() => setOrderDrawerOpen(true)} variant="primary">
-              <Plus aria-hidden />
-              {t('createOrder')}
             </Button>
           ) : null}
           {mutationsAllowed ? (
@@ -721,91 +753,70 @@ function CustomerDetailScreen({
               triggerRef={deleteTriggerRef}
             />
           ) : null}
-        </div>
-      </header>
+          {canCreateOrder ? (
+            <Button onClick={() => setOrderDrawerOpen(true)} variant="primary">
+              <Plus aria-hidden />
+              {t('createOrder')}
+            </Button>
+          ) : null}
+        </>
+      }
+      crumb={crumbTrail(customer.name)}
+      width="record"
+    >
+      {error ? <Notice tone="danger">{t(error)}</Notice> : null}
+      {copied ? <Notice tone="ok">{t('phoneCopied')}</Notice> : null}
 
-      <div className="rz-page max-w-[1240px]">
-        {error ? <Notice tone="danger">{t(error)}</Notice> : null}
-        {copied ? <Notice tone="ok">{t('phoneCopied')}</Notice> : null}
-
-        <div className="grid gap-2">
-          <div className="rz-page-head items-center">
-            <span aria-hidden className="rz-avatar rz-avatar--round size-8">
-              {customerInitials(customer.name)}
-            </span>
-            <h1 className="rz-h-page">{customer.name}</h1>
-            <StatusPill tone={customer.isActive ? 'ok' : 'neutral'}>
-              {customer.isActive ? t('active') : t('inactive')}
+      <div className="grid gap-1.5">
+        <h1 className="rz-h-page">{customer.name}</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusPill tone={customer.isActive ? 'ok' : 'neutral'}>
+            {customer.isActive ? t('active') : t('inactive')}
+          </StatusPill>
+          {customer.ordersCount === null ? null : (
+            <StatusPill tone="neutral">
+              {t(segmentTag(customer.ordersCount))}
             </StatusPill>
-          </div>
-          {customer.phone === null ? (
-            <p className="rz-muted m-0">{t('phoneMissing')}</p>
-          ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rz-strong font-mono">
-                {displayCustomerPhone(customer.phone)}
-              </span>
-              <div className="rz-btn-row gap-1.5">
-                <Button
-                  onClick={() => void copyPhone(customer.phone ?? '')}
-                  size="sm"
-                >
-                  <Copy aria-hidden />
-                  {t('copyPhone')}
-                </Button>
-                <Button asChild size="sm">
-                  <a href={`tel:${customer.phone}`}>
-                    <Phone aria-hidden />
-                    {t('call')}
-                  </a>
-                </Button>
-                <Button asChild size="sm">
-                  <a href={`sms:${customer.phone}`}>
-                    <MessageSquare aria-hidden />
-                    {t('sms')}
-                  </a>
-                </Button>
-              </div>
-            </div>
           )}
         </div>
+      </div>
 
-        <KpiStrip>
-          <Kpi
-            label={t('statOrders')}
-            meta=""
-            tone={(customer.ordersCount ?? 0) > 0 ? 'plain' : 'dim'}
-            value={
-              customer.ordersCount === null ? '—' : String(customer.ordersCount)
-            }
-          />
-          {financeViewAllowed ? (
-            <>
-              <Kpi
-                label={t('statSpent')}
-                meta=""
-                tone={(customer.totalAmount ?? 0) > 0 ? 'plain' : 'dim'}
-                value={money(customer.totalAmount)}
-              />
-              <Kpi
-                label={t('statAverage')}
-                meta=""
-                tone={(customer.averageAmount ?? 0) > 0 ? 'plain' : 'dim'}
-                value={money(
-                  typeof customer.averageAmount === 'number'
-                    ? Math.round(customer.averageAmount)
-                    : null,
-                )}
-              />
-            </>
-          ) : null}
-        </KpiStrip>
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid min-w-0 gap-3.5">
+          <KpiStrip>
+            <Kpi
+              label={t('statOrders')}
+              meta=""
+              tone={(customer.ordersCount ?? 0) > 0 ? 'plain' : 'dim'}
+              value={
+                customer.ordersCount === null
+                  ? '—'
+                  : String(customer.ordersCount)
+              }
+            />
+            {financeViewAllowed ? (
+              <>
+                <Kpi
+                  label={t('statSpent')}
+                  meta=""
+                  tone={(customer.totalAmount ?? 0) > 0 ? 'plain' : 'dim'}
+                  {...kpiMoney(customer.totalAmount)}
+                />
+                <Kpi
+                  label={t('statAverage')}
+                  meta=""
+                  tone={(customer.averageAmount ?? 0) > 0 ? 'plain' : 'dim'}
+                  {...kpiMoney(
+                    typeof customer.averageAmount === 'number'
+                      ? Math.round(customer.averageAmount)
+                      : null,
+                  )}
+                />
+              </>
+            ) : null}
+          </KpiStrip>
 
-        <div className="flex flex-wrap items-start gap-4">
-          <section
-            aria-labelledby={ordersTitleId}
-            className="rz-card min-w-0 flex-[1_1_480px]"
-          >
+          <section aria-labelledby={ordersTitleId} className="rz-card min-w-0">
             <div className="rz-card__head py-2">
               <h2 className="rz-h-card" id={ordersTitleId}>
                 {t('orderHistory')}{' '}
@@ -823,7 +834,7 @@ function CustomerDetailScreen({
                 <p className="rz-state__body text-pretty">
                   {t('noOrdersHint')}
                 </p>
-                {orderCreateAllowed && customer.isActive ? (
+                {canCreateOrder ? (
                   <Button
                     onClick={() => setOrderDrawerOpen(true)}
                     variant="primary"
@@ -834,50 +845,61 @@ function CustomerDetailScreen({
               </div>
             ) : (
               <>
-                <ul className="m-0 grid list-none p-0">
-                  {visibleOrders.map((order) => {
-                    const status = orderStatusPresentation(order.status, locale)
-                    return (
-                      <li
-                        className="border-app-line border-t first:border-t-0"
-                        key={order.id}
-                      >
-                        <Link
-                          className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-(--rz-card-p) py-2.5 transition-colors hover:bg-app-hover"
-                          to={orderHref(order.id)}
-                        >
-                          <span className="min-w-0">
-                            <span className="flex flex-wrap items-center gap-2">
-                              <span className="rz-strong font-mono font-medium">
+                <div className="rz-table-scroll">
+                  <table className="rz-table">
+                    <caption>{t('orderHistory')}</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">{to('columnOrder')}</th>
+                        <th scope="col">{to('columnStatus')}</th>
+                        <th className="rz-num" scope="col">
+                          {to('columnTotal')}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleOrders.map((order) => {
+                        const status = orderStatusPresentation(
+                          order.status,
+                          locale,
+                        )
+                        return (
+                          <tr className="h-auto" key={order.id}>
+                            <th className="py-1.5" scope="row">
+                              <Link
+                                className="text-app-strong block w-fit font-mono"
+                                title={order.partNames.join(', ') || undefined}
+                                to={orderHref(order.id)}
+                              >
                                 #{order.number}
+                              </Link>
+                              <span className="rz-caption block font-mono font-normal">
+                                {day(order.createdAt)}
                               </span>
+                            </th>
+                            <td data-label={to('columnStatus')}>
                               <StatusPill tone={status.tone}>
                                 {status.label}
                               </StatusPill>
-                            </span>
-                            <span className="rz-caption block truncate">
-                              {[
-                                day(order.createdAt),
-                                order.partNames.join(', ') || null,
-                              ]
-                                .filter(Boolean)
-                                .join(' · ')}
-                            </span>
-                          </span>
-                          <span className="rz-num rz-strong whitespace-nowrap">
-                            {/* The ISO code the server sends, never a symbol:
-                                CAD and USD would both read «$». */}
-                            <Amount
-                              currency={order.currency ?? null}
-                              currencyDisplay="code"
-                              value={order.totalAmount}
-                            />
-                          </span>
-                        </Link>
-                      </li>
-                    )
-                  })}
-                </ul>
+                            </td>
+                            <td
+                              className="rz-num whitespace-nowrap"
+                              data-label={to('columnTotal')}
+                            >
+                              {/* The ISO code the server sends, never a
+                                  symbol: CAD and USD would both read «$». */}
+                              <Amount
+                                currency={order.currency ?? null}
+                                currencyDisplay="code"
+                                value={order.totalAmount}
+                              />
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
                 {ordersTotalPages > 1 ? (
                   <Pagination
                     label={t('ordersPagesLabel')}
@@ -890,117 +912,133 @@ function CustomerDetailScreen({
             )}
           </section>
 
-          <aside className="grid max-w-full min-w-0 flex-[1_1_280px] gap-4 lg:max-w-95">
-            <Card bodyClassName="p-0" title={t('details')}>
-              <dl className="rz-facts">
-                <div>
-                  <dt>{t('phone')}</dt>
-                  <dd
-                    className={cn(
-                      'font-mono',
-                      customer.phone === null && 'text-app-dim',
-                    )}
+          <Card
+            aside={
+              mutationsAllowed && notes.trim() !== (customer.notes ?? '') ? (
+                <div className="rz-btn-row gap-1.5">
+                  <Button
+                    disabled={busy}
+                    onClick={() => setNotes(customer.notes ?? '')}
+                    size="sm"
                   >
-                    {customer.phone === null
-                      ? '—'
-                      : displayCustomerPhone(customer.phone)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>{t('address')}</dt>
-                  <dd
-                    className={cn(addressLines.length === 0 && 'text-app-dim')}
+                    {tc('cancel')}
+                  </Button>
+                  <Button
+                    aria-busy={busy}
+                    disabled={busy}
+                    onClick={() => void saveNotes()}
+                    size="sm"
                   >
-                    {addressLines.length === 0
-                      ? tc('notSet')
-                      : addressLines.map((line) => (
-                          <span className="block" key={line}>
-                            {line}
-                          </span>
-                        ))}
-                  </dd>
+                    {t('saveNotes')}
+                  </Button>
                 </div>
-                <div>
-                  <dt title={t('channelHint')}>{t('channel')}</dt>
-                  <dd className="text-app-dim">—</dd>
-                </div>
-                <div>
-                  <dt>{t('customerSince')}</dt>
-                  <dd className="font-mono">{day(customer.createdAt)}</dd>
-                </div>
-                <div>
-                  <dt>{t('firstPurchase')}</dt>
-                  <dd
-                    className={cn(
-                      'font-mono',
-                      customer.firstOrderAt === null && 'text-app-dim',
-                    )}
-                  >
-                    {customer.firstOrderAt === null
-                      ? '—'
-                      : day(customer.firstOrderAt)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>{t('lastPurchase')}</dt>
-                  <dd
-                    className={cn(
-                      'font-mono',
-                      customer.lastOrderAt === null && 'text-app-dim',
-                    )}
-                  >
-                    {customer.lastOrderAt === null
-                      ? '—'
-                      : day(customer.lastOrderAt)}
-                  </dd>
-                </div>
-              </dl>
-            </Card>
+              ) : undefined
+            }
+            headerClassName="py-2"
+            title={t('notes')}
+          >
+            {mutationsAllowed ? (
+              <Field label={t('notesLabel')} srLabel={customer.name}>
+                <TextArea
+                  disabled={busy}
+                  onChange={(event) => setNotes(event.target.value)}
+                  placeholder={t('notesPlaceholder')}
+                  rows={3}
+                  value={notes}
+                />
+              </Field>
+            ) : (
+              <p
+                className={cn(
+                  'm-0 whitespace-pre-wrap',
+                  customer.notes === null ? 'text-app-dim' : 'text-app-muted',
+                )}
+              >
+                {customer.notes ?? t('noNotes')}
+              </p>
+            )}
+          </Card>
+        </div>
 
-            <Card title={t('notes')}>
-              {mutationsAllowed ? (
-                <>
-                  <Field label={t('notesLabel')} srLabel={customer.name}>
-                    <TextArea
-                      disabled={busy}
-                      onChange={(event) => setNotes(event.target.value)}
-                      placeholder={t('notesPlaceholder')}
-                      rows={4}
-                      value={notes}
-                    />
-                  </Field>
-                  {notes.trim() === (customer.notes ?? '') ? null : (
-                    <div className="rz-btn-row mt-3 justify-end">
-                      <Button
-                        disabled={busy}
-                        onClick={() => setNotes(customer.notes ?? '')}
-                      >
-                        {tc('cancel')}
-                      </Button>
-                      <Button
-                        aria-busy={busy}
-                        disabled={busy}
-                        onClick={() => void saveNotes()}
-                        variant="primary"
-                      >
-                        {t('saveNotes')}
-                      </Button>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <p
+        <aside className="grid min-w-0 gap-3.5">
+          <Card bodyClassName="p-0" headerClassName="py-2" title={t('details')}>
+            <dl className="rz-facts">
+              <div>
+                <dt>{t('phone')}</dt>
+                <dd
                   className={cn(
-                    'm-0 whitespace-pre-wrap',
-                    customer.notes === null ? 'text-app-dim' : 'text-app-muted',
+                    'flex flex-wrap items-center gap-x-2 gap-y-1 font-mono',
+                    customer.phone === null && 'text-app-dim',
                   )}
                 >
-                  {customer.notes ?? t('noNotes')}
-                </p>
-              )}
-            </Card>
-          </aside>
-        </div>
+                  {customer.phone === null ? (
+                    t('phoneMissing')
+                  ) : (
+                    <>
+                      <span>{displayCustomerPhone(customer.phone)}</span>
+                      <Button
+                        aria-label={t('copyPhone')}
+                        className="relative after:absolute after:-inset-2.5 after:content-['']"
+                        onClick={() => void copyPhone(customer.phone ?? '')}
+                        size="icon"
+                        title={t('copyPhone')}
+                        variant="quiet"
+                      >
+                        <Copy aria-hidden />
+                      </Button>
+                    </>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('address')}</dt>
+                <dd className={cn(addressLines.length === 0 && 'text-app-dim')}>
+                  {addressLines.length === 0
+                    ? tc('notSet')
+                    : addressLines.map((line) => (
+                        <span className="block" key={line}>
+                          {line}
+                        </span>
+                      ))}
+                </dd>
+              </div>
+              <div>
+                <dt title={t('channelHint')}>{t('channel')}</dt>
+                <dd className="text-app-dim">—</dd>
+              </div>
+              <div>
+                <dt>{t('customerSince')}</dt>
+                <dd className="font-mono">{day(customer.createdAt)}</dd>
+              </div>
+              <div>
+                <dt>{t('firstPurchase')}</dt>
+                <dd
+                  className={cn(
+                    'font-mono',
+                    customer.firstOrderAt === null && 'text-app-dim',
+                  )}
+                >
+                  {customer.firstOrderAt === null
+                    ? '—'
+                    : day(customer.firstOrderAt)}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('lastPurchase')}</dt>
+                <dd
+                  className={cn(
+                    'font-mono',
+                    customer.lastOrderAt === null && 'text-app-dim',
+                  )}
+                >
+                  {customer.lastOrderAt === null
+                    ? '—'
+                    : day(customer.lastOrderAt)}
+                </dd>
+              </div>
+            </dl>
+          </Card>
+        </aside>
       </div>
 
       <ConfirmDialog
@@ -1028,7 +1066,7 @@ function CustomerDetailScreen({
           definition={cabinetModules.orders}
         />
       ) : null}
-    </div>
+    </RedesignShell>
   )
 }
 
@@ -1221,17 +1259,13 @@ function CustomerForm({
       {mutationsAllowed ? null : <Notice tone="warn">{t('readOnly')}</Notice>}
       <form
         aria-busy={save.pending}
-        className="grid gap-4"
+        className="grid gap-5"
         id={CUSTOMER_FORM}
         noValidate
         onSubmit={submit}
       >
-        <SectionPanel
-          variant="plain"
-          description={t('contactDescription')}
-          title={t('contactTitle')}
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
+        <SheetGroup hint={t('contactDescription')} title={t('contactTitle')}>
+          <div className="grid gap-3">
             <Field
               error={touched.name ? nameIssue : null}
               hint={t('nameExample')}
@@ -1269,13 +1303,9 @@ function CustomerForm({
               />
             </Field>
           </div>
-        </SectionPanel>
-        <SectionPanel
-          variant="plain"
-          description={t('addressDescription')}
-          title={t('addressTitle')}
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
+        </SheetGroup>
+        <SheetGroup hint={t('addressDescription')} title={t('addressTitle')}>
+          <div className="grid gap-3 sm:grid-cols-3">
             <Field label={t('country')}>
               <SelectInput
                 autoComplete="country"
@@ -1301,12 +1331,8 @@ function CustomerForm({
             {addressText('building', 'address-line2')}
             {addressText('postcode', 'postal-code')}
           </div>
-        </SectionPanel>
-        <SectionPanel
-          variant="plain"
-          description={t('notesDescription')}
-          title={t('notesTitle')}
-        >
+        </SheetGroup>
+        <SheetGroup hint={t('notesDescription')} title={t('notesTitle')}>
           <Field hint={t('notesHint')} label={t('notes')}>
             <TextArea
               disabled={!mutationsAllowed}
@@ -1315,7 +1341,7 @@ function CustomerForm({
               value={notes}
             />
           </Field>
-        </SectionPanel>
+        </SheetGroup>
         {duplicate === null ? null : (
           <Notice block role="alert" tone="warn">
             <p className="m-0">

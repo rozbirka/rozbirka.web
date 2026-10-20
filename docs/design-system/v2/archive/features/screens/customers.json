@@ -1,0 +1,107 @@
+{
+ "id": "C8",
+ "module": "customers",
+ "eyebrow": "Продажі",
+ "title": "Клієнти",
+ "icon": "icon-users",
+ "route": "/app/:tenant/customers",
+ "source": "customers/messages.ts",
+ "unverified": "",
+ "searchLabel": "Пошук клієнта",
+ "searchPlaceholder": "Імʼя або телефон",
+ "emptyTitle": "Клієнтів поки немає",
+ "emptyBody": "Клієнти зʼявляються після першого замовлення або коли ви додасте їх самі.",
+ "actions": [
+  {
+   "label": "Новий клієнт",
+   "icon": "icon-user-plus",
+   "href": "#"
+  }
+ ],
+ "filters": [
+  "Сортувати: Сумою"
+ ],
+ "columns": [
+  {
+   "key": "name",
+   "label": "Клієнт",
+   "sub": "tag"
+  },
+  {
+   "key": "phone",
+   "label": "Телефон",
+   "mono": true
+  },
+  {
+   "key": "last",
+   "label": "Остання покупка",
+   "mono": true
+  },
+  {
+   "key": "orders",
+   "label": "Замовлень",
+   "align": "end"
+  },
+  {
+   "key": "sum",
+   "label": "Сума",
+   "align": "end"
+  }
+ ],
+ "rows": [
+  {
+   "name": "СТО «Мотор»",
+   "tag": "постійний",
+   "phone": "+380 93 000 00 03",
+   "last": "17.10",
+   "orders": 11,
+   "sum": "96 250 ₴"
+  },
+  {
+   "name": "Олена Коваль",
+   "tag": "постійний",
+   "phone": "+380 67 000 00 01",
+   "last": "15.10",
+   "orders": 4,
+   "sum": "18 400 ₴"
+  },
+  {
+   "name": "Андрій Фастов",
+   "tag": "разовий",
+   "phone": "+380 50 000 00 02",
+   "last": "09.10",
+   "orders": 1,
+   "sum": "4 800 ₴"
+  },
+  {
+   "name": "Ігор Ткач",
+   "tag": "без покупок",
+   "phone": "+380 63 000 00 04",
+   "last": "—",
+   "orders": 0,
+   "sum": "0 ₴"
+  }
+ ],
+ "detailHref": "./Record.dc.html?screen=customer",
+ "filteredTitle": "Нічого не знайдено",
+ "filteredBody": "Спробуйте змінити пошук або сегмент.",
+ "resetLabel": "Скинути фільтри",
+ "tabs": [
+  {
+   "label": "Усі"
+  },
+  {
+   "label": "Постійні",
+   "value": "постійний"
+  },
+  {
+   "label": "Разові",
+   "value": "разовий"
+  },
+  {
+   "label": "Без покупок",
+   "value": "без покупок"
+  }
+ ],
+ "tabField": "tag"
+}
