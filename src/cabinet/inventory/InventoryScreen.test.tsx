@@ -2182,7 +2182,56 @@ it('shows warehouse stock figures with a direct opening action', async () => {
   expect(
     within(warehouse).getByText('Зон').nextElementSibling,
   ).toHaveTextContent('4')
-  expect(within(warehouse).getByText('Відкрити')).toBeVisible()
+  expect(warehouse).toHaveAttribute('href', '/app/yard/warehouses/wh-1')
+})
+
+it('searches warehouse codes and resets the current page without losing other parameters', async () => {
+  const user = userEvent.setup()
+  api.getWarehouses.mockResolvedValue(
+    Array.from({ length: 12 }, (_, index) => ({
+      id: `wh-${index + 1}`,
+      name: `Склад ${index + 1}`,
+      code: `WH${index + 1}`,
+      isActive: true,
+      isSystemDefault: index === 0,
+      zoneCount: 2,
+    })),
+  )
+  renderAt('/app/yard/warehouses?locationPage=2&keep=1')
+  expect(
+    await screen.findByRole('link', { name: 'Відкрити склад Склад 11' }),
+  ).toBeVisible()
+  await user.type(
+    screen.getByRole('searchbox', { name: 'Пошук складу' }),
+    'WH2',
+  )
+  expect(
+    screen.getByRole('link', { name: 'Відкрити склад Склад 2' }),
+  ).toHaveAttribute('href', '/app/yard/warehouses/wh-2')
+  expect(
+    screen.queryByRole('link', { name: 'Відкрити склад Склад 11' }),
+  ).toBeNull()
+  expect(screen.getByTestId('inventory-url')).toHaveTextContent('keep=1')
+  expect(screen.getByTestId('inventory-url')).not.toHaveTextContent(
+    'locationPage',
+  )
+})
+
+it('distinguishes warehouse search with no matches from an empty warehouse directory', async () => {
+  const user = userEvent.setup()
+  renderAt('/app/yard/warehouses')
+  await screen.findByRole('heading', { level: 1, name: 'Склади' })
+  const search = screen.getByRole('searchbox', { name: 'Пошук складу' })
+  await user.type(search, 'невідомий')
+  expect(
+    screen.getByText('Складів за цією назвою або кодом не знайдено.'),
+  ).toBeVisible()
+  expect(screen.queryByText('Складів ще немає')).toBeNull()
+  expect(screen.getByRole('button', { name: 'Додати склад' })).toBeVisible()
+  await user.clear(search)
+  expect(
+    screen.getByRole('link', { name: 'Відкрити склад Основний склад' }),
+  ).toBeVisible()
 })
 
 it('shows an empty warehouse as zero parts in the warehouse directory', async () => {
@@ -2196,7 +2245,7 @@ it('shows an empty warehouse as zero parts in the warehouse directory', async ()
   expect(
     within(warehouse).getByText('Зон').nextElementSibling,
   ).toHaveTextContent('4')
-  expect(within(warehouse).getByText('Відкрити')).toBeVisible()
+  expect(warehouse).toHaveAttribute('href', '/app/yard/warehouses/wh-1')
 })
 
 it('keeps warehouse navigation available when stock figures fail', async () => {

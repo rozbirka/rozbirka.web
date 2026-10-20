@@ -83,6 +83,18 @@
   grid-template-columns: minmax(0, 1fr) 1.25rem;
 }
 
+.location-browser__row--warehouse,
+.location-browser__columns--warehouse {
+  grid-template-columns: minmax(0, 1fr) auto 1.25rem;
+}
+
+.location-browser__warehouse-counts {
+  display: grid;
+  grid-template-columns: 6rem 5rem;
+  align-items: center;
+  gap: 18px;
+}
+
 .location-browser__row {
   width: 100%;
   min-width: 0;
@@ -304,6 +316,15 @@
 
   .location-browser__row--shelf {
     grid-template-columns: minmax(0, 1fr) 14px;
+  }
+
+  .location-browser__row--warehouse {
+    grid-template-columns: minmax(0, 1fr) auto 14px;
+  }
+
+  .location-browser__warehouse-counts {
+    grid-template-columns: 4.5rem 3rem;
+    gap: 10px;
   }
 
   .location-browser__row--zone {

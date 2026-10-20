@@ -15,7 +15,6 @@ import {
   Button,
   Card,
   ConfirmDialog,
-  EmptyState,
   Field,
   FormDialog,
   Notice,
@@ -43,7 +42,7 @@ import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { cabinetModules } from '../module-registry'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
-import { commonMessages, useFormat, useT } from '@/i18n'
+import { commonMessages, useT } from '@/i18n'
 import { useInventoryFormat } from '../inventory/inventory-format'
 import { inventoryMessages } from '../inventory/messages'
 import { overviewMessages } from '../inventory/overview-messages'
@@ -54,7 +53,7 @@ import { LocationLabelsPage } from '../inventory/LocationLabelPrinter'
 import { locationPartsHref } from '../inventory/location-contents'
 import { locationBrowserMessages } from '../inventory/location-browser-messages'
 import { warehouseMessages } from '../inventory/warehouse-messages'
-import { RedesignShell, RedesignTitle } from '../redesign-shell'
+import { RedesignShell } from '../redesign-shell'
 import { inventoryCodeFromName } from '../inventory/inventory-code'
 import { ZoneEditorSheet, type ZoneDraft } from '../inventory/ZoneEditorSheet'
 import { Resource } from '../inventory/InventoryResource'
@@ -62,6 +61,7 @@ import { useLoad, usePermission } from '../inventory/use-stock-resource'
 import { StockStat } from '../inventory/StockStat'
 import { Step } from '../inventory/StockStep'
 import { WarehouseZoneBrowser } from './WarehouseZoneBrowser'
+import { WarehouseBrowser } from './WarehouseBrowser'
 
 export function WarehousesScreen({
   definition: _definition,
@@ -92,9 +92,7 @@ interface WarehousesOverviewData {
 }
 
 function WarehousesOverview() {
-  const t = useT(overviewMessages)
   const ti = useT(inventoryMessages)
-  const format = useFormat()
   const base = useWarehouseBase()
   const canZones = usePermission('inventory.zones.manage')
   const canSeeParts = usePermission('parts.view')
@@ -150,129 +148,21 @@ function WarehousesOverview() {
   return (
     <Resource retry={resource.reload} state={resource.state}>
       {({ warehouses, byWarehouse }: WarehousesOverviewData) => {
-        const stock = byWarehouse
-
         return (
           <RedesignShell crumb={ti('crumbWarehouses')}>
-            <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-5">
-              <RedesignTitle
-                title={ti('crumbWarehouses')}
-                lead={t('warehousesLead')}
-                aside={
-                  <span className="border-app-line-2 text-app-muted rounded-full border px-3 py-1 font-mono text-[14px] tabular-nums">
-                    {format.number(warehouses.length)}
-                  </span>
-                }
-              />
-              {canZones ? (
-                <Button
-                  onClick={() => {
-                    setDraft({ name: '', code: '' })
-                    setAdding(true)
-                  }}
-                  variant="primary"
-                >
-                  <Plus aria-hidden />
-                  {t('addWarehouse')}
-                </Button>
-              ) : null}
-            </div>
             {operationError ? (
               <Notice tone="danger">{operationError}</Notice>
             ) : null}
-            <section
-              aria-label={t('warehouses')}
-              className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
-            >
-              {warehouses.length === 0 ? (
-                <EmptyState
-                  description={t('noWarehousesHint')}
-                  title={t('noWarehousesTitle')}
-                />
-              ) : (
-                <>
-                  <div
-                    aria-hidden
-                    className="border-app-line text-app-dim hidden grid-cols-[minmax(0,1fr)_16rem_7rem] gap-5 border-b px-6 py-3.5 font-mono text-[10px] tracking-[0.14em] uppercase md:grid"
-                  >
-                    <span>{t('columnWarehouse')}</span>
-                    <div className="grid grid-cols-[9rem_6rem] gap-4 text-right">
-                      <span>{t('columnParts')}</span>
-                      <span>{t('columnZones')}</span>
-                    </div>
-                    <span />
-                  </div>
-                  <ul className="divide-app-line divide-y">
-                    {warehouses.map((item) => {
-                      const parts =
-                        stock === null ? null : (stock.get(item.id) ?? 0)
-                      return (
-                        <li key={item.id}>
-                          <Link
-                            aria-label={t('openWarehouseLabel', {
-                              name: item.name,
-                            })}
-                            className="focus-visible:outline-brand group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-5 gap-y-5 px-5 py-5 transition-colors outline-offset-[-3px] hover:bg-white/[0.03] focus-visible:outline-2 md:grid-cols-[minmax(0,1fr)_16rem_7rem] md:px-6 md:py-6"
-                            to={`${base}/${item.id}`}
-                          >
-                            <div className="col-span-2 min-w-0 md:col-span-1">
-                              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                                <h2 className="text-[18px] font-bold tracking-[-0.01em] break-words text-white [overflow-wrap:anywhere]">
-                                  {item.name}
-                                </h2>
-                                {item.isSystemDefault ? (
-                                  <StatusPill>{t('defaultTag')}</StatusPill>
-                                ) : null}
-                                {!item.isActive ? (
-                                  <StatusPill>{t('archivedTag')}</StatusPill>
-                                ) : null}
-                              </div>
-                              <p className="text-app-muted mt-1.5 font-mono text-[12px] break-words [overflow-wrap:anywhere]">
-                                {t('warehouseCode', { code: item.code })}
-                              </p>
-                            </div>
-                            <dl className="grid min-w-0 grid-cols-2 gap-4 md:grid-cols-[9rem_6rem]">
-                              <div className="min-w-0 md:text-right">
-                                <dt className="text-app-muted text-[12px] md:sr-only">
-                                  {t('columnParts')}
-                                </dt>
-                                <dd
-                                  className={cn(
-                                    'mt-1 tabular-nums md:mt-0',
-                                    parts === null
-                                      ? 'text-app-muted text-[12px]'
-                                      : 'text-[22px] leading-tight font-bold text-white',
-                                  )}
-                                >
-                                  {parts === null
-                                    ? ti('stockUnavailable')
-                                    : format.number(parts)}
-                                </dd>
-                              </div>
-                              <div className="md:text-right">
-                                <dt className="text-app-muted text-[12px] md:sr-only">
-                                  {t('columnZones')}
-                                </dt>
-                                <dd className="text-app-muted mt-1 text-[22px] leading-tight font-semibold tabular-nums md:mt-0">
-                                  {format.number(item.zoneCount)}
-                                </dd>
-                              </div>
-                            </dl>
-                            <span className="text-app-muted group-hover:text-app-ink flex items-center justify-end gap-2 text-[13px] font-semibold">
-                              {t('openWarehouse')}
-                              <ArrowRight
-                                aria-hidden
-                                className="size-4 shrink-0"
-                              />
-                            </span>
-                          </Link>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </>
-              )}
-            </section>
+            <WarehouseBrowser
+              warehouses={warehouses}
+              stock={byWarehouse}
+              base={base}
+              canManage={canZones}
+              onAdd={() => {
+                setDraft({ name: '', code: '' })
+                setAdding(true)
+              }}
+            />
             <WarehouseEditorSheet
               open={adding}
               draft={draft}
