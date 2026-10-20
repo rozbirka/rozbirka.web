@@ -1068,6 +1068,63 @@ it('shows the mobile scan journal as read-only data', async () => {
   ).not.toBeInTheDocument()
 })
 
+it('filters journal scans by comparison and restores all scans', async () => {
+  const user = userEvent.setup()
+  renderAt('/app/yard/inventory/sessions/session-1/journal/zone-1')
+  expect(await screen.findByText('Крило')).toBeVisible()
+  await user.click(screen.getByRole('radio', { name: 'Збіглося 0' }))
+  expect(screen.queryByText('Крило')).toBeNull()
+  expect(screen.getByText('Сканувань за цим фільтром немає')).toBeVisible()
+  await user.click(screen.getByRole('radio', { name: 'Усі 1' }))
+  expect(within(screen.getByRole('table')).getByText('Крило')).toBeVisible()
+  await user.click(screen.getByRole('radio', { name: 'Розходження 1' }))
+  expect(within(screen.getByRole('table')).getByText('Крило')).toBeVisible()
+})
+
+it('filters audit events by kind and by search without mixing the groups', async () => {
+  const user = userEvent.setup()
+  const event = {
+    inventorySessionId: 'session-1',
+    zoneId: null,
+    partId: null,
+    scanId: null,
+    adjustmentId: null,
+    actorUserId: 'user-1',
+    detailsJson: null,
+    createdAt: '2026-09-02T11:00:00Z',
+  }
+  api.getAudit.mockResolvedValue([
+    { ...event, id: 'audit-session', action: 'session.started' },
+    {
+      ...event,
+      id: 'audit-adjustment',
+      action: 'adjustment.applied',
+      adjustmentId: 'adjustment-1',
+      partId: 'part-1',
+    },
+    { ...event, id: 'audit-scan', action: 'scan.recorded', scanId: 'scan-1' },
+  ])
+  renderAt('/app/yard/inventory/sessions/session-1/audit')
+  expect(await screen.findByText('Сесію розпочато')).toBeVisible()
+  await user.click(screen.getByRole('radio', { name: 'Рішення 1' }))
+  expect(screen.getByText('Коригування застосовано')).toBeVisible()
+  expect(screen.queryByText('Сесію розпочато')).toBeNull()
+  expect(screen.queryByText('Позицію відскановано')).toBeNull()
+  await user.click(screen.getByRole('radio', { name: 'Сканування 1' }))
+  expect(screen.getByText('Позицію відскановано')).toBeVisible()
+  expect(screen.queryByText('Коригування застосовано')).toBeNull()
+  await user.click(screen.getByRole('radio', { name: 'Усі 3' }))
+  expect(screen.getByText('Сесію розпочато')).toBeVisible()
+  expect(screen.getByText('Коригування застосовано')).toBeVisible()
+  await user.type(
+    screen.getByRole('searchbox', { name: 'Пошук в аудиті' }),
+    'розпочато',
+  )
+  expect(screen.getByText('Сесію розпочато')).toBeVisible()
+  expect(screen.queryByText('Коригування застосовано')).toBeNull()
+  expect(screen.queryByText('Позицію відскановано')).toBeNull()
+})
+
 it('marks voided Mobile scans in the read-only journal', async () => {
   api.getScans.mockResolvedValue([
     {
