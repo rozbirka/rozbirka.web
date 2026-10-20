@@ -17,6 +17,8 @@ import {
 } from 'react-router'
 import {
   ChevronDown,
+  ChevronUp,
+  Maximize2,
   ChevronLeft,
   ChevronRight,
   Copy,
@@ -52,6 +54,7 @@ import {
   QuantityStepper,
   SkeletonRows,
   SpecGrid,
+  BulkBar,
   Button,
   ConfirmDialog,
   DataTable,
@@ -367,6 +370,12 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
   const canManage = manageDecision.kind === 'allowed'
 
   const [reloadToken, setReloadToken] = useState(0)
+  // v2 list (module 11, frames 1.2–1.3): a working set of picked rows whose
+  // one bulk action is printing their stickers, and the part opened beside
+  // the list. Both reset when the filters change; paging keeps the picks.
+  const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
+  const [peekId, setPeekId] = useState<string | null>(null)
+  const navigateList = useNavigate()
   const removedOrigin =
     searchParams.get('origin')?.toLowerCase() === 'free' ||
     (location.state as { removedOrigin?: boolean } | null)?.removedOrigin ===
@@ -435,6 +444,17 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     }),
     [filters],
   )
+  const selectionScope = JSON.stringify({
+    ...searchRequest,
+    page: undefined,
+    pageSize: undefined,
+  })
+  const [pickScope, setPickScope] = useState(selectionScope)
+  if (pickScope !== selectionScope) {
+    setPickScope(selectionScope)
+    setPicked(new Set())
+    setPeekId(null)
+  }
   const filteredCarKey = filters.carIds.join(',')
   const filteredCars = useMemo(
     () =>
@@ -822,6 +842,21 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
 
   return (
     <RedesignShell
+      {...(peekId === null || loading || error
+        ? {}
+        : {
+            peek: (
+              <PartPeek
+                key={peekId}
+                links={links}
+                onClose={() => setPeekId(null)}
+                onOpen={setPeekId}
+                partId={peekId}
+                rows={items}
+                tenantSlug={cabinet.targetTenant?.slug ?? ''}
+              />
+            ),
+          })}
       actions={
         manageDecision.kind === 'allowed' ||
         createDecision.kind === 'allowed' ||
@@ -880,7 +915,37 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
         <Notice tone="warn">{t('accessQuota')}</Notice>
       ) : null}
 
-      <div className="rz-toolbar" hidden={emptyYard} role="search">
+      {picked.size > 0 ? (
+        <BulkBar
+          actions={[
+            {
+              key: 'stickers',
+              label: t('bulkPrintStickers'),
+              onRun: () =>
+                void navigateList(
+                  `/app/${cabinet.targetTenant?.slug ?? ''}/stickers?${[
+                    ...picked,
+                  ]
+                    .map((id) => `part=${encodeURIComponent(id)}`)
+                    .join('&')}`,
+                ),
+            },
+          ]}
+          count={picked.size}
+          noun={t('bulkNoun', { count: picked.size })}
+          onClear={() => setPicked(new Set())}
+          onSelectPage={() =>
+            setPicked(new Set([...picked, ...items.map((part) => part.id)]))
+          }
+          pageCount={items.length}
+        />
+      ) : null}
+
+      <div
+        className="rz-toolbar"
+        hidden={emptyYard || picked.size > 0}
+        role="search"
+      >
         <SearchInput
           aria-label={t('searchLabel')}
           name="q"
@@ -1317,8 +1382,15 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
               </nav>
             ) : null
           }
+          activeKey={peekId}
+          onRowClick={(part) => setPeekId(part.id)}
           rowKey={(part) => part.id}
           rows={items}
+          selection={{
+            selected: picked,
+            onChange: setPicked,
+            rowLabel: (part) => t('selectPart', { name: part.name }),
+          }}
         />
       )}
     </RedesignShell>
@@ -2960,6 +3032,311 @@ const placementLabel = (
   return placed
     .map((zone) => `${zone.warehouseName} · ${zone.zoneName}`)
     .join(', ')
+}
+
+/**
+ * The part opened beside the list (v2 module 11, frame 1.2): the facts a
+ * person checks before deciding to open the full record — stock, price,
+ * place, source, the latest history. Prev/next walk the current page; the
+ * expand button opens the full record. Read-only by design.
+ */
+function PartPeek({
+  partId,
+  rows,
+  onOpen,
+  onClose,
+  tenantSlug,
+  links,
+}: {
+  partId: string
+  rows: readonly PartSearchItem[]
+  onOpen: (id: string) => void
+  onClose: () => void
+  tenantSlug: string
+  links: { cars: boolean; inventory: boolean }
+}) {
+  const t = useT(partDetailMessages)
+  const tl = useT(partsListMessages)
+  const { locale } = useLocale()
+  const format = useFormat()
+  const { currency } = useAccountingCurrency()
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const [state, setState] = useState<
+    | { kind: 'loading' }
+    | { kind: 'error' }
+    | {
+        kind: 'ready'
+        detail: PartDetail
+        history: Awaited<ReturnType<typeof partsApi.history>> | null
+        zones: PartInventoryZone[] | null
+      }
+  >({ kind: 'loading' })
+
+  useEffect(() => {
+    // Keyed by part id in the parent, so a new part starts from 'loading'.
+    const controller = new AbortController()
+    void Promise.all([
+      partsApi.get(partId, { signal: controller.signal }),
+      partsApi.history(partId, { signal: controller.signal }).catch(() => null),
+      links.inventory
+        ? inventoryApi
+            .getPartZones(partId, { signal: controller.signal })
+            .catch(() => [])
+        : Promise.resolve(null),
+    ]).then(
+      ([detail, history, zones]) => {
+        if (!controller.signal.aborted)
+          setState({ kind: 'ready', detail, history, zones })
+      },
+      () => {
+        if (!controller.signal.aborted) setState({ kind: 'error' })
+      },
+    )
+    return () => controller.abort()
+  }, [links.inventory, partId])
+
+  useEffect(() => {
+    headingRef.current?.focus()
+  }, [partId])
+
+  const index = rows.findIndex((row) => row.id === partId)
+  const previous = index > 0 ? rows[index - 1] : undefined
+  const next =
+    index >= 0 && index < rows.length - 1 ? rows[index + 1] : undefined
+  const fallbackName = rows[index]?.name ?? t('titleFallback')
+  const name = state.kind === 'ready' ? state.detail.name : fallbackName
+  const fullHref = `/app/${tenantSlug}/parts/${partId}`
+
+  return (
+    <aside
+      aria-label={tl('peekLabel', { name })}
+      className="rz-peek"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.stopPropagation()
+          onClose()
+        }
+      }}
+    >
+      <div className="rz-peek__head">
+        <div className="flex items-center gap-1">
+          <span className="rz-eyebrow flex-1">{tl('peekEyebrow')}</span>
+          <Button
+            aria-label={tl('peekPrevious')}
+            disabled={previous === undefined}
+            onClick={() => previous && onOpen(previous.id)}
+            size="icon"
+            variant="quiet"
+          >
+            <ChevronUp aria-hidden />
+          </Button>
+          <Button
+            aria-label={tl('peekNext')}
+            disabled={next === undefined}
+            onClick={() => next && onOpen(next.id)}
+            size="icon"
+            variant="quiet"
+          >
+            <ChevronDown aria-hidden />
+          </Button>
+          <Button asChild size="icon" variant="quiet">
+            <Link aria-label={tl('peekOpen')} to={fullHref}>
+              <Maximize2 aria-hidden />
+            </Link>
+          </Button>
+          <Button
+            aria-label={tl('peekClose')}
+            onClick={onClose}
+            size="icon"
+            variant="quiet"
+          >
+            <X aria-hidden />
+          </Button>
+        </div>
+        <h2 className="rz-h-title outline-none" ref={headingRef} tabIndex={-1}>
+          {name}
+        </h2>
+        {state.kind === 'ready' ? (
+          <>
+            <div className="rz-btn-row items-center">
+              {state.detail.oemCode ? (
+                <span className="rz-code pr-2">
+                  {t('oem', { code: state.detail.oemCode })}
+                </span>
+              ) : null}
+              {statusPresentation(state.detail.status, locale).label ===
+              '' ? null : (
+                <StatusPill
+                  tone={statusPresentation(state.detail.status, locale).tone}
+                >
+                  {statusPresentation(state.detail.status, locale).label}
+                </StatusPill>
+              )}
+              {state.detail.condition ? (
+                <span className="text-app-muted">
+                  {conditionLabel(state.detail.condition, locale)}
+                </span>
+              ) : null}
+            </div>
+            <div className="rz-btn-row">
+              <Button asChild>
+                <Link to={`/app/${tenantSlug}/stickers?part=${partId}`}>
+                  <Printer aria-hidden />
+                  {t('printSticker')}
+                </Link>
+              </Button>
+              <Button disabled title={t('addToOrderHint')}>
+                <ShoppingBag aria-hidden />
+                {t('addToOrder')}
+              </Button>
+            </div>
+          </>
+        ) : null}
+      </div>
+
+      {state.kind === 'loading' ? (
+        <div className="rz-peek__section">
+          <SkeletonRows columns={2} label={t('loading')} rows={4} />
+        </div>
+      ) : state.kind === 'error' ? (
+        <div className="rz-peek__section">
+          <Notice tone="danger">{tl('peekLoadFailed')}</Notice>
+        </div>
+      ) : (
+        <>
+          <section className="rz-peek__section" aria-label={t('stock')}>
+            <h3 className="rz-label m-0">{t('stock')}</h3>
+            <dl className="rz-kpis m-0 grid-cols-3">
+              <StockTile
+                label={t('tileAvailable')}
+                sub={
+                  state.detail.quantityAvailable > 0
+                    ? t('canSell')
+                    : t('noneFree')
+                }
+                value={state.detail.quantityAvailable}
+              />
+              <StockTile
+                label={t('tileReserved')}
+                sub={
+                  state.detail.quantityReserved > 0
+                    ? t('ordersCount', {
+                        count: state.detail.reservations?.length ?? 0,
+                      })
+                    : t('none')
+                }
+                tone="warn"
+                value={state.detail.quantityReserved}
+              />
+              <StockTile
+                label={t('tileSold')}
+                sub={
+                  state.detail.quantitySoldTotal > 0
+                    ? t('ordersCount', {
+                        count: state.detail.soldOrders?.length ?? 0,
+                      })
+                    : t('neverSold')
+                }
+                value={state.detail.quantitySoldTotal}
+              />
+            </dl>
+          </section>
+          <dl className="rz-facts m-0 border-app-line border-b">
+            <div>
+              <dt>{t('salePrice')}</dt>
+              <dd>
+                {state.detail.effectiveSalePrice === null ? (
+                  <span className="text-app-muted">{t('noPriceTitle')}</span>
+                ) : (
+                  <>
+                    <Amount
+                      className="text-app-strong font-mono"
+                      currency={currency}
+                      currencyDisplay="code"
+                      value={state.detail.effectiveSalePrice}
+                    />{' '}
+                    <span className="rz-caption">
+                      {t('perUnit', {
+                        unit: unitLabel(state.detail.unit, locale),
+                      })}
+                    </span>
+                  </>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>{t('placement')}</dt>
+              <dd>{placementLabel(state.zones, links.inventory, t)}</dd>
+            </div>
+            <div>
+              <dt>{tl('colCar')}</dt>
+              <dd>
+                {state.detail.carId ? (
+                  links.cars ? (
+                    <Link to={`/app/${tenantSlug}/cars/${state.detail.carId}`}>
+                      {[
+                        state.detail.carBrand,
+                        state.detail.carModel,
+                        state.detail.carYear,
+                      ]
+                        .filter(Boolean)
+                        .join(' ') ||
+                        (state.detail.carCode ?? t('sourceCarFallback'))}
+                    </Link>
+                  ) : (
+                    [
+                      state.detail.carBrand,
+                      state.detail.carModel,
+                      state.detail.carYear,
+                    ]
+                      .filter(Boolean)
+                      .join(' ') ||
+                    (state.detail.carCode ?? t('sourceCarFallback'))
+                  )
+                ) : state.detail.intakeId ? (
+                  t('sourceIntake')
+                ) : (
+                  t('sourceNone')
+                )}
+              </dd>
+            </div>
+          </dl>
+          <section className="rz-peek__section" aria-label={t('history')}>
+            <h3 className="rz-label m-0">{t('history')}</h3>
+            {(state.history?.events ?? []).length === 0 ? (
+              <p className="rz-caption m-0">{t('historyEmpty')}</p>
+            ) : (
+              <ol className="rz-timeline -mx-3">
+                {(state.history?.events ?? []).slice(0, 3).map((event) => (
+                  <li key={event.id}>
+                    <span aria-hidden className="rz-timeline__icon">
+                      {HISTORY_ICON[historyKind(event.eventType, event.data)]}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="text-app-strong font-medium">
+                        {historyLabel(event.eventType, locale)}
+                      </span>
+                      {event.order ? (
+                        <span className="text-app-muted font-mono">
+                          {' '}
+                          {t('orderNumber', {
+                            number: String(event.order.number),
+                          })}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="rz-timeline__date">
+                      {format.date(event.createdAt) ?? ''}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        </>
+      )}
+    </aside>
+  )
 }
 
 /** One of the three counts a part is split into, as a `.rz-kpi` cell. */

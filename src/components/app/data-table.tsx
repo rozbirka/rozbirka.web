@@ -34,6 +34,8 @@ export interface DataTableProps<Row> {
   /** Shown instead of the body when there is nothing to list. */
   empty?: ReactNode
   onRowClick?: (row: Row) => void
+  /** The row whose record is open beside the list (peek): brand edge. */
+  activeKey?: string | null
   footer?: ReactNode
   /** Turns the list into a working set: a checkbox per row and in the header. */
   selection?: DataTableSelection<Row>
@@ -56,6 +58,7 @@ export function DataTable<Row>({
   rowKey,
   empty,
   onRowClick,
+  activeKey = null,
   footer,
   selection,
   density,
@@ -152,6 +155,7 @@ export function DataTable<Row>({
               return (
                 <tr
                   {...(picked ? { 'aria-selected': true } : {})}
+                  {...(activeKey === id ? { 'data-active': 'true' } : {})}
                   className={cn(onRowClick !== undefined && 'cursor-pointer')}
                   key={id}
                   onClick={

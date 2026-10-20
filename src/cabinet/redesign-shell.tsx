@@ -12,6 +12,7 @@ export function RedesignShell({
   crumb,
   actions,
   banner,
+  peek,
   width = 'list',
   children,
 }: {
@@ -19,6 +20,8 @@ export function RedesignShell({
   actions?: ReactNode
   /** Full-width `.rz-banner` under the topbar (read-only, billing…). */
   banner?: ReactNode
+  /** `.rz-peek` beside the page (master-detail); the page and it share `.rz-split`. */
+  peek?: ReactNode
   /** `record` caps the page at 1240px, as Record.dc.html does. */
   width?: 'list' | 'record'
   children: ReactNode
@@ -34,9 +37,20 @@ export function RedesignShell({
         )}
       </div>
       {banner}
-      <div className={cn('rz-page', width === 'record' && 'max-w-[1240px]')}>
-        {children}
-      </div>
+      {peek === undefined || peek === null ? (
+        <div className={cn('rz-page', width === 'record' && 'max-w-[1240px]')}>
+          {children}
+        </div>
+      ) : (
+        <div className="rz-split">
+          <div
+            className={cn('rz-page', width === 'record' && 'max-w-[1240px]')}
+          >
+            {children}
+          </div>
+          {peek}
+        </div>
+      )}
     </div>
   )
 }

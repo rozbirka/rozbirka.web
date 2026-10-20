@@ -2366,14 +2366,135 @@ it('keeps the add button in place but switched off with the reason once the quot
   expect(add).toHaveAttribute('title', 'Ліміт деталей вичерпано.')
 })
 
-it('does not show selection checkboxes or bulk actions in the parts directory', async () => {
-  renderDirectory()
+function StickerProbe() {
+  const location = useLocation()
+  return <output aria-label="Стікери">{location.search}</output>
+}
+
+function renderDirectoryWithStickers() {
+  partMocks.search.mockResolvedValue({
+    items: pickableRows,
+    page: 1,
+    pageSize: 30,
+    total: 2,
+    totalPages: 1,
+  })
+  return render(
+    <MemoryRouter initialEntries={['/app/yard/parts']}>
+      <Routes>
+        <Route
+          element={<PartsScreen definition={partsDefinition as never} />}
+          path="/app/:tenant/parts"
+        />
+        <Route element={<StickerProbe />} path="/app/:tenant/stickers" />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+it('picks rows into a working set whose one bulk action prints their stickers', async () => {
+  const user = userEvent.setup()
+  renderDirectoryWithStickers()
 
   await screen.findByRole('link', { name: 'Фара ліва' })
-  expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  expect(screen.getByRole('search')).toBeVisible()
   expect(
     screen.queryByRole('region', { name: 'Дії над обраними' }),
   ).not.toBeInTheDocument()
+
+  await user.click(screen.getByRole('checkbox', { name: 'Обрати: Фара ліва' }))
+  const bulk = screen.getByRole('region', { name: 'Дії над обраними' })
+  // The bulk bar takes the toolbar's place (D15) and counts what is picked.
+  expect(bulk).toHaveTextContent('1 деталь обрано')
+  expect(screen.queryByRole('search')).toBeNull()
+  // Only a read-only action: no bulk price change or delete comes back.
+  expect(
+    within(bulk)
+      .getAllByRole('button')
+      .map((b) => b.textContent),
+  ).toEqual(['Обрати всі на сторінці (2)', 'Друк стікера', ''])
+
+  await user.click(
+    within(bulk).getByRole('button', { name: /Обрати всі на сторінці/ }),
+  )
+  expect(bulk).toHaveTextContent('2 деталі обрано')
+
+  await user.click(within(bulk).getByRole('button', { name: 'Друк стікера' }))
+  expect(await screen.findByLabelText('Стікери')).toHaveTextContent(
+    '?part=part-1&part=part-2',
+  )
+})
+
+it('clears the working set from the bulk bar and gives the toolbar back', async () => {
+  const user = userEvent.setup()
+  renderDirectory()
+
+  await user.click(
+    await screen.findByRole('checkbox', { name: 'Обрати: Бампер передній' }),
+  )
+  await user.click(screen.getByRole('button', { name: 'Зняти вибір' }))
+  expect(
+    screen.queryByRole('region', { name: 'Дії над обраними' }),
+  ).not.toBeInTheDocument()
+  expect(screen.getByRole('search')).toBeVisible()
+})
+
+it('opens a part beside the list on row click and walks the page from there', async () => {
+  const user = userEvent.setup()
+  partMocks.get.mockImplementation((id: string) =>
+    Promise.resolve({
+      id,
+      name: id === 'part-1' ? 'Фара ліва' : 'Бампер передній',
+      condition: 'used',
+      status: 'available',
+      source: 'car',
+      quantityTotal: 2,
+      quantityAvailable: 2,
+      quantityReserved: 0,
+      quantitySoldTotal: 0,
+      oemCode: id === 'part-1' ? '3G1941005' : null,
+      effectiveSalePrice: 1800,
+      unit: 'pcs',
+      photos: [],
+      reservations: null,
+      order: null,
+      soldOrders: null,
+      createdByName: 'Olena',
+      createdAt: '2026-08-28T12:00:00Z',
+    }),
+  )
+  renderDirectory()
+
+  const row = (await screen.findByRole('link', { name: 'Фара ліва' })).closest(
+    'tr',
+  )!
+  await user.click(within(row).getByRole('cell', { name: /2/ }).closest('td')!)
+  const peek = await screen.findByRole('complementary', {
+    name: 'Деталь: Фара ліва',
+  })
+  expect(
+    screen.getByRole('link', { name: 'Фара ліва' }).closest('tr'),
+  ).toHaveAttribute('data-active', 'true')
+  expect(within(peek).getByText('OEM 3G1941005')).toBeVisible()
+  expect(within(peek).getByText('Наявність')).toBeVisible()
+  expect(
+    within(peek).getByRole('link', { name: 'Відкрити картку деталі' }),
+  ).toHaveAttribute('href', '/app/yard/parts/part-1')
+  expect(
+    within(peek).getByRole('button', { name: 'Попередня деталь' }),
+  ).toBeDisabled()
+
+  await user.click(
+    within(peek).getByRole('button', { name: 'Наступна деталь' }),
+  )
+  expect(
+    await screen.findByRole('complementary', {
+      name: 'Деталь: Бампер передній',
+    }),
+  ).toBeVisible()
+
+  await user.keyboard('{Escape}')
+  expect(screen.queryByRole('complementary')).toBeNull()
 })
 
 it('does not expose web-only saved filters', async () => {

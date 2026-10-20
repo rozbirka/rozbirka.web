@@ -143,3 +143,14 @@
     row-gap: 2px;
   }
 }
+
+/*
+ * Below 1200px the kit turns `.rz-peek` into a fixed drawer but keeps the
+ * column's `align-self: flex-start`; browsers that align positioned boxes
+ * then shrink it to its content instead of the full height.
+ */
+@media (max-width: 1199px) {
+  .rz-peek {
+    align-self: stretch;
+  }
+}
