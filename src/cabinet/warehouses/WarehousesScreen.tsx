@@ -122,9 +122,9 @@ function UnassignedPartsView({ id }: { id: string }) {
         return (
           <RedesignShell
             crumb={
-              <span className="flex min-h-11 flex-wrap items-center gap-3">
+              <span className="flex min-h-control flex-wrap items-center gap-3">
                 <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 font-sans text-sm font-semibold tracking-normal normal-case hover:bg-white/[0.05]"
+                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 font-sans text-sm font-semibold tracking-normal normal-case hover:bg-app-hover"
                   to={`${base}/${encodeURIComponent(warehouse.id)}`}
                 >
                   <ChevronLeft aria-hidden className="size-3.5" />
@@ -146,7 +146,7 @@ function UnassignedPartsView({ id }: { id: string }) {
             {!warehouse.isActive ? <Notice>{t('archived')}</Notice> : null}
             {zone ? (
               <section
-                className="border-app-line bg-app-raised rounded-[20px] border p-4 sm:p-6"
+                className="rz-card p-[var(--rz-card-p)]"
                 aria-label={t('list')}
               >
                 <LocationPartsList
@@ -332,9 +332,9 @@ function WarehousesOverview() {
         return (
           <RedesignShell
             crumb={
-              <span className="flex min-h-11 items-center gap-2.5 text-[12px]">
+              <span className="flex min-h-control items-center gap-2.5 text-caption">
                 <span className="hidden sm:inline">{ti('crumbWarehouse')}</span>
-                <span aria-hidden className="hidden text-white/20 sm:inline">
+                <span aria-hidden className="hidden text-app-dim sm:inline">
                   /
                 </span>
                 <span className="text-app-muted">{ti('crumbWarehouses')}</span>
@@ -360,7 +360,7 @@ function WarehousesOverview() {
               title={ti('crumbWarehouses')}
               lead={t('warehousesPageLead')}
             />
-            <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-px overflow-hidden rounded-[20px] border">
+            <div className="rz-kpis">
               <StockStat
                 label={t('statWarehouses')}
                 value={format.number(warehouses.length) ?? '0'}
@@ -660,23 +660,23 @@ function WarehouseView({ id }: { id: string }) {
             : Math.round((filled / real.length) * 100)
 
         return (
-          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+          <div className="grid content-start">
+            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
               <div className="flex min-w-0 items-center gap-5">
                 <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-app-hover"
                   to={base}
                 >
                   <ChevronLeft aria-hidden className="size-3.5" />
                   {ti('backToWarehouses')}
                 </Link>
-                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                <p className="rz-crumbs hidden sm:flex">
                   <span>{ti('crumbWarehouse')}</span>
-                  <span aria-hidden className="text-white/20">
+                  <span aria-hidden className="text-app-dim">
                     /
                   </span>
                   <span>{ti('crumbWarehouses')}</span>
-                  <span aria-hidden className="text-white/20">
+                  <span aria-hidden className="text-app-dim">
                     /
                   </span>
                   <span className="text-app-muted truncate">
@@ -724,14 +724,12 @@ function WarehouseView({ id }: { id: string }) {
               </div>
             </div>
 
-            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="rz-page">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-4">
-                  <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                    {warehouse.name}
-                  </h1>
+                  <h1 className="rz-h-page break-words">{warehouse.name}</h1>
                   {warehouse.isActive ? (
-                    <span className="border-state-ok/30 bg-state-ok-soft text-state-ok inline-flex h-[30px] items-center gap-2 rounded-full border pr-3.5 pl-3 text-[13px] font-bold">
+                    <span className="border-state-ok/30 bg-state-ok-soft text-state-ok inline-flex h-[30px] items-center gap-2 rounded-full border pr-3.5 pl-3 text-body font-bold">
                       <span
                         aria-hidden
                         className="bg-state-ok size-1.5 rounded-full"
@@ -742,7 +740,7 @@ function WarehouseView({ id }: { id: string }) {
                     <StatusPill tone="neutral">{t('archived')}</StatusPill>
                   )}
                 </div>
-                <p className="text-app-muted mt-3 text-[15px]">
+                <p className="rz-caption mt-1">
                   {[
                     t('code', { code: warehouse.code }),
                     ti('zones', { count: real.length }),
@@ -761,7 +759,7 @@ function WarehouseView({ id }: { id: string }) {
                 <Notice tone="danger">{operationError}</Notice>
               ) : null}
 
-              <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-px overflow-hidden rounded-[20px] border">
+              <div className="rz-kpis">
                 <StockStat
                   label={t('statPositions')}
                   meta={`${ti('zones', { count: real.length })} · ${t('unassigned', { count: warehouse.unassignedPartCount })}`}
@@ -988,11 +986,11 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
               ? `?${new URLSearchParams({ locationSearch: zoneSearch }).toString()}`
               : ''
         return (
-          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+          <div className="grid content-start">
+            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
               <div className="flex min-w-0 items-center gap-5">
                 <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex min-h-11 shrink-0 items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                  className="border-app-line-2 text-app-muted hover:text-app-ink flex min-h-control shrink-0 items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-app-hover"
                   to={
                     section
                       ? `${base}/zones/${zone.id}${returnQuery}`
@@ -1004,13 +1002,13 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
                 </Link>
                 <p className="text-app-muted hidden min-w-0 items-center gap-2 text-sm sm:flex">
                   <span>{ti('crumbWarehouse')}</span>
-                  <span aria-hidden className="text-white/20">
+                  <span aria-hidden className="text-app-dim">
                     /
                   </span>
                   <span className="text-app-muted truncate">
                     {zone.warehouseName}
                   </span>
-                  <span aria-hidden className="text-white/20">
+                  <span aria-hidden className="text-app-dim">
                     /
                   </span>
                   {section ? (
@@ -1018,7 +1016,7 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
                       <span className="text-app-muted truncate">
                         {zone.name}
                       </span>
-                      <span aria-hidden className="text-white/20">
+                      <span aria-hidden className="text-app-dim">
                         /
                       </span>
                     </>
@@ -1054,9 +1052,9 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
                 </Button>
               ) : null}
             </div>
-            <div className="mx-auto grid w-full max-w-[1440px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="rz-page">
               <header className="min-w-0">
-                <h1 className="break-words text-[38px] leading-[1.05] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+                <h1 className="rz-h-page break-words">
                   {section?.name ?? zone.name}
                 </h1>
                 <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -1073,7 +1071,7 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
                         : 'zoneArchived',
                     )}
                   </StatusPill>
-                  <p className="text-app-muted min-w-0 break-all font-mono text-[13px]">
+                  <p className="text-app-muted min-w-0 break-all font-mono text-body">
                     {t('code', { code: section?.code ?? zone.code })}
                   </p>
                 </div>
@@ -1098,7 +1096,7 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
                     )}
                   </Notice>
                   {labelsOpen && !zone.isSystemUnassigned ? (
-                    <div className="border-app-line bg-app-raised rounded-[20px] border p-4 sm:p-6">
+                    <div className="rz-card p-[var(--rz-card-p)]">
                       <LocationLabelsPage
                         target={{
                           kind: section ? 'shelf' : 'section',
@@ -1293,7 +1291,7 @@ function ZoneLocations({
   return (
     <section
       aria-label={t(section ? 'shelfType' : 'sectionType')}
-      className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
+      className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-panel border"
     >
       {error ? (
         <div className="p-4 sm:p-6">
@@ -1840,7 +1838,7 @@ function PartPlacementView({
     : '/'
 
   const content = (
-    <Resource retry={resource.reload} state={resource.state}>
+    <Resource retry={resource.reload} state={resource.state} framed={!drawer}>
       {({
         warehouses,
         zones,
@@ -1950,30 +1948,28 @@ function PartPlacementView({
         return (
           <div
             className={
-              drawer
-                ? 'type-redesign grid min-w-0 content-start'
-                : 'type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10'
+              drawer ? 'grid min-w-0 content-start' : 'grid content-start'
             }
           >
             {!drawer ? (
-              <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+              <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
                 <div className="flex min-w-0 items-center gap-5">
                   <Link
-                    className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                    className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-app-hover"
                     to={back}
                   >
                     <ChevronLeft aria-hidden className="size-3.5" />
                     {t('backToPart')}
                   </Link>
-                  <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                  <p className="rz-crumbs hidden sm:flex">
                     <span>{ti('crumbWarehouse')}</span>
-                    <span aria-hidden className="text-white/20">
+                    <span aria-hidden className="text-app-dim">
                       /
                     </span>
                     <span>{t('crumbParts')}</span>
                     {part === null ? null : (
                       <>
-                        <span aria-hidden className="text-white/20">
+                        <span aria-hidden className="text-app-dim">
                           /
                         </span>
                         <span className="text-app-muted">{part.qrCode}</span>
@@ -1997,20 +1993,12 @@ function PartPlacementView({
               </div>
             ) : null}
 
-            <div
-              className={
-                drawer
-                  ? 'grid min-w-0 gap-5'
-                  : 'mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12'
-              }
-            >
+            <div className={drawer ? 'grid min-w-0 gap-5' : 'rz-page'}>
               <div className="min-w-0">
                 {!drawer ? (
-                  <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                    {t('title')}
-                  </h1>
+                  <h1 className="rz-h-page break-words">{t('title')}</h1>
                 ) : null}
-                <p className="text-app-muted mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px]">
+                <p className="text-app-muted mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-body">
                   {part === null ? (
                     <span>{t('partHidden')}</span>
                   ) : (
@@ -2018,13 +2006,13 @@ function PartPlacementView({
                       <span className="text-app-ink font-semibold">
                         {part.name}
                       </span>
-                      <span aria-hidden className="text-white/20">
+                      <span aria-hidden className="text-app-dim">
                         ·
                       </span>
                       <span className="max-w-full break-all font-mono">
                         {part.qrCode}
                       </span>
-                      <span aria-hidden className="text-white/20">
+                      <span aria-hidden className="text-app-dim">
                         ·
                       </span>
                       <span>
@@ -2067,7 +2055,7 @@ function PartPlacementView({
                       role="radiogroup"
                     >
                       {houses.length === 0 ? (
-                        <div className="border-app-line-2 text-app-muted grid w-full gap-3 rounded-xl border border-dashed bg-white/[0.02] p-4.5 text-sm">
+                        <div className="border-app-line-2 text-app-muted grid w-full gap-3 rounded-panel border border-dashed bg-app-hover p-4.5 text-sm">
                           <p>{t('noActiveWarehouses')}</p>
                           {canManage ? (
                             <Button onClick={() => openCreate('warehouse')}>
@@ -2086,9 +2074,9 @@ function PartPlacementView({
                           <button
                             aria-checked={active}
                             className={cn(
-                              'focus-visible:outline-brand min-h-[66px] flex-[1_1_10rem] cursor-pointer rounded-xl border px-3.5 py-3 text-left hover:border-white/20',
+                              'focus-visible:outline-brand min-h-[66px] flex-[1_1_10rem] cursor-pointer rounded-panel border px-3.5 py-3 text-left hover:border-app-line-2',
                               active
-                                ? 'border-app-line-2 bg-white/[0.07]'
+                                ? 'border-app-line-2 bg-app-hover'
                                 : 'border-app-line bg-transparent',
                             )}
                             key={item.id}
@@ -2101,13 +2089,13 @@ function PartPlacementView({
                           >
                             <span
                               className={cn(
-                                'block text-[15px] font-bold',
+                                'block text-title font-bold',
                                 active ? 'text-app-ink' : 'text-app-muted',
                               )}
                             >
                               {item.name}
                             </span>
-                            <span className="text-app-muted mt-1 block text-[12px] font-medium">
+                            <span className="text-app-muted mt-1 block text-caption font-medium">
                               {ti('zones', { count })}
                             </span>
                           </button>
@@ -2118,25 +2106,25 @@ function PartPlacementView({
 
                   <Step
                     aside={
-                      <p className="text-app-muted flex flex-wrap items-center gap-3.5 text-[12px]">
+                      <p className="text-app-muted flex flex-wrap items-center gap-3.5 text-caption">
                         <span className="flex items-center gap-1.5">
                           <span
                             aria-hidden
-                            className="size-2 rounded-[3px] bg-white/15"
+                            className="bg-app-line-2 size-2 rounded-control"
                           />
                           {t('legendEmpty')}
                         </span>
                         <span className="flex items-center gap-1.5">
                           <span
                             aria-hidden
-                            className="bg-state-warn/50 size-2 rounded-[3px]"
+                            className="bg-state-warn/50 size-2 rounded-control"
                           />
                           {t('legendFilled')}
                         </span>
                         <span className="flex items-center gap-1.5">
                           <span
                             aria-hidden
-                            className="bg-state-danger/50 size-2 rounded-[3px]"
+                            className="bg-state-danger/50 size-2 rounded-control"
                           />
                           {t('legendBusiest')}
                         </span>
@@ -2149,7 +2137,7 @@ function PartPlacementView({
                     {warehouseOnly && !drawer?.requirePhysicalZone ? (
                       <label
                         className={cn(
-                          'mb-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
+                          'mb-3 flex cursor-pointer items-center justify-between gap-3 rounded-panel border p-3 text-sm transition-colors',
                           selected.length === 1 &&
                             selected[0] === warehouseOnly.id
                             ? 'border-brand bg-brand/[0.08]'
@@ -2176,7 +2164,7 @@ function PartPlacementView({
                         <span
                           aria-hidden="true"
                           className={cn(
-                            'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                            'flex size-5 shrink-0 items-center justify-center rounded-control border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
                             selected.length === 1 &&
                               selected[0] === warehouseOnly.id
                               ? 'border-brand bg-brand text-app-canvas'
@@ -2208,7 +2196,7 @@ function PartPlacementView({
                       </div>
                     )}
                     {house !== null && shown.length === 0 ? (
-                      <p className="border-app-line-2 text-app-muted mt-3.5 rounded-xl border border-dashed bg-white/[0.02] p-4.5 text-sm">
+                      <p className="border-app-line-2 text-app-muted mt-3.5 rounded-panel border border-dashed bg-app-hover p-4.5 text-sm">
                         {inHouse.length === 0
                           ? t('noActiveZones')
                           : t('noZonesFound')}
@@ -2232,7 +2220,7 @@ function PartPlacementView({
                             <li key={zone.id}>
                               <label
                                 className={cn(
-                                  'block cursor-pointer rounded-xl border px-3 pt-2.5 pb-3 hover:border-white/20',
+                                  'block cursor-pointer rounded-panel border px-3 pt-2.5 pb-3 hover:border-app-line-2',
                                   on
                                     ? 'border-brand bg-brand/[0.08]'
                                     : 'border-app-line bg-app-canvas',
@@ -2243,14 +2231,14 @@ function PartPlacementView({
                                     <span
                                       className={cn(
                                         drawer
-                                          ? 'block break-words text-[14px] font-bold'
-                                          : 'block truncate text-[14px] font-bold',
+                                          ? 'block break-words text-body font-bold'
+                                          : 'block truncate text-body font-bold',
                                         on ? 'text-app-ink' : 'text-app-muted',
                                       )}
                                     >
                                       {zone.name}
                                     </span>
-                                    <span className="text-app-muted block font-mono text-[12px]">
+                                    <span className="text-app-muted block font-mono text-caption">
                                       {zone.code}
                                     </span>
                                   </span>
@@ -2265,7 +2253,7 @@ function PartPlacementView({
                                   <span
                                     aria-hidden="true"
                                     className={cn(
-                                      'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                      'flex size-5 shrink-0 items-center justify-center rounded-control border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
                                       on
                                         ? 'border-brand bg-brand text-app-canvas'
                                         : 'border-app-line-2',
@@ -2278,7 +2266,7 @@ function PartPlacementView({
                                 </span>
                                 <span
                                   aria-hidden
-                                  className="mt-2.5 block h-1 overflow-hidden rounded-full bg-white/[0.08]"
+                                  className="mt-2.5 block h-1 overflow-hidden rounded-full bg-app-hover"
                                 >
                                   <span
                                     className={cn(
@@ -2292,7 +2280,7 @@ function PartPlacementView({
                                     style={{ width: `${String(load)}%` }}
                                   />
                                 </span>
-                                <span className="text-app-muted mt-1.5 block text-[11px] font-semibold">
+                                <span className="text-app-muted mt-1.5 block text-micro font-semibold">
                                   {count === null
                                     ? ti('stockUnavailable')
                                     : ti('positions', { count })}
@@ -2335,7 +2323,7 @@ function PartPlacementView({
                         <div className="grid gap-2 sm:grid-cols-2">
                           <label
                             className={cn(
-                              'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
+                              'flex cursor-pointer items-center justify-between gap-3 rounded-panel border p-3 text-sm transition-colors',
                               !selectedSectionId
                                 ? 'border-brand bg-brand/[0.08]'
                                 : 'border-app-line hover:border-app-line-2',
@@ -2356,7 +2344,7 @@ function PartPlacementView({
                             <span
                               aria-hidden="true"
                               className={cn(
-                                'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                'flex size-5 shrink-0 items-center justify-center rounded-control border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
                                 !selectedSectionId
                                   ? 'border-brand bg-brand text-app-canvas'
                                   : 'border-app-line-2',
@@ -2370,7 +2358,7 @@ function PartPlacementView({
                           {availableSections.map((section) => (
                             <label
                               className={cn(
-                                'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
+                                'flex cursor-pointer items-center justify-between gap-3 rounded-panel border p-3 text-sm transition-colors',
                                 selectedSectionId === section.id
                                   ? 'border-brand bg-brand/[0.08]'
                                   : 'border-app-line hover:border-app-line-2',
@@ -2394,7 +2382,7 @@ function PartPlacementView({
                               <span
                                 aria-hidden="true"
                                 className={cn(
-                                  'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                  'flex size-5 shrink-0 items-center justify-center rounded-control border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
                                   selectedSectionId === section.id
                                     ? 'border-brand bg-brand text-app-canvas'
                                     : 'border-app-line-2',
@@ -2431,7 +2419,7 @@ function PartPlacementView({
                         <div className="grid gap-2 sm:grid-cols-2">
                           <label
                             className={cn(
-                              'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
+                              'flex cursor-pointer items-center justify-between gap-3 rounded-panel border p-3 text-sm transition-colors',
                               !selectedShelfId
                                 ? 'border-brand bg-brand/[0.08]'
                                 : 'border-app-line hover:border-app-line-2',
@@ -2449,7 +2437,7 @@ function PartPlacementView({
                             <span
                               aria-hidden="true"
                               className={cn(
-                                'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                'flex size-5 shrink-0 items-center justify-center rounded-control border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
                                 !selectedShelfId
                                   ? 'border-brand bg-brand text-app-canvas'
                                   : 'border-app-line-2',
@@ -2463,7 +2451,7 @@ function PartPlacementView({
                           {availableShelves.map((shelf) => (
                             <label
                               className={cn(
-                                'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
+                                'flex cursor-pointer items-center justify-between gap-3 rounded-panel border p-3 text-sm transition-colors',
                                 selectedShelfId === shelf.id
                                   ? 'border-brand bg-brand/[0.08]'
                                   : 'border-app-line hover:border-app-line-2',
@@ -2485,7 +2473,7 @@ function PartPlacementView({
                               <span
                                 aria-hidden="true"
                                 className={cn(
-                                  'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                  'flex size-5 shrink-0 items-center justify-center rounded-control border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
                                   selectedShelfId === shelf.id
                                     ? 'border-brand bg-brand text-app-canvas'
                                     : 'border-app-line-2',
@@ -2511,26 +2499,26 @@ function PartPlacementView({
                   >
                     <div className="flex flex-wrap items-center gap-4.5">
                       <span
-                        className="border-app-line bg-app-canvas text-app-muted flex items-center gap-1 rounded-xl border p-[3px]"
+                        className="border-app-line bg-app-canvas text-app-muted flex items-center gap-1 rounded-panel border p-[3px]"
                         title={t('notSplitTitle')}
                       >
                         <span
                           aria-hidden
-                          className="flex size-9.5 items-center justify-center rounded-[9px] text-[18px] font-bold opacity-40"
+                          className="flex size-9.5 items-center justify-center rounded-control text-title font-bold opacity-40"
                         >
                           −
                         </span>
-                        <span className="w-13 text-center font-mono text-[17px] text-white">
+                        <span className="w-13 text-center font-mono text-title text-app-strong">
                           {part?.quantityTotal ?? '—'}
                         </span>
                         <span
                           aria-hidden
-                          className="flex size-9.5 items-center justify-center rounded-[9px] text-[18px] font-bold opacity-40"
+                          className="flex size-9.5 items-center justify-center rounded-control text-title font-bold opacity-40"
                         >
                           +
                         </span>
                       </span>
-                      <p className="text-app-muted min-w-[12rem] flex-1 text-[14px]">
+                      <p className="text-app-muted min-w-[12rem] flex-1 text-body">
                         {t('notSplit')}
                       </p>
                     </div>
@@ -2539,7 +2527,7 @@ function PartPlacementView({
                   {!drawer ? (
                     <Card
                       aside={
-                        <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
+                        <span className="text-app-muted font-mono text-micro tracking-[0.1em] uppercase">
                           {t('records', { count: moves.length })}
                         </span>
                       }
@@ -2560,13 +2548,13 @@ function PartPlacementView({
                               className="border-app-line flex flex-wrap items-center gap-x-3.5 gap-y-1 border-t px-6 py-3"
                               key={event.id}
                             >
-                              <span className="text-app-ink w-28 shrink-0 text-[14px] font-semibold">
+                              <span className="text-app-ink w-28 shrink-0 text-body font-semibold">
                                 {historyLabel(event.eventType, locale)}
                               </span>
-                              <span className="text-app-muted min-w-0 flex-1 text-[13px]">
+                              <span className="text-app-muted min-w-0 flex-1 text-body">
                                 {historyDetails(event.data, locale).join(' · ')}
                               </span>
-                              <span className="text-app-dim font-mono text-[13px] whitespace-nowrap">
+                              <span className="text-app-dim font-mono text-body whitespace-nowrap">
                                 {date(event.createdAt)}
                               </span>
                             </li>
@@ -2580,14 +2568,14 @@ function PartPlacementView({
                 {!drawer ? (
                   <section
                     aria-label={t('newPlacement')}
-                    className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-[18px] border px-5.5 pt-[22px] pb-6"
+                    className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-panel border px-5.5 pt-[22px] pb-6"
                   >
-                    <h2 className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
+                    <h2 className="text-app-dim font-mono text-micro tracking-[var(--rz-ls-mono)] uppercase">
                       {t('newPlacement')}
                     </h2>
-                    <div className="border-app-line bg-app-canvas mt-4 rounded-[14px] border p-4">
+                    <div className="border-app-line bg-app-canvas mt-4 rounded-panel border p-4">
                       {chosen.length > 0 ? (
-                        <ul className="grid gap-3 text-[14px]">
+                        <ul className="grid gap-3 text-body">
                           {chosen.map((zone) => (
                             <li className="min-w-0" key={zone.id}>
                               <span className="text-app-ink font-semibold">
@@ -2608,7 +2596,7 @@ function PartPlacementView({
                           ))}
                         </ul>
                       ) : (
-                        <p className="text-app-muted text-[14px]">
+                        <p className="text-app-muted text-body">
                           {t('noLocationSelected')}
                         </p>
                       )}
@@ -2616,7 +2604,7 @@ function PartPlacementView({
                     {canManage ? (
                       <Button
                         aria-busy={saving}
-                        className="mt-5.5 min-h-11.5 w-full text-[15px] font-bold"
+                        className="mt-5.5 min-h-control-lg w-full text-title font-bold"
                         disabled={saving || selected.length === 0}
                         onClick={() => void save()}
                         variant="primary"
@@ -2624,7 +2612,7 @@ function PartPlacementView({
                         {saving ? t('saving') : t('savePlacement')}
                       </Button>
                     ) : null}
-                    <p className="text-app-dim mt-3 text-[12px] leading-[1.5]">
+                    <p className="text-app-dim mt-3 text-caption leading-[1.5]">
                       {selected.length === 0
                         ? t('pickOne')
                         : changed

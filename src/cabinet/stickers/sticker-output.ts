@@ -84,13 +84,13 @@ export const buildStickerHtml = async (
     @page{size:40mm 58mm;margin:0}
     html,body{margin:0;padding:0}
     *{box-sizing:border-box}
-    body{width:40mm;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#fff}
+    body{width:40mm;font-family:"Manrope",ui-sans-serif,sans-serif;background:#fff;color:#000}
     .sticker{width:40mm;height:57mm;padding:2mm;display:flex;flex-direction:column;align-items:center;overflow:hidden;text-align:center;page-break-after:always;break-after:page}
     .sticker:last-child{page-break-after:auto;break-after:auto}
     .qr{width:36mm;height:36mm;flex:none;margin-bottom:1.5mm}
     .qr svg{display:block;width:100%;height:100%}
     strong{display:-webkit-box;width:100%;overflow:hidden;font-size:9px;line-height:1.2;-webkit-box-orient:vertical;-webkit-line-clamp:2}
-    span{display:-webkit-box;width:100%;overflow:hidden;margin-top:1px;color:#444;font-size:7px;line-height:1.2;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+    span{display:-webkit-box;width:100%;overflow:hidden;margin-top:1px;color:#555;font-size:7px;line-height:1.2;-webkit-box-orient:vertical;-webkit-line-clamp:2}
     a{display:none}
   </style>
 </head>

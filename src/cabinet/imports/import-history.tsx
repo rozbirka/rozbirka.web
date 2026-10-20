@@ -1,6 +1,12 @@
 import { useMemo, useState } from 'react'
-import { Button, DataTable, EmptyState, StatusPill } from '@/components/app'
-import { cn } from '@/lib/utils'
+import {
+  Button,
+  DataTable,
+  EmptyState,
+  Notice,
+  StatusPill,
+} from '@/components/app'
+import { Kpi, KpiStrip } from '../redesign-kpi'
 import {
   commonMessages,
   formatDate,
@@ -119,52 +125,6 @@ const actionLabel = (row: ImportStatus, zone: Zone) =>
       ? text(zone, 'details')
       : text(zone, 'result')
 
-function Kpi({
-  label,
-  value,
-  unit,
-  meta,
-  tone,
-  unavailable,
-}: {
-  label: string
-  value: string
-  unit?: string
-  meta: string
-  tone?: 'plain' | 'warn'
-  /** Why the figure is missing. Set means the tile shows a dash and says why. */
-  unavailable?: string
-}) {
-  return (
-    <div className="bg-app-raised px-6 pt-5.5 pb-6">
-      <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-        {label}
-      </p>
-      <p className="mt-3.5 flex items-baseline gap-2">
-        <span
-          className={cn(
-            'text-[30px] leading-none font-extrabold tracking-[-0.03em]',
-            unavailable !== undefined
-              ? 'text-app-dim'
-              : tone === 'warn'
-                ? 'text-state-warn'
-                : 'text-app-ink',
-          )}
-          {...(unavailable === undefined ? {} : { title: unavailable })}
-        >
-          {unavailable === undefined ? value : '—'}
-        </span>
-        {unit === undefined || unavailable !== undefined ? null : (
-          <span className="text-app-muted font-mono text-[13px] font-medium">
-            {unit}
-          </span>
-        )}
-      </p>
-      <p className="text-app-dim mt-3.5 text-[13px]">{unavailable ?? meta}</p>
-    </div>
-  )
-}
-
 /**
  * Історія імпортів — the screen someone lands on to start a new import or to
  * come back to one they left. Figures first, then the one import that still
@@ -223,8 +183,8 @@ export function ImportHistory({
     return <ImportEmpty capabilities={capabilities} onNew={onNew} />
 
   return (
-    <div className="min-w-0">
-      <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,190px),1fr))] gap-px overflow-hidden rounded-[20px] border">
+    <div className="grid min-w-0 gap-3">
+      <KpiStrip>
         <Kpi
           label={t('importsThisMonth')}
           meta={
@@ -236,15 +196,16 @@ export function ImportHistory({
         />
         <Kpi
           label={t('partsCreated')}
-          meta=""
-          unavailable={noExecution}
+          meta={noExecution}
+          title={noExecution}
+          tone="dim"
           value="—"
         />
         <Kpi
           label={t('rowsWithErrors')}
-          meta=""
-          tone="warn"
-          unavailable={noExecution}
+          meta={noExecution}
+          title={noExecution}
+          tone="dim"
           value="—"
         />
         <Kpi
@@ -258,37 +219,34 @@ export function ImportHistory({
             Math.round(capabilities.limits.maxBytes / (1024 * 1024)),
           )}
         />
-      </div>
+      </KpiStrip>
 
       {unfinished === undefined ? null : (
-        <div className="border-state-warn/25 bg-state-warn-soft mt-3.5 flex flex-wrap items-center gap-4 rounded-[18px] border px-5.5 py-4.5">
-          <div className="min-w-[240px] flex-[1_1_320px]">
-            <p className="flex items-center gap-2.5">
-              <span
-                aria-hidden
-                className="bg-state-warn size-1.75 rounded-full"
-              />
-              <span className="text-state-warn text-[15px] font-bold">
-                {t('unfinishedTitle')}
-              </span>
-            </p>
-            <p className="text-app-muted mt-1.5 text-[14px] leading-6 text-pretty">
-              {t('unfinishedLine', {
-                id: unfinished.id.slice(0, 8),
-                line: line(unfinished, zone),
-              })}
-            </p>
-          </div>
-          <Button onClick={() => onOpen(unfinished.id)} variant="primary">
-            {t('continuePreparing')}
-          </Button>
-        </div>
+        <Notice
+          action={
+            <Button onClick={() => onOpen(unfinished.id)}>
+              {t('continuePreparing')}
+            </Button>
+          }
+          block
+          tone="warn"
+        >
+          <p className="text-app-strong m-0 font-semibold">
+            {t('unfinishedTitle')}
+          </p>
+          <p className="text-app-muted m-0 mt-0.5 text-pretty">
+            {t('unfinishedLine', {
+              id: unfinished.id.slice(0, 8),
+              line: line(unfinished, zone),
+            })}
+          </p>
+        </Notice>
       )}
 
-      <div className="mt-9 flex flex-wrap items-center justify-between gap-5">
+      <div className="rz-toolbar mt-2">
         <div
           aria-label={t('importGroups')}
-          className="border-app-line bg-app-raised flex max-w-full flex-wrap gap-1 rounded-[12px] border p-1"
+          className="rz-seg max-w-full flex-wrap"
           role="group"
         >
           {SEGMENTS.map((option) => {
@@ -297,30 +255,17 @@ export function ImportHistory({
             return (
               <button
                 aria-pressed={on}
-                className={cn(
-                  'focus-visible:outline-brand inline-flex min-h-11 items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-bold whitespace-nowrap transition-colors',
-                  on
-                    ? 'text-app-ink bg-white/[0.08]'
-                    : 'text-app-muted hover:text-app-ink',
-                )}
+                className="whitespace-nowrap"
                 key={option.key}
                 onClick={() => setSegment(option.key)}
                 type="button"
               >
-                {t(option.label)}{' '}
-                <span
-                  className={cn(
-                    'font-mono text-[11px] font-medium',
-                    on ? 'text-app-muted' : 'text-app-dim',
-                  )}
-                >
-                  {shown}
-                </span>
+                {t(option.label)} <span className="rz-count">{shown}</span>
               </button>
             )
           })}
         </div>
-        <p className="text-app-dim text-[13px]">
+        <p className="rz-toolbar__end text-app-dim m-0">
           {t('shownOnPage', {
             shown: count(rows.length),
             total: count(imports.length),
@@ -331,130 +276,118 @@ export function ImportHistory({
         </p>
       </div>
 
-      <div className="mt-4.5">
-        <DataTable
-          caption={t('caption')}
-          columns={[
-            {
-              key: 'id',
-              label: t('number'),
-              variant: 'primary',
-              cell: (row) => (
-                <span className="text-app-muted font-mono text-[14px]">
-                  {row.id.slice(0, 8)}
-                </span>
-              ),
-            },
-            {
-              key: 'when',
-              label: t('dateAndState'),
-              cell: (row) => (
-                <span className="grid min-w-0 gap-0.5">
-                  <span className="text-app-ink truncate text-[15px] font-bold tracking-[-0.01em]">
-                    {dayAndTime(row.createdAt, zone)}
-                  </span>
-                  <span className="text-app-muted truncate text-[13px]">
-                    {line(row, zone)}
-                  </span>
-                </span>
-              ),
-            },
-            {
-              key: 'rows',
-              label: t('rows'),
-              align: 'end',
-              cell: (row) => (
-                <span className="font-mono text-[14px]">
-                  {row.rowCount > 0 ? count(row.rowCount) : '—'}
-                </span>
-              ),
-            },
-            {
-              key: 'created',
-              label: t('created'),
-              align: 'end',
-              cell: () => (
-                <span
-                  className="text-app-dim font-mono text-[14px]"
-                  title={noExecution}
-                >
-                  —
-                </span>
-              ),
-            },
-            {
-              key: 'failed',
-              label: t('errors'),
-              align: 'end',
-              cell: () => (
-                <span
-                  className="text-app-dim font-mono text-[14px]"
-                  title={noExecution}
-                >
-                  —
-                </span>
-              ),
-            },
-            {
-              key: 'status',
-              label: t('status'),
-              align: 'end',
-              cell: (row) => (
-                <StatusPill tone={TONES[row.status] ?? 'neutral'}>
-                  {statusLabel(row.status, locale)}
-                </StatusPill>
-              ),
-            },
-            {
-              key: 'action',
-              label: t('action'),
-              align: 'end',
-              cell: (row) => (
-                <Button onClick={() => onOpen(row.id)}>
-                  {actionLabel(row, zone)}
-                </Button>
-              ),
-            },
-          ]}
-          empty={
-            <EmptyState
-              description={
-                imports.length === 0
-                  ? t('emptyDescription')
-                  : t('groupEmptyDescription')
-              }
-              title={
-                imports.length === 0 ? t('emptyTitle') : t('groupEmptyTitle')
-              }
-            />
-          }
-          footer={
-            <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-t px-6 py-4">
-              <p className="text-app-dim text-[13px]">{t('retentionNote')}</p>
-              <span className="flex items-center gap-2.5">
-                <Button disabled={page === 1} onClick={() => onPage(page - 1)}>
-                  {tc('back')}
-                </Button>
-                <span className="text-app-muted font-mono text-[13px] tabular-nums">
-                  {page}
-                </span>
-                <Button
-                  disabled={page * 50 >= total}
-                  onClick={() => onPage(page + 1)}
-                >
-                  {t('showMore')}
-                </Button>
+      <DataTable
+        caption={t('caption')}
+        columns={[
+          {
+            key: 'id',
+            label: t('number'),
+            variant: 'primary',
+            cell: (row) => (
+              <span className="text-app-muted font-mono">
+                {row.id.slice(0, 8)}
               </span>
-            </div>
-          }
-          rowKey={(row) => row.id}
-          rows={rows}
-        />
-      </div>
+            ),
+          },
+          {
+            key: 'when',
+            label: t('dateAndState'),
+            cell: (row) => (
+              <span className="grid min-w-0 gap-0.5 py-1.5">
+                <span className="text-app-strong truncate font-medium">
+                  {dayAndTime(row.createdAt, zone)}
+                </span>
+                <span className="rz-caption truncate">{line(row, zone)}</span>
+              </span>
+            ),
+          },
+          {
+            key: 'rows',
+            label: t('rows'),
+            align: 'end',
+            cell: (row) => (row.rowCount > 0 ? count(row.rowCount) : '—'),
+          },
+          {
+            key: 'created',
+            label: t('created'),
+            align: 'end',
+            cell: () => (
+              <span className="text-app-dim" title={noExecution}>
+                —
+              </span>
+            ),
+          },
+          {
+            key: 'failed',
+            label: t('errors'),
+            align: 'end',
+            cell: () => (
+              <span className="text-app-dim" title={noExecution}>
+                —
+              </span>
+            ),
+          },
+          {
+            key: 'status',
+            label: t('status'),
+            cell: (row) => (
+              <StatusPill tone={TONES[row.status] ?? 'neutral'}>
+                {statusLabel(row.status, locale)}
+              </StatusPill>
+            ),
+          },
+          {
+            key: 'action',
+            label: t('action'),
+            align: 'end',
+            cell: (row) => (
+              <Button onClick={() => onOpen(row.id)} size="sm">
+                {actionLabel(row, zone)}
+              </Button>
+            ),
+          },
+        ]}
+        empty={
+          <EmptyState
+            description={
+              imports.length === 0
+                ? t('emptyDescription')
+                : t('groupEmptyDescription')
+            }
+            title={
+              imports.length === 0 ? t('emptyTitle') : t('groupEmptyTitle')
+            }
+          />
+        }
+        footer={
+          <div className="rz-pager">
+            <p className="m-0">{t('retentionNote')}</p>
+            <span className="rz-pager__nav">
+              <Button
+                disabled={page === 1}
+                onClick={() => onPage(page - 1)}
+                size="sm"
+              >
+                {tc('back')}
+              </Button>
+              <span className="text-app-muted font-mono tabular-nums">
+                {page}
+              </span>
+              <Button
+                disabled={page * 50 >= total}
+                onClick={() => onPage(page + 1)}
+                size="sm"
+              >
+                {t('showMore')}
+              </Button>
+            </span>
+          </div>
+        }
+        rowKey={(row) => row.id}
+        rows={rows}
+      />
 
-      <p className="text-app-dim mt-3 text-[13px] leading-6">
-        {t('blankColumnsNote')}
-      </p>
+      <p className="rz-caption m-0">{t('blankColumnsNote')}</p>
     </div>
   )
 }

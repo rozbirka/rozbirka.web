@@ -92,7 +92,7 @@ export function WarehouseZoneBrowser({
   return (
     <section
       aria-label={t('zonesTitle')}
-      className="location-browser border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
+      className="location-browser border-app-line bg-app-raised min-w-0 overflow-hidden rounded-panel border"
     >
       <LocationBrowserHeader
         title={t('zonesTitle')}
@@ -100,7 +100,7 @@ export function WarehouseZoneBrowser({
         search={
           printWorkspace ? null : (
             <SearchInput
-              className="min-h-11 text-sm"
+              className="min-h-control text-sm"
               aria-label={tb('searchZones')}
               placeholder={tb('nameOrCode')}
               value={query}
@@ -117,7 +117,7 @@ export function WarehouseZoneBrowser({
           <>
             {canManage ? (
               <Button
-                className="px-3 text-[13px] sm:px-4 sm:text-sm"
+                className="px-3 text-body sm:px-4 sm:text-sm"
                 onClick={onAdd}
                 variant="primary"
               >

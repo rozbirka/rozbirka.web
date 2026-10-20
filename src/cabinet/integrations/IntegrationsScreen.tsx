@@ -1,6 +1,13 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Button, DateValue, Notice, StatusPill } from '@/components/app'
+import { ChevronRight } from 'lucide-react'
+import {
+  Button,
+  DateValue,
+  ErrorState,
+  Notice,
+  StatusPill,
+} from '@/components/app'
 import {
   integrationsApi,
   type Integration,
@@ -12,7 +19,6 @@ import { useLocale, useT } from '@/i18n'
 import { useCabinet } from '../CabinetContext'
 import { cabinetPath } from '../cabinet-paths'
 import { RedesignShell, RedesignTitle } from '../redesign-shell'
-import { Kpi, KpiStrip } from '../redesign-kpi'
 import { moduleLabel, navigationGroupLabel } from '../module-messages'
 import {
   integrationErrorMessage,
@@ -38,23 +44,47 @@ type LoadState =
 /** A control the design asks for and the API cannot back: shown, not faked. */
 function Dead({ children, title }: { children: ReactNode; title: string }) {
   return (
-    <button
-      className="border-app-line text-app-dim inline-flex min-h-11 cursor-not-allowed items-center rounded-[10px] border px-3.5 text-[13px] font-medium"
-      disabled
-      title={title}
-      type="button"
-    >
+    <Button disabled title={title}>
       {children}
-    </button>
+    </Button>
   )
 }
 
-function Mark({ code }: { code: string }) {
+/** The breadcrumb trail of `.rz-crumbs`: parents, a chevron, the current page. */
+export function IntegrationCrumbs({
+  parents,
+  current,
+}: {
+  parents: string[]
+  current: string
+}) {
+  return (
+    <>
+      {parents.map((part) => (
+        <Fragment key={part}>
+          <span>{part}</span>
+          <ChevronRight aria-hidden className="size-3 shrink-0" />
+        </Fragment>
+      ))}
+      <span aria-current="page">{current}</span>
+    </>
+  )
+}
+
+export function Mark({
+  code,
+  large = false,
+}: {
+  code: string
+  large?: boolean
+}) {
   const { locale } = useLocale()
   return (
     <span
       aria-hidden
-      className="border-app-line text-app-muted inline-flex size-9 shrink-0 items-center justify-center rounded-[9px] border font-mono text-[12px]"
+      className={`border-app-line bg-app-input text-app-muted inline-grid shrink-0 place-items-center rounded-control border font-mono ${
+        large ? 'size-10 text-body' : 'size-8 text-caption'
+      }`}
     >
       {integrationMark(code, locale)}
     </span>
@@ -80,6 +110,7 @@ export function IntegrationsScreen() {
     loaded?.key === scopeKey ? loaded.state : { kind: 'loading' }
   const [connecting, setConnecting] = useState<string | null>(null)
   const [connectError, setConnectError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
   const mountedRef = useRef(true)
 
   useEffect(() => {
@@ -109,10 +140,14 @@ export function IntegrationsScreen() {
       },
     )
     return () => controller.abort()
-  }, [scopeKey])
+  }, [scopeKey, attempt])
 
   if (tenant === null) {
-    return <p className="text-app-muted text-sm">{t('pickBusinessList')}</p>
+    return (
+      <div className="rz-page">
+        <p className="rz-muted m-0">{t('pickBusinessList')}</p>
+      </div>
+    )
   }
 
   const slug = tenant.slug
@@ -129,13 +164,6 @@ export function IntegrationsScreen() {
   const catalogSize = novaPoshtaAvailable
     ? definitions.length
     : definitions.filter((item) => item.code !== NOVA_POSHTA).length
-  const failing = items.filter((item) => item.status === 'error')
-  const lastVerified = items
-    .map((item) => item.verifiedAt)
-    .filter((value): value is string => value !== null)
-    .sort()
-    .at(-1)
-
   const connect = async (definitionId: string) => {
     if (connecting !== null) return
     setConnecting(definitionId)
@@ -157,7 +185,12 @@ export function IntegrationsScreen() {
   return (
     <RedesignShell
       actions={<Dead title={t('noExchangeLog')}>{t('exchangeLog')}</Dead>}
-      crumb={`${navigationGroupLabel('settings', locale) ?? ''} · ${moduleLabel('integrations', locale)}`}
+      crumb={
+        <IntegrationCrumbs
+          current={moduleLabel('integrations', locale)}
+          parents={[navigationGroupLabel('settings', locale) ?? '']}
+        />
+      }
     >
       <RedesignTitle
         lead={
@@ -172,142 +205,106 @@ export function IntegrationsScreen() {
       />
 
       {state.kind === 'error' && (
-        <Notice tone="danger">{t('loadError')}</Notice>
+        <ErrorState
+          description={t('loadError')}
+          onRetry={() => {
+            setLoaded(null)
+            setAttempt((current) => current + 1)
+          }}
+        />
       )}
       {connectError !== null && <Notice tone="danger">{connectError}</Notice>}
 
-      <KpiStrip>
-        <Kpi
-          label={t('kpiConnected')}
-          meta={
-            state.kind !== 'ready'
-              ? t('kpiCatalogLoading')
-              : t('kpiCatalog', { count: catalogSize })
-          }
-          value={String(items.length)}
-        />
-        <Kpi
-          label={t('kpiAttention')}
-          meta={
-            failing.length > 0
-              ? failing.map((item) => item.displayName).join(', ')
-              : t('kpiNoErrors')
-          }
-          tone={failing.length > 0 ? 'warn' : 'plain'}
-          value={String(failing.length)}
-        />
-        <Kpi
-          label={t('kpiLastCheck')}
-          meta={
-            lastVerified === undefined ? t('kpiNeverChecked') : t('kpiFreshest')
-          }
-          value={
-            lastVerified === undefined ? (
-              <span className="text-app-dim">—</span>
-            ) : (
-              <DateValue value={lastVerified} withTime={false} />
-            )
-          }
-        />
-      </KpiStrip>
-
-      <section
-        aria-label={t('connectedTitle')}
-        className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
-      >
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 px-6 pt-5 pb-4">
-          <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-            {t('connectedTitle')}
-          </h2>
-          <p className="text-app-dim text-[13px]">{t('connectedHint')}</p>
-        </div>
-        {state.kind === 'loading' ? (
-          <p className="text-app-muted border-app-line border-t px-6 py-4 text-sm">
-            {t('loading')}
-          </p>
-        ) : items.length === 0 ? (
-          <p className="text-app-muted border-app-line border-t px-6 py-4 text-sm">
-            {t('noneConnected')}
-          </p>
-        ) : (
-          <ul className="divide-app-line border-app-line grid divide-y border-t">
-            {items.map((item) => {
-              const status = integrationStatusPresentation(item.status, locale)
-              // Outside Ukraine an NP connection stays readable as history,
-              // but there is nothing left to open or configure.
-              const locked = !novaPoshtaAvailable && item.code === NOVA_POSHTA
-              const rowClass =
-                'flex flex-wrap items-center gap-x-3.5 gap-y-2 px-6 py-3.5'
-              const row = (
-                <>
-                  <Mark code={item.code} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px] font-bold tracking-[-0.01em] text-white">
-                      {item.displayName}
+      {state.kind === 'error' ? null : (
+        <section aria-label={t('connectedTitle')} className="rz-card">
+          <header className="rz-card__head">
+            <h2 className="rz-h-card">{t('connectedTitle')}</h2>
+            <p className="rz-caption m-0">{t('connectedHint')}</p>
+          </header>
+          {state.kind === 'loading' ? (
+            <p className="rz-muted rz-card__body m-0">{t('loading')}</p>
+          ) : items.length === 0 ? (
+            <p className="rz-muted rz-card__body m-0">{t('noneConnected')}</p>
+          ) : (
+            <ul className="divide-app-line m-0 grid list-none divide-y p-0">
+              {items.map((item) => {
+                const status = integrationStatusPresentation(
+                  item.status,
+                  locale,
+                )
+                // Outside Ukraine an NP connection stays readable as history,
+                // but there is nothing left to open or configure.
+                const locked = !novaPoshtaAvailable && item.code === NOVA_POSHTA
+                const rowClass =
+                  'flex min-h-row flex-wrap items-center gap-x-3 gap-y-2 px-[var(--rz-card-p)] py-2 text-app-muted'
+                const row = (
+                  <>
+                    <Mark code={item.code} />
+                    <span className="grid min-w-0 flex-1">
+                      <span className="truncate font-medium text-app-strong">
+                        {item.displayName}
+                      </span>
+                      <span className="rz-caption truncate">
+                        {integrationKind(item.code, locale) ??
+                          t('serviceFallback')}
+                      </span>
                     </span>
-                    <span className="text-app-dim mt-0.5 block truncate text-xs">
-                      {integrationKind(item.code, locale) ??
-                        t('serviceFallback')}
+                    <StatusPill tone={status.tone}>{status.label}</StatusPill>
+                    <span className="rz-num min-w-[104px] text-app-muted">
+                      {item.verifiedAt === null ? (
+                        <span className="text-app-dim">
+                          {t('neverChecked')}
+                        </span>
+                      ) : (
+                        <DateValue value={item.verifiedAt} withTime={false} />
+                      )}
                     </span>
-                  </span>
-                  <StatusPill tone={status.tone}>{status.label}</StatusPill>
-                  <span className="text-app-muted min-w-[104px] text-right font-mono text-[13px]">
-                    {item.verifiedAt === null ? (
-                      <span className="text-app-dim">{t('neverChecked')}</span>
+                  </>
+                )
+                return (
+                  <li key={item.id}>
+                    {locked ? (
+                      <div className={rowClass}>{row}</div>
                     ) : (
-                      <DateValue value={item.verifiedAt} withTime={false} />
+                      <Link
+                        className={`${rowClass} hover:bg-app-hover`}
+                        to={cabinetPath(slug, 'integrations', item.id)}
+                      >
+                        {row}
+                      </Link>
                     )}
-                  </span>
-                </>
-              )
-              return (
-                <li key={item.id}>
-                  {locked ? (
-                    <div className={rowClass}>{row}</div>
-                  ) : (
-                    <Link
-                      className={`${rowClass} hover:bg-white/[0.03]`}
-                      to={cabinetPath(slug, 'integrations', item.id)}
-                    >
-                      {row}
-                    </Link>
-                  )}
-                  {item.lastErrorCode !== null && (
-                    <p className="text-state-danger px-6 pb-3.5 text-[13px] leading-5 text-pretty">
-                      {integrationErrorMessage(item.lastErrorCode, locale)}
-                    </p>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </section>
+                    {item.lastErrorCode !== null && (
+                      <p className="text-state-danger m-0 px-[var(--rz-card-p)] pb-2.5 text-pretty">
+                        {integrationErrorMessage(item.lastErrorCode, locale)}
+                      </p>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </section>
+      )}
 
       {!novaPoshtaAvailable && <NovaPoshtaUnavailable />}
 
       {available.length > 0 && (
-        <section
-          aria-label={t('availableTitle')}
-          className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
-        >
-          <div className="px-6 pt-5 pb-4">
-            <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-              {t('availableTitle')}
-            </h2>
-          </div>
-          <ul className="divide-app-line border-app-line grid divide-y border-t">
+        <section aria-label={t('availableTitle')} className="rz-card">
+          <header className="rz-card__head">
+            <h2 className="rz-h-card">{t('availableTitle')}</h2>
+          </header>
+          <ul className="divide-app-line m-0 grid list-none divide-y p-0">
             {available.map((definition) => (
               <li
-                className="flex flex-wrap items-center gap-x-3.5 gap-y-3 px-6 py-4"
+                className="flex min-h-row flex-wrap items-center gap-x-3 gap-y-2 px-[var(--rz-card-p)] py-2"
                 key={definition.id}
               >
                 <Mark code={definition.code} />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[15px] font-bold tracking-[-0.01em] text-white">
+                <span className="grid min-w-0 flex-1">
+                  <span className="font-medium text-app-strong">
                     {definition.displayName}
                   </span>
-                  <span className="text-app-dim mt-0.5 block text-xs">
+                  <span className="rz-caption">
                     {integrationKind(definition.code, locale) ??
                       t('serviceFallback')}
                   </span>
@@ -316,6 +313,7 @@ export function IntegrationsScreen() {
                   aria-busy={connecting === definition.id}
                   disabled={connecting !== null}
                   onClick={() => void connect(definition.id)}
+                  size="sm"
                 >
                   {connecting === definition.id
                     ? t('connecting')

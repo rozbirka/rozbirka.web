@@ -2,10 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Download, Minus, Plus, Printer, Share2 } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { partsApi, type PartListItem } from '@/api/parts'
-import { Button, Notice, Pagination, SearchInput } from '@/components/app'
+import {
+  Button,
+  Notice,
+  Pagination,
+  SearchInput,
+  useOptionalToast,
+} from '@/components/app'
 import { stickersApi } from '@/api/stickers'
 import { useTenantSettings } from '@/auth/useTenantSettings'
-import { useT } from '@/i18n'
+import { useLocale, useT } from '@/i18n'
+import { navigationGroupLabel } from '../module-messages'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { evaluateModuleAccess } from '../policy'
@@ -161,6 +168,14 @@ function TenantStickerQueue({
   >['requireLatestMutation']
 }) {
   const t = useT(stickersMessages)
+  const { locale } = useLocale()
+  const toast = useOptionalToast()
+  /* A failed hand-off (print, download, share) is reported as a toast, as the
+     module page draws it; without a toast host it stays on the page. */
+  const failed = (message: string) => {
+    if (toast === null) setError(message)
+    else toast.show({ tone: 'danger', message })
+  }
   // Printed stickers follow the tenant document language, not the UI locale.
   const documentLocale = useTenantSettings().documentLanguage ?? 'uk'
   const [searchParams, setSearchParams] = useSearchParams()
@@ -396,7 +411,7 @@ function TenantStickerQueue({
         URL.revokeObjectURL(url)
       }
     } catch {
-      setError(t('downloadFailed'))
+      failed(t('downloadFailed'))
     }
   }
   const print = async () => {
@@ -410,7 +425,7 @@ function TenantStickerQueue({
       printWindow.focus()
       printWindow.print()
     } catch {
-      setError(t('printFailed'))
+      failed(t('printFailed'))
     }
   }
   const share = async () => {
@@ -428,7 +443,7 @@ function TenantStickerQueue({
         title: t('shareTitle'),
       })
     } catch {
-      setError(t('shareFailed'))
+      failed(t('shareFailed'))
     }
   }
 
@@ -487,13 +502,28 @@ function TenantStickerQueue({
     <StickerWorkspace
       title={t('title')}
       subtitle={t('subtitle')}
+      crumb={navigationGroupLabel('stock', locale)}
+      actions={
+        <Button
+          aria-busy={busy}
+          disabled={!queue.length || !canGenerate || busy}
+          onClick={() => (preview.length ? void print() : void generate())}
+          variant="primary"
+        >
+          <Printer aria-hidden />
+          {busy
+            ? t('preparing')
+            : preview.length
+              ? t('print', { count: total })
+              : t('prepare', { count: total })}
+        </Button>
+      }
       notice={!scope ? <Notice tone="danger">{t('noScope')}</Notice> : null}
       list={
         <StickerListPanel
           search={
             <SearchInput
               aria-label={t('searchLabel')}
-              className="min-h-14 rounded-[16px]"
               disabled={!canGenerate}
               onChange={(event) => {
                 setSearch(event.target.value)
@@ -511,7 +541,6 @@ function TenantStickerQueue({
             <>
               {' '}
               <Button
-                className="min-h-9 px-3 text-[12.5px]"
                 disabled={
                   !canGenerate || partsUnavailable || parts.length === 0
                 }
@@ -519,11 +548,7 @@ function TenantStickerQueue({
               >
                 {t('selectAll')}
               </Button>
-              <Button
-                className="min-h-9 px-3 text-[12.5px]"
-                disabled={!queue.length}
-                onClick={clear}
-              >
+              <Button disabled={!queue.length} onClick={clear}>
                 {t('clear')}
               </Button>
             </>
@@ -540,12 +565,12 @@ function TenantStickerQueue({
           }
         >
           {partsUnavailable ? (
-            <div className="p-5">
+            <div className="p-3">
               <Notice tone="danger">{t('partsLoadFailed')}</Notice>
             </div>
           ) : null}
           <ul
-            className="divide-app-line grid divide-y"
+            className="divide-app-line m-0 grid list-none divide-y p-0"
             aria-label={t('partsList')}
           >
             {parts.map((part) => {
@@ -570,8 +595,8 @@ function TenantStickerQueue({
                       <span
                         className={
                           part.quantityAvailable > 0
-                            ? 'text-state-ok ml-2'
-                            : 'text-state-danger ml-2'
+                            ? 'rz-dot rz-dot--ok ml-2'
+                            : 'rz-dot rz-dot--danger ml-2'
                         }
                       >
                         {t('available', { count: part.quantityAvailable })}
@@ -581,24 +606,22 @@ function TenantStickerQueue({
                   controls={
                     selected && queued ? (
                       <div
-                        className="border-app-line-2 bg-app-canvas col-start-2 flex h-9 w-fit items-center rounded-[10px] border sm:col-start-auto"
+                        className="rz-stepper col-start-2 w-fit sm:col-start-auto"
                         onClick={(event) => event.stopPropagation()}
                       >
                         <button
                           aria-label={t('decrease', { name: part.name })}
-                          className="text-app-muted hover:text-app-ink grid size-9 place-items-center disabled:opacity-35"
                           disabled={queued.quantity <= 1}
                           onClick={() => changeQuantity(queued.id, -1)}
                           type="button"
                         >
                           <Minus aria-hidden className="size-3.5" />
                         </button>
-                        <span className="min-w-7 text-center font-mono text-[13px] font-semibold text-white tabular-nums">
+                        <span className="rz-mono rz-strong grid h-full min-w-10 place-items-center border-app-line border-x px-2">
                           {queued.quantity}
                         </span>
                         <button
                           aria-label={t('increase', { name: part.name })}
-                          className="text-app-muted hover:text-app-ink grid size-9 place-items-center disabled:opacity-35"
                           disabled={
                             total >= MAX_STICKERS ||
                             queued.quantity >= part.quantityAvailable
@@ -624,27 +647,10 @@ function TenantStickerQueue({
           total={total}
           actions={
             <>
-              {' '}
-              <Button
-                aria-busy={busy}
-                className="mt-5 w-full justify-center"
-                disabled={!queue.length || !canGenerate || busy}
-                onClick={() =>
-                  preview.length ? void print() : void generate()
-                }
-                variant="primary"
-              >
-                <Printer aria-hidden />
-                {busy
-                  ? t('preparing')
-                  : preview.length
-                    ? t('print', { count: total })
-                    : t('prepare', { count: total })}
-              </Button>
               {preview.length ? (
-                <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <Button
-                    className="min-w-0 px-2.5 text-[12.5px]"
+                    className="min-w-0"
                     disabled={busy}
                     onClick={() => void download()}
                   >
@@ -652,7 +658,7 @@ function TenantStickerQueue({
                     {t('download')}
                   </Button>
                   <Button
-                    className="min-w-0 px-2.5 text-[12.5px]"
+                    className="min-w-0"
                     disabled={busy}
                     onClick={() => void share()}
                   >
@@ -667,7 +673,7 @@ function TenantStickerQueue({
       }
     >
       {!canGenerate ? (
-        <p className="text-app-dim text-[13.5px]" role="status">
+        <p className="rz-dim m-0" role="status">
           {generationDecision === 'subscription-blocked'
             ? t('subscriptionBlocked')
             : generationDecision === 'access-loading'

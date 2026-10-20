@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Camera,
+  ChevronRight,
   MapPin,
   Printer,
   QrCode,
@@ -17,8 +18,6 @@ import {
   Field,
   PhotoFileField,
   Notice,
-  PageBody,
-  PageHeader,
   SectionPanel,
   StateScreen,
   StatusPill,
@@ -26,13 +25,13 @@ import {
   TextInput,
   type NoticeTone,
 } from '@/components/app'
-import { cn } from '@/lib/utils'
 import {
   partStatusPresentation,
   conditionLabel,
   historyLabel,
   unitLabel,
 } from '../parts/part-labels'
+import { cn } from '@/lib/utils'
 import { scannersApi } from '@/api/scanners'
 import { partsApi, type PartHistory } from '@/api/parts'
 import { inventoryApi, type PartInventoryZone } from '@/api/inventory'
@@ -396,267 +395,337 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
     : null
 
   return (
-    <PageBody width="narrow">
-      <PageHeader eyebrow={t('eyebrow')} title={t('title')} />
-      <p className="text-app-muted text-sm">{t('intro')}</p>
+    <div className="rz-scan">
+      <header className="rz-topbar">
+        <p className="rz-crumbs m-0">
+          <span>{t('eyebrow')}</span>
+          <ChevronRight aria-hidden className="size-3" />
+          <span aria-current="page">{t('title')}</span>
+        </p>
+      </header>
 
-      {cameraLive ? (
-        <div className="rounded-panel border-app-line relative overflow-hidden border bg-black">
-          <video
-            aria-label={t('cameraLabel')}
-            autoPlay
-            className="aspect-4/3 w-full object-cover"
-            muted
-            onCanPlay={() => setVideoReady(true)}
-            playsInline
-            ref={videoRef}
-          />
-          <span
-            aria-hidden
-            className="border-brand/70 pointer-events-none absolute inset-x-8 inset-y-6 rounded-2xl border-2"
-          />
+      <div className="rz-page max-w-3xl pb-5">
+        <div className="grid gap-1">
+          <div className="rz-page-head">
+            <h1 className="rz-h-page">{t('title')}</h1>
+          </div>
+          <p className="rz-muted m-0">{t('intro')}</p>
         </div>
-      ) : null}
 
-      {part ? (
-        <div className="grid gap-4">
-          <SectionPanel
-            aside={
-              <span className="text-app-dim font-mono text-[12px] break-all">
-                {part.qrCode ?? part.code}
-              </span>
-            }
-            description={t('recognisedHint')}
-            title={t('recognisedTitle')}
-          >
-            <div className="flex flex-wrap items-start gap-4">
-              {part.photo ? (
-                <Thumbnail
-                  alt=""
-                  className="size-20 shrink-0"
-                  photo={part.photo}
-                />
-              ) : null}
-              <div className="grid min-w-0 flex-1 gap-2">
-                <p className="text-[18px] font-bold break-words text-white">
-                  {part.name}
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  {partStatus ? (
-                    <StatusPill tone={partStatus.tone}>
-                      {partStatus.label}
-                      {typeof part.quantityAvailable === 'number'
-                        ? ` · ${t('quantity', { count: part.quantityAvailable, unit: unitLabel(part.unit, locale) })}`
-                        : ''}
-                    </StatusPill>
-                  ) : null}
-                  {part.condition ? (
-                    <span className="border-app-line bg-app-input text-app-muted rounded-full border px-2.5 py-1 text-[13px]">
-                      {conditionLabel(part.condition, locale)}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </SectionPanel>
+        {cameraLive ? (
+          <div className="rz-scan__cam w-full max-w-[50vh] justify-self-center">
+            <video
+              aria-label={t('cameraLabel')}
+              autoPlay
+              className="absolute inset-0 size-full object-cover"
+              muted
+              onCanPlay={() => setVideoReady(true)}
+              playsInline
+              ref={videoRef}
+            />
+            <span
+              aria-hidden
+              className="rz-scan__frame pointer-events-none relative"
+              data-state="active"
+            />
+          </div>
+        ) : null}
 
-          <div className="grid items-start gap-4 lg:grid-cols-2">
+        {part ? (
+          <div className="grid gap-3">
             <SectionPanel
-              description={t('actionsHint')}
-              title={t('actionsTitle')}
+              aside={
+                <span className="rz-mono rz-caption break-all">
+                  {part.qrCode ?? part.code}
+                </span>
+              }
+              description={t('recognisedHint')}
+              title={t('recognisedTitle')}
             >
-              <div className="grid gap-2.5">
-                <div className="border-app-line rounded-panel flex flex-wrap items-center justify-between gap-3 border p-3.5">
-                  <span className="flex min-w-0 items-center gap-2.5">
-                    <MapPin aria-hidden className="text-app-dim size-4" />
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-white">
-                        {t('placement')}
-                      </span>
-                      <span className="text-app-muted block text-[13px]">
-                        {placement.length === 0
-                          ? t('noPlacement')
-                          : placement
-                              .map((zone) => zone.zoneCode ?? zone.zoneName)
-                              .filter(Boolean)
-                              .join(' · ')}
-                      </span>
-                    </span>
-                  </span>
-                  <Button asChild>
-                    <Link
-                      to={`/app/${targetTenant?.slug ?? ''}/parts/${part.id}/inventory`}
-                    >
-                      {t('move')}
-                    </Link>
-                  </Button>
-                </div>
-                <div className="border-app-line rounded-panel flex flex-wrap items-center justify-between gap-3 border p-3.5">
-                  <span className="flex min-w-0 items-center gap-2.5">
-                    <Printer aria-hidden className="text-app-dim size-4" />
-                    <span className="text-sm font-semibold text-white">
-                      {t('sticker')}
-                    </span>
-                  </span>
-                  <Button asChild>
-                    <Link
-                      to={`/app/${targetTenant?.slug ?? ''}/stickers?part=${part.id}`}
-                    >
-                      {t('print')}
-                    </Link>
-                  </Button>
-                </div>
-                {part.carId ? (
-                  <div className="border-app-line rounded-panel flex flex-wrap items-center justify-between gap-3 border p-3.5">
-                    <span className="flex min-w-0 items-center gap-2.5">
-                      <QrCode aria-hidden className="text-app-dim size-4" />
-                      <span className="min-w-0">
-                        <span className="block text-sm font-semibold text-white">
-                          {t('source')}
-                        </span>
-                        <span className="text-app-muted block text-[13px]">
-                          {[part.carCode, part.car].filter(Boolean).join(' · ')}
-                        </span>
-                      </span>
-                    </span>
-                    <Button asChild>
-                      <Link
-                        to={`/app/${targetTenant?.slug ?? ''}/cars/${part.carId}`}
-                      >
-                        {t('openCar')}
-                      </Link>
-                    </Button>
-                  </div>
+              <div className="flex flex-wrap items-start gap-3">
+                {part.photo ? (
+                  <Thumbnail
+                    alt=""
+                    className="size-20 shrink-0"
+                    photo={part.photo}
+                  />
                 ) : null}
+                <div className="grid min-w-0 flex-1 gap-2">
+                  <p className="rz-h-title break-words">{part.name}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {partStatus ? (
+                      <StatusPill tone={partStatus.tone}>
+                        {partStatus.label}
+                        {typeof part.quantityAvailable === 'number'
+                          ? ` · ${t('quantity', { count: part.quantityAvailable, unit: unitLabel(part.unit, locale) })}`
+                          : ''}
+                      </StatusPill>
+                    ) : null}
+                    {part.condition ? (
+                      <StatusPill>
+                        {conditionLabel(part.condition, locale)}
+                      </StatusPill>
+                    ) : null}
+                  </div>
+                </div>
               </div>
             </SectionPanel>
 
-            <SectionPanel
-              aside={
-                <Link
-                  className="hover:text-brand text-app-muted text-[13px]"
-                  to={`/app/${targetTenant?.slug ?? ''}/parts/${part.id}`}
-                >
-                  {t('fullHistory')}
-                </Link>
-              }
-              title={t('movementTitle')}
-            >
-              {history.length === 0 ? (
-                <p className="text-app-dim text-[13px]">{t('noEvents')}</p>
-              ) : (
-                <ol className="grid">
-                  {history.map((event, index) => (
+            <div className="grid items-start gap-3 lg:grid-cols-2">
+              <SectionPanel
+                description={t('actionsHint')}
+                title={t('actionsTitle')}
+              >
+                <div className="grid gap-2">
+                  <div className="rz-inset flex flex-wrap items-center justify-between gap-3">
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <MapPin aria-hidden className="text-app-dim size-4" />
+                      <span className="min-w-0">
+                        <span className="rz-strong block font-semibold">
+                          {t('placement')}
+                        </span>
+                        <span className="rz-muted block">
+                          {placement.length === 0
+                            ? t('noPlacement')
+                            : placement
+                                .map((zone) => zone.zoneCode ?? zone.zoneName)
+                                .filter(Boolean)
+                                .join(' · ')}
+                        </span>
+                      </span>
+                    </span>
+                    <Button asChild size="glove">
+                      <Link
+                        to={`/app/${targetTenant?.slug ?? ''}/parts/${part.id}/inventory`}
+                      >
+                        {t('move')}
+                      </Link>
+                    </Button>
+                  </div>
+                  <div className="rz-inset flex flex-wrap items-center justify-between gap-3">
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <Printer aria-hidden className="text-app-dim size-4" />
+                      <span className="rz-strong font-semibold">
+                        {t('sticker')}
+                      </span>
+                    </span>
+                    <Button asChild size="glove">
+                      <Link
+                        to={`/app/${targetTenant?.slug ?? ''}/stickers?part=${part.id}`}
+                      >
+                        {t('print')}
+                      </Link>
+                    </Button>
+                  </div>
+                  {part.carId ? (
+                    <div className="rz-inset flex flex-wrap items-center justify-between gap-3">
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <QrCode aria-hidden className="text-app-dim size-4" />
+                        <span className="min-w-0">
+                          <span className="rz-strong block font-semibold">
+                            {t('source')}
+                          </span>
+                          <span className="rz-muted block">
+                            {[part.carCode, part.car]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </span>
+                        </span>
+                      </span>
+                      <Button asChild size="glove">
+                        <Link
+                          to={`/app/${targetTenant?.slug ?? ''}/cars/${part.carId}`}
+                        >
+                          {t('openCar')}
+                        </Link>
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              </SectionPanel>
+
+              <SectionPanel
+                aside={
+                  <Link
+                    to={`/app/${targetTenant?.slug ?? ''}/parts/${part.id}`}
+                  >
+                    {t('fullHistory')}
+                  </Link>
+                }
+                title={t('movementTitle')}
+              >
+                {history.length === 0 ? (
+                  <p className="rz-dim m-0">{t('noEvents')}</p>
+                ) : (
+                  <ol className="m-0 grid list-none p-0">
+                    {history.map((event, index) => (
+                      <li
+                        className={cn(
+                          'flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2.5',
+                          index > 0 && 'border-app-line border-t',
+                        )}
+                        key={event.id}
+                      >
+                        <span className="rz-strong font-semibold">
+                          {historyLabel(event.eventType, locale)}
+                        </span>
+                        <span className="rz-caption flex flex-wrap gap-x-2.5">
+                          {event.user.name}
+                          <DateValue value={event.createdAt} />
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </SectionPanel>
+            </div>
+
+            {recent.length > 1 ? (
+              <SectionPanel title={t('recentTitle')}>
+                <ol className="m-0 grid list-none p-0">
+                  {recent.slice(1).map((entry, index) => (
                     <li
                       className={cn(
                         'flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2.5',
                         index > 0 && 'border-app-line border-t',
                       )}
-                      key={event.id}
+                      key={entry.code}
                     >
-                      <span className="text-sm font-semibold text-white">
-                        {historyLabel(event.eventType, locale)}
+                      <span className="min-w-0">
+                        <span className="rz-strong block font-medium">
+                          {entry.name}
+                        </span>
+                        <span className="rz-mono rz-caption block break-all">
+                          {entry.code}
+                        </span>
                       </span>
-                      <span className="text-app-dim flex flex-wrap gap-x-2.5 text-[12px]">
-                        {event.user.name}
-                        <DateValue value={event.createdAt} />
-                      </span>
+                      <DateValue
+                        className="rz-caption rz-mono"
+                        value={entry.at}
+                      />
                     </li>
                   ))}
                 </ol>
-              )}
-            </SectionPanel>
+              </SectionPanel>
+            ) : null}
           </div>
+        ) : pending ? (
+          <StateScreen
+            description={t('checkingHint')}
+            icon={<ScanLine aria-hidden />}
+            title={t('checkingTitle')}
+            tone="brand"
+          />
+        ) : status?.kind === 'not-found' ? (
+          <StateScreen
+            description={t('notFoundHint')}
+            icon={<SearchX aria-hidden />}
+            role="alert"
+            title={t('notFoundTitle')}
+            tone="warn"
+            actions={
+              <Button
+                onClick={() => void scanNext()}
+                size="glove"
+                variant="primary"
+              >
+                <ScanLine aria-hidden />
+                {t('scanAgain')}
+              </Button>
+            }
+          />
+        ) : status?.kind === 'camera-denied' ? (
+          <DeniedState
+            description={t('cameraDeniedHint')}
+            title={t('cameraDeniedTitle')}
+          />
+        ) : cameraLive ? null : (
+          <EmptyState
+            description={t('readyHint')}
+            icon={<QrCode aria-hidden />}
+            title={t('readyTitle')}
+          />
+        )}
 
-          {recent.length > 1 ? (
-            <SectionPanel title={t('recentTitle')}>
-              <ol className="grid">
-                {recent.slice(1).map((entry, index) => (
-                  <li
-                    className={cn(
-                      'flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2.5',
-                      index > 0 && 'border-app-line border-t',
-                    )}
-                    key={entry.code}
-                  >
-                    <span className="min-w-0">
-                      <span className="block text-sm font-medium text-white">
-                        {entry.name}
-                      </span>
-                      <span className="text-app-dim block font-mono text-[12px] break-all">
-                        {entry.code}
-                      </span>
-                    </span>
-                    <DateValue
-                      className="text-app-dim text-[12px]"
-                      value={entry.at}
-                    />
-                  </li>
-                ))}
-              </ol>
-            </SectionPanel>
-          ) : null}
-        </div>
-      ) : pending ? (
-        <StateScreen
-          description={t('checkingHint')}
-          icon={<ScanLine aria-hidden />}
-          title={t('checkingTitle')}
-          tone="brand"
-        />
-      ) : status?.kind === 'not-found' ? (
-        <StateScreen
-          description={t('notFoundHint')}
-          icon={<SearchX aria-hidden />}
-          role="alert"
-          title={t('notFoundTitle')}
-          tone="warn"
-          actions={
+        {status?.kind === 'inline' ? (
+          <Notice
+            role={status.tone === 'danger' ? 'alert' : 'status'}
+            tone={status.tone}
+          >
+            {t(status.text)}
+          </Notice>
+        ) : null}
+
+        <SectionPanel description={t('manualHint')} title={t('manualTitle')}>
+          <form
+            className="grid gap-3"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void resolve(code)
+            }}
+          >
+            <Field hint={t('codeHint')} label={t('codeLabel')}>
+              {/* 16px keeps iOS from zooming into the field mid-scan. */}
+              <TextInput
+                aria-label={t('codeLabel')}
+                autoComplete="off"
+                className="h-touch font-mono text-title"
+                onChange={(event) => setCode(event.target.value)}
+                placeholder={t('codePlaceholder')}
+                value={code}
+              />
+            </Field>
+            <Field hint={t('fileHint')} label={t('fileLabel')}>
+              <PhotoFileField
+                aria-label={t('fileLabel')}
+                onChange={(event) =>
+                  void scanFile(event.target.files?.[0] ?? null)
+                }
+              />
+              {filePreview ? (
+                <div className="rz-inset flex min-w-0 items-center gap-3 p-2">
+                  <img
+                    alt={t('filePreview', { name: filePreview.name })}
+                    className="size-14 shrink-0 rounded-control object-cover"
+                    src={filePreview.url}
+                  />
+                  <span className="min-w-0 flex-1 truncate">
+                    {filePreview.name}
+                  </span>
+                </div>
+              ) : null}
+            </Field>
             <Button
-              className="min-h-14"
-              onClick={() => void scanNext()}
-              variant="primary"
+              aria-busy={pending}
+              disabled={pending}
+              size="glove"
+              type="submit"
+              /* Without a camera this is the only way in, so it takes the fill. */
+              variant={
+                cameraState === 'unavailable' && !part ? 'primary' : 'ghost'
+              }
             >
-              <ScanLine aria-hidden />
-              {t('scanAgain')}
+              {t('findPart')}
             </Button>
-          }
-        />
-      ) : status?.kind === 'camera-denied' ? (
-        <DeniedState
-          description={t('cameraDeniedHint')}
-          title={t('cameraDeniedTitle')}
-        />
-      ) : cameraLive ? null : (
-        <EmptyState
-          description={t('readyHint')}
-          icon={<QrCode aria-hidden />}
-          title={t('readyTitle')}
-        />
-      )}
+          </form>
+        </SectionPanel>
 
-      {status?.kind === 'inline' ? (
-        <Notice
-          role={status.tone === 'danger' ? 'alert' : 'status'}
-          tone={status.tone}
-        >
-          {t(status.text)}
-        </Notice>
-      ) : null}
+        <p className="rz-dim m-0">{t('vinUnavailable')}</p>
+      </div>
 
       {/* The yard works one-handed: the deciding action stays under the thumb. */}
-      <div className="rounded-panel border-app-line bg-app-overlay/95 sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-10 grid gap-2 border p-3 backdrop-blur md:bottom-6">
+      <div className="rz-scan__dock sticky bottom-0 z-10">
         {part ? (
           <>
-            <Button asChild className="min-h-14 w-full" variant="primary">
+            <Button asChild size="glove" variant="primary">
               <Link to={`/app/${targetTenant?.slug ?? ''}/parts/${part.id}`}>
                 {t('openPart')}
               </Link>
             </Button>
             <Button
-              className="min-h-14 w-full"
               onClick={() => void scanNext()}
-              variant="ghost"
+              size="touch"
+              variant="quiet"
             >
               <ScanLine aria-hidden />
               {t('scanNext')}
@@ -665,84 +734,24 @@ export function ScannerScreen(_props: CabinetModuleScreenProps) {
         ) : (
           <>
             {cameraLive ? (
-              <Button
-                className="min-h-14 w-full"
-                onClick={stopCamera}
-                variant="ghost"
-              >
+              <Button onClick={stopCamera} size="glove">
                 {t('stopCamera')}
               </Button>
             ) : null}
             <Button
-              className="min-h-14 w-full"
               onClick={() => void enableCamera()}
+              size={cameraLive ? 'touch' : 'glove'}
               variant={cameraLive ? 'quiet' : 'primary'}
             >
               {cameraLive ? <RotateCcw aria-hidden /> : <Camera aria-hidden />}
               {t('startCamera')}
             </Button>
             {cameraLive ? (
-              <p className="text-app-dim text-center text-[12.5px]">
-                {t('frozenHint')}
-              </p>
+              <p className="rz-caption m-0 text-center">{t('frozenHint')}</p>
             ) : null}
           </>
         )}
       </div>
-
-      <SectionPanel description={t('manualHint')} title={t('manualTitle')}>
-        <form
-          className="grid gap-3"
-          onSubmit={(event) => {
-            event.preventDefault()
-            void resolve(code)
-          }}
-        >
-          <Field hint={t('codeHint')} label={t('codeLabel')}>
-            <TextInput
-              aria-label={t('codeLabel')}
-              autoComplete="off"
-              onChange={(event) => setCode(event.target.value)}
-              placeholder={t('codePlaceholder')}
-              value={code}
-            />
-          </Field>
-          <Field hint={t('fileHint')} label={t('fileLabel')}>
-            <PhotoFileField
-              aria-label={t('fileLabel')}
-              onChange={(event) =>
-                void scanFile(event.target.files?.[0] ?? null)
-              }
-            />
-            {filePreview ? (
-              <div className="border-app-line flex min-w-0 items-center gap-3 rounded-control border p-2">
-                <img
-                  alt={t('filePreview', { name: filePreview.name })}
-                  className="size-14 shrink-0 rounded-control object-cover"
-                  src={filePreview.url}
-                />
-                <span className="text-app-ink min-w-0 flex-1 truncate text-sm">
-                  {filePreview.name}
-                </span>
-              </div>
-            ) : null}
-          </Field>
-          <Button
-            aria-busy={pending}
-            className="min-h-14 w-full"
-            disabled={pending}
-            type="submit"
-            /* Without a camera this is the only way in, so it takes the fill. */
-            variant={
-              cameraState === 'unavailable' && !part ? 'primary' : 'ghost'
-            }
-          >
-            {t('findPart')}
-          </Button>
-        </form>
-      </SectionPanel>
-
-      <p className="text-app-dim text-[13.5px]">{t('vinUnavailable')}</p>
-    </PageBody>
+    </div>
   )
 }

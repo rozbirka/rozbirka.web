@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
-import { Button, Notice, type NoticeTone } from '@/components/app'
+import { StatusPill } from '@/components/app'
+import { cn } from '@/lib/utils'
 import type { Tenant } from '@/api/types'
 import {
   translate,
@@ -12,16 +13,27 @@ import type { TenantAccessSnapshot } from '../access-types'
 import { getDashboardBillingPath } from './dashboard-billing-access'
 import { dashboardMessages } from './dashboard-messages'
 
+type BannerTone = 'info' | 'warn' | 'danger'
+
+/** `.rz-banner--*`: the module-level strip under the topbar. */
+const BANNER_TONE: Record<BannerTone, string> = {
+  info: 'rz-banner--info',
+  warn: 'rz-banner--warn',
+  danger: 'rz-banner--danger',
+}
+
 interface BillingGuidance {
   title: string
   message: string
-  tone: NoticeTone
+  tone: BannerTone
   urgent: boolean
 }
 
 /**
  * The one thing allowed to interrupt the dashboard. It appears only when the
  * subscription needs a decision, and it carries the single action that ends it.
+ * Drawn as the design system's module banner (`.rz-banner`), full width under
+ * the topbar rather than as a notice inside the page.
  */
 export function DashboardBillingBanner({
   snapshot,
@@ -38,21 +50,26 @@ export function DashboardBillingBanner({
   const billingPath = getDashboardBillingPath(snapshot, tenant)
 
   return (
-    <Notice
-      action={
-        billingPath === null ? undefined : (
-          <Button asChild variant={guidance.urgent ? 'primary' : 'ghost'}>
-            <Link to={billingPath}>{t('goToSubscription')}</Link>
-          </Button>
-        )
-      }
-      block
+    <div
+      className={cn('rz-banner', BANNER_TONE[guidance.tone])}
       role={guidance.urgent ? 'alert' : 'status'}
-      tone={guidance.tone}
     >
-      <p className="font-medium text-white">{guidance.title}</p>
-      <p className="text-app-muted mt-0.5">{guidance.message}</p>
-    </Notice>
+      {/* The state as a chip, then what it means — as the v2 banner reads. */}
+      <StatusPill className="shrink-0" tone={guidance.tone}>
+        {guidance.title}
+      </StatusPill>
+      <p className="rz-muted m-0 min-w-60 flex-1 text-pretty">
+        {guidance.message}
+      </p>
+      {billingPath === null ? null : (
+        <Link
+          className="text-brand-text inline-flex min-h-control items-center font-medium whitespace-nowrap"
+          to={billingPath}
+        >
+          {t('goToSubscription')}
+        </Link>
+      )}
+    </div>
   )
 }
 

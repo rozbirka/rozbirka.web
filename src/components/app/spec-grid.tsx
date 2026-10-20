@@ -11,12 +11,9 @@ export interface Spec {
 }
 
 /**
- * The fixed properties of a record, laid out as cells rather than rows. Short
- * values — a code, a condition, a type — waste a whole row each in a list and
- * are quicker to compare side by side; the hairline between cells does the
- * separating, so nothing needs a box of its own.
- *
- * Use `FactRows` instead when most values are sentences.
+ * The fixed properties of a record. v2 has one fact list (`dl.rz-facts`) for
+ * every record, so this renders the same rows as `FactRows`; `wide` is kept
+ * for callers but no longer changes the layout.
  */
 export function SpecGrid({
   specs,
@@ -26,24 +23,11 @@ export function SpecGrid({
   className?: string
 }) {
   return (
-    <dl
-      className={cn(
-        'bg-app-line rounded-panel grid gap-px overflow-hidden sm:grid-cols-2',
-        className,
-      )}
-    >
+    <dl className={cn('rz-facts px-0', className)}>
       {specs.map((spec) => (
-        <div
-          className={cn(
-            'bg-app-raised grid content-start gap-1.5 px-4 py-3.5',
-            spec.wide && 'sm:col-span-2',
-          )}
-          key={spec.label}
-        >
-          <dt className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
-            {spec.label}
-          </dt>
-          <dd className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[16px] font-medium break-words text-white">
+        <div key={spec.label}>
+          <dt>{spec.label}</dt>
+          <dd className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
             {spec.value}
             {spec.note}
           </dd>
@@ -65,7 +49,7 @@ export function SpecNote({
   icon?: ReactNode
 }) {
   return (
-    <span className="text-app-dim inline-flex items-center gap-1.5 rounded-md bg-white/[0.04] px-2 py-1 text-[13px] font-normal">
+    <span className="rz-caption bg-app-neutral-soft rounded-rz-xs inline-flex items-center gap-1.5 px-1.5 py-0.5">
       {icon}
       {children}
     </span>

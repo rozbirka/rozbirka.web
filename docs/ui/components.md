@@ -47,7 +47,7 @@ ConfirmDialog при відкритті ставить focus на «Скасув
 
 [SiteHeader](../../src/components/site/header.tsx), [FAQ](../../src/components/site/faq.tsx), [Pricing](../../src/components/site/pricing.tsx), [PageContainer](../../src/components/layout/page-container.tsx) і [Section](../../src/components/layout/section.tsx) належать маркетинговому шару.
 
-У кабінеті є PageHeader/PageBody і окремий [RedesignShell](../../src/cabinet/redesign-shell.tsx). Обирати реалізацію за сусідніми екранами й прийнятим дизайном; сам факт наявності redesign не є дорученням мігрувати всі сторінки.
+Кадр сторінки кабінету — v2: sticky `.rz-topbar` (breadcrumb + дії) і `.rz-page`. Його дає [RedesignShell](../../src/cabinet/redesign-shell.tsx); PageHeader/PageBody лишаються для заголовка й колонки всередині `.rz-page`. Відповідність компонентів і класів kit — [CATALOG](../design-system/v2/CATALOG.md).
 
 ## Фото
 

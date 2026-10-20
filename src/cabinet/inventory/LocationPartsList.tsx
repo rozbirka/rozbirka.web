@@ -46,7 +46,7 @@ function LocationPartThumbnail({ source }: { source: string | null }) {
   return (
     <span
       aria-hidden
-      className="bg-app-input text-app-dim grid size-12 shrink-0 place-items-center overflow-hidden rounded-control"
+      className="bg-app-input text-app-dim grid size-8 shrink-0 place-items-center overflow-hidden rounded-control"
     >
       {source && !failed ? (
         <img
@@ -185,7 +185,7 @@ function OwnedLocationPartsList({
           <p className="text-app-ink bg-app-raised border-app-line shrink-0 rounded-control border px-4 py-3 text-base font-semibold tabular-nums">
             {t('positions', { count: data.total })}
           </p>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable] [&>div]:overflow-visible [&_thead_th]:bg-app-raised [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:font-sans [&_thead_th]:text-sm [&_thead_th]:font-semibold [&_thead_th]:tracking-normal [&_thead_th]:normal-case [&_thead_th]:text-app-muted">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable] [&_thead_th]:bg-app-raised [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10">
             <DataTable
               embedded
               caption={target.name}
@@ -229,7 +229,7 @@ function OwnedLocationPartsList({
                         source={part.thumbnailUrl}
                       />
                       <span className="min-w-0">
-                        <strong className="text-app-ink block break-words text-base leading-6 font-bold">
+                        <strong className="text-app-ink block break-words text-body font-semibold">
                           {part.name}
                         </strong>
                         {part.car ? (
@@ -265,7 +265,7 @@ function OwnedLocationPartsList({
                         part.status === 'reserved'
                           ? 'warn'
                           : part.status === 'sold'
-                            ? 'neutral'
+                            ? 'danger'
                             : 'ok'
                       }
                     >
@@ -288,6 +288,7 @@ function OwnedLocationPartsList({
                         cell: (part: PartSearchItem) => (
                           <div className="grid justify-items-start gap-1.5 md:justify-items-end">
                             <Button
+                              size={context === 'unassigned' ? 'glove' : 'md'}
                               onClick={() => onPlace(part)}
                               disabled={part.isInventoryLocked}
                               aria-label={t('placePart', { name: part.name })}

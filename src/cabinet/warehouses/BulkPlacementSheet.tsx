@@ -159,12 +159,12 @@ export function BulkPlacementSheet({
         </>
       }
     >
-      <div className="type-redesign grid gap-5">
+      <div className="grid gap-5">
         <p className="text-app-ink text-base font-semibold">
           {t('selectedCount', { count: parts.length })}
         </p>
         <p className="text-app-muted text-sm">{t('bulkHint')}</p>
-        <Resource state={resource.state} retry={resource.reload}>
+        <Resource state={resource.state} retry={resource.reload} framed={false}>
           {() => (
             <>
               {!zones.length ? (

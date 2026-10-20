@@ -43,19 +43,16 @@ export function ActionMenu({
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           align="end"
-          className="bg-app-overlay border-app-line-2 rounded-sheet z-50 grid min-w-52 gap-1 border p-1.5 shadow-2xl"
+          className="rz-menu z-50"
           collisionPadding={16}
           sideOffset={6}
         >
           {actions.map((action) => (
             <DropdownMenu.Item
               className={cn(
-                'rounded-control flex min-h-11 cursor-pointer items-center gap-2.5 px-3 text-[14.5px] outline-none select-none',
-                'data-[highlighted]:bg-white/[0.06]',
+                'rz-menu__item outline-none select-none',
                 'data-[disabled]:pointer-events-none data-[disabled]:opacity-55',
-                action.destructive
-                  ? 'text-state-danger data-[highlighted]:bg-state-danger-soft'
-                  : 'text-app-ink',
+                action.destructive && 'rz-menu__item--danger',
               )}
               {...(action.disabled === undefined
                 ? {}

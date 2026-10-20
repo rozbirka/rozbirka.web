@@ -1465,7 +1465,7 @@ it('opens zone creation in a side drawer and derives its code from the name', as
 
   await user.click(await screen.findByRole('button', { name: 'Додати зону' }))
   const drawer = screen.getByRole('dialog', { name: 'Нова зона' })
-  expect(drawer).toHaveClass('sm:right-0')
+  expect(drawer).toHaveClass('rz-sheet')
   await user.type(
     within(drawer).getByRole('textbox', { name: 'Назва' }),
     'Стелаж Б2',
@@ -1486,7 +1486,7 @@ it('updates the zone code when its name is edited in the side drawer', async () 
     screen.getByRole('menuitem', { name: 'Редагувати зону Стелаж A1' }),
   )
   const drawer = screen.getByRole('dialog', { name: 'Редагувати зону' })
-  expect(drawer).toHaveClass('sm:right-0')
+  expect(drawer).toHaveClass('rz-sheet')
   expect(within(drawer).getByRole('textbox', { name: 'Код' })).toHaveValue('A1')
   await user.clear(within(drawer).getByRole('textbox', { name: 'Назва' }))
   await user.type(
@@ -1825,7 +1825,7 @@ it('creates a shelf in a side drawer for its section', async () => {
   )
   await user.click(await screen.findByRole('button', { name: 'Додати полицю' }))
   const drawer = screen.getByRole('dialog', { name: 'Нова полиця' })
-  expect(drawer).toHaveClass('sm:right-0')
+  expect(drawer).toHaveClass('rz-sheet')
   expect(within(drawer).getByText('Секція B')).toBeInTheDocument()
 
   const name = within(drawer).getByRole('textbox', { name: 'Назва' })
@@ -1898,7 +1898,7 @@ it('creates a zone in a side drawer for its warehouse', async () => {
 
   await user.click(await screen.findByRole('button', { name: 'Додати зону' }))
   const drawer = screen.getByRole('dialog', { name: 'Нова зона' })
-  expect(drawer).toHaveClass('sm:right-0')
+  expect(drawer).toHaveClass('rz-sheet')
   expect(within(drawer).getByText('Основний склад')).toBeInTheDocument()
 
   await user.type(
@@ -1993,7 +1993,7 @@ it('edits a zone in the same side drawer', async () => {
     screen.getByRole('menuitem', { name: 'Редагувати зону Стелаж A1' }),
   )
   const drawer = screen.getByRole('dialog', { name: 'Редагувати зону' })
-  expect(drawer).toHaveClass('sm:right-0')
+  expect(drawer).toHaveClass('rz-sheet')
   const name = within(drawer).getByRole('textbox', { name: 'Назва' })
   const code = within(drawer).getByRole('textbox', { name: 'Код' })
   await user.clear(name)
@@ -2154,7 +2154,7 @@ it('opens warehouse creation in a side drawer without leaving warehouses', async
   renderAt('/app/yard/warehouses')
   await user.click(await screen.findByRole('button', { name: 'Додати склад' }))
   const drawer = screen.getByRole('dialog', { name: 'Новий склад' })
-  expect(drawer).toHaveClass('sm:right-0')
+  expect(drawer).toHaveClass('rz-sheet')
   await user.type(
     within(drawer).getByRole('textbox', { name: 'Назва' }),
     'Склад Б',
@@ -2187,7 +2187,7 @@ it('saves placement from the drawer and blocks dismissal while saving', async ()
   const drawer = await screen.findByRole('dialog', {
     name: 'Розміщення на складі',
   })
-  expect(drawer).toHaveClass('sm:right-0')
+  expect(drawer).toHaveClass('rz-sheet')
   await user.click(
     await within(drawer).findByRole('checkbox', {
       name: 'Основний склад · Стелаж A1',

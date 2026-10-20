@@ -164,13 +164,13 @@ export function AccountingCurrencySection() {
 
   const value = (code: SupportedCurrency | null) =>
     code === null ? (
-      <p className="text-app-muted text-[15px]">{t('notSet')}</p>
+      <p className="rz-muted m-0 text-title">{t('notSet')}</p>
     ) : (
-      <p className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-        <span className="text-app-ink font-mono text-[15px] font-bold">
+      <p className="m-0 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+        <span className="rz-mono rz-strong text-title font-semibold">
           {code}
         </span>
-        <span className="text-app-ink text-[15px]">
+        <span className="rz-strong text-title">
           {currencyName(code, locale)}
         </span>
       </p>
@@ -183,10 +183,7 @@ export function AccountingCurrencySection() {
           <Notice
             action={
               returnPath === null ? undefined : (
-                <Link
-                  className="text-brand font-semibold underline-offset-4 hover:underline"
-                  to={returnPath}
-                >
+                <Link className="font-medium" to={returnPath}>
                   {t('backToForm')} →
                 </Link>
               )
@@ -226,7 +223,7 @@ export function AccountingCurrencySection() {
 
   const picker = (
     <form
-      className="grid gap-3.5"
+      className="grid gap-3"
       noValidate
       onSubmit={(event) => {
         event.preventDefault()
@@ -245,7 +242,7 @@ export function AccountingCurrencySection() {
           value={picked ?? current}
         />
       </Field>
-      <div className="flex flex-wrap justify-end gap-2.5">
+      <div className="rz-btn-row justify-end">
         {editing ? (
           <Button
             disabled={busy}
@@ -298,31 +295,25 @@ export function AccountingCurrencySection() {
       <>
         <div className="flex flex-wrap items-center gap-3">
           {value(current)}
-          <span className="border-app-line-2 text-app-muted inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] font-semibold">
+          <span className="rz-pill before:hidden">
             <Lock aria-hidden className="size-3" />
             {t('badge')}
           </span>
         </div>
-        <p className="text-app-muted text-[13px] leading-5 text-pretty">
-          {t('lockedHint')}
-        </p>
+        <p className="rz-muted m-0 text-pretty">{t('lockedHint')}</p>
       </>
     )
   } else if (view === 'read-only') {
     body = (
       <>
         {value(current)}
-        <p className="text-app-muted text-[13px] leading-5 text-pretty">
-          {t('noRights')}
-        </p>
+        <p className="rz-muted m-0 text-pretty">{t('noRights')}</p>
       </>
     )
   } else if (view === 'choose' || editing) {
     body = (
       <>
-        <p className="text-app-muted text-[13px] leading-5 text-pretty">
-          {t('hint')}
-        </p>
+        <p className="rz-muted m-0 text-pretty">{t('hint')}</p>
         {picker}
       </>
     )
@@ -342,9 +333,7 @@ export function AccountingCurrencySection() {
             {t('change')}
           </Button>
         </div>
-        <p className="text-state-warn text-[13px] leading-5 text-pretty">
-          {t('hint')}
-        </p>
+        <p className="text-state-warn m-0 text-pretty">{t('hint')}</p>
       </>
     )
   }
@@ -352,20 +341,20 @@ export function AccountingCurrencySection() {
   return (
     <section
       aria-labelledby={titleId}
-      className="border-app-line bg-app-raised min-w-0 scroll-mt-24 rounded-[20px] border px-5 py-5 outline-none"
+      className="rz-card min-w-0 scroll-mt-24 outline-none"
       // Deep-link target (onboarding: /settings/business#accounting-currency).
       id={BUSINESS_SECTION_IDS.accountingCurrency}
       tabIndex={-1}
     >
-      <div className="flex items-center gap-3">
-        <span className="border-app-line text-app-dim inline-flex size-7 shrink-0 items-center justify-center rounded-full border font-mono text-[11px]">
-          03
-        </span>
-        <h2 className="text-app-ink text-[15px] font-bold" id={titleId}>
-          {t('title')}
-        </h2>
-      </div>
-      <div className="mt-4 grid gap-3.5">
+      <header className="rz-card__head py-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="rz-code rz-code--sm">03</span>
+          <h2 className="rz-h-card" id={titleId}>
+            {t('title')}
+          </h2>
+        </div>
+      </header>
+      <div className="rz-card__body grid gap-3">
         {feedback}
         {body}
       </div>

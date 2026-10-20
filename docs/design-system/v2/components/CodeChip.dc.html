@@ -10,7 +10,7 @@
 <helmet>
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
-<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}button{font:inherit;color:inherit}a{color:#f77425}a:hover{color:#ff8430}button:focus-visible{outline:none;box-shadow:var(--rz-focus)}</style>
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}button{font:inherit;color:inherit}a{color:var(--rz-brand-text)}a:hover{color:var(--rz-brand-hover)}button:focus-visible{outline:none;box-shadow:var(--rz-focus)}</style>
 </helmet>
 <div data-theme="dark" data-density="{{ density }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
   <div style="max-width:1280px;margin:0 auto;display:grid;gap:24px">
@@ -31,21 +31,21 @@
             <div style="display:grid;gap:6px;justify-items:start">
               <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 2px 0 8px;border:1px solid var(--rz-border);border-radius:var(--rz-r-xs);background:var(--rz-surface-2)">
                 <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text);white-space:nowrap">OEM 3G1941005</span>
-                <button aria-label="Копіювати код" title="Копіювати код" onClick="{{ copy }}" style="display:grid;place-items:center;width:20px;height:20px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:{{ copyColor }};cursor:pointer" style-hover="background:var(--rz-fill-active);color:var(--rz-text)"><i class="{{ copyIcon }}" style="font-size:12px"></i></button>
+                <button aria-label="Копіювати код" title="Копіювати код" onClick="{{ copy }}" style="display:grid;place-items:center;width:20px;height:20px;border:0;border-radius:var(--rz-r-xs);background:transparent;color:{{ copyColor }};cursor:pointer" style-hover="background:var(--rz-fill-active);color:var(--rz-text)"><i class="{{ copyIcon }}" style="font-size:var(--rz-icon-sm)"></i></button>
               </span>
               <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">клікніть копіювання</span>
             </div>
             <div style="display:grid;gap:6px;justify-items:start">
               <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 2px 0 8px;border:1px solid var(--rz-border);border-radius:var(--rz-r-xs);background:var(--rz-surface-2)">
                 <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text);white-space:nowrap">VIN WVWZZZ3CZGE012345</span>
-                <span style="display:grid;place-items:center;width:20px;height:20px;border-radius:var(--rz-r-xs);background:var(--rz-fill-active);color:var(--rz-text)"><i class="icon-copy" style="font-size:12px"></i></span>
+                <span style="display:grid;place-items:center;width:20px;height:20px;border-radius:var(--rz-r-xs);background:var(--rz-fill-active);color:var(--rz-text)"><i class="icon-copy" style="font-size:var(--rz-icon-sm)"></i></span>
               </span>
               <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">hover</span>
             </div>
             <div style="display:grid;gap:6px;justify-items:start">
               <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 2px 0 8px;border:1px solid var(--rz-border);border-radius:var(--rz-r-xs);background:var(--rz-surface-2)">
                 <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text);white-space:nowrap">QR RZ-000482</span>
-                <span style="display:grid;place-items:center;width:20px;height:20px;border-radius:var(--rz-r-xs);color:var(--rz-ok)"><i class="icon-check" style="font-size:12px"></i></span>
+                <span style="display:grid;place-items:center;width:20px;height:20px;border-radius:var(--rz-r-xs);color:var(--rz-ok)"><i class="icon-check" style="font-size:var(--rz-icon-sm)"></i></span>
               </span>
               <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">скопійовано · 1.5 с</span>
             </div>
@@ -55,7 +55,7 @@
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:8px;max-width:360px;height:36px;padding:0 12px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-overlay);box-shadow:var(--rz-shadow-popover)">
-            <i class="icon-circle-check" style="font-size:14px;color:var(--rz-ok)"></i><span style="color:var(--rz-text)">Код скопійовано.</span>
+            <i class="icon-circle-check" style="font-size:var(--rz-icon);color:var(--rz-ok)"></i><span style="color:var(--rz-text)">Код скопійовано.</span>
           </div>
           <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Повідомлення після копіювання — Toast (B2). Помилка: «Не вдалося скопіювати код.»</span>
         </div>

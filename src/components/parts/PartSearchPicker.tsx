@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { partsApi, type PartListItem, type PartSearchItem } from '@/api/parts'
+import { Button, StatusPill } from '@/components/app'
 import { cn } from '@/lib/utils'
 import { formatMoney, translate, useLocale, useT, type Locale } from '@/i18n'
 import { partPickerMessages } from './part-picker-messages'
@@ -39,23 +40,23 @@ const statusPresentation = (part: PartPickerItem, locale: Locale) => {
   if (part.status === 'reserved')
     return {
       label: translate(partPickerMessages, locale, 'reserved'),
-      className: 'border-state-warn/35 bg-state-warn-soft text-state-warn',
+      tone: 'warn' as const,
     }
   if (part.status === 'available' || part.quantityAvailable > 0)
     return {
       label: translate(partPickerMessages, locale, 'inStock', {
         count: part.quantityAvailable,
       }),
-      className: 'border-state-ok/35 bg-state-ok-soft text-state-ok',
+      tone: 'ok' as const,
     }
   if (part.quantityReserved > 0)
     return {
       label: translate(partPickerMessages, locale, 'reserved'),
-      className: 'border-state-warn/35 bg-state-warn-soft text-state-warn',
+      tone: 'warn' as const,
     }
   return {
     label: translate(partPickerMessages, locale, 'none'),
-    className: 'border-state-danger/35 bg-state-danger-soft text-state-danger',
+    tone: 'danger' as const,
   }
 }
 
@@ -249,19 +250,20 @@ export function PartSearchPicker({
       <label className="sr-only" htmlFor={inputId}>
         {t('label')}
       </label>
-      <div className="relative">
-        <Search
-          aria-hidden
-          className="text-app-dim pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2"
-        />
+      {/* A part picked from the list is the current selection: the one place
+          the brand edge is allowed on the field. */}
+      <div
+        className={cn(
+          'rz-search h-control-lg',
+          value?.name === query && 'border-brand bg-brand-soft',
+        )}
+      >
+        <Search aria-hidden className="pointer-events-none" />
         <input
           aria-controls={`${inputId}-results`}
           aria-expanded={open}
           autoComplete="off"
-          className={cn(
-            'bg-app-input text-app-ink placeholder:text-app-dim border-app-line-2 h-14 w-full rounded-[16px] border pr-4 pl-12 text-[15px] outline-none transition-colors hover:border-white/20 focus-visible:border-brand',
-            value?.name === query && 'border-brand/40',
-          )}
+          className="max-md:text-title"
           disabled={disabled}
           id={inputId}
           onChange={(event) => {
@@ -284,32 +286,17 @@ export function PartSearchPicker({
       {open && query.trim() ? (
         <div
           aria-label={t('results')}
-          className="border-app-line bg-app-raised absolute top-[calc(100%+8px)] right-0 left-0 z-40 overflow-hidden rounded-[18px] border shadow-2xl"
+          className="rz-popover absolute top-full right-0 left-0 z-40 mt-1.5 w-auto"
           id={`${inputId}-results`}
           role="dialog"
         >
-          <div className="border-app-line flex flex-wrap items-center justify-between gap-3 border-b px-3 py-3">
-            <div className="flex flex-wrap gap-2">
+          <div className="border-app-line flex flex-wrap items-center justify-between gap-2 border-b p-2">
+            <div className="rz-seg flex-wrap" role="group">
               {filterOptions
                 .map((value) => ({ value, label: t(value) }))
                 .map((option) => (
                   <button
                     aria-pressed={filter === option.value}
-                    className={cn(
-                      'flex min-h-10 items-center gap-2 rounded-full border px-3.5 text-sm font-semibold transition-colors',
-                      option.value === 'all' &&
-                        (filter === option.value
-                          ? 'border-app-line-2 bg-white/[0.09] text-white'
-                          : 'border-app-line-2 text-app-muted hover:bg-white/[0.04]'),
-                      option.value === 'available' &&
-                        (filter === option.value
-                          ? 'border-state-ok/35 bg-state-ok-soft text-state-ok'
-                          : 'border-state-ok/25 text-state-ok hover:bg-state-ok-soft/50'),
-                      option.value === 'reserved' &&
-                        (filter === option.value
-                          ? 'border-state-warn/35 bg-state-warn-soft text-state-warn'
-                          : 'border-state-warn/25 text-state-warn hover:bg-state-warn-soft/50'),
-                    )}
                     key={option.value}
                     onClick={() => {
                       setFilter(option.value)
@@ -322,13 +309,11 @@ export function PartSearchPicker({
                     type="button"
                   >
                     {option.label}
-                    <span className="text-app-dim font-mono text-xs">
-                      {counts[option.value]}
-                    </span>
+                    <span className="rz-count">{counts[option.value]}</span>
                   </button>
                 ))}
             </div>
-            <p className="text-app-dim font-mono text-xs tabular-nums">
+            <p className="rz-dim m-0 pr-1 font-mono text-caption tabular-nums">
               {t('shownOf', { shown: String(shown), total: String(total) })}
             </p>
           </div>
@@ -336,26 +321,23 @@ export function PartSearchPicker({
           <div className="max-h-[min(52vh,460px)] overflow-y-auto overscroll-contain">
             {error && items.length === 0 ? (
               <p
-                className="text-state-danger px-5 py-8 text-center text-sm"
+                className="text-state-danger m-0 px-4 py-6 text-center"
                 role="alert"
               >
                 {t('loadFailed')}
               </p>
             ) : loading && items.length === 0 ? (
-              <p
-                className="text-app-muted px-5 py-8 text-center text-sm"
-                role="status"
-              >
+              <p className="rz-muted m-0 px-4 py-6 text-center" role="status">
                 {t('searching')}
               </p>
             ) : items.length === 0 ? (
-              <p className="text-app-muted px-5 py-8 text-center text-sm">
+              <p className="rz-muted m-0 px-4 py-6 text-center">
                 {t('nothing')}
               </p>
             ) : (
               <ul
                 aria-label={t('found')}
-                className="divide-app-line grid divide-y"
+                className="divide-app-line m-0 grid list-none divide-y p-0"
                 role="listbox"
               >
                 {items.map((part) => {
@@ -367,7 +349,7 @@ export function PartSearchPicker({
                     <li key={part.id}>
                       <button
                         aria-label={t('choose', { name: part.name })}
-                        className="hover:bg-white/[0.035] grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors"
+                        className="grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-0 bg-transparent px-3 py-2 text-left transition-colors hover:bg-app-hover"
                         onClick={() => {
                           setOpen(false)
                           onSelect(part)
@@ -377,27 +359,22 @@ export function PartSearchPicker({
                       >
                         <span className="min-w-0">
                           <span className="flex flex-wrap items-center gap-2">
-                            <span className="truncate text-[15px] font-bold text-white">
+                            <span className="rz-strong truncate font-medium">
                               {part.name}
                             </span>
-                            <span
-                              className={cn(
-                                'rounded-full border px-2.5 py-1 text-xs font-semibold',
-                                presentation.className,
-                              )}
-                            >
+                            <StatusPill tone={presentation.tone}>
                               {presentation.label}
-                            </span>
+                            </StatusPill>
                           </span>
-                          <span className="text-app-muted mt-1 block truncate text-[13px]">
+                          <span className="rz-caption block truncate">
                             {car}
                           </span>
                         </span>
-                        <span className="grid justify-items-end gap-1 pl-2">
-                          <span className="font-mono text-[15px] font-bold text-white tabular-nums">
+                        <span className="grid justify-items-end gap-0.5 pl-2">
+                          <span className="rz-num rz-strong">
                             {price(part.effectiveSalePrice, currency, locale)}
                           </span>
-                          <span className="text-app-dim font-mono text-xs">
+                          <span className="rz-dim font-mono text-caption">
                             {part.externalCode ?? '—'}
                           </span>
                         </span>
@@ -409,23 +386,22 @@ export function PartSearchPicker({
             )}
             {error && items.length > 0 && (
               <p
-                className="text-state-danger px-4 py-3 text-center text-xs"
+                className="text-state-danger m-0 px-4 py-3 text-center text-caption"
                 role="alert"
               >
                 {t('loadFailed')}
               </p>
             )}
             {hasMore && (
-              <div className="border-app-line border-t p-3">
-                <button
+              <div className="border-app-line border-t p-2">
+                <Button
                   aria-busy={loading}
-                  className="border-app-line-2 text-brand hover:bg-brand/5 min-h-11 w-full rounded-[10px] border text-sm font-semibold disabled:opacity-55"
                   disabled={loading}
                   onClick={() => setPage((current) => current + 1)}
-                  type="button"
+                  size="wide"
                 >
                   {loading ? t('loading') : t('showMore')}
-                </button>
+                </Button>
               </div>
             )}
           </div>

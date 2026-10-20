@@ -206,13 +206,14 @@ describe('PartSearchPicker', () => {
     const availableFilter = within(dropdown).getByRole('button', {
       name: /В наявності\s*9/,
     })
-    expect(availableFilter).toHaveClass('text-state-ok')
-    expect(availableFilter).not.toHaveClass('bg-state-ok-soft')
+    // v2: the status filter is a neutral segmented control — the state lives
+    // in the row badges, not in the colour of the filter.
+    expect(availableFilter.closest('.rz-seg')).not.toBeNull()
+    expect(availableFilter).toHaveAttribute('aria-pressed', 'false')
     const reservedFilter = within(dropdown).getByRole('button', {
       name: /Резерв\s*1/,
     })
-    expect(reservedFilter).toHaveClass('text-state-warn')
-    expect(reservedFilter).not.toHaveClass('bg-state-warn-soft')
+    expect(reservedFilter).toHaveAttribute('aria-pressed', 'false')
     expect(within(dropdown).queryByRole('button', { name: /Немає/ })).toBeNull()
     expect(within(dropdown).queryByText('І1')).toBeNull()
     expect(within(dropdown).getByText(/^0,00\sUSD$/)).toBeVisible()
@@ -225,13 +226,13 @@ describe('PartSearchPicker', () => {
       name: /Інвертор 1/,
     })
     expect(within(availableOption).getByText('3 в наявності')).toHaveClass(
-      'text-state-ok',
+      'rz-pill--ok',
     )
     const unavailableOption = within(dropdown).getByRole('option', {
       name: /Інвертор 2/,
     })
     expect(within(unavailableOption).getByText('Немає')).toHaveClass(
-      'text-state-danger',
+      'rz-pill--danger',
     )
 
     await user.click(
@@ -262,13 +263,10 @@ describe('PartSearchPicker', () => {
       name: /Інвертор 2/,
     })
     const reservedBadge = within(reservedOption).getByText('Резерв')
-    expect(reservedBadge).toHaveClass('text-state-warn')
+    expect(reservedBadge).toHaveClass('rz-pill--warn')
     expect(
       within(dropdown).getByRole('button', { name: /Резерв\s*1/ }),
     ).toHaveAttribute('aria-pressed', 'true')
-    expect(
-      within(dropdown).getByRole('button', { name: /Резерв\s*1/ }),
-    ).toHaveClass('bg-state-warn-soft')
     expect(availableFilter).toHaveAttribute('aria-pressed', 'false')
 
     await user.click(await screen.findByRole('option', { name: /Інвертор 2/ }))

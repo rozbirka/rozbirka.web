@@ -10,7 +10,7 @@
 <helmet>
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
-<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}a{color:#f77425}a:hover{color:#ff8430}</style>
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}a{color:var(--rz-brand-text)}a:hover{color:var(--rz-brand-hover)}</style>
 </helmet>
 <div data-theme="dark" data-density="{{ density }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
   <div style="max-width:1280px;margin:0 auto;display:grid;gap:24px">
@@ -55,9 +55,9 @@
         <div style="display:grid;gap:12px;padding-top:20px;border-top:1px solid var(--rz-border)">
           <p style="margin:0;font-size:var(--rz-fs-caption);font-weight:600;color:var(--rz-text-muted)">Counter · у навігації, вкладках, фільтрах</p>
           <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:center">
-            <span style="display:flex;align-items:center;gap:10px;height:30px;padding:0 8px;border-radius:var(--rz-r-sm);background:var(--rz-fill-selected);color:var(--rz-text-strong);font-weight:600;min-width:200px"><i class="icon-clipboard-list" style="font-size:15px;color:var(--rz-brand)"></i><span style="flex:1">Замовлення</span><span style="min-width:18px;height:18px;padding:0 5px;display:inline-grid;place-items:center;border-radius:var(--rz-r-full);background:var(--rz-fill-active);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-muted)">12</span></span>
+            <span style="display:flex;align-items:center;gap:10px;height:30px;padding:0 8px;border-radius:var(--rz-r-sm);background:var(--rz-fill-selected);color:var(--rz-text-strong);font-weight:600;min-width:200px"><i class="icon-clipboard-list" style="font-size:var(--rz-icon-md);color:var(--rz-brand)"></i><span style="flex:1">Замовлення</span><span style="min-width:18px;height:18px;padding:0 5px;display:inline-grid;place-items:center;border-radius:var(--rz-r-full);background:var(--rz-fill-active);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-muted)">12</span></span>
             <span style="display:inline-flex;align-items:center;gap:6px">У резерві<span style="min-width:18px;height:18px;padding:0 5px;display:inline-grid;place-items:center;border-radius:var(--rz-r-full);background:var(--rz-fill-active);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-muted)">96</span></span>
-            <span style="display:inline-flex;align-items:center;gap:6px">Інтеграції<span style="min-width:18px;height:18px;padding:0 5px;display:inline-grid;place-items:center;border-radius:var(--rz-r-full);background:var(--rz-danger);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);font-weight:500;color:#fff">1</span></span>
+            <span style="display:inline-flex;align-items:center;gap:6px">Інтеграції<span style="min-width:18px;height:18px;padding:0 5px;display:inline-grid;place-items:center;border-radius:var(--rz-r-full);background:var(--rz-danger);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);font-weight:500;color:var(--rz-on-solid)">1</span></span>
             <span style="display:inline-flex;align-items:center;gap:6px;color:var(--rz-text-muted)"><span style="width:6px;height:6px;border-radius:var(--rz-r-full);background:var(--rz-brand)"></span>нове</span>
           </div>
           <span style="font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">Нейтральний лічильник — кількість. Червоний — лише те, що потребує дії (помилка інтеграції). У коді лічильників у навігації немає; це пропозиція v2.</span>

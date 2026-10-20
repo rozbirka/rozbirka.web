@@ -27,19 +27,19 @@ export function RecordIdentity({
       {photoUrl === undefined ? null : photoUrl === null ? (
         <span
           aria-hidden
-          className="bg-app-input border-app-line size-10 shrink-0 rounded-lg border"
+          className="bg-app-input border-app-line rounded-rz-sm size-8 shrink-0 border"
         />
       ) : (
         <Thumbnail
           alt=""
-          className="size-10 shrink-0 rounded-lg"
+          className="rounded-rz-sm size-8 shrink-0"
           photo={{ url: photoUrl }}
         />
       )}
       <span className="grid min-w-0 gap-0.5">
-        <span className="text-app-ink truncate font-medium">{title}</span>
+        <span className="text-app-strong truncate font-medium">{title}</span>
         {subtitle === undefined ? null : (
-          <span className="text-app-dim truncate text-[13px]">{subtitle}</span>
+          <span className="text-app-dim text-caption truncate">{subtitle}</span>
         )}
       </span>
     </span>

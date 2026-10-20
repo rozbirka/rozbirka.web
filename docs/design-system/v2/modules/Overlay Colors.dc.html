@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../kit.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}a{color:var(--rz-brand-text)}a:hover{color:var(--rz-brand-hover)}</style>
+</helmet>
+<div class="rz" data-theme="{{ theme }}" style="min-height:100vh;padding:56px 64px 120px;background:var(--rz-bg-sidebar);display:grid;gap:40px;align-content:start;width:max-content">
+  <header style="display:grid;gap:8px;max-width:900px">
+    <span class="rz-eyebrow">Модуль 10 · Автомобілі · кольори оверлеїв</span>
+    <h1 class="rz-h-page" style="font-size:var(--rz-fs-display)">Модалка й дровер: три кольорові схеми</h1>
+    <p class="rz-muted" style="margin:0;text-wrap:pretty">Однаковий вміст, різні поверхні. Зараз у модулі: теплий фон оверлею #1f1e1d, футер темніший за тіло, кольоровий квадрат з іконкою. Оберіть 1a, 1b або 1c — застосую до всіх модулів через токени.</p>
+  </header>
+  <section style="display:flex;gap:48px;align-items:flex-start">
+    <sc-for list="{{ options }}" as="op" hint-placeholder-count="3">
+      <div id="{{ op.id }}" style="display:grid;gap:14px;width:1040px">
+        <div style="display:flex;align-items:baseline;gap:12px"><span class="rz-mono" style="display:inline-grid;place-items:center;height:24px;padding:0 8px;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:700">{{ op.id }}</span><h2 class="rz-h-title">{{ op.name }}</h2></div>
+        <p class="rz-muted" style="margin:0;text-wrap:pretty">{{ op.desc }}</p>
+        <ul style="margin:0;padding-left:18px;display:grid;gap:2px;color:var(--rz-text-dim);font-size:var(--rz-fs-caption)"><sc-for list="{{ op.tokens }}" as="t" hint-placeholder-count="3"><li class="rz-mono">{{ t }}</li></sc-for></ul>
+
+        <sc-for list="{{ op.frames }}" as="fr" hint-placeholder-count="2">
+          <div style="position:relative;width:1040px;height:620px;overflow:hidden;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-bg)">
+            <div aria-hidden="true" style="position:absolute;inset:0;padding:20px 24px;display:grid;align-content:start;gap:14px">
+              <div style="display:flex;align-items:center;gap:10px"><span class="rz-h-page">Volkswagen Passat B8 · 2016</span><span class="rz-pill rz-pill--ok">Активний</span></div>
+              <div class="rz-kpis" style="grid-template-columns:repeat(4,1fr)"><div class="rz-kpi"><span class="rz-kpi__label">Вкладено</span><span class="rz-display">120 000</span></div><div class="rz-kpi"><span class="rz-kpi__label">Повернено</span><span class="rz-display">74 400</span></div><div class="rz-kpi"><span class="rz-kpi__label">До окупності</span><span class="rz-display" style="color:var(--rz-warn)">45 600</span></div><div class="rz-kpi"><span class="rz-kpi__label">Окупність</span><span class="rz-display">62</span></div></div>
+              <section class="rz-card"><div class="rz-card__head"><span class="rz-h-card">Витрати</span><span class="rz-btn rz-btn--sm"><i class="icon-plus"></i>Додати витрату</span></div>
+                <div style="display:grid"><div style="display:flex;justify-content:space-between;height:36px;align-items:center;padding:0 12px;border-top:1px solid var(--rz-border)"><span class="rz-strong">Транспортування</span><span class="rz-mono rz-strong">3 000 ₴</span></div><div style="display:flex;justify-content:space-between;height:36px;align-items:center;padding:0 12px;border-top:1px solid var(--rz-border);background:var(--rz-fill-selected);box-shadow:inset 2px 0 0 var(--rz-brand)"><span class="rz-strong">Мийка</span><span class="rz-mono rz-strong">600 ₴</span></div><div style="display:flex;justify-content:space-between;height:36px;align-items:center;padding:0 12px;border-top:1px solid var(--rz-border)"><span class="rz-strong">Розмитнення</span><span class="rz-mono rz-strong">4 400 ₴</span></div></div>
+              </section>
+            </div>
+            <sc-if value="{{ op.scrim }}" hint-placeholder-val="{{ true }}"><div aria-hidden="true" style="{{ op.scrimStyle }}"></div></sc-if>
+
+            <sc-if value="{{ fr.isSheet }}" hint-placeholder-val="{{ false }}">
+              <section role="dialog" aria-label="Додати витрату" style="{{ op.sheet }}">
+                <header style="{{ op.head }}"><span style="flex:1;display:grid;gap:2px"><h3 class="rz-h-title">Додати витрату</h3><span class="rz-muted" style="font-size:var(--rz-fs-caption)">Додайте витрату понад ціну придбання автомобіля.</span></span><button type="button" class="rz-btn rz-btn--icon rz-btn--ghost" aria-label="Закрити"><i class="icon-x"></i></button></header>
+                <div style="{{ op.body }}">
+                  <label class="rz-field"><span class="rz-label">Назва витрати</span><input class="rz-input" readOnly="{{ true }}" value="Евакуатор з Луцька" style="{{ op.input }}"></label>
+                  <label class="rz-field"><span class="rz-label">Сума витрати</span><span class="rz-input-group" style="{{ op.input }}"><input readOnly="{{ true }}" value="3 500" style="flex:1;min-width:0;width:100%;font-family:var(--rz-font-mono);text-align:right;color:var(--rz-text-strong)"><span class="rz-input-group__addon">₴</span></span></label>
+                  <dl style="{{ op.summary }}"><div style="display:flex;justify-content:space-between;padding:6px 0"><dt class="rz-muted">Вкладено зараз</dt><dd class="rz-mono" style="margin:0">120 000 ₴</dd></div><div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid var(--rz-border)"><dt class="rz-muted">Після збереження</dt><dd class="rz-mono rz-strong" style="margin:0;font-weight:600">123 500 ₴</dd></div></dl>
+                </div>
+                <footer style="{{ op.foot }}"><button type="button" class="rz-btn">Скасувати</button><button type="button" class="rz-btn rz-btn--primary">Додати витрату</button></footer>
+              </section>
+            </sc-if>
+
+            <sc-if value="{{ fr.isDialog }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;inset:0;display:grid;place-items:center">
+                <section role="alertdialog" aria-label="Видалити витрату?" style="{{ op.dialog }}">
+                  <sc-if value="{{ op.dlgBands }}" hint-placeholder-val="{{ false }}">
+                    <header style="{{ op.head }}"><h3 class="rz-h-title" style="flex:1">Видалити витрату?</h3><button type="button" class="rz-btn rz-btn--icon rz-btn--ghost" aria-label="Закрити"><i class="icon-x"></i></button></header>
+                    <div style="{{ op.body }}"><p style="margin:0;text-wrap:pretty">Витрата «Мийка» на 600 ₴ зникне назавжди, а інвестована сума зменшиться.</p></div>
+                    <footer style="{{ op.foot }}"><button type="button" class="rz-btn">Скасувати</button><button type="button" class="{{ op.dangerBtn }}">Видалити витрату</button></footer>
+                  </sc-if>
+                  <sc-if value="{{ op.dlgPlain }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:grid;gap:8px;padding:18px 18px 14px"><h3 class="rz-h-title">Видалити витрату?</h3><p class="rz-muted" style="margin:0;text-wrap:pretty">Витрата «Мийка» на 600 ₴ зникне назавжди, а інвестована сума зменшиться.</p></div>
+                    <footer style="{{ op.foot }}"><button type="button" class="rz-btn">Скасувати</button><button type="button" class="{{ op.dangerBtn }}">Видалити витрату</button></footer>
+                  </sc-if>
+                </section>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </sc-for>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dark&quot;,&quot;light&quot;], &quot;default&quot;: &quot;dark&quot;, &quot;tsType&quot;: &quot;'dark' | 'light'&quot;}}">
+const BASE_SHEET = 'position:absolute;top:0;right:0;bottom:0;width:440px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;';
+const HEAD = 'display:flex;align-items:flex-start;gap:12px;padding:12px 12px 12px 16px;border-bottom:1px solid var(--rz-border);';
+const BODY = 'display:grid;align-content:start;gap:14px;padding:16px;';
+const FOOT = 'display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--rz-border);';
+const SUM = 'margin:0;padding:4px 12px;border:1px solid var(--rz-border);border-radius:var(--rz-r-sm);';
+class Component extends DCLogic {
+  renderVals() {
+    const frames = [{ isSheet: true }, { isDialog: true }];
+    const options = [
+      { id: '1a', name: 'Як картка', desc: 'Оверлей має той самий колір, що й картки сторінки. Відокремлює його рамка й тінь, а не інший відтінок. Поля — як у формах на сторінці. Затемнення легше.',
+        tokens: ['фон: --rz-surface', 'шапка й футер: --rz-surface, лінії --rz-border', 'поля: --rz-surface-2', 'затемнення: чорний 40 %'],
+        scrim: true, scrimStyle: 'position:absolute;inset:0;background:rgb(0 0 0 / 0.4)',
+        sheet: BASE_SHEET + 'background:var(--rz-surface);border-left:1px solid var(--rz-border-strong);box-shadow:var(--rz-shadow-dialog)',
+        dialog: 'width:420px;display:grid;background:var(--rz-surface);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-lg);box-shadow:var(--rz-shadow-dialog);overflow:hidden',
+        head: HEAD, body: BODY, foot: FOOT, input: '', summary: SUM + 'background:var(--rz-surface-2)', dlgBands: false, dlgPlain: true, dangerBtn: 'rz-btn rz-btn--danger' },
+      { id: '1b', name: 'Смуги шапки й футера', desc: 'Класична ERP-модалка: шапка й футер — окремі смуги, тіло світліше, поля втиснуті темніше. Модалка має ту саму будову, що й дровер.',
+        tokens: ['тіло: --rz-surface-2', 'шапка й футер: --rz-surface', 'поля: --rz-bg (втиснуті)', 'затемнення: --rz-scrim'],
+        scrim: true, scrimStyle: 'position:absolute;inset:0;background:var(--rz-scrim)',
+        sheet: BASE_SHEET + 'background:var(--rz-surface-2);border-left:1px solid var(--rz-border-strong);box-shadow:var(--rz-shadow-dialog)',
+        dialog: 'width:440px;display:grid;background:var(--rz-surface-2);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);box-shadow:var(--rz-shadow-dialog);overflow:hidden',
+        head: HEAD + 'background:var(--rz-surface)', body: BODY, foot: FOOT + 'background:var(--rz-surface)', input: 'background:var(--rz-bg)', summary: SUM + 'background:var(--rz-surface)', dlgBands: true, dlgPlain: false, dangerBtn: 'rz-btn rz-btn--danger' },
+      { id: '1c', name: 'Панель без затемнення', desc: 'Сторінка лишається видимою й не темніє — видно рядок, з яким працюєте. Дровер — це панель поруч зі сторінкою. Модалка з легким затемненням.',
+        tokens: ['фон: --rz-surface', 'затемнення дровера: немає, лише лінія --rz-border-strong і тінь', 'модалка: затемнення 30 %', 'поля: --rz-surface-2'],
+        scrim: true, scrimStyle: 'position:absolute;inset:0;background:transparent',
+        sheet: BASE_SHEET + 'background:var(--rz-surface);border-left:1px solid var(--rz-border-strong);box-shadow:-12px 0 32px rgb(0 0 0 / 0.35)',
+        dialog: 'width:420px;display:grid;background:var(--rz-surface);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-lg);box-shadow:var(--rz-shadow-dialog);overflow:hidden;outline:100vmax solid rgb(0 0 0 / 0.3)',
+        head: HEAD, body: BODY, foot: FOOT, input: '', summary: SUM + 'background:var(--rz-surface-2)', dlgBands: false, dlgPlain: true, dangerBtn: 'rz-btn' },
+    ];
+    options[2].dangerBtnStyle = '';
+    options[2].dangerBtn = 'rz-btn rz-btn--danger';
+    return { theme: this.props.theme ?? 'dark', options: options.map((o) => ({ ...o, frames })) };
+  }
+}
+</script>
+</body>
+</html>

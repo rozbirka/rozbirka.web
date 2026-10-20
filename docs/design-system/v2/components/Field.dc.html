@@ -10,7 +10,7 @@
 <helmet>
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
-<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}input,select,textarea,button{font:inherit}a{color:#f77425}a:hover{color:#ff8430}input::placeholder,textarea::placeholder{color:var(--rz-text-dim)}</style>
+<style>html,body{margin:0}body{background:#0b0b0b}*{box-sizing:border-box}input,select,textarea,button{font:inherit}a{color:var(--rz-brand-text)}a:hover{color:var(--rz-brand-hover)}input::placeholder,textarea::placeholder{color:var(--rz-text-dim)}</style>
 </helmet>
 <div data-theme="dark" data-density="{{ density }}" style="min-height:100vh;background:var(--rz-bg);color:var(--rz-text);font-family:var(--rz-font);font-size:var(--rz-fs-body);line-height:var(--rz-lh);padding:32px 24px 64px">
   <div style="max-width:1280px;margin:0 auto;display:grid;gap:24px">
@@ -46,7 +46,7 @@
             <span style="font-size:var(--rz-fs-micro);font-family:var(--rz-font-mono);color:var(--rz-text-dim)">Помилка</span>
             <label style="font-size:var(--rz-fs-caption);font-weight:500;color:var(--rz-text-muted)">Кількість</label>
             <input value="-1" readonly aria-invalid="true" style="height:var(--rz-control-h-lg);width:100%;padding:0 10px;border:1px solid var(--rz-danger);border-radius:var(--rz-r-sm);background:var(--rz-surface-2);color:var(--rz-text);font-size:var(--rz-fs-body);outline:none">
-            <span role="alert" style="display:flex;gap:6px;align-items:flex-start;font-size:var(--rz-fs-caption);color:var(--rz-danger)"><i class="icon-circle-alert" style="font-size:13px;margin-top:2px"></i>Кількість — ціле число від нуля.</span>
+            <span role="alert" style="display:flex;gap:6px;align-items:flex-start;font-size:var(--rz-fs-caption);color:var(--rz-danger)"><i class="icon-circle-alert" style="font-size:var(--rz-icon);margin-top:2px"></i>Кількість — ціле число від нуля.</span>
           </div>
           <div style="display:grid;gap:6px;align-content:start">
             <span style="font-size:var(--rz-fs-micro);font-family:var(--rz-font-mono);color:var(--rz-text-dim)">Вимкнене</span>
@@ -76,7 +76,7 @@
             <label style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">Пошук деталей</label>
             <span style="font-size:var(--rz-fs-caption);font-weight:500;color:var(--rz-text-muted)">прихований label</span>
             <div style="display:flex;align-items:center;gap:8px;height:var(--rz-control-h);padding:0 6px 0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:var(--rz-surface-2)" style-hover="border-color:var(--rz-text-dim)">
-              <i class="icon-search" style="font-size:14px;color:var(--rz-text-dim)"></i>
+              <i class="icon-search" style="font-size:var(--rz-icon);color:var(--rz-text-dim)"></i>
               <input type="search" placeholder="Пошук: назва, OEM, QR або VIN" style="flex:1;min-width:0;border:0;background:transparent;color:var(--rz-text);font-size:var(--rz-fs-body);outline:none">
               <span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-xs);padding:0 4px">/</span>
             </div>
@@ -88,7 +88,7 @@
               <select style="appearance:none;height:var(--rz-control-h-lg);width:100%;padding:0 30px 0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:var(--rz-surface-2);color:var(--rz-text);font-size:var(--rz-fs-body);outline:none;cursor:pointer" style-hover="border-color:var(--rz-text-dim)" style-focus="border-color:var(--rz-brand);box-shadow:0 0 0 3px var(--rz-brand-soft)">
                 <option>Вживана</option><option>Нова</option><option>Хороший</option><option>Задовільний</option><option>На запчастини</option><option>Відновлена</option><option>Пошкоджена</option>
               </select>
-              <i class="icon-chevron-down" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--rz-text-dim);pointer-events:none"></i>
+              <i class="icon-chevron-down" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:var(--rz-icon);color:var(--rz-text-dim);pointer-events:none"></i>
             </div>
           </div>
           <div style="display:grid;gap:6px;align-content:start;grid-column:1 / -1;max-width:560px">

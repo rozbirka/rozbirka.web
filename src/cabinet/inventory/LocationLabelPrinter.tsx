@@ -469,7 +469,7 @@ function ScopedLocationLabels({
           actions={
             <>
               <Button
-                className="min-h-9 px-3 text-[12.5px]"
+                className="min-h-9 px-3 text-caption"
                 disabled={locked || loading || loadFailed || !visible.length}
                 onClick={() =>
                   updateSelection(
@@ -485,7 +485,7 @@ function ScopedLocationLabels({
                 })}
               </Button>
               <Button
-                className="min-h-9 px-3 text-[12.5px]"
+                className="min-h-9 px-3 text-caption"
                 disabled={locked || !selection.size}
                 onClick={() => updateSelection(new Set())}
               >
@@ -493,7 +493,7 @@ function ScopedLocationLabels({
               </Button>
               <Button
                 variant="quiet"
-                className="min-h-9 px-3 text-[12.5px]"
+                className="min-h-9 px-3 text-caption"
                 disabled={busy}
                 onClick={() => setOpen(false)}
               >
@@ -634,7 +634,7 @@ function ScopedLocationLabels({
                     {busy ? t('printing') : t('print', { count: batch.length })}
                   </Button>
                   <Button
-                    className="mt-2 w-full justify-center text-[12.5px]"
+                    className="mt-2 w-full justify-center text-caption"
                     disabled={locked || loading || loadFailed}
                     onClick={() => void output(batch)}
                   >

@@ -19,7 +19,7 @@ import {
 import type { DeliveryOrderState } from './use-delivery-order'
 
 const TONE: Record<ShipmentFact['tone'], string> = {
-  ink: 'text-white',
+  ink: 'text-app-strong',
   ok: 'text-state-ok',
   warn: 'text-state-warn',
   danger: 'text-state-danger',
@@ -34,35 +34,24 @@ export function DeliveryLifecycle({
 }) {
   const t = useT(deliveryMessages)
   return (
-    <ol
-      aria-label={t('lifecycleLabel')}
-      className="grid grid-cols-2 gap-1.5 sm:grid-cols-4"
-    >
-      {steps.map((step) => (
-        <li className="min-w-0" key={step.key}>
-          <span
-            aria-hidden
-            className={cn(
-              'block h-1 rounded-full',
-              step.current
-                ? 'bg-state-ok'
-                : step.done
-                  ? 'bg-white/35'
-                  : 'bg-white/[0.08]',
+    <ol aria-label={t('lifecycleLabel')} className="rz-steps">
+      {steps.map((step, index) => (
+        <li
+          {...(step.current ? { 'aria-current': 'step' as const } : {})}
+          className="h-auto min-h-7 py-1"
+          data-state={step.done && !step.current ? 'done' : undefined}
+          key={step.key}
+        >
+          <span aria-hidden className="rz-steps__n">
+            {String(index + 1)}
+          </span>
+          <span className="grid min-w-0">
+            <span className="truncate">{step.label}</span>
+            {step.meta === '' ? null : (
+              <span className="rz-dim font-mono text-micro font-normal whitespace-nowrap">
+                {step.meta}
+              </span>
             )}
-          />
-          <span className="mt-2.5 flex flex-col gap-[3px]">
-            <span
-              className={cn(
-                'truncate text-[14px] font-bold',
-                step.done ? 'text-white' : 'text-app-dim',
-              )}
-            >
-              {step.label}
-            </span>
-            <span className="text-app-dim min-h-[15px] font-mono text-[11px] whitespace-nowrap">
-              {step.meta}
-            </span>
           </span>
         </li>
       ))}
@@ -104,36 +93,23 @@ export function DeliveryTabs({
   ]
 
   return (
-    <div
-      aria-label={t('tabsLabel')}
-      className="border-app-line flex gap-6 border-b"
-      role="tablist"
-    >
+    <div aria-label={t('tabsLabel')} className="rz-tabs" role="tablist">
       {options.map((option) => (
         <button
           aria-selected={tab === option.key}
           className={cn(
-            'relative -mb-px flex flex-col items-start gap-0.5 border-b-2 pt-1 pb-3 text-left transition-colors',
+            'flex cursor-pointer flex-col items-start gap-0.5 border-0 bg-transparent px-2.5 py-1.5 text-left font-medium whitespace-nowrap transition-colors',
             tab === option.key
-              ? 'border-brand text-white'
-              : 'text-app-muted hover:text-app-ink border-transparent',
+              ? 'text-app-strong font-semibold shadow-[inset_0_-2px_0_var(--rz-brand)]'
+              : 'text-app-muted hover:text-app-strong',
           )}
           key={option.key}
           onClick={() => onChange(option.key)}
           role="tab"
           type="button"
         >
-          <span className="text-[15px] font-bold tracking-[-0.01em]">
-            {option.label}
-          </span>
-          <span
-            className={cn(
-              'text-[12px]',
-              tab === option.key ? 'text-app-muted' : 'text-app-dim',
-            )}
-          >
-            {option.meta}
-          </span>
+          <span>{option.label}</span>
+          <span className="rz-caption font-normal">{option.meta}</span>
         </button>
       ))}
     </div>
@@ -156,44 +132,32 @@ export function ShipmentCard({
   const facts = shipmentFacts(delivery, shipment, locale)
 
   return (
-    <section
-      aria-label={t('novaPoshta')}
-      className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 px-6 pt-5 pb-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-            {t('novaPoshta')}
-          </h2>
+    <section aria-label={t('novaPoshta')} className="rz-card">
+      <div className="rz-card__head py-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="rz-h-card">{t('novaPoshta')}</h2>
           <StatusPill tone={parcel.tone}>{parcel.label}</StatusPill>
         </div>
       </div>
-      <dl className="border-app-line bg-app-line grid grid-cols-2 gap-px border-y lg:grid-cols-4">
+      <dl className="rz-kpis m-0 rounded-none border-0">
         {facts.map((fact) => (
-          <div className="bg-app-raised px-6 py-3.5" key={fact.key}>
-            <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-              {fact.label}
-            </dt>
-            <dd>
-              <span
-                className={cn(
-                  'mt-2 block font-mono text-[15px] tabular-nums',
-                  TONE[fact.tone],
-                )}
-              >
+          <div className="rz-kpi" key={fact.key}>
+            <dt className="rz-kpi__label">{fact.label}</dt>
+            <dd className="m-0 grid gap-1">
+              <span className={cn('rz-mono', TONE[fact.tone])}>
                 {fact.value}
               </span>
               {fact.note === '' ? null : (
-                <span className="text-app-dim mt-1 block text-[12px] text-pretty">
-                  {fact.note}
-                </span>
+                <span className="rz-kpi__meta text-pretty">{fact.note}</span>
               )}
             </dd>
           </div>
         ))}
       </dl>
       {actions === null ? null : (
-        <div className="flex flex-wrap gap-2.5 px-6 py-4">{actions}</div>
+        <div className="rz-btn-row border-app-line border-t px-(--rz-card-p) py-2.5">
+          {actions}
+        </div>
       )}
     </section>
   )
@@ -212,22 +176,21 @@ export function RecipientCard({
   if (recipient === null) return null
 
   return (
-    <section
-      aria-label={t('recipient')}
-      className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-5 pb-5"
-    >
-      <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-        {t('recipient')}
-      </h2>
-      <p className="mt-3 text-[15px] font-bold text-white">{recipient.name}</p>
-      <p className="text-app-muted mt-1 font-mono text-[13px]">
-        {recipient.phone || (phone ?? '—')}
-      </p>
-      {/* The carrier identifies a branch by a GUID, so the draft carries the
-          name it was chosen by — that is the only readable form there is. */}
-      <p className="text-app-dim mt-2 text-[13px]">
-        {recipient.warehouseName ?? t('branchChosen')}
-      </p>
+    <section aria-label={t('recipient')} className="rz-card">
+      <div className="rz-card__head py-2">
+        <h2 className="rz-h-card">{t('recipient')}</h2>
+      </div>
+      <div className="rz-card__body grid gap-1">
+        <p className="rz-strong m-0 font-semibold">{recipient.name}</p>
+        <p className="rz-muted m-0 font-mono">
+          {recipient.phone || (phone ?? '—')}
+        </p>
+        {/* The carrier identifies a branch by a GUID, so the draft carries the
+            name it was chosen by — that is the only readable form there is. */}
+        <p className="rz-dim m-0">
+          {recipient.warehouseName ?? t('branchChosen')}
+        </p>
+      </div>
     </section>
   )
 }
@@ -251,40 +214,33 @@ export function DeliveryPaymentsCard({
   )
 
   return (
-    <section
-      aria-label={t('payments')}
-      className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 px-6 pt-5 pb-4">
-        <div className="flex min-w-0 items-baseline gap-3">
-          <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-            {t('payments')}
-          </h2>
-          <span className="text-app-muted font-mono text-[12px]">
+    <section aria-label={t('payments')} className="rz-card">
+      <div className="rz-card__head py-2">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h2 className="rz-h-card">{t('payments')}</h2>
+          <span className="rz-dim font-mono text-caption">
             {String(live.length)}
           </span>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5">{actions}</div>
+        <div className="rz-btn-row gap-1.5">{actions}</div>
       </div>
       {live.length === 0 ? (
-        <p className="border-app-line text-app-muted border-t px-6 pt-4 pb-5 text-[14px]">
-          {t('noPayments')}
-        </p>
+        <p className="rz-card__body text-app-muted m-0">{t('noPayments')}</p>
       ) : (
-        <ul aria-label={t('orderPayments')}>
+        <ul aria-label={t('orderPayments')} className="m-0 list-none p-0">
           {live.map((payment) => (
             <li
-              className="border-app-line flex items-center gap-3.5 border-t px-6 py-3.5"
+              className="border-app-line flex items-center gap-2.5 border-t px-(--rz-card-p) py-2.5 first:border-t-0"
               key={payment.id}
             >
-              <span className="bg-state-ok-soft text-state-ok grid size-[34px] shrink-0 place-items-center rounded-[10px]">
-                <Check aria-hidden className="size-4" />
+              <span aria-hidden className="rz-timeline__icon">
+                <Check />
               </span>
               <span className="min-w-0">
-                <span className="block text-[15px] font-semibold text-white">
+                <span className="rz-strong block font-medium">
                   {paymentKindLabel(payment.kind, locale)}
                 </span>
-                <span className="text-app-muted mt-0.5 block truncate text-[13px]">
+                <span className="rz-caption block truncate">
                   {tillName(payment.accountId) ?? t('till')} ·{' '}
                   {format.dateTime(payment.createdAt) ?? payment.createdAt}
                   {payment.feeUah > 0
@@ -292,7 +248,7 @@ export function DeliveryPaymentsCard({
                     : ''}
                 </span>
               </span>
-              <span className="ml-auto font-mono text-[15px] font-medium whitespace-nowrap text-white tabular-nums">
+              <span className="rz-num rz-strong ml-auto whitespace-nowrap">
                 {uah(payment.amountUah, locale)}
               </span>
             </li>
@@ -340,78 +296,53 @@ export function DeliveryDueCard({
   const standing = paymentStanding(delivery, locale)
 
   return (
-    <section
-      aria-label={t('due')}
-      className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
-    >
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-          {t('due')}
-        </h2>
-        <p
-          className={cn(
-            'text-[13px] font-bold',
-            standing.tone === 'ok'
-              ? 'text-state-ok'
-              : standing.tone === 'warn'
-                ? 'text-state-warn'
-                : 'text-app-dim',
-          )}
-        >
+    <section aria-label={t('due')} className="rz-card">
+      <div className="rz-card__head py-2">
+        <h2 className="rz-h-card">{t('due')}</h2>
+        <StatusPill tone={standing.tone === 'dim' ? 'neutral' : standing.tone}>
           {standing.label}
-        </p>
+        </StatusPill>
       </div>
-      <p className="mt-3 text-[38px] leading-none font-extrabold tracking-[-0.03em] text-white tabular-nums">
-        {uah(delivery.outstandingUah, locale)}
-      </p>
-      <span aria-hidden className="mt-4.5 flex gap-0.5">
-        <span
-          className="bg-state-ok h-[5px] rounded-l-full"
-          style={{ flex: paidPercent }}
-        />
-        <span
-          className="h-[5px] rounded-r-full bg-white/[0.08]"
-          style={{ flex: 100 - paidPercent }}
-        />
-      </span>
-      <dl className="mt-4 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
-        <dt className="text-app-muted text-[14px]">{t('agreed')}</dt>
-        <dd className="font-mono text-[14px] text-white tabular-nums">
-          {uah(delivery.agreedTotalUah, locale)}
-        </dd>
-        <dt className="text-app-muted text-[14px]">{t('paid')}</dt>
-        <dd className="text-state-ok font-mono text-[14px] tabular-nums">
-          {uah(delivery.appliedUah, locale)}
-        </dd>
+      <div className="rz-card__body grid gap-3">
+        <p className="rz-display m-0">{uah(delivery.outstandingUah, locale)}</p>
+        <span aria-hidden className="rz-meter">
+          <span style={{ width: `${String(paidPercent)}%` }} />
+        </span>
+      </div>
+      <dl className="rz-facts border-app-line border-t">
+        <div>
+          <dt>{t('agreed')}</dt>
+          <dd className="rz-mono">{uah(delivery.agreedTotalUah, locale)}</dd>
+        </div>
+        <div>
+          <dt>{t('paid')}</dt>
+          <dd className="rz-mono">{uah(delivery.appliedUah, locale)}</dd>
+        </div>
       </dl>
-      {action.kind === null ? null : (
-        <Button
-          className="mt-5 w-full justify-center"
-          disabled={busy}
-          onClick={() => onPrimary(action.kind!)}
-          variant="primary"
-        >
-          {action.kind === 'create' ? <Truck aria-hidden /> : null}
-          {action.kind === 'pay' ? <Plus aria-hidden /> : null}
-          {action.label}
-        </Button>
-      )}
-      {/* Taking money is no longer the step the order waits for, but a yard
-          still takes a deposit over the counter, so the way to record one has
-          to stay in reach — just not as the thing being asked for. */}
-      {delivery.outstandingUah > 0 && action.kind !== 'pay' ? (
-        <Button
-          className="mt-2.5 w-full justify-center"
-          disabled={busy}
-          onClick={() => onPrimary('pay')}
-        >
-          <Plus aria-hidden />
-          {t('recordPayment')}
-        </Button>
-      ) : null}
-      <p className="text-app-dim mt-3 text-center text-[12px] leading-[1.5] text-pretty">
-        {action.hint}
-      </p>
+      <div className="rz-card__foot grid justify-stretch gap-2">
+        {action.kind === null ? null : (
+          <Button
+            disabled={busy}
+            onClick={() => onPrimary(action.kind!)}
+            size="wide"
+            variant="primary"
+          >
+            {action.kind === 'create' ? <Truck aria-hidden /> : null}
+            {action.kind === 'pay' ? <Plus aria-hidden /> : null}
+            {action.label}
+          </Button>
+        )}
+        {/* Taking money is no longer the step the order waits for, but a yard
+            still takes a deposit over the counter, so the way to record one has
+            to stay in reach — just not as the thing being asked for. */}
+        {delivery.outstandingUah > 0 && action.kind !== 'pay' ? (
+          <Button disabled={busy} onClick={() => onPrimary('pay')} size="wide">
+            <Plus aria-hidden />
+            {t('recordPayment')}
+          </Button>
+        ) : null}
+        <p className="rz-caption m-0 text-center text-pretty">{action.hint}</p>
+      </div>
     </section>
   )
 }
@@ -449,62 +380,50 @@ export function DeliverySteps({
   }
 
   return (
-    <section
-      aria-label={t('stepsTitle')}
-      className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-5 pb-5"
-    >
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-          {t('stepsTitle')}
-        </h2>
-        <button
-          className="text-app-muted hover:text-app-ink relative text-[12px] font-semibold transition-colors after:absolute after:-inset-2 after:content-['']"
+    <section aria-label={t('stepsTitle')} className="rz-card">
+      <div className="rz-card__head py-2">
+        <h2 className="rz-h-card">{t('stepsTitle')}</h2>
+        <Button
+          className="relative after:absolute after:-inset-2 after:content-['']"
           onClick={() => setExpanded((value) => !value)}
-          type="button"
+          size="sm"
+          variant="quiet"
         >
           {expanded ? t('stepsShort') : t('stepsExplain')}
-        </button>
+        </Button>
       </div>
-      <ol className="mt-4 grid gap-3.5">
+      <ol className="rz-timeline">
         {steps.map((step) => (
-          <li className="flex gap-3" key={step.key}>
+          <li key={step.key}>
             <span
               aria-hidden
               className={cn(
-                'mt-0.5 grid size-[18px] shrink-0 place-items-center rounded-full border',
+                'rz-timeline__icon',
                 step.done
-                  ? 'bg-state-ok border-transparent text-black'
+                  ? 'bg-state-ok-soft text-state-ok'
                   : step.current
-                    ? 'border-state-warn/50'
-                    : 'border-app-line-2',
+                    ? 'bg-state-warn-soft text-state-warn'
+                    : 'bg-transparent shadow-[inset_0_0_0_1px_var(--rz-border-strong)]',
               )}
             >
-              {step.done ? <Check className="size-3" /> : null}
+              {step.done ? <Check /> : null}
             </span>
-            <span className="min-w-0 flex-1">
-              <span className="flex flex-wrap items-baseline justify-between gap-x-3">
-                <span
-                  className={cn(
-                    'text-[14px] font-bold',
-                    step.done
-                      ? 'text-white'
-                      : step.current
-                        ? 'text-state-warn'
-                        : 'text-app-dim',
-                  )}
-                >
-                  {step.label}
-                </span>
-                <span className="text-app-dim font-mono text-[12px]">
-                  {step.meta || '—'}
-                </span>
+            <span className="min-w-0">
+              <span
+                className={cn(
+                  'block font-medium',
+                  step.done || step.current ? 'rz-strong' : 'rz-dim',
+                )}
+              >
+                {step.label}
               </span>
               {expanded && notes[step.key] !== undefined ? (
-                <span className="text-app-dim mt-1 block text-[12px] leading-[1.5] text-pretty">
+                <span className="rz-caption block text-pretty">
                   {notes[step.key]}
                 </span>
               ) : null}
             </span>
+            <span className="rz-timeline__date">{step.meta || '—'}</span>
           </li>
         ))}
       </ol>
@@ -522,11 +441,11 @@ export function DeliveryGateCard({
   const { locale } = useLocale()
   const blocked = delivery.outstandingUah > 0
   return (
-    <Notice tone={blocked ? 'warn' : 'ok'}>
-      <p className="font-semibold">
+    <Notice block tone={blocked ? 'warn' : 'ok'}>
+      <p className="rz-strong m-0 font-semibold">
         {blocked ? t('gateCodTitle') : t('gateReadyTitle')}
       </p>
-      <p className="mt-1">
+      <p className="m-0 mt-1">
         {blocked
           ? t('gateCodNote', { amount: uah(delivery.outstandingUah, locale) })
           : t('createHintPaid')}

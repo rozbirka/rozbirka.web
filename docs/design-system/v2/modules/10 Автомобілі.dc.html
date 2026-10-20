@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../kit.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}a{color:var(--rz-brand-text);text-decoration:none}a:hover{color:var(--rz-brand-hover)}</style>
+</helmet>
+<div class="rz" data-theme="{{ theme }}" data-density="{{ density }}" style="min-height:100vh;padding:56px 64px 120px;background:var(--rz-bg-sidebar);display:grid;gap:72px;align-content:start;width:max-content">
+
+  <header style="display:grid;gap:16px;max-width:1280px">
+    <span class="rz-eyebrow">Rozbirka v2 · модуль 10 · Склад</span>
+    <h1 class="rz-h-page" style="font-size:var(--rz-fs-display)">Автомобілі</h1>
+    <p class="rz-muted" style="margin:0;max-width:80ch;text-wrap:pretty">Усі екрани модуля в порядку роботи: список → картка → форма → шторка витрати → діалоги. Кожен кадр — 1280×800, один стан. Тексти з <span class="rz-mono">cars/messages.ts</span>, <span class="rz-mono">car-form-messages.ts</span>, <span class="rz-mono">car-card-messages.ts</span>; незнайдене в коді позначено <span class="rz-mono" style="color:var(--rz-warn)">[unverified]</span>.</p>
+    <nav aria-label="Зміст модуля" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;padding:16px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+      <sc-for list="{{ sections }}" as="s" hint-placeholder-count="5">
+        <div style="display:grid;gap:4px;align-content:start">
+          <a href="{{ s.href }}" class="rz-strong" style="font-weight:700;color:var(--rz-text-strong)"><span class="rz-mono" style="color:var(--rz-brand-text)">{{ s.num }}</span> {{ s.title }}</a>
+          <span class="rz-mono rz-dim" style="font-size:var(--rz-fs-micro)">{{ s.route }}</span>
+          <sc-for list="{{ s.frames }}" as="fr" hint-placeholder-count="4"><a href="{{ fr.href }}" style="color:var(--rz-text-muted);font-size:var(--rz-fs-caption)"><span class="rz-mono rz-dim">{{ fr.num }}</span> {{ fr.label }}</a></sc-for>
+        </div>
+      </sc-for>
+    </nav>
+  </header>
+
+  <sc-for list="{{ sections }}" as="s" hint-placeholder-count="2">
+    <section id="{{ s.anchor }}" style="display:grid;gap:28px">
+      <header style="display:flex;align-items:baseline;gap:16px;padding-bottom:12px;border-bottom:1px solid var(--rz-border-strong)">
+        <span class="rz-mono" style="font-size:var(--rz-fs-display);color:var(--rz-brand-text)">{{ s.num }}</span>
+        <h2 class="rz-h-page" style="font-size:var(--rz-fs-display)">{{ s.title }}</h2>
+        <span class="rz-mono rz-dim">{{ s.route }}</span>
+        <span class="rz-caption" style="margin-left:auto">{{ s.source }}</span>
+      </header>
+      <div style="display:grid;grid-template-columns:repeat(3,1280px);gap:56px 48px">
+        <sc-for list="{{ s.frames }}" as="fr" hint-placeholder-count="3">
+          <figure id="{{ fr.anchor }}" style="margin:0;display:grid;gap:10px;align-content:start">
+            <figcaption style="display:flex;align-items:baseline;gap:10px;min-height:22px">
+              <span class="rz-mono" style="font-size:var(--rz-fs-title);color:var(--rz-brand-text)">{{ fr.num }}</span>
+              <span class="rz-h-title">{{ fr.label }}</span>
+              <span class="rz-caption" style="text-wrap:pretty">{{ fr.note }}</span>
+            </figcaption>
+
+            <div style="position:relative;width:1280px;height:800px;display:flex;overflow:hidden;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-bg)">
+              <aside style="flex:0 0 216px;display:flex;flex-direction:column;gap:2px;padding:8px;border-right:1px solid var(--rz-border);background:var(--rz-bg-sidebar)">
+                <div style="display:flex;align-items:center;gap:8px;height:36px;padding:0 8px;font-weight:600;color:var(--rz-text-strong)"><span class="rz-avatar">Р</span><span style="flex:1">Демо-розбірка</span><i class="icon-chevrons-up-down rz-dim"></i></div>
+                <div class="rz-search" style="margin:4px 0 8px;color:var(--rz-text-dim)"><i class="icon-search"></i><span style="flex:1">Пошук</span><span class="rz-kbd">⌘K</span></div>
+                <sc-for list="{{ nav }}" as="g" hint-placeholder-count="4">
+                  <div class="rz-nav-group">
+                    <sc-if value="{{ g.title }}" hint-placeholder-val="{{ true }}"><p class="rz-nav-group__title">{{ g.title }}</p></sc-if>
+                    <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="3"><span class="rz-nav-item" aria-current="{{ it.current }}"><i class="{{ it.icon }}"></i>{{ it.label }}</span></sc-for>
+                  </div>
+                </sc-for>
+              </aside>
+
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+                <div style="display:flex;align-items:center;gap:12px;height:48px;flex:none;padding:0 20px;border-bottom:1px solid var(--rz-border)">
+                  <nav class="rz-crumbs" aria-label="Навігаційний ланцюжок"><sc-for list="{{ fr.crumbs }}" as="c" hint-placeholder-count="2"><span style="{{ c.style }}">{{ c.label }}</span><sc-if value="{{ c.sep }}" hint-placeholder-val="{{ true }}"><i class="icon-chevron-right" style="font-size:var(--rz-icon-sm)"></i></sc-if></sc-for></nav>
+                  <div style="margin-left:auto;display:flex;gap:6px">
+                    <sc-for list="{{ fr.actions }}" as="a" hint-placeholder-count="1"><button type="button" class="{{ a.cls }}" disabled="{{ a.disabled }}" title="{{ a.title }}" aria-label="{{ a.aria }}"><i class="{{ a.icon }}"></i>{{ a.label }}</button></sc-for>
+                  </div>
+                </div>
+                <sc-if value="{{ fr.banner }}" hint-placeholder-val="{{ false }}">
+                  <div class="{{ fr.banner.cls }}" role="status" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;min-height:36px;padding:6px 20px;border-bottom:1px solid var(--rz-border)"><span class="{{ fr.banner.pill }}">{{ fr.banner.chip }}</span><span style="flex:1;min-width:240px"><strong class="rz-strong">{{ fr.banner.title }}</strong> <span class="rz-muted">{{ fr.banner.body }}</span></span><sc-if value="{{ fr.banner.link }}" hint-placeholder-val="{{ false }}"><a href="#">{{ fr.banner.link }}</a></sc-if></div>
+                </sc-if>
+
+                <div style="flex:1;min-height:0;overflow:hidden;padding:20px 24px;display:grid;align-content:start;gap:16px">
+
+                  <sc-if value="{{ fr.isList }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;align-items:baseline;gap:10px"><h1 class="rz-h-page">Автомобілі</h1><span class="rz-mono rz-dim">{{ fr.l.count }}</span></div>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+                      <label class="rz-search" style="flex:0 1 340px"><i class="icon-search"></i><span class="rz-sr">Пошук автомобілів</span><input readOnly="{{ true }}" value="{{ fr.l.query }}" placeholder="Код, марка, модель або VIN"><sc-if value="{{ fr.l.query }}" hint-placeholder-val="{{ false }}"><i class="icon-x"></i></sc-if></label>
+                      <div class="rz-seg" role="group" aria-label="Статус автомобілів"><sc-for list="{{ fr.l.tabs }}" as="t" hint-placeholder-count="3"><button type="button" aria-pressed="{{ t.pressed }}" style="{{ t.style }}">{{ t.label }}<span class="rz-mono rz-dim" style="font-size:var(--rz-fs-micro)">{{ t.count }}</span></button></sc-for></div>
+                      <sc-if value="{{ fr.l.found }}" hint-placeholder-val="{{ false }}"><span class="rz-caption">{{ fr.l.found }}</span></sc-if>
+                      <div style="margin-left:auto;display:flex;align-items:center;gap:8px"><span class="rz-caption">Порядок</span><div class="rz-seg" role="group" aria-label="Порядок"><sc-for list="{{ fr.l.sort }}" as="t" hint-placeholder-count="2"><button type="button" aria-pressed="{{ t.pressed }}" style="{{ t.style }}">{{ t.label }}</button></sc-for></div></div>
+                    </div>
+                    <div style="border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface);overflow:hidden">
+                      <sc-if value="{{ fr.l.table }}" hint-placeholder-val="{{ true }}">
+                        <table style="width:100%;border-collapse:collapse">
+                          <caption class="rz-sr">Список автомобілів</caption>
+                          <thead><tr style="height:32px;border-bottom:1px solid var(--rz-border)"><sc-for list="{{ listCols }}" as="h" hint-placeholder-count="8"><th scope="col" class="rz-th-label" style="{{ h.style }}">{{ h.label }}</th></sc-for></tr></thead>
+                          <tbody>
+                            <sc-for list="{{ fr.l.rows }}" as="r" hint-placeholder-count="6">
+                              <tr style="height:40px;border-top:1px solid var(--rz-border)">
+                                <td style="padding:0 12px;width:84px"><span class="rz-code rz-code--sm">{{ r.code }}</span></td>
+                                <th scope="row" style="padding:0 12px;text-align:left;font-weight:500"><span style="display:flex;align-items:baseline;gap:8px;white-space:nowrap"><span class="rz-strong">{{ r.name }}</span><span class="rz-mono rz-dim" style="font-size:var(--rz-fs-caption);font-weight:400">{{ r.vin }}</span></span></th>
+                                <td style="padding:0 12px"><span class="{{ r.pill }}">{{ r.status }}</span></td>
+                                <td class="rz-num" style="padding:0 12px;color:var(--rz-text-strong)">{{ r.parts }}</td>
+                                <td class="rz-num" style="padding:0 12px;color:var(--rz-text-muted)">{{ r.sold }}</td>
+                                <td class="rz-num" style="padding:0 12px;color:var(--rz-text-strong)">{{ r.invested }}</td>
+                                <td class="rz-num" style="padding:0 12px;color:var(--rz-text-strong)">{{ r.recouped }}</td>
+                                <td style="padding:0 12px;width:150px"><span style="display:flex;align-items:center;gap:8px"><span class="{{ r.meter }}" style="flex:1"><span style="{{ r.meterW }}"></span></span><span class="rz-mono" style="{{ r.payStyle }}">{{ r.payback }}</span></span></td>
+                                <td class="rz-num" style="padding:0 12px;color:var(--rz-text-muted)">{{ r.days }}</td>
+                              </tr>
+                            </sc-for>
+                            <sc-for list="{{ fr.l.skel }}" as="k" hint-placeholder-count="0">
+                              <tr style="height:40px;border-top:1px solid var(--rz-border)"><td style="padding:0 12px"><span class="rz-skel" style="width:48px"></span></td><td style="padding:0 12px"><span class="rz-skel" style="width:70%"></span></td><td style="padding:0 12px"><span class="rz-skel" style="width:64px"></span></td><td style="padding:0 12px" colspan="6"><span class="rz-skel"></span></td></tr>
+                            </sc-for>
+                          </tbody>
+                        </table>
+                        <div style="display:flex;align-items:center;gap:16px;min-height:40px;padding:6px 12px;border-top:1px solid var(--rz-border);color:var(--rz-text-dim);font-size:var(--rz-fs-caption)"><span>{{ fr.l.pager }}</span><span style="margin-left:auto;display:flex;gap:6px"><button type="button" class="rz-btn rz-btn--icon rz-btn--sm" aria-label="Попередня сторінка" disabled="{{ true }}"><i class="icon-chevron-left"></i></button><button type="button" class="rz-btn rz-btn--icon rz-btn--sm" aria-label="Наступна сторінка"><i class="icon-chevron-right"></i></button></span></div>
+                      </sc-if>
+                      <sc-if value="{{ fr.l.state }}" hint-placeholder-val="{{ false }}">
+                        <div class="{{ fr.l.state.cls }}" role="{{ fr.l.state.role }}" style="min-height:420px"><span class="rz-state__icon"><i class="{{ fr.l.state.icon }}"></i></span><p class="rz-state__title">{{ fr.l.state.title }}</p><p class="rz-muted" style="margin:0;max-width:52ch;text-wrap:pretty">{{ fr.l.state.body }}</p><sc-if value="{{ fr.l.state.btn }}" hint-placeholder-val="{{ false }}"><button type="button" class="{{ fr.l.state.btnCls }}" style="margin-top:8px"><i class="{{ fr.l.state.btnIcon }}"></i>{{ fr.l.state.btn }}</button></sc-if><sc-if value="{{ fr.l.state.unverified }}" hint-placeholder-val="{{ false }}"><span class="rz-mono" style="font-size:var(--rz-fs-micro);color:var(--rz-warn)">[unverified]</span></sc-if></div>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ fr.isDetail }}" hint-placeholder-val="{{ false }}">
+                    <sc-if value="{{ fr.d.loading }}" hint-placeholder-val="{{ false }}">
+                      <div role="status" style="display:grid;gap:12px"><span class="rz-sr">Завантажуємо автомобіль…</span><span class="rz-skel" style="width:36%;height:22px"></span><span class="rz-skel" style="width:52%"></span><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px"><span class="rz-skel" style="height:92px"></span><span class="rz-skel" style="height:92px"></span><span class="rz-skel" style="height:92px"></span><span class="rz-skel" style="height:92px"></span></div><div style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px"><span class="rz-skel" style="height:300px"></span><span class="rz-skel" style="height:300px"></span></div><span class="rz-caption">Завантажуємо автомобіль…</span></div>
+                    </sc-if>
+                    <sc-if value="{{ fr.d.error }}" hint-placeholder-val="{{ false }}">
+                      <div class="rz-card"><div class="rz-state rz-state--danger" role="alert" style="min-height:480px"><span class="rz-state__icon"><i class="icon-circle-alert"></i></span><p class="rz-state__title">Не вдалося завантажити автомобіль</p><p class="rz-muted" style="margin:0">Перевірте зв’язок і спробуйте ще раз. <span class="rz-mono" style="font-size:var(--rz-fs-micro);color:var(--rz-warn)">[unverified]</span></p><div style="display:flex;gap:8px;margin-top:8px"><button type="button" class="rz-btn"><i class="icon-arrow-left"></i>До автомобілів</button><button type="button" class="rz-btn rz-btn--primary"><i class="icon-rotate-cw"></i>Спробувати ще раз</button></div></div></div>
+                    </sc-if>
+                    <sc-if value="{{ fr.d.ready }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:grid;gap:8px">
+                        <div style="display:flex;align-items:center;gap:10px"><h1 class="rz-h-page">{{ fr.d.name }}</h1><span class="{{ fr.d.pill }}">{{ fr.d.status }}</span><sc-if value="{{ fr.d.payoff }}" hint-placeholder-val="{{ false }}"><span class="{{ fr.d.payoffPill }}">{{ fr.d.payoff }}</span></sc-if></div>
+                        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px"><span class="rz-code">{{ fr.d.code }}<button type="button" aria-label="Копіювати код"><i class="icon-copy"></i></button></span><span class="rz-code">VIN {{ fr.d.vin }}<button type="button" aria-label="Копіювати VIN"><i class="icon-copy"></i></button></span><span class="rz-caption">{{ fr.d.since }}</span></div>
+                      </div>
+                      <div class="rz-kpis" aria-label="Прибутковість" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+                        <sc-for list="{{ fr.d.kpis }}" as="k" hint-placeholder-count="4">
+                          <div class="rz-kpi"><span class="rz-kpi__label">{{ k.label }}</span><span class="rz-kpi__value"><span class="rz-display" style="{{ k.style }}">{{ k.value }}</span><span class="rz-kpi__unit">{{ k.unit }}</span></span><sc-if value="{{ k.meter }}" hint-placeholder-val="{{ false }}"><span class="{{ k.meterCls }}"><span style="{{ k.meter }}"></span></span></sc-if><span class="rz-kpi__meta">{{ k.meta }}</span></div>
+                        </sc-for>
+                      </div>
+                      <div style="display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start">
+                        <div style="display:grid;gap:16px">
+                          <section class="rz-card">
+                            <div class="rz-card__head"><span style="display:flex;align-items:baseline;gap:8px"><h2 class="rz-h-card">Запчастини з авто</h2><span class="rz-caption">{{ fr.d.partsCount }}</span></span><a href="#" style="font-size:var(--rz-fs-caption)">{{ fr.d.partsAll }}</a></div>
+                            <sc-if value="{{ fr.d.hasParts }}" hint-placeholder-val="{{ true }}">
+                              <table style="width:100%;border-collapse:collapse"><thead><tr style="height:32px"><th class="rz-th-label" style="text-align:left;padding:0 12px">Деталь</th><th class="rz-th-label" style="text-align:left;padding:0 12px">Стан</th><th class="rz-th-label" style="text-align:right;padding:0 12px">Ціна</th></tr></thead>
+                                <tbody><sc-for list="{{ fr.d.parts }}" as="p" hint-placeholder-count="4"><tr style="height:36px;border-top:1px solid var(--rz-border)"><td style="padding:0 12px"><span style="display:flex;gap:8px;align-items:baseline"><span class="rz-strong" style="font-weight:500">{{ p.name }}</span><span class="rz-mono rz-dim" style="font-size:var(--rz-fs-caption)">{{ p.oem }}</span></span></td><td style="padding:0 12px"><span class="{{ p.pill }}">{{ p.state }}</span></td><td class="rz-num" style="padding:0 12px;color:var(--rz-text-strong)">{{ p.price }}</td></tr></sc-for></tbody>
+                              </table>
+                            </sc-if>
+                            <sc-if value="{{ fr.d.noParts }}" hint-placeholder-val="{{ false }}"><p class="rz-muted" style="margin:0;padding:20px 16px">З цього авто ще не розібрано жодної позиції.</p></sc-if>
+                          </section>
+                          <section class="rz-card">
+                            <div class="rz-card__head"><span style="display:grid;gap:2px;padding:8px 0"><h2 class="rz-h-card">Витрати</h2><span class="rz-caption">Транспортування, мийка, розмитнення — додаються до вкладеного.</span></span><button type="button" class="rz-btn rz-btn--sm" disabled="{{ fr.d.ro }}"><i class="icon-plus"></i>Додати витрату</button></div>
+                            <sc-if value="{{ fr.d.hasExpenses }}" hint-placeholder-val="{{ true }}">
+                              <table style="width:100%;border-collapse:collapse"><caption class="rz-sr">Витрати автомобіля</caption><thead><tr style="height:32px"><th class="rz-th-label" style="text-align:left;padding:0 12px">Витрата</th><th class="rz-th-label" style="text-align:left;padding:0 12px">Додано</th><th class="rz-th-label" style="text-align:right;padding:0 12px">Сума</th><th style="width:40px"><span class="rz-sr">Дії</span></th></tr></thead>
+                                <tbody><sc-for list="{{ fr.d.expenses }}" as="e" hint-placeholder-count="3"><tr style="{{ e.style }}"><td style="padding:0 12px;color:var(--rz-text-strong)">{{ e.name }}</td><td class="rz-mono" style="padding:0 12px;color:var(--rz-text-dim);font-size:var(--rz-fs-caption)">{{ e.date }}</td><td class="rz-num" style="padding:0 12px;color:var(--rz-text-strong)">{{ e.amount }}</td><td style="padding:0 6px"><button type="button" class="rz-btn rz-btn--icon rz-btn--ghost rz-btn--sm" aria-label="Дії з витратою {{ e.name }}"><i class="icon-ellipsis"></i></button></td></tr></sc-for></tbody>
+                              </table>
+                              <div style="display:flex;justify-content:space-between;padding:10px 12px;border-top:1px solid var(--rz-border-strong)"><span class="rz-muted">{{ fr.d.expTotalLabel }}</span><span class="rz-mono rz-strong" style="font-weight:600">{{ fr.d.expTotal }}</span></div>
+                            </sc-if>
+                            <sc-if value="{{ fr.d.noExpenses }}" hint-placeholder-val="{{ false }}"><div class="rz-state" style="min-height:160px"><span class="rz-state__icon"><i class="icon-receipt"></i></span><p class="rz-state__title">Витрат ще немає</p><p class="rz-muted" style="margin:0;max-width:48ch">Транспортування, мийка, розмитнення — усе, що ви вклали в авто понад ціну придбання.</p></div></sc-if>
+                          </section>
+                        </div>
+                        <section class="rz-card">
+                          <div class="rz-card__head"><h2 class="rz-h-card">Фото та нотатки</h2><span class="rz-caption">{{ fr.d.photoCount }}</span></div>
+                          <div class="rz-card__body" style="display:grid;gap:14px">
+                            <sc-if value="{{ fr.d.hasPhotos }}" hint-placeholder-val="{{ true }}"><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px"><sc-for list="{{ fr.d.photos }}" as="ph" hint-placeholder-count="4"><div class="rz-photo"><sc-if value="{{ ph.cover }}" hint-placeholder-val="{{ false }}"><span class="rz-photo__badge">Обкладинка</span></sc-if><i class="icon-image" style="font-size:var(--rz-icon-md)"></i><span style="position:absolute;left:6px;bottom:6px;font-size:var(--rz-fs-micro)">{{ ph.label }}</span></div></sc-for></div></sc-if>
+                            <sc-if value="{{ fr.d.noPhotos }}" hint-placeholder-val="{{ false }}"><div style="display:grid;gap:4px"><span class="rz-strong">Фото цього авто ще немає.</span><span class="rz-caption" style="text-wrap:pretty">Радимо зняти передню частину, задню чверть, бік, салон, дисплей і табличку VIN — і додати їх у редагуванні автомобіля.</span></div></sc-if>
+                            <div style="display:grid;gap:4px;padding-top:12px;border-top:1px solid var(--rz-border)"><span class="rz-th-label">Нотатки</span><span style="{{ fr.d.notesStyle }}">{{ fr.d.notes }}</span></div>
+                          </div>
+                        </section>
+                      </div>
+                    </sc-if>
+                  </sc-if>
+
+                  <sc-if value="{{ fr.isForm }}" hint-placeholder-val="{{ false }}">
+                    <sc-if value="{{ fr.f.loading }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:grid;gap:12px"><span class="rz-skel" style="width:30%;height:22px"></span><div style="display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px"><span class="rz-skel" style="height:520px"></span><span class="rz-skel" style="height:260px"></span></div><span class="rz-caption">Завантажуємо дані автомобіля…</span></div></sc-if>
+                    <sc-if value="{{ fr.f.ready }}" hint-placeholder-val="{{ true }}">
+                      <div style="display:flex;align-items:baseline;gap:12px"><h1 class="rz-h-page">{{ fr.f.title }}</h1><span class="rz-caption">{{ fr.f.sub }}</span></div>
+                      <sc-if value="{{ fr.f.notice }}" hint-placeholder-val="{{ false }}"><div class="{{ fr.f.notice.cls }}" role="alert"><i class="{{ fr.f.notice.icon }}"></i><span class="rz-notice__body" style="text-wrap:pretty">{{ fr.f.notice.text }}</span></div></sc-if>
+                      <div style="display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start">
+                        <div style="display:grid;gap:12px">
+                          <sc-for list="{{ fr.f.cards }}" as="cd" hint-placeholder-count="3">
+                            <section class="rz-card">
+                              <div class="rz-card__head" style="padding-top:10px;padding-bottom:10px"><span style="display:grid;gap:2px"><h2 class="rz-h-card">{{ cd.title }}</h2><span class="rz-caption" style="text-wrap:pretty">{{ cd.hint }}</span></span></div>
+                              <div class="rz-card__body" style="display:grid;gap:12px">
+                                <sc-if value="{{ cd.fields }}" hint-placeholder-val="{{ true }}">
+                                  <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+                                    <sc-for list="{{ cd.fields }}" as="fd" hint-placeholder-count="4">
+                                      <label class="rz-field" style="min-width:0;{{ fd.cell }}">
+                                        <span class="rz-label">{{ fd.label }}<sc-if value="{{ fd.req }}" hint-placeholder-val="{{ false }}"><span class="rz-req">*</span></sc-if></span>
+                                        <span class="rz-input-group" style="{{ fd.group }}"><input readOnly="{{ true }}" value="{{ fd.value }}" placeholder="{{ fd.ph }}" aria-invalid="{{ fd.invalid }}" style="{{ fd.input }}"><sc-if value="{{ fd.lock }}" hint-placeholder-val="{{ false }}"><i class="icon-lock" style="padding:0 10px;color:var(--rz-text-dim)"></i></sc-if><sc-if value="{{ fd.select }}" hint-placeholder-val="{{ false }}"><i class="icon-chevron-down" style="padding:0 10px;color:var(--rz-text-dim)"></i></sc-if><sc-if value="{{ fd.suffix }}" hint-placeholder-val="{{ false }}"><span class="rz-input-group__addon">{{ fd.suffix }}</span></sc-if></span>
+                                        <sc-if value="{{ fd.hint }}" hint-placeholder-val="{{ false }}"><span class="rz-hint" style="text-wrap:pretty">{{ fd.hint }}</span></sc-if>
+                                        <sc-if value="{{ fd.error }}" hint-placeholder-val="{{ false }}"><span class="rz-error"><i class="icon-circle-alert" style="margin-top:2px"></i>{{ fd.error }}</span></sc-if>
+                                      </label>
+                                    </sc-for>
+                                  </div>
+                                </sc-if>
+                                <sc-if value="{{ cd.colors }}" hint-placeholder-val="{{ false }}">
+                                  <div style="display:grid;gap:6px"><span class="rz-label">Колір</span><div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ cd.colors }}" as="co" hint-placeholder-count="6"><span role="radio" aria-checked="{{ co.on }}" style="{{ co.style }}">{{ co.label }}</span></sc-for></div></div>
+                                </sc-if>
+                                <sc-if value="{{ cd.expenses }}" hint-placeholder-val="{{ false }}">
+                                  <div style="display:grid;gap:6px"><sc-for list="{{ cd.expenses }}" as="ex" hint-placeholder-count="2"><div style="display:grid;grid-template-columns:minmax(0,1fr) 160px 32px;gap:8px"><input class="rz-input" readOnly="{{ true }}" value="{{ ex.name }}" placeholder="Транспортування" aria-label="Назва витрати" style="min-width:0"><span class="rz-input-group" style="min-width:0"><input readOnly="{{ true }}" value="{{ ex.amount }}" aria-label="Сума витрати" style="flex:1;width:100%;min-width:0;font-family:var(--rz-font-mono);text-align:right"><span class="rz-input-group__addon">₴</span></span><button type="button" class="rz-btn rz-btn--icon rz-btn--ghost" aria-label="Прибрати витрату"><i class="icon-x"></i></button></div></sc-for></div>
+                                  <div style="display:flex;align-items:center;gap:12px"><button type="button" class="rz-btn rz-btn--sm"><i class="icon-plus"></i>Додати витрату</button><span class="rz-caption">{{ cd.expNote }}</span></div>
+                                </sc-if>
+                                <sc-if value="{{ cd.photos }}" hint-placeholder-val="{{ false }}">
+                                  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px"><div class="rz-photo rz-photo--add" style="display:grid;gap:4px;align-content:center"><i class="icon-image-plus" style="font-size:var(--rz-icon-md)"></i><span>Вибрати фото</span></div></div>
+                                  <span class="rz-caption">{{ cd.photosNote }}</span>
+                                </sc-if>
+                                <sc-if value="{{ cd.notes }}" hint-placeholder-val="{{ false }}"><textarea class="rz-textarea" readOnly="{{ true }}" rows="3" placeholder="Ходова частина в робочому стані." aria-label="Нотатки" style="height:auto;padding:8px 10px"></textarea></sc-if>
+                                <sc-if value="{{ cd.danger }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px"><span class="rz-muted" style="flex:1;min-width:240px;text-wrap:pretty">{{ cd.dangerText }}</span><button type="button" class="rz-btn rz-btn--danger" disabled="{{ cd.dangerDisabled }}"><i class="icon-trash-2"></i>Видалити автомобіль</button></div></sc-if>
+                              </div>
+                            </section>
+                          </sc-for>
+                        </div>
+                        <aside style="display:grid;gap:12px">
+                          <section class="rz-card">
+                            <div class="rz-card__head"><h2 class="rz-h-card">{{ fr.f.checkTitle }}</h2></div>
+                            <ul style="margin:0;padding:8px 12px;list-style:none;display:grid;gap:2px"><sc-for list="{{ fr.f.checks }}" as="ck" hint-placeholder-count="4"><li style="display:flex;align-items:center;gap:8px;min-height:28px"><i class="{{ ck.icon }}" style="{{ ck.style }}"></i><span style="{{ ck.labelStyle }}">{{ ck.label }}</span><span class="rz-sr">{{ ck.sr }}</span></li></sc-for></ul>
+                          </section>
+                          <section class="rz-card">
+                            <div class="rz-card__head"><h2 class="rz-h-card">Зведення</h2></div>
+                            <dl style="margin:0;padding:4px 16px"><sc-for list="{{ fr.f.summary }}" as="sm" hint-placeholder-count="3"><div style="{{ sm.style }}"><dt class="rz-muted">{{ sm.k }}</dt><dd class="rz-mono" style="{{ sm.vStyle }}">{{ sm.v }}</dd></div></sc-for></dl>
+                          </section>
+                          <p class="rz-caption" style="margin:0">Обовʼязкові поля позначені <span style="color:var(--rz-brand-text)">*</span>. Решту можна заповнити пізніше.</p>
+                        </aside>
+                      </div>
+                    </sc-if>
+                  </sc-if>
+                </div>
+              </div>
+
+              <sc-if value="{{ fr.o.scrim }}" hint-placeholder-val="{{ false }}"><div aria-hidden="true" style="position:absolute;inset:0;background:var(--rz-scrim)"></div></sc-if>
+
+              <sc-if value="{{ fr.o.sheet }}" hint-placeholder-val="{{ false }}">
+                <section role="dialog" aria-modal="true" aria-label="{{ fr.o.sheet.title }}" aria-busy="{{ fr.o.sheet.busy }}" style="position:absolute;top:0;right:0;bottom:0;width:440px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;border-left:1px solid var(--rz-border-strong);background:var(--rz-sheet-body);box-shadow:var(--rz-shadow-dialog)">
+                  <header style="display:flex;align-items:flex-start;gap:12px;padding:12px 12px 12px 16px;border-bottom:1px solid var(--rz-border);background:var(--rz-sheet-band)"><span style="flex:1;display:grid;gap:2px"><h2 class="rz-h-title">{{ fr.o.sheet.title }}</h2><span class="rz-muted" style="font-size:var(--rz-fs-caption);text-wrap:pretty">{{ fr.o.sheet.desc }}</span></span><button type="button" class="rz-btn rz-btn--icon rz-btn--ghost" aria-label="Закрити" disabled="{{ fr.o.sheet.busy }}"><i class="icon-x"></i></button></header>
+                  <div style="display:grid;align-content:start;gap:14px;padding:16px">
+                    <sc-if value="{{ fr.o.sheet.error }}" hint-placeholder-val="{{ false }}"><div class="rz-notice rz-notice--danger" role="alert"><i class="icon-circle-alert"></i><span class="rz-notice__body">{{ fr.o.sheet.error }} <span class="rz-mono" style="font-size:var(--rz-fs-micro);color:var(--rz-warn)">[unverified]</span></span></div></sc-if>
+                    <sc-for list="{{ fr.o.sheet.fields }}" as="fd" hint-placeholder-count="2">
+                      <label class="rz-field"><span class="rz-label">{{ fd.label }}</span><span class="rz-input-group" style="background:var(--rz-sheet-field);{{ fd.group }}"><input readOnly="{{ true }}" value="{{ fd.value }}" placeholder="{{ fd.ph }}" aria-invalid="{{ fd.invalid }}" style="{{ fd.input }}"><sc-if value="{{ fd.suffix }}" hint-placeholder-val="{{ false }}"><span class="rz-input-group__addon">{{ fd.suffix }}</span></sc-if></span><sc-if value="{{ fd.hint }}" hint-placeholder-val="{{ false }}"><span class="rz-hint">{{ fd.hint }}</span></sc-if><sc-if value="{{ fd.error }}" hint-placeholder-val="{{ false }}"><span class="rz-error"><i class="icon-circle-alert" style="margin-top:2px"></i>{{ fd.error }}</span></sc-if></label>
+                    </sc-for>
+                    <div style="display:grid;gap:2px;padding:10px 12px;border:1px solid var(--rz-border);border-radius:var(--rz-r-sm);background:var(--rz-sheet-band)"><span class="rz-caption">Вкладено після збереження</span><span class="rz-mono rz-strong">{{ fr.o.sheet.after }}</span></div>
+                  </div>
+                  <footer style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--rz-border);background:var(--rz-sheet-band)"><button type="button" class="rz-btn" disabled="{{ fr.o.sheet.busy }}">Скасувати</button><button type="button" class="rz-btn rz-btn--primary" disabled="{{ fr.o.sheet.busy }}" aria-busy="{{ fr.o.sheet.busy }}"><sc-if value="{{ fr.o.sheet.busy }}" hint-placeholder-val="{{ false }}"><i class="icon-loader-circle rz-spin"></i></sc-if>{{ fr.o.sheet.submit }}</button></footer>
+                </section>
+              </sc-if>
+
+              <sc-if value="{{ fr.o.dialog }}" hint-placeholder-val="{{ false }}">
+                <div style="position:absolute;inset:0;display:grid;place-items:center;padding:24px">
+                  <section role="alertdialog" aria-label="{{ fr.o.dialog.title }}" style="width:440px;display:grid;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-sheet-body);box-shadow:var(--rz-shadow-dialog);overflow:hidden">
+                    <header style="display:flex;align-items:center;gap:12px;padding:10px 12px 10px 16px;border-bottom:1px solid var(--rz-border);background:var(--rz-sheet-band)"><h2 class="rz-h-title" style="flex:1">{{ fr.o.dialog.title }}</h2><button type="button" class="rz-btn rz-btn--icon rz-btn--ghost" aria-label="Закрити" disabled="{{ fr.o.dialog.busy }}"><i class="icon-x"></i></button></header>
+                    <div style="display:grid;gap:8px;padding:16px">
+                      <p style="margin:0;text-wrap:pretty">{{ fr.o.dialog.text }}</p>
+                      <sc-if value="{{ fr.o.dialog.extra }}" hint-placeholder-val="{{ false }}"><p class="rz-muted" style="margin:0;text-wrap:pretty">{{ fr.o.dialog.extra }}</p></sc-if>
+                    </div>
+                    <footer style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--rz-border);background:var(--rz-sheet-band)">
+                      <sc-if value="{{ fr.o.dialog.cancel }}" hint-placeholder-val="{{ true }}"><button type="button" class="rz-btn" disabled="{{ fr.o.dialog.busy }}">Скасувати</button></sc-if>
+                      <button type="button" class="{{ fr.o.dialog.cls }}" aria-busy="{{ fr.o.dialog.busy }}"><sc-if value="{{ fr.o.dialog.busy }}" hint-placeholder-val="{{ false }}"><i class="icon-loader-circle rz-spin"></i></sc-if>{{ fr.o.dialog.confirm }}</button>
+                    </footer>
+                  </section>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ fr.o.menu }}" hint-placeholder-val="{{ false }}">
+                <div class="rz-menu" role="menu" aria-label="Інші дії з автомобілем" style="position:absolute;top:44px;right:20px;width:240px">
+                  <sc-for list="{{ fr.o.menu }}" as="mi" hint-placeholder-count="3"><sc-if value="{{ mi.sep }}" hint-placeholder-val="{{ false }}"><div style="height:1px;margin:3px 4px;background:var(--rz-border)"></div></sc-if><div role="menuitem" class="rz-menu__item" style="{{ mi.style }}"><i class="{{ mi.icon }}" style="{{ mi.iconStyle }}"></i><span style="flex:1">{{ mi.label }}</span></div></sc-for>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ fr.o.picker }}" hint-placeholder-val="{{ false }}">
+                <div role="dialog" aria-label="Оберіть марку" style="position:absolute;left:546px;top:262px;width:260px;display:grid;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-overlay);box-shadow:var(--rz-shadow-popover);overflow:hidden">
+                  <label style="display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border-bottom:1px solid var(--rz-border)"><i class="icon-search" style="color:var(--rz-text-dim)"></i><input readOnly="{{ true }}" value="vol" placeholder="Пошук: Марка" aria-label="Пошук: Марка" style="flex:1;min-width:0;border:0;background:transparent;outline:none;color:var(--rz-text)"></label>
+                  <div role="listbox" style="display:grid;gap:1px;padding:4px"><sc-for list="{{ fr.o.picker }}" as="pk" hint-placeholder-count="3"><div role="option" aria-selected="{{ pk.sel }}" style="{{ pk.style }}"><span style="flex:1">{{ pk.label }}</span><sc-if value="{{ pk.on }}" hint-placeholder-val="{{ false }}"><i class="icon-check" style="color:var(--rz-brand)"></i></sc-if></div></sc-for></div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ fr.o.toast }}" hint-placeholder-val="{{ false }}">
+                <div class="rz-toast" role="status" style="position:absolute;right:24px;bottom:24px"><i class="{{ fr.o.toast.icon }}" style="{{ fr.o.toast.iconStyle }}"></i><span class="rz-toast__msg">{{ fr.o.toast.text }}</span><sc-if value="{{ fr.o.toast.action }}" hint-placeholder-val="{{ false }}"><button type="button" class="rz-toast__action">{{ fr.o.toast.action }}</button></sc-if><button type="button" class="rz-btn rz-btn--icon rz-btn--ghost rz-btn--sm" aria-label="Закрити"><i class="icon-x"></i></button></div>
+              </sc-if>
+            </div>
+          </figure>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dark&quot;,&quot;light&quot;], &quot;default&quot;: &quot;dark&quot;, &quot;tsType&quot;: &quot;'dark' | 'light'&quot;}, &quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;,&quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+const NAV = [
+  { title: '', items: [['Головна', 'icon-layout-dashboard']] },
+  { title: 'Склад', items: [['Автомобілі', 'icon-car', true], ['Запчастини', 'icon-package'], ['Інвентаризація', 'icon-clipboard-check'], ['Приймання', 'icon-scan-line'], ['Стікери', 'icon-sticker']] },
+  { title: 'Продажі', items: [['Замовлення', 'icon-clipboard-list'], ['Клієнти', 'icon-users']] },
+  { title: 'Гроші', items: [['Фінанси', 'icon-wallet-cards'], ['Звіти', 'icon-chart-column']] },
+  { title: 'Налаштування', items: [['Команда', 'icon-user-round-cog'], ['Підписка', 'icon-credit-card'], ['Інтеграції', 'icon-plug']] },
+];
+const CARS = [
+  ['A-0142', 'Volkswagen Passat B8 · 2016', 'WVWZZZ3CZGE012345', true, 38, 14, '120 000', '74 400', 62, '19 днів'],
+  ['A-0139', 'Skoda Octavia A7 · 2018', 'TMBJG7NE0J0123456', true, 24, 6, '96 500', '39 600', 41, '27 днів'],
+  ['A-0131', 'Toyota Camry XV70 · 2019', '4T1B11HK5KU123456', true, 57, 41, '210 000', '321 300', 153, '64 дні'],
+  ['A-0127', 'Renault Megane III · 2014', 'VF1BZ0B0H51234567', true, 41, 33, '68 000', '73 400', 108, '88 днів'],
+  ['A-0124', 'Mazda 6 GJ · 2015', 'JMZGJ691601234567', true, 33, 9, '118 000', '41 300', 35, '41 день'],
+  ['A-0120', 'Nissan Qashqai J11 · 2017', 'SJNFAAJ11U1234567', true, 12, 0, '142 000', '0', 0, '6 днів'],
+  ['A-0117', 'Hyundai Tucson TL · 2017', 'TMAJ3815AHJ123456', true, 29, 11, '134 000', '52 900', 39, '102 дні'],
+  ['A-0098', 'Ford Focus III · 2013', 'WF0LXXGCBLDR12345', false, 46, 46, '54 000', '81 000', 150, '210 днів'],
+  ['A-0091', 'Opel Astra J · 2012', 'W0LPD6EC5CG123456', false, 38, 38, '47 500', '59 400', 125, '256 днів'],
+];
+const COLS = [['Код'], ['Автомобіль'], ['Статус'], ['Запчастин', 1], ['Продано', 1], ['Вкладено, ₴', 1], ['Повернено, ₴', 1], ['Окупність'], ['На складі', 1]];
+const U = '[unverified]';
+
+const segBtn = (label, on, count) => ({ label, count: count == null ? '' : String(count), pressed: on ? 'true' : 'false', style: 'display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border:0;border-radius:var(--rz-r-xs);cursor:pointer;white-space:nowrap;font-weight:' + (on ? 600 : 500) + ';background:' + (on ? 'var(--rz-fill-selected)' : 'transparent') + ';color:' + (on ? 'var(--rz-text-strong)' : 'var(--rz-text-muted)') });
+const carRow = (c) => {
+  const [code, name, vin, active, parts, sold, invested, recouped, pay, days] = c;
+  return { code, name, vin, status: active ? 'Активний' : 'Архів', pill: active ? 'rz-pill rz-pill--ok' : 'rz-pill', parts: String(parts), sold: String(sold), invested, recouped, payback: pay + ' %', meter: 'rz-meter' + (pay >= 100 ? '' : pay > 0 ? ' rz-meter--warn' : ''), meterW: 'width:' + Math.min(pay, 100) + '%', payStyle: 'width:44px;text-align:right;font-size:var(--rz-fs-caption);color:' + (pay >= 100 ? 'var(--rz-ok)' : pay > 0 ? 'var(--rz-text-strong)' : 'var(--rz-text-dim)'), days };
+};
+const crumbs = (arr) => arr.map((label, i) => ({ label, sep: i < arr.length - 1, style: i === arr.length - 1 ? 'color:var(--rz-text-strong);font-weight:600' : 'color:var(--rz-text-muted)' }));
+const btn = (label, icon, kind, extra) => ({ label, icon, cls: 'rz-btn' + (kind ? ' rz-btn--' + kind : ''), disabled: false, title: '', aria: '', ...(extra || {}) });
+const READONLY = { cls: '', pill: 'rz-pill rz-pill--warn', chip: 'Кабінет у режимі перегляду', title: 'Підписка неактивна — дані лише для читання.', body: 'Склад, замовлення й історія грошей збереглися повністю, але створювати й змінювати записи не можна, доки підписка не відновиться.', link: 'Перейти до підписки' };
+
+function list(over) {
+  const o = { tab: 0, query: '', rows: CARS.filter((c) => c[3]), skel: 0, state: null, add: {}, banner: null, count: '35', found: '', pager: 'Сторінка 1 з 4 · 35 автомобілів', ...over };
+  return {
+    isList: true, crumbs: crumbs(['Склад', 'Автомобілі']), banner: o.banner,
+    actions: [btn('Імпорт запчастин', 'icon-upload', 'ghost'), btn('Додати автомобіль', 'icon-plus', 'primary', o.add)],
+    l: { count: o.count, query: o.query, found: o.found, pager: o.pager,
+      tabs: [['Усі', 42], ['Активні', 35], ['Архів', 7]].map(([l, n], i) => segBtn(l, i === o.tab, n)),
+      sort: ['Окупність', 'Запчастини'].map((l, i) => segBtn(l, i === 0)),
+      table: !o.state, rows: o.skel ? [] : o.rows.map(carRow), skel: Array.from({ length: o.skel }, (_, i) => i), state: o.state },
+    o: {},
+  };
+}
+
+const PASSAT = {
+  name: 'Volkswagen Passat B8 · 2016', code: 'A-0142', vin: 'WVWZZZ3CZGE012345', since: 'на складі з 01.10.2026 · 19 днів',
+  status: 'Активний', pill: 'rz-pill rz-pill--ok', payoff: 'Окупається', payoffPill: 'rz-pill rz-pill--warn',
+  kpis: [
+    { label: 'Вкладено', value: '120 000', unit: '₴', meta: 'авто 112 000 ₴ + витрати 8 000 ₴' },
+    { label: 'Повернено', value: '74 400', unit: '₴', meta: 'з продажу 14 позицій' },
+    { label: 'До окупності', value: '45 600', unit: '₴', meta: 'ще продати на цю суму', tone: 'warn' },
+    { label: 'Окупність', value: '62', unit: '%', meta: '62 % вкладеного повернено · беззбитковість 120 000 ₴', meter: 62, meterCls: 'rz-meter rz-meter--warn' },
+  ],
+  partsCount: '38 запчастин з цього авто', partsAll: 'Усі 38 →',
+  parts: [['Фара передня ліва', '3G1941005', 'на складі', '4 800 ₴'], ['Генератор', '03L903023', 'продано', '3 900 ₴'], ['Компресор кондиціонера', '5Q0820803', 'на складі', '8 900 ₴'], ['Дзеркало праве, електро', '3G0857522', 'на складі', '2 600 ₴'], ['Кришка багажника', '3G9827025', 'продано', '6 200 ₴'], ['Блок ABS', '3Q0907379', 'на складі', '5 400 ₴']],
+  expenses: [['Транспортування', '02.10.2026', '3 000 ₴'], ['Мийка', '03.10.2026', '600 ₴'], ['Розмитнення', '04.10.2026', '4 400 ₴']],
+  expTotal: '8 000 ₴', expTotalLabel: 'Разом 3 витрати',
+  photos: ['Передня частина', 'Задня чверть', 'Бік', 'Салон'], photoCount: '4 знімки',
+  notes: 'Ходова частина в робочому стані. Двигун не запускали — перевірити перед продажем.',
+};
+function detail(over, ovl, extra) {
+  const d = { ...PASSAT, ...(over || {}) };
+  const ro = !!(extra && extra.ro);
+  return {
+    isDetail: true, crumbs: crumbs(['Склад', 'Автомобілі', d.code]), banner: extra && extra.banner || null,
+    actions: (extra && extra.noActions) ? [] : [btn('Імпорт запчастин', 'icon-upload', 'ghost', { disabled: ro }), btn('Додати запчастину', 'icon-plus', '', { disabled: ro }), btn('Редагувати', 'icon-pencil', 'primary', { disabled: ro }), btn('', 'icon-ellipsis', 'icon', { aria: 'Інші дії з автомобілем', cls: 'rz-btn rz-btn--icon' + (ovl && ovl.menu ? '' : ''), style: '' })],
+    d: {
+      loading: !!d.loading, error: !!d.error, ready: !d.loading && !d.error, ro,
+      name: d.name, code: d.code, vin: d.vin, since: d.since, status: d.status, pill: d.pill, payoff: d.payoff, payoffPill: d.payoffPill,
+      kpis: d.kpis.map((k) => ({ ...k, style: k.tone ? 'color:var(--rz-' + k.tone + ')' : '', meter: k.meter != null ? 'width:' + Math.min(k.meter, 100) + '%' : '', meterCls: k.meterCls || 'rz-meter' })),
+      partsCount: d.partsCount, partsAll: d.partsAll, hasParts: d.parts.length > 0, noParts: d.parts.length === 0,
+      parts: d.parts.map(([name, oem, state, price]) => ({ name, oem, state, price, pill: state === 'продано' ? 'rz-pill' : 'rz-pill rz-pill--ok' })),
+      hasExpenses: d.expenses.length > 0, noExpenses: d.expenses.length === 0,
+      expenses: d.expenses.map(([name, date, amount], i) => ({ name, date, amount, style: 'height:36px;border-top:1px solid var(--rz-border)' + (extra && extra.activeExp === i ? ';background:var(--rz-fill-selected);box-shadow:inset 2px 0 0 var(--rz-brand)' : '') })),
+      expTotal: d.expTotal, expTotalLabel: d.expTotalLabel,
+      hasPhotos: d.photos.length > 0, noPhotos: d.photos.length === 0, photos: d.photos.map((label, i) => ({ label, cover: i === 0 })), photoCount: d.photoCount,
+      notes: d.notes || 'Нотаток немає. Їх можна додати в редагуванні автомобіля.', notesStyle: d.notes ? 'color:var(--rz-text);text-wrap:pretty' : 'color:var(--rz-text-dim);text-wrap:pretty',
+    },
+    o: ovl || {},
+  };
+}
+
+const field = (label, value, o) => {
+  const x = o || {};
+  return { label, value: value || '', ph: x.ph || '', req: !!x.req, hint: x.hint || '', error: x.error || '', suffix: x.suffix || '', select: !!x.select, lock: !!x.lock, invalid: x.error ? 'true' : 'false',
+    cell: 'grid-column:span ' + (x.span || 1), group: (x.error ? 'border-color:var(--rz-danger);' : '') + (x.lock ? 'opacity:0.6;' : ''),
+    input: 'flex:1;width:100%;min-width:0;color:var(--rz-text-strong);font-size:var(--rz-fs-input);' + (x.mono ? 'font-family:var(--rz-font-mono);' : '') + (x.right ? 'text-align:right;' : '') };
+};
+const COLORS = ['Білий', 'Чорний', 'Сірий', 'Срібний', 'Синій', 'Червоний'];
+function form(mode, over) {
+  const o = { ...(over || {}) };
+  const filled = mode !== 'new' && mode !== 'invalid';
+  const inv = mode === 'invalid';
+  const edit = mode === 'edit' || mode === 'partial';
+  const v = (x) => (filled ? x : '');
+  const color = filled ? 4 : -1;
+  const ident = {
+    title: 'Ідентифікація', hint: edit ? 'Код і VIN використовуються в пошуку та на стікерах. Зміна коду не впливає на вже надруковані стікери.' : 'За кодом ви знаходите авто на складі, за VIN — звіряєте його з документами.',
+    fields: [
+      field('Код', v('A-0142'), { req: true, mono: true, hint: 'Внутрішній номер авто на складі', error: inv ? 'Код не вказано' : '' }),
+      field('Рік', inv ? '16' : v('2016'), { req: true, mono: true, hint: 'Чотири цифри, наприклад 2020', error: inv ? 'Рік — чотири цифри' : '' }),
+      field('Марка', v('Volkswagen'), { req: true, select: true, ph: 'Оберіть марку', error: inv ? 'Марка й модель не вказані' : '' }),
+      field('Модель', v('Passat B8'), { req: true, select: true, ph: 'Оберіть модель' }),
+      field('VIN', v('WVWZZZ3CZGE012345'), { mono: true, span: 2, hint: '17 символів з техпаспорта. Декодування VIN сервер не виконує — марку, модель і рік заповнюємо вручну.' }),
+      field('Колір словами', v('Синій металік'), { span: 2, ph: 'Синій', hint: 'Будь-який колір можна вписати словами.' }),
+    ],
+    colors: COLORS.map((label, i) => ({ label, on: i === color ? 'true' : 'false', style: 'display:inline-flex;align-items:center;height:26px;padding:0 10px;border:1px solid ' + (i === color ? 'var(--rz-brand)' : 'var(--rz-border-strong)') + ';border-radius:var(--rz-r-full);background:' + (i === color ? 'var(--rz-brand-soft)' : 'transparent') + ';color:' + (i === color ? 'var(--rz-text-strong)' : 'var(--rz-text-muted)') + ';font-size:var(--rz-fs-caption);cursor:pointer' })),
+  };
+  const purchase = {
+    title: 'Придбання', hint: 'Ціна придбання разом із витратами формує інвестовану суму авто.',
+    fields: [
+      field('Ціна придбання', v('112 000'), { req: true, mono: true, right: true, suffix: '₴', span: 2, lock: !!o.locked, hint: o.locked ? 'Ціну змінює користувач із правом на фінанси' : '', error: inv ? 'Ціна придбання — ще не заповнено' : '' }),
+      field('Дата придбання', v('01.10.2026'), { mono: true, span: 2, ph: 'дд.мм.рррр' }),
+    ],
+  };
+  const exp = edit
+    ? { title: 'Додаткові витрати', hint: 'Витрати впливають на інвестовану суму й окупність авто.', fields: null, expenses: null, danger: false, manage: true }
+    : { title: 'Додаткові витрати', hint: 'Те, що вже витрачено на авто: транспортування, розмитнення, мийка. Разом із ціною придбання це інвестована сума.', fields: null,
+        expenses: filled || mode === 'picker' ? [{ name: 'Транспортування', amount: '3 000' }, { name: 'Розмитнення', amount: '4 400' }] : [{ name: '', amount: '' }],
+        expNote: filled ? '' : 'Витрат ще немає — авто збережеться й без них.' };
+  if (exp.manage) { exp.expenses = [{ name: 'Транспортування', amount: '3 000' }, { name: 'Мийка', amount: '600' }, { name: 'Розмитнення', amount: '4 400' }]; exp.expNote = 'Керувати витратами — на сторінці авто.'; }
+  const photos = { title: 'Фото', hint: 'Можна вибрати кілька файлів одразу або зняти на камеру.', fields: null, photos: true, photosNote: edit ? 'Перше фото — обкладинка. Зміни застосуються після збереження. Максимум 10 фото.' : 'Файли завантажаться після створення автомобіля. Максимум 10 фото.' };
+  const notes = { title: 'Нотатки', hint: 'Стан авто, домовленості з продавцем, що перевірити перед розбиранням.', fields: null, notes: true };
+  const cards = [ident, purchase, exp, photos, notes];
+  if (edit) cards.push({ title: 'Видалити автомобіль', hint: '', fields: null, danger: true, dangerDisabled: true, dangerText: 'На авто закріплено 38 запчастин, тому видалити його не можна. Щоб прибрати авто зі списку, архівуйте його на картці авто.' });
+  const ok = filled || mode === 'picker';
+  const checks = [['Код заповнено', filled], ['Марка й модель', filled], ['Рік — чотири цифри', filled], [o.locked ? 'Ціну веде фінансист' : 'Ціна придбання', filled || !!o.locked]].map(([label, done]) => ({
+    label, sr: done ? ' — заповнено' : ' — ще не заповнено', icon: done ? 'icon-circle-check' : inv ? 'icon-circle-alert' : 'icon-circle',
+    style: 'font-size:var(--rz-icon);color:' + (done ? 'var(--rz-ok)' : inv ? 'var(--rz-danger)' : 'var(--rz-text-dim)'), labelStyle: 'color:' + (done ? 'var(--rz-text)' : 'var(--rz-text-muted)') }));
+  const sumRow = (k, v2, strong) => ({ k, v: v2, style: 'display:flex;justify-content:space-between;gap:12px;padding:8px 0' + (strong ? ';border-top:1px solid var(--rz-border-strong)' : ''), vStyle: 'margin:0;color:' + (strong ? 'var(--rz-text-strong);font-weight:600' : 'var(--rz-text)') });
+  const summary = filled || mode === 'picker'
+    ? [sumRow('Ціна придбання', '112 000 ₴'), sumRow('Витрати', edit ? '8 000 ₴' : '7 400 ₴'), sumRow('Інвестовано', edit ? '120 000 ₴' : '119 400 ₴', true)]
+    : [sumRow('Ціна придбання', '—'), sumRow('Витрати', '—'), sumRow('Інвестовано', '—', true)];
+  const notice = mode === 'invalid' ? { cls: 'rz-notice rz-notice--danger', icon: 'icon-circle-alert', text: 'Заповніть обовʼязкові поля: код, марку, модель, рік числом і ціну придбання числом.' }
+    : mode === 'partial' ? { cls: 'rz-notice rz-notice--danger', icon: 'icon-circle-alert', text: 'Автомобіль створено, але не всі витрати збережено: сума «Розмитнення» має бути більшою за нуль. Виправте дані витрати й надішліть форму ще раз — автомобіль не створиться повторно.' } : null;
+  const title = edit ? 'Редагувати автомобіль' : 'Новий автомобіль';
+  return {
+    isForm: true, crumbs: crumbs(edit ? ['Склад', 'Автомобілі', 'A-0142', 'Редагування'] : ['Склад', 'Автомобілі', 'Новий']), banner: null,
+    actions: [btn(edit ? 'До автомобіля' : 'Скасувати', edit ? 'icon-arrow-left' : 'icon-x', 'ghost'), btn(edit ? 'Зберегти зміни' : 'Створити автомобіль', 'icon-check', 'primary')],
+    f: { loading: !!o.loading, ready: !o.loading, title, sub: edit ? 'Створено 01.10.2026' : 'Решту можна заповнити пізніше.', notice, cards: o.loading ? [] : cards, checkTitle: edit ? 'Зведення перевірки' : 'Перед створенням', checks, summary },
+    o: o.ovl || {},
+  };
+}
+const sheet = (mode) => {
+  const edit = mode === 'edit', inv = mode === 'invalid', busy = mode === 'busy';
+  const fl = (label, value, x) => ({ label, value, ph: x.ph || '', suffix: x.suffix || '', hint: x.hint || '', error: x.error || '', invalid: x.error ? 'true' : 'false', group: x.error ? 'border-color:var(--rz-danger)' : '', input: 'flex:1;width:100%;min-width:0;color:var(--rz-text-strong);font-size:var(--rz-fs-input);' + (x.mono ? 'font-family:var(--rz-font-mono);text-align:right' : '') });
+  return {
+    scrim: true,
+    sheet: {
+      title: edit ? 'Редагувати витрату' : 'Додати витрату',
+      desc: edit ? 'Оновіть назву або суму. Прибутковість авто перерахується після збереження.' : 'Додайте витрату понад ціну придбання автомобіля.',
+      busy, error: mode === 'error' ? 'Не вдалося зберегти витрату. Спробуйте ще раз.' : '',
+      fields: [
+        fl('Назва витрати', inv ? '' : edit ? 'Мийка' : 'Евакуатор з Луцька', { ph: 'Наприклад, транспортування', error: inv ? 'Впишіть назву витрати — наприклад, «Транспортування».' : '' }),
+        fl('Сума витрати', inv ? '0' : edit ? '850' : '3 500', { mono: true, suffix: '₴', error: inv ? 'Сума має бути числом більшим за нуль — наприклад, 500.' : '' }),
+      ],
+      after: edit ? '120 250 ₴ (було 120 000 ₴)' : inv ? '—' : '123 500 ₴ (було 120 000 ₴)',
+      submit: busy ? 'Додаємо…' : edit ? 'Зберегти витрату' : 'Додати витрату',
+    },
+  };
+};
+const dlg = (tone, icon, title, text, confirm, cls, x) => ({ scrim: true, dialog: { title, text, confirm, cls: 'rz-btn ' + cls, icon, iconStyle: 'display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-' + tone + '-soft);color:var(--rz-' + (tone === 'neutral' ? 'text-muted' : tone) + ')', cancel: true, busy: false, extra: '', ...(x || {}) } });
+const toast = (text, action, tone) => ({ toast: { text, action: action || '', icon: tone === 'danger' ? 'icon-circle-alert' : 'icon-circle-check', iconStyle: 'font-size:var(--rz-icon-md);color:var(--rz-' + (tone || 'ok') + ')' } });
+const MENU = [
+  { label: 'Копіювати VIN', icon: 'icon-copy' },
+  { label: 'Архівувати', icon: 'icon-archive' },
+  { label: 'Видалити автомобіль', icon: 'icon-trash-2', danger: true, sep: true },
+].map((m, i) => ({ ...m, style: (i === 0 ? 'background:var(--rz-fill-active);' : '') + (m.danger ? 'color:var(--rz-danger)' : ''), iconStyle: m.danger ? 'color:var(--rz-danger)' : '' }));
+const PICK = ['Volkswagen', 'Volvo'].map((label, i) => ({ label, on: i === 0, sel: i === 0 ? 'true' : 'false', style: 'display:flex;align-items:center;height:28px;padding:0 8px;border-radius:var(--rz-r-sm);cursor:pointer;' + (i === 0 ? 'background:var(--rz-fill-active);color:var(--rz-text-strong)' : 'color:var(--rz-text)') }));
+
+const TOYOTA = {
+  name: 'Toyota Camry XV70 · 2019', code: 'A-0131', vin: '4T1B11HK5KU123456', since: 'на складі з 17.08.2026 · 64 дні', payoff: 'Окупилось', payoffPill: 'rz-pill rz-pill--ok',
+  kpis: [
+    { label: 'Вкладено', value: '210 000', unit: '₴', meta: 'авто 196 000 ₴ + витрати 14 000 ₴' },
+    { label: 'Повернено', value: '321 300', unit: '₴', meta: 'з продажу 41 позиції' },
+    { label: 'Прибуток', value: '111 300', unit: '₴', meta: '+53 % до вкладеного', tone: 'ok' },
+    { label: 'Окупність', value: '153', unit: '%', meta: '153 % вкладеного повернено', meter: 100, meterCls: 'rz-meter' },
+  ],
+  partsCount: '57 запчастин з цього авто', partsAll: 'Усі 57 →',
+};
+
+function build() {
+  const S = [];
+  S.push({ num: '1', title: 'Список', route: '/app/:tenant/cars', source: 'CarsScreen.tsx · messages.ts — у коді картки, у v2 таблиця', frames: [
+    { label: 'Дані', note: 'вкладка «Активні», порядок «Окупність»', ...list({ tab: 1 }) },
+    { label: 'Пошук', note: 'запит «passat»', ...list({ tab: 0, query: 'passat', rows: [CARS[0]], found: 'знайдено 1', count: '1', pager: '1 автомобіль' }) },
+    { label: 'Архів', note: 'архівні авто — без дій продажу', ...list({ tab: 2, rows: CARS.filter((c) => !c[3]), count: '7', pager: 'Сторінка 1 з 1 · 7 автомобілів' }) },
+    { label: 'Завантаження', note: 'skeleton рядків таблиці', ...list({ skel: 9, pager: 'Завантажуємо…' }) },
+    { label: 'Порожньо', note: 'ще жодного авто', ...list({ count: '0', state: { cls: 'rz-state rz-state--brand', role: 'status', icon: 'icon-car', title: 'Автомобілів поки немає', body: 'Додайте перше авто — після розбирання його деталі потраплять на склад.', btn: 'Додати автомобіль', btnIcon: 'icon-plus', btnCls: 'rz-btn rz-btn--primary' } }) },
+    { label: 'Нічого не знайдено', note: 'запит без збігів', ...list({ query: 'audi r8', count: '0', found: 'знайдено 0', state: { cls: 'rz-state', role: 'status', icon: 'icon-search-x', title: 'Нічого не знайдено', body: 'Перевірте код, VIN або назву моделі.', btn: 'Скинути пошук', btnIcon: 'icon-x', btnCls: 'rz-btn', unverified: true } }) },
+    { label: 'Помилка', note: 'список не завантажився', ...list({ count: '', state: { cls: 'rz-state rz-state--danger', role: 'alert', icon: 'icon-circle-alert', title: 'Не вдалося завантажити автомобілі', body: 'Перевірте зв’язок і спробуйте ще раз.', btn: 'Спробувати ще раз', btnIcon: 'icon-rotate-cw', btnCls: 'rz-btn', unverified: true } }) },
+    { label: 'Ліміт тарифу', note: 'кнопка вимкнена з причиною', ...list({ tab: 1, add: { disabled: true, title: 'Ліміт автомобілів вичерпано.' }, banner: { cls: '', pill: 'rz-pill rz-pill--warn', chip: 'Ліміт', title: 'Ліміт автомобілів вичерпано.', body: 'Щоб додати нове авто, архівуйте наявне або змініть тариф.', link: 'Змінити тариф' } }) },
+    { label: 'Лише перегляд', note: 'підписка неактивна', ...list({ tab: 1, add: { disabled: true, title: 'Поточна підписка не дозволяє цю дію.' }, banner: READONLY }) },
+  ] });
+  S.push({ num: '2', title: 'Картка автомобіля', route: '/app/:tenant/cars/:carId', source: 'CarsScreen.tsx · CarProfitabilityCard.tsx · CarPartsCard.tsx · car-card-messages.ts', frames: [
+    { label: 'Дані', note: 'окупається', ...detail() },
+    { label: 'Окупилось', note: 'прибуток понад вкладене', ...detail(TOYOTA) },
+    { label: 'Без витрат, фото й нотаток', note: 'нове авто', ...detail({ name: 'Nissan Qashqai J11 · 2017', code: 'A-0120', vin: 'SJNFAAJ11U1234567', since: 'на складі з 14.10.2026 · 6 днів', payoff: 'Без продажів', payoffPill: 'rz-pill', kpis: [{ label: 'Вкладено', value: '142 000', unit: '₴', meta: 'ціна придбання' }, { label: 'Повернено', value: '0', unit: '₴', meta: 'продажів ще не було' }, { label: 'До окупності', value: '142 000', unit: '₴', meta: 'ще продати на цю суму', tone: 'warn' }, { label: 'Окупність', value: '0', unit: '%', meta: '0 % вкладеного повернено', meter: 0, meterCls: 'rz-meter' }], partsCount: '12 запчастин з цього авто', partsAll: 'Усі 12 →', expenses: [], photos: [], photoCount: '0 знімків', notes: '' }) },
+    { label: 'Архівний', note: 'статус «Архівний»', ...detail({ ...TOYOTA, name: 'Ford Focus III · 2013', code: 'A-0098', vin: 'WF0LXXGCBLDR12345', status: 'Архівний', pill: 'rz-pill', since: 'на складі з 24.03.2026 · 210 днів' }) },
+    { label: 'Меню «Інші дії»', note: 'destructive — після роздільника', ...detail({}, { menu: MENU }) },
+    { label: 'VIN скопійовано', note: 'тост', ...detail({}, toast('VIN скопійовано.')) },
+    { label: 'Лише перегляд', note: 'дії вимкнені', ...detail({}, {}, { ro: true, banner: READONLY }) },
+    { label: 'Завантаження', note: '', ...detail({ loading: true }, {}, { noActions: true }) },
+    { label: 'Помилка', note: '', ...detail({ error: true }, {}, { noActions: true }) },
+  ] });
+  S.push({ num: '3', title: 'Форма автомобіля', route: '/app/:tenant/cars/new · /cars/:carId/edit', source: 'CarsScreen.tsx (CarForm) · car-form-messages.ts', frames: [
+    { label: 'Новий · порожньо', note: 'чекліст ще не заповнено', ...form('new') },
+    { label: 'Новий · заповнено', note: 'готово до створення', ...form('filled') },
+    { label: 'Помилки', note: 'після спроби зберегти', ...form('invalid') },
+    { label: 'Вибір марки', note: 'пошук у довіднику', ...form('picker', { ovl: { picker: PICK } }) },
+    { label: 'Редагування', note: 'видалення заблоковане деталями', ...form('edit') },
+    { label: 'Ціна заблокована', note: 'немає права на фінанси', ...form('edit', { locked: true }) },
+    { label: 'Витрати збережено частково', note: 'авто створено', ...form('partial') },
+    { label: 'Створено', note: 'тост після створення', ...form('filled', { ovl: toast('Автомобіль створено. Решту витрат можна додати на його сторінці.', 'Відкрити автомобіль') }) },
+    { label: 'Завантаження', note: 'редагування', ...form('edit', { loading: true }) },
+  ] });
+  S.push({ num: '4', title: 'Шторка «Витрата»', route: 'картка авто → «Додати витрату» / дія рядка', source: 'CarExpenseDrawer.tsx · car-card-messages.ts · messages.ts', frames: [
+    { label: 'Додати витрату', note: '', ...detail({}, sheet('add')) },
+    { label: 'Редагувати витрату', note: 'рядок «Мийка» активний', ...detail({}, sheet('edit'), { activeExp: 1 }) },
+    { label: 'Помилки полів', note: '', ...detail({}, sheet('invalid')) },
+    { label: 'Збереження', note: 'шторка не закривається', ...detail({}, sheet('busy')) },
+    { label: 'Помилка сервера', note: '', ...detail({}, sheet('error')) },
+    { label: 'Витрату додано', note: 'тост після закриття', ...detail({ expenses: [...PASSAT.expenses, ['Евакуатор з Луцька', '20.10.2026', '3 500 ₴']], expTotal: '11 500 ₴', expTotalLabel: 'Разом 4 витрати' }, toast('Витрату додано.'), { activeExp: 3 }) },
+  ] });
+  S.push({ num: '5', title: 'Діалоги', route: 'картка авто · форма', source: 'CarsScreen.tsx:915, 1209, 2181 · ConfirmDialog', frames: [
+    { label: 'Архівувати автомобіль?', note: '', ...detail({}, dlg('neutral', 'icon-archive', 'Архівувати автомобіль?', 'Автомобіль зникне з активного списку. Його деталі лишаться на складі.', 'Архівувати', 'rz-btn--primary')) },
+    { label: 'Видалити автомобіль?', note: 'авто без деталей', ...detail({ name: 'Nissan Qashqai J11 · 2017', code: 'A-0120', parts: [], partsCount: '0 запчастин', partsAll: '' }, dlg('danger', 'icon-trash-2', 'Видалити автомобіль?', 'Автомобіль і його витрати буде видалено назавжди. Якщо до авто прив’язані деталі, навіть продані, видалення буде відхилено — тоді архівуйте авто.', 'Видалити автомобіль', 'rz-btn--danger')) },
+    { label: 'Видалення · pending', note: '', ...detail({ name: 'Nissan Qashqai J11 · 2017', code: 'A-0120', parts: [], partsCount: '0 запчастин', partsAll: '' }, dlg('danger', 'icon-trash-2', 'Видалити автомобіль?', 'Автомобіль і його витрати буде видалено назавжди. Якщо до авто прив’язані деталі, навіть продані, видалення буде відхилено — тоді архівуйте авто.', 'Видаляємо…', 'rz-btn--danger', { busy: true })) },
+    { label: 'Не можна видалити', note: 'є деталі', ...detail({}, dlg('warn', 'icon-triangle-alert', 'Автомобіль не можна видалити', 'До авто прив’язано 38 деталей, тому видалити його не можна.', 'Зрозуміло', 'rz-btn--primary', { cancel: false, extra: 'Архівуйте авто, щоб прибрати його з активного списку — деталі лишаться на складі.' })) },
+    { label: 'Видалити витрату?', note: '', ...detail({}, dlg('danger', 'icon-trash-2', 'Видалити витрату?', 'Витрата «Мийка» на 600 ₴ зникне назавжди, а інвестована сума зменшиться.', 'Видалити витрату', 'rz-btn--danger'), { activeExp: 1 }) },
+    { label: 'Витрату оновлено', note: 'тост', ...detail({}, toast('Витрату оновлено.'), { activeExp: 1 }) },
+  ] });
+  return S.map((s) => ({ ...s, anchor: 's' + s.num, href: '#s' + s.num, frames: s.frames.map((f, i) => ({ ...f, num: s.num + '.' + (i + 1), anchor: 'f' + s.num + '-' + (i + 1), href: '#f' + s.num + '-' + (i + 1) })) }));
+}
+
+class Component extends DCLogic {
+  renderVals() {
+    if (!this._s) this._s = build();
+    return {
+      theme: this.props.theme ?? 'dark', density: this.props.density ?? 'compact',
+      nav: NAV.map((g) => ({ title: g.title, items: g.items.map(([label, icon, on]) => ({ label, icon, current: on ? 'page' : 'false' })) })),
+      listCols: COLS.map(([label, num]) => ({ label, style: 'padding:0 12px;text-align:' + (num ? 'right' : 'left') })),
+      sections: this._s,
+    };
+  }
+}
+</script>
+</body>
+</html>

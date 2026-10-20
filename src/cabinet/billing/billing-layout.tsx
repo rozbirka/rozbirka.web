@@ -49,11 +49,11 @@ export function BillingSection({
   return (
     <section aria-labelledby={titleId} className="grid gap-3">
       <div className="grid gap-1">
-        <h2 className="text-base font-semibold text-white" id={titleId}>
+        <h2 className="rz-h-card" id={titleId}>
           {title}
         </h2>
         {description === undefined ? null : (
-          <p className="text-app-dim text-[13.5px]">{description}</p>
+          <p className="rz-caption m-0">{description}</p>
         )}
       </div>
       {children}

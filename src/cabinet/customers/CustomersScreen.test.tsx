@@ -127,7 +127,8 @@ it('returns from a customer card to the customer directory', async () => {
     </ToastProvider>,
   )
 
-  await user.click(await screen.findByRole('link', { name: 'До клієнтів' }))
+  // The breadcrumb's «Клієнти» leads back to the directory.
+  await user.click(await screen.findByRole('link', { name: 'Клієнти' }))
 
   await waitFor(() =>
     expect(router.state.location.pathname).toBe('/app/garage/customers'),
@@ -178,7 +179,7 @@ it('opens the new-customer form in the standard side drawer over the directory',
 
   expect(screen.getByText('Клієнти', { selector: 'h1' })).toBeInTheDocument()
   const drawer = screen.getByRole('dialog', { name: 'Новий клієнт' })
-  expect(drawer).toHaveClass('sm:max-w-[600px]')
+  expect(drawer).toHaveClass('rz-sheet')
   // The shared drawer: its footer keeps the save action in view.
   expect(
     within(drawer).getByRole('button', { name: 'Створити клієнта' }),
@@ -245,9 +246,8 @@ it('uses browser-native contact links and opens a new order over the customer ca
     '/app/garage/orders/order-7',
   )
   const average = screen.getByText('Середній чек').closest('div')
-  expect(
-    within(average as HTMLElement).getByText(/1\s167,00\sUSD/),
-  ).toBeVisible()
+  // v2 KPI: the figure large, the ISO code as its unit.
+  expect(average).toHaveTextContent(/1\s167,00\s*USD/)
   await user.click(screen.getByRole('button', { name: 'Копіювати телефон' }))
   expect(writeText).toHaveBeenCalledWith('+380501112233')
 
@@ -718,7 +718,7 @@ it('edits a customer in the side drawer over the customer card', async () => {
   const drawer = await screen.findByRole('dialog', {
     name: 'Редагувати клієнта',
   })
-  expect(drawer).toHaveClass('sm:max-w-[600px]')
+  expect(drawer).toHaveClass('rz-sheet')
   await within(drawer).findByDisplayValue('Ірина')
   expect(
     within(drawer).getByRole('button', { name: 'Зберегти зміни' }),

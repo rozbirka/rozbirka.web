@@ -68,10 +68,10 @@ const snapshot = (permissions: string[]): TenantAccessSnapshot => ({
 const renderNavigation = (
   permissions = ['billing.view'],
   onLogout = vi.fn<() => Promise<void>>(),
-  initialEntry = '/app/koval/settings/billing/overview',
+  path = '/app/koval/settings/billing/overview',
 ) =>
   render(
-    <MemoryRouter initialEntries={[initialEntry]}>
+    <MemoryRouter initialEntries={[path]}>
       <CabinetNavigation
         tenant={activeTenant}
         tenants={[activeTenant, otherTenant]}
@@ -99,12 +99,10 @@ it('shows only released and allowed links with current-route semantics', () => {
   expect(
     screen
       .getByRole('navigation', { name: 'Навігація планшета' })
-      .querySelectorAll('a.min-h-11.min-w-11'),
+      .querySelectorAll('a.rz-nav-item'),
   ).not.toHaveLength(0)
-  expect(screen.getByRole('button', { name: 'Ще' })).toHaveClass(
-    'min-h-11',
-    'min-w-11',
-  )
+  // The tab bar's targets are 48px tall (`.rz-tabbar a`, h-12 on "Ще").
+  expect(screen.getByRole('button', { name: 'Ще' })).toHaveClass('h-12')
 })
 
 it('omits released links denied by the shared cabinet policy', () => {
@@ -129,7 +127,7 @@ it('shows and restores every tablet rail label on focus and hover', async () => 
   if (rail === null) throw new Error('Tablet rail was not rendered')
 
   const controls = [
-    ...['Головна', 'Підписка', 'Тарифи', 'Платежі', 'Профіль'].map(
+    ...['Головна', 'Підписка', 'Профіль'].map(
       (label) =>
         [
           within(tabletNavigation).getByRole('link', { name: label }),
@@ -262,17 +260,17 @@ it('folds the desktop menu away and back from the seam between it and the page',
 
   const toggle = screen.getByRole('button', { name: 'Сховати меню' })
   expect(toggle).toHaveAttribute('aria-expanded', 'true')
-  const menu = document.getElementById('cabinet-navigation')
-  expect(menu).not.toHaveAttribute('hidden')
+  expect(document.getElementById('cabinet-navigation')).toBeVisible()
 
   await user.click(toggle)
-  // The control keeps its place and turns around, so the way back is where
-  // the menu was folded away.
+  // Folded away, the desktop menu becomes the 56px rail, and the way back
+  // sits at its foot.
   const restore = screen.getByRole('button', { name: 'Показати меню' })
   expect(restore).toHaveAttribute('aria-expanded', 'false')
-  expect(document.getElementById('cabinet-navigation')).toHaveAttribute(
-    'hidden',
-  )
+  expect(document.getElementById('cabinet-navigation')).toBeNull()
+  expect(
+    screen.getAllByRole('navigation', { name: 'Навігація кабінету' }),
+  ).toHaveLength(1)
 
   await user.click(restore)
   expect(screen.getByRole('button', { name: 'Сховати меню' })).toHaveAttribute(
@@ -314,6 +312,26 @@ it('names sections, groups and controls in English (UK)', () => {
   expect(
     screen.getByRole('navigation', { name: 'Mobile navigation' }),
   ).toHaveTextContent('More')
+})
+
+it('keeps billing sub-pages under Підписка and offers search in the sidebar', async () => {
+  const user = userEvent.setup()
+  const open = vi.fn()
+  window.addEventListener('cabinet:open-command-palette', open)
+  renderNavigation()
+  const desktop = screen.getByRole('navigation', { name: 'Навігація кабінету' })
+
+  expect(within(desktop).getByRole('link', { name: 'Підписка' })).toBeVisible()
+  expect(within(desktop).queryByRole('link', { name: 'Тарифи' })).toBeNull()
+  expect(within(desktop).queryByRole('link', { name: 'Платежі' })).toBeNull()
+
+  await user.click(
+    within(document.getElementById('cabinet-navigation')!).getByRole('button', {
+      name: /Пошук/,
+    }),
+  )
+  expect(open).toHaveBeenCalledOnce()
+  window.removeEventListener('cabinet:open-command-palette', open)
 })
 
 it('provides separate warehouse and stocktake links for inventory viewers', () => {

@@ -116,7 +116,7 @@ export function LocationSelect({
           align="start"
           sideOffset={6}
           collisionPadding={12}
-          className="bg-app-overlay border-app-line-2 rounded-control z-[60] flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden border shadow-2xl"
+          className="bg-app-overlay border-app-line-2 rounded-control z-[60] flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden border shadow-dialog"
         >
           <div className="border-app-line shrink-0 border-b p-2">
             <SearchInput
@@ -156,7 +156,7 @@ export function LocationSelect({
                 data-active={active?.id === option.id}
                 onClick={() => choose(option.id)}
                 className={cn(
-                  'text-app-ink hover:bg-app-raised flex min-h-11 w-full cursor-pointer items-center justify-between gap-3 rounded-control px-3 py-2 text-left text-sm',
+                  'text-app-ink hover:bg-app-raised flex min-h-control w-full cursor-pointer items-center justify-between gap-3 rounded-control px-3 py-2 text-left text-sm',
                   active?.id === option.id && 'bg-app-raised',
                 )}
               >

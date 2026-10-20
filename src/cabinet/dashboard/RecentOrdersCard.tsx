@@ -45,22 +45,20 @@ export function RecentOrdersCard({
           return (
             <CardRow hover key={order.id}>
               <Link
-                className="grid grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-3 outline-none focus-visible:ring-2 focus-visible:ring-white/40 sm:grid-cols-[44px_minmax(0,1fr)_auto_minmax(64px,auto)]"
+                className="grid grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-3 outline-none sm:grid-cols-[44px_minmax(0,1fr)_auto_minmax(64px,auto)]"
                 to={`${base}/${order.id}`}
               >
-                <span className="text-app-dim font-mono text-[13px]">
-                  #{String(order.number)}
-                </span>
+                <span className="rz-mono rz-dim">#{String(order.number)}</span>
                 <span className="min-w-0">
-                  <span className="block truncate text-[15px] font-bold tracking-[-0.01em] text-white">
+                  <span className="rz-strong block truncate font-medium">
                     {order.customerName ?? t('noCustomer')}
                   </span>
-                  <span className="text-app-dim mt-[3px] block font-mono text-[12px]">
+                  <span className="rz-caption rz-mono mt-0.5 block">
                     {date(order.createdAt)}
                   </span>
                 </span>
                 <StatusPill tone={status.tone}>{status.label}</StatusPill>
-                <span className="col-start-2 font-mono text-[15px] font-medium whitespace-nowrap tabular-nums text-white sm:col-start-auto sm:text-right">
+                <span className="rz-mono rz-strong col-start-2 whitespace-nowrap sm:col-start-auto sm:text-right">
                   {order.totalAmount === null
                     ? '—'
                     : `${sum(order.totalAmount)}${accountingCurrency === null ? '' : ` ${accountingCurrency}`}`}

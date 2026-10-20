@@ -1,11 +1,13 @@
 import type { ReactNode } from 'react'
-import { PageBody } from '@/components/app'
+import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /** Shared desktop print workspace: selection on the left, sheet on the right. */
 export function StickerWorkspace({
   title,
   subtitle,
+  crumb,
+  actions,
   back,
   notice,
   list,
@@ -18,6 +20,10 @@ export function StickerWorkspace({
 }: {
   title: string
   subtitle: ReactNode
+  /** The trail before the title in the topbar, e.g. the sidebar section. */
+  crumb?: ReactNode
+  /** The page's own actions, at the right of the topbar. */
+  actions?: ReactNode
   back?: ReactNode
   notice?: ReactNode
   list: ReactNode
@@ -28,32 +34,70 @@ export function StickerWorkspace({
   embedded?: boolean
   className?: string | undefined
 }) {
-  return (
-    <PageBody
-      className={cn(embedded ? 'gap-3' : 'gap-6 pb-8', className)}
-      aria-label={label}
-    >
-      {back}
-      {showHeader ? (
-        <header>
-          <h1 className="text-[clamp(34px,4vw,48px)] leading-none font-extrabold tracking-[-0.035em] text-white">
-            {title}
-          </h1>
-          <p className="text-app-muted mt-3 max-w-3xl text-[14px] leading-6">
-            {subtitle}
-          </p>
-        </header>
-      ) : null}
+  const workspace = (
+    <>
       {notice}
       <div
         data-slot="sticker-workspace-columns"
-        className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_360px]"
+        className="grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_340px]"
       >
         {list}
         {preview}
       </div>
       {children}
-    </PageBody>
+    </>
+  )
+  // Inside another screen (location labels) the host already draws the frame.
+  if (embedded)
+    return (
+      <section
+        aria-label={label}
+        className={cn('grid min-w-0 gap-3', className)}
+      >
+        {back}
+        {showHeader ? (
+          <div className="grid gap-1">
+            <h1 className="rz-h-page">{title}</h1>
+            <p className="rz-muted m-0 max-w-[72ch]">{subtitle}</p>
+          </div>
+        ) : null}
+        {workspace}
+      </section>
+    )
+  return (
+    <section
+      aria-label={label}
+      className={cn('grid min-w-0 content-start', className)}
+    >
+      <header className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
+        <p className="rz-crumbs m-0">
+          {crumb === undefined ? null : (
+            <>
+              <span>{crumb}</span>
+              <ChevronRight aria-hidden className="size-3 shrink-0" />
+            </>
+          )}
+          <span aria-current="page">{title}</span>
+        </p>
+        {actions === undefined ? null : (
+          <div className="rz-topbar__actions flex-wrap items-center">
+            {actions}
+          </div>
+        )}
+      </header>
+      <div className="rz-page">
+        {back}
+        {showHeader ? (
+          <div className="grid gap-1">
+            <div className="rz-page-head">
+              <h1 className="rz-h-page">{title}</h1>
+            </div>
+            <p className="rz-muted m-0 max-w-[72ch]">{subtitle}</p>
+          </div>
+        ) : null}
+        {workspace}
+      </div>
+    </section>
   )
 }
 export function StickerListPanel({
@@ -74,24 +118,20 @@ export function StickerListPanel({
   return (
     <section
       data-slot="sticker-list"
-      className={cn(
-        'min-w-0',
-        !embedded &&
-          'border-app-line bg-app-raised overflow-hidden rounded-[20px] border',
-      )}
+      className={cn('min-w-0', !embedded && 'rz-card')}
     >
       {search != null ? (
-        <div className="border-app-line border-b p-4 sm:p-5">{search}</div>
+        <div className="border-app-line border-b p-3">{search}</div>
       ) : null}
       <div
         data-slot="sticker-list-toolbar"
         className={cn(
-          'border-app-line flex flex-wrap items-center justify-between gap-3 border-b py-3',
-          embedded ? 'px-3' : 'px-4 sm:px-5',
+          'rz-toolbar border-app-line justify-between border-b py-2',
+          embedded ? 'px-3' : 'px-4',
         )}
       >
-        <p className="text-app-muted text-[13px] tabular-nums">{summary}</p>
-        <div className="flex flex-wrap gap-2">{actions}</div>
+        <p className="rz-muted m-0 tabular-nums">{summary}</p>
+        <div className="rz-btn-row">{actions}</div>
       </div>
       {children}
       {footer}
@@ -131,16 +171,10 @@ export function StickerSelectionRow({
       data-appearance={appearance}
       data-selected={selected}
       aria-label={label}
-      className={
-        appearance === 'location'
-          ? cn(
-              'cursor-pointer transition-colors',
-              selected ? 'bg-app-overlay/40' : 'hover:bg-app-overlay/40',
-            )
-          : selected
-            ? 'cursor-pointer bg-white/[0.035] shadow-[inset_2px_0_0_var(--color-brand)]'
-            : 'cursor-pointer transition-colors hover:bg-white/[0.025]'
-      }
+      className={cn(
+        'cursor-pointer transition-colors',
+        selected ? 'bg-app-row-selected' : 'hover:bg-app-hover',
+      )}
       onClick={() => {
         if (!disabled) onToggle()
       }}
@@ -149,21 +183,21 @@ export function StickerSelectionRow({
         data-slot="sticker-selection-content"
         className={cn(
           appearance === 'location'
-            ? 'flex min-h-20 min-w-0 items-center gap-3 px-3 py-3 sm:gap-4'
-            : 'grid min-h-[72px] grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-4 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:px-5',
+            ? 'flex min-w-0 items-center gap-3 px-3 py-2.5'
+            : 'grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-4 py-2.5 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto]',
         )}
       >
         <input
           aria-label={checkboxLabel}
           checked={selected}
-          className="accent-brand size-[18px] shrink-0"
+          className="rz-check"
           disabled={disabled}
           onClick={(event) => event.stopPropagation()}
           onChange={onToggle}
           type="checkbox"
         />
         {appearance === 'location' && icon ? (
-          <span className="bg-app-input text-app-muted hidden size-10 shrink-0 place-items-center rounded-control sm:grid">
+          <span className="bg-app-input text-app-muted hidden size-8 shrink-0 place-items-center rounded-control sm:grid">
             {icon}
           </span>
         ) : null}
@@ -174,18 +208,16 @@ export function StickerSelectionRow({
           <p
             className={
               appearance === 'location'
-                ? 'text-app-ink break-words text-base font-bold sm:text-lg'
-                : 'truncate text-[14px] font-bold text-white'
+                ? 'rz-strong m-0 font-semibold break-words'
+                : 'rz-strong m-0 truncate font-semibold'
             }
           >
             {name}
           </p>
           <p
             className={cn(
-              'text-app-muted mt-1',
-              appearance === 'location'
-                ? 'break-all text-sm'
-                : 'truncate text-[12.5px]',
+              'rz-muted m-0 mt-0.5 text-caption',
+              appearance === 'location' ? 'break-all' : 'truncate',
             )}
           >
             {detail}
@@ -206,7 +238,7 @@ export function StickerSelectionRow({
           <span className="hidden sm:block" />
         ) : null}
         {appearance === 'sticker' ? (
-          <span className="text-app-dim hidden max-w-28 truncate text-right font-mono text-[12.5px] sm:block">
+          <span className="rz-mono rz-caption hidden max-w-28 truncate text-right sm:block">
             {code ?? '—'}
           </span>
         ) : null}

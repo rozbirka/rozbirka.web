@@ -55,49 +55,39 @@ export function CabinetNotFoundScreen() {
   }
 
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid min-h-[70dvh] place-items-center sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="grid w-full max-w-[620px] gap-6 px-4 py-16 sm:px-6 md:px-8 lg:px-12">
-        <div role="alert">
-          <p className="text-app-dim font-mono text-[12px] tracking-[0.14em] uppercase">
-            {t('notFoundEyebrow')}
-          </p>
-          <h1 className="mt-2.5 text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-            {t('notFoundTitle')}
-          </h1>
-          <p className="text-app-muted mt-3 max-w-[56ch] text-[14.5px] leading-6 text-pretty">
-            {t('notFoundBody')}
-          </p>
+    <div className="rz-page">
+      <section
+        aria-label={t('notFoundTitle')}
+        className="rz-card rz-state min-h-[50dvh]"
+      >
+        <div className="grid justify-items-center gap-2" role="alert">
+          <p className="rz-eyebrow m-0">{t('notFoundEyebrow')}</p>
+          <h1 className="rz-state__title mt-0">{t('notFoundTitle')}</h1>
+          <p className="rz-state__body text-pretty">{t('notFoundBody')}</p>
         </div>
 
         {!canSearch ? null : (
           <form
-            className="border-app-line bg-app-raised focus-within:border-app-line-2 flex h-13 min-w-0 items-center gap-3 rounded-[14px] border px-4"
+            className="mt-1.5 flex w-full max-w-[320px] gap-1.5"
             onSubmit={search}
+            role="search"
           >
-            <Search aria-hidden className="text-app-dim size-4 shrink-0" />
-            <input
-              aria-label={t('searchParts')}
-              className="text-app-ink placeholder:text-app-dim min-w-0 flex-1 bg-transparent text-sm outline-none"
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t('searchPartsPlaceholder')}
-              value={query}
-            />
-            <button
-              className="text-app-muted hover:text-app-ink shrink-0 text-[13px] font-bold"
-              type="submit"
-            >
-              {t('find')}
-            </button>
+            <label className="rz-search min-w-0 flex-1">
+              <Search aria-hidden />
+              <input
+                aria-label={t('searchParts')}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t('searchPartsPlaceholder')}
+                value={query}
+              />
+            </label>
+            <Button type="submit">{t('find')}</Button>
           </form>
         )}
 
-        <div className="flex flex-wrap gap-2.5">
+        <div className="rz-btn-row mt-1.5 justify-center">
           {targetTenant === null ? null : (
-            <Button
-              asChild
-              className="px-5 text-sm font-bold"
-              variant="primary"
-            >
+            <Button asChild variant="primary">
               <Link to={cabinetPath(targetTenant.slug, 'dashboard')}>
                 {t('toHome')}
               </Link>
@@ -107,28 +97,27 @@ export function CabinetNotFoundScreen() {
         </div>
 
         {targetTenant === null || permitted.length === 0 ? null : (
-          <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5">
-            <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-              {t('frequentSections')}
-            </h2>
-            <div className="mt-3 flex flex-wrap gap-2">
+          <nav
+            aria-label={t('frequentSections')}
+            className="mt-3 grid justify-items-center gap-2"
+          >
+            <h2 className="rz-eyebrow m-0">{t('frequentSections')}</h2>
+            <div className="rz-btn-row justify-center">
               {permitted.map((key) => (
-                <Link
-                  className="border-app-line text-app-muted hover:border-app-line-2 hover:text-app-ink inline-flex min-h-11 items-center rounded-[10px] border px-3.5 text-[13px] font-medium"
-                  key={key}
-                  to={cabinetPath(targetTenant.slug, key)}
-                >
-                  {moduleLabel(key, locale)}
-                </Link>
+                <Button asChild key={key} size="sm">
+                  <Link to={cabinetPath(targetTenant.slug, key)}>
+                    {moduleLabel(key, locale)}
+                  </Link>
+                </Button>
               ))}
             </div>
-          </section>
+          </nav>
         )}
 
-        <p className="text-app-dim font-mono text-[12px] break-all">
+        <p className="rz-state__meta m-0 mt-1.5 break-all">
           {location.pathname}
         </p>
-      </div>
+      </section>
     </div>
   )
 }

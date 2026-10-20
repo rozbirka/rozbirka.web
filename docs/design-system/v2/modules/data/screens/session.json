@@ -1,0 +1,208 @@
+{
+ "id": "C28",
+ "module": "inventory",
+ "crumbs": [
+  "Склад",
+  "Інвентаризація"
+ ],
+ "title": "Склад 1 · Зона A",
+ "route": "/app/:tenant/inventory/sessions/:sessionId[/results|/audit|/journal/:zoneId]",
+ "source": "inventory/journal-messages.ts, audit-messages.ts",
+ "unverified": "кнопки сесії, KPI",
+ "chips": [
+  {
+   "cls": "rz-pill rz-pill--warn",
+   "text": "Відкрита"
+  }
+ ],
+ "actions": [
+  {
+   "label": "Сканер",
+   "icon": "icon-scan-line"
+  },
+  {
+   "label": "Завершити сесію",
+   "icon": "icon-check",
+   "variant": "primary"
+  }
+ ],
+ "states": [
+  [
+   "data",
+   "Журнал сканувань"
+  ],
+  [
+   "results",
+   "Результати"
+  ],
+  [
+   "audit",
+   "Аудит сесії"
+  ],
+  [
+   "empty",
+   "Сканувань ще немає"
+  ],
+  [
+   "loading",
+   "Завантаження"
+  ],
+  [
+   "error",
+   "Помилка"
+  ]
+ ],
+ "kpis": [
+  {
+   "cls": "rz-kpi",
+   "label": "Відскановано",
+   "value": "214",
+   "unit": "з 260",
+   "meta": ""
+  },
+  {
+   "cls": "rz-kpi rz-kpi--warn",
+   "label": "Розбіжностей",
+   "value": "7",
+   "unit": "",
+   "meta": ""
+  },
+  {
+   "cls": "rz-kpi",
+   "label": "Тривалість",
+   "value": "2:14",
+   "unit": "год",
+   "meta": ""
+  }
+ ],
+ "main": [
+  {
+   "type": "table",
+   "title": "Журнал сканувань",
+   "columns": [
+    {
+     "label": "Час",
+     "mono": true
+    },
+    {
+     "label": "Позиція"
+    },
+    {
+     "label": "Хто"
+    },
+    {
+     "label": "Облік",
+     "align": "end"
+    },
+    {
+     "label": "Скан",
+     "align": "end"
+    },
+    {
+     "label": "Різниця",
+     "align": "end"
+    }
+   ],
+   "rows": [
+    [
+     "14:02",
+     "Фара передня ліва",
+     "Олег К.",
+     "1",
+     "1",
+     "0"
+    ],
+    [
+     "14:05",
+     "Колісний диск R17",
+     "Олег К.",
+     "4",
+     "3",
+     "−1"
+    ],
+    [
+     "14:09",
+     "Стартер",
+     "Сергій Б.",
+     "0",
+     "1",
+     "+1"
+    ]
+   ]
+  }
+ ],
+ "aside": [],
+ "overrides": {
+  "empty": {
+   "kpis": [],
+   "main": [
+    {
+     "type": "text",
+     "title": "Журнал сканувань",
+     "text": "Сканувань ще немає"
+    }
+   ]
+  },
+  "audit": {
+   "main": [
+    {
+     "type": "timeline",
+     "title": "Аудит сесії",
+     "items": [
+      {
+       "icon": "icon-play",
+       "event": "Сесію відкрито",
+       "detail": "Олег К.",
+       "date": "17.10 12:00"
+      },
+      {
+       "icon": "icon-pause",
+       "event": "Пауза",
+       "detail": "",
+       "date": "17.10 13:10"
+      }
+     ]
+    }
+   ]
+  },
+  "results": {
+   "main": [
+    {
+     "type": "table",
+     "title": "Розбіжності",
+     "columns": [
+      {
+       "label": "Позиція"
+      },
+      {
+       "label": "Облік",
+       "align": "end"
+      },
+      {
+       "label": "Скан",
+       "align": "end"
+      },
+      {
+       "label": "Різниця",
+       "align": "end"
+      }
+     ],
+     "rows": [
+      [
+       "Колісний диск R17",
+       "4",
+       "3",
+       "−1"
+      ],
+      [
+       "Стартер",
+       "0",
+       "1",
+       "+1"
+      ]
+     ]
+    }
+   ]
+  }
+ }
+}

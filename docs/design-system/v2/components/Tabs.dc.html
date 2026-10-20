@@ -64,7 +64,7 @@
             <div style="position:absolute;inset:0;background:var(--rz-scrim)"></div>
             <div role="dialog" aria-label="Пошук по кабінету" style="position:absolute;top:40px;left:50%;transform:translateX(-50%);width:min(600px,calc(100% - 32px));max-height:400px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-lg);background:var(--rz-overlay);box-shadow:var(--rz-shadow-dialog);overflow:hidden">
               <div style="display:flex;align-items:center;gap:10px;height:48px;padding:0 14px;border-bottom:1px solid var(--rz-border)">
-                <i class="icon-search" style="font-size:16px;color:var(--rz-text-dim)"></i>
+                <i class="icon-search" style="font-size:var(--rz-icon-md);color:var(--rz-text-dim)"></i>
                 <input role="combobox" aria-label="Пошук по кабінету" aria-expanded="true" value="{{ query }}" onChange="{{ onQuery }}" placeholder="Розділ, деталь, авто, клієнт або замовлення" style="flex:1;min-width:0;border:0;background:transparent;color:var(--rz-text-strong);font-size:var(--rz-fs-input);outline:none">
                 <span style="height:18px;padding:0 4px;display:inline-grid;place-items:center;border:1px solid var(--rz-border-strong);border-bottom-width:2px;border-radius:var(--rz-r-xs);font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">Esc</span>
               </div>
@@ -75,7 +75,7 @@
                     <p style="margin:0;padding:8px 8px 4px;font-size:var(--rz-fs-micro);font-weight:600;color:var(--rz-text-dim)">{{ g.label }}</p>
                     <sc-for list="{{ g.items }}" as="c" hint-placeholder-count="3">
                       <div role="option" aria-selected="{{ c.selected }}" onMouseEnter="{{ c.onHover }}" style="display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:var(--rz-r-sm);background:{{ c.bg }};color:{{ c.color }};cursor:pointer">
-                        <i class="{{ c.icon }}" style="font-size:15px;color:var(--rz-text-dim)"></i>
+                        <i class="{{ c.icon }}" style="font-size:var(--rz-icon-md);color:var(--rz-text-dim)"></i>
                         <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ c.label }}</span>
                         <span style="flex:none;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">{{ c.detail }}</span>
                         <sc-if value="{{ c.isSel }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">↵</span></sc-if>

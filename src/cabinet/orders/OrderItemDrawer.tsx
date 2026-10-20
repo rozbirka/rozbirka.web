@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Search, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import {
   Button,
   Field,
@@ -7,6 +7,7 @@ import {
   QuantityStepper,
   Sheet,
   SkeletonRows,
+  SearchInput,
   TextInput,
 } from '@/components/app'
 import { commonMessages, useT } from '@/i18n'
@@ -21,6 +22,7 @@ import { amountPrecisionError } from '../currency/amount-precision'
 import type { FirstPriceGuard } from '../currency/use-accounting-currency'
 import { usePriceSlots } from '../currency/use-price-slots'
 import { money } from './order-money'
+import { SheetGroup } from './sheet-group'
 
 const SEARCH_DEBOUNCE_MS = 250
 const PAGE_SIZE = 8
@@ -263,7 +265,7 @@ function OpenOrderItemDrawer({
       eyebrow={t('drawerEyebrow', { number: String(orderNumber) })}
       footer={
         <>
-          <p className="text-app-muted min-w-0 flex-1 text-[13px]">
+          <p className="rz-muted m-0 min-w-0 flex-1">
             {valid
               ? t('totalWillBe', {
                   amount: money(
@@ -305,157 +307,154 @@ function OpenOrderItemDrawer({
 
       <Field hiddenLabel label={t('searchPart')}>
         <span className="relative block">
-          <Search
-            aria-hidden
-            className="text-app-dim pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2"
-          />
-          <TextInput
+          <SearchInput
             aria-controls={listId}
             autoComplete="off"
-            className="h-[46px] rounded-[11px] pr-12 pl-10"
+            className="h-control-lg pr-9"
             ref={inputRef}
             onChange={(event) => changeQuery(event.target.value)}
             placeholder={t('searchPlaceholder')}
+            type="text"
             value={query}
           />
           {query ? (
-            <button
-              type="button"
+            <Button
               aria-label={t('clearSearch')}
-              className="text-app-muted hover:text-app-ink focus-visible:outline-brand absolute top-0 right-0 flex size-[46px] cursor-pointer items-center justify-center rounded-[11px] focus-visible:outline-2"
+              className="absolute top-1/2 right-1 -translate-y-1/2"
               onClick={() => {
                 changeQuery('')
                 inputRef.current?.focus()
               }}
+              size="icon"
+              variant="quiet"
             >
-              <X aria-hidden className="size-4" />
-            </button>
+              <X aria-hidden />
+            </Button>
           ) : null}
         </span>
       </Field>
 
-      <div
-        className="border-app-line bg-app-raised overflow-hidden rounded-[14px] border"
-        id={listId}
-      >
-        {!query.trim() ? (
-          <div
-            className="text-app-muted px-4 py-8 text-center text-[13px]"
-            role="status"
+      {query.trim() && loadError !== null ? (
+        <div className="grid justify-items-start gap-2.5" id={listId}>
+          <Notice tone="danger">{loadError}</Notice>
+          <Button
+            onClick={() => {
+              setLoadError(null)
+              setItems(null)
+              setAttempt((value) => value + 1)
+            }}
           >
-            <p className="text-app-ink font-semibold">{t('searchPrompt')}</p>
-            <p className="mt-1">{t('searchScope')}</p>
-          </div>
-        ) : loadError !== null ? (
-          <div className="space-y-3 p-4">
-            <Notice tone="danger">{loadError}</Notice>
-            <Button
-              onClick={() => {
-                setLoadError(null)
-                setItems(null)
-                setAttempt((value) => value + 1)
-              }}
+            {t('retrySearch')}
+          </Button>
+        </div>
+      ) : (
+        <div
+          className="border-app-line min-h-fit overflow-hidden rounded-rz-md border bg-(--rz-sheet-field)"
+          id={listId}
+        >
+          {!query.trim() ? (
+            <p
+              className="rz-muted m-0 px-4 py-4 text-center text-pretty"
+              role="status"
             >
-              {t('retrySearch')}
-            </Button>
-          </div>
-        ) : items === null ? (
-          <div className="p-4">
-            <SkeletonRows label={t('searching')} rows={4} />
-          </div>
-        ) : items.length === 0 ? (
-          <p
-            className="text-app-muted px-4 py-6 text-center text-[13px]"
-            role="status"
-          >
-            {t('nothingFound')}
-          </p>
-        ) : (
-          <ul aria-label={t('foundParts')}>
-            {items.map((item) => {
-              const already = taken.has(item.id)
-              const out = item.quantityAvailable <= 0
-              const disabled = already || out
-              const active = item.id === pickedId
-              return (
-                <li key={item.id}>
-                  <button
-                    className={cn(
-                      'flex w-full items-center gap-3 border-b border-white/5 px-3.5 py-3 text-left transition-colors',
-                      active
-                        ? 'bg-brand/[0.07] shadow-[inset_3px_0_0_var(--color-brand)]'
-                        : disabled
-                          ? 'cursor-default'
-                          : 'hover:bg-white/[0.04]',
-                    )}
-                    disabled={disabled}
-                    onClick={() => {
-                      setPickedId(item.id)
-                      setQuantity(1)
-                      setPrice(null)
-                    }}
-                    type="button"
+              <span>{t('searchPrompt')}</span>. <span>{t('searchScope')}</span>
+            </p>
+          ) : items === null ? (
+            <div className="p-3">
+              <SkeletonRows label={t('searching')} rows={4} />
+            </div>
+          ) : items.length === 0 ? (
+            <p className="rz-muted m-0 px-4 py-4 text-center" role="status">
+              {t('nothingFound')}
+            </p>
+          ) : (
+            <ul aria-label={t('foundParts')} className="m-0 list-none p-0">
+              {items.map((item) => {
+                const already = taken.has(item.id)
+                const out = item.quantityAvailable <= 0
+                const disabled = already || out
+                const active = item.id === pickedId
+                return (
+                  <li
+                    className="[&:first-child>button]:border-t-0"
+                    key={item.id}
                   >
-                    <span className="min-w-0 flex-1">
-                      <span
-                        className={cn(
-                          'block text-[14px] font-bold tracking-[-0.01em] text-pretty',
-                          disabled ? 'text-app-dim' : 'text-white',
-                        )}
-                      >
-                        {item.name}
+                    <button
+                      className={cn(
+                        'border-app-line flex min-h-11 w-full items-center gap-3 border-0 border-t bg-transparent px-3 py-2 text-left transition-colors',
+                        active
+                          ? 'bg-app-selected shadow-[inset_2px_0_0_var(--rz-brand)]'
+                          : disabled
+                            ? 'cursor-default'
+                            : 'cursor-pointer hover:bg-app-hover',
+                      )}
+                      disabled={disabled}
+                      onClick={() => {
+                        setPickedId(item.id)
+                        setQuantity(1)
+                        setPrice(null)
+                      }}
+                      type="button"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={cn(
+                            'block font-semibold text-pretty',
+                            disabled ? 'text-app-dim' : 'text-app-strong',
+                          )}
+                        >
+                          {item.name}
+                        </span>
+                        <span className="rz-dim block font-mono text-micro">
+                          {[item.oemCode, origin(item, t('noCar')), item.place]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
                       </span>
-                      <span className="text-app-muted mt-1 block font-mono text-[11px] leading-[1.5]">
-                        {[item.oemCode, origin(item, t('noCar')), item.place]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-right">
-                      <span
-                        className={cn(
-                          'block font-mono text-[13px]',
-                          disabled ? 'text-app-dim' : 'text-app-ink',
-                        )}
-                      >
-                        {money(item.price, currency, locale)}
-                      </span>
-                      <span
-                        className={cn(
-                          'mt-1 block text-[11px] font-bold whitespace-nowrap',
-                          already
-                            ? 'text-app-muted'
+                      <span className="shrink-0 text-right">
+                        <span
+                          className={cn(
+                            'rz-num block',
+                            disabled ? 'text-app-dim' : 'text-app-strong',
+                          )}
+                        >
+                          {money(item.price, currency, locale)}
+                        </span>
+                        <span
+                          className={cn(
+                            'mt-0.5 block text-micro font-medium whitespace-nowrap',
+                            already
+                              ? 'text-app-muted'
+                              : out
+                                ? 'text-state-danger'
+                                : 'text-state-ok',
+                          )}
+                        >
+                          {already
+                            ? t('inOrder')
                             : out
-                              ? 'text-state-danger'
-                              : 'text-state-ok',
-                        )}
-                      >
-                        {already
-                          ? t('inOrder')
-                          : out
-                            ? t('outOfStock')
-                            : t('inStock', { count: item.quantityAvailable })}
+                              ? t('outOfStock')
+                              : t('inStock', { count: item.quantityAvailable })}
+                        </span>
                       </span>
-                    </span>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </div>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+      )}
 
       {picked === null ? null : (
-        <div className="border-app-line bg-app-raised grid gap-3.5 rounded-[14px] border px-[18px] py-4">
-          <div>
-            <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-              {t('selected')}
-            </p>
-            <p className="mt-2 text-[16px] font-bold tracking-[-0.01em] text-pretty text-white">
-              {picked.name}
-            </p>
-          </div>
-          <div className="grid grid-cols-1 items-start gap-x-3.5 gap-y-3 sm:grid-cols-[180px_minmax(0,1fr)]">
+        <SheetGroup
+          hint={t('stockNote', {
+            count: picked.quantityAvailable,
+            number: String(orderNumber),
+          })}
+          title={t('selected')}
+        >
+          <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-3">
             <Field label={t('quantity')}>
               <QuantityStepper
                 label={t('itemQuantity')}
@@ -472,32 +471,27 @@ function OpenOrderItemDrawer({
               label={t('unitPrice')}
             >
               <MoneyInput
-                className="font-mono"
                 currency={priceSlots.currency}
                 disabled={priceSlots.disabled}
                 inputMode="decimal"
+                numeric
                 onChange={(event) => setPrice(event.target.value)}
                 value={price ?? String(picked.price ?? '')}
               />
             </Field>
-            <p className="border-app-line flex items-baseline justify-between gap-3 border-t pt-3 sm:col-span-2">
-              <span className="text-app-muted text-[12px] font-semibold">
-                {t('lineSum')}
-              </span>
-              <span className="font-mono text-[17px] whitespace-nowrap text-white tabular-nums">
-                {money(lineTotal, currency, locale)}
-              </span>
-            </p>
+            <Field label={t('lineSum')}>
+              <TextInput
+                className="opacity-60"
+                numeric
+                readOnly
+                tabIndex={-1}
+                value={money(lineTotal, currency, locale)}
+              />
+            </Field>
           </div>
           {priceSlots.note}
           {priceSlots.saveNotes}
-          <p className="text-app-dim text-[12px]">
-            {t('stockNote', {
-              count: picked.quantityAvailable,
-              number: String(orderNumber),
-            })}
-          </p>
-        </div>
+        </SheetGroup>
       )}
     </Sheet>
   )

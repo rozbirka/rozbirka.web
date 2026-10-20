@@ -1,4 +1,5 @@
-import { useId, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
+import { Card } from '@/components/app'
 
 export function Step({
   number,
@@ -14,30 +15,20 @@ export function Step({
   aside?: ReactNode
   children: ReactNode
 }) {
-  const titleId = useId()
   return (
-    <section
-      aria-labelledby={titleId}
-      className="border-app-line bg-app-raised rounded-[18px] border px-6 pt-[22px] pb-6"
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <div className="flex items-baseline gap-2.5">
-          <span aria-hidden className="text-app-dim font-mono text-[11px]">
+    <Card
+      title={title}
+      aside={
+        <div className="flex items-center gap-2">
+          <span aria-hidden className="rz-caption rz-mono">
             {number}
           </span>
-          <h2
-            className="text-[17px] font-bold tracking-[-0.01em] text-white"
-            id={titleId}
-          >
-            {title}
-          </h2>
+          {aside}
         </div>
-        {aside}
-      </div>
-      {hint === undefined ? null : (
-        <p className="text-app-muted mt-1.5 text-[14px]">{hint}</p>
-      )}
-      <div className="mt-4.5">{children}</div>
-    </section>
+      }
+    >
+      {hint === undefined ? null : <p className="rz-hint mb-3">{hint}</p>}
+      {children}
+    </Card>
   )
 }

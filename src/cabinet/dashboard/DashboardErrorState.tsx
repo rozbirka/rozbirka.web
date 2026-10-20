@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
-import { Button, Panel } from '@/components/app'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { Button, StateScreen } from '@/components/app'
 import type { ApiProblem } from '@/api/contracts'
 import { commonMessages, useT, type MessageKey } from '@/i18n'
 import { dashboardMessages } from './dashboard-messages'
@@ -41,27 +42,31 @@ export function DashboardErrorState({
   const tc = useT(commonMessages)
   const guidance = dashboardErrorGuidance(problem)
 
+  // `.rz-state` in a card, as the design system draws a failed block: danger
+  // for a plain failure, warn when the plan or a limit is what stopped it.
   return (
-    <Panel aria-label={ariaLabel} role="alert">
-      {guidance === null ? (
-        <p className="text-app-muted text-sm">{genericMessage}</p>
-      ) : (
+    <StateScreen
+      actions={
         <>
-          <h2 className="text-sm font-medium text-white">
-            {t(guidance.title)}
-          </h2>
-          <p className="text-app-muted mt-1 text-sm">{t(guidance.message)}</p>
-          {billingPath === null ? null : (
-            <Button asChild className="mt-3" variant="primary">
+          {guidance === null || billingPath === null ? null : (
+            <Button asChild variant="primary">
               <Link to={billingPath}>{t('goToSubscription')}</Link>
             </Button>
           )}
+          <Button onClick={() => void retry()}>
+            <RefreshCw aria-hidden />
+            {tc('retry')}
+          </Button>
         </>
-      )}
-      <div className="mt-3">
-        <Button onClick={() => void retry()}>{tc('retry')}</Button>
-      </div>
-    </Panel>
+      }
+      className="min-h-0"
+      icon={<AlertTriangle aria-hidden />}
+      label={ariaLabel}
+      role="alert"
+      title={guidance === null ? genericMessage : t(guidance.title)}
+      tone={guidance === null ? 'danger' : 'warn'}
+      {...(guidance === null ? {} : { description: t(guidance.message) })}
+    />
   )
 }
 

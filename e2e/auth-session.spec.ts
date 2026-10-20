@@ -378,10 +378,20 @@ async function logoutFromCabinet(page: Page) {
     .getByRole('button', { name: 'Вийти' })
     .filter({ visible: true })
   if ((await logout.count()) === 0) {
-    await page.getByRole('button', { name: 'Ще' }).click()
-    logout = page
-      .getByRole('dialog', { name: 'Меню кабінету' })
-      .getByRole('button', { name: 'Вийти' })
+    // v2: on desktop the way out lives in the account menu at the foot of
+    // the sidebar; on a phone, in the "Ще" menu.
+    const account = page
+      .locator('#cabinet-navigation')
+      .getByRole('button', { name: namedUser.displayName })
+    if (await account.isVisible()) {
+      await account.click()
+      logout = page.getByRole('menuitem', { name: 'Вийти' })
+    } else {
+      await page.getByRole('button', { name: 'Ще', exact: true }).click()
+      logout = page
+        .getByRole('dialog', { name: 'Меню кабінету' })
+        .getByRole('button', { name: 'Вийти' })
+    }
   }
   await logout.click()
 }
@@ -522,7 +532,10 @@ test('auth fixture fails closed for unsupported methods on recognized routes', a
 for (const width of [320, 768]) {
   test(`onboarding logout keeps a 44px computed target at ${width}px`, async ({
     page,
-  }) => {
+  }, testInfo) => {
+    // v2 (OPEN-QUESTIONS ?3): 44px is the coarse-pointer target; a mouse
+    // gets 28/32px controls.
+    test.skip(!testInfo.project.use.hasTouch, 'touch target applies to touch')
     await page.setViewportSize({ width, height: 900 })
     await installApiBoundary(page, { noTenants: true })
     await loginFrom(page, '/login', '/account')

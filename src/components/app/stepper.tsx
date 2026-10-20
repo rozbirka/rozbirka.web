@@ -32,12 +32,7 @@ export function Stepper({
 }) {
   const t = useT(appMessages)
   return (
-    <ol
-      className={cn(
-        'border-app-line rounded-panel bg-app-raised flex flex-wrap gap-1 border p-2',
-        className,
-      )}
-    >
+    <ol className={cn('rz-steps', className)}>
       {steps.map((step, index) => {
         const done = index < current
         const active = index === current
@@ -51,16 +46,7 @@ export function Stepper({
 
         const content = (
           <>
-            <span
-              aria-hidden
-              className={cn(
-                'grid size-5 shrink-0 place-items-center rounded-full text-[12px] font-semibold tabular-nums',
-                failed && 'bg-state-danger-soft text-state-danger',
-                !failed && active && 'bg-brand text-brand-foreground',
-                !failed && done && 'bg-state-ok-soft text-state-ok',
-                !failed && !active && !done && 'bg-white/[0.06] text-app-dim',
-              )}
-            >
+            <span aria-hidden className="rz-steps__n">
               {done && !failed ? <Check className="size-3" /> : index + 1}
             </span>
             <span className="truncate">{step.title}</span>
@@ -68,16 +54,17 @@ export function Stepper({
         )
 
         return (
-          <li className="min-w-0 flex-1" key={step.key}>
+          <li
+            {...(active ? { 'aria-current': 'step' as const } : {})}
+            className="min-w-0 p-0"
+            data-state={failed ? 'failed' : done ? 'done' : undefined}
+            key={step.key}
+          >
             {reachable ? (
               <button
                 aria-current={active ? 'step' : undefined}
                 aria-label={label}
-                className={cn(
-                  'rounded-control flex min-h-11 w-full items-center gap-2 px-3 text-[13.5px] transition-colors',
-                  active ? 'bg-white/[0.05] text-white' : 'text-app-muted',
-                  'hover:bg-white/[0.06]',
-                )}
+                className="rounded-rz-full hover:bg-app-hover flex h-7 w-full cursor-pointer items-center gap-2 pr-2.5 pl-1.5 text-inherit"
                 onClick={() => onSelect(index)}
                 type="button"
               >
@@ -86,10 +73,7 @@ export function Stepper({
             ) : (
               <span
                 aria-current={active ? 'step' : undefined}
-                className={cn(
-                  'rounded-control flex min-h-11 w-full items-center gap-2 px-3 text-[13.5px]',
-                  active ? 'bg-white/[0.05] text-white' : 'text-app-dim',
-                )}
+                className="flex h-7 w-full items-center gap-2 pr-2.5 pl-1.5"
               >
                 <span className="sr-only">{label}</span>
                 {content}
@@ -113,7 +97,7 @@ export function StepPanel({
   return (
     <section aria-label={step.title} className="grid gap-3">
       {step.description === undefined ? null : (
-        <p className="text-app-dim text-[13.5px]">{step.description}</p>
+        <p className="rz-caption">{step.description}</p>
       )}
       {children}
     </section>

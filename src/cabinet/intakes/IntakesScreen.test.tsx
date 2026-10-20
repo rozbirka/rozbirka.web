@@ -852,7 +852,7 @@ it('opens add-part over its intake in a side drawer and returns to the intake on
     (await screen.findAllByRole('link', { name: 'Додати деталь' }))[0]!,
   )
   const drawer = await screen.findByRole('dialog', { name: 'Додати деталь' })
-  expect(drawer).toHaveClass('sm:right-0')
+  expect(drawer).toHaveClass('rz-sheet')
   expect(document.querySelector('[role="main"]')).toHaveTextContent(
     'Липнева партія',
   )

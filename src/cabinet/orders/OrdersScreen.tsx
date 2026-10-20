@@ -1,20 +1,40 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
-import { ChevronLeft, Plus, RotateCcw, Trash2, XCircle } from 'lucide-react'
+import {
+  ArrowLeft,
+  Banknote,
+  Check,
+  ChevronRight,
+  RefreshCw,
+  Undo2,
+  ClipboardList,
+  Plus,
+  Printer,
+  SearchX,
+  Trash2,
+  X,
+  XCircle,
+} from 'lucide-react'
 import {
   ActionMenu,
   Button,
-  Card,
   ConfirmDialog,
+  DataTable,
+  type DataColumn,
   SectionPanel,
   Sheet,
   DeniedState,
   ErrorState,
   Field,
   Notice,
-  PageBody,
   Pagination,
-  Panel,
   QuantityStepper,
   SearchInput,
   SkeletonRows,
@@ -50,6 +70,7 @@ import { useCurrencyDraft } from '../currency/form-draft'
 import { lostResponseMessages } from '../lost-response'
 import { amountPrecisionError } from '../currency/amount-precision'
 import { orderSteps } from './order-steps'
+import { RedesignShell } from '../redesign-shell'
 import {
   OrderCustomerCard,
   OrderDueCard,
@@ -57,6 +78,7 @@ import {
   OrderNotesCard,
   OrderPaymentsCard,
   OrderSteps,
+  OrderTimeline,
 } from './OrderDetailCards'
 import { DeliveryConfigureCard } from './delivery/DeliveryConfigureCard'
 import { DeliveryOrderBody } from './delivery/DeliveryOrderBody'
@@ -99,6 +121,7 @@ import {
 import { useTenantSettings } from '@/auth/useTenantSettings'
 import { isPhoneCountry } from '@/lib/phone'
 import { OrderCustomerDrawer } from './OrderCustomerDrawer'
+import { SheetGroup, SheetList } from './sheet-group'
 import { OrderItemDrawer, type OrderItemDraft } from './OrderItemDrawer'
 import { OrderPaymentDrawer, type PaymentOutcome } from './OrderPaymentDrawer'
 
@@ -242,12 +265,12 @@ const canCreateOrder = (
 
 /** The statuses the list filters by, in the order a sale moves through them. */
 const ORDER_STATUS_FILTERS = [
-  { value: '', dot: 'bg-app-line-2' },
-  { value: 'pending', dot: 'bg-state-warn' },
-  { value: 'confirmed', dot: 'bg-state-ok' },
-  { value: 'refunded', dot: 'bg-state-info' },
-  { value: 'cancelled', dot: 'bg-app-muted' },
-]
+  '',
+  'pending',
+  'confirmed',
+  'refunded',
+  'cancelled',
+] as const
 
 /** Statuses whose money never reached the till. */
 const UNPAID_STATUSES = new Set(['cancelled', 'refunded'])
@@ -270,15 +293,21 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
   /** Dates arrive as ISO strings; anything unparsable is shown as it came. */
   const day = (value: string) => format.date(value) ?? value
   const cabinet = useCabinet()
+  const navigate = useNavigate()
   const { currency: accountingCurrency } = useAccountingCurrency()
   const createAllowed = canCreateOrder(definition, cabinet)
   const [params, setParams] = useSearchParams()
   const [orders, setOrders] = useState<OrderListItem[]>([])
+  /** False until the first answer: the list shows skeleton rows, not «empty». */
+  const [loaded, setLoaded] = useState(false)
   const [totalPages, setTotalPages] = useState(0)
   const [total, setTotal] = useState(0)
+  const [pageSize, setPageSize] = useState<number | undefined>(undefined)
   /** How many orders sit behind each status chip, under the same search. */
   const [counts, setCounts] = useState<Record<string, number> | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** Bumped by «Спробувати ще раз» to ask for the same page again. */
+  const [attempt, setAttempt] = useState(0)
   const search = params.get('q') ?? undefined
   const status = params.get('status') ?? undefined
   const customerId = params.get('customerId') ?? undefined
@@ -299,15 +328,19 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
         setOrders(result.items)
         setTotalPages(result.totalPages)
         setTotal(result.total)
+        setPageSize(result.pageSize)
         setError(null)
+        setLoaded(true)
       })
       .catch((error) => {
-        if (!controller.signal.aborted) setError(errorMessage(error))
+        if (controller.signal.aborted) return
+        setError(errorMessage(error))
+        setLoaded(true)
       })
     return () => controller.abort()
     // The message is chosen when the request fails, not re-run per locale.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customerId, page, search, status])
+  }, [customerId, page, search, status, attempt])
 
   /* The endpoint reports a total per filter, not a breakdown, so each chip's
      count is its own one-row request under the current search. */
@@ -319,14 +352,14 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
           .list(
             {
               ...(search === undefined ? {} : { search }),
-              ...(option.value === '' ? {} : { status: option.value }),
+              ...(option === '' ? {} : { status: option }),
               ...(customerId === undefined ? {} : { customerId }),
               page: 1,
               pageSize: 1,
             },
             { signal: controller.signal },
           )
-          .then((result) => [option.value, result.total] as const),
+          .then((result) => [option, result.total] as const),
       ),
     ).then(
       (pairs) => setCounts(Object.fromEntries(pairs)),
@@ -352,215 +385,235 @@ function OrderDirectory({ definition }: CabinetModuleScreenProps) {
     .reduce((sum, order) => sum + (order.totalAmount ?? 0), 0)
   const filtered = (search ?? '') !== '' || (status ?? '') !== ''
 
-  return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="grid w-full gap-4 px-4 pt-10 pb-16 sm:px-6 md:px-8 lg:px-12">
-        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
-          <div className="min-w-0">
-            <p className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
-              {t('eyebrow')}
-            </p>
-            <h1 className="mt-2.5 text-[38px] leading-none font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-              {t('title')}
-            </h1>
-          </div>
-          {createAllowed ? (
-            <Button
-              asChild
-              className="min-h-11 px-5.5 text-[15px] font-bold"
-              variant="primary"
-            >
-              <Link to="new">
-                <Plus aria-hidden />
-                {t('newOrder')}
-              </Link>
-            </Button>
-          ) : null}
-        </div>
+  const resetFilters = () => {
+    const next = new URLSearchParams(params)
+    next.delete('q')
+    next.delete('status')
+    next.set('page', '1')
+    setParams(next)
+  }
+  const columns: DataColumn<OrderListItem>[] = [
+    {
+      key: 'order',
+      label: t('columnOrder'),
+      variant: 'primary',
+      cell: (order) => (
+        <span className="grid">
+          <Link
+            className="rz-mono w-fit"
+            onClick={(event) => event.stopPropagation()}
+            to={order.id}
+          >
+            #{order.number}
+          </Link>
+          <span className="rz-caption rz-mono font-normal">
+            {day(order.createdAt)}
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: 'buyer',
+      label: t('columnBuyer'),
+      cell: (order) => (
+        <span
+          className={cn(
+            'block max-w-72 truncate',
+            order.customerName === null ? 'rz-muted' : 'rz-strong',
+          )}
+        >
+          {order.customerName ?? t('noBuyer')}
+        </span>
+      ),
+    },
+    {
+      key: 'items',
+      label: t('columnItems'),
+      cell: (order) => (
+        <span className="grid min-w-0 max-w-96 py-1.5">
+          <span
+            className="text-app-ink truncate"
+            title={
+              order.partNames.length === 0
+                ? undefined
+                : order.partNames.join(', ')
+            }
+          >
+            {t('itemCount', { count: order.itemCount })}
+          </span>
+          <span className="rz-caption truncate">
+            {order.paymentAccountNames.length === 0
+              ? t('noPayments')
+              : order.paymentAccountNames.join(', ')}
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      label: t('columnStatus'),
+      cell: (order) => {
+        const presentation = orderStatusPresentation(order.status, locale)
+        return (
+          <StatusPill tone={presentation.tone}>{presentation.label}</StatusPill>
+        )
+      },
+    },
+    {
+      key: 'total',
+      label: t('columnTotal'),
+      align: 'end',
+      cell: (order) => (
+        <span
+          className={cn(
+            'rz-mono whitespace-nowrap',
+            UNPAID_STATUSES.has(order.status) && 'rz-dim',
+          )}
+        >
+          {listMoney(order.totalAmount, accountingCurrency, locale)}
+        </span>
+      ),
+    },
+  ]
+  const newOrderButton = createAllowed ? (
+    <Button asChild variant="primary">
+      <Link to="new">
+        <Plus aria-hidden />
+        {t('newOrder')}
+      </Link>
+    </Button>
+  ) : undefined
+  /** An account with no orders at all: the head and the filters say nothing. */
+  const firstRun = loaded && error === null && orders.length === 0 && !filtered
 
-        <div className="mt-2.5">
+  return (
+    <RedesignShell
+      actions={newOrderButton}
+      crumb={
+        <>
+          <span>{t('eyebrow')}</span>
+          <ChevronRight aria-hidden className="size-3" />
+          <span aria-current="page">{t('title')}</span>
+        </>
+      }
+    >
+      <div className="rz-page-head">
+        <h1 className="rz-h-page">{t('title')}</h1>
+        {loaded && error === null && !firstRun ? (
+          <>
+            <span className="rz-muted">
+              {t('orderCount', { count: total })}
+            </span>
+            <dl className="rz-totals">
+              <div className="flex items-baseline gap-1.5">
+                <dt>{t('pageSum')}</dt>
+                <dd className="rz-strong">
+                  {listMoney(pageSum, accountingCurrency, locale)}
+                </dd>
+              </div>
+            </dl>
+          </>
+        ) : null}
+      </div>
+
+      {firstRun ? null : (
+        <div className="rz-toolbar" role="search">
           <SearchInput
             aria-label={t('searchLabel')}
-            className="min-h-12.5 text-[15px]"
+            className="sm:max-w-80"
             onChange={(event) => setParam('q', event.target.value)}
             placeholder={t('searchPlaceholder')}
             value={params.get('q') ?? ''}
           />
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
           <div
             aria-label={t('statusFilter')}
-            className="border-app-line bg-app-raised flex flex-wrap gap-[3px] rounded-xl border p-[3px]"
+            className="rz-seg max-w-full flex-wrap"
             role="radiogroup"
           >
-            {ORDER_STATUS_FILTERS.map((option) => {
-              const active = (status ?? '') === option.value
-              return (
-                <button
-                  aria-checked={active}
-                  className={cn(
-                    'focus-visible:outline-brand flex min-h-11 cursor-pointer items-center gap-2.5 rounded-[9px] px-3.5 text-[14px] font-semibold',
-                    active
-                      ? 'text-app-ink bg-white/[0.09]'
-                      : 'text-app-muted hover:bg-white/[0.05]',
-                  )}
-                  key={option.value}
-                  onClick={() => setParam('status', option.value)}
-                  role="radio"
-                  type="button"
-                >
-                  <span
-                    aria-hidden
-                    className={cn('size-1.5 rounded-full', option.dot)}
-                  />
-                  {option.value === ''
-                    ? t('filterAll')
-                    : orderStatusPresentation(option.value, locale).label}
-                  {counts === null ? null : (
-                    <span className="text-app-muted font-mono text-[12px] font-medium">
-                      {counts[option.value] ?? 0}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
+            {ORDER_STATUS_FILTERS.map((option) => (
+              <button
+                aria-checked={(status ?? '') === option}
+                key={option}
+                onClick={() => setParam('status', option)}
+                role="radio"
+                type="button"
+              >
+                {option === ''
+                  ? t('filterAll')
+                  : orderStatusPresentation(option, locale).label}
+                {counts === null ? null : (
+                  <span className="rz-count">{counts[option] ?? 0}</span>
+                )}
+              </button>
+            ))}
           </div>
-          <p className="flex items-baseline gap-2.5">
-            <span className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
-              {t('pageSum')}
-            </span>
-            <span className="text-[20px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
-              {listMoney(pageSum, accountingCurrency, locale)}
-            </span>
-          </p>
+          {filtered ? (
+            <Button onClick={resetFilters} variant="ghost">
+              {t('resetFilters')}
+            </Button>
+          ) : null}
         </div>
+      )}
 
-        {error === null ? null : <Notice tone="danger">{error}</Notice>}
-
-        <section
-          aria-label={t('listLabel')}
-          className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
-        >
-          <div
-            aria-hidden
-            className="border-app-line text-app-dim hidden gap-4 border-b px-6 py-3.5 font-mono text-[10px] tracking-[0.14em] uppercase md:grid md:grid-cols-[7rem_1.4fr_1fr_9.5rem_7.5rem]"
-          >
-            <span>{t('columnOrder')}</span>
-            <span>{t('columnBuyer')}</span>
-            <span>{t('columnItems')}</span>
-            <span>{t('columnStatus')}</span>
-            <span className="text-right">{t('columnTotal')}</span>
-          </div>
-
-          {orders.length === 0 ? (
-            <div className="flex flex-col items-center gap-3.5 px-6 py-14 text-center">
-              <p className="text-[16px] font-bold text-white">
-                {filtered ? t('nothingFound') : t('noOrders')}
-              </p>
-              <p className="text-app-muted text-[14px]">
-                {filtered ? t('nothingFoundHint') : t('noOrdersHint')}
-              </p>
-              {filtered ? (
-                <Button
-                  className="text-[13px] font-bold"
-                  onClick={() => {
-                    const next = new URLSearchParams(params)
-                    next.delete('q')
-                    next.delete('status')
-                    next.set('page', '1')
-                    setParams(next)
-                  }}
-                >
-                  {t('resetFilters')}
-                </Button>
-              ) : null}
-            </div>
-          ) : (
-            <ul className="grid">
-              {orders.map((order) => {
-                const presentation = orderStatusPresentation(
-                  order.status,
-                  locale,
-                )
-                const unpaid = UNPAID_STATUSES.has(order.status)
-                return (
-                  <li
-                    className="border-app-line border-b last:border-0"
-                    key={order.id}
-                  >
-                    <Link
-                      className="grid items-center gap-x-4 gap-y-1.5 px-6 py-3.5 hover:bg-white/[0.03] md:grid-cols-[7rem_1.4fr_1fr_9.5rem_7.5rem]"
-                      to={order.id}
-                    >
-                      <span>
-                        <span className="text-app-ink block font-mono text-[15px]">
-                          #{order.number}
-                        </span>
-                        <span className="text-app-muted mt-0.5 block text-[12px]">
-                          {day(order.createdAt)}
-                        </span>
-                      </span>
-                      <span className="min-w-0">
-                        <span
-                          className={cn(
-                            'block truncate text-[15px] font-semibold tracking-[-0.01em]',
-                            order.customerName === null
-                              ? 'text-app-dim'
-                              : 'text-white',
-                          )}
-                        >
-                          {order.customerName ?? t('noBuyer')}
-                        </span>
-                        <span className="text-app-muted mt-0.5 block truncate text-[13px]">
-                          {order.paymentAccountNames.length === 0
-                            ? t('noPayments')
-                            : order.paymentAccountNames.join(', ')}
-                        </span>
-                      </span>
-                      <span className="text-app-muted min-w-0 truncate text-[14px] font-medium">
-                        {order.partNames.length === 0
-                          ? t('itemCount', { count: order.itemCount })
-                          : order.partNames.join(', ')}
-                      </span>
-                      <span>
-                        <StatusPill tone={presentation.tone}>
-                          {presentation.label}
-                        </StatusPill>
-                      </span>
-                      <span
-                        className={cn(
-                          'text-[16px] font-bold tracking-[-0.01em] tabular-nums md:text-right',
-                          unpaid ? 'text-app-dim' : 'text-white',
-                        )}
-                      >
-                        {listMoney(
-                          order.totalAmount,
-                          accountingCurrency,
-                          locale,
-                        )}
-                      </span>
-                    </Link>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-
-          <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-t px-6 py-3.5">
-            <p className="text-app-muted text-[13px] font-semibold">
-              {t('orderCount', { count: total })}
-            </p>
-            <Pagination
-              label={t('pagesLabel')}
-              onPage={goToPage}
-              page={page}
-              totalPages={Math.max(totalPages, 1)}
-            />
-          </div>
-        </section>
-      </div>
-    </div>
+      <section aria-label={t('listLabel')}>
+        {error !== null ? (
+          <ErrorState
+            description={error}
+            onRetry={() => setAttempt((value) => value + 1)}
+            title={t('loadFailed')}
+          />
+        ) : !loaded ? (
+          <SkeletonRows columns={5} label={t('loading')} rows={8} />
+        ) : (
+          <DataTable
+            caption={t('listLabel')}
+            columns={columns}
+            empty={
+              <div
+                className={cn('rz-state', !filtered && 'rz-state--brand')}
+                role="status"
+              >
+                <span className="rz-state__icon">
+                  {filtered ? (
+                    <SearchX aria-hidden />
+                  ) : (
+                    <ClipboardList aria-hidden />
+                  )}
+                </span>
+                <h2 className="rz-state__title">
+                  {filtered ? t('nothingFound') : t('noOrders')}
+                </h2>
+                <p className="rz-state__body">
+                  {filtered ? t('nothingFoundHint') : t('noOrdersHint')}
+                </p>
+                {filtered ? (
+                  <Button onClick={resetFilters}>
+                    <X aria-hidden />
+                    {t('resetFilters')}
+                  </Button>
+                ) : (
+                  newOrderButton
+                )}
+              </div>
+            }
+            footer={
+              <Pagination
+                label={t('pagesLabel')}
+                onPage={goToPage}
+                page={page}
+                totalPages={Math.max(totalPages, 1)}
+                {...(pageSize === undefined || total === 0
+                  ? {}
+                  : { pageSize, total })}
+              />
+            }
+            onRowClick={(order) => void navigate(order.id)}
+            rowKey={(order) => order.id}
+            rows={orders}
+          />
+        )}
+      </section>
+    </RedesignShell>
   )
 }
 
@@ -922,13 +975,13 @@ export function OrderForm({
   }
   if (!dependenciesAllowed) {
     return (
-      <PageBody width="narrow">
+      <div className="rz-page">
         <DeniedState
           description={t('deniedDescription')}
           role="alert"
           title={t('deniedTitle')}
         />
-      </PageBody>
+      </div>
     )
   }
   const draftItemsTotal = draftItems.reduce(
@@ -949,16 +1002,12 @@ export function OrderForm({
     (draftItems.length === 0 && (!partId || !quantity || !unitPrice))
   const form = (
     <form
-      className="grid"
+      className="grid gap-5"
       id={ORDER_FORM}
       onSubmit={(event) => void submit(event)}
     >
       {error && <Notice tone="danger">{error}</Notice>}
-      <SectionPanel
-        description={t('itemDescription')}
-        title={t('itemTitle')}
-        variant="plain"
-      >
+      <SheetGroup hint={t('itemDescription')} title={t('itemTitle')}>
         <div className="grid gap-3">
           {partSearchAllowed && (
             <PartSearchPicker
@@ -988,10 +1037,10 @@ export function OrderForm({
             </Field>
             <Field hint={itemPrices.hint} label={t('unitPrice')}>
               <MoneyInput
-                className="text-left"
                 currency={itemPrices.currency}
                 disabled={itemPrices.disabled}
                 inputMode="decimal"
+                numeric
                 onChange={(event) => setUnitPrice(event.target.value)}
                 value={unitPrice}
               />
@@ -999,7 +1048,7 @@ export function OrderForm({
           </div>
           {itemPrices.note}
           <Button
-            className="w-full justify-center border-dashed"
+            className="border-dashed"
             disabled={
               !selectedPartDraft ||
               !quantity ||
@@ -1008,71 +1057,66 @@ export function OrderForm({
               Number(unitPrice) < 0
             }
             onClick={addDraftItem}
+            size="wide"
           >
             <Plus aria-hidden />
             {t('addPart')}
           </Button>
-
-          {draftItems.length > 0 && (
-            <div
-              aria-label={t('orderItems')}
-              className="border-app-line grid gap-2 border-t pt-4"
-            >
-              {draftItems.map((item) => (
-                <div
-                  className="border-app-line bg-app-canvas/45 grid gap-3 rounded-[14px] border p-3.5 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center"
-                  key={item.part.id}
-                >
-                  <div className="min-w-0">
-                    <p className="text-app-ink truncate text-[14px] font-bold">
-                      {item.part.name}
-                    </p>
-                    <p className="text-app-muted mt-1 text-[13px] tabular-nums">
-                      {item.quantity} ×{' '}
-                      {money(item.unitPrice, guard.currency, locale)}
-                    </p>
-                  </div>
-                  <p className="text-brand text-right text-[16px] font-extrabold tabular-nums">
-                    {money(
-                      item.quantity * item.unitPrice,
-                      guard.currency,
-                      locale,
-                    )}
-                  </p>
-                  <Button
-                    aria-label={t('removeItem', { name: item.part.name })}
-                    className="size-10 justify-center px-0"
-                    onClick={() =>
-                      setDraftItems((current) =>
-                        current.filter(
-                          (draft) => draft.part.id !== item.part.id,
-                        ),
-                      )
-                    }
-                    variant="quiet"
-                  >
-                    <Trash2 aria-hidden />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
-      </SectionPanel>
+      </SheetGroup>
+      {draftItems.length > 0 && (
+        <SheetGroup>
+          <p aria-hidden className="rz-label m-0">
+            {t('orderItems')}
+          </p>
+          <SheetList label={t('orderItems')}>
+            {draftItems.map((item) => (
+              <li key={item.part.id}>
+                <div className="min-w-0 flex-1">
+                  <p className="rz-strong m-0 truncate font-semibold">
+                    {item.part.name}
+                  </p>
+                  <p className="rz-caption rz-mono m-0">
+                    {item.quantity} ×{' '}
+                    {money(item.unitPrice, guard.currency, locale)}
+                  </p>
+                </div>
+                <p className="rz-num rz-strong m-0 whitespace-nowrap">
+                  {money(
+                    item.quantity * item.unitPrice,
+                    guard.currency,
+                    locale,
+                  )}
+                </p>
+                <Button
+                  aria-label={t('removeItem', { name: item.part.name })}
+                  size="icon"
+                  onClick={() =>
+                    setDraftItems((current) =>
+                      current.filter((draft) => draft.part.id !== item.part.id),
+                    )
+                  }
+                  variant="quiet"
+                >
+                  <X aria-hidden />
+                </Button>
+              </li>
+            ))}
+          </SheetList>
+        </SheetGroup>
+      )}
       {customerSearchAllowed && (
-        <SectionPanel
-          variant="plain"
-          description={t('customerDescription')}
-          title={t('customerTitle')}
-        >
+        <SheetGroup hint={t('customerDescription')} title={t('customerTitle')}>
           <div className="grid gap-3" ref={customerPickerRef}>
             <Field
               hint={customerId ? undefined : t('noCustomerChosen')}
               label={t('searchCustomer')}
             >
+              {/* A chosen customer is the current selection: the one place
+                  the brand edge is allowed on a field. */}
               <SearchInput
                 className={
-                  customerId ? 'border-brand/40 bg-brand/[0.08]' : undefined
+                  customerId ? 'border-brand bg-brand-soft' : undefined
                 }
                 onChange={(event) => {
                   const value = event.target.value
@@ -1091,16 +1135,17 @@ export function OrderForm({
             {customerPickerOpen &&
               customerQuery.trim() &&
               customerResults.length > 0 && (
-                <ul className="grid gap-1.5">
+                <ul className="m-0 grid list-none gap-1 p-0">
                   {customerResults.map((customer) => (
                     <li key={customer.id}>
                       <Button
+                        size="wide"
                         aria-label={t('pickCustomer', { name: customer.name })}
-                        className={
-                          customer.id === customerId
-                            ? 'border-brand/40 bg-brand/[0.1] w-full justify-between'
-                            : 'w-full justify-between'
-                        }
+                        className={cn(
+                          'justify-between',
+                          customer.id === customerId &&
+                            'border-brand bg-brand-soft',
+                        )}
                         onClick={() => {
                           setCustomerId(customer.id)
                           setSelectedCustomerName(customer.name)
@@ -1112,7 +1157,7 @@ export function OrderForm({
                         <span className="min-w-0 truncate">
                           {customer.name}
                         </span>
-                        <span className="text-app-dim text-[13px]">
+                        <span className="rz-dim font-mono text-caption">
                           {customer.phone ?? t('noPhone')}
                         </span>
                       </Button>
@@ -1124,6 +1169,7 @@ export function OrderForm({
               <Button
                 className="w-fit"
                 onClick={() => setNewCustomerFormOpen(true)}
+                size="sm"
                 type="button"
               >
                 <Plus aria-hidden />
@@ -1131,8 +1177,8 @@ export function OrderForm({
               </Button>
             )}
             {customerMutationAllowed && !customerId && newCustomerFormOpen && (
-              <fieldset className="border-app-line-2 rounded-control grid gap-3 border border-dashed p-3">
-                <legend className="text-app-muted px-1 text-[13.5px]">
+              <fieldset className="rz-inset m-0 grid gap-3">
+                <legend className="rz-label float-left mb-1 w-full p-0">
                   {t('newCustomer')}
                 </legend>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -1156,7 +1202,7 @@ export function OrderForm({
                     />
                   </Field>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="rz-btn-row">
                   <Button
                     aria-busy={customerBusy}
                     disabled={customerBusy || !newCustomerName.trim()}
@@ -1206,36 +1252,34 @@ export function OrderForm({
               </Notice>
             )}
           </div>
-        </SectionPanel>
+        </SheetGroup>
       )}
-      <SectionPanel variant="plain" title={t('notes')}>
-        <div>
-          <Field hint={t('notesHint')} label={t('notes')}>
-            <TextArea
-              onChange={(event) => setNotes(event.target.value)}
-              value={notes}
-            />
-          </Field>
-        </div>
-      </SectionPanel>
+      <Field hint={t('notesHint')} label={t('notes')}>
+        <TextArea
+          onChange={(event) => setNotes(event.target.value)}
+          value={notes}
+        />
+      </Field>
 
       {draftItems.length > 0 && (
-        <Panel
-          aria-label={t('summary')}
-          className="border-brand/25 bg-brand/[0.055]"
-        >
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-app-muted text-[13.5px]">{t('orderTotal')}</p>
-              <p className="text-app-dim mt-1 text-[12.5px]">
+        <SheetGroup title={t('summary')}>
+          <div className="rz-inset grid gap-0 py-1">
+            <div className="flex items-baseline justify-between gap-3 py-1.5">
+              <span className="rz-muted">
                 {t('itemCount', { count: draftItems.length })}
-              </p>
+              </span>
+              <span className="rz-mono">
+                {money(draftItemsTotal, guard.currency, locale)}
+              </span>
             </div>
-            <p className="text-brand text-[28px] leading-none font-extrabold tracking-[-0.02em] tabular-nums">
-              {money(draftItemsTotal, guard.currency, locale)}
-            </p>
+            <div className="border-app-line flex items-baseline justify-between gap-3 border-t py-1.5">
+              <span className="rz-strong font-semibold">{t('orderTotal')}</span>
+              <span className="rz-mono rz-strong font-bold">
+                {money(draftItemsTotal, guard.currency, locale)}
+              </span>
+            </div>
           </div>
-        </Panel>
+        </SheetGroup>
       )}
     </form>
   )
@@ -1244,9 +1288,12 @@ export function OrderForm({
       description={t('sheetDescription')}
       eyebrow={t('sheetEyebrow')}
       footer={
-        <div className="flex w-full flex-wrap items-center gap-2.5">
+        <div className="flex w-full flex-wrap items-center gap-2">
           <div className="basis-full empty:hidden">{itemPrices.saveNotes}</div>
-          <div className="ml-auto flex items-center gap-2.5">
+          <p className="rz-muted m-0 mr-auto">
+            {t('itemCount', { count: draftItems.length })}
+          </p>
+          <div className="rz-btn-row ml-auto">
             <Button disabled={busy} onClick={closeCreate} type="button">
               {tc('cancel')}
             </Button>
@@ -1323,6 +1370,7 @@ function OrderDetailScreen({
     null,
   )
   const [customerOpen, setCustomerOpen] = useState(false)
+  const historyTitleId = useId()
   const guard = useFirstPriceGuard()
   const currency = guard.currency
   const tp = useT(paymentMessages)
@@ -1418,21 +1466,44 @@ function OrderDetailScreen({
       setBusy(false)
     }
   }
+  const ordersPath = location.pathname.replace(/\/orders\/.*$/, '/orders')
+  const crumbTrail = (current: string) => (
+    <>
+      <span className="max-sm:hidden">{t('eyebrow')}</span>
+      <ChevronRight aria-hidden className="size-3 max-sm:hidden" />
+      <Link to={ordersPath}>{t('title')}</Link>
+      <ChevronRight aria-hidden className="size-3" />
+      <span aria-current="page">{current}</span>
+    </>
+  )
   if (error && !order)
     return (
-      <PageBody width="narrow">
+      <RedesignShell crumb={crumbTrail(t('title'))} width="record">
         <ErrorState
+          actions={
+            <>
+              <Button asChild>
+                <Link to={ordersPath}>
+                  <ArrowLeft aria-hidden />
+                  {t('backToOrders')}
+                </Link>
+              </Button>
+              <Button onClick={() => void reload()}>
+                <RefreshCw aria-hidden />
+                {tc('retry')}
+              </Button>
+            </>
+          }
           description={error}
-          onRetry={() => void reload()}
           title={t('loadFailed')}
         />
-      </PageBody>
+      </RedesignShell>
     )
   if (!order)
     return (
-      <PageBody width="narrow">
-        <SkeletonRows label={t('loading')} rows={4} />
-      </PageBody>
+      <RedesignShell crumb={crumbTrail(t('title'))} width="record">
+        <SkeletonRows label={t('loading')} rows={8} />
+      </RedesignShell>
     )
   const status = orderStatusPresentation(order.status, locale)
   const orderEditable =
@@ -1476,7 +1547,6 @@ function OrderDetailScreen({
             Number.isFinite(order.totalAmount)
           ? order.totalAmount
           : null
-  const ordersPath = location.pathname.replace(/\/orders\/.*$/, '/orders')
   const moduleBase = location.pathname.replace(/\/orders\/.*$/, '')
   const partsPath =
     cabinet.snapshot?.permissions.has('parts.view') === true
@@ -1601,27 +1671,34 @@ function OrderDetailScreen({
   const visibleHistoryRows = historyExpanded
     ? historyRows
     : historyRows.slice(0, 3)
+  const canConfirm = ordinaryFinance && order.status === 'pending'
+  const canRefund = ordinaryFinance && order.status === 'confirmed'
+  const confirmOrder = () => {
+    const input = {
+      payments: order.payments.map(({ accountId, amount, currency }) => ({
+        accountId,
+        amount,
+        currency,
+      })),
+    }
+    void transition(
+      (idempotencyKey) =>
+        ordersApi.confirm(order.id, input, {
+          idempotencyKey: idempotencyKey!,
+        }),
+      {
+        operation: 'order-confirm',
+        payload: { orderId: order.id, input },
+      },
+      'finance.manage',
+    )
+  }
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-        <div className="flex min-w-0 items-center gap-5">
-          <Link
-            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-            to={ordersPath}
-          >
-            <ChevronLeft aria-hidden className="size-3.5" />
-            {t('backToOrders')}
-          </Link>
-          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>{t('eyebrow')}</span>
-            <span aria-hidden className="text-white/20">
-              /
-            </span>
-            <span className="text-app-muted">{t('title')}</span>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
+    <RedesignShell
+      actions={
+        <>
           <Button disabled title={t('printUnavailable')}>
+            <Printer aria-hidden />
             {t('print')}
           </Button>
           {orderEditable ? (
@@ -1640,560 +1717,505 @@ function OrderDetailScreen({
               label={t('moreActions')}
             />
           ) : null}
+          {/* Confirming is the operator's acknowledgement of full payment
+              (R-10): it does not wait for a payment and compares nothing
+              with the value. */}
+          {canConfirm ? (
+            <Button disabled={busy} onClick={confirmOrder} variant="primary">
+              <Check aria-hidden />
+              {t('confirmOrder')}
+            </Button>
+          ) : canRefund ? (
+            <Button onClick={() => changeRefundOpen(!refundOpen)}>
+              <Undo2 aria-hidden />
+              {t('startRefund')}
+            </Button>
+          ) : null}
+        </>
+      }
+      crumb={crumbTrail(`#${String(order.number)}`)}
+      width="record"
+    >
+      <div className="grid gap-1.5">
+        <div className="rz-page-head">
+          <h1 className="rz-h-page">
+            {t('orderTitle', { number: String(order.number) })}
+          </h1>
+          {deliveryMoney === null ? (
+            <OrderSteps steps={orderSteps(order, formatTimestamp, locale)} />
+          ) : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <StatusPill
+            tone={
+              deliveryMoney === null
+                ? status.tone
+                : orderChip(deliveryMoney, locale).tone
+            }
+          >
+            {deliveryMoney === null
+              ? status.label
+              : orderChip(deliveryMoney, locale).label}
+          </StatusPill>
+          <p className="rz-caption m-0">
+            {t('createdBy', {
+              when: formatTimestamp(order.createdAt),
+              who: order.createdByName,
+            })}
+          </p>
         </div>
       </div>
 
-      <div className="mx-auto grid w-full max-w-[1200px] gap-5 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-9 lg:px-12">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-4">
-            <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-              {t('orderTitle', { number: String(order.number) })}
-            </h1>
-            <StatusPill
-              tone={
-                deliveryMoney === null
-                  ? status.tone
-                  : orderChip(deliveryMoney, locale).tone
-              }
-            >
-              {deliveryMoney === null
-                ? status.label
-                : orderChip(deliveryMoney, locale).label}
-            </StatusPill>
-            <p className="text-app-muted text-sm">
-              {t('createdBy', {
-                when: formatTimestamp(order.createdAt),
-                who: order.createdByName,
-              })}
-            </p>
-          </div>
-          {deliveryMoney === null ? (
-            <div className="mt-6">
-              <OrderSteps steps={orderSteps(order, formatTimestamp, locale)} />
-            </div>
-          ) : null}
-        </div>
+      {deliveryMoney === null ? null : (
+        <DeliveryOrderBody
+          countryCode={novaPoshta.countryCode}
+          accountingCurrency={currency}
+          customerPath={customerPath}
+          delivery={deliveryMoney}
+          financeAllowed={financeAllowed}
+          integrationsPath={integrationsPath}
+          load={deliveryLoad}
+          mutationsAllowed={mutationsAllowed}
+          novaPoshtaAvailable={novaPoshta.available}
+          order={order}
+          partsPath={partsPath}
+        />
+      )}
 
-        {deliveryMoney === null ? null : (
-          <DeliveryOrderBody
-            countryCode={novaPoshta.countryCode}
-            accountingCurrency={currency}
-            customerPath={customerPath}
-            delivery={deliveryMoney}
-            financeAllowed={financeAllowed}
-            integrationsPath={integrationsPath}
-            load={deliveryLoad}
-            mutationsAllowed={mutationsAllowed}
-            novaPoshtaAvailable={novaPoshta.available}
-            order={order}
-            partsPath={partsPath}
-          />
-        )}
+      {error && paymentOrderId !== order.id && !refundOpen ? (
+        <Notice tone="danger">{error}</Notice>
+      ) : null}
 
-        {error && paymentOrderId !== order.id && !refundOpen ? (
-          <Notice tone="danger">{error}</Notice>
-        ) : null}
-
-        {deliveryOrder ? null : (
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-            <div className="grid min-w-0 gap-5">
-              {itemsEditable ? (
-                <SectionPanel
-                  aside={
-                    <span className="text-app-muted text-[13.5px] tabular-nums">
-                      {t('itemsTotal', {
-                        amount: money(draftsTotal, currency, locale),
-                      })}
-                    </span>
-                  }
-                  description={
-                    itemDrafts.length === 1
-                      ? t('lastItemHint')
-                      : t('editItemsHint')
-                  }
-                  footer={
-                    <>
-                      <div className="basis-full empty:hidden">
-                        {itemPrices.saveNotes}
-                      </div>
-                      <Button
-                        disabled={
-                          busy || !itemDraftsValid || itemPrices.disabled
-                        }
-                        onClick={() => saveItemDrafts()}
-                        variant="primary"
+      {deliveryOrder ? null : (
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="grid min-w-0 gap-3.5">
+            {itemsEditable ? (
+              <SectionPanel
+                aside={
+                  <span className="rz-mono">
+                    {t('itemsTotal', {
+                      amount: money(draftsTotal, currency, locale),
+                    })}
+                  </span>
+                }
+                description={
+                  itemDrafts.length === 1
+                    ? t('lastItemHint')
+                    : t('editItemsHint')
+                }
+                footer={
+                  <>
+                    <div className="basis-full empty:hidden">
+                      {itemPrices.saveNotes}
+                    </div>
+                    <Button
+                      disabled={busy || !itemDraftsValid || itemPrices.disabled}
+                      onClick={() => saveItemDrafts()}
+                      variant="primary"
+                    >
+                      {t('saveItems')}
+                    </Button>
+                    <Button
+                      disabled={busy}
+                      onClick={() => {
+                        setItemDrafts(order.items)
+                        setEditingItems(false)
+                        setError(null)
+                      }}
+                      variant="ghost"
+                    >
+                      {tc('cancel')}
+                    </Button>
+                  </>
+                }
+                title={t('items')}
+              >
+                {itemDrafts.length === 0 && (
+                  <p className="text-app-muted m-0">{t('noItems')}</p>
+                )}
+                <ul className="m-0 grid list-none p-0">
+                  {visibleItems.map((item, visibleIndex) => {
+                    const index = (itemsPage - 1) * itemsPageSize + visibleIndex
+                    return (
+                      <li
+                        className="border-app-line grid gap-3 border-t py-2.5 first:border-t-0 first:pt-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+                        key={item.id}
                       >
-                        {t('saveItems')}
-                      </Button>
-                      <Button
-                        disabled={busy}
-                        onClick={() => {
-                          setItemDrafts(order.items)
-                          setEditingItems(false)
-                          setError(null)
-                        }}
-                        variant="ghost"
-                      >
-                        {tc('cancel')}
-                      </Button>
-                    </>
-                  }
-                  title={t('items')}
-                >
-                  {itemDrafts.length === 0 && (
-                    <p className="text-app-muted px-4 py-3 text-sm">
-                      {t('noItems')}
-                    </p>
-                  )}
-                  <ul>
-                    {visibleItems.map((item, visibleIndex) => {
-                      const index =
-                        (itemsPage - 1) * itemsPageSize + visibleIndex
-                      return (
-                        <li
-                          className="border-app-line grid gap-3 border-b px-4 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
-                          key={item.id}
-                        >
-                          <div className="min-w-0">
-                            <p className="text-app-ink truncate text-sm font-medium">
-                              {item.partName}
-                            </p>
-                            <p className="text-app-dim mt-0.5 text-[12.5px] tabular-nums">
-                              {t('lineTotal', {
-                                amount: money(
-                                  lineTotal(item.quantity, item.unitPrice),
-                                  currency,
-                                  locale,
-                                ),
-                              })}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap items-end gap-2">
-                            <div className="grid w-20 gap-1.5">
-                              <span
-                                aria-hidden
-                                className="text-app-dim text-[12.5px]"
-                              >
-                                {t('quantity')}
-                              </span>
-                              <TextInput
-                                aria-label={t('quantityOf', {
-                                  name: item.partName,
-                                })}
-                                className="text-right"
-                                inputMode="numeric"
-                                onChange={(event) =>
-                                  setItemDrafts((current) =>
-                                    current.map((draft, draftIndex) =>
-                                      draftIndex === index
-                                        ? {
-                                            ...draft,
-                                            quantity: Number(
-                                              event.target.value,
-                                            ),
-                                          }
-                                        : draft,
-                                    ),
-                                  )
-                                }
-                                value={item.quantity}
-                              />
-                            </div>
-                            <div className="grid w-28 gap-1.5">
-                              <span
-                                aria-hidden
-                                className="text-app-dim text-[12.5px]"
-                              >
-                                {t('price')}
-                              </span>
-                              <TextInput
-                                aria-label={
-                                  currency === null
-                                    ? t('priceOf', { name: item.partName })
-                                    : t('priceOfIn', {
-                                        name: item.partName,
-                                        code: currency,
-                                      })
-                                }
-                                className="text-right"
-                                inputMode="decimal"
-                                onChange={(event) =>
-                                  setItemDrafts((current) =>
-                                    current.map((draft, draftIndex) =>
-                                      draftIndex === index
-                                        ? {
-                                            ...draft,
-                                            unitPrice: Number(
-                                              event.target.value,
-                                            ),
-                                          }
-                                        : draft,
-                                    ),
-                                  )
-                                }
-                                value={item.unitPrice}
-                              />
-                            </div>
-                            <Button
-                              aria-label={t('deleteItem', {
+                        <div className="min-w-0">
+                          <p className="rz-strong m-0 truncate font-medium">
+                            {item.partName}
+                          </p>
+                          <p className="rz-caption rz-mono m-0">
+                            {t('lineTotal', {
+                              amount: money(
+                                lineTotal(item.quantity, item.unitPrice),
+                                currency,
+                                locale,
+                              ),
+                            })}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-end gap-2">
+                          <div className="rz-field w-20">
+                            <span aria-hidden className="rz-label">
+                              {t('quantity')}
+                            </span>
+                            <TextInput
+                              aria-label={t('quantityOf', {
                                 name: item.partName,
                               })}
-                              disabled={busy}
-                              onClick={() =>
-                                void transition(() =>
-                                  itemDrafts.length === 1
-                                    ? ordersApi.cancel(order.id)
-                                    : ordersApi.updateItems(
-                                        order.id,
-                                        itemDrafts
-                                          .filter(
-                                            (_, draftIndex) =>
-                                              draftIndex !== index,
-                                          )
-                                          .map(
-                                            ({
-                                              partId,
-                                              quantity,
-                                              unitPrice,
-                                            }) => ({
-                                              partId,
-                                              quantity,
-                                              unitPrice,
-                                            }),
-                                          ),
-                                      ),
+                              className="rz-input--sm"
+                              inputMode="numeric"
+                              numeric
+                              onChange={(event) =>
+                                setItemDrafts((current) =>
+                                  current.map((draft, draftIndex) =>
+                                    draftIndex === index
+                                      ? {
+                                          ...draft,
+                                          quantity: Number(event.target.value),
+                                        }
+                                      : draft,
+                                  ),
                                 )
                               }
-                              size="icon"
-                              variant="danger"
-                            >
-                              <Trash2 aria-hidden />
-                            </Button>
+                              value={item.quantity}
+                            />
                           </div>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                  {itemDrafts.length > itemsPageSize ? (
-                    <Pagination
-                      label={t('itemsPages')}
-                      onPage={setItemsPage}
-                      page={itemsPage}
-                      totalPages={itemsTotalPages}
-                    />
-                  ) : null}
-                </SectionPanel>
-              ) : (
-                <OrderItemsCard
-                  addPath={
-                    orderEditable ? `${location.pathname}/items/new` : null
-                  }
-                  editable={orderEditable}
-                  items={order.items}
-                  onEdit={() => {
-                    setItemDrafts(order.items)
-                    setEditingItems(true)
-                    setError(null)
-                  }}
-                  currency={currency}
-                  partsPath={partsPath}
-                  total={orderTotalUsd}
-                />
-              )}
-
-              {deliveryOrder ? null : (
-                <OrderPaymentsCard
-                  paidLine={
-                    summary.paid.length === 0
-                      ? null
-                      : moneyList(summary.paid, ' · ', locale)
-                  }
-                  payments={order.payments}
-                />
-              )}
-
-              <OrderNotesCard
-                busy={busy}
-                editable={orderEditable}
-                notes={order.notes}
-                onSave={(value) =>
-                  void transition(() => ordersApi.updateNotes(order.id, value))
-                }
-              />
-            </div>
-
-            <aside className="grid min-w-0 gap-5 lg:sticky lg:top-24">
-              {deliveryOrder ? null : (
-                <OrderDueCard
-                  actions={
-                    ordinaryFinance && order.status === 'pending' ? (
-                      <>
-                        <Button
-                          className="w-full justify-center"
-                          disabled={busy}
-                          onClick={() => setPaymentOrderId(order.id)}
-                          variant="primary"
-                        >
-                          {t('addPayment')}
-                        </Button>
-                        {/* Confirming is the operator's acknowledgement of
-                            full payment (R-10): it does not wait for a
-                            payment and compares nothing with the value. */}
-                        <Button
-                          className="w-full justify-center"
-                          disabled={busy}
-                          onClick={() => {
-                            const input = {
-                              payments: order.payments.map(
-                                ({ accountId, amount, currency }) => ({
-                                  accountId,
-                                  amount,
-                                  currency,
-                                }),
-                              ),
+                          <div className="rz-field w-28">
+                            <span aria-hidden className="rz-label">
+                              {t('price')}
+                            </span>
+                            <TextInput
+                              aria-label={
+                                currency === null
+                                  ? t('priceOf', { name: item.partName })
+                                  : t('priceOfIn', {
+                                      name: item.partName,
+                                      code: currency,
+                                    })
+                              }
+                              className="rz-input--sm"
+                              inputMode="decimal"
+                              numeric
+                              onChange={(event) =>
+                                setItemDrafts((current) =>
+                                  current.map((draft, draftIndex) =>
+                                    draftIndex === index
+                                      ? {
+                                          ...draft,
+                                          unitPrice: Number(event.target.value),
+                                        }
+                                      : draft,
+                                  ),
+                                )
+                              }
+                              value={item.unitPrice}
+                            />
+                          </div>
+                          <Button
+                            aria-label={t('deleteItem', {
+                              name: item.partName,
+                            })}
+                            disabled={busy}
+                            onClick={() =>
+                              void transition(() =>
+                                itemDrafts.length === 1
+                                  ? ordersApi.cancel(order.id)
+                                  : ordersApi.updateItems(
+                                      order.id,
+                                      itemDrafts
+                                        .filter(
+                                          (_, draftIndex) =>
+                                            draftIndex !== index,
+                                        )
+                                        .map(
+                                          ({
+                                            partId,
+                                            quantity,
+                                            unitPrice,
+                                          }) => ({
+                                            partId,
+                                            quantity,
+                                            unitPrice,
+                                          }),
+                                        ),
+                                    ),
+                              )
                             }
-                            void transition(
-                              (idempotencyKey) =>
-                                ordersApi.confirm(order.id, input, {
-                                  idempotencyKey: idempotencyKey!,
-                                }),
-                              {
-                                operation: 'order-confirm',
-                                payload: { orderId: order.id, input },
-                              },
-                              'finance.manage',
-                            )
-                          }}
-                        >
-                          {t('confirmOrder')}
-                        </Button>
-                      </>
-                    ) : ordinaryFinance && order.status === 'confirmed' ? (
-                      <Button
-                        className="w-full justify-center"
-                        onClick={() => changeRefundOpen(!refundOpen)}
-                        variant="danger"
-                      >
-                        {t('startRefund')}
-                      </Button>
-                    ) : null
-                  }
-                  accountingCurrency={currency}
-                  hint={
-                    ordinaryFinance && order.status === 'pending'
-                      ? tp('confirmNote')
-                      : ordinaryFinance && order.status === 'confirmed'
-                        ? t('refundHint')
-                        : null
-                  }
-                  summary={summary}
-                  tills={[
-                    ...new Set(
-                      order.payments.map((payment) => payment.accountName),
-                    ),
-                  ]}
-                />
-              )}
-
-              <OrderCustomerCard
-                accountingCurrency={currency}
-                customerId={order.customerId}
-                customerName={order.customerName}
-                initials={initials(order.customerName ?? '—')}
-                onChange={
-                  orderEditable ? () => setCustomerOpen(true) : undefined
-                }
-                to={customerPath ?? '#'}
-              />
-
-              {/* Whether an order ships is Core's decision, not the carrier's:
-                  offering it only while Nova Poshta answers made the order's
-                  kind depend on an integration that has nothing to do with it. */}
-              {deliveryLoad.state !== null && order.status === 'pending' ? (
-                <DeliveryConfigureCard
-                  mutationsAllowed={mutationsAllowed}
-                  novaPoshtaAvailable={novaPoshta.available}
-                  onConfigured={deliveryLoad.setMoney}
-                  orderId={order.id}
-                />
-              ) : null}
-
-              <Card title={t('history')}>
-                {historyRows.length === 0 ? (
-                  <p className="text-app-muted text-sm">{t('historyEmpty')}</p>
-                ) : (
-                  <>
-                    <ol aria-label={t('historyLabel')} className="grid">
-                      {visibleHistoryRows.map((entry, index) => (
-                        <li className="flex gap-3.5" key={entry.key}>
-                          <span
-                            aria-hidden
-                            className="flex flex-col items-center"
+                            size="icon"
+                            variant="danger"
                           >
-                            <span className="bg-app-muted mt-1.5 size-2.5 rounded-full" />
-                            {index < visibleHistoryRows.length - 1 ? (
-                              <span className="bg-app-line w-px flex-1" />
-                            ) : null}
-                          </span>
-                          <span className="min-w-0 flex-1 pb-5">
-                            <span className="block text-[15px] font-bold text-white">
-                              {orderEventTitle(entry.eventType, locale)}
-                            </span>
-                            <span className="text-app-muted mt-1 block text-[13px]">
-                              {entry.userName} ·{' '}
-                              <time dateTime={entry.createdAt}>
-                                {formatTimestamp(entry.createdAt)}
-                              </time>
-                            </span>
-                          </span>
-                        </li>
-                      ))}
-                    </ol>
-                    {historyRows.length > 3 ? (
-                      <button
-                        className="border-app-line-2 text-app-muted hover:border-brand/60 hover:text-brand w-full rounded-xl border px-4 py-3 text-sm font-semibold transition-colors"
+                            <Trash2 aria-hidden />
+                          </Button>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+                {itemDrafts.length > itemsPageSize ? (
+                  <Pagination
+                    label={t('itemsPages')}
+                    onPage={setItemsPage}
+                    page={itemsPage}
+                    totalPages={itemsTotalPages}
+                  />
+                ) : null}
+              </SectionPanel>
+            ) : (
+              <OrderItemsCard
+                addPath={
+                  orderEditable ? `${location.pathname}/items/new` : null
+                }
+                editable={orderEditable}
+                items={order.items}
+                onEdit={() => {
+                  setItemDrafts(order.items)
+                  setEditingItems(true)
+                  setError(null)
+                }}
+                currency={currency}
+                partsPath={partsPath}
+                total={orderTotalUsd}
+              />
+            )}
+
+            <OrderPaymentsCard
+              action={
+                canConfirm ? (
+                  <Button
+                    className="relative after:absolute after:-inset-2 after:content-['']"
+                    disabled={busy}
+                    onClick={() => setPaymentOrderId(order.id)}
+                    size="sm"
+                  >
+                    <Banknote aria-hidden />
+                    {t('addPayment')}
+                  </Button>
+                ) : null
+              }
+              paidLine={
+                summary.paid.length === 0
+                  ? null
+                  : moneyList(summary.paid, ' · ', locale)
+              }
+              payments={order.payments}
+            />
+
+            <section aria-labelledby={historyTitleId} className="rz-card">
+              <div className="rz-card__head py-2">
+                <h2 className="rz-h-card" id={historyTitleId}>
+                  {t('history')}
+                </h2>
+              </div>
+              {historyRows.length === 0 ? (
+                <p className="rz-card__body text-app-muted m-0">
+                  {t('historyEmpty')}
+                </p>
+              ) : (
+                <>
+                  <OrderTimeline
+                    label={t('historyLabel')}
+                    rows={visibleHistoryRows}
+                    title={(eventType) => orderEventTitle(eventType, locale)}
+                    when={formatTimestamp}
+                  />
+                  {historyRows.length > 3 ? (
+                    <div className="rz-card__foot">
+                      <Button
+                        className="justify-center"
                         onClick={() =>
                           setHistoryExpanded((expanded) => !expanded)
                         }
-                        type="button"
+                        size="wide"
+                        variant="quiet"
                       >
                         {historyExpanded
                           ? t('historyCollapse')
                           : t('historyExpand')}
-                      </button>
-                    ) : null}
-                  </>
-                )}
-              </Card>
-            </aside>
+                      </Button>
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </section>
           </div>
-        )}
-        <ConfirmDialog
-          confirmLabel={
-            summary.paid.length === 0
-              ? tp('refundNothing')
-              : tp('refundLabel', {
-                  amounts: moneyList(summary.paid, tp('and'), locale),
-                })
-          }
-          confirmDisabled={!refundReason.trim()}
-          consequence={t('refundConsequence')}
-          destructive
-          effects={refundEffects(order, summary, locale)}
-          error={refundOpen ? error : null}
-          icon={RotateCcw}
-          onConfirm={() => {
-            const normalizedReason = refundReason.trim()
-            if (!normalizedReason) return
-            const input = { refundReason: normalizedReason }
-            void transition(
-              (idempotencyKey) =>
-                ordersApi.refund(order.id, input, {
-                  idempotencyKey: idempotencyKey!,
-                }),
-              {
-                operation: 'order-refund',
-                payload: { orderId: order.id, input },
-              },
-              'finance.manage',
-            ).then((done) => {
-              if (done) changeRefundOpen(false)
-            })
-          }}
-          onOpenChange={changeRefundOpen}
-          open={refundOpen && ordinaryFinance && order.status === 'confirmed'}
-          pending={busy}
-          title={t('refundTitle')}
-        >
-          <Field label={t('refundReason')}>
-            <TextInput
-              onChange={(event) => setRefundReason(event.target.value)}
-              placeholder={t('refundReasonPlaceholder')}
-              value={refundReason}
+
+          <aside className="grid min-w-0 gap-3.5 lg:sticky lg:top-(--rz-topbar-h)">
+            <OrderDueCard
+              accountingCurrency={currency}
+              actions={null}
+              hint={
+                canConfirm
+                  ? tp('confirmNote')
+                  : canRefund
+                    ? t('refundHint')
+                    : null
+              }
+              summary={summary}
+              tills={[
+                ...new Set(
+                  order.payments.map((payment) => payment.accountName),
+                ),
+              ]}
             />
-          </Field>
-        </ConfirmDialog>
 
-        <OrderItemDrawer
-          busy={busy}
-          draft={itemDraft.initial}
-          error={addingItem ? error : null}
-          guard={guard}
-          onKeepDraft={itemDraft.keep}
-          onOpenChange={(next) => {
-            if (!next) void navigate(`${ordersPath}/${order.id}`)
-          }}
-          onSubmit={(item, accepted) => {
-            const add = () =>
-              void transition(
-                () =>
-                  ordersApi.updateItems(order.id, [
-                    ...order.items.map(({ partId, quantity, unitPrice }) => ({
-                      partId,
-                      quantity,
-                      unitPrice,
-                    })),
-                    item,
-                  ]),
-                undefined,
-                // The part was chosen from the catalogue; losing the right to
-                // read it between opening the drawer and saving stops the save.
-                'parts.view',
-              ).then((saved) => {
-                if (saved) {
-                  guard.afterSave(true)
-                  toast?.show({ message: t('itemAdded'), tone: 'ok' })
-                  void navigate(`${ordersPath}/${order.id}`)
-                }
+            <OrderCustomerCard
+              accountingCurrency={currency}
+              customerId={order.customerId}
+              customerName={order.customerName}
+              initials={initials(order.customerName ?? '—')}
+              onChange={orderEditable ? () => setCustomerOpen(true) : undefined}
+              to={customerPath ?? '#'}
+            />
+
+            {/* Whether an order ships is Core's decision, not the carrier's:
+                offering it only while Nova Poshta answers made the order's
+                kind depend on an integration that has nothing to do with it. */}
+            {deliveryLoad.state !== null && order.status === 'pending' ? (
+              <DeliveryConfigureCard
+                mutationsAllowed={mutationsAllowed}
+                novaPoshtaAvailable={novaPoshta.available}
+                onConfigured={deliveryLoad.setMoney}
+                orderId={order.id}
+              />
+            ) : null}
+
+            <OrderNotesCard
+              busy={busy}
+              editable={orderEditable}
+              notes={order.notes}
+              onSave={(value) =>
+                void transition(() => ordersApi.updateNotes(order.id, value))
+              }
+            />
+          </aside>
+        </div>
+      )}
+      <ConfirmDialog
+        confirmLabel={
+          summary.paid.length === 0
+            ? tp('refundNothing')
+            : tp('refundLabel', {
+                amounts: moneyList(summary.paid, tp('and'), locale),
               })
-            withPriceCheck(add, accepted)
-          }}
-          open={addingItem && orderEditable}
-          orderNumber={order.number}
-          orderTotal={orderTotalUsd}
-          takenPartIds={order.items.map((item) => item.partId)}
-        />
+        }
+        confirmDisabled={!refundReason.trim()}
+        consequence={t('refundConsequence')}
+        destructive
+        effects={refundEffects(order, summary, locale)}
+        error={refundOpen ? error : null}
+        onConfirm={() => {
+          const normalizedReason = refundReason.trim()
+          if (!normalizedReason) return
+          const input = { refundReason: normalizedReason }
+          void transition(
+            (idempotencyKey) =>
+              ordersApi.refund(order.id, input, {
+                idempotencyKey: idempotencyKey!,
+              }),
+            {
+              operation: 'order-refund',
+              payload: { orderId: order.id, input },
+            },
+            'finance.manage',
+          ).then((done) => {
+            if (done) changeRefundOpen(false)
+          })
+        }}
+        onOpenChange={changeRefundOpen}
+        open={refundOpen && ordinaryFinance && order.status === 'confirmed'}
+        pending={busy}
+        title={t('refundTitle')}
+      >
+        <Field label={t('refundReason')}>
+          <TextInput
+            onChange={(event) => setRefundReason(event.target.value)}
+            placeholder={t('refundReasonPlaceholder')}
+            value={refundReason}
+          />
+        </Field>
+      </ConfirmDialog>
 
-        <OrderCustomerDrawer
-          busy={busy}
-          currentId={order.customerId}
-          currentName={order.customerName}
-          error={customerOpen ? error : null}
-          onAssign={(customerId) => {
-            void transition(() =>
-              ordersApi.setCustomer(order.id, customerId),
+      <OrderItemDrawer
+        busy={busy}
+        draft={itemDraft.initial}
+        error={addingItem ? error : null}
+        guard={guard}
+        onKeepDraft={itemDraft.keep}
+        onOpenChange={(next) => {
+          if (!next) void navigate(`${ordersPath}/${order.id}`)
+        }}
+        onSubmit={(item, accepted) => {
+          const add = () =>
+            void transition(
+              () =>
+                ordersApi.updateItems(order.id, [
+                  ...order.items.map(({ partId, quantity, unitPrice }) => ({
+                    partId,
+                    quantity,
+                    unitPrice,
+                  })),
+                  item,
+                ]),
+              undefined,
+              // The part was chosen from the catalogue; losing the right to
+              // read it between opening the drawer and saving stops the save.
+              'parts.view',
             ).then((saved) => {
               if (saved) {
-                setCustomerOpen(false)
-                toast?.show({ message: t('customerAssigned'), tone: 'ok' })
+                guard.afterSave(true)
+                toast?.show({ message: t('itemAdded'), tone: 'ok' })
+                void navigate(`${ordersPath}/${order.id}`)
               }
             })
-          }}
-          onOpenChange={setCustomerOpen}
-          open={customerOpen && orderEditable}
-          orderNumber={order.number}
-        />
+          withPriceCheck(add, accepted)
+        }}
+        open={addingItem && orderEditable}
+        orderNumber={order.number}
+        orderTotal={orderTotalUsd}
+        takenPartIds={order.items.map((item) => item.partId)}
+      />
 
-        {ordinaryFinance &&
-        order.status === 'pending' &&
-        paymentOrderId === order.id ? (
-          <OrderPaymentDrawer
-            accountingCurrency={currency}
-            busy={busy}
-            existing={order.payments}
-            onOpenChange={(next) => {
-              setPaymentOutcome(null)
-              setPaymentOrderId(next ? order.id : null)
-            }}
-            onSave={(payments, added) => void savePayment(payments, added)}
-            open
-            orderNumber={order.number}
-            orderValue={summary.value}
-            outcome={paymentOutcome}
-          />
-        ) : null}
-      </div>
-    </div>
+      <OrderCustomerDrawer
+        busy={busy}
+        currentId={order.customerId}
+        currentName={order.customerName}
+        error={customerOpen ? error : null}
+        onAssign={(customerId) => {
+          void transition(() =>
+            ordersApi.setCustomer(order.id, customerId),
+          ).then((saved) => {
+            if (saved) {
+              setCustomerOpen(false)
+              toast?.show({ message: t('customerAssigned'), tone: 'ok' })
+            }
+          })
+        }}
+        onOpenChange={setCustomerOpen}
+        open={customerOpen && orderEditable}
+        orderNumber={order.number}
+      />
+
+      {ordinaryFinance &&
+      order.status === 'pending' &&
+      paymentOrderId === order.id ? (
+        <OrderPaymentDrawer
+          accountingCurrency={currency}
+          busy={busy}
+          existing={order.payments}
+          onOpenChange={(next) => {
+            setPaymentOutcome(null)
+            setPaymentOrderId(next ? order.id : null)
+          }}
+          onSave={(payments, added) => void savePayment(payments, added)}
+          open
+          orderNumber={order.number}
+          orderValue={summary.value}
+          outcome={paymentOutcome}
+        />
+      ) : null}
+    </RedesignShell>
   )
 }
 

@@ -1,13 +1,16 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router'
-import { ArrowLeft } from 'lucide-react'
+import { AlertTriangle, ChevronRight } from 'lucide-react'
 import {
   Button,
+  DeniedState,
   Field,
   TextInput,
   Notice,
   SkeletonRows,
+  StateScreen,
 } from '@/components/app'
+import { cn } from '@/lib/utils'
 import { commonMessages, useLocale, useT } from '@/i18n'
 import {
   partImportsApi as api,
@@ -48,7 +51,7 @@ import {
 } from './import-model'
 import { importScreenMessages } from './messages'
 import { useImportT } from './use-import-text'
-import './imports.css'
+import { RedesignTitle } from '../redesign-shell'
 
 const steps = [
   'stepHistory',
@@ -82,7 +85,11 @@ export function ImportScreen(props: CabinetModuleScreenProps) {
   if (cabinet.status !== 'ready' || !cabinet.snapshot)
     return <SkeletonRows label={t('checkingAccess')} />
   if (!cabinet.snapshot.permissions.has('parts.manage'))
-    return <Notice tone="warn">{t('noAccess')}</Notice>
+    return (
+      <div className="rz-page">
+        <DeniedState title={t('noAccess')} />
+      </div>
+    )
   return (
     <ImportWorkspace
       key={`${cabinet.snapshot.tenantId}:${cabinet.snapshot.userId}:${cabinet.snapshot.generation}:${importId ?? 'history'}`}
@@ -657,59 +664,69 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
   }
   if (!caps)
     return error ? (
-      <Notice tone="danger">{error}</Notice>
+      <div className="rz-page">
+        <StateScreen
+          icon={<AlertTriangle aria-hidden />}
+          role="alert"
+          title={error}
+          tone="danger"
+        />
+      </div>
     ) : (
       <SkeletonRows label={t('loadingSettings')} />
     )
   return (
-    <div className="type-redesign import-workspace">
-      <header className="import-top">
-        <Button asChild>
+    <div className="grid min-w-0 content-start">
+      <header className="rz-topbar min-h-topbar h-auto flex-wrap justify-between gap-y-1.5 py-1.5">
+        <p className="rz-crumbs m-0 min-w-0">
           <Link to={cabinetPath(cabinet.targetTenant!.slug, 'parts')}>
-            <ArrowLeft aria-hidden />
             {t('toParts')}
           </Link>
-        </Button>
-        <span className="import-caption">{t('caption')}</span>
-        <div className="grow" />
-        {step > 0 && step < 5 ? (
-          <Button
-            disabled={busy}
-            onClick={() => {
-              void navigate(base)
-              setStep(0)
-            }}
-          >
-            {t('toHistory')}
-          </Button>
-        ) : null}
-        {step === 3 || step === 4 ? null : (
-          <Button
-            disabled={
-              busy ||
-              (step === 1 && !status?.source && !file) ||
-              (step === 1 &&
-                !!status?.source &&
-                !status.source.fields?.length) ||
-              (step === 2 && !editable)
-            }
-            onClick={next}
-            variant="primary"
-          >
-            {primary}
-          </Button>
-        )}
+          <ChevronRight aria-hidden className="size-3 flex-none" />
+          <span aria-current="page">{t('caption')}</span>
+        </p>
+        <div className="rz-topbar__actions flex-wrap items-center">
+          {step > 0 && step < 5 ? (
+            <Button
+              disabled={busy}
+              onClick={() => {
+                void navigate(base)
+                setStep(0)
+              }}
+            >
+              {t('toHistory')}
+            </Button>
+          ) : null}
+          {step === 3 || step === 4 ? null : (
+            <Button
+              disabled={
+                busy ||
+                (step === 1 && !status?.source && !file) ||
+                (step === 1 &&
+                  !!status?.source &&
+                  !status.source.fields?.length) ||
+                (step === 2 && !editable)
+              }
+              onClick={next}
+              // On the result the page's own next step is the primary one;
+              // going back to the history is just a way out.
+              variant={step === 5 ? 'ghost' : 'primary'}
+            >
+              {primary}
+            </Button>
+          )}
+        </div>
       </header>
-      <div className="import-body">
+      <div className={cn('rz-page min-w-0', step > 0 && 'max-w-[1240px]')}>
         {step === 0 ? null : (
-          <nav aria-label={t('stepsLabel')} className="import-steps">
-            {steps.slice(1).map((label, index) => {
-              // The rail is the flow only: history is where the flow starts
-              // from, not a step inside it, so it is numbered 1 through 5.
-              const i = index + 1
-              return (
-                <span className="import-steps__item" key={label}>
-                  <button
+          <nav aria-label={t('stepsLabel')}>
+            <ol className="rz-steps">
+              {steps.slice(1).map((label, index) => {
+                // The rail is the flow only: history is where the flow starts
+                // from, not a step inside it, so it is numbered 1 through 5.
+                const i = index + 1
+                return (
+                  <li
                     aria-current={step === i ? 'step' : undefined}
                     data-state={
                       step === i
@@ -720,40 +737,43 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
                           ? 'done'
                           : 'ahead'
                     }
-                    disabled={
-                      busy ||
-                      (i > 1 && !status?.source?.fields?.length) ||
-                      (i === 4 && !canConfirm) ||
-                      (i === 5 && !status?.execution)
-                    }
-                    onClick={() => setStep(i)}
-                    type="button"
+                    key={label}
                   >
-                    <span>{i}</span>
-                    {t(label)}
-                  </button>
-                  {i < steps.length - 1 ? (
-                    <span aria-hidden className="import-steps__arrow">
-                      →
-                    </span>
-                  ) : null}
-                </span>
-              )
-            })}
+                    <button
+                      className="inline-flex cursor-pointer items-center gap-2 border-0 bg-transparent p-0 font-[inherit] whitespace-nowrap text-inherit disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={
+                        busy ||
+                        (i > 1 && !status?.source?.fields?.length) ||
+                        (i === 4 && !canConfirm) ||
+                        (i === 5 && !status?.execution)
+                      }
+                      onClick={() => setStep(i)}
+                      type="button"
+                    >
+                      <span className="rz-steps__n">{i}</span>
+                      {t(label)}
+                    </button>
+                  </li>
+                )
+              })}
+            </ol>
           </nav>
         )}
-        <h1>{t(titles[step] ?? 'titleHistory')}</h1>
-        {step === 2 ? null : (
-          <p className="import-description">
-            {step === 1 && status?.status === 'Failed'
-              ? t('descriptionFailed')
-              : step === 1 && transfer !== null
-                ? transfer.loaded < transfer.total
-                  ? t('descriptionSending')
-                  : t('descriptionReading')
-                : t(descriptions[step] ?? 'descriptionHistory')}
-          </p>
-        )}
+        <RedesignTitle
+          title={t(titles[step] ?? 'titleHistory')}
+          {...(step === 2
+            ? {}
+            : {
+                lead:
+                  step === 1 && status?.status === 'Failed'
+                    ? t('descriptionFailed')
+                    : step === 1 && transfer !== null
+                      ? transfer.loaded < transfer.total
+                        ? t('descriptionSending')
+                        : t('descriptionReading')
+                      : t(descriptions[step] ?? 'descriptionHistory'),
+              })}
+        />
         {error && !(step === 4 && conflict) ? (
           <Notice
             tone="danger"
@@ -823,42 +843,41 @@ function ImportWorkspace({ definition }: CabinetModuleScreenProps) {
           />
         ) : null}
         {step === 2 && status?.source ? (
-          <div className="grid gap-4">
-            <section
-              aria-label={t('sourceRegion')}
-              className="border-app-line bg-app-raised grid gap-3 rounded-[20px] border p-5"
-            >
-              <h2 className="text-app-ink text-[15px] font-bold">
-                {t('sourceHeading')}
-              </h2>
-              {destinationUnknown && destination.type === 'newBatch' ? (
-                <Notice tone="warn">{t('sourceUnknown')}</Notice>
-              ) : null}
-              {destination.type === 'newBatch' ? (
-                <Field
-                  label={t('newBatchName')}
-                  hint={t('newBatchHint')}
-                  required
-                >
-                  <TextInput
-                    aria-label={t('newBatchName')}
-                    maxLength={200}
-                    disabled={busy || !editable}
-                    value={destination.batchName}
-                    onChange={(event) => {
-                      changed()
-                      setDestination({
-                        type: 'newBatch',
-                        batchName: event.target.value,
-                      })
-                    }}
-                  />
-                </Field>
-              ) : (
-                <p className="text-app-muted">
-                  {t('existingSource', { label: destinationLabel })}
-                </p>
-              )}
+          <div className="grid min-w-0 gap-4">
+            <section aria-label={t('sourceRegion')} className="rz-card">
+              <header className="rz-card__head py-2.5">
+                <h2 className="rz-h-card">{t('sourceHeading')}</h2>
+              </header>
+              <div className="rz-card__body grid gap-3">
+                {destinationUnknown && destination.type === 'newBatch' ? (
+                  <Notice tone="warn">{t('sourceUnknown')}</Notice>
+                ) : null}
+                {destination.type === 'newBatch' ? (
+                  <Field
+                    label={t('newBatchName')}
+                    hint={t('newBatchHint')}
+                    required
+                  >
+                    <TextInput
+                      aria-label={t('newBatchName')}
+                      maxLength={200}
+                      disabled={busy || !editable}
+                      value={destination.batchName}
+                      onChange={(event) => {
+                        changed()
+                        setDestination({
+                          type: 'newBatch',
+                          batchName: event.target.value,
+                        })
+                      }}
+                    />
+                  </Field>
+                ) : (
+                  <p className="text-app-muted m-0">
+                    {t('existingSource', { label: destinationLabel })}
+                  </p>
+                )}
+              </div>
             </section>
             {destinationInfo?.key === destinationKey &&
             destinationInfo.error ? (

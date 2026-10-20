@@ -27,16 +27,21 @@ export function Resource<T>({
   retry,
   children,
   errorContent,
+  framed = true,
 }: {
   state: LoadState<T>
   errorContent?: ReactNode
+  framed?: boolean
   retry: () => void
   children: (data: T) => ReactNode
 }) {
   const t = useT(inventoryMessages)
-  if (state.kind === 'loading') return <SkeletonRows label={t('loading')} />
+  const frame = (content: ReactNode) =>
+    framed ? <div className="rz-page">{content}</div> : content
+  if (state.kind === 'loading')
+    return frame(<SkeletonRows label={t('loading')} />)
   if (state.kind === 'error') {
-    return (
+    return frame(
       <>
         <Notice tone="danger">
           {t('loadFailed')}{' '}
@@ -45,7 +50,7 @@ export function Resource<T>({
           </button>
         </Notice>
         {errorContent}
-      </>
+      </>,
     )
   }
   return children(state.data)

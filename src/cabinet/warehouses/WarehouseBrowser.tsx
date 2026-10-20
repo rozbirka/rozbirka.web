@@ -55,14 +55,14 @@ export function WarehouseBrowser({
   return (
     <section
       aria-label={t('warehouses')}
-      className="location-browser border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
+      className="location-browser border-app-line bg-app-raised min-w-0 overflow-hidden rounded-panel border"
     >
       <LocationBrowserHeader
         title={t('warehousesList')}
         lead={t('warehousesLead')}
         search={
           <SearchInput
-            className="min-h-11 text-sm"
+            className="min-h-control text-sm"
             aria-label={t('searchWarehouses')}
             placeholder={tb('nameOrCode')}
             value={query}
@@ -119,13 +119,13 @@ export function WarehouseBrowser({
                         />
                         <dl className="location-browser__warehouse-counts">
                           <div className="location-browser__count">
-                            <dt className="text-app-muted text-[11px] lowercase md:sr-only">
+                            <dt className="text-app-muted text-micro lowercase md:sr-only">
                               {t('columnParts')}
                             </dt>
                             <dd
                               className={
                                 parts === null
-                                  ? 'text-app-muted font-sans text-[11px]'
+                                  ? 'text-app-muted font-sans text-micro'
                                   : undefined
                               }
                             >
@@ -135,7 +135,7 @@ export function WarehouseBrowser({
                             </dd>
                           </div>
                           <div className="location-browser__count">
-                            <dt className="text-app-muted text-[11px] lowercase md:sr-only">
+                            <dt className="text-app-muted text-micro lowercase md:sr-only">
                               {t('columnZones')}
                             </dt>
                             <dd>{f.number(item.zoneCount)}</dd>

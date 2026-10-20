@@ -184,7 +184,7 @@ it('returns from a cash register card to the cash directory', async () => {
   const user = userEvent.setup()
   render(<RouterProvider router={router} />)
 
-  await user.click(await screen.findByRole('link', { name: 'Гроші · Каси' }))
+  await user.click(await screen.findByRole('link', { name: 'Каси' }))
 
   await waitFor(() =>
     expect(router.state.location.pathname).toBe('/app/garage/cash'),
@@ -339,7 +339,7 @@ it('uses the Core manual movement enum values instead of generic income and expe
   )
 
   await user.click(await screen.findByRole('button', { name: 'Нова операція' }))
-  await user.click(screen.getByRole('button', { name: 'Витрата' }))
+  await user.click(screen.getByRole('radio', { name: 'Витрата' }))
   await user.type(screen.getByLabelText('Сума'), '25')
   await user.click(screen.getByRole('button', { name: 'Записати операцію' }))
 
@@ -498,7 +498,7 @@ it('submits one idempotent transfer from a side drawer and reloads the cash over
   const drawer = await screen.findByRole('dialog', {
     name: 'Переказ між касами',
   })
-  expect(drawer).toHaveClass('sm:right-0')
+  expect(drawer).toHaveClass('rz-sheet')
   await user.click(
     within(screen.getByRole('group', { name: 'Каса-отримувач' })).getByRole(
       'radio',
@@ -864,7 +864,7 @@ it('rotates a movement key when client-side navigation changes the register reso
   await act(async () => {
     await router.navigate('/app/garage/cash/cash-2')
   })
-  await screen.findByText('Гроші · Резервна каса')
+  await screen.findAllByText('Резервна каса')
   await user.click(screen.getByRole('button', { name: 'Записати операцію' }))
 
   expect(cashMocks.createTransaction).toHaveBeenNthCalledWith(
@@ -1231,7 +1231,7 @@ it('creates a UAH-only bank after selecting currencies for a cash register', asy
 
   await user.type(screen.getByLabelText('Назва'), 'Банківський рахунок')
   await user.click(screen.getByRole('button', { name: /USD/ }))
-  await user.click(screen.getByRole('button', { name: /Безготівкова/ }))
+  await user.click(screen.getByRole('radio', { name: /Безготівкова/ }))
   expect(
     screen.queryByRole('group', { name: 'Валюти' }),
   ).not.toBeInTheDocument()
@@ -1544,14 +1544,17 @@ it('names the manual movement direction and its signed amount before submitting'
   expect(screen.getByText('Надходження до каси «Основна каса»')).toBeVisible()
   expect(screen.getByText('+25 UAH')).toBeVisible()
 
-  const income = screen.getByRole('button', { name: 'Надходження' })
-  const expense = screen.getByRole('button', { name: 'Витрата' })
-  expect(income).toHaveAttribute('aria-pressed', 'true')
-  expect(income).toHaveClass('border-state-ok/70')
-  expect(expense).toHaveClass('border-state-danger/35')
+  // v2: the direction is a Segmented radio group (.rz-seg); the direction is
+  // read from the summary text and the sign, not from the toggle's colour.
+  const direction = screen.getByRole('group', { name: 'Тип операції' })
+  expect(direction).toHaveClass('rz-seg')
+  const income = within(direction).getByRole('radio', { name: 'Надходження' })
+  const expense = within(direction).getByRole('radio', { name: 'Витрата' })
+  expect(income).toBeChecked()
+  expect(expense).not.toBeChecked()
   await user.click(expense)
-  expect(expense).toHaveAttribute('aria-pressed', 'true')
-  expect(expense).toHaveClass('border-state-danger/70')
+  expect(expense).toBeChecked()
+  expect(income).not.toBeChecked()
   expect(screen.getByText('Витрата з каси «Основна каса»')).toBeVisible()
   expect(screen.getByText('−25 UAH')).toBeVisible()
 })
@@ -1624,10 +1627,7 @@ it('describes register form controls and offers a way out of the form', () => {
     screen.getByRole('textbox', { name: 'Назва' }),
   ).toHaveAccessibleDescription('Так каса підписана у звітах і переказах')
   expect(screen.getByRole('group', { name: 'Тип' })).toBeVisible()
-  expect(screen.getByRole('button', { name: /Готівкова/ })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  )
+  expect(screen.getByRole('radio', { name: /Готівкова/ })).toBeChecked()
   expect(screen.getByRole('button', { name: 'Скасувати' })).toBeVisible()
   expect(screen.getByRole('button', { name: 'Зберегти' })).toBeVisible()
   // Every supported currency, by ISO code and readable name, not ₴/$/€.

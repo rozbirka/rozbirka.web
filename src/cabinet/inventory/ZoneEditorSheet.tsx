@@ -41,8 +41,17 @@ export function ZoneEditorSheet({
 
   return (
     <Sheet
-      description={description ?? t('newZoneHint')}
-      eyebrow={eyebrow}
+      description={
+        <>
+          {eyebrow ? (
+            <>
+              <span>{eyebrow}</span>
+              <span aria-hidden> · </span>
+            </>
+          ) : null}
+          {description ?? t('newZoneHint')}
+        </>
+      }
       footer={
         <>
           <Button disabled={pending} onClick={onClose} type="button">

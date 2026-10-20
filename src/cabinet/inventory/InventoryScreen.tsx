@@ -195,11 +195,11 @@ function Overview() {
         )
 
         return (
-          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-              <p className="text-app-dim flex items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase">
+          <div className="grid content-start">
+            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
+              <p className="rz-crumbs flex-wrap">
                 <span>{ti('crumbWarehouse')}</span>
-                <span aria-hidden className="text-white/20">
+                <span aria-hidden className="text-app-dim">
                   /
                 </span>
                 <span className="text-app-muted">{ti('crumbInventory')}</span>
@@ -225,12 +225,12 @@ function Overview() {
               </div>
             </div>
 
-            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="rz-page">
               <div className="min-w-0">
-                <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+                <h1 className="rz-h-page break-words">
                   {ti('crumbInventory')}
                 </h1>
-                <p className="text-app-muted mt-3 text-[15px]">
+                <p className="rz-caption mt-1">
                   {last === null
                     ? t('noCompletedYet')
                     : t('lastCompleted', {
@@ -247,7 +247,7 @@ function Overview() {
                 />
               ) : null}
 
-              <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-px overflow-hidden rounded-[20px] border">
+              <div className="rz-kpis">
                 <StockStat
                   label={t('statActive')}
                   meta={
@@ -300,7 +300,7 @@ function Overview() {
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div
                   aria-label={t('segmentsLabel')}
-                  className="border-app-line bg-app-raised flex flex-wrap gap-1 rounded-xl border p-1"
+                  className="rz-seg flex-wrap"
                   role="radiogroup"
                 >
                   {OVERVIEW_SEGMENTS.map((option) => {
@@ -309,9 +309,9 @@ function Overview() {
                       <button
                         aria-checked={active}
                         className={cn(
-                          'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-bold',
+                          'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-control px-3.5 text-body font-bold',
                           active
-                            ? 'text-app-ink bg-white/[0.08]'
+                            ? 'text-app-strong bg-app-selected'
                             : 'text-app-muted hover:text-app-ink',
                         )}
                         key={option.value}
@@ -320,25 +320,25 @@ function Overview() {
                         type="button"
                       >
                         {t(option.label)}{' '}
-                        <span className="text-app-dim font-mono text-[11px] font-medium">
+                        <span className="text-app-dim font-mono text-micro font-medium">
                           {counts[option.value]}
                         </span>
                       </button>
                     )
                   })}
                 </div>
-                <p className="text-app-muted text-[13px]">
+                <p className="text-app-muted text-body">
                   {t('rowsSummary', { count: rows.length })}
                 </p>
               </div>
 
               <section
                 aria-label={t('sessionsLabel')}
-                className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
+                className="border-app-line bg-app-raised overflow-hidden rounded-panel border"
               >
                 <div
                   aria-hidden
-                  className="border-app-line text-app-muted hidden gap-4 border-b px-6 py-3 font-mono text-[10px] tracking-[0.14em] uppercase md:grid md:grid-cols-[1.6fr_1fr_9.5rem_7rem_6rem]"
+                  className="border-app-line text-app-muted hidden gap-4 border-b px-6 py-3 font-mono text-micro tracking-[var(--rz-ls-mono)] uppercase md:grid md:grid-cols-[1.6fr_1fr_9.5rem_7rem_6rem]"
                 >
                   <span>{t('colSession')}</span>
                   <span>{t('colWarehouseZones')}</span>
@@ -364,18 +364,18 @@ function Overview() {
                           key={item.id}
                         >
                           <Link
-                            className="grid items-center gap-x-4 gap-y-2 px-6 py-4 hover:bg-white/[0.03] md:grid-cols-[1.6fr_1fr_9.5rem_7rem_6rem]"
+                            className="grid items-center gap-x-4 gap-y-2 px-6 py-4 hover:bg-app-hover md:grid-cols-[1.6fr_1fr_9.5rem_7rem_6rem]"
                             to={`${base}/sessions/${item.id}`}
                           >
                             <span className="min-w-0">
-                              <span className="block text-[15px] font-bold tracking-[-0.01em] text-white">
+                              <span className="block text-title font-bold tracking-[-0.01em] text-app-strong">
                                 {item.number}
                               </span>
-                              <span className="text-app-muted mt-0.5 block text-[13px]">
+                              <span className="text-app-muted mt-0.5 block text-body">
                                 {ti('created', { date: date(item.createdAt) })}
                               </span>
                             </span>
-                            <span className="text-app-muted min-w-0 text-[14px]">
+                            <span className="text-app-muted min-w-0 text-body">
                               {houseOf(item)}
                               {zonesOf(item) === ''
                                 ? ''
@@ -398,13 +398,13 @@ function Overview() {
                                   style={{ width: `${String(percent)}%` }}
                                 />
                               </span>
-                              <span className="text-app-muted mt-1.5 block font-mono text-[12px]">
+                              <span className="text-app-muted mt-1.5 block font-mono text-caption">
                                 {ti('zonesProgress', { done, count: total })}
                               </span>
                             </span>
                             <span
                               className={cn(
-                                'font-mono text-[14px] tabular-nums',
+                                'font-mono text-body tabular-nums',
                                 item.status === 'draft'
                                   ? 'text-app-dim'
                                   : item.preview.conflictingPartCount === 0
@@ -412,7 +412,7 @@ function Overview() {
                                     : 'text-state-danger',
                               )}
                             >
-                              <span className="text-app-muted mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
+                              <span className="text-app-muted mr-2 text-micro tracking-[var(--rz-ls-mono)] uppercase md:hidden">
                                 {ti('discrepancies')}
                               </span>
                               {item.status === 'draft'
@@ -588,19 +588,19 @@ function NewSessionView() {
         const ready = selected.length > 0 && canManage
 
         return (
-          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+          <div className="grid content-start">
+            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
               <div className="flex min-w-0 items-center gap-5">
                 <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-app-hover"
                   to={base}
                 >
                   <ChevronLeft aria-hidden className="size-3.5" />
                   {ti('backToInventory')}
                 </Link>
-                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                <p className="rz-crumbs hidden sm:flex">
                   <span>{ti('crumbWarehouse')}</span>
-                  <span aria-hidden className="text-white/20">
+                  <span aria-hidden className="text-app-dim">
                     /
                   </span>
                   <span className="text-app-muted">{ti('crumbInventory')}</span>
@@ -625,12 +625,10 @@ function NewSessionView() {
               </div>
             </div>
 
-            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="rz-page">
               <div className="min-w-0">
-                <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                  {t('title')}
-                </h1>
-                <p className="text-app-muted mt-3 text-[15px]">{t('intro')}</p>
+                <h1 className="rz-h-page break-words">{t('title')}</h1>
+                <p className="rz-caption mt-1">{t('intro')}</p>
               </div>
 
               {!canManage ? (
@@ -654,12 +652,12 @@ function NewSessionView() {
                           <button
                             aria-checked={active}
                             className={cn(
-                              'focus-visible:outline-brand min-h-[70px] flex-[1_1_10rem] rounded-xl border px-4 py-3.5 text-left',
+                              'focus-visible:outline-brand min-h-[70px] flex-[1_1_10rem] rounded-panel border px-4 py-3.5 text-left',
                               active
-                                ? 'border-app-line-2 bg-white/[0.07]'
+                                ? 'border-app-line-2 bg-app-hover'
                                 : 'border-app-line bg-transparent',
                               option.available
-                                ? 'cursor-pointer hover:border-white/20'
+                                ? 'cursor-pointer hover:border-app-line-2'
                                 : 'cursor-not-allowed opacity-55',
                             )}
                             disabled={!option.available}
@@ -675,13 +673,13 @@ function NewSessionView() {
                           >
                             <span
                               className={cn(
-                                'block text-[15px] font-bold',
+                                'block text-title font-bold',
                                 active ? 'text-app-ink' : 'text-app-muted',
                               )}
                             >
                               {t(option.label)}
                             </span>
-                            <span className="text-app-muted mt-1.5 block text-[12px] leading-[1.4] font-medium">
+                            <span className="text-app-muted mt-1.5 block text-caption leading-[1.4] font-medium">
                               {t(option.hint)}
                             </span>
                           </button>
@@ -709,10 +707,10 @@ function NewSessionView() {
                             <button
                               aria-checked={active}
                               className={cn(
-                                'focus-visible:outline-brand min-h-11 cursor-pointer rounded-[10px] border px-4 text-[14px] font-semibold',
+                                'focus-visible:outline-brand min-h-control cursor-pointer rounded-control border px-4 text-body font-semibold',
                                 active
-                                  ? 'border-app-line-2 text-app-ink bg-white/[0.07]'
-                                  : 'border-app-line text-app-muted hover:border-white/20',
+                                  ? 'border-app-line-2 text-app-strong bg-app-selected'
+                                  : 'border-app-line text-app-muted hover:border-app-line-2',
                               )}
                               key={item.id}
                               onClick={() => {
@@ -741,13 +739,13 @@ function NewSessionView() {
                           <li key={zone.id}>
                             <label
                               className={cn(
-                                'flex w-full flex-wrap items-center gap-x-3.5 gap-y-1 rounded-xl border px-4 py-3.5',
+                                'flex w-full flex-wrap items-center gap-x-3.5 gap-y-1 rounded-panel border px-4 py-3.5',
                                 on
-                                  ? 'border-app-line-2 bg-white/[0.04]'
+                                  ? 'border-app-line-2 bg-app-hover'
                                   : 'border-app-line bg-app-canvas',
                                 type === 'full'
                                   ? 'cursor-not-allowed'
-                                  : 'cursor-pointer hover:border-white/20',
+                                  : 'cursor-pointer hover:border-app-line-2',
                               )}
                             >
                               <input
@@ -766,7 +764,7 @@ function NewSessionView() {
                               <span className="min-w-0 flex-[1_1_8rem]">
                                 <span
                                   className={cn(
-                                    'block text-[15px] font-bold',
+                                    'block text-title font-bold',
                                     type === 'full'
                                       ? 'text-app-muted'
                                       : 'text-app-ink',
@@ -774,13 +772,13 @@ function NewSessionView() {
                                 >
                                   {zone.name}
                                 </span>
-                                <span className="text-app-muted mt-0.5 block text-[13px]">
+                                <span className="text-app-muted mt-0.5 block text-body">
                                   {zone.code} · {zone.warehouseName}
                                 </span>
                               </span>
                               {/* Narrow screens give the count its own line
                                   rather than squeezing the zone's name. */}
-                              <span className="text-app-muted w-full pl-8.5 font-mono text-[13px] tabular-nums sm:w-auto sm:pl-0">
+                              <span className="text-app-muted w-full pl-8.5 font-mono text-body tabular-nums sm:w-auto sm:pl-0">
                                 {count === null
                                   ? '—'
                                   : ti('positions', { count })}
@@ -807,12 +805,12 @@ function NewSessionView() {
                         {people.map((person) => (
                           <li key={person.userId}>
                             <span
-                              className="border-app-line text-app-muted flex min-h-11 items-center gap-2.5 rounded-full border py-0 pr-4 pl-2 text-[14px] font-semibold"
+                              className="border-app-line text-app-muted flex min-h-control items-center gap-2.5 rounded-full border py-0 pr-4 pl-2 text-body font-semibold"
                               title={t('personHint')}
                             >
                               <span
                                 aria-hidden
-                                className="flex size-7 items-center justify-center rounded-full bg-white/[0.06] text-[12px] font-bold"
+                                className="flex size-7 items-center justify-center rounded-full bg-app-hover text-caption font-bold"
                               >
                                 {initials(person.name)}
                               </span>
@@ -860,16 +858,16 @@ function NewSessionView() {
 
                 <section
                   aria-label={t('scopeTitle')}
-                  className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-[18px] border px-5.5 pt-[22px] pb-6"
+                  className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-panel border px-5.5 pt-[22px] pb-6"
                 >
-                  <h2 className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
+                  <h2 className="text-app-dim font-mono text-micro tracking-[var(--rz-ls-mono)] uppercase">
                     {t('scopeTitle')}
                   </h2>
-                  <div className="border-app-line bg-app-canvas mt-4 rounded-[14px] border p-4">
-                    <p className="text-[17px] font-bold tracking-[-0.015em] text-white">
+                  <div className="border-app-line bg-app-canvas mt-4 rounded-panel border p-4">
+                    <p className="text-title font-bold tracking-[-0.015em] text-app-strong">
                       {houseName} · {typeName}
                     </p>
-                    <p className="text-app-muted mt-1 text-[14px]">
+                    <p className="text-app-muted mt-1 text-body">
                       {selected.length === 0
                         ? t('noZonesPicked')
                         : inHouse
@@ -879,48 +877,48 @@ function NewSessionView() {
                     </p>
                   </div>
                   <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
-                    <dt className="text-app-muted text-[14px] font-semibold">
+                    <dt className="text-app-muted text-body font-semibold">
                       {t('zonesCount')}
                     </dt>
-                    <dd className="font-mono text-[15px] text-white tabular-nums">
+                    <dd className="font-mono text-title text-app-strong tabular-nums">
                       {selected.length === 0 ? '—' : selected.length}
                     </dd>
-                    <dt className="text-app-muted text-[14px] font-semibold">
+                    <dt className="text-app-muted text-body font-semibold">
                       {t('positionsCount')}
                     </dt>
-                    <dd className="font-mono text-[15px] text-white tabular-nums">
+                    <dd className="font-mono text-title text-app-strong tabular-nums">
                       {byZone === null || selected.length === 0
                         ? '—'
                         : partsTotal}
                     </dd>
                     <dt
-                      className="text-app-muted text-[14px] font-semibold"
+                      className="text-app-muted text-body font-semibold"
                       title={t('peopleNotAssigned')}
                     >
                       {t('peopleCount')}
                     </dt>
-                    <dd className="text-app-dim font-mono text-[15px]">—</dd>
+                    <dd className="text-app-dim font-mono text-title">—</dd>
                     <dd
                       aria-hidden
                       className="bg-app-line col-span-2 my-1 h-px"
                     />
                     <dt
-                      className="text-[15px] font-bold text-white"
+                      className="text-title font-bold text-app-strong"
                       title={t('durationNotEstimated')}
                     >
                       {t('estimate')}
                     </dt>
-                    <dd className="text-app-dim font-mono text-[20px]">—</dd>
+                    <dd className="text-app-dim font-mono text-page">—</dd>
                   </dl>
                   <Button
-                    className="mt-5.5 min-h-11.5 w-full text-[15px] font-bold"
+                    className="mt-5.5 min-h-control-lg w-full text-title font-bold"
                     disabled={!ready || busy !== null}
                     onClick={() => void create(selected, true)}
                     variant="primary"
                   >
                     {busy === 'start' ? t('starting') : t('start')}
                   </Button>
-                  <p className="text-app-dim mt-3 text-[12px] leading-[1.5]">
+                  <p className="text-app-dim mt-3 text-caption leading-[1.5]">
                     {selected.length === 0 ? t('pickOne') : t('afterStart')}
                   </p>
                 </section>
@@ -952,12 +950,14 @@ function Toggle({
   const t = useT(newSessionMessages)
   return (
     <li
-      className="border-app-line bg-app-canvas flex items-center gap-3.5 rounded-xl border px-4 py-3.5"
+      className="border-app-line bg-app-canvas flex items-center gap-3.5 rounded-panel border px-4 py-3.5"
       title={why}
     >
       <span className="min-w-0 flex-1">
-        <span className="block text-[15px] font-bold text-white">{label}</span>
-        <span className="text-app-muted mt-0.5 block text-[13px] leading-[1.45]">
+        <span className="block text-title font-bold text-app-strong">
+          {label}
+        </span>
+        <span className="text-app-muted mt-0.5 block text-body leading-[1.45]">
           {hint} {why}.
         </span>
       </span>
@@ -965,7 +965,7 @@ function Toggle({
         aria-hidden
         className={cn(
           'flex h-6 w-10.5 shrink-0 items-center rounded-full p-[3px]',
-          on ? 'bg-brand' : 'bg-white/10',
+          on ? 'bg-brand' : 'bg-app-line-2',
         )}
       >
         <span
@@ -1167,19 +1167,19 @@ function SessionView({ id }: { id: string }) {
           .filter((name): name is string => name !== null)
 
         return (
-          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+          <div className="grid content-start">
+            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
               <div className="flex min-w-0 items-center gap-5">
                 <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-app-hover"
                   to={base}
                 >
                   <ChevronLeft aria-hidden className="size-3.5" />
                   {ti('backToInventory')}
                 </Link>
-                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                <p className="rz-crumbs hidden sm:flex">
                   <span>{ti('crumbInventory')}</span>
-                  <span aria-hidden className="text-white/20">
+                  <span aria-hidden className="text-app-dim">
                     /
                   </span>
                   <span className="text-app-muted">{session.number}</span>
@@ -1245,15 +1245,13 @@ function SessionView({ id }: { id: string }) {
               </div>
             </div>
 
-            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="rz-page">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-4">
-                  <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                    {session.number}
-                  </h1>
+                  <h1 className="rz-h-page break-words">{session.number}</h1>
                   <StatusPill tone={tone}>{label}</StatusPill>
                 </div>
-                <p className="text-app-muted mt-3 text-[15px]">
+                <p className="rz-caption mt-1">
                   {[
                     session.zones[0]?.warehouseName ?? null,
                     session.zones.length === 0
@@ -1285,7 +1283,7 @@ function SessionView({ id }: { id: string }) {
                     aside={
                       <div
                         aria-label={t('filterLabel')}
-                        className="border-app-line bg-app-canvas flex flex-wrap gap-1 rounded-[10px] border p-[3px]"
+                        className="border-app-line bg-app-canvas flex flex-wrap gap-1 rounded-control border p-[3px]"
                         role="radiogroup"
                       >
                         {SESSION_FILTERS.map((option) => {
@@ -1294,9 +1292,9 @@ function SessionView({ id }: { id: string }) {
                             <button
                               aria-checked={active}
                               className={cn(
-                                'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-[8px] px-3 text-[12px] font-bold',
+                                'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-control px-3 text-caption font-bold',
                                 active
-                                  ? 'text-app-ink bg-white/[0.08]'
+                                  ? 'text-app-strong bg-app-selected'
                                   : 'text-app-muted hover:text-app-ink',
                               )}
                               disabled={resultsFailed}
@@ -1306,7 +1304,7 @@ function SessionView({ id }: { id: string }) {
                               type="button"
                             >
                               {t(option.label)}{' '}
-                              <span className="text-app-dim font-mono text-[11px] font-medium">
+                              <span className="text-app-dim font-mono text-micro font-medium">
                                 {resultsFailed ? '—' : counts[option.value]}
                               </span>
                             </button>
@@ -1320,7 +1318,7 @@ function SessionView({ id }: { id: string }) {
                   >
                     <div
                       aria-hidden
-                      className="border-app-line text-app-muted hidden gap-3 border-y px-6 py-3 font-mono text-[10px] tracking-[0.14em] uppercase md:grid md:grid-cols-[7rem_minmax(0,1fr)_5.5rem_5.5rem_6rem]"
+                      className="border-app-line text-app-muted hidden gap-3 border-y px-6 py-3 font-mono text-micro tracking-[var(--rz-ls-mono)] uppercase md:grid md:grid-cols-[7rem_minmax(0,1fr)_5.5rem_5.5rem_6rem]"
                     >
                       <span>{t('colCode')}</span>
                       <span>{t('colPosition')}</span>
@@ -1350,30 +1348,30 @@ function SessionView({ id }: { id: string }) {
                             className="border-app-line grid items-center gap-x-3 gap-y-1 border-b px-6 py-3.5 last:border-0 md:grid-cols-[7rem_minmax(0,1fr)_5.5rem_5.5rem_6rem]"
                             key={part.partId}
                           >
-                            <span className="text-app-muted font-mono text-[14px]">
+                            <span className="text-app-muted font-mono text-body">
                               {part.partQrCode}
                             </span>
                             <span className="min-w-0">
-                              <span className="block text-[15px] font-semibold tracking-[-0.01em] text-white">
+                              <span className="block text-title font-semibold tracking-[-0.01em] text-app-strong">
                                 {part.partName}
                               </span>
                               {part.hasCoverageWarning ? (
-                                <span className="text-state-warn mt-0.5 block text-[12px]">
+                                <span className="text-state-warn mt-0.5 block text-caption">
                                   {t('coverageWarning')}
                                 </span>
                               ) : null}
                             </span>
-                            <span className="text-app-muted font-mono text-[14px] tabular-nums md:text-right">
+                            <span className="text-app-muted font-mono text-body tabular-nums md:text-right">
                               {/* Stacked rows lose the header row, so each
                                   number carries its own name below md. */}
-                              <span className="mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
+                              <span className="mr-2 text-micro tracking-[var(--rz-ls-mono)] uppercase md:hidden">
                                 {t('colExpected')}
                               </span>
                               {part.expectedQuantity}
                             </span>
                             <span
                               className={cn(
-                                'font-mono text-[14px] tabular-nums md:text-right',
+                                'font-mono text-body tabular-nums md:text-right',
                                 part.delta === 0
                                   ? 'text-app-muted'
                                   : part.delta > 0
@@ -1381,7 +1379,7 @@ function SessionView({ id }: { id: string }) {
                                     : 'text-state-danger',
                               )}
                             >
-                              <span className="text-app-muted mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
+                              <span className="text-app-muted mr-2 text-micro tracking-[var(--rz-ls-mono)] uppercase md:hidden">
                                 {t('colActual')}
                               </span>
                               {part.actualQuantity}
@@ -1430,26 +1428,26 @@ function SessionView({ id }: { id: string }) {
                             className="border-app-line flex flex-wrap items-center gap-x-3.5 gap-y-1 border-t px-6 py-3"
                             key={scan.id}
                           >
-                            <span className="text-app-dim w-13 shrink-0 font-mono text-[13px]">
+                            <span className="text-app-dim w-13 shrink-0 font-mono text-body">
                               {timeOfDay(scan.scannedAt)}
                             </span>
                             <Link
-                              className="text-app-ink w-24 shrink-0 font-mono text-[14px] hover:underline"
+                              className="text-app-ink w-24 shrink-0 font-mono text-body hover:underline"
                               to={`${base}/sessions/${id}/journal/${scan.zoneId}`}
                             >
                               {zoneName(scan.zoneId)}
                             </Link>
-                            <span className="text-app-muted order-last min-w-0 basis-full truncate text-[14px] sm:order-none sm:flex-1 sm:basis-auto">
+                            <span className="text-app-muted order-last min-w-0 basis-full truncate text-body sm:order-none sm:flex-1 sm:basis-auto">
                               {scan.partName}
                             </span>
                             {nameOf(scan.scannedBy) === null ? null : (
-                              <span className="text-app-muted text-[13px] whitespace-nowrap">
+                              <span className="text-app-muted text-body whitespace-nowrap">
                                 {nameOf(scan.scannedBy)}
                               </span>
                             )}
                             <span
                               className={cn(
-                                'min-w-12 text-right font-mono text-[13px] tabular-nums',
+                                'min-w-12 text-right font-mono text-body tabular-nums',
                                 scan.voidedAt != null
                                   ? 'text-state-danger line-through'
                                   : scan.unexpected
@@ -1469,16 +1467,16 @@ function SessionView({ id }: { id: string }) {
                 <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-5">
                   <section
                     aria-label={t('progress')}
-                    className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
+                    className="border-app-line bg-app-raised rounded-panel border px-6 pt-[22px] pb-6"
                   >
-                    <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+                    <h2 className="text-app-muted font-mono text-micro tracking-[var(--rz-ls-mono)] uppercase">
                       {t('progress')}
                     </h2>
                     <p className="mt-3 flex items-baseline gap-2.5">
-                      <span className="text-[34px] leading-none font-extrabold tracking-[-0.03em] tabular-nums text-white">
+                      <span className="text-display leading-none font-extrabold tracking-[var(--rz-ls-title)] tabular-nums text-app-strong">
                         {percent}%
                       </span>
-                      <span className="text-app-muted font-mono text-[14px]">
+                      <span className="text-app-muted font-mono text-body">
                         {ti('zonesProgress', {
                           done,
                           count: session.zones.length,
@@ -1498,22 +1496,22 @@ function SessionView({ id }: { id: string }) {
                       />
                     </span>
                     <dl className="border-app-line mt-4.5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5 border-t pt-4">
-                      <dt className="text-app-muted text-[14px] font-semibold">
+                      <dt className="text-app-muted text-body font-semibold">
                         {t('matched')}
                       </dt>
-                      <dd className="text-state-ok font-mono text-[15px] tabular-nums">
+                      <dd className="text-state-ok font-mono text-title tabular-nums">
                         {results === null ? '—' : matched}
                       </dd>
-                      <dt className="text-app-muted text-[14px] font-semibold">
+                      <dt className="text-app-muted text-body font-semibold">
                         {t('differing')}
                       </dt>
-                      <dd className="text-state-danger font-mono text-[15px] tabular-nums">
+                      <dd className="text-state-danger font-mono text-title tabular-nums">
                         {results === null ? '—' : differing}
                       </dd>
-                      <dt className="text-app-muted text-[14px] font-semibold">
+                      <dt className="text-app-muted text-body font-semibold">
                         {t('zonesLeft')}
                       </dt>
-                      <dd className="font-mono text-[15px] text-white tabular-nums">
+                      <dd className="font-mono text-title text-app-strong tabular-nums">
                         {session.zones.length - done}
                       </dd>
                     </dl>
@@ -1521,7 +1519,7 @@ function SessionView({ id }: { id: string }) {
                       <div className="mt-4.5 grid gap-2.5">
                         {session.status === 'draft' ? (
                           <Button
-                            className="min-h-11 w-full text-sm font-bold"
+                            className="min-h-control w-full text-sm font-bold"
                             disabled={acting}
                             onClick={() => setAsking('start')}
                             variant="primary"
@@ -1531,7 +1529,7 @@ function SessionView({ id }: { id: string }) {
                         ) : null}
                         {session.status === 'inProgress' ? (
                           <Button
-                            className="min-h-11 w-full text-sm font-bold"
+                            className="min-h-control w-full text-sm font-bold"
                             disabled
                             title={t('countingInApp')}
                             variant="primary"
@@ -1541,7 +1539,7 @@ function SessionView({ id }: { id: string }) {
                         ) : null}
                         {session.status === 'review' ? (
                           <Button
-                            className="min-h-11 w-full text-sm font-bold"
+                            className="min-h-control w-full text-sm font-bold"
                             disabled={acting}
                             onClick={() => setAsking('complete')}
                             variant="primary"
@@ -1551,7 +1549,7 @@ function SessionView({ id }: { id: string }) {
                         ) : null}
                         {session.status === 'review' ? (
                           <Button
-                            className="min-h-11 w-full text-sm font-semibold"
+                            className="min-h-control w-full text-sm font-semibold"
                             disabled={acting}
                             onClick={() => setAsking('reopen')}
                           >
@@ -1560,7 +1558,7 @@ function SessionView({ id }: { id: string }) {
                         ) : null}
                       </div>
                     ) : null}
-                    <p className="text-app-dim mt-3 text-[12px] leading-[1.5]">
+                    <p className="text-app-dim mt-3 text-caption leading-[1.5]">
                       {session.status === 'review'
                         ? t('hintReview')
                         : session.status === 'inProgress'
@@ -1579,14 +1577,14 @@ function SessionView({ id }: { id: string }) {
                           key={zone.zoneId}
                         >
                           <div className="min-w-0">
-                            <strong className="text-[15px] font-bold text-white">
+                            <strong className="text-title font-bold text-app-strong">
                               {zone.zoneName}
                             </strong>
-                            <p className="text-app-muted mt-0.5 text-[13px]">
+                            <p className="text-app-muted mt-0.5 text-body">
                               {zone.warehouseName} · {zone.zoneCode}
                             </p>
                             {zone.leaseOwnerUserId ? (
-                              <p className="text-state-warn mt-1.5 text-[12px]">
+                              <p className="text-state-warn mt-1.5 text-caption">
                                 {nameOf(zone.leaseOwnerUserId) === null
                                   ? t('leased', {
                                       date: date(zone.leaseExpiresAt),
@@ -1632,9 +1630,9 @@ function SessionView({ id }: { id: string }) {
                   {workers.length === 0 ? null : (
                     <section
                       aria-label={t('workers')}
-                      className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
+                      className="border-app-line bg-app-raised rounded-panel border px-6 pt-[22px] pb-6"
                     >
-                      <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+                      <h2 className="text-app-muted font-mono text-micro tracking-[var(--rz-ls-mono)] uppercase">
                         {t('workers')}
                       </h2>
                       <ul className="mt-4 grid gap-3.5">
@@ -1647,22 +1645,22 @@ function SessionView({ id }: { id: string }) {
                             >
                               <span
                                 aria-hidden
-                                className="bg-brand-soft text-brand flex size-[34px] shrink-0 items-center justify-center rounded-full text-[13px] font-bold"
+                                className="bg-brand-soft text-brand flex size-[34px] shrink-0 items-center justify-center rounded-full text-body font-bold"
                               >
                                 {initials(who ?? '?')}
                               </span>
                               <span className="min-w-0 flex-1">
-                                <span className="block text-[15px] font-semibold text-white">
+                                <span className="block text-title font-semibold text-app-strong">
                                   {who ??
                                     (team.allowed
                                       ? ti('teamNameUnavailable')
                                       : t('nameHidden'))}
                                 </span>
-                                <span className="text-app-muted mt-0.5 block text-[12px]">
+                                <span className="text-app-muted mt-0.5 block text-caption">
                                   {t('since', { time: timeOfDay(stat.since) })}
                                 </span>
                               </span>
-                              <span className="text-app-muted font-mono text-[14px] tabular-nums">
+                              <span className="text-app-muted font-mono text-body tabular-nums">
                                 {stat.count}
                               </span>
                             </li>
@@ -1670,7 +1668,7 @@ function SessionView({ id }: { id: string }) {
                         })}
                       </ul>
                       {!team.allowed ? (
-                        <p className="text-app-muted mt-3.5 text-[12px] leading-[1.5]">
+                        <p className="text-app-muted mt-3.5 text-caption leading-[1.5]">
                           {t('namesHidden')}
                         </p>
                       ) : null}
@@ -1679,9 +1677,9 @@ function SessionView({ id }: { id: string }) {
 
                   <section
                     aria-label={t('rules')}
-                    className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
+                    className="border-app-line bg-app-raised rounded-panel border px-6 pt-[22px] pb-6"
                   >
-                    <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
+                    <h2 className="text-app-muted font-mono text-micro tracking-[var(--rz-ls-mono)] uppercase">
                       {t('rules')}
                     </h2>
                     <ul className="mt-3.5 grid gap-2.5">
@@ -1788,7 +1786,7 @@ function Rule({
   return (
     <li
       className={cn(
-        'flex items-center gap-2.5 text-[13px] font-semibold',
+        'flex items-center gap-2.5 text-body font-semibold',
         on === true ? 'text-app-ink' : 'text-app-dim',
       )}
       title={why}
@@ -1796,8 +1794,8 @@ function Rule({
       <span
         aria-hidden
         className={cn(
-          'flex size-4.5 shrink-0 items-center justify-center rounded-full text-[11px] font-extrabold',
-          on === true ? 'bg-state-ok-soft text-state-ok' : 'bg-white/[0.06]',
+          'flex size-4.5 shrink-0 items-center justify-center rounded-full text-micro font-extrabold',
+          on === true ? 'bg-state-ok-soft text-state-ok' : 'bg-app-hover',
         )}
       >
         {on === true ? '✓' : on === false ? '' : '?'}
@@ -1953,23 +1951,23 @@ function ResultsView({ id }: { id: string }) {
         ].join(', ')
 
         return (
-          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+          <div className="grid content-start">
+            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
               <div className="flex min-w-0 items-center gap-5">
                 <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-app-hover"
                   to={`${base}/sessions/${id}`}
                 >
                   <ChevronLeft aria-hidden className="size-3.5" />
                   {t('backToSession')}
                 </Link>
-                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                <p className="rz-crumbs hidden sm:flex">
                   <span>{ti('crumbInventory')}</span>
-                  <span aria-hidden className="text-white/20">
+                  <span aria-hidden className="text-app-dim">
                     /
                   </span>
                   <span>{session.number}</span>
-                  <span aria-hidden className="text-white/20">
+                  <span aria-hidden className="text-app-dim">
                     /
                   </span>
                   <span className="text-app-muted">{t('crumbResults')}</span>
@@ -1985,15 +1983,13 @@ function ResultsView({ id }: { id: string }) {
               </div>
             </div>
 
-            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="rz-page">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-4">
-                  <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                    {t('title')}
-                  </h1>
+                  <h1 className="rz-h-page break-words">{t('title')}</h1>
                   <StatusPill tone={statusTone}>{statusLabel}</StatusPill>
                 </div>
-                <p className="text-app-muted mt-3 text-[15px]">
+                <p className="rz-caption mt-1">
                   {[
                     session.zones[0]?.warehouseName,
                     zones === '' ? null : t('zonesList', { zones }),
@@ -2018,7 +2014,7 @@ function ResultsView({ id }: { id: string }) {
               />
               <InventoryTeamStatus team={team} />
 
-              <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-px overflow-hidden rounded-[20px] border">
+              <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-px overflow-hidden rounded-panel border">
                 <JournalStat
                   label={t('statPositions')}
                   meta={ti('zones', { count: session.zones.length })}
@@ -2061,7 +2057,7 @@ function ResultsView({ id }: { id: string }) {
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div
                   aria-label={t('filterLabel')}
-                  className="border-app-line bg-app-raised flex flex-wrap gap-1 rounded-xl border p-1"
+                  className="rz-seg flex-wrap"
                   role="radiogroup"
                 >
                   {RESULT_FILTERS.map((option) => {
@@ -2070,9 +2066,9 @@ function ResultsView({ id }: { id: string }) {
                       <button
                         aria-checked={active}
                         className={cn(
-                          'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-bold',
+                          'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-control px-3.5 text-body font-bold',
                           active
-                            ? 'text-app-ink bg-white/[0.08]'
+                            ? 'text-app-strong bg-app-selected'
                             : 'text-app-muted hover:text-app-ink',
                         )}
                         key={option.value}
@@ -2081,7 +2077,7 @@ function ResultsView({ id }: { id: string }) {
                         type="button"
                       >
                         {t(option.label)}{' '}
-                        <span className="text-app-dim font-mono text-[11px] font-medium">
+                        <span className="text-app-dim font-mono text-micro font-medium">
                           {counts[option.value]}
                         </span>
                       </button>
@@ -2089,7 +2085,7 @@ function ResultsView({ id }: { id: string }) {
                   })}
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
-                  <p className="text-app-dim text-[13px]">
+                  <p className="text-app-dim text-body">
                     {differing.length === 0
                       ? t('noDiffs')
                       : t('decisionsMade', {
@@ -2101,7 +2097,7 @@ function ResultsView({ id }: { id: string }) {
                   </p>
                   {decidable.length > 0 ? (
                     <Button
-                      className="min-h-9 px-3.5 text-[13px] font-semibold"
+                      className="min-h-9 px-3.5 text-body font-semibold"
                       onClick={() => {
                         setReason('')
                         setAsking(decidable)
@@ -2115,7 +2111,7 @@ function ResultsView({ id }: { id: string }) {
 
               <section
                 aria-label={t('tableLabel')}
-                className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
+                className="border-app-line bg-app-raised overflow-hidden rounded-panel border"
               >
                 <DataTable
                   caption={t('caption')}
@@ -2124,7 +2120,7 @@ function ResultsView({ id }: { id: string }) {
                       key: 'code',
                       label: t('colCode'),
                       cell: (part) => (
-                        <span className="text-app-muted font-mono text-[13px]">
+                        <span className="text-app-muted font-mono text-body">
                           {part.partQrCode}
                         </span>
                       ),
@@ -2135,11 +2131,11 @@ function ResultsView({ id }: { id: string }) {
                       variant: 'primary',
                       cell: (part) => (
                         <span className="grid gap-0.5">
-                          <span className="font-semibold text-white">
+                          <span className="font-semibold text-app-strong">
                             {part.partName}
                           </span>
                           {part.hasCoverageWarning ? (
-                            <span className="text-state-warn text-[12px]">
+                            <span className="text-state-warn text-caption">
                               {t('notAllZones')}
                             </span>
                           ) : null}
@@ -2240,7 +2236,7 @@ function ResultsView({ id }: { id: string }) {
                     <dt className="text-app-muted text-sm font-semibold">
                       {t('writeOff')}
                     </dt>
-                    <dd className="text-state-danger font-mono text-[15px] tabular-nums">
+                    <dd className="text-state-danger font-mono text-title tabular-nums">
                       {shortage === 0
                         ? '—'
                         : t('quantity', { count: String(shortage) })}
@@ -2248,18 +2244,18 @@ function ResultsView({ id }: { id: string }) {
                     <dt className="text-app-muted text-sm font-semibold">
                       {t('addSurplus')}
                     </dt>
-                    <dd className="text-state-ok font-mono text-[15px] tabular-nums">
+                    <dd className="text-state-ok font-mono text-title tabular-nums">
                       {surplus === 0
                         ? '—'
                         : t('quantity', { count: `+${String(surplus)}` })}
                     </dd>
                     <div className="bg-app-line col-span-2 my-0.5 h-px" />
-                    <dt className="text-[15px] font-bold text-white">
+                    <dt className="text-title font-bold text-app-strong">
                       {t('quantityChange')}
                     </dt>
                     <dd
                       className={cn(
-                        'font-mono text-[19px] tabular-nums',
+                        'font-mono text-title tabular-nums',
                         shortage + surplus === 0
                           ? 'text-app-muted'
                           : shortage + surplus > 0
@@ -2276,7 +2272,7 @@ function ResultsView({ id }: { id: string }) {
                     </dd>
                   </dl>
                   <p
-                    className="text-app-dim mt-4 text-[13px] leading-[1.5]"
+                    className="text-app-dim mt-4 text-body leading-[1.5]"
                     title={t('noCostTitle')}
                   >
                     {t('noCost')}
@@ -2300,13 +2296,13 @@ function ResultsView({ id }: { id: string }) {
                     )}
                   </ul>
                   {decidable.length > 0 && hasBlocked ? (
-                    <p className="text-app-dim mt-5 text-[13px] leading-[1.5]">
+                    <p className="text-app-dim mt-5 text-body leading-[1.5]">
                       {t('coverageBlocked')}
                     </p>
                   ) : null}
                   {decidable.length > 0 ? (
                     <Button
-                      className="mt-5 min-h-11 w-full text-sm font-bold"
+                      className="mt-5 min-h-control w-full text-sm font-bold"
                       onClick={() => {
                         setReason('')
                         setAsking(decidable)
@@ -2316,7 +2312,7 @@ function ResultsView({ id }: { id: string }) {
                       {t('applyDecisions', { count: decidable.length })}
                     </Button>
                   ) : (
-                    <p className="text-app-dim mt-5 text-[13px] leading-[1.5]">
+                    <p className="text-app-dim mt-5 text-body leading-[1.5]">
                       {differing.length === 0
                         ? t('nothingToApply')
                         : session.status === 'review'
@@ -2403,7 +2399,7 @@ function ResultDecision({
   if (part.hasCoverageWarning)
     return (
       <span
-        className="text-app-dim text-[12px]"
+        className="text-app-dim text-caption"
         title={t('partialCoverageWhy')}
       >
         {t('partialCoverage')}
@@ -2411,11 +2407,11 @@ function ResultDecision({
     )
   if (!canAdjust)
     return (
-      <span className="text-app-dim text-[12px]">{t('noAdjustRight')}</span>
+      <span className="text-app-dim text-caption">{t('noAdjustRight')}</span>
     )
   if (status !== 'review')
     return (
-      <span className="text-app-dim text-[12px]">{t('awaitingReview')}</span>
+      <span className="text-app-dim text-caption">{t('awaitingReview')}</span>
     )
   return (
     <Button
@@ -2443,7 +2439,7 @@ const auditKind = (event: InventoryAuditEvent): AuditKind => {
 type AuditKind = 'decision' | 'scan' | 'session'
 
 const AUDIT_KINDS: Record<AuditKind, { label: AuditKey; dot: string }> = {
-  decision: { label: 'kindDecision', dot: 'bg-brand' },
+  decision: { label: 'kindDecision', dot: 'bg-state-info' },
   scan: { label: 'kindScan', dot: 'bg-state-info' },
   session: { label: 'kindSession', dot: 'bg-state-ok' },
 }
@@ -2516,23 +2512,23 @@ function AuditView({ id }: { id: string }) {
         const warehouse = session.zones[0]?.warehouseName ?? null
 
         return (
-          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+          <div className="grid content-start">
+            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
               <div className="flex min-w-0 items-center gap-5">
                 <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-app-hover"
                   to={`${base}/sessions/${id}`}
                 >
                   <ChevronLeft aria-hidden className="size-3.5" />
                   {t('backToSession')}
                 </Link>
-                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                <p className="rz-crumbs hidden sm:flex">
                   <span>{ti('crumbInventory')}</span>
-                  <span aria-hidden className="text-white/20">
+                  <span aria-hidden className="text-app-dim">
                     /
                   </span>
                   <span>{session.number}</span>
-                  <span aria-hidden className="text-white/20">
+                  <span aria-hidden className="text-app-dim">
                     /
                   </span>
                   <span className="text-app-muted">{t('crumbAudit')}</span>
@@ -2552,12 +2548,10 @@ function AuditView({ id }: { id: string }) {
               </div>
             </div>
 
-            <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="rz-page">
               <div className="min-w-0">
-                <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                  {t('title')}
-                </h1>
-                <p className="text-app-muted mt-3 text-[15px]">
+                <h1 className="rz-h-page break-words">{t('title')}</h1>
+                <p className="rz-caption mt-1">
                   {[
                     warehouse,
                     zones === '' ? null : t('zonesList', { zones }),
@@ -2575,7 +2569,7 @@ function AuditView({ id }: { id: string }) {
               <div className="flex flex-wrap items-center gap-3">
                 <div
                   aria-label={t('filterLabel')}
-                  className="border-app-line bg-app-raised flex flex-wrap gap-1 rounded-xl border p-1"
+                  className="rz-seg flex-wrap"
                   role="radiogroup"
                 >
                   {AUDIT_FILTERS.map((option) => {
@@ -2584,9 +2578,9 @@ function AuditView({ id }: { id: string }) {
                       <button
                         aria-checked={active}
                         className={cn(
-                          'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-bold',
+                          'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-control px-3.5 text-body font-bold',
                           active
-                            ? 'text-app-ink bg-white/[0.08]'
+                            ? 'text-app-strong bg-app-selected'
                             : 'text-app-muted hover:text-app-ink',
                         )}
                         key={option.value}
@@ -2598,7 +2592,7 @@ function AuditView({ id }: { id: string }) {
                         type="button"
                       >
                         {t(option.label)}{' '}
-                        <span className="text-app-dim font-mono text-[11px] font-medium">
+                        <span className="text-app-dim font-mono text-micro font-medium">
                           {counts[option.value]}
                         </span>
                       </button>
@@ -2620,7 +2614,7 @@ function AuditView({ id }: { id: string }) {
 
               <section
                 aria-label={t('logLabel')}
-                className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-6 pb-2"
+                className="border-app-line bg-app-raised rounded-panel border px-6 pt-6 pb-2"
               >
                 {visible.length === 0 ? (
                   <p className="text-app-muted py-6 text-center text-sm">
@@ -2649,21 +2643,21 @@ function AuditView({ id }: { id: string }) {
                           </span>
                           <span className="min-w-0 flex-1 pb-5.5">
                             <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                              <span className="text-[15px] font-bold text-white">
+                              <span className="text-title font-bold text-app-strong">
                                 {auditTitle(event.action, locale)}
                               </span>
-                              <span className="border-app-line-2 text-app-muted inline-flex h-[22px] items-center rounded-full border bg-white/[0.05] px-2.5 text-[11px] font-bold">
+                              <span className="border-app-line-2 text-app-muted inline-flex h-[22px] items-center rounded-full border bg-app-hover px-2.5 text-micro font-bold">
                                 {t(AUDIT_KINDS[kind].label)}
                               </span>
-                              <span className="text-app-dim font-mono text-[12px]">
+                              <span className="text-app-dim font-mono text-caption">
                                 {date(event.createdAt)}
                               </span>
                             </span>
-                            <span className="text-app-muted mt-1 block text-[13px]">
+                            <span className="text-app-muted mt-1 block text-body">
                               {nameOf(event.actorUserId) ?? t('actorUnknown')}
                             </span>
                             {change === null ? null : (
-                              <span className="border-app-line bg-app-input mt-2.5 inline-flex items-center gap-3 rounded-[10px] border px-3.5 py-2 font-mono text-[13px]">
+                              <span className="border-app-line bg-app-input mt-2.5 inline-flex items-center gap-3 rounded-control border px-3.5 py-2 font-mono text-body">
                                 <span className="text-app-muted line-through">
                                   {change.from}
                                 </span>
@@ -2671,11 +2665,13 @@ function AuditView({ id }: { id: string }) {
                                   aria-hidden
                                   className="text-app-dim size-3.5"
                                 />
-                                <span className="text-white">{change.to}</span>
+                                <span className="text-app-strong">
+                                  {change.to}
+                                </span>
                               </span>
                             )}
                             {raw && event.detailsJson ? (
-                              <span className="border-app-line bg-app-input text-app-muted mt-2.5 block rounded-[9px] border px-3 py-2.5 font-mono text-[11px] leading-[1.55] break-all">
+                              <span className="border-app-line bg-app-input text-app-muted mt-2.5 block rounded-control border px-3 py-2.5 font-mono text-micro leading-[1.55] break-all">
                                 {event.detailsJson}
                               </span>
                             ) : null}
@@ -2689,7 +2685,7 @@ function AuditView({ id }: { id: string }) {
 
               {rows.length > 0 ? (
                 <div className="flex flex-wrap items-center justify-between gap-4">
-                  <p className="text-app-dim text-[13px]">
+                  <p className="text-app-dim text-body">
                     {t('shown', {
                       visible: visible.length,
                       count: rows.length,
@@ -2697,7 +2693,7 @@ function AuditView({ id }: { id: string }) {
                   </p>
                   {visible.length < rows.length ? (
                     <Button
-                      className="min-h-10 px-4 text-[13px] font-bold"
+                      className="min-h-10 px-4 text-body font-bold"
                       onClick={() => setShown((value) => value + AUDIT_PAGE)}
                     >
                       {t('showMore', {
@@ -2837,21 +2833,21 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
         const backTo = `${base}/sessions/${id}`
 
         return (
-          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
+          <div className="grid content-start">
+            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
               <div className="flex min-w-0 items-center gap-5">
                 <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-app-hover"
                   to={backTo}
                 >
                   <ChevronLeft aria-hidden className="size-3.5" />
                   {t('backToSession')}
                 </Link>
-                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                <p className="rz-crumbs hidden sm:flex">
                   <span>{t('crumbSession', { number: session.number })}</span>
                   {zone ? (
                     <>
-                      <span aria-hidden className="text-white/20">
+                      <span aria-hidden className="text-app-dim">
                         /
                       </span>
                       <span className="text-app-muted">{zone.zoneCode}</span>
@@ -2868,12 +2864,12 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
               </div>
             </div>
 
-            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="rz-page">
               <div className="min-w-0">
-                <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+                <h1 className="rz-h-page break-words">
                   {zone ? t('titleZone', { zone: zone.zoneCode }) : t('title')}
                 </h1>
-                <p className="text-app-muted mt-3 text-[15px]">
+                <p className="rz-caption mt-1">
                   {[
                     zone?.warehouseName,
                     zone?.zoneName,
@@ -2901,7 +2897,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                 />
               ) : null}
 
-              <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-px overflow-hidden rounded-[20px] border">
+              <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-px overflow-hidden rounded-panel border">
                 <JournalStat
                   label={t('statScans')}
                   meta={ti('positions', {
@@ -2949,7 +2945,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
               <div className="flex flex-wrap items-center gap-3">
                 <div
                   aria-label={t('filterLabel')}
-                  className="border-app-line bg-app-raised flex gap-1 rounded-xl border p-1"
+                  className="rz-seg"
                   role="radiogroup"
                 >
                   {JOURNAL_FILTERS.map((option) => {
@@ -2961,9 +2957,9 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                       <button
                         aria-checked={active}
                         className={cn(
-                          'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-bold disabled:cursor-not-allowed disabled:opacity-50',
+                          'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-control px-3.5 text-body font-bold disabled:cursor-not-allowed disabled:opacity-50',
                           active
-                            ? 'text-app-ink bg-white/[0.08]'
+                            ? 'text-app-strong bg-app-selected'
                             : 'text-app-muted hover:text-app-ink',
                         )}
                         disabled={locked}
@@ -2983,7 +2979,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                         type="button"
                       >
                         {t(option.label)}{' '}
-                        <span className="text-app-dim font-mono text-[11px] font-medium">
+                        <span className="text-app-dim font-mono text-micro font-medium">
                           {results === null && option.value !== 'all'
                             ? '—'
                             : counts[option.value]}
@@ -3008,9 +3004,9 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                       <button
                         aria-checked={who === person.id}
                         className={cn(
-                          'focus-visible:outline-brand min-h-9 cursor-pointer rounded-full border px-3.5 text-[13px] font-semibold',
+                          'focus-visible:outline-brand min-h-9 cursor-pointer rounded-full border px-3.5 text-body font-semibold',
                           who === person.id
-                            ? 'border-app-line-2 bg-app-input text-white'
+                            ? 'border-app-line-2 bg-app-input text-app-strong'
                             : 'border-app-line text-app-muted hover:text-app-ink',
                         )}
                         key={person.id}
@@ -3041,7 +3037,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
 
               <section
                 aria-label={t('title')}
-                className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
+                className="border-app-line bg-app-raised overflow-hidden rounded-panel border"
               >
                 <DataTable
                   caption={t('caption')}
@@ -3050,7 +3046,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                       key: 'time',
                       label: t('colTime'),
                       cell: (scan) => (
-                        <span className="text-app-dim font-mono text-[13px]">
+                        <span className="text-app-dim font-mono text-body">
                           {timeOfDay(scan.scannedAt)}
                         </span>
                       ),
@@ -3061,21 +3057,21 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                       variant: 'primary',
                       cell: (scan) => (
                         <span className="grid gap-0.5">
-                          <span className="font-semibold text-white">
+                          <span className="font-semibold text-app-strong">
                             {scan.partName}
                           </span>
-                          <span className="text-app-dim font-mono text-[12px]">
+                          <span className="text-app-dim font-mono text-caption">
                             {scan.partQrCode}
                           </span>
                           {/* Facts about this scan rather than about the
                               total, so they stay beside the part. */}
                           {scan.voidReason == null ? null : (
-                            <span className="text-app-muted text-[12px]">
+                            <span className="text-app-muted text-caption">
                               {scan.voidReason}
                             </span>
                           )}
                           {scan.unexpected && scan.voidedAt == null ? (
-                            <span className="text-state-warn text-[12px]">
+                            <span className="text-state-warn text-caption">
                               {t('unexpected')}
                             </span>
                           ) : null}
@@ -3107,7 +3103,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                       label: t('colScan'),
                       align: 'end',
                       cell: (scan) => (
-                        <span className="font-mono text-white tabular-nums">
+                        <span className="font-mono text-app-strong tabular-nums">
                           {resultOf(scan.partId)?.actualQuantity ??
                             scan.zonePartCount}
                         </span>
@@ -3163,7 +3159,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                 />
                 {rows.length > 0 ? (
                   <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-t px-6 py-4">
-                    <p className="text-app-dim text-[13px]">
+                    <p className="text-app-dim text-body">
                       {t('shown', {
                         visible: visible.length,
                         count: rows.length,
@@ -3171,7 +3167,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                     </p>
                     {visible.length < rows.length ? (
                       <Button
-                        className="min-h-9 px-3.5 text-[13px] font-bold"
+                        className="min-h-9 px-3.5 text-body font-bold"
                         onClick={() =>
                           setShown((value) => value + JOURNAL_PAGE)
                         }
@@ -3189,11 +3185,11 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                   className="grid gap-4.5"
                 >
                   <div className="flex items-baseline gap-3.5">
-                    <h2 className="text-app-muted font-mono text-[11px] tracking-[0.16em] uppercase">
+                    <h2 className="text-app-muted font-mono text-micro tracking-[0.16em] uppercase">
                       {t('pendingZones')}
                     </h2>
                     <span aria-hidden className="bg-app-line h-px flex-1" />
-                    <span className="text-app-dim text-[13px]">
+                    <span className="text-app-dim text-body">
                       {ti('zones', { count: pending.length })}
                     </span>
                   </div>
@@ -3201,7 +3197,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                     {pending.map((item) => (
                       <li key={item.zoneId}>
                         <Link
-                          className="border-app-line-2 text-app-muted hover:text-app-ink block rounded-[11px] border border-dashed bg-white/[0.02] px-3 py-2.5 text-center font-mono text-[13px] hover:bg-white/[0.05]"
+                          className="border-app-line-2 text-app-muted hover:text-app-ink block rounded-control border border-dashed bg-app-hover px-3 py-2.5 text-center font-mono text-body hover:bg-app-hover"
                           to={`${base}/sessions/${id}/journal/${item.zoneId}`}
                         >
                           {item.zoneCode}
@@ -3235,26 +3231,26 @@ function JournalStat({
 }) {
   return (
     <div className="bg-app-raised px-6 pt-[22px] pb-6">
-      <p className="text-app-muted font-mono text-[11px] tracking-[0.14em] uppercase">
+      <p className="text-app-muted font-mono text-micro tracking-[var(--rz-ls-mono)] uppercase">
         {label}
       </p>
       <p className="mt-3.5 flex items-baseline gap-2">
         <span
           className={cn(
-            'text-[30px] leading-none font-extrabold tracking-[-0.03em] tabular-nums',
-            tone === 'danger' ? 'text-state-danger' : 'text-white',
+            'text-display leading-none font-extrabold tracking-[var(--rz-ls-title)] tabular-nums',
+            tone === 'danger' ? 'text-state-danger' : 'text-app-strong',
           )}
         >
           {value}
         </span>
         {unit === undefined ? null : (
-          <span className="text-app-muted font-mono text-[13px] font-medium">
+          <span className="text-app-muted font-mono text-body font-medium">
             {unit}
           </span>
         )}
       </p>
       {meta === undefined ? null : (
-        <p className="text-app-dim mt-3.5 text-[13px]">{meta}</p>
+        <p className="text-app-dim mt-3.5 text-body">{meta}</p>
       )}
     </div>
   )

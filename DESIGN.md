@@ -9,14 +9,17 @@ focused product flow; billing belongs to the existing cabinet. Preserve this
 identity when extending login or registration, rather than introducing a second
 visual system.
 
-Runtime tokens are canonical in `src/index.css`: orange brand `#f77425`, canvas
-`#0b0b0b`, raised surface `#121212`, input `#191919`, ink `#f6f4f2`, muted text
-`#a29b93`. Existing typography uses the app's system sans with Manrope and
-JetBrains Mono in its redesigned cabinet scope; marketing retains Visuelt Hero.
-Do not duplicate or replace these values in screen-local CSS.
+The cabinet and auth follow the Rozbirka Design System v2 in
+`docs/design-system/` one to one; read its `CLAUDE.md` before any UI change.
+Its tokens and kit are generated into `src/styles/` (`npm run ds:sync`) and the
+Tailwind names in `src/index.css` only point at them: orange brand `#f77425`,
+canvas `#0b0b0b`, surface `#121212`, input `#191919`, text `#f6f4f2`, muted
+`#a29b93`, Manrope + JetBrains Mono, a 4-step radius scale and a 7-step type
+scale. Marketing retains Visuelt Hero. Do not duplicate or replace these values
+in screen-local CSS.
 
-Authentication reuses `src/screens/login.tsx`'s 420px column, BrandLogo, step
-headers and shared app Button, Field, TextInput and Notice components. Login and
+Authentication reuses `src/screens/login.tsx`'s 420px column, the v2 brand mark,
+step headers and shared app Button, Field, TextInput and Notice components. Login and
 registration are explicit business variants of the same flow. Localized text
 names the action; invitation context survives both variants. Language names are
 always written in their own language with a matching `lang` attribute. Billing preserves

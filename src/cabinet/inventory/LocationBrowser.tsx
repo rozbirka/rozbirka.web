@@ -124,7 +124,7 @@ export function LocationBrowser({
         search={
           printWorkspace ? null : (
             <SearchInput
-              className="min-h-11 text-sm"
+              className="min-h-control text-sm"
               aria-label={t(section ? 'searchShelves' : 'searchSections')}
               placeholder={t('nameOrCode')}
               value={query}
@@ -141,7 +141,7 @@ export function LocationBrowser({
           <>
             {canManage ? (
               <Button
-                className="px-3 text-[13px] sm:px-4 sm:text-sm"
+                className="px-3 text-body sm:px-4 sm:text-sm"
                 variant="primary"
                 onClick={() =>
                   section ? onAddShelf(section) : onAddSection(zone)

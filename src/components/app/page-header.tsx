@@ -18,24 +18,13 @@ export function PageHeader({
   className?: string
 }) {
   return (
-    <header
-      className={cn(
-        'flex flex-wrap items-end justify-between gap-3',
-        className,
-      )}
-    >
+    <header className={cn('rz-page-head justify-between', className)}>
       <div className="min-w-0">
-        {eyebrow === undefined ? null : (
-          <p className="text-app-dim font-mono text-[11.5px] tracking-[0.12em] uppercase">
-            {eyebrow}
-          </p>
-        )}
-        <h1 className="mt-1 text-2xl font-semibold tracking-[-0.02em] text-white">
-          {title}
-        </h1>
+        {eyebrow === undefined ? null : <p className="rz-eyebrow">{eyebrow}</p>}
+        <h1 className="rz-h-page mt-1">{title}</h1>
       </div>
       {actions === undefined ? null : (
-        <div className="flex flex-wrap gap-2">{actions}</div>
+        <div className="rz-btn-row">{actions}</div>
       )}
     </header>
   )
@@ -55,7 +44,7 @@ export function PageBody({
   return (
     <section
       className={cn(
-        'mx-auto grid w-full min-w-0 gap-4',
+        'grid w-full min-w-0 gap-3',
         width === 'wide' ? 'max-w-none' : 'max-w-3xl',
         className,
       )}

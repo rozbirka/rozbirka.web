@@ -18,7 +18,7 @@ export function InventoryRefreshStatus({
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-app-dim text-[13px]">
+        <p className="text-app-dim text-body">
           {state.updatedAt === null
             ? null
             : t('updatedAt', {
