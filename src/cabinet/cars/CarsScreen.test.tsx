@@ -362,7 +362,7 @@ it('refetches authoritative detail after an expense mutation and disables duplic
   await screen.findByRole('heading', { name: /BMW X5/ })
   await user.click(screen.getByRole('button', { name: 'Додати витрату' }))
   const form = within(await screen.findByRole('dialog'))
-  expect(screen.getByRole('dialog')).toHaveClass('sm:right-0')
+  expect(screen.getByRole('dialog')).toHaveClass('rz-sheet')
   await user.type(form.getByLabelText('Назва витрати'), 'Транспорт')
   await user.type(form.getByLabelText('Сума витрати'), '500')
   const save = form.getByRole('button', { name: 'Додати витрату' })

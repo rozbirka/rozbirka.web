@@ -11,7 +11,7 @@ function Runs({ runs }: { runs: Run[] }) {
     if ('strong' in run) return <strong key={index}>{run.strong}</strong>
     return (
       <a
-        className="text-brand underline-offset-2 hover:underline"
+        className="underline-offset-2 hover:underline"
         href={`mailto:${PRIVACY_MAIL}`}
         key={index}
       >
@@ -27,12 +27,10 @@ export function PrivacyTranslationBody({
   translation: PrivacyTranslation
 }) {
   return (
-    <div className="prose-content mt-12 space-y-10 text-[15px] leading-relaxed text-foreground/85">
+    <div className="prose-content text-input text-app-ink mt-6 space-y-8 leading-relaxed">
       {translation.sections.map((section) => (
         <section key={section.title}>
-          <h2 className="mb-3 text-xl font-medium text-foreground">
-            {section.title}
-          </h2>
+          <h2 className="rz-h-title mb-3">{section.title}</h2>
           {section.blocks.map((block, index) =>
             'p' in block ? (
               <p className={index > 0 ? 'mt-3' : undefined} key={index}>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Button, Notice, StatusPill } from '@/components/app'
+import { MapPinOff } from 'lucide-react'
+import { Button, EmptyState, Notice, StatusPill } from '@/components/app'
 import {
   integrationsApi,
   type NovaPoshtaDispatchPoint,
@@ -93,7 +94,7 @@ export function DispatchPointsPanel({
   const reload = useCallback(() => setReloads((value) => value + 1), [])
 
   if (tenant === null) {
-    return <p className="text-app-muted text-sm">{t('pickBusinessPoints')}</p>
+    return <p className="rz-muted m-0">{t('pickBusinessPoints')}</p>
   }
 
   const guard = (): boolean => {
@@ -158,9 +159,9 @@ export function DispatchPointsPanel({
   }
 
   return (
-    <div className="grid gap-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <p className="text-app-muted max-w-[62ch] text-[14px] leading-6 text-pretty">
+    <div className="grid gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="rz-muted m-0 max-w-[62ch] text-pretty">
           {t('pointsIntro')}
         </p>
         <Button
@@ -179,7 +180,7 @@ export function DispatchPointsPanel({
         <Notice tone="danger">
           {t('pointsLoadError')}{' '}
           <button
-            className="underline underline-offset-4"
+            className="text-brand-text cursor-pointer border-0 bg-transparent p-0 underline underline-offset-4"
             onClick={reload}
             type="button"
           >
@@ -193,74 +194,70 @@ export function DispatchPointsPanel({
       )}
 
       {state.kind === 'loading' && (
-        <p className="text-app-muted text-sm">{t('pointsLoading')}</p>
+        <p className="rz-muted m-0" role="status">
+          {t('pointsLoading')}
+        </p>
       )}
 
       {state.kind === 'ready' && points.length === 0 && (
-        <section className="border-app-line bg-app-raised grid justify-items-center gap-3 rounded-[20px] border px-10 py-14 text-center">
-          <h2 className="text-[22px] font-extrabold tracking-[-0.02em] text-white">
-            {t('noPointsTitle')}
-          </h2>
-          <p className="text-app-muted max-w-[46ch] text-[14px] leading-6 text-pretty">
-            {t('noPointsText')}
-          </p>
-          <Button
-            onClick={() => {
-              setFormError(null)
-              setEditing({ mode: 'new' })
-            }}
-            variant="primary"
-          >
-            {t('addPoint')}
-          </Button>
-        </section>
+        <EmptyState
+          actions={
+            <Button
+              onClick={() => {
+                setFormError(null)
+                setEditing({ mode: 'new' })
+              }}
+              variant="primary"
+            >
+              {t('addPoint')}
+            </Button>
+          }
+          description={t('noPointsText')}
+          icon={<MapPinOff aria-hidden />}
+          title={t('noPointsTitle')}
+        />
       )}
 
       {state.kind === 'ready' && points.length > 0 && (
-        <section
-          aria-label={t('pointsTitle')}
-          className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
-        >
-          <ul className="divide-app-line grid divide-y">
+        <section aria-label={t('pointsTitle')} className="rz-card">
+          <ul className="divide-app-line m-0 grid list-none divide-y p-0">
             {points.map((point) => (
               <li
-                className="flex flex-wrap items-center gap-x-4 gap-y-3 px-6 py-4"
+                className="flex min-h-row flex-wrap items-center gap-x-4 gap-y-2 px-[var(--rz-card-p)] py-2.5"
                 key={point.id}
               >
-                <div className="min-w-0 flex-[1_1_220px]">
+                <div className="grid min-w-0 flex-[1_1_220px] gap-0.5">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[15px] font-bold tracking-[-0.01em] text-white">
+                    <span className="font-semibold text-app-strong">
                       {point.name}
                     </span>
                     {point.isDefault && (
-                      <span className="border-brand/30 text-brand rounded-full border bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-bold">
-                        {t('defaultBadge')}
-                      </span>
+                      <StatusPill>{t('defaultBadge')}</StatusPill>
                     )}
                   </div>
-                  <p className="text-app-dim mt-0.5 truncate text-xs">
+                  <p className="rz-caption m-0 truncate">
                     {point.companyName ?? t('privateSender')}
                   </p>
                 </div>
                 <div className="min-w-0 flex-[1_1_180px]">
                   {point.warehouseName === null ? (
                     <p
-                      className="text-app-dim text-[13px] text-pretty"
+                      className="text-app-dim m-0 text-pretty"
                       title={t('noBranchName')}
                     >
                       {t('branchNameMissing')}
                     </p>
                   ) : (
-                    <p className="text-app-ink truncate text-[14px] font-semibold">
+                    <p className="text-app-ink m-0 truncate">
                       {point.warehouseName}
                     </p>
                   )}
                 </div>
-                <div className="min-w-0 flex-[1_1_160px]">
-                  <p className="text-app-ink truncate text-[14px] font-semibold">
+                <div className="grid min-w-0 flex-[1_1_160px] gap-0.5">
+                  <p className="text-app-ink m-0 truncate">
                     {point.senderName}
                   </p>
-                  <p className="text-app-dim mt-0.5 truncate font-mono text-xs">
+                  <p className="rz-mono rz-caption m-0 truncate">
                     {point.phone}
                   </p>
                 </div>
@@ -272,13 +269,14 @@ export function DispatchPointsPanel({
                     setFormError(null)
                     setEditing({ mode: 'edit', point })
                   }}
+                  size="sm"
                 >
                   {t('change')}
                 </Button>
               </li>
             ))}
           </ul>
-          <p className="text-app-dim border-app-line border-t px-6 py-4 text-[13px] leading-5 text-pretty">
+          <p className="rz-card__foot rz-caption m-0 text-pretty">
             {t('defaultFootnote')}
           </p>
         </section>

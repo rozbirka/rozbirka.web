@@ -339,7 +339,7 @@ it('uses the Core manual movement enum values instead of generic income and expe
   )
 
   await user.click(await screen.findByRole('button', { name: 'Нова операція' }))
-  await user.click(screen.getByRole('button', { name: 'Витрата' }))
+  await user.click(screen.getByRole('radio', { name: 'Витрата' }))
   await user.type(screen.getByLabelText('Сума'), '25')
   await user.click(screen.getByRole('button', { name: 'Записати операцію' }))
 
@@ -498,7 +498,7 @@ it('submits one idempotent transfer from a side drawer and reloads the cash over
   const drawer = await screen.findByRole('dialog', {
     name: 'Переказ між касами',
   })
-  expect(drawer).toHaveClass('sm:right-0')
+  expect(drawer).toHaveClass('rz-sheet')
   await user.click(
     within(screen.getByRole('group', { name: 'Каса-отримувач' })).getByRole(
       'radio',
@@ -1544,14 +1544,17 @@ it('names the manual movement direction and its signed amount before submitting'
   expect(screen.getByText('Надходження до каси «Основна каса»')).toBeVisible()
   expect(screen.getByText('+25 UAH')).toBeVisible()
 
-  const income = screen.getByRole('button', { name: 'Надходження' })
-  const expense = screen.getByRole('button', { name: 'Витрата' })
-  expect(income).toHaveAttribute('aria-pressed', 'true')
-  expect(income).toHaveClass('border-state-ok/70')
-  expect(expense).toHaveClass('border-state-danger/35')
+  // v2: the direction is a Segmented radio group (.rz-seg); the direction is
+  // read from the summary text and the sign, not from the toggle's colour.
+  const direction = screen.getByRole('group', { name: 'Тип операції' })
+  expect(direction).toHaveClass('rz-seg')
+  const income = within(direction).getByRole('radio', { name: 'Надходження' })
+  const expense = within(direction).getByRole('radio', { name: 'Витрата' })
+  expect(income).toBeChecked()
+  expect(expense).not.toBeChecked()
   await user.click(expense)
-  expect(expense).toHaveAttribute('aria-pressed', 'true')
-  expect(expense).toHaveClass('border-state-danger/70')
+  expect(expense).toBeChecked()
+  expect(income).not.toBeChecked()
   expect(screen.getByText('Витрата з каси «Основна каса»')).toBeVisible()
   expect(screen.getByText('−25 UAH')).toBeVisible()
 })

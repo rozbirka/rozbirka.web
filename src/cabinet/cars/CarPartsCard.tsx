@@ -27,10 +27,7 @@ export function CarPartsCard({
     <Card
       aside={
         partsHref === null ? null : (
-          <Link
-            className="text-brand text-[13px] font-bold whitespace-nowrap underline-offset-4 hover:underline"
-            to={partsHref}
-          >
+          <Link className="whitespace-nowrap" to={partsHref}>
             {t('partsAll', { count: partsTotal })}
           </Link>
         )
@@ -38,64 +35,46 @@ export function CarPartsCard({
       title={t('partsTitle')}
     >
       {partsTotal === 0 ? (
-        <p className="text-app-muted text-[13px] leading-5 text-pretty">
-          {t('partsNone')}
-        </p>
+        <p className="rz-muted m-0 text-pretty">{t('partsNone')}</p>
       ) : (
-        <>
-          <div
-            aria-hidden
-            className="mt-1 flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-white/[0.06]"
-          >
+        <div className="grid gap-3">
+          <span aria-hidden className="rz-meter">
             <span
-              className="bg-app-ink"
-              style={{ flex: `${String(Math.max(partsSold, 0.001))} 1 0` }}
+              style={{ width: `${String(share(partsSold, partsTotal))}%` }}
             />
-            <span
-              className="bg-white/10"
-              style={{ flex: `${String(Math.max(partsAvailable, 0.001))} 1 0` }}
-            />
-          </div>
+          </span>
 
-          <dl className="mt-3 flex items-start justify-between gap-4">
+          <dl className="m-0 flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <dd className="flex items-baseline gap-2">
-                <span className="text-[22px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
+              <dd className="m-0 flex items-baseline gap-2">
+                <span className="rz-mono rz-strong text-title">
                   {partsSold}
                 </span>
-                <span className="text-app-muted font-mono text-[12px]">
+                <span className="rz-mono rz-caption">
                   {t('share', { percent: share(partsSold, partsTotal) })}
                 </span>
               </dd>
-              <dt className="text-app-muted mt-0.5 flex items-center gap-[7px] text-[13px] font-semibold">
-                <span
-                  aria-hidden
-                  className="bg-app-ink size-1.5 rounded-full"
-                />
+              <dt className="rz-dot rz-dot--ok rz-muted mt-0.5">
                 {t('partsSold')}
               </dt>
             </div>
             <div className="min-w-0 text-right">
-              <dd className="flex items-baseline justify-end gap-2">
-                <span className="text-app-muted font-mono text-[12px]">
+              <dd className="m-0 flex items-baseline justify-end gap-2">
+                <span className="rz-mono rz-caption">
                   {t('share', { percent: share(partsAvailable, partsTotal) })}
                 </span>
-                <span className="text-[22px] font-extrabold tracking-[-0.02em] text-white tabular-nums">
+                <span className="rz-mono rz-strong text-title">
                   {partsAvailable}
                 </span>
               </dd>
-              <dt className="text-app-muted mt-0.5 flex items-center justify-end gap-[7px] text-[13px] font-semibold">
+              <dt className="rz-dot rz-muted mt-0.5 justify-end">
                 {t('partsInStock')}
-                <span
-                  aria-hidden
-                  className="size-1.5 rounded-full bg-white/25"
-                />
               </dt>
             </div>
           </dl>
 
           <p className="sr-only">{t('partsFromCar', { count: partsTotal })}</p>
-        </>
+        </div>
       )}
     </Card>
   )

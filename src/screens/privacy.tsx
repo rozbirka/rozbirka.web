@@ -1,3 +1,5 @@
+import { AuthBrand } from './auth-brand'
+import { useDesignSystemRoot } from '@/components/app/use-design-system-root'
 import { useState } from 'react'
 import {
   LOCALE_NATIVE_NAMES,
@@ -24,6 +26,7 @@ const PAGE_LANGUAGE: Readonly<Record<Locale, string>> = {
  * Ukrainian, and a page-language switch changes only this page.
  */
 export function PrivacyScreen() {
+  useDesignSystemRoot()
   const [language, setLanguage] = useState<Locale>(
     () => siteLocalePreference.get() ?? 'uk',
   )
@@ -35,29 +38,20 @@ export function PrivacyScreen() {
         : null
   return (
     <LocaleOverride locale={language}>
-      <div className="min-h-screen bg-background text-foreground">
-        <header className="border-b border-border/40">
-          <div className="mx-auto max-w-4xl px-6 py-5">
-            <span className="text-brand text-2xl font-semibold tracking-tight">
-              rozbirka
-            </span>
-          </div>
-        </header>
-
-        <main className="mx-auto max-w-3xl px-6 py-16 md:py-24" lang={language}>
+      <div className="rz min-h-screen">
+        <main
+          className="mx-auto grid max-w-[720px] gap-5 px-6 py-10"
+          lang={language}
+        >
+          <AuthBrand />
           <div
             aria-label={PAGE_LANGUAGE[language]}
-            className="mb-10 flex flex-wrap gap-2"
+            className="rz-seg justify-self-start"
             role="group"
           >
             {SUPPORTED_LOCALES.map((code) => (
               <button
                 aria-pressed={code === language}
-                className={
-                  code === language
-                    ? 'border-brand text-brand min-h-11 rounded-full border px-4 text-sm'
-                    : 'min-h-11 rounded-full px-4 text-sm text-muted-foreground ring-1 ring-border/60 hover:text-foreground'
-                }
                 key={code}
                 lang={code}
                 onClick={() => {
@@ -74,16 +68,10 @@ export function PrivacyScreen() {
             <UkrainianPolicy />
           ) : (
             <>
-              <p className="text-sm font-medium uppercase tracking-wider text-brand">
-                {translation.eyebrow}
-              </p>
-              <h1 className="mt-4 text-4xl font-light tracking-tight md:text-5xl">
-                {translation.title}
-              </h1>
-              <p className="mt-3 text-sm text-muted-foreground">
-                {translation.version}
-              </p>
-              <p className="mt-6 rounded-xl border border-border/60 px-4 py-3 text-sm text-muted-foreground">
+              <p className="rz-eyebrow m-0">{translation.eyebrow}</p>
+              <h1 className="rz-h-page mt-1.5">{translation.title}</h1>
+              <p className="text-app-muted mt-1 mb-0">{translation.version}</p>
+              <p className="rz-notice rz-notice--info mt-4 mb-0">
                 {translation.notice}
               </p>
               <PrivacyTranslationBody translation={translation} />
@@ -91,14 +79,9 @@ export function PrivacyScreen() {
           )}
         </main>
 
-        <footer className="border-t border-border/40 py-10 text-center text-sm text-muted-foreground">
+        <footer className="border-app-line rz-caption border-t py-6 text-center">
           © 2026 Rozbirka ·{' '}
-          <a
-            href="mailto:support@rozbirka.com"
-            className="hover:text-foreground"
-          >
-            support@rozbirka.com
-          </a>
+          <a href="mailto:support@rozbirka.com">support@rozbirka.com</a>
         </footer>
       </div>
     </LocaleOverride>
@@ -109,21 +92,15 @@ export function PrivacyScreen() {
 function UkrainianPolicy() {
   return (
     <>
-      <p className="text-sm font-medium uppercase tracking-wider text-brand">
+      <p className="rz-eyebrow m-0">
         Privacy Policy · Політика конфіденційності
       </p>
-      <h1 className="mt-4 text-4xl font-light tracking-tight md:text-5xl">
-        Як ми поводимось з даними
-      </h1>
-      <p className="mt-3 text-sm text-muted-foreground">
-        Версія від 19 вересня 2026 р.
-      </p>
+      <h1 className="rz-h-page mt-1.5">Як ми поводимось з даними</h1>
+      <p className="text-app-muted mt-1 mb-0">Версія від 19 вересня 2026 р.</p>
 
-      <div className="prose-content mt-12 space-y-10 text-[15px] leading-relaxed text-foreground/85">
+      <div className="prose-content text-input text-app-ink mt-6 space-y-8 leading-relaxed">
         <section>
-          <h2 className="mb-3 text-xl font-medium text-foreground">
-            1. Хто ми
-          </h2>
+          <h2 className="rz-h-title mb-3">1. Хто ми</h2>
           <p>
             Rozbirka — платформа для обліку діяльності авторозбірок: облік авто,
             складу запчастин, замовлень, кас і команди. Доступна як
@@ -134,7 +111,7 @@ function UkrainianPolicy() {
             користувачів виступає власник сервісу Rozbirka. Для зв'язку —{' '}
             <a
               href="mailto:support@rozbirka.com"
-              className="text-brand underline-offset-2 hover:underline"
+              className="underline-offset-2 hover:underline"
             >
               support@rozbirka.com
             </a>
@@ -143,9 +120,7 @@ function UkrainianPolicy() {
         </section>
 
         <section>
-          <h2 className="mb-3 text-xl font-medium text-foreground">
-            2. Які дані ми збираємо
-          </h2>
+          <h2 className="rz-h-title mb-3">2. Які дані ми збираємо</h2>
           <ul className="list-disc space-y-2 pl-6">
             <li>
               <strong>Дані акаунту:</strong> номер телефону (для входу через
@@ -174,9 +149,7 @@ function UkrainianPolicy() {
         </section>
 
         <section>
-          <h2 className="mb-3 text-xl font-medium text-foreground">
-            3. Як ми використовуємо дані
-          </h2>
+          <h2 className="rz-h-title mb-3">3. Як ми використовуємо дані</h2>
           <ul className="list-disc space-y-2 pl-6">
             <li>Надавати функціональність сервісу (вхід, облік, аналітика).</li>
             <li>Обробляти підписку та платежі (через Monobank).</li>
@@ -195,9 +168,7 @@ function UkrainianPolicy() {
         </section>
 
         <section>
-          <h2 className="mb-3 text-xl font-medium text-foreground">
-            4. З ким ми ділимось даними
-          </h2>
+          <h2 className="rz-h-title mb-3">4. З ким ми ділимось даними</h2>
           <ul className="list-disc space-y-2 pl-6">
             <li>
               <strong>Monobank</strong> — обробка платежів за підписку.
@@ -232,7 +203,7 @@ function UkrainianPolicy() {
         </section>
 
         <section>
-          <h2 className="mb-3 text-xl font-medium text-foreground">
+          <h2 className="rz-h-title mb-3">
             5. Скільки ми зберігаємо ваші дані
           </h2>
           <p>
@@ -259,9 +230,7 @@ function UkrainianPolicy() {
         </section>
 
         <section>
-          <h2 className="mb-3 text-xl font-medium text-foreground">
-            6. Ваші права
-          </h2>
+          <h2 className="rz-h-title mb-3">6. Ваші права</h2>
           <ul className="list-disc space-y-2 pl-6">
             <li>
               <strong>Доступ:</strong> отримати копію своїх даних.
@@ -288,7 +257,7 @@ function UkrainianPolicy() {
             Щоб скористатися будь-яким із цих прав — напишіть на{' '}
             <a
               href="mailto:support@rozbirka.com"
-              className="text-brand underline-offset-2 hover:underline"
+              className="underline-offset-2 hover:underline"
             >
               support@rozbirka.com
             </a>
@@ -297,9 +266,7 @@ function UkrainianPolicy() {
         </section>
 
         <section>
-          <h2 className="mb-3 text-xl font-medium text-foreground">
-            7. Безпека
-          </h2>
+          <h2 className="rz-h-title mb-3">7. Безпека</h2>
           <p>
             Сервіс використовує HTTPS для передавання даних, одноразові коди для
             входу та перевірку прав доступу до даних компанії. Сеанси
@@ -309,9 +276,7 @@ function UkrainianPolicy() {
         </section>
 
         <section>
-          <h2 className="mb-3 text-xl font-medium text-foreground">
-            8. Дані дітей
-          </h2>
+          <h2 className="rz-h-title mb-3">8. Дані дітей</h2>
           <p>
             Rozbirka — інструмент для бізнесу й не призначений для осіб молодше
             16 років. Ми свідомо не збираємо персональні дані дітей. Якщо ви
@@ -321,9 +286,7 @@ function UkrainianPolicy() {
         </section>
 
         <section>
-          <h2 className="mb-3 text-xl font-medium text-foreground">
-            9. Зміни цієї політики
-          </h2>
+          <h2 className="rz-h-title mb-3">9. Зміни цієї політики</h2>
           <p>
             Поточна версія політики та дата її оновлення доступні за цією
             адресою.
@@ -331,14 +294,12 @@ function UkrainianPolicy() {
         </section>
 
         <section>
-          <h2 className="mb-3 text-xl font-medium text-foreground">
-            10. Контакти
-          </h2>
+          <h2 className="rz-h-title mb-3">10. Контакти</h2>
           <p>
             Питання чи запити щодо ваших даних —{' '}
             <a
               href="mailto:support@rozbirka.com"
-              className="text-brand underline-offset-2 hover:underline"
+              className="underline-offset-2 hover:underline"
             >
               support@rozbirka.com
             </a>
@@ -346,12 +307,10 @@ function UkrainianPolicy() {
           </p>
         </section>
 
-        <hr className="my-12 border-border/40" />
+        <hr className="border-app-line my-8" />
 
-        <section className="text-sm text-muted-foreground">
-          <p className="font-medium uppercase tracking-wider text-foreground">
-            English summary
-          </p>
+        <section className="text-app-muted">
+          <p className="rz-eyebrow m-0">English summary</p>
           <p className="mt-3">
             Rozbirka collects only the data needed to operate the service: your
             phone number for login, your business inventory data (cars, parts,
@@ -363,7 +322,7 @@ function UkrainianPolicy() {
             by emailing{' '}
             <a
               href="mailto:support@rozbirka.com"
-              className="text-brand underline-offset-2 hover:underline"
+              className="underline-offset-2 hover:underline"
             >
               support@rozbirka.com
             </a>

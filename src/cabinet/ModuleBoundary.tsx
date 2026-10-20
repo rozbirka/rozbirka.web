@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ComponentType, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Gauge } from 'lucide-react'
 import {
   Button,
   DeniedState,
@@ -53,7 +53,13 @@ export function ModuleBoundary({
 
   if (decision.kind === 'allowed') {
     return (
-      <Suspense fallback={<SkeletonRows label={t('loadingModule')} />}>
+      <Suspense
+        fallback={
+          <div className="rz-page">
+            <SkeletonRows label={t('loadingModule')} />
+          </div>
+        }
+      >
         <Screen definition={definition} />
       </Suspense>
     )
@@ -87,7 +93,9 @@ function DecisionScreen({
       return <FeatureUnavailableScreen definition={definition} />
     case 'permission-denied':
       return (
-        <DeniedState description={t('deniedBody')} title={t('deniedTitle')} />
+        <div className="rz-page">
+          <DeniedState description={t('deniedBody')} title={t('deniedTitle')} />
+        </div>
       )
     case 'subscription-blocked':
       return (
@@ -100,6 +108,7 @@ function DecisionScreen({
       return (
         <BoundaryStateScreen
           action={<BillingLink label={t('comparePlans')} module="plans" />}
+          icon={<Gauge aria-hidden />}
           description={t('quotaBody', {
             used: decision.used,
             max: decision.max,
@@ -118,7 +127,11 @@ function DecisionScreen({
         />
       )
     case 'access-loading':
-      return <SkeletonRows label={t('checkingAccess')} />
+      return (
+        <div className="rz-page">
+          <SkeletonRows label={t('checkingAccess')} />
+        </div>
+      )
   }
 }
 
@@ -143,24 +156,28 @@ function BoundaryStateScreen({
   title,
   description,
   action,
+  icon = <AlertTriangle aria-hidden />,
   role = 'status',
   tone = 'neutral',
 }: {
   title: string
   description: string
   action?: ReactNode
+  icon?: ReactNode
   role?: 'alert' | 'status'
   tone?: 'neutral' | 'warn' | 'danger'
 }) {
   return (
-    <StateScreen
-      actions={action}
-      className="min-h-[50dvh] content-center"
-      description={description}
-      icon={<AlertTriangle aria-hidden />}
-      role={role}
-      title={title}
-      tone={tone}
-    />
+    <div className="rz-page">
+      <StateScreen
+        actions={action}
+        className="min-h-[50dvh]"
+        description={description}
+        icon={icon}
+        role={role}
+        title={title}
+        tone={tone}
+      />
+    </div>
   )
 }

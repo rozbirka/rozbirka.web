@@ -20,10 +20,11 @@ import { FeatureGate } from '../FeatureFlags'
 import { FEATURE_FLAGS } from '@/api/feature-flags'
 import {
   Archive,
+  Check,
   ChevronLeft,
   ChevronRight,
+  Lock,
   CarFront,
-  Search,
   ImagePlus,
   Pencil,
   Plus,
@@ -45,16 +46,17 @@ import {
   CodeChip,
   ConfirmDialog,
   DataTable,
-  Gallery,
   EmptyState,
   Field,
   ErrorState,
   Notice,
-  PageBody,
+  Gallery,
   PhotoFileField,
   Thumbnail,
   PillGroup,
+  SearchInput,
   SkeletonRows,
+  StateScreen,
   StatusPill,
   TextArea,
   TextInput,
@@ -77,6 +79,7 @@ import {
   type MediaUploadResult,
 } from '@/api/media'
 import { useCabinet } from '../CabinetContext'
+import { RedesignShell } from '../redesign-shell'
 import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import {
@@ -205,9 +208,23 @@ function Denied({ decision }: { decision: ModuleAccessDecision }) {
         ? t('deniedSubscription')
         : t('deniedPermission')
   return (
-    <Notice role="alert" tone="warn">
-      {message}
-    </Notice>
+    <RedesignShell
+      crumb={
+        <>
+          <span>{t('eyebrow')}</span>
+          <ChevronRight aria-hidden className="size-3" />
+          <span aria-current="page">{t('title')}</span>
+        </>
+      }
+    >
+      <StateScreen
+        className="min-h-[420px]"
+        icon={<Lock aria-hidden />}
+        role="alert"
+        title={message}
+        tone="warn"
+      />
+    </RedesignShell>
   )
 }
 
@@ -266,10 +283,10 @@ function CarCard({
 
   return (
     <Link
-      className="border-app-line bg-app-raised hover:border-app-line-2 flex flex-col overflow-hidden rounded-[20px] border transition-colors"
+      className="rz-card hover:border-app-line-2 hover:bg-app-hover flex flex-col transition-colors"
       to={href}
     >
-      <span className="bg-app-input relative block aspect-4/3">
+      <span className="rz-photo rounded-none border-0 border-b border-app-line">
         {car.coverPhotoUrl ? (
           <Thumbnail
             alt=""
@@ -278,79 +295,56 @@ function CarCard({
             ratio="wide"
           />
         ) : (
-          <span className="text-app-dim grid h-full place-items-center">
-            <CarFront aria-hidden className="size-8" />
-          </span>
+          <CarFront aria-hidden className="size-6" />
         )}
-        <span className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/65 px-2.5 py-1 text-[13px] font-semibold text-white backdrop-blur-sm">
-          <span
-            aria-hidden
-            className={cn(
-              'size-1.5 rounded-full',
-              car.status === 'active' ? 'bg-state-ok' : 'bg-app-dim',
-            )}
-          />
-          {car.status === 'active' ? t('cardActive') : t('cardArchived')}
-        </span>
-        {showMoney && percent !== null ? (
-          <span
-            className={cn(
-              'absolute top-3 right-3 rounded-full border border-white/10 bg-black/65 px-2.5 py-1 font-mono text-[13px] font-semibold tabular-nums backdrop-blur-sm',
-              paidOff ? 'text-state-ok' : 'text-brand',
-            )}
-          >
-            {percent}%
-          </span>
-        ) : null}
       </span>
 
-      <span className="grid gap-2.5 p-4">
-        <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3">
-          <span className="min-w-0 truncate text-[18px] font-bold text-white">
+      <span className="grid gap-2 p-3">
+        <span className="flex min-w-0 items-center justify-between gap-2">
+          <span className="rz-strong min-w-0 truncate font-mono font-medium">
             {car.code}
           </span>
-          {showMoney ? (
-            <span className="text-[18px] font-bold whitespace-nowrap text-white tabular-nums">
-              {money(car.profitability?.recouped ?? 0)}
-            </span>
-          ) : null}
+          <StatusPill tone={car.status === 'active' ? 'ok' : 'neutral'}>
+            {car.status === 'active' ? t('cardActive') : t('cardArchived')}
+          </StatusPill>
         </span>
-        <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3">
-          <span className="text-app-muted min-w-0 truncate text-[14px]">
-            {car.brand} {car.model} ({String(car.year)})
-          </span>
-          {showMoney ? (
-            <span className="text-app-dim font-mono text-[11px] tracking-[0.14em] whitespace-nowrap uppercase">
-              {t('cardRecouped')}
-            </span>
-          ) : null}
+        <span className="rz-muted min-w-0 truncate">
+          {car.brand} {car.model} ({String(car.year)})
         </span>
         {showMoney ? (
-          <span
-            aria-hidden
-            className="bg-app-input mt-0.5 block h-1 overflow-hidden rounded-full"
-          >
-            <span
-              className={cn(
-                'block h-full rounded-full',
-                paidOff ? 'bg-state-ok' : 'bg-brand',
-              )}
-              style={{ width: `${String(Math.min(percent ?? 0, 100))}%` }}
-            />
+          <span className="grid gap-1.5">
+            <span className="flex items-baseline justify-between gap-3">
+              <span className="rz-eyebrow">{t('cardRecouped')}</span>
+              <span className="rz-mono rz-strong whitespace-nowrap">
+                {money(car.profitability?.recouped ?? 0)}
+                {percent === null ? null : (
+                  <span
+                    className={cn(
+                      'ml-2 text-caption',
+                      paidOff ? 'text-state-ok' : 'rz-dim',
+                    )}
+                  >
+                    {percent}%
+                  </span>
+                )}
+              </span>
+            </span>
+            <span aria-hidden className="rz-meter">
+              <span
+                className={paidOff ? undefined : 'bg-app-dim'}
+                style={{ width: `${String(Math.min(percent ?? 0, 100))}%` }}
+              />
+            </span>
           </span>
         ) : null}
-        <span className="flex items-baseline justify-between gap-3">
-          <span className="text-app-muted text-[14px]">
+        <span className="rz-caption flex items-baseline justify-between gap-3">
+          <span>
             {t('cardParts')}{' '}
-            <span className="font-semibold text-white tabular-nums">
-              {car.partsCount}
-            </span>
+            <span className="rz-mono rz-strong">{car.partsCount}</span>
           </span>
-          <span className="text-app-muted text-[14px]">
+          <span>
             {t('cardSold')}{' '}
-            <span className="font-semibold text-white tabular-nums">
-              {car.soldPartsCount}
-            </span>
+            <span className="rz-mono rz-strong">{car.soldPartsCount}</span>
           </span>
         </span>
       </span>
@@ -409,66 +403,65 @@ function CarsList({ base }: { base: string }) {
   const cars = sortCars(data?.items ?? [], sort)
 
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-          <div className="min-w-0">
-            <p className="text-app-dim font-mono text-[12px] tracking-[0.14em] uppercase">
-              {t('eyebrow')}
-            </p>
-            <h1 className="mt-1.5 text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
-              {t('title')}
-            </h1>
-          </div>
-          {createDecision.kind === 'allowed' ? (
-            <Button
-              asChild
-              className="px-5 text-sm font-bold"
-              variant="primary"
-            >
-              <Link to={`${base}/new`}>
-                <Plus aria-hidden />
-                {t('addCar')}
-              </Link>
-            </Button>
-          ) : null}
-        </div>
+    <RedesignShell
+      actions={
+        createDecision.kind === 'allowed' ? (
+          <Button asChild variant="primary">
+            <Link to={`${base}/new`}>
+              <Plus aria-hidden />
+              {t('addCar')}
+            </Link>
+          </Button>
+        ) : undefined
+      }
+      crumb={
+        <>
+          <span>{t('eyebrow')}</span>
+          <ChevronRight aria-hidden className="size-3" />
+          <span aria-current="page">{t('title')}</span>
+        </>
+      }
+    >
+      <div className="rz-page-head">
+        <h1 className="rz-h-page">{t('title')}</h1>
+        <p className="rz-totals">
+          <span>
+            <span className="rz-mono rz-strong">{data?.total ?? 0}</span>{' '}
+            {t('found')}
+          </span>
+        </p>
+      </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <form
-            className="min-w-[240px] flex-1"
-            onSubmit={(event) => {
-              event.preventDefault()
-              change({ search: query.trim() || undefined, page: '1' })
-            }}
-          >
-            <span className="border-app-line bg-app-raised focus-within:border-app-line-2 flex h-13 items-center gap-3 rounded-[14px] border px-4">
-              <Search aria-hidden className="text-app-dim size-4 shrink-0" />
-              <input
-                aria-label={t('searchLabel')}
-                className="text-app-ink placeholder:text-app-dim min-w-0 flex-1 bg-transparent text-sm outline-none"
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={t('searchLabel')}
-                value={query}
-              />
-              <button className="sr-only" type="submit">
-                {t('searchSubmit')}
-              </button>
-            </span>
-          </form>
-          <PillGroup
-            label={t('statusFilter')}
-            onChange={(next) =>
-              change({ status: next || undefined, page: '1' })
-            }
-            options={[
-              { value: '', label: t('filterAll') },
-              { value: 'active', label: t('filterActive') },
-              { value: 'archived', label: t('filterArchived') },
-            ]}
-            value={selected.status ?? ''}
+      <div className="rz-toolbar" role="search">
+        <form
+          className="flex min-w-0 flex-[1_1_240px] sm:max-w-[360px]"
+          onSubmit={(event) => {
+            event.preventDefault()
+            change({ search: query.trim() || undefined, page: '1' })
+          }}
+        >
+          <SearchInput
+            aria-label={t('searchLabel')}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t('searchLabel')}
+            value={query}
           />
-          {financeView ? (
+          <button className="sr-only" type="submit">
+            {t('searchSubmit')}
+          </button>
+        </form>
+        <PillGroup
+          label={t('statusFilter')}
+          onChange={(next) => change({ status: next || undefined, page: '1' })}
+          options={[
+            { value: '', label: t('filterAll') },
+            { value: 'active', label: t('filterActive') },
+            { value: 'archived', label: t('filterArchived') },
+          ]}
+          value={selected.status ?? ''}
+        />
+        {financeView ? (
+          <div className="rz-toolbar__end">
             <PillGroup
               label={totalPages > 1 ? t('sortLabelThisPage') : t('sortLabel')}
               onChange={(next) => change({ sort: next })}
@@ -478,71 +471,77 @@ function CarsList({ base }: { base: string }) {
               ]}
               value={sort}
             />
-          ) : null}
-        </div>
-
-        {problem ? <Notice tone="danger">{problem}</Notice> : null}
-
-        <p className="text-app-muted text-sm">
-          <span className="text-[18px] font-bold text-white tabular-nums">
-            {data?.total ?? 0}
-          </span>{' '}
-          {t('found')}
-        </p>
-
-        {cars.length === 0 ? (
-          <EmptyState
-            description={t('emptyDescription')}
-            title={t('emptyTitle')}
-          />
-        ) : (
-          <ul
-            aria-label={t('listLabel')}
-            className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-          >
-            {cars.map((car) => (
-              <li className="grid" key={car.id}>
-                <CarCard
-                  car={car}
-                  currency={accounting.currency}
-                  href={`${base}/${car.id}`}
-                  showMoney={financeView}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <nav
-          aria-label={t('paginationLabel')}
-          className="border-app-line flex flex-wrap items-center justify-between gap-3 border-t pt-5"
-        >
-          <p className="text-app-dim text-[14px]">
-            {t('pageOf', { page, total: totalPages })}
-          </p>
-          <span className="flex items-center gap-2.5">
-            <Button
-              aria-label={t('previousPage')}
-              className="px-4 text-sm font-semibold"
-              disabled={page <= 1}
-              onClick={() => change({ page: String(page - 1) })}
-            >
-              <ChevronLeft aria-hidden />
-              {tc('back')}
-            </Button>
-            <Button
-              aria-label={t('nextPage')}
-              className="px-4 text-sm font-semibold"
-              disabled={page >= totalPages}
-              onClick={() => change({ page: String(page + 1) })}
-            >
-              {tc('next')}
-              <ChevronRight aria-hidden />
-            </Button>
-          </span>
-        </nav>
+          </div>
+        ) : null}
       </div>
-    </div>
+
+      {problem ? <Notice tone="danger">{problem}</Notice> : null}
+
+      {cars.length === 0 ? (
+        <EmptyState
+          description={t('emptyDescription')}
+          icon={<CarFront aria-hidden />}
+          title={t('emptyTitle')}
+        />
+      ) : (
+        <ul
+          aria-label={t('listLabel')}
+          className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,240px),1fr))] gap-3 p-0"
+        >
+          {cars.map((car) => (
+            <li className="grid" key={car.id}>
+              <CarCard
+                car={car}
+                currency={accounting.currency}
+                href={`${base}/${car.id}`}
+                showMoney={financeView}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <nav aria-label={t('paginationLabel')} className="rz-pager px-0">
+        <p className="rz-mono m-0">
+          {t('pageOf', { page, total: totalPages })}
+        </p>
+        <span className="rz-pager__nav">
+          <Button
+            aria-label={t('previousPage')}
+            disabled={page <= 1}
+            onClick={() => change({ page: String(page - 1) })}
+            size="sm"
+          >
+            <ChevronLeft aria-hidden />
+            {tc('back')}
+          </Button>
+          <Button
+            aria-label={t('nextPage')}
+            disabled={page >= totalPages}
+            onClick={() => change({ page: String(page + 1) })}
+            size="sm"
+          >
+            {tc('next')}
+            <ChevronRight aria-hidden />
+          </Button>
+        </span>
+      </nav>
+    </RedesignShell>
+  )
+}
+
+/**
+ * The way back, at the head of the breadcrumb: a quiet small button, so the
+ * crumb trail after it still reads as the path.
+ */
+function BackLink({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <Button asChild size="sm" variant="quiet">
+      <Link to={to}>
+        <ChevronLeft aria-hidden />
+        {children}
+      </Link>
+    </Button>
   )
 }
 
@@ -667,19 +666,31 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
       setProblem(t('vinCopyFailed'))
     }
   }
+  const crumb = (
+    <>
+      <BackLink to={base}>{t('backToCars')}</BackLink>
+      <span className="hidden min-w-0 items-center gap-1.5 sm:flex">
+        <span>{t('eyebrow')}</span>
+        <ChevronRight aria-hidden className="size-3" />
+        <span>{t('title')}</span>
+      </span>
+    </>
+  )
   if (!car)
-    return problem ? (
-      <PageBody width="narrow">
-        <ErrorState
-          description={problem}
-          onRetry={() => void load()}
-          title={t('loadFailed')}
-        />
-      </PageBody>
-    ) : (
-      <PageBody width="narrow">
-        <SkeletonRows label={t('loading')} rows={4} />
-      </PageBody>
+    return (
+      <RedesignShell crumb={crumb}>
+        <div className="grid max-w-[1240px] gap-4">
+          {problem ? (
+            <ErrorState
+              description={problem}
+              onRetry={() => void load()}
+              title={t('loadFailed')}
+            />
+          ) : (
+            <SkeletonRows label={t('loading')} rows={4} />
+          )}
+        </div>
+      </RedesignShell>
     )
   const profit = car.profitability
   // What "invested" is made of, so the figure is not a number to take on trust.
@@ -696,70 +707,68 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
     pendingAction === 'delete' && partsOnCar !== null && partsOnCar > 0
   const archived = car.status === 'archived'
 
+  const photos = car.photos.map((photo, index) => {
+    const shot = CAR_SHOTS[index]
+    return {
+      id: photo.id,
+      url: photo.url,
+      ...(photo.thumbnailUrl ? { thumbnailUrl: photo.thumbnailUrl } : {}),
+      alt: t('photoAlt', {
+        shot:
+          shot === undefined ? t('shotNumber', { number: index + 1 }) : t(shot),
+        code: car.code,
+      }),
+    }
+  })
+
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-        <div className="flex min-w-0 items-center gap-5">
-          <Link
-            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-            to={base}
-          >
-            <ChevronLeft aria-hidden className="size-3.5" />
-            {t('backToCars')}
-          </Link>
-          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>{t('eyebrow')}</span>
-            <span aria-hidden className="text-white/20">
-              /
-            </span>
-            <span>{t('title')}</span>
-          </p>
-        </div>
-        {manage || partsManage ? (
-          <div className="flex flex-wrap items-center gap-2.5">
-            {manage ? (
-              <Button asChild className="px-4 text-sm font-bold">
-                <Link to={`${base}/${car.id}/edit`}>{tc('edit')}</Link>
-              </Button>
-            ) : null}
-            {partsManage && car.status !== 'archived' ? (
-              <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
+    <div className="grid content-start">
+      <RedesignShell
+        actions={
+          manage || partsManage ? (
+            <>
+              {partsManage && car.status !== 'archived' ? (
+                <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
+                  <Button asChild>
+                    <Link
+                      to={`${partsBase}/imports?car_id=${encodeURIComponent(car.id)}`}
+                    >
+                      {t('importParts')}
+                    </Link>
+                  </Button>
+                </FeatureGate>
+              ) : null}
+              {partsManage && car.status !== 'archived' ? (
                 <Button asChild>
-                  <Link
-                    to={`${partsBase}/imports?car_id=${encodeURIComponent(car.id)}`}
-                  >
-                    {t('importParts')}
+                  {/* The part form picks the car up from the link. */}
+                  <Link to={`${partsBase}/new?car_id=${car.id}`}>
+                    <Plus aria-hidden />
+                    {t('addPart')}
                   </Link>
                 </Button>
-              </FeatureGate>
-            ) : null}
-            {partsManage && car.status !== 'archived' ? (
-              <Button
-                asChild
-                className="px-5 text-sm font-bold"
-                variant="primary"
-              >
-                {/* The part form picks the car up from the link. */}
-                <Link to={`${partsBase}/new?car_id=${car.id}`}>
-                  {t('addPart')}
-                </Link>
-              </Button>
-            ) : null}
-            {manage ? (
-              <>
+              ) : null}
+              {manage ? (
+                <Button asChild variant="primary">
+                  <Link to={`${base}/${car.id}/edit`}>
+                    <Pencil aria-hidden />
+                    {tc('edit')}
+                  </Link>
+                </Button>
+              ) : null}
+              {manage ? (
                 <ActionMenu
                   actions={[
                     {
                       key: 'archive',
                       label: t('archive'),
-                      icon: <Archive aria-hidden className="size-4" />,
+                      icon: <Archive aria-hidden />,
                       disabled: busy,
                       onSelect: () => setPendingAction('archive'),
                     },
                     {
                       key: 'delete',
                       label: tc('delete'),
-                      icon: <Trash2 aria-hidden className="size-4" />,
+                      icon: <Trash2 aria-hidden />,
                       destructive: true,
                       disabled: busy,
                       onSelect: () => setPendingAction('delete'),
@@ -767,150 +776,135 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
                   ]}
                   label={t('moreActions')}
                 />
-              </>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+              ) : null}
+            </>
+          ) : undefined
+        }
+        crumb={crumb}
+      >
+        <div className="grid max-w-[1240px] gap-4">
+          {problem ? <Notice tone="danger">{problem}</Notice> : null}
+          {copyStatus ? <Notice tone="ok">{copyStatus}</Notice> : null}
 
-      <div className="grid w-full gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-11 lg:px-12">
-        {problem ? <Notice tone="danger">{problem}</Notice> : null}
-        {copyStatus ? <Notice tone="ok">{copyStatus}</Notice> : null}
-
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <StatusPill tone={car.status === 'active' ? 'ok' : 'neutral'}>
-              {car.status === 'active'
-                ? t('statusActive')
-                : t('statusArchived')}
-            </StatusPill>
-            <p className="text-app-muted text-[13px]">
+          <div className="grid gap-2">
+            <div className="rz-page-head items-center">
+              <h1 className="rz-h-page text-balance">
+                {car.brand} {car.model} <span className="rz-dim">·</span>{' '}
+                {String(car.year)}
+              </h1>
+              <StatusPill tone={car.status === 'active' ? 'ok' : 'neutral'}>
+                {car.status === 'active'
+                  ? t('statusActive')
+                  : t('statusArchived')}
+              </StatusPill>
+            </div>
+            <p className="rz-muted m-0">
               {t('onStockSince', { date: day(car.acquiredAt) })}
               {onStock === null
                 ? ''
                 : ` · ${t('daysOnStock', { count: onStock })}`}
             </p>
-          </div>
-          <h1 className="mt-3.5 text-[38px] leading-[1.04] font-extrabold tracking-[-0.03em] text-balance text-white sm:text-[46px] lg:text-[48px]">
-            {car.brand} {car.model} <span className="text-app-dim">·</span>{' '}
-            {String(car.year)}
-          </h1>
-          <div className="mt-3.5 flex flex-wrap items-center gap-2.5">
-            <span className="border-app-line-2 text-app-ink rounded-[7px] border bg-white/[0.05] px-2.5 py-1 font-mono text-[14px] font-medium">
-              {car.code}
-            </span>
-            {car.vin ? (
-              <CodeChip
-                code={car.vin}
-                label={t('copyVin')}
-                onCopy={() => {
-                  void copyVin(car.vin ?? '')
-                }}
-              />
-            ) : null}
-            {car.color ? (
-              <span className="text-app-muted flex items-center gap-2 text-sm font-medium">
-                <span
-                  aria-hidden
-                  className="border-app-line-2 size-[11px] rounded-full border"
-                  style={{ background: colorSwatch(car.color) }}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rz-code pr-2">{car.code}</span>
+              {car.vin ? (
+                <CodeChip
+                  code={car.vin}
+                  label={t('copyVin')}
+                  onCopy={() => {
+                    void copyVin(car.vin ?? '')
+                  }}
                 />
-                {car.color}
-              </span>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="mt-4 grid items-start gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.85fr)]">
-          <section
-            aria-label={t('photosAndNotes')}
-            className="grid min-w-0 gap-6"
-          >
-            <Card
-              aside={
-                <span className="text-app-dim font-mono text-[12px] tracking-[0.1em] uppercase">
-                  {t('photoCount', { count: car.photos.length })}
+              ) : null}
+              {car.color ? (
+                <span className="rz-muted flex items-center gap-1.5">
+                  <span
+                    aria-hidden
+                    className="border-app-line-2 size-2.5 rounded-full border"
+                    style={{ background: colorSwatch(car.color) }}
+                  />
+                  {car.color}
                 </span>
-              }
-              bodyClassName="p-0"
-              headerClassName="pb-4"
-              title={t('photosTitle')}
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-start gap-4">
+            <section
+              aria-label={t('photosAndNotes')}
+              className="grid min-w-0 flex-[1.35_1_480px] gap-4"
             >
-              <Gallery
-                emptyLabel={
-                  <span className="grid gap-1">
-                    <span>{t('photosEmpty')}</span>
-                    <span>
-                      {t('photosAdvice', {
-                        shots: CAR_SHOTS.slice(0, 3)
-                          .map((shot) => t(shot))
-                          .join(', ')
-                          .toLowerCase(),
-                      })}
-                    </span>
+              <Card
+                aside={
+                  <span className="rz-eyebrow">
+                    {t('photoCount', { count: car.photos.length })}
                   </span>
                 }
-                label={t('galleryLabel', { code: car.code })}
-                photos={car.photos.map((photo, index) => {
-                  const shot = CAR_SHOTS[index]
-                  return {
-                    id: photo.id,
-                    url: photo.url,
-                    ...(photo.thumbnailUrl
-                      ? { thumbnailUrl: photo.thumbnailUrl }
-                      : {}),
-                    alt: t('photoAlt', {
-                      shot:
-                        shot === undefined
-                          ? t('shotNumber', { number: index + 1 })
-                          : t(shot),
-                      code: car.code,
-                    }),
+                bodyClassName="p-0"
+                title={t('photosTitle')}
+              >
+                <Gallery
+                  emptyLabel={
+                    <span className="grid gap-1">
+                      <span>{t('photosEmpty')}</span>
+                      <span>
+                        {t('photosAdvice', {
+                          shots: CAR_SHOTS.slice(0, 3)
+                            .map((shot) => t(shot))
+                            .join(', ')
+                            .toLowerCase(),
+                        })}
+                      </span>
+                    </span>
                   }
-                })}
-                variant="framed"
-              />
-            </Card>
+                  label={t('galleryLabel', { code: car.code })}
+                  photos={photos}
+                  variant="framed"
+                />
+              </Card>
 
-            <Card title={t('notesTitle')}>
-              {car.notes ? (
-                <p className="text-app-ink text-[15px] leading-[1.55] whitespace-pre-line text-pretty">
-                  {car.notes}
-                </p>
-              ) : (
-                <p className="text-app-muted text-[14px]">{t('notesEmpty')}</p>
-              )}
-            </Card>
-          </section>
+              <Card title={t('notesTitle')}>
+                {car.notes ? (
+                  <p className="m-0 whitespace-pre-line text-pretty">
+                    {car.notes}
+                  </p>
+                ) : (
+                  <p className="rz-dim m-0">{t('notesEmpty')}</p>
+                )}
+              </Card>
+            </section>
 
-          <aside aria-label={t('summaryLabel')} className="grid min-w-0 gap-6">
-            {financeView && profit ? (
-              <CarProfitabilityCard
-                currency={accounting.currency}
-                expensesTotal={expensesTotal}
-                profit={profit}
-                purchasePrice={car.purchasePrice}
-              />
-            ) : null}
+            <aside
+              aria-label={t('summaryLabel')}
+              className="grid min-w-0 flex-[1_1_360px] gap-4"
+            >
+              {financeView && profit ? (
+                <CarProfitabilityCard
+                  currency={accounting.currency}
+                  expensesTotal={expensesTotal}
+                  profit={profit}
+                  purchasePrice={car.purchasePrice}
+                />
+              ) : null}
 
-            {profit ? (
-              <CarPartsCard
-                partsHref={partsView ? partsHref : null}
-                profit={profit}
-              />
-            ) : null}
+              {profit ? (
+                <CarPartsCard
+                  partsHref={partsView ? partsHref : null}
+                  profit={profit}
+                />
+              ) : null}
 
-            {financeView ? (
-              <Expenses
-                car={car}
-                canManage={financeManage}
-                onChanged={load}
-                onProblem={setProblem}
-              />
-            ) : null}
-          </aside>
+              {financeView ? (
+                <Expenses
+                  car={car}
+                  canManage={financeManage}
+                  onChanged={load}
+                  onProblem={setProblem}
+                />
+              ) : null}
+            </aside>
+          </div>
         </div>
-      </div>
+      </RedesignShell>
 
       <ConfirmDialog
         confirmLabel={
@@ -1087,104 +1081,103 @@ function Expenses({
     setFormOpen(true)
   }
   return (
-    <Card bodyClassName="grid gap-5" title={t('expensesTitle')}>
-      <p className="text-app-dim text-[12.5px] leading-[1.45] text-pretty">
-        {t('expensesIntro')}
-      </p>
-      {expenses.length === 0 ? (
-        <p className="text-app-muted text-[13px] leading-5 text-pretty">
-          {t('expensesNone')}
-        </p>
-      ) : (
-        <DataTable
-          caption={t('expensesCaption')}
-          columns={[
-            {
-              key: 'name',
-              label: t('columnExpense'),
-              variant: 'primary',
-              cell: (expense: CarExpense) => expense.name,
-            },
-            {
-              key: 'createdAt',
-              label: t('columnAdded'),
-              cell: (expense: CarExpense) => day(expense.createdAt),
-            },
-            {
-              key: 'amount',
-              label: t('columnAmount'),
-              align: 'end',
-              cell: (expense: CarExpense) => money(expense.amount),
-            },
-            ...(canManage
-              ? [
-                  {
-                    key: 'actions',
-                    label: tc('actions'),
-                    align: 'end' as const,
-                    headerHidden: true,
-                    cell: (expense: CarExpense) => (
-                      <ActionMenu
-                        actions={[
-                          {
-                            key: 'edit',
-                            label: tc('edit'),
-                            icon: <Pencil aria-hidden className="size-4" />,
-                            disabled: busy,
-                            onSelect: () => openForm(expense),
-                          },
-                          {
-                            key: 'remove',
-                            label: tc('delete'),
-                            icon: <Trash2 aria-hidden className="size-4" />,
-                            destructive: true,
-                            disabled: busy,
-                            onSelect: () => setPendingRemoval(expense),
-                          },
-                        ]}
-                        label={t('expenseActions', { name: expense.name })}
-                      />
-                    ),
-                  },
-                ]
-              : []),
-          ]}
-          empty={
-            <EmptyState
-              description={t('expensesEmptyDescription')}
-              icon={<Wallet aria-hidden />}
-              title={t('expensesEmptyTitle')}
-            />
-          }
-          footer={
-            expenses.length === 0 ? undefined : (
-              <div className="border-app-line flex flex-wrap items-baseline justify-between gap-2 border-t px-3.5 py-2.5">
-                <span className="text-app-dim text-[13.5px]">
-                  {t('expensesTotal', { count: expenses.length })}
-                </span>
-                <span className="text-[16px] font-semibold tabular-nums text-white">
-                  {money(total)}
-                </span>
-              </div>
-            )
-          }
-          rowKey={(expense: CarExpense) => expense.id}
-          rows={expenses}
-        />
-      )}
-      {canManage ? (
-        <div className="flex flex-wrap justify-start pt-1">
-          <Button
-            className="px-4 text-sm font-bold"
-            disabled={busy}
-            onClick={() => openForm(null)}
-            variant="primary"
-          >
+    <Card
+      aside={
+        canManage ? (
+          <Button disabled={busy} onClick={() => openForm(null)} size="sm">
             <Plus aria-hidden />
             {t('addExpense')}
           </Button>
+        ) : undefined
+      }
+      bodyClassName="p-0"
+      title={t('expensesTitle')}
+    >
+      <p className="rz-caption m-0 px-(--rz-card-p) pt-3 text-pretty">
+        {t('expensesIntro')}
+      </p>
+      {expenses.length === 0 ? (
+        <p className="rz-muted m-0 p-(--rz-card-p) text-pretty">
+          {t('expensesNone')}
+        </p>
+      ) : (
+        <div className="pt-2">
+          <DataTable
+            caption={t('expensesCaption')}
+            columns={[
+              {
+                key: 'name',
+                label: t('columnExpense'),
+                variant: 'primary',
+                cell: (expense: CarExpense) => expense.name,
+              },
+              {
+                key: 'createdAt',
+                label: t('columnAdded'),
+                cell: (expense: CarExpense) => (
+                  <span className="rz-mono">{day(expense.createdAt)}</span>
+                ),
+              },
+              {
+                key: 'amount',
+                label: t('columnAmount'),
+                align: 'end',
+                cell: (expense: CarExpense) => money(expense.amount),
+              },
+              ...(canManage
+                ? [
+                    {
+                      key: 'actions',
+                      label: tc('actions'),
+                      align: 'end' as const,
+                      headerHidden: true,
+                      cell: (expense: CarExpense) => (
+                        <ActionMenu
+                          actions={[
+                            {
+                              key: 'edit',
+                              label: tc('edit'),
+                              icon: <Pencil aria-hidden />,
+                              disabled: busy,
+                              onSelect: () => openForm(expense),
+                            },
+                            {
+                              key: 'remove',
+                              label: tc('delete'),
+                              icon: <Trash2 aria-hidden />,
+                              destructive: true,
+                              disabled: busy,
+                              onSelect: () => setPendingRemoval(expense),
+                            },
+                          ]}
+                          label={t('expenseActions', { name: expense.name })}
+                        />
+                      ),
+                    },
+                  ]
+                : []),
+            ]}
+            embedded
+            empty={
+              <EmptyState
+                description={t('expensesEmptyDescription')}
+                icon={<Wallet aria-hidden />}
+                title={t('expensesEmptyTitle')}
+              />
+            }
+            footer={
+              <div className="rz-card__foot flex-wrap items-baseline">
+                <span className="rz-muted">
+                  {t('expensesTotal', { count: expenses.length })}
+                </span>
+                <span className="rz-mono rz-strong">{money(total)}</span>
+              </div>
+            }
+            rowKey={(expense: CarExpense) => expense.id}
+            rows={expenses}
+          />
         </div>
-      ) : null}
+      )}
 
       <CarExpenseDrawer
         amount={amount}
@@ -1585,6 +1578,7 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     }
   }
   const priceLocked = carId !== undefined && !financeManage
+  const summaryId = useId()
   const remove = async () => {
     if (busy || !carId) return
     setBusy(true)
@@ -1635,561 +1629,572 @@ function CarForm({ carId, title }: { carId?: string; title: string }) {
     },
   ]
 
+  const crumb = (
+    <>
+      <BackLink to={backTo}>
+        {carId ? tf('backToCar') : t('backToCars')}
+      </BackLink>
+      <span className="hidden min-w-0 items-center gap-1.5 sm:flex">
+        <span>{t('eyebrow')}</span>
+        <ChevronRight aria-hidden className="size-3" />
+        <span>{t('title')}</span>
+        {values.code.trim() === '' ? null : (
+          <>
+            <ChevronRight aria-hidden className="size-3" />
+            <span aria-current="page" className="font-mono">
+              {values.code.trim()}
+            </span>
+          </>
+        )}
+      </span>
+    </>
+  )
+
   if (loading)
     return (
-      <div className="type-redesign -mx-4 -mt-6 grid content-start px-4 pt-8 sm:-mx-6 sm:px-6 md:-mx-8 md:-mt-8 md:px-8 lg:-mx-10 lg:-mt-10 lg:px-12">
-        <SkeletonRows columns={2} label={tf('loadingCar')} rows={5} />
-      </div>
+      <RedesignShell crumb={crumb}>
+        <div className="grid max-w-[1240px] gap-4">
+          <SkeletonRows columns={2} label={tf('loadingCar')} rows={5} />
+        </div>
+      </RedesignShell>
     )
 
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+    <div className="grid content-start">
       <form aria-busy={busy} onSubmit={(event) => void submit(event)}>
-        <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-          <div className="flex min-w-0 items-center gap-5">
-            <Link
-              className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-              to={backTo}
-            >
-              <ChevronLeft aria-hidden className="size-3.5" />
-              {carId ? tf('backToCar') : t('backToCars')}
-            </Link>
-            <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-              <span>{t('eyebrow')}</span>
-              <span aria-hidden className="text-white/20">
-                /
-              </span>
-              <span>{t('title')}</span>
-              {values.code.trim() === '' ? null : (
-                <>
-                  <span aria-hidden className="text-white/20">
-                    /
-                  </span>
-                  <span className="text-app-muted truncate">
-                    {values.code.trim()}
-                  </span>
-                </>
-              )}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            <Button asChild className="px-[18px] text-sm font-semibold">
-              <Link to={backTo}>{tc('cancel')}</Link>
-            </Button>
-            <Button
-              aria-busy={busy}
-              className="px-5 text-sm font-bold"
-              disabled={busy}
-              type="submit"
-              variant="primary"
-            >
-              {carId ? tf('saveChanges') : tf('createCar')}
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid w-full gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-          <div className="min-w-0">
-            <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-              {carId
-                ? `${values.brand.trim()} ${values.model.trim()}`.trim() ||
-                  title
-                : title}
-            </h1>
-            <p className="text-app-muted mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px]">
-              {values.code.trim() === '' ? null : (
-                <>
-                  <span className="text-app-ink font-mono">
-                    {values.code.trim()}
-                  </span>
-                  <span aria-hidden className="text-white/20">
-                    ·
-                  </span>
-                </>
-              )}
-              {values.year.trim() === '' ? null : (
-                <>
-                  <span>{values.year.trim()}</span>
-                  <span aria-hidden className="text-white/20">
-                    ·
-                  </span>
-                </>
-              )}
-              <span>
-                {loaded === null ? (
-                  <>
-                    {tf('requiredMarked')}{' '}
-                    <span className="text-brand font-bold">*</span>.{' '}
-                    {tf('restLater')}
-                  </>
-                ) : (
-                  tf('createdOn', { date: day(loaded.createdAt) })
-                )}
-              </span>
-            </p>
-          </div>
-
-          {problem ? <Notice tone="danger">{problem}</Notice> : null}
-          {createdCarId ? (
-            <Notice tone="ok">
-              {tf('createdNotice')}{' '}
-              <Link className="underline" to={`${base}/${createdCarId}`}>
-                {tf('openCar')}
-              </Link>
-            </Notice>
-          ) : null}
-
-          <div className="flex flex-wrap items-start gap-6">
-            <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-5">
-              <CarStep
-                hint={carId ? tf('identityHintEdit') : tf('identityHintNew')}
-                number="01"
-                title={tf('identityTitle')}
-              >
-                <div className="grid gap-3.5 sm:grid-cols-2">
-                  <Field hint={tf('codeHint')} label={tf('codeLabel')} required>
-                    <TextInput
-                      {...bind('code')}
-                      className="font-mono"
-                      placeholder="RZB-26-0001"
-                      required
-                    />
-                  </Field>
-                  <Field hint={tf('yearHint')} label={tf('yearLabel')} required>
-                    <TextInput
-                      {...bind('year')}
-                      className="font-mono"
-                      inputMode="numeric"
-                      placeholder="2020"
-                      required
-                    />
-                  </Field>
-                  <VehicleCatalogPicker
-                    disabled={busy}
-                    label={tf('makeLabel')}
-                    onSelect={(option) => {
-                      setMakeId(option.id)
-                      setValues((current) => ({
-                        ...current,
-                        brand: option.name,
-                        model: '',
-                      }))
-                    }}
-                    type="make"
-                    value={values.brand}
-                  />
-                  <VehicleCatalogPicker
-                    disabled={busy || values.brand === ''}
-                    label={tf('modelLabel')}
-                    makeId={makeId}
-                    makeName={values.brand}
-                    onSelect={(option) =>
-                      setValues((current) => ({
-                        ...current,
-                        model: option.name,
-                      }))
-                    }
-                    type="model"
-                    value={values.model}
-                  />
-                </div>
-
-                <div className="mt-4">
-                  <p className="text-app-ink text-[13px] font-bold">
-                    {tf('colorTitle')}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {quickColors(tf).map((option) => {
-                      const active =
-                        values.color.trim().toLowerCase() ===
-                        option.label.toLowerCase()
-                      return (
-                        <button
-                          aria-pressed={active}
-                          className={cn(
-                            'focus-visible:outline-brand flex min-h-11 cursor-pointer items-center gap-2 rounded-[10px] border px-3.5 text-[14px] font-semibold',
-                            active
-                              ? 'border-app-line-2 text-app-ink bg-white/[0.07]'
-                              : 'border-app-line text-app-muted hover:border-white/20',
-                          )}
-                          disabled={busy}
-                          key={option.label}
-                          onClick={() =>
-                            setValues((current) => ({
-                              ...current,
-                              color: active ? '' : option.label,
-                            }))
-                          }
-                          type="button"
-                        >
-                          <span
-                            aria-hidden
-                            className="size-2.5 rounded-full border border-white/20"
-                            style={{ background: option.swatch }}
-                          />
-                          {option.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <div className="mt-3">
-                    <Field
-                      hint={tf('colorFreeHint')}
-                      label={tf('colorFreeLabel')}
-                    >
-                      <TextInput
-                        {...bind('color')}
-                        placeholder={tf('colorPlaceholder')}
-                      />
-                    </Field>
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <Field hint={tf('vinHint')} label="VIN">
-                    <TextInput
-                      {...bind('vin')}
-                      className="font-mono tracking-[0.04em] uppercase"
-                      maxLength={17}
-                      placeholder="WVWD2468F220158A6"
-                    />
-                  </Field>
-                  <p
-                    className={cn(
-                      'mt-1.5 text-right font-mono text-[11px]',
-                      vinLength === 0
-                        ? 'text-app-dim'
-                        : vinLength === 17
-                          ? 'text-state-ok'
-                          : 'text-state-warn',
-                    )}
-                  >
-                    {vinLength} / 17
-                  </p>
-                </div>
-              </CarStep>
-
-              <CarStep
-                hint={tf('purchaseHint')}
-                number="02"
-                title={tf('purchaseTitle')}
-              >
-                <div className="grid gap-3.5 sm:grid-cols-2">
-                  <Field label={tf('acquiredAt')}>
-                    <TextInput {...bind('acquiredAt')} type="date" />
-                  </Field>
-                  <Field
-                    hint={priceLocked ? tf('purchasePriceLocked') : price.hint}
-                    label={tf('checkPrice')}
-                    required={!priceLocked}
-                  >
-                    <MoneyInput
-                      {...bind('purchasePrice')}
-                      className="font-mono"
-                      currency={price.currency}
-                      disabled={busy || priceLocked || price.disabled}
-                      inputMode="decimal"
-                      placeholder="10380"
-                      required={!priceLocked && !price.disabled}
-                    />
-                  </Field>
-                </div>
-                {priceLocked ? null : price.note}
-              </CarStep>
-
-              {financeManage ? (
-                <CarStep
-                  hint={tf('extraExpensesHint')}
-                  number="03"
-                  title={tf('extraExpensesTitle')}
-                >
-                  {carId ? (
-                    <CarFormExpenses
-                      expenses={loaded?.expenses ?? []}
-                      money={money}
-                      to={`${base}/${carId}`}
-                    />
-                  ) : (
-                    <NewCarExpenses
-                      busy={busy}
-                      completed={completedExpenseIds}
-                      expenses={expenses}
-                      onChange={setExpenses}
-                      price={price}
-                    />
-                  )}
-                </CarStep>
-              ) : null}
-
-              <CarStep
-                hint={tf('photosHint')}
-                number={financeManage ? '04' : '03'}
-                title={tf('photosTitle')}
-              >
-                {carId ? (
-                  <fieldset className="grid gap-3" disabled={busy}>
-                    <p className="text-app-muted text-sm">
-                      {tf('photosEditNote')}
-                    </p>
-                    <PhotoFileField
-                      aria-label={tf('addPhotos')}
-                      multiple
-                      disabled={busy}
-                      onChange={(event) => {
-                        const files = Array.from(event.target.files ?? [])
-                        event.target.value = ''
-                        if (photoOrder.length + files.length > 10) {
-                          setProblem(tf('photosLimit'))
-                          return
-                        }
-                        const picked = files.map((file) => ({
-                          id: crypto.randomUUID(),
-                          file,
-                          previewUrl: URL.createObjectURL(file),
-                        }))
-                        setPendingMedia((current) => [...current, ...picked])
-                        setPhotoOrder((current) => [
-                          ...current,
-                          ...picked.map((item) => item.id),
-                        ])
-                      }}
-                    />
-                    {photoOrder.length === 0 ? (
-                      <p className="text-app-dim text-sm">{tf('noPhotos')}</p>
-                    ) : (
-                      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                        {photoOrder.map((key, index) => {
-                          const existing = media.find(
-                            (item) => item.storageKey === key,
-                          )
-                          const pending = pendingMedia.find(
-                            (item) => item.id === key,
-                          )
-                          return (
-                            <li
-                              key={key}
-                              className="grid min-w-0 content-start gap-2"
-                            >
-                              <Thumbnail
-                                photo={{
-                                  url:
-                                    existing?.url ?? pending?.previewUrl ?? '',
-                                }}
-                                alt={tf('currentPhotoAlt', {
-                                  number: index + 1,
-                                })}
-                                ratio="wide"
-                              />
-                              {index === 0 ? (
-                                <span className="text-brand text-xs">
-                                  {tf('coverPhoto')}
-                                </span>
-                              ) : (
-                                <Button
-                                  size="md"
-                                  variant="quiet"
-                                  className="min-w-0 px-2 text-xs whitespace-normal"
-                                  aria-label={tf('makeCoverPhoto', {
-                                    number: index + 1,
-                                  })}
-                                  onClick={() =>
-                                    setPhotoOrder((current) => [
-                                      key,
-                                      ...current.filter((item) => item !== key),
-                                    ])
-                                  }
-                                >
-                                  {tf('makeCover')}
-                                </Button>
-                              )}
-                              <Button
-                                size="md"
-                                variant="quiet"
-                                className="min-w-0 px-2 text-xs whitespace-normal"
-                                aria-label={tf('removePhotoNumber', {
-                                  number: index + 1,
-                                })}
-                                onClick={() => {
-                                  setPhotoOrder((current) =>
-                                    current.filter((item) => item !== key),
-                                  )
-                                  setMedia((current) =>
-                                    current.filter(
-                                      (item) => item.storageKey !== key,
-                                    ),
-                                  )
-                                  setPendingMedia((current) =>
-                                    current.filter((item) => item.id !== key),
-                                  )
-                                  if (pending?.previewUrl)
-                                    URL.revokeObjectURL(pending.previewUrl)
-                                }}
-                              >
-                                {tf('removePhoto')}
-                              </Button>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    )}
-                  </fieldset>
-                ) : (
-                  <PendingMediaPicker
-                    disabled={busy}
-                    items={pendingMedia}
-                    onChange={setPendingMedia}
-                  />
-                )}
-              </CarStep>
-
-              <CarStep
-                hint={tf('notesHint')}
-                number={financeManage ? '05' : '04'}
-                title={tf('notesTitle')}
-              >
-                <Field label={tf('notesTitle')}>
-                  <TextArea
-                    {...bind('notes')}
-                    placeholder={tf('notesPlaceholder')}
-                    rows={4}
-                  />
-                </Field>
-              </CarStep>
-            </div>
-
-            <section
-              aria-label={carId ? tf('summaryTitle') : tf('beforeCreateTitle')}
-              className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-[18px] border px-5.5 pt-[22px] pb-6"
-            >
-              <h2 className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
-                {carId ? tf('summaryTitle') : tf('beforeCreateTitle')}
-              </h2>
-              <div className="border-app-line bg-app-canvas mt-4 rounded-[14px] border p-4">
-                <p
-                  className={cn(
-                    'text-[17px] font-bold tracking-[-0.015em]',
-                    values.code.trim() === '' ? 'text-app-dim' : 'text-white',
-                  )}
-                >
-                  {values.code.trim() || tf('codeMissing')}
-                </p>
-                <p
-                  className={cn(
-                    'mt-1 text-[14px] font-medium',
-                    values.brand.trim() === '' && values.model.trim() === ''
-                      ? 'text-app-dim'
-                      : 'text-app-muted',
-                  )}
-                >
-                  {`${values.brand.trim()} ${values.model.trim()}`.trim() ||
-                    tf('makeModelMissing')}
-                </p>
-                <p
-                  className={cn(
-                    'mt-3 font-mono text-[12px] tracking-[0.04em] break-all',
-                    vinLength === 17 ? 'text-app-muted' : 'text-app-dim',
-                  )}
-                >
-                  {values.vin.trim().toUpperCase() || tf('vinMissing')}
-                </p>
-              </div>
-              <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
-                <dt className="text-app-muted text-[14px] font-semibold">
-                  {tf('summaryPrice')}
-                </dt>
-                <dd
-                  className={cn(
-                    'font-mono text-[15px]',
-                    priceValid ? 'text-white' : 'text-app-dim',
-                  )}
-                >
-                  {priceValid ? money(priceNumber) : '—'}
-                </dd>
-                <dt className="text-app-muted text-[14px] font-semibold">
-                  {tf('summaryExpenses')}
-                </dt>
-                <dd
-                  className={cn(
-                    'font-mono text-[15px]',
-                    expensesTotal > 0 ? 'text-white' : 'text-app-dim',
-                  )}
-                >
-                  {expensesTotal > 0 ? money(expensesTotal) : '—'}
-                </dd>
-                <dd aria-hidden className="bg-app-line col-span-2 my-1 h-px" />
-                <dt className="text-[15px] font-bold text-white">
-                  {tf('summaryInvested')}
-                </dt>
-                <dd className="font-mono text-[20px] text-white">
-                  {invested > 0 ? money(invested) : '—'}
-                </dd>
-              </dl>
-              <ul className="border-app-line mt-5.5 grid gap-2.5 border-t pt-4.5">
-                {checks.map((check) => (
-                  <li
-                    className={cn(
-                      'flex items-center gap-2.5 text-[13px] font-semibold',
-                      check.done ? 'text-app-ink' : 'text-app-muted',
-                    )}
-                    key={check.label}
-                  >
-                    <span
-                      aria-hidden
-                      className={cn(
-                        'flex size-4.5 shrink-0 items-center justify-center rounded-full text-[11px] font-extrabold',
-                        check.done
-                          ? 'bg-state-ok-soft text-state-ok'
-                          : 'bg-white/[0.06]',
-                      )}
-                    >
-                      {check.done ? '✓' : ''}
-                    </span>
-                    {check.label}
-                    <span className="sr-only">
-                      {check.done ? tf('checkDone') : tf('checkNotDone')}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {priceEditable ? (
-                <div className="mt-5.5 empty:hidden">{price.saveNotes}</div>
-              ) : null}
+        <RedesignShell
+          actions={
+            <>
+              <Button asChild>
+                <Link to={backTo}>{tc('cancel')}</Link>
+              </Button>
               <Button
                 aria-busy={busy}
-                className="mt-5.5 min-h-11.5 w-full text-[15px] font-bold"
                 disabled={busy}
                 type="submit"
                 variant="primary"
               >
+                <Check aria-hidden />
                 {carId ? tf('saveChanges') : tf('createCar')}
               </Button>
-              {carId && loaded !== null ? (
-                <div className="border-app-line mt-5 border-t pt-4.5">
-                  <p className="text-app-muted text-[13px] leading-[1.5]">
-                    {loaded.profitability == null
-                      ? tf('deleteNoProfitability')
-                      : loaded.profitability.partsTotal > 0
-                        ? tf('deleteBlockedParts', {
-                            count: loaded.profitability.partsTotal,
-                          })
-                        : tf('deleteAllowed')}
-                  </p>
-                  <Button
-                    className="mt-3 min-h-10 w-full text-[13px] font-bold"
-                    disabled={
-                      busy || (loaded.profitability?.partsTotal ?? 0) > 0
-                    }
-                    onClick={() => setDeleting(true)}
-                    variant="danger"
+            </>
+          }
+          crumb={crumb}
+        >
+          <div className="grid max-w-[1240px] gap-4">
+            <div className="grid gap-2">
+              <h1 className="rz-h-page">
+                {carId
+                  ? `${values.brand.trim()} ${values.model.trim()}`.trim() ||
+                    title
+                  : title}
+              </h1>
+              <p className="rz-muted m-0 flex flex-wrap items-center gap-x-2 gap-y-1">
+                {values.code.trim() === '' ? null : (
+                  <>
+                    <span className="rz-mono rz-strong">
+                      {values.code.trim()}
+                    </span>
+                    <span aria-hidden className="rz-dim">
+                      ·
+                    </span>
+                  </>
+                )}
+                {values.year.trim() === '' ? null : (
+                  <>
+                    <span>{values.year.trim()}</span>
+                    <span aria-hidden className="rz-dim">
+                      ·
+                    </span>
+                  </>
+                )}
+                <span>
+                  {loaded === null ? (
+                    <>
+                      {tf('requiredMarked')}{' '}
+                      <span className="text-brand-text font-bold">*</span>.{' '}
+                      {tf('restLater')}
+                    </>
+                  ) : (
+                    tf('createdOn', { date: day(loaded.createdAt) })
+                  )}
+                </span>
+              </p>
+            </div>
+
+            {problem ? <Notice tone="danger">{problem}</Notice> : null}
+            {createdCarId ? (
+              <Notice tone="ok">
+                {tf('createdNotice')}{' '}
+                <Link to={`${base}/${createdCarId}`}>{tf('openCar')}</Link>
+              </Notice>
+            ) : null}
+
+            <div className="flex flex-wrap items-start gap-4">
+              <div className="grid min-w-0 flex-[1_1_480px] gap-4">
+                <CarStep
+                  hint={carId ? tf('identityHintEdit') : tf('identityHintNew')}
+                  number="01"
+                  title={tf('identityTitle')}
+                >
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field
+                      hint={tf('codeHint')}
+                      label={tf('codeLabel')}
+                      required
+                    >
+                      <TextInput
+                        {...bind('code')}
+                        className="font-mono"
+                        placeholder="RZB-26-0001"
+                        required
+                      />
+                    </Field>
+                    <Field
+                      hint={tf('yearHint')}
+                      label={tf('yearLabel')}
+                      required
+                    >
+                      <TextInput
+                        {...bind('year')}
+                        className="font-mono"
+                        inputMode="numeric"
+                        placeholder="2020"
+                        required
+                      />
+                    </Field>
+                    <VehicleCatalogPicker
+                      disabled={busy}
+                      label={tf('makeLabel')}
+                      onSelect={(option) => {
+                        setMakeId(option.id)
+                        setValues((current) => ({
+                          ...current,
+                          brand: option.name,
+                          model: '',
+                        }))
+                      }}
+                      type="make"
+                      value={values.brand}
+                    />
+                    <VehicleCatalogPicker
+                      disabled={busy || values.brand === ''}
+                      label={tf('modelLabel')}
+                      makeId={makeId}
+                      makeName={values.brand}
+                      onSelect={(option) =>
+                        setValues((current) => ({
+                          ...current,
+                          model: option.name,
+                        }))
+                      }
+                      type="model"
+                      value={values.model}
+                    />
+                  </div>
+
+                  <div className="grid gap-2">
+                    <p className="rz-label m-0">{tf('colorTitle')}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {quickColors(tf).map((option) => {
+                        const active =
+                          values.color.trim().toLowerCase() ===
+                          option.label.toLowerCase()
+                        return (
+                          <button
+                            aria-pressed={active}
+                            className={cn(
+                              'rz-btn',
+                              active
+                                ? 'bg-app-selected text-app-strong'
+                                : 'rz-muted',
+                            )}
+                            disabled={busy}
+                            key={option.label}
+                            onClick={() =>
+                              setValues((current) => ({
+                                ...current,
+                                color: active ? '' : option.label,
+                              }))
+                            }
+                            type="button"
+                          >
+                            <span
+                              aria-hidden
+                              className="border-app-line-2 size-2.5 rounded-full border"
+                              style={{ background: option.swatch }}
+                            />
+                            {option.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <div className="mt-1">
+                      <Field
+                        hint={tf('colorFreeHint')}
+                        label={tf('colorFreeLabel')}
+                      >
+                        <TextInput
+                          {...bind('color')}
+                          placeholder={tf('colorPlaceholder')}
+                        />
+                      </Field>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-1.5">
+                    <Field hint={tf('vinHint')} label="VIN">
+                      <TextInput
+                        {...bind('vin')}
+                        className="font-mono uppercase"
+                        maxLength={17}
+                        placeholder="WVWD2468F220158A6"
+                      />
+                    </Field>
+                    <p
+                      className={cn(
+                        'm-0 text-right font-mono text-micro',
+                        vinLength === 0
+                          ? 'text-app-dim'
+                          : vinLength === 17
+                            ? 'text-state-ok'
+                            : 'text-state-warn',
+                      )}
+                    >
+                      {vinLength} / 17
+                    </p>
+                  </div>
+                </CarStep>
+
+                <CarStep
+                  hint={tf('purchaseHint')}
+                  number="02"
+                  title={tf('purchaseTitle')}
+                >
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label={tf('acquiredAt')}>
+                      <TextInput {...bind('acquiredAt')} type="date" />
+                    </Field>
+                    <Field
+                      hint={
+                        priceLocked ? tf('purchasePriceLocked') : price.hint
+                      }
+                      label={tf('checkPrice')}
+                      required={!priceLocked}
+                    >
+                      <MoneyInput
+                        {...bind('purchasePrice')}
+                        className="font-mono"
+                        currency={price.currency}
+                        disabled={busy || priceLocked || price.disabled}
+                        inputMode="decimal"
+                        placeholder="10380"
+                        required={!priceLocked && !price.disabled}
+                      />
+                    </Field>
+                  </div>
+                  {priceLocked ? null : price.note}
+                </CarStep>
+
+                {financeManage ? (
+                  <CarStep
+                    hint={tf('extraExpensesHint')}
+                    number="03"
+                    title={tf('extraExpensesTitle')}
                   >
-                    <Trash2 aria-hidden />
-                    {tf('deleteCar')}
+                    {carId ? (
+                      <CarFormExpenses
+                        expenses={loaded?.expenses ?? []}
+                        money={money}
+                        to={`${base}/${carId}`}
+                      />
+                    ) : (
+                      <NewCarExpenses
+                        busy={busy}
+                        completed={completedExpenseIds}
+                        expenses={expenses}
+                        onChange={setExpenses}
+                        price={price}
+                      />
+                    )}
+                  </CarStep>
+                ) : null}
+
+                <CarStep
+                  hint={tf('photosHint')}
+                  number={financeManage ? '04' : '03'}
+                  title={tf('photosTitle')}
+                >
+                  {carId ? (
+                    <fieldset className="grid gap-3" disabled={busy}>
+                      <p className="rz-muted m-0">{tf('photosEditNote')}</p>
+                      <PhotoFileField
+                        aria-label={tf('addPhotos')}
+                        multiple
+                        disabled={busy}
+                        onChange={(event) => {
+                          const files = Array.from(event.target.files ?? [])
+                          event.target.value = ''
+                          if (photoOrder.length + files.length > 10) {
+                            setProblem(tf('photosLimit'))
+                            return
+                          }
+                          const picked = files.map((file) => ({
+                            id: crypto.randomUUID(),
+                            file,
+                            previewUrl: URL.createObjectURL(file),
+                          }))
+                          setPendingMedia((current) => [...current, ...picked])
+                          setPhotoOrder((current) => [
+                            ...current,
+                            ...picked.map((item) => item.id),
+                          ])
+                        }}
+                      />
+                      {photoOrder.length === 0 ? (
+                        <p className="rz-dim m-0">{tf('noPhotos')}</p>
+                      ) : (
+                        <ul className="rz-photos m-0 list-none p-0">
+                          {photoOrder.map((key, index) => {
+                            const existing = media.find(
+                              (item) => item.storageKey === key,
+                            )
+                            const pending = pendingMedia.find(
+                              (item) => item.id === key,
+                            )
+                            return (
+                              <li
+                                key={key}
+                                className="grid min-w-0 content-start gap-2"
+                              >
+                                <Thumbnail
+                                  photo={{
+                                    url:
+                                      existing?.url ??
+                                      pending?.previewUrl ??
+                                      '',
+                                  }}
+                                  alt={tf('currentPhotoAlt', {
+                                    number: index + 1,
+                                  })}
+                                  ratio="wide"
+                                />
+                                {index === 0 ? (
+                                  <span className="rz-pill rz-pill--info justify-self-start">
+                                    {tf('coverPhoto')}
+                                  </span>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="quiet"
+                                    className="min-w-0 justify-self-start whitespace-normal"
+                                    aria-label={tf('makeCoverPhoto', {
+                                      number: index + 1,
+                                    })}
+                                    onClick={() =>
+                                      setPhotoOrder((current) => [
+                                        key,
+                                        ...current.filter(
+                                          (item) => item !== key,
+                                        ),
+                                      ])
+                                    }
+                                  >
+                                    {tf('makeCover')}
+                                  </Button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="quiet"
+                                  className="min-w-0 justify-self-start whitespace-normal"
+                                  aria-label={tf('removePhotoNumber', {
+                                    number: index + 1,
+                                  })}
+                                  onClick={() => {
+                                    setPhotoOrder((current) =>
+                                      current.filter((item) => item !== key),
+                                    )
+                                    setMedia((current) =>
+                                      current.filter(
+                                        (item) => item.storageKey !== key,
+                                      ),
+                                    )
+                                    setPendingMedia((current) =>
+                                      current.filter((item) => item.id !== key),
+                                    )
+                                    if (pending?.previewUrl)
+                                      URL.revokeObjectURL(pending.previewUrl)
+                                  }}
+                                >
+                                  {tf('removePhoto')}
+                                </Button>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      )}
+                    </fieldset>
+                  ) : (
+                    <PendingMediaPicker
+                      disabled={busy}
+                      items={pendingMedia}
+                      onChange={setPendingMedia}
+                    />
+                  )}
+                </CarStep>
+
+                <CarStep
+                  hint={tf('notesHint')}
+                  number={financeManage ? '05' : '04'}
+                  title={tf('notesTitle')}
+                >
+                  <Field label={tf('notesTitle')}>
+                    <TextArea
+                      {...bind('notes')}
+                      placeholder={tf('notesPlaceholder')}
+                      rows={4}
+                    />
+                  </Field>
+                </CarStep>
+              </div>
+
+              <section
+                aria-labelledby={summaryId}
+                className="rz-card min-w-0 flex-[1_1_280px] lg:max-w-[380px]"
+              >
+                <header className="rz-card__head py-2.5">
+                  <h2 className="rz-h-card" id={summaryId}>
+                    {carId ? tf('summaryTitle') : tf('beforeCreateTitle')}
+                  </h2>
+                </header>
+                <div className="rz-card__body grid gap-4">
+                  <div className="rz-inset grid gap-1">
+                    <p
+                      className={cn(
+                        'm-0 font-mono font-semibold',
+                        values.code.trim() === '' ? 'rz-dim' : 'rz-strong',
+                      )}
+                    >
+                      {values.code.trim() || tf('codeMissing')}
+                    </p>
+                    <p
+                      className={cn(
+                        'm-0',
+                        values.brand.trim() === '' && values.model.trim() === ''
+                          ? 'rz-dim'
+                          : 'rz-muted',
+                      )}
+                    >
+                      {`${values.brand.trim()} ${values.model.trim()}`.trim() ||
+                        tf('makeModelMissing')}
+                    </p>
+                    <p
+                      className={cn(
+                        'rz-caption m-0 font-mono break-all',
+                        vinLength === 17 && 'rz-muted',
+                      )}
+                    >
+                      {values.vin.trim().toUpperCase() || tf('vinMissing')}
+                    </p>
+                  </div>
+                  <dl className="m-0 grid grid-cols-[1fr_auto] items-baseline gap-y-2">
+                    <dt className="rz-muted">{tf('summaryPrice')}</dt>
+                    <dd
+                      className={cn(
+                        'rz-mono m-0',
+                        priceValid ? 'rz-strong' : 'rz-dim',
+                      )}
+                    >
+                      {priceValid ? money(priceNumber) : '—'}
+                    </dd>
+                    <dt className="rz-muted">{tf('summaryExpenses')}</dt>
+                    <dd
+                      className={cn(
+                        'rz-mono m-0',
+                        expensesTotal > 0 ? 'rz-strong' : 'rz-dim',
+                      )}
+                    >
+                      {expensesTotal > 0 ? money(expensesTotal) : '—'}
+                    </dd>
+                    <dd
+                      aria-hidden
+                      className="bg-app-line col-span-2 m-0 h-px"
+                    />
+                    <dt className="rz-strong font-semibold">
+                      {tf('summaryInvested')}
+                    </dt>
+                    <dd className="rz-mono rz-strong m-0 text-title">
+                      {invested > 0 ? money(invested) : '—'}
+                    </dd>
+                  </dl>
+                  <ul className="border-app-line m-0 grid list-none gap-2 border-t p-0 pt-3">
+                    {checks.map((check) => (
+                      <li
+                        className={cn(
+                          'flex items-center gap-2',
+                          check.done ? 'text-app-ink' : 'rz-muted',
+                        )}
+                        key={check.label}
+                      >
+                        <span
+                          aria-hidden
+                          className={cn(
+                            'grid size-4 shrink-0 place-items-center rounded-full',
+                            check.done
+                              ? 'bg-state-ok-soft text-state-ok'
+                              : 'bg-app-hover',
+                          )}
+                        >
+                          {check.done ? <Check className="size-3" /> : null}
+                        </span>
+                        {check.label}
+                        <span className="sr-only">
+                          {check.done ? tf('checkDone') : tf('checkNotDone')}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {priceEditable ? (
+                    <div className="empty:hidden">{price.saveNotes}</div>
+                  ) : null}
+                  <Button
+                    aria-busy={busy}
+                    disabled={busy}
+                    size="wide"
+                    type="submit"
+                    variant="primary"
+                  >
+                    {carId ? tf('saveChanges') : tf('createCar')}
                   </Button>
+                  {carId && loaded !== null ? (
+                    <div className="border-app-line grid gap-3 border-t pt-3">
+                      <p className="rz-muted m-0">
+                        {loaded.profitability == null
+                          ? tf('deleteNoProfitability')
+                          : loaded.profitability.partsTotal > 0
+                            ? tf('deleteBlockedParts', {
+                                count: loaded.profitability.partsTotal,
+                              })
+                            : tf('deleteAllowed')}
+                      </p>
+                      <Button
+                        disabled={
+                          busy || (loaded.profitability?.partsTotal ?? 0) > 0
+                        }
+                        onClick={() => setDeleting(true)}
+                        size="wide"
+                        variant="danger"
+                      >
+                        <Trash2 aria-hidden />
+                        {tf('deleteCar')}
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </section>
+              </section>
+            </div>
           </div>
-        </div>
+        </RedesignShell>
       </form>
 
       <ConfirmDialog
@@ -2222,25 +2227,17 @@ function CarStep({
 }) {
   const titleId = useId()
   return (
-    <section
-      aria-labelledby={titleId}
-      className="border-app-line bg-app-raised rounded-[18px] border px-6 pt-[22px] pb-6"
-    >
-      <div className="flex items-baseline gap-2.5">
-        <span aria-hidden className="text-app-dim font-mono text-[11px]">
+    <section aria-labelledby={titleId} className="rz-card">
+      <header className="rz-card__head justify-start py-2.5">
+        <span aria-hidden className="rz-mono rz-dim text-caption">
           {number}
         </span>
-        <h2
-          className="text-[17px] font-bold tracking-[-0.01em] text-white"
-          id={titleId}
-        >
+        <h2 className="rz-h-card" id={titleId}>
           {title}
         </h2>
-      </div>
-      <p className="text-app-muted mt-1.5 text-[14px] leading-[1.5] text-pretty">
-        {hint}
-      </p>
-      <div className="mt-4.5">{children}</div>
+        <p className="rz-caption m-0 w-full text-pretty">{hint}</p>
+      </header>
+      <div className="rz-card__body grid gap-4">{children}</div>
     </section>
   )
 }
@@ -2259,29 +2256,22 @@ function CarFormExpenses({
   return (
     <>
       {expenses.length === 0 ? (
-        <p className="border-app-line-2 text-app-muted rounded-xl border border-dashed bg-white/[0.02] p-4.5 text-sm">
-          {tf('noExpenses')}
-        </p>
+        <p className="rz-inset rz-muted m-0">{tf('noExpenses')}</p>
       ) : (
-        <ul className="grid gap-3">
+        <ul className="divide-app-line border-app-line m-0 grid list-none divide-y rounded-panel border p-0">
           {expenses.map((expense) => (
-            <li
-              className="border-app-line bg-app-canvas flex items-center gap-3 rounded-xl border px-3.5 py-3"
-              key={expense.id}
-            >
-              <span className="min-w-0 flex-1 text-[15px] font-semibold text-white">
+            <li className="flex items-center gap-3 px-3 py-2" key={expense.id}>
+              <span className="rz-strong min-w-0 flex-1 font-medium">
                 {expense.name}
               </span>
-              <span className="font-mono text-[15px] text-white">
-                {money(expense.amount)}
-              </span>
+              <span className="rz-mono rz-strong">{money(expense.amount)}</span>
             </li>
           ))}
         </ul>
       )}
-      <div className="border-app-line mt-4.5 flex flex-wrap items-center justify-between gap-4 border-t pt-4.5">
-        <p className="text-app-muted text-[13px]">{tf('expensesAffect')}</p>
-        <Button asChild className="text-[13px] font-bold">
+      <div className="border-app-line flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+        <p className="rz-muted m-0">{tf('expensesAffect')}</p>
+        <Button asChild>
           <Link to={to}>{tf('manageExpenses')}</Link>
         </Button>
       </div>
@@ -2312,11 +2302,9 @@ function NewCarExpenses({
   return (
     <>
       {expenses.length === 0 ? (
-        <p className="border-app-line-2 text-app-muted rounded-xl border border-dashed bg-white/[0.02] p-4.5 text-sm">
-          {tf('noNewExpenses')}
-        </p>
+        <p className="rz-inset rz-muted m-0">{tf('noNewExpenses')}</p>
       ) : (
-        <ul className="grid">
+        <ul className="m-0 grid list-none p-0">
           {expenses.map((expense, index) => {
             const saved = completed.has(expense.id)
             return (
@@ -2371,7 +2359,7 @@ function NewCarExpenses({
                     value={expense.amount}
                   />
                 </Field>
-                <div className="flex items-center justify-end gap-2 sm:pt-[27px]">
+                <div className="flex items-center justify-end gap-2 sm:self-end sm:pb-0.5">
                   {saved ? (
                     <StatusPill tone="ok">{tc('saved')}</StatusPill>
                   ) : null}
@@ -2394,10 +2382,9 @@ function NewCarExpenses({
           })}
         </ul>
       )}
-      <div className="border-app-line mt-4.5 flex flex-wrap items-center justify-between gap-4 border-t pt-4.5">
-        <p className="text-app-muted text-[13px]">{tf('expensesLater')}</p>
+      <div className="border-app-line flex flex-wrap items-center justify-between gap-3 border-t pt-3">
+        <p className="rz-muted m-0">{tf('expensesLater')}</p>
         <Button
-          className="text-[13px] font-bold"
           disabled={busy}
           onClick={() =>
             onChange((current) => [
@@ -2566,21 +2553,23 @@ export function VehicleCatalogPicker({
   return (
     <div ref={pickerRef}>
       <Field className="relative" label={label} required>
-        <button
-          aria-expanded={open}
-          aria-haspopup="listbox"
-          aria-label={label}
-          className="border-app-line-2 bg-app-input text-app-ink min-h-11 w-full rounded-control border px-3.5 text-left text-[14.5px] disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={disabled}
-          onClick={togglePicker}
-          type="button"
-        >
-          {value || (type === 'make' ? tf('pickMake') : tf('pickModel'))}
-        </button>
+        <span className="rz-select-wrap block">
+          <button
+            aria-expanded={open}
+            aria-haspopup="listbox"
+            aria-label={label}
+            className="rz-select text-left"
+            disabled={disabled}
+            onClick={togglePicker}
+            type="button"
+          >
+            {value || (type === 'make' ? tf('pickMake') : tf('pickModel'))}
+          </button>
+        </span>
         {open ? (
           <div
             aria-label={label}
-            className="border-app-line-2 bg-app-overlay absolute top-full right-0 left-0 z-40 mt-2 grid max-h-72 gap-2 overflow-y-auto rounded-[14px] border p-2 shadow-2xl"
+            className="rz-menu absolute top-full right-0 left-0 z-40 mt-1 max-h-72 gap-1 overflow-y-auto"
             role="listbox"
           >
             <TextInput
@@ -2591,7 +2580,7 @@ export function VehicleCatalogPicker({
               value={query}
             />
             {loading ? (
-              <p className="text-app-muted py-4 text-center text-sm">
+              <p className="rz-muted m-0 py-4 text-center">
                 {tf('loadingList')}
               </p>
             ) : null}
@@ -2599,7 +2588,7 @@ export function VehicleCatalogPicker({
             {!loading && !problem
               ? shown.map((option) => (
                   <button
-                    className="hover:bg-white/[0.06] min-h-11 rounded-[10px] px-3 text-left text-sm font-semibold text-white"
+                    className="rz-menu__item"
                     key={option.id}
                     onClick={() => {
                       onSelect(option)
@@ -2650,14 +2639,12 @@ function PendingMediaPicker({
   }
   return (
     <fieldset className="grid gap-3">
-      <label className="border-app-line-2 bg-app-input hover:border-brand flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-[14px] border border-dashed px-5 text-center">
-        <ImagePlus aria-hidden className="text-app-muted size-6" />
-        <span className="mt-2 text-sm font-bold text-white">
+      <label className="rz-photo rz-photo--add aspect-auto min-h-28 gap-1 px-5 py-4 text-center">
+        <ImagePlus aria-hidden className="size-5" />
+        <span className="rz-strong text-body font-semibold">
           {tf('choosePhotos')}
         </span>
-        <span className="text-app-dim mt-1 text-xs">
-          {tf('uploadAfterCreate')}
-        </span>
+        <span className="rz-caption">{tf('uploadAfterCreate')}</span>
         <input
           accept="image/*"
           aria-label={tf('addPhotos')}
@@ -2669,9 +2656,9 @@ function PendingMediaPicker({
         />
       </label>
       {items.length === 0 ? (
-        <p className="text-app-dim text-[13.5px]">{tf('noFiles')}</p>
+        <p className="rz-dim m-0">{tf('noFiles')}</p>
       ) : (
-        <ul className="grid gap-2 sm:grid-cols-2">
+        <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2">
           {items.map((item) => (
             <li
               className="border-app-line flex min-w-0 items-center gap-3 rounded-control border p-2"
@@ -2680,20 +2667,19 @@ function PendingMediaPicker({
               {item.previewUrl ? (
                 <img
                   alt={tf('photoPreview')}
-                  className="size-12 rounded-control object-cover"
+                  className="size-control-lg shrink-0 rounded-rz-xs object-cover"
                   src={item.previewUrl}
                 />
               ) : (
-                <ImagePlus aria-hidden className="text-app-dim size-8" />
+                <ImagePlus aria-hidden className="rz-dim size-5" />
               )}
-              <span className="text-app-ink min-w-0 flex-1 truncate text-sm">
-                {item.file.name}
-              </span>
+              <span className="min-w-0 flex-1 truncate">{item.file.name}</span>
               <Button
                 aria-label={tf('removeFile', { name: item.file.name })}
                 disabled={disabled}
                 onClick={() => remove(item.id)}
                 size="icon"
+                variant="quiet"
               >
                 <Trash2 aria-hidden />
               </Button>
@@ -2821,23 +2807,11 @@ export function MediaPicker({
     }
   }
   return (
-    <fieldset
-      className={cn(
-        'grid min-w-0 gap-3',
-        !bare && 'border-app-line rounded-panel bg-app-raised border p-4',
-      )}
-    >
-      <legend
-        className={cn(
-          'px-1 text-base font-semibold text-white',
-          bare && 'sr-only',
-        )}
-      >
+    <fieldset className={cn('grid min-w-0 gap-3', !bare && 'rz-inset')}>
+      <legend className={cn('rz-h-card float-left w-full', bare && 'sr-only')}>
         {tf('photosTitle')}
       </legend>
-      {bare ? null : (
-        <p className="text-app-dim text-[13.5px]">{tf('photosHint')}</p>
-      )}
+      {bare ? null : <p className="rz-caption m-0">{tf('photosHint')}</p>}
       <PhotoFileField
         aria-label={tf('addPhotos')}
         capture="environment"
@@ -2848,7 +2822,7 @@ export function MediaPicker({
       {pendingPreviews.length > 0 ? (
         <ul
           aria-label={tf('selectedPhotos')}
-          className="grid gap-2 sm:grid-cols-2"
+          className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2"
         >
           {pendingPreviews.map((item) => (
             <li
@@ -2857,34 +2831,31 @@ export function MediaPicker({
             >
               <img
                 alt={tf('previewOf', { name: item.name })}
-                className="size-12 shrink-0 rounded-control object-cover"
+                className="size-control-lg shrink-0 rounded-rz-xs object-cover"
                 src={item.url}
               />
-              <span className="text-app-ink min-w-0 flex-1 truncate text-sm">
-                {item.name}
-              </span>
-              <span className="text-app-dim text-xs">{tf('uploading')}</span>
+              <span className="min-w-0 flex-1 truncate">{item.name}</span>
+              <span className="rz-caption">{tf('uploading')}</span>
             </li>
           ))}
         </ul>
       ) : null}
       {problems.length > 0 ? (
-        <div
-          className="border-state-danger/30 bg-state-danger-soft rounded-control border px-3.5 py-2.5"
-          role="alert"
-        >
-          <p className="text-state-danger text-[14.5px] font-medium">
-            {tf('uploadFailed')}
-          </p>
-          <ul className="text-app-ink mt-1.5 grid gap-1 text-[14px]">
-            {problems.map((problem) => (
-              <li key={problem}>{problem}</li>
-            ))}
-          </ul>
+        <div className="rz-notice rz-notice--danger" role="alert">
+          <div className="rz-notice__body">
+            <p className="text-state-danger m-0 font-medium">
+              {tf('uploadFailed')}
+            </p>
+            <ul className="m-0 mt-1 grid list-none gap-1 p-0">
+              {problems.map((problem) => (
+                <li key={problem}>{problem}</li>
+              ))}
+            </ul>
+          </div>
         </div>
       ) : null}
       {items.length > 0 ? (
-        <ul className="grid gap-2">
+        <ul className="m-0 grid list-none gap-2 p-0">
           {items.map((item) => (
             <li
               className="border-app-line rounded-control flex flex-wrap items-center gap-3 border p-2"
@@ -2892,15 +2863,19 @@ export function MediaPicker({
             >
               <img
                 alt={tf('photoPreview')}
-                className="rounded-control size-12 shrink-0 object-cover"
+                className="size-control-lg shrink-0 rounded-rz-xs object-cover"
                 src={item.url}
               />
-              <span className="text-app-ink min-w-0 flex-1 truncate text-[14.5px]">
+              <span className="min-w-0 flex-1 truncate">
                 {names[item.storageKey] ??
                   item.storageKey.split('/').pop() ??
                   tf('photoFallback')}
               </span>
-              <Button disabled={busy} onClick={() => void remove(item)}>
+              <Button
+                disabled={busy}
+                onClick={() => void remove(item)}
+                size="sm"
+              >
                 <Trash2 aria-hidden />
                 {tf('removePhoto')}
               </Button>
@@ -2908,7 +2883,7 @@ export function MediaPicker({
           ))}
         </ul>
       ) : (
-        <p className="text-app-dim text-[13.5px]">
+        <p className="rz-dim m-0">
           <ImagePlus
             aria-hidden
             className="mr-1.5 inline size-4 align-text-bottom"

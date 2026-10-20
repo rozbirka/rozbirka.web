@@ -46,7 +46,11 @@ export function Amount({
       ? formatMoney(value, currency, locale)
       : formatNumber(value, locale)
   if (text === null) {
-    return <span className={cn('tabular-nums', className)}>{fallback}</span>
+    return (
+      <span className={cn('font-mono tabular-nums', className)}>
+        {fallback}
+      </span>
+    )
   }
 
   const suffix =
@@ -57,7 +61,7 @@ export function Amount({
   // the amount, is what a screen reader user actually needs.
   const supported = currencyDisplay === 'code' ? parseCurrency(currency) : null
   return (
-    <span className={cn('tabular-nums whitespace-nowrap', className)}>
+    <span className={cn('font-mono tabular-nums whitespace-nowrap', className)}>
       {text}
       {suffix ? ` ${suffix}` : ''}
       {supported ? (
@@ -82,11 +86,15 @@ export function Quantity({
   const { locale } = useLocale()
   const text = formatNumber(value, locale)
   if (text === null) {
-    return <span className={cn('tabular-nums', className)}>{fallback}</span>
+    return (
+      <span className={cn('font-mono tabular-nums', className)}>
+        {fallback}
+      </span>
+    )
   }
 
   return (
-    <span className={cn('tabular-nums whitespace-nowrap', className)}>
+    <span className={cn('font-mono tabular-nums whitespace-nowrap', className)}>
       {text}
       {unit ? ` ${unit}` : ''}
     </span>
@@ -125,7 +133,7 @@ export function DateValue({
 
   return (
     <time
-      className={cn('tabular-nums whitespace-nowrap', className)}
+      className={cn('font-mono tabular-nums whitespace-nowrap', className)}
       dateTime={value}
     >
       {text}
@@ -145,8 +153,8 @@ export function Fact({
 }) {
   return (
     <div className={cn('grid min-w-0 gap-1', className)}>
-      <dt className="text-app-dim text-[13.5px]">{label}</dt>
-      <dd className="text-sm break-words text-white">{children}</dd>
+      <dt className="text-app-dim">{label}</dt>
+      <dd className="text-app-ink m-0 break-words">{children}</dd>
     </div>
   )
 }

@@ -124,13 +124,13 @@ export function LocationBrowser({
       }
 
   return (
-    <div className="grid min-w-0 gap-4">
+    <div className="grid min-w-0 gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-app-ink text-xl font-bold tracking-[-0.01em]">
+        <h2 className="rz-h-title">
           {t(section ? 'shelves' : 'sections')} ·{' '}
           {f.number(section ? visibleShelves.length : visibleSections.length)}
         </h2>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="rz-btn-row items-center">
           {canManage ? (
             <Button
               variant="primary"
@@ -148,7 +148,6 @@ export function LocationBrowser({
       {printWorkspace ?? (
         <>
           <SearchInput
-            className="min-h-12 text-base"
             aria-label={t(section ? 'searchShelves' : 'searchSections')}
             placeholder={t(
               section ? 'searchShelfPlaceholder' : 'searchSectionPlaceholder',
@@ -161,23 +160,23 @@ export function LocationBrowser({
           {selectionNotice}
           {canViewParts ? (
             <Link
-              className="group bg-app-input text-app-ink hover:bg-app-overlay focus-visible:outline-brand flex min-h-20 w-full cursor-pointer items-center gap-3 rounded-control px-4 py-3 text-left transition-colors motion-reduce:transition-none"
+              className="group rz-inset hover:bg-app-hover flex w-full cursor-pointer items-center gap-3 px-3 py-2.5 text-left text-app-ink transition-colors motion-reduce:transition-none"
               to={locationPartsHref(partsBase, zone.warehouseId, direct)}
             >
-              <span className="text-app-muted hidden size-10 shrink-0 place-items-center sm:grid">
-                <Package aria-hidden className="size-5" />
+              <span className="text-app-muted hidden size-8 shrink-0 place-items-center sm:grid">
+                <Package aria-hidden className="size-4" />
               </span>
               <span className="min-w-0 flex-1">
-                <strong className="block break-words text-base font-bold">
+                <strong className="rz-strong block font-semibold break-words">
                   {direct.name}
                 </strong>
-                <span className="text-app-muted mt-1 block text-sm leading-5">
+                <span className="rz-muted mt-0.5 block text-caption">
                   {t(section ? 'sectionDirectHint' : 'zoneDirectHint')}
                 </span>
               </span>
               <ChevronRight
                 aria-hidden
-                className="text-app-muted group-hover:text-brand size-5 shrink-0"
+                className="text-app-dim group-hover:text-app-ink size-4 shrink-0"
               />
             </Link>
           ) : null}
@@ -188,7 +187,7 @@ export function LocationBrowser({
                 role="group"
                 aria-label={t('shelfList')}
                 tabIndex={0}
-                className="min-w-0 max-h-[36rem] overflow-auto overscroll-contain [scrollbar-gutter:stable] [&_thead_th]:text-app-muted [&_thead_th]:font-sans [&_thead_th]:text-sm [&_thead_th]:font-semibold [&_thead_th]:tracking-normal [&_thead_th]:normal-case"
+                className="rz-card min-w-0 max-h-[36rem] overflow-auto overscroll-contain [scrollbar-gutter:stable]"
               >
                 <DataTable
                   density="compact"
@@ -202,32 +201,32 @@ export function LocationBrowser({
                       cell: (shelf) => {
                         const content = (
                           <>
-                            <span className="bg-app-input text-app-muted hidden size-10 shrink-0 place-items-center rounded-control sm:grid">
-                              <Rows3 aria-hidden className="size-5" />
+                            <span className="bg-app-input text-app-muted hidden size-8 shrink-0 place-items-center rounded-control sm:grid">
+                              <Rows3 aria-hidden className="size-4" />
                             </span>
                             <span className="min-w-0 flex-1">
-                              <strong className="block break-words text-base font-bold sm:text-lg">
+                              <strong className="rz-strong block font-semibold break-words">
                                 {shelf.name}
                               </strong>
-                              <span className="text-app-muted mt-1 block break-all text-sm font-normal">
+                              <span className="rz-mono rz-caption mt-0.5 block break-all font-normal">
                                 {shelf.code}
                               </span>
                             </span>
                             {onEditShelf ? (
                               <Pencil
                                 aria-hidden
-                                className="text-brand size-5 shrink-0"
+                                className="text-app-dim group-hover:text-app-ink size-4 shrink-0"
                               />
                             ) : (
                               <ChevronRight
                                 aria-hidden
-                                className="text-app-muted group-hover:text-brand size-5 shrink-0"
+                                className="text-app-dim group-hover:text-app-ink size-4 shrink-0"
                               />
                             )}
                           </>
                         )
                         const rowClassName =
-                          'group text-app-ink focus-visible:outline-brand flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-control py-1 text-left'
+                          'group text-app-ink flex h-auto min-h-control-lg w-full cursor-pointer items-center gap-3 rounded-control py-1 text-left'
                         if (onEditShelf)
                           return (
                             <Button
@@ -259,7 +258,7 @@ export function LocationBrowser({
                         ) : (
                           <span className="text-app-ink block break-words">
                             {shelf.name}
-                            <span className="text-app-muted block break-all text-xs">
+                            <span className="rz-mono rz-caption block break-all">
                               {shelf.code}
                             </span>
                           </span>
@@ -273,7 +272,7 @@ export function LocationBrowser({
                   )}
                   rowKey={(shelf) => shelf.id}
                   empty={
-                    <p className="text-app-muted px-4 py-6 text-sm">
+                    <p className="rz-muted m-0 px-4 py-6">
                       {t(needle ? 'noMatches' : 'noShelves')}
                     </p>
                   }
@@ -286,7 +285,7 @@ export function LocationBrowser({
               role="group"
               aria-label={t('sectionList')}
               tabIndex={0}
-              className="min-w-0 max-h-[36rem] overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+              className="rz-card min-w-0 max-h-[36rem] overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
             >
               {visibleSections.length ? (
                 visibleSections
@@ -296,10 +295,10 @@ export function LocationBrowser({
                       key={item.id}
                       role="group"
                       aria-label={tw('sectionGroup', { name: item.name })}
-                      className="group border-app-line hover:bg-app-overlay/40 flex min-w-0 items-center gap-2 border-b py-1 pr-2 transition-colors last:border-0 motion-reduce:transition-none"
+                      className="group border-app-line hover:bg-app-hover flex min-w-0 items-center gap-2 border-b pr-2 transition-colors last:border-0 motion-reduce:transition-none"
                     >
                       <Link
-                        className="focus-visible:outline-brand grid min-h-20 min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-control px-3 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-4"
+                        className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-control px-3 py-2.5 text-app-ink sm:grid-cols-[auto_minmax(0,1fr)_auto]"
                         to={`${base}/sections/${encodeURIComponent(item.id)}`}
                         state={{
                           zoneId: zone.id,
@@ -307,14 +306,14 @@ export function LocationBrowser({
                         }}
                         aria-label={`${item.name}, ${item.code}`}
                       >
-                        <span className="bg-app-input text-app-muted hidden size-10 shrink-0 place-items-center rounded-control sm:grid">
-                          <LayoutGrid aria-hidden className="size-5" />
+                        <span className="bg-app-input text-app-muted hidden size-8 shrink-0 place-items-center rounded-control sm:grid">
+                          <LayoutGrid aria-hidden className="size-4" />
                         </span>
                         <span className="min-w-0">
-                          <strong className="text-app-ink block break-words text-base font-bold sm:text-lg">
+                          <strong className="rz-strong block font-semibold break-words">
                             {item.name}
                           </strong>
-                          <span className="text-app-muted mt-1 block break-all text-sm">
+                          <span className="rz-muted mt-0.5 block break-all text-caption">
                             {item.code} ·{' '}
                             {t('shelvesCount', {
                               count:
@@ -324,13 +323,13 @@ export function LocationBrowser({
                         </span>
                         <ChevronRight
                           aria-hidden
-                          className="text-app-muted group-hover:text-brand size-5 shrink-0"
+                          className="text-app-dim group-hover:text-app-ink size-4 shrink-0"
                         />
                       </Link>
                     </div>
                   ))
               ) : (
-                <p className="text-app-muted px-3 py-6 text-sm">
+                <p className="rz-muted m-0 px-3 py-6">
                   {t(needle ? 'noMatches' : 'noSections')}
                 </p>
               )}

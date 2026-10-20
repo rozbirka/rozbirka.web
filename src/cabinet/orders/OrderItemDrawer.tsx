@@ -7,7 +7,7 @@ import {
   QuantityStepper,
   Sheet,
   SkeletonRows,
-  TextInput,
+  SearchInput,
 } from '@/components/app'
 import { commonMessages, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -263,7 +263,7 @@ function OpenOrderItemDrawer({
       eyebrow={t('drawerEyebrow', { number: String(orderNumber) })}
       footer={
         <>
-          <p className="text-app-muted min-w-0 flex-1 text-[13px]">
+          <p className="rz-muted m-0 min-w-0 flex-1">
             {valid
               ? t('totalWillBe', {
                   amount: money(
@@ -305,49 +305,44 @@ function OpenOrderItemDrawer({
 
       <Field hiddenLabel label={t('searchPart')}>
         <span className="relative block">
-          <Search
-            aria-hidden
-            className="text-app-dim pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2"
-          />
-          <TextInput
+          <SearchInput
             aria-controls={listId}
             autoComplete="off"
-            className="h-[46px] rounded-[11px] pr-12 pl-10"
+            className="h-control-lg pr-9"
             ref={inputRef}
             onChange={(event) => changeQuery(event.target.value)}
             placeholder={t('searchPlaceholder')}
+            type="text"
             value={query}
           />
           {query ? (
-            <button
-              type="button"
+            <Button
               aria-label={t('clearSearch')}
-              className="text-app-muted hover:text-app-ink focus-visible:outline-brand absolute top-0 right-0 flex size-[46px] cursor-pointer items-center justify-center rounded-[11px] focus-visible:outline-2"
+              className="absolute top-1/2 right-1 -translate-y-1/2"
               onClick={() => {
                 changeQuery('')
                 inputRef.current?.focus()
               }}
+              size="icon"
+              variant="quiet"
             >
-              <X aria-hidden className="size-4" />
-            </button>
+              <X aria-hidden />
+            </Button>
           ) : null}
         </span>
       </Field>
 
-      <div
-        className="border-app-line bg-app-raised overflow-hidden rounded-[14px] border"
-        id={listId}
-      >
+      <div className="rz-card" id={listId}>
         {!query.trim() ? (
-          <div
-            className="text-app-muted px-4 py-8 text-center text-[13px]"
-            role="status"
-          >
-            <p className="text-app-ink font-semibold">{t('searchPrompt')}</p>
-            <p className="mt-1">{t('searchScope')}</p>
+          <div className="rz-state min-h-0 py-8" role="status">
+            <span className="rz-state__icon">
+              <Search aria-hidden />
+            </span>
+            <p className="rz-strong m-0 font-semibold">{t('searchPrompt')}</p>
+            <p className="rz-state__body">{t('searchScope')}</p>
           </div>
         ) : loadError !== null ? (
-          <div className="space-y-3 p-4">
+          <div className="grid justify-items-start gap-3 p-3">
             <Notice tone="danger">{loadError}</Notice>
             <Button
               onClick={() => {
@@ -360,18 +355,15 @@ function OpenOrderItemDrawer({
             </Button>
           </div>
         ) : items === null ? (
-          <div className="p-4">
+          <div className="p-3">
             <SkeletonRows label={t('searching')} rows={4} />
           </div>
         ) : items.length === 0 ? (
-          <p
-            className="text-app-muted px-4 py-6 text-center text-[13px]"
-            role="status"
-          >
+          <p className="rz-muted m-0 px-4 py-6 text-center" role="status">
             {t('nothingFound')}
           </p>
         ) : (
-          <ul aria-label={t('foundParts')}>
+          <ul aria-label={t('foundParts')} className="m-0 list-none p-0">
             {items.map((item) => {
               const already = taken.has(item.id)
               const out = item.quantityAvailable <= 0
@@ -381,12 +373,12 @@ function OpenOrderItemDrawer({
                 <li key={item.id}>
                   <button
                     className={cn(
-                      'flex w-full items-center gap-3 border-b border-white/5 px-3.5 py-3 text-left transition-colors',
+                      'border-app-line flex w-full items-center gap-3 border-0 border-t bg-transparent px-3 py-2 text-left transition-colors',
                       active
-                        ? 'bg-brand/[0.07] shadow-[inset_3px_0_0_var(--color-brand)]'
+                        ? 'bg-app-selected shadow-[inset_2px_0_0_var(--rz-brand)]'
                         : disabled
                           ? 'cursor-default'
-                          : 'hover:bg-white/[0.04]',
+                          : 'cursor-pointer hover:bg-app-hover',
                     )}
                     disabled={disabled}
                     onClick={() => {
@@ -399,13 +391,13 @@ function OpenOrderItemDrawer({
                     <span className="min-w-0 flex-1">
                       <span
                         className={cn(
-                          'block text-[14px] font-bold tracking-[-0.01em] text-pretty',
-                          disabled ? 'text-app-dim' : 'text-white',
+                          'block font-medium text-pretty',
+                          disabled ? 'text-app-dim' : 'text-app-strong',
                         )}
                       >
                         {item.name}
                       </span>
-                      <span className="text-app-muted mt-1 block font-mono text-[11px] leading-[1.5]">
+                      <span className="rz-dim block font-mono text-micro">
                         {[item.oemCode, origin(item, t('noCar')), item.place]
                           .filter(Boolean)
                           .join(' · ')}
@@ -414,15 +406,15 @@ function OpenOrderItemDrawer({
                     <span className="shrink-0 text-right">
                       <span
                         className={cn(
-                          'block font-mono text-[13px]',
-                          disabled ? 'text-app-dim' : 'text-app-ink',
+                          'rz-num block',
+                          disabled ? 'text-app-dim' : 'text-app-strong',
                         )}
                       >
                         {money(item.price, currency, locale)}
                       </span>
                       <span
                         className={cn(
-                          'mt-1 block text-[11px] font-bold whitespace-nowrap',
+                          'mt-0.5 block text-micro font-medium whitespace-nowrap',
                           already
                             ? 'text-app-muted'
                             : out
@@ -446,16 +438,12 @@ function OpenOrderItemDrawer({
       </div>
 
       {picked === null ? null : (
-        <div className="border-app-line bg-app-raised grid gap-3.5 rounded-[14px] border px-[18px] py-4">
-          <div>
-            <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-              {t('selected')}
-            </p>
-            <p className="mt-2 text-[16px] font-bold tracking-[-0.01em] text-pretty text-white">
-              {picked.name}
-            </p>
+        <div className="rz-inset grid gap-3">
+          <div className="grid gap-1">
+            <p className="rz-eyebrow m-0">{t('selected')}</p>
+            <p className="rz-h-card m-0 text-pretty">{picked.name}</p>
           </div>
-          <div className="grid grid-cols-1 items-start gap-x-3.5 gap-y-3 sm:grid-cols-[180px_minmax(0,1fr)]">
+          <div className="grid grid-cols-1 items-start gap-x-3 gap-y-3 sm:grid-cols-[auto_minmax(0,1fr)]">
             <Field label={t('quantity')}>
               <QuantityStepper
                 label={t('itemQuantity')}
@@ -472,26 +460,24 @@ function OpenOrderItemDrawer({
               label={t('unitPrice')}
             >
               <MoneyInput
-                className="font-mono"
                 currency={priceSlots.currency}
                 disabled={priceSlots.disabled}
                 inputMode="decimal"
+                numeric
                 onChange={(event) => setPrice(event.target.value)}
                 value={price ?? String(picked.price ?? '')}
               />
             </Field>
-            <p className="border-app-line flex items-baseline justify-between gap-3 border-t pt-3 sm:col-span-2">
-              <span className="text-app-muted text-[12px] font-semibold">
-                {t('lineSum')}
-              </span>
-              <span className="font-mono text-[17px] whitespace-nowrap text-white tabular-nums">
+            <p className="border-app-line m-0 flex items-baseline justify-between gap-3 border-t pt-3 sm:col-span-2">
+              <span className="rz-muted">{t('lineSum')}</span>
+              <span className="rz-mono rz-strong whitespace-nowrap">
                 {money(lineTotal, currency, locale)}
               </span>
             </p>
           </div>
           {priceSlots.note}
           {priceSlots.saveNotes}
-          <p className="text-app-dim text-[12px]">
+          <p className="rz-caption m-0">
             {t('stockNote', {
               count: picked.quantityAvailable,
               number: String(orderNumber),

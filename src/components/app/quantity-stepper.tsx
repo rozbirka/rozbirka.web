@@ -30,27 +30,20 @@ export function QuantityStepper({
   const clamp = (next: number) => Math.min(max, Math.max(min, next))
 
   return (
-    <div
-      className={cn(
-        'border-app-line-2 bg-app-input rounded-control flex w-fit items-center gap-0.5 border p-1',
-        className,
-      )}
-    >
+    <div className={cn('rz-stepper w-fit', className)}>
       <button
         aria-label={t('less')}
-        className="text-app-muted hover:text-app-ink focus-visible:outline-brand grid size-10 cursor-pointer place-items-center rounded-lg hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45"
         disabled={value <= min}
         onClick={() => onChange(clamp(value - 1))}
         type="button"
       >
-        <Minus aria-hidden className="size-4" />
+        <Minus aria-hidden />
       </button>
       <input
         {...field}
         // Inside a `Field` the visible label already names the control; the
         // prop is the fallback for a stepper standing on its own.
         {...(field.id === undefined ? { 'aria-label': label } : {})}
-        className="w-14 bg-transparent text-center font-mono text-[17px] text-white tabular-nums outline-none"
         inputMode="numeric"
         onChange={(event) => {
           const next = Number(event.target.value.replace(/\D/g, ''))
@@ -60,12 +53,11 @@ export function QuantityStepper({
       />
       <button
         aria-label={t('more')}
-        className="text-app-muted hover:text-app-ink focus-visible:outline-brand grid size-10 cursor-pointer place-items-center rounded-lg hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-45"
         disabled={value >= max}
         onClick={() => onChange(clamp(value + 1))}
         type="button"
       >
-        <Plus aria-hidden className="size-4" />
+        <Plus aria-hidden />
       </button>
     </div>
   )

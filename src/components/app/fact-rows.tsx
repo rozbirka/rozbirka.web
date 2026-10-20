@@ -21,19 +21,11 @@ export function FactRows({
   className?: string
 }) {
   return (
-    <dl className={cn('grid', className)}>
-      {rows.map((row, index) => (
-        <div
-          className={cn(
-            'flex flex-wrap items-baseline gap-x-6 gap-y-1 py-3',
-            index > 0 && 'border-app-line border-t',
-          )}
-          key={row.label}
-        >
-          <dt className="text-app-dim w-40 shrink-0 font-mono text-[11.5px] tracking-[0.08em] uppercase">
-            {row.label}
-          </dt>
-          <dd className="text-app-ink flex min-w-0 flex-1 flex-wrap items-center gap-3 text-sm break-words">
+    <dl className={cn('rz-facts px-0', className)}>
+      {rows.map((row) => (
+        <div key={row.label}>
+          <dt>{row.label}</dt>
+          <dd className="flex flex-wrap items-center gap-3">
             {row.value}
             {row.action}
           </dd>

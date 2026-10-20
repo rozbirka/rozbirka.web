@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEvent } from 'react'
-import { ChevronDown, Store } from 'lucide-react'
+import { ChevronsUpDown } from 'lucide-react'
 import type { Tenant } from '../api/types'
 import { useT } from '@/i18n'
 import { cn } from '../lib/utils'
@@ -9,14 +9,23 @@ export interface TenantSwitcherProps {
   tenant: Tenant
   tenants: readonly Tenant[]
   onSwitch: (tenantId: string) => Promise<void>
+  /** The rail's 28px brand square instead of the full row. */
   compact?: boolean
+  /** The mobile menu's bordered 44px row. */
+  framed?: boolean
 }
 
+/**
+ * `.rz-sidebar__tenant` from the design system: brand square, name, ⇅. The
+ * native select is laid over the row so the choice keeps the platform picker
+ * and its accessibility; the row is only what it looks like.
+ */
 export function TenantSwitcher({
   tenant,
   tenants,
   onSwitch,
   compact = false,
+  framed = false,
 }: TenantSwitcherProps) {
   const t = useT(shellMessages)
   const [isSwitching, setIsSwitching] = useState(false)
@@ -37,28 +46,42 @@ export function TenantSwitcher({
     }
   }
 
+  const initial = tenant.name.trim().charAt(0).toUpperCase() || '·'
   const planLabel = tenant.planTier ?? tenant.plan ?? null
   const context = [tenant.roleName, planLabel].filter(Boolean).join(' · ')
 
   return (
-    <div className={cn('relative min-w-0', compact ? 'size-11' : 'w-full')}>
-      <Store
+    <div
+      className={cn(
+        'relative min-w-0 has-[:focus-visible]:shadow-[var(--rz-focus)]',
+        compact
+          ? 'rounded-control mb-3 grid size-7 place-items-center'
+          : 'rz-sidebar__tenant w-full',
+        framed && 'border-app-line-2 h-touch border',
+        isSwitching && 'opacity-60',
+      )}
+      title={context || undefined}
+    >
+      <span
         aria-hidden
         className={cn(
-          'pointer-events-none absolute z-10 size-4 -translate-y-1/2',
-          compact
-            ? 'text-brand-foreground top-1/2 left-1/2 -translate-x-1/2'
-            : 'text-brand top-[22px] left-4',
+          'rz-avatar',
+          compact && 'rounded-control size-7 text-caption',
         )}
-      />
+      >
+        {initial}
+      </span>
+      {compact ? null : (
+        <>
+          <span className="min-w-0 flex-1 truncate">
+            {isSwitching ? t('tenant.switching') : tenant.name}
+          </span>
+          <ChevronsUpDown aria-hidden className="text-app-dim size-3.5" />
+        </>
+      )}
       <select
         aria-label={t('tenant.switch')}
-        className={cn(
-          'bg-app-input rounded-control border-app-line-2 min-h-11 min-w-11 appearance-none border text-sm text-white transition-colors outline-none hover:bg-white/[0.06] disabled:cursor-wait disabled:opacity-60',
-          compact
-            ? 'bg-brand size-11 cursor-pointer px-0 text-transparent'
-            : 'w-full cursor-pointer py-2 pr-9 pl-11',
-        )}
+        className="absolute -inset-px cursor-pointer appearance-none opacity-0 disabled:cursor-default"
         disabled={isSwitching || tenants.length <= 1}
         onChange={(event) => void handleChange(event)}
         value={tenant.id}
@@ -69,20 +92,6 @@ export function TenantSwitcher({
           </option>
         ))}
       </select>
-      {!compact && (
-        <ChevronDown
-          aria-hidden
-          className={cn(
-            'text-app-dim pointer-events-none absolute top-[22px] right-3 size-4 -translate-y-1/2',
-            isSwitching && 'opacity-40',
-          )}
-        />
-      )}
-      {!compact && context ? (
-        <p className="text-app-dim mt-1 px-1 font-mono text-[11.5px]">
-          {isSwitching ? t('tenant.switching') : context}
-        </p>
-      ) : null}
     </div>
   )
 }

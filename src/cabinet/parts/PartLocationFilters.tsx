@@ -225,41 +225,39 @@ export function PartLocationFilters({
         {parentOptions(zoneOptions, zoneId, t('selectedZone'))}
       </SelectInput>
       {warehouseId && zoneId ? (
-        <div className="motion-safe:animate-[location-filter-reveal_180ms_ease-out]">
-          <SelectInput
-            aria-label={t('section')}
-            name="section"
-            value={withoutSection ? WITHOUT_LOCATION : sectionId}
-            onChange={(event) =>
-              onChange('section', event.target.value || null)
-            }
-          >
-            <option value="">└ {t('sectionAll')}</option>
-            <option value={WITHOUT_LOCATION}>{t('withoutSection')}</option>
-            {parentOptions(sectionOptions, sectionId, t('selectedSection'))}
-          </SelectInput>
-        </div>
+        <SelectInput
+          aria-label={t('section')}
+          name="section"
+          value={withoutSection ? WITHOUT_LOCATION : sectionId}
+          onChange={(event) => onChange('section', event.target.value || null)}
+        >
+          <option value="">└ {t('sectionAll')}</option>
+          <option value={WITHOUT_LOCATION}>{t('withoutSection')}</option>
+          {parentOptions(sectionOptions, sectionId, t('selectedSection'))}
+        </SelectInput>
       ) : null}
       {warehouseId && zoneId && sectionId && !withoutSection ? (
-        <div className="motion-safe:animate-[location-filter-reveal_180ms_ease-out]">
-          <SelectInput
-            aria-label={t('shelf')}
-            name="shelf"
-            value={withoutShelf ? WITHOUT_LOCATION : shelfId}
-            onChange={(event) => onChange('shelf', event.target.value || null)}
-          >
-            <option value="">└ {t('shelfAll')}</option>
-            <option value={WITHOUT_LOCATION}>{t('withoutShelf')}</option>
-            {parentOptions(shelfOptions, shelfId, t('selectedShelf'))}
-          </SelectInput>
-        </div>
+        <SelectInput
+          aria-label={t('shelf')}
+          name="shelf"
+          value={withoutShelf ? WITHOUT_LOCATION : shelfId}
+          onChange={(event) => onChange('shelf', event.target.value || null)}
+        >
+          <option value="">└ {t('shelfAll')}</option>
+          <option value={WITHOUT_LOCATION}>{t('withoutShelf')}</option>
+          {parentOptions(shelfOptions, shelfId, t('selectedShelf'))}
+        </SelectInput>
       ) : null}
       {failed ? (
-        <Notice tone="warn">
-          {t('locationOptionsFailed')}{' '}
-          <Button onClick={() => setAttempt((value) => value + 1)}>
-            {tc('retry')}
-          </Button>
+        <Notice
+          action={
+            <Button onClick={() => setAttempt((value) => value + 1)} size="sm">
+              {tc('retry')}
+            </Button>
+          }
+          tone="warn"
+        >
+          {t('locationOptionsFailed')}
         </Notice>
       ) : null}
     </>

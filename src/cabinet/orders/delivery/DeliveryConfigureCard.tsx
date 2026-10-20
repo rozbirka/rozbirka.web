@@ -50,21 +50,21 @@ export function DeliveryConfigureCard({
   if (!novaPoshtaAvailable)
     return (
       <Card title={t('tabShipping')}>
-        <p className="text-app-muted text-sm">{t('countryUnavailable')}</p>
+        <p className="text-app-muted m-0">{t('countryUnavailable')}</p>
       </Card>
     )
 
   return (
     <Card title={t('tabShipping')}>
-      <div className="grid gap-3.5">
-        <p className="text-app-muted text-sm">{t('configureNote')}</p>
+      <div className="grid gap-3">
+        <p className="text-app-muted m-0">{t('configureNote')}</p>
         {error === null ? null : <Notice tone="danger">{error}</Notice>}
         {mutationsAllowed && (
           <Button
             aria-busy={busy}
-            className="justify-center"
             disabled={busy}
             onClick={configure}
+            size="wide"
             variant="primary"
           >
             <Truck aria-hidden />

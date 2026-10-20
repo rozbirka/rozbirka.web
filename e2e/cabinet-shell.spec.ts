@@ -1885,6 +1885,8 @@ test('compact location browser searches and pages large shelf lists @location-br
     await expect(
       page.getByRole('table', { name: 'Деталі на складі' }).getByRole('row'),
     ).toHaveCount(31)
+    // v2: location selects live in the "Склад" filter popover.
+    await page.getByRole('button', { name: /^Склад:/ }).click()
     await expect(
       page.getByRole('combobox', { name: 'Склад', exact: true }),
     ).toHaveValue('warehouse-1')
@@ -1906,6 +1908,7 @@ test('compact location browser searches and pages large shelf lists @location-br
         shelfIds: ['section-6-shelf-99'],
         pageSize: 30,
       })
+    await page.getByRole('button', { name: /^Склад:/ }).click()
     const pager = page.getByRole('navigation', { name: 'Пагінація деталей' })
     await pager.getByRole('button', { name: 'Наступна сторінка' }).click()
     await expect(
@@ -1918,6 +1921,7 @@ test('compact location browser searches and pages large shelf lists @location-br
       page.getByRole('link', { name: /Запчастина 50/ }),
     ).toBeVisible()
     await page.reload()
+    await page.getByRole('button', { name: /^Склад:/ }).click()
     await expect(
       page.getByRole('combobox', { name: 'Полиця', exact: true }),
     ).toHaveValue('section-6-shelf-99')
@@ -1939,6 +1943,7 @@ test('compact location browser searches and pages large shelf lists @location-br
     ).toBe(true)
     await page.goto('/app/koval/inventory/sections/section-6')
     await page.getByRole('link', { name: /У секції без полиці/ }).click()
+    await page.getByRole('button', { name: /^Склад:/ }).click()
     await expect(
       page.getByRole('combobox', { name: 'Полиця', exact: true }),
     ).toHaveValue('__without__')
@@ -1953,6 +1958,7 @@ test('compact location browser searches and pages large shelf lists @location-br
     await page
       .getByRole('link', { name: 'Усі запчастини секції', exact: true })
       .click()
+    await page.getByRole('button', { name: /^Склад:/ }).click()
     await expect(
       page.getByRole('combobox', { name: 'Полиця', exact: true }),
     ).toHaveValue('')
@@ -1967,6 +1973,7 @@ test('compact location browser searches and pages large shelf lists @location-br
       .toEqual({ sectionIds: ['section-6'], hasMissingShelf: false })
     await page.goto('/app/koval/inventory/zones/zone-1')
     await page.getByRole('link', { name: /У зоні без секції/ }).click()
+    await page.getByRole('button', { name: /^Склад:/ }).click()
     await expect(
       page.getByRole('combobox', { name: 'Секція', exact: true }),
     ).toHaveValue('__without__')
@@ -2154,7 +2161,7 @@ test('renders an unknown cabinet route inside the branded shell', async ({
     page.getByRole('heading', { name: 'Сторінку не знайдено' }),
   ).toBeVisible()
   await expect(
-    page.getByRole('link', { name: 'rozbirka — на головну' }),
+    page.getByRole('navigation', { name: 'Навігація кабінету' }),
   ).toBeVisible()
   await expect(
     page.getByRole('link', { name: 'На головну', exact: true }),
@@ -2211,7 +2218,9 @@ for (const path of releasedAccessPaths) {
 
 test('released Team dialogs and Reports actions keep 44px targets', async ({
   page,
-}) => {
+}, testInfo) => {
+  // v2 (OPEN-QUESTIONS ?3): 44px targets apply to coarse pointers.
+  test.skip(!testInfo.project.use.hasTouch, 'touch target applies to touch')
   await page.setViewportSize({ width: 320, height: 900 })
   await installCabinetApiBoundary(page)
   await loginFrom(page)
@@ -2286,7 +2295,9 @@ test('released Team dialogs and Reports actions keep 44px targets', async ({
 
 test('visible mobile cabinet controls meet the 44px target minimum', async ({
   page,
-}) => {
+}, testInfo) => {
+  // v2 (OPEN-QUESTIONS ?3): 44px targets apply to coarse pointers.
+  test.skip(!testInfo.project.use.hasTouch, 'touch target applies to touch')
   await page.setViewportSize({ width: 320, height: 900 })
   await installCabinetApiBoundary(page)
   await loginFrom(page)
@@ -2326,7 +2337,9 @@ test('visible mobile cabinet controls meet the 44px target minimum', async ({
 for (const width of [320, 768]) {
   test(`over-quota upgrade keeps a 44px computed target at ${width}px`, async ({
     page,
-  }) => {
+  }, testInfo) => {
+    // v2 (OPEN-QUESTIONS ?3): 44px targets apply to coarse pointers.
+    test.skip(!testInfo.project.use.hasTouch, 'touch target applies to touch')
     await page.setViewportSize({ width, height: 900 })
     await installCabinetApiBoundary(page, { overQuota: true })
     await loginFrom(page)
@@ -2342,7 +2355,9 @@ for (const width of [320, 768]) {
 
   test(`pending payment wraps without overflow and keeps 44px actions at ${width}px`, async ({
     page,
-  }) => {
+  }, testInfo) => {
+    // v2 (OPEN-QUESTIONS ?3): 44px targets apply to coarse pointers.
+    test.skip(!testInfo.project.use.hasTouch, 'touch target applies to touch')
     await page.setViewportSize({ width, height: 900 })
     await installCabinetApiBoundary(page, { pendingPayment: true })
     await loginFrom(page)
@@ -2469,10 +2484,10 @@ test('logs out normally from the cabinet shell @cabinet-smoke', async ({
       logoutSettled = true
     })
     await page
-      .getByRole('navigation', { name: 'Навігація кабінету' })
-      .locator('..')
-      .getByRole('button', { name: 'Вийти' })
+      .locator('#cabinet-navigation')
+      .getByRole('button', { name: 'Олена Коваль' })
       .click()
+    await page.getByRole('menuitem', { name: 'Вийти' }).click()
 
     await expect(page).toHaveURL('/')
     await expect

@@ -1,4 +1,11 @@
-import { Button, Field, Notice, SelectInput, TextInput } from '@/components/app'
+import {
+  Button,
+  Field,
+  Notice,
+  SectionPanel,
+  SelectInput,
+  TextInput,
+} from '@/components/app'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/i18n'
 import type {
@@ -125,7 +132,7 @@ export function ImportMappingStep({
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <p className="text-app-muted text-[15px]">
+        <p className="text-app-muted m-0">
           {t('fileSummary', {
             rows: t('fileRows', { count: status.rowCount }),
             columns: t('fileColumns', { count: columns.length }),
@@ -137,19 +144,22 @@ export function ImportMappingStep({
             className="flex flex-wrap items-center gap-2"
             role="group"
           >
-            <span className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-              {t('profile')}
-            </span>
+            <span className="rz-eyebrow">{t('profile')}</span>
             {profiles.map((profile) => (
               <Button
                 disabled={busy || !editable}
                 key={profile.id}
                 onClick={() => onApplyProfile(profile)}
+                size="sm"
               >
                 {profile.name}
               </Button>
             ))}
-            <Button disabled={busy || !editable} onClick={onClearProfile}>
+            <Button
+              disabled={busy || !editable}
+              onClick={onClearProfile}
+              size="sm"
+            >
               {t('noProfile')}
             </Button>
           </div>
@@ -168,15 +178,13 @@ export function ImportMappingStep({
       <div className="flex flex-wrap items-start gap-4">
         <section
           aria-label={t('columnMapping')}
-          className="border-app-line bg-app-raised min-w-0 flex-[1_1_480px] overflow-hidden rounded-[20px] border"
+          className="rz-card min-w-0 flex-[1_1_480px]"
         >
-          <div className="border-app-line flex flex-wrap items-baseline justify-between gap-3 border-b px-5.5 py-4">
-            <h2 className="text-app-ink text-[15px] font-bold">
-              {t('columnMapping')}
-            </h2>
+          <div className="rz-card__head py-2.5">
+            <h2 className="rz-h-card">{t('columnMapping')}</h2>
             <p
               className={cn(
-                'text-[13px]',
+                'm-0 text-caption',
                 missing.length > 0 ? 'text-state-warn' : 'text-app-dim',
               )}
             >
@@ -190,30 +198,30 @@ export function ImportMappingStep({
             </p>
           </div>
 
-          <ul className="divide-app-line divide-y">
+          <ul className="divide-app-line m-0 list-none divide-y p-0">
             {columns.map((column) => {
               const target = targetOf(column.id)
               const raw = sampleFor(column.id)
               const out = resultFor(target)
               return (
                 <li
-                  className="grid gap-3 px-5.5 py-4 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1.1fr)_minmax(0,0.9fr)] sm:items-start sm:gap-4"
+                  className="grid gap-2 px-(--rz-card-p) py-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1.1fr)_minmax(0,0.9fr)] sm:items-start sm:gap-4"
                   key={column.id}
                 >
                   <div className="min-w-0">
-                    <p className="text-app-ink truncate text-[14.5px] font-bold">
+                    <p className="text-app-strong m-0 truncate font-semibold">
                       {column.header ||
                         t('columnNumber', {
                           number: String(column.column + 1),
                         })}
                     </p>
-                    <p className="text-app-dim mt-0.5 truncate font-mono text-[12.5px]">
+                    <p className="rz-caption m-0 mt-0.5 truncate font-mono">
                       {raw === null ? '—' : t('sample', { value: raw })}
                     </p>
                   </div>
                   <span
                     aria-hidden
-                    className="text-app-line-2 hidden pt-2 text-[13px] sm:block"
+                    className="text-app-dim hidden pt-1.5 sm:block"
                   >
                     →
                   </span>
@@ -247,7 +255,7 @@ export function ImportMappingStep({
                   <div className="min-w-0 sm:text-right">
                     <p
                       className={cn(
-                        'truncate text-[14px]',
+                        'm-0 truncate',
                         out === null ? 'text-app-dim' : 'text-app-muted',
                       )}
                     >
@@ -259,14 +267,14 @@ export function ImportMappingStep({
             })}
           </ul>
 
-          <p className="text-app-dim border-app-line border-t px-5.5 py-3.5 text-[13px]">
+          <p className="rz-caption border-app-line m-0 border-t px-(--rz-card-p) py-2.5">
             {unused.length === 0
               ? t('allColumnsUsed')
               : t('unusedColumns', { count: unused.length })}
           </p>
         </section>
 
-        <div className="grid min-w-0 flex-[0_1_360px] gap-4 sm:min-w-[300px]">
+        <div className="grid max-w-full min-w-0 flex-[1_1_300px] gap-4 lg:max-w-[380px]">
           <SharedValues
             busy={busy}
             capabilities={capabilities}
@@ -276,25 +284,14 @@ export function ImportMappingStep({
             rowCount={status.rowCount}
           />
 
-          <section
-            aria-label={t('scenario')}
-            className="border-app-line bg-app-raised rounded-[18px] border px-5 py-4.5"
-          >
-            <h2 className="text-app-ink text-[15px] font-bold">
-              {t('scenario')}
-            </h2>
-            <div className="mt-3 grid gap-2">
+          <SectionPanel title={t('scenario')}>
+            <div className="grid gap-2">
               {SCENARIOS.map((scenario) => {
                 const on = strategy === scenario.value
                 return (
                   <button
                     aria-pressed={on}
-                    className={cn(
-                      'focus-visible:outline-brand rounded-[12px] border px-3.5 py-3 text-left transition-colors',
-                      on
-                        ? 'border-app-line-2 bg-white/[0.07]'
-                        : 'border-app-line hover:bg-white/[0.03]',
-                    )}
+                    className="rz-choice-card aria-pressed:border-brand aria-pressed:bg-brand-soft hover:not-aria-pressed:bg-app-hover grid w-full gap-0.5 bg-transparent text-left disabled:cursor-not-allowed disabled:opacity-40"
                     disabled={busy || !editable}
                     key={scenario.value}
                     onClick={() => onRule('Strategy', '', scenario.value)}
@@ -302,13 +299,13 @@ export function ImportMappingStep({
                   >
                     <span
                       className={cn(
-                        'block text-[14px] font-bold',
-                        on ? 'text-app-ink' : 'text-app-muted',
+                        'block font-semibold',
+                        on ? 'text-app-strong' : 'text-app-muted',
                       )}
                     >
                       {t(scenario.label)}
                     </span>
-                    <span className="text-app-muted mt-1 block text-[13px] leading-5 text-pretty">
+                    <span className="text-app-muted block text-pretty">
                       {t(scenario.hint)}
                     </span>
                   </button>
@@ -316,22 +313,16 @@ export function ImportMappingStep({
               })}
             </div>
             {strategy === 'Reserved' ? (
-              <p className="border-app-line text-app-muted mt-3.5 border-t pt-3.5 text-[13px] leading-5 text-pretty">
+              <p className="border-app-line text-app-muted m-0 border-t pt-3 text-pretty">
                 {t('reservedNote', {
                   size: count(capabilities.maxOrderGroupSize),
                 })}
               </p>
             ) : null}
-          </section>
+          </SectionPanel>
 
-          <section
-            aria-label={t('requiredFields')}
-            className="border-app-line bg-app-raised rounded-[18px] border px-5 py-4.5"
-          >
-            <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-              {t('requiredFields')}
-            </h2>
-            <ul className="mt-3 grid gap-2">
+          <SectionPanel title={t('requiredFields')}>
+            <ul className="m-0 grid list-none gap-2 p-0">
               {capabilities.fields
                 .filter((field) => field.required)
                 .map((field) => {
@@ -352,7 +343,7 @@ export function ImportMappingStep({
                   return (
                     <li
                       className={cn(
-                        'flex items-start gap-2.5 text-[13.5px]',
+                        'flex items-start gap-2.5',
                         from === null ? 'text-state-warn' : 'text-app-muted',
                       )}
                       key={field.id}
@@ -360,10 +351,10 @@ export function ImportMappingStep({
                       <span
                         aria-hidden
                         className={cn(
-                          'mt-0.5 inline-flex size-4.5 flex-none items-center justify-center rounded-full text-[11px] font-bold',
+                          'mt-px inline-flex size-4.5 flex-none items-center justify-center rounded-full font-mono text-micro',
                           from === null
-                            ? 'bg-state-warn/16 text-state-warn'
-                            : 'bg-state-ok/16 text-state-ok',
+                            ? 'bg-state-warn-soft text-state-warn'
+                            : 'bg-state-ok-soft text-state-ok',
                         )}
                       >
                         {from === null ? '!' : '✓'}
@@ -382,19 +373,13 @@ export function ImportMappingStep({
                   )
                 })}
             </ul>
-          </section>
+          </SectionPanel>
 
-          <section
-            aria-label={t('saveAsProfile')}
-            className="border-app-line bg-app-raised rounded-[18px] border px-5 py-4.5"
+          <SectionPanel
+            description={t('saveAsProfileHint')}
+            title={t('saveAsProfile')}
           >
-            <h2 className="text-app-ink text-[15px] font-bold">
-              {t('saveAsProfile')}
-            </h2>
-            <p className="text-app-dim mt-1 text-[13px] leading-5 text-pretty">
-              {t('saveAsProfileHint')}
-            </p>
-            <div className="mt-3 grid gap-2.5">
+            <div className="grid gap-3">
               <Field label={t('profileName')}>
                 <TextInput
                   disabled={busy || !editable}
@@ -403,16 +388,18 @@ export function ImportMappingStep({
                   value={profileName}
                 />
               </Field>
-              <Button
-                disabled={busy || !editable || profileName.trim() === ''}
-                onClick={onSaveProfile}
-              >
-                {t('saveProfile')}
-              </Button>
+              <div className="rz-btn-row">
+                <Button
+                  disabled={busy || !editable || profileName.trim() === ''}
+                  onClick={onSaveProfile}
+                >
+                  {t('saveProfile')}
+                </Button>
+              </div>
             </div>
-          </section>
+          </SectionPanel>
 
-          <div className="grid gap-2.5">
+          <div className="grid gap-2">
             <Button
               disabled={busy || !editable || missing.length > 0}
               onClick={onContinue}
@@ -420,7 +407,7 @@ export function ImportMappingStep({
             >
               {t('checkData')}
             </Button>
-            <p className="text-app-dim text-[13px] leading-5 text-pretty">
+            <p className="rz-caption m-0 text-pretty">
               {t('checkDataHint', { count: count(status.rowCount) })}
             </p>
           </div>
@@ -461,17 +448,11 @@ function SharedValues({
     (rules.find((rule) => rule.target === field.id)?.sources.length ?? 0) > 0
 
   return (
-    <section
-      aria-label={t('sharedValues')}
-      className="border-app-line bg-app-raised rounded-[18px] border px-5 py-4.5"
+    <SectionPanel
+      description={t('sharedValuesHint', { count: count(rowCount) })}
+      title={t('sharedValues')}
     >
-      <h2 className="text-app-ink text-[15px] font-bold">
-        {t('sharedValues')}
-      </h2>
-      <p className="text-app-dim mt-1 text-[13px] leading-5 text-pretty">
-        {t('sharedValuesHint', { count: count(rowCount) })}
-      </p>
-      <div className="mt-3.5 grid gap-3.5">
+      <div className="grid gap-3">
         {shared.map((field) => (
           <Field
             hint={fromColumn(field) ? t('fromFileColumnHint') : undefined}
@@ -510,6 +491,6 @@ function SharedValues({
           </Field>
         ))}
       </div>
-    </section>
+    </SectionPanel>
   )
 }

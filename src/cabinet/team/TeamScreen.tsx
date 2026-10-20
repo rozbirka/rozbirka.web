@@ -10,21 +10,21 @@ import { Link } from 'react-router'
 import {
   Ban,
   KeyRound,
-  Plus,
   Power,
   PowerOff,
-  Search,
+  SearchX,
   Trash2,
+  UserPlus,
 } from 'lucide-react'
 import { AlertDialog } from 'radix-ui'
 import {
   ActionMenu,
   Button,
   DateValue,
+  DeniedState,
   Field,
   Notice,
-  PageBody,
-  PageHeader,
+  SearchInput,
   SelectInput,
   SkeletonRows,
   StatusPill,
@@ -32,11 +32,10 @@ import {
   type StatusTone,
   Sheet,
 } from '@/components/app'
-import { cn } from '@/lib/utils'
 import { commonMessages, translate, useLocale, useT } from '@/i18n'
 import { roleLabel, teamMessages } from './messages'
 import { Kpi, KpiStrip } from '../redesign-kpi'
-import { RedesignShell, RedesignTitle } from '../redesign-shell'
+import { RedesignShell } from '../redesign-shell'
 import { ALL_PERMISSIONS } from '../access-types'
 import { useCabinet } from '../CabinetContext'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
@@ -370,12 +369,12 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
 
   if (!canView) {
     return (
-      <PageBody>
-        <PageHeader eyebrow={t('accessEyebrow')} title={t('title')} />
-        <Notice role="alert" tone="danger">
-          {t('noViewPermission')}
-        </Notice>
-      </PageBody>
+      <RedesignShell crumb={t('accessEyebrow')}>
+        <div className="rz-page-head">
+          <h1 className="rz-h-page">{t('title')}</h1>
+        </div>
+        <DeniedState role="alert" title={t('noViewPermission')} />
+      </RedesignShell>
     )
   }
 
@@ -418,33 +417,23 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
     <>
       <RedesignShell
         actions={
-          <>
-            <span className="border-app-line bg-app-raised focus-within:border-app-line-2 flex h-10 w-full min-w-0 items-center gap-2.5 rounded-[10px] border px-3 sm:w-[260px]">
-              <Search aria-hidden className="text-app-dim size-4 shrink-0" />
-              <input
-                aria-label={t('searchMembers')}
-                className="text-app-ink placeholder:text-app-dim min-w-0 flex-1 bg-transparent text-[14px] outline-none"
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={t('searchPlaceholder')}
-                value={query}
-              />
-            </span>
-            {canManageAccess && (
-              <Button
-                className="px-5 text-sm font-bold"
-                onClick={openInvitationDrawer}
-                type="button"
-                variant="primary"
-              >
-                <Plus aria-hidden />
-                {t('invite')}
-              </Button>
-            )}
-          </>
+          canManageAccess ? (
+            <Button
+              onClick={openInvitationDrawer}
+              type="button"
+              variant="primary"
+            >
+              <UserPlus aria-hidden />
+              {t('invite')}
+            </Button>
+          ) : undefined
         }
         crumb={t('crumb')}
       >
-        <RedesignTitle lead={t('lead')} title={t('title')} />
+        <div className="rz-page-head">
+          <h1 className="rz-h-page">{t('title')}</h1>
+          <span className="rz-muted text-pretty">{t('lead')}</span>
+        </div>
 
         {feedback && <Notice tone="ok">{feedback}</Notice>}
         {pageError && <Notice tone="danger">{pageError}</Notice>}
@@ -518,33 +507,33 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
               />
             </KpiStrip>
 
-            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+            <div className="rz-toolbar" role="search">
+              <SearchInput
+                aria-label={t('searchMembers')}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t('searchPlaceholder')}
+                value={query}
+              />
               <div
                 aria-label={t('memberState')}
-                className="border-app-line bg-app-raised flex min-w-0 flex-wrap gap-1 rounded-[14px] border p-1"
+                className="rz-seg"
                 role="group"
               >
                 {MEMBER_SEGMENTS.map((one) => (
                   <button
                     aria-pressed={segment === one.key}
-                    className={cn(
-                      'inline-flex min-h-11 items-center gap-2 rounded-[10px] px-3.5 text-[13.5px] font-bold whitespace-nowrap',
-                      segment === one.key
-                        ? 'text-app-ink bg-white/[0.08]'
-                        : 'text-app-muted hover:text-app-ink',
-                    )}
                     key={one.key}
                     onClick={() => setSegment(one.key)}
                     type="button"
                   >
                     {t(one.message)}
-                    <span className="text-app-dim font-mono text-[12px]">
+                    <span className="rz-mono rz-dim">
                       {segmentCounts[one.key]}
                     </span>
                   </button>
                 ))}
               </div>
-              <p className="text-app-dim text-[13px]">
+              <p className="rz-toolbar__end rz-dim m-0">
                 {t('shownMembers', {
                   shown: shownMembers.length,
                   count: teamData.members.length,
@@ -554,42 +543,36 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
 
             <section
               aria-labelledby="team-members-heading"
-              className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
+              className="rz-table-wrap min-w-0"
             >
               <h2 className="sr-only" id="team-members-heading">
                 {t('members')}
               </h2>
               {shownMembers.length === 0 ? (
-                <p className="text-app-muted px-5.5 py-8 text-[14px]">
-                  {t('noMembersForFilter')}
-                </p>
+                <div className="rz-state min-h-[200px]">
+                  <span className="rz-state__icon">
+                    <SearchX aria-hidden />
+                  </span>
+                  <p className="rz-state__title">{t('noMembersForFilter')}</p>
+                </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-[14px]">
-                    <caption className="sr-only">{t('membersCaption')}</caption>
+                <div className="rz-table-scroll">
+                  <table className="rz-table">
+                    <caption>{t('membersCaption')}</caption>
                     <thead>
-                      <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
-                        <th className="px-5.5 py-2.5 text-left">
-                          {t('columnUser')}
-                        </th>
-                        <th className="px-3 py-2.5 text-left">
-                          {t('columnRole')}
-                        </th>
-                        <th
-                          className="px-3 py-2.5 text-left"
-                          title={t('noLastSeen')}
-                        >
+                      <tr>
+                        <th scope="col">{t('columnUser')}</th>
+                        <th scope="col">{t('columnRole')}</th>
+                        <th scope="col" title={t('noLastSeen')}>
                           {t('columnActivity')}
                         </th>
-                        <th className="px-3 py-2.5 text-left">
-                          {t('columnStatus')}
-                        </th>
+                        <th scope="col">{t('columnStatus')}</th>
                         {canManageAccess && (
                           // `relative` keeps the visually hidden label's
                           // containing block inside the cell: absolutely
                           // positioned at the page root it would widen the
                           // document and break the 320px floor.
-                          <th className="relative px-5.5 py-2.5 text-right">
+                          <th className="relative text-right" scope="col">
                             <span className="sr-only">{tc('actions')}</span>
                           </th>
                         )}
@@ -597,34 +580,29 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                     </thead>
                     <tbody>
                       {shownMembers.map((member) => (
-                        <tr
-                          className="border-app-line border-b"
-                          key={member.id}
-                        >
-                          <td className="px-5.5 py-3.5">
-                            <span className="flex min-w-0 items-center gap-3">
+                        <tr key={member.id}>
+                          <th className="py-2" scope="row">
+                            <span className="flex min-w-0 items-center gap-2.5">
                               <span
                                 aria-hidden
-                                className="border-app-line text-app-muted inline-flex size-9 shrink-0 items-center justify-center rounded-full border font-mono text-[12px]"
+                                className="rz-avatar rz-avatar--round"
                               >
                                 {initials(member.name)}
                               </span>
                               <span className="grid min-w-0 gap-0.5">
-                                <span className="text-app-ink flex flex-wrap items-center gap-2 font-medium">
+                                <span className="flex flex-wrap items-center gap-2">
                                   {member.name}
                                   {member.userId === myUserId && (
-                                    <span className="border-app-line text-app-dim rounded-full border px-2 py-0.5 text-[11px]">
-                                      {t('itsYou')}
-                                    </span>
+                                    <StatusPill>{t('itsYou')}</StatusPill>
                                   )}
                                 </span>
                                 {member.phone ? (
-                                  <span className="text-app-dim text-[12.5px]">
+                                  <span className="rz-caption rz-mono font-normal">
                                     {member.phone}
                                   </span>
                                 ) : (
                                   <span
-                                    className="text-app-dim text-[12.5px]"
+                                    className="rz-caption font-normal"
                                     title={t('noEmail')}
                                   >
                                     {t('noContact')}
@@ -632,8 +610,8 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                                 )}
                               </span>
                             </span>
-                          </td>
-                          <td className="px-3 py-3.5">
+                          </th>
+                          <td className="py-2" data-label={t('columnRole')}>
                             {canManageAccess &&
                             member.userId !== myUserId &&
                             !isOwnerRole(member.role) ? (
@@ -657,16 +635,14 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                                 ))}
                               </SelectInput>
                             ) : (
-                              <span className="text-app-muted">
-                                {roleLabel(member.role, locale)}
-                              </span>
+                              <span>{roleLabel(member.role, locale)}</span>
                             )}
                           </td>
-                          <td className="text-app-muted px-3 py-3.5">
+                          <td className="py-2" data-label={t('columnActivity')}>
                             {t('inTeamSince')}{' '}
                             <DateValue value={member.joinedAt} />
                           </td>
-                          <td className="px-3 py-3.5">
+                          <td className="py-2" data-label={t('columnStatus')}>
                             <StatusPill
                               tone={member.isActive ? 'ok' : 'neutral'}
                             >
@@ -676,7 +652,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                             </StatusPill>
                           </td>
                           {canManageAccess && (
-                            <td className="px-5.5 py-3.5">
+                            <td className="py-2">
                               <span className="flex justify-end">
                                 {!isOwnerRole(member.role) ? (
                                   <ActionMenu
@@ -776,8 +752,8 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                   </table>
                 </div>
               )}
-              <div className="border-app-line flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t px-5.5 py-3.5">
-                <p className="text-app-dim text-[13px] leading-5 text-pretty">
+              <div className="border-app-line flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t px-[var(--rz-cell-px)] py-2.5">
+                <p className="rz-caption m-0 text-pretty">
                   <span title={t('noLastSeen')}>{t('lastSeenNote')}</span>{' '}
                   {seats === null
                     ? t('seatsNoteUnknown')
@@ -786,7 +762,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                       : t('seatsNote', { used: seats.used, max: seats.max })}
                 </p>
                 <Link
-                  className="text-brand text-[13px] font-bold underline-offset-4 hover:underline"
+                  className="font-semibold"
                   to={`/app/${cabinet.targetTenant?.slug ?? ''}/settings/billing/overview`}
                 >
                   {t('raiseLimit')}
@@ -796,22 +772,17 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
 
             <section
               aria-labelledby="team-invitations-heading"
-              className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
+              className="rz-card min-w-0"
               id="team-invite"
             >
-              <div className="flex flex-wrap items-center justify-between gap-3 px-5.5 py-4.5">
-                <div>
-                  <h2
-                    className="text-app-ink text-[15px] font-bold"
-                    id="team-invitations-heading"
-                  >
+              <div className="rz-card__head py-2">
+                <div className="min-w-0">
+                  <h2 className="rz-h-card" id="team-invitations-heading">
                     {t('invitations')}
                   </h2>
-                  <p className="text-app-dim mt-1 text-[13px]">
-                    {t('invitationsLead')}
-                  </p>
+                  <p className="rz-caption m-0">{t('invitationsLead')}</p>
                 </div>
-                <span className="text-app-dim font-mono text-[12px]">
+                <span className="rz-caption rz-mono">
                   {openInvitations.length === 0
                     ? t('noActive')
                     : t('activeInvitations', {
@@ -819,22 +790,22 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                       })}
                 </span>
               </div>
-              <ul className="border-app-line divide-app-line divide-y border-t">
+              <ul className="divide-app-line m-0 list-none divide-y p-0">
                 {visibleInvitations.map((item) => {
                   const status = invitationStatus(item)
                   return (
                     <li
-                      className="flex min-w-0 max-w-full items-center gap-3 px-5.5 py-3"
+                      className="flex min-h-row min-w-0 max-w-full items-center gap-3 px-[var(--rz-card-p)] py-2"
                       key={item.id}
                     >
                       <div className="min-w-0 flex-1 overflow-hidden">
                         <p
-                          className="text-app-ink truncate font-mono text-[14px] font-bold"
+                          className="rz-mono text-app-strong m-0 truncate font-semibold"
                           title={item.code}
                         >
                           {item.code}
                         </p>
-                        <p className="text-app-dim mt-0.5 text-[12.5px]">
+                        <p className="rz-caption m-0">
                           {t('validUntil', {
                             role: roleLabel(item.role, locale),
                           })}{' '}
@@ -877,15 +848,13 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                   )
                 })}
                 {visibleInvitations.length === 0 && (
-                  <li className="text-app-muted px-5.5 py-5 text-[13.5px]">
+                  <li className="rz-muted px-[var(--rz-card-p)] py-4">
                     {t('noActiveInvitations')}
                   </li>
                 )}
               </ul>
-              <div className="border-app-line flex flex-wrap items-center justify-between gap-3 border-t px-5.5 py-3.5">
-                <p className="text-app-dim text-[12.5px] leading-5">
-                  {t('noEmailInvite')}
-                </p>
+              <div className="rz-card__foot flex-wrap items-center">
+                <p className="rz-caption m-0">{t('noEmailInvite')}</p>
                 {invitationHistory.length > 0 && (
                   <Button
                     aria-expanded={invitationHistoryOpen}
@@ -1036,45 +1005,46 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
         open={confirmation !== null}
       >
         <AlertDialog.Portal>
-          <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
-          {confirmation && (
-            <AlertDialog.Content
-              className="bg-app-overlay border-app-line-2 rounded-sheet fixed inset-x-3 top-1/2 z-50 grid max-w-md -translate-y-1/2 gap-3 border p-5 text-white shadow-2xl sm:inset-x-auto sm:left-1/2 sm:w-full sm:-translate-x-1/2"
-              onCloseAutoFocus={restoreFocus}
-            >
-              <AlertDialog.Title className="text-lg font-semibold">
-                {confirmation.title}
-              </AlertDialog.Title>
-              <AlertDialog.Description className="text-app-muted text-sm leading-6">
-                {confirmation.description}
-              </AlertDialog.Description>
-              {confirmedAction.error !== null && (
-                <Notice tone="danger">{confirmedAction.error}</Notice>
-              )}
-              <div className="mt-2 flex flex-wrap justify-end gap-2">
-                {/* Cancel first, and focused on open: the way out of a
+          <AlertDialog.Overlay className="rz-scrim">
+            {confirmation && (
+              <AlertDialog.Content
+                className="rz-confirm text-app-ink"
+                onCloseAutoFocus={restoreFocus}
+              >
+                <AlertDialog.Title className="rz-h-title">
+                  {confirmation.title}
+                </AlertDialog.Title>
+                <AlertDialog.Description className="text-app-muted m-0 text-pretty">
+                  {confirmation.description}
+                </AlertDialog.Description>
+                {confirmedAction.error !== null && (
+                  <Notice tone="danger">{confirmedAction.error}</Notice>
+                )}
+                <div className="mt-2 flex flex-wrap justify-end gap-2">
+                  {/* Cancel first, and focused on open: the way out of a
                     destructive question is never the default. */}
-                <AlertDialog.Cancel asChild>
-                  <Button disabled={confirmedAction.pending}>
-                    {tc('cancel')}
-                  </Button>
-                </AlertDialog.Cancel>
-                <AlertDialog.Action asChild>
-                  <Button
-                    aria-busy={confirmedAction.pending}
-                    disabled={!canManageAccess || confirmedAction.pending}
-                    onClick={(event) => {
-                      event.preventDefault()
-                      confirmedAction.run()
-                    }}
-                    variant="danger"
-                  >
-                    {t('confirm')}
-                  </Button>
-                </AlertDialog.Action>
-              </div>
-            </AlertDialog.Content>
-          )}
+                  <AlertDialog.Cancel asChild>
+                    <Button disabled={confirmedAction.pending}>
+                      {tc('cancel')}
+                    </Button>
+                  </AlertDialog.Cancel>
+                  <AlertDialog.Action asChild>
+                    <Button
+                      aria-busy={confirmedAction.pending}
+                      disabled={!canManageAccess || confirmedAction.pending}
+                      onClick={(event) => {
+                        event.preventDefault()
+                        confirmedAction.run()
+                      }}
+                      variant="danger"
+                    >
+                      {t('confirm')}
+                    </Button>
+                  </AlertDialog.Action>
+                </div>
+              </AlertDialog.Content>
+            )}
+          </AlertDialog.Overlay>
         </AlertDialog.Portal>
       </AlertDialog.Root>
     </>
@@ -1093,7 +1063,7 @@ function PermissionChecklist({
   const t = useT(teamMessages)
   return (
     <fieldset className="grid min-w-0 gap-3">
-      <legend className="text-app-dim mb-1 text-[13.5px]">
+      <legend className="rz-label mb-1">
         {t('selectedCount', {
           legend: legend ?? t('rolePermissions'),
           selected: ALL_PERMISSIONS.filter((item) => selected.includes(item))
@@ -1103,19 +1073,19 @@ function PermissionChecklist({
       </legend>
       {permissionGroups.map((group) => (
         <fieldset className="grid min-w-0 gap-1" key={group.prefix}>
-          <legend className="text-app-dim font-mono text-[11.5px] tracking-[0.08em] uppercase">
+          <legend className="rz-eyebrow mb-1">
             {group.title === null ? group.prefix : t(group.title)}
           </legend>
           <div className="grid min-w-0 gap-1 sm:grid-cols-2">
             {group.permissions.map((permission) => (
               <label
-                className="text-app-muted rounded-control flex min-h-11 min-w-11 items-center gap-2.5 px-2 font-mono text-[13.5px] hover:bg-white/[0.04]"
+                className="text-app-muted rounded-control rz-mono flex min-h-control-lg items-center gap-2.5 px-2 hover:bg-app-hover"
                 key={permission}
               >
                 <input
                   aria-label={permission}
                   checked={selected.includes(permission)}
-                  className="accent-brand size-4 shrink-0"
+                  className="rz-check shrink-0"
                   onChange={() => onToggle(permission)}
                   type="checkbox"
                 />

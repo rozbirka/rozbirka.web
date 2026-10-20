@@ -93,11 +93,9 @@ function ReadOnlyRow({
   lang?: string | undefined
 }) {
   return (
-    <div className="border-app-line flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b py-2.5 last:border-b-0">
-      <dt className="text-app-muted text-[13px]">{label}</dt>
-      <dd className="text-app-ink text-[14px] font-medium" lang={lang}>
-        {children}
-      </dd>
+    <div>
+      <dt>{label}</dt>
+      <dd lang={lang}>{children}</dd>
     </div>
   )
 }
@@ -114,15 +112,15 @@ export function RegionSummary({ tenant }: { tenant: Tenant }) {
   const settings = tenantSettings(tenant)
   if (settings.countryCode === null || settings.documentLanguage === null)
     return (
-      <p className="text-app-muted text-[13px] leading-5 text-pretty">
-        <strong className="text-app-ink">{t('unknownTitle')}</strong>{' '}
+      <p className="rz-muted m-0 text-pretty">
+        <strong className="rz-strong">{t('unknownTitle')}</strong>{' '}
         {t('unknownBody')}
       </p>
     )
   return (
     <>
       <LockStatus locked={settings.regionLocked === true} t={t} />
-      <dl>
+      <dl className="rz-facts px-0 py-0">
         <ReadOnlyRow label={t('country')}>
           {t(COUNTRY_KEY[settings.countryCode])}
         </ReadOnlyRow>
@@ -140,10 +138,10 @@ export function RegionSummary({ tenant }: { tenant: Tenant }) {
 /** Static text, not a live region: it describes a state, not an event. */
 function LockStatus({ locked, t }: { locked: boolean; t: Translate }) {
   return (
-    <p className="border-app-line text-app-muted rounded-[12px] border px-3.5 py-2.5 text-[13px] leading-5 text-pretty">
+    <p className="rz-inset rz-muted m-0 text-pretty">
       {locked ? (
         <>
-          <strong className="text-app-ink">{t('lockedTitle')}</strong>{' '}
+          <strong className="rz-strong">{t('lockedTitle')}</strong>{' '}
           {t('lockedBody')}
         </>
       ) : (
@@ -362,7 +360,7 @@ export function RegionSettings({
         {locked ? (
           <>
             <LockStatus locked t={t} />
-            <dl>
+            <dl className="rz-facts px-0 py-0">
               <ReadOnlyRow label={t('country')}>
                 {countryName(savedCountry)}
               </ReadOnlyRow>
@@ -376,7 +374,7 @@ export function RegionSettings({
             <Notice tone="warn">
               {t('beforeFirst')} {t('lockReasons')}
             </Notice>
-            <div className="grid gap-3.5 sm:grid-cols-2">
+            <div className="rz-form-grid">
               <Field label={t('country')}>
                 <SelectInput
                   disabled={pending}
@@ -431,14 +429,11 @@ export function RegionSettings({
             value={docLanguage}
           />
         </Field>
-        <div
-          className="border-app-line rounded-[14px] border px-4 py-3"
-          lang={docLanguage}
-        >
-          <p className="text-app-muted text-[12.5px]" lang={locale}>
+        <div className="rz-inset grid gap-2" lang={docLanguage}>
+          <p className="rz-caption m-0" lang={locale}>
             {t('preview')}
           </p>
-          <dl className="mt-2 grid grid-cols-3 gap-3 text-[13px]">
+          <dl className="m-0 grid grid-cols-3 gap-3">
             {(
               [
                 ['previewDate', preview.date],
@@ -446,16 +441,14 @@ export function RegionSettings({
                 ['previewAmount', preview.amount],
               ] as const
             ).map(([key, value]) => (
-              <div className="min-w-0" key={key}>
-                <dt className="text-app-dim">{previewLabels(key)}</dt>
-                <dd className="text-app-ink font-medium tabular-nums">
-                  {value}
-                </dd>
+              <div className="grid min-w-0 gap-0.5" key={key}>
+                <dt className="rz-dim">{previewLabels(key)}</dt>
+                <dd className="rz-mono rz-strong m-0">{value}</dd>
               </div>
             ))}
           </dl>
         </div>
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="rz-btn-row justify-end">
           <Button
             disabled={pending || !changed}
             onClick={() => {
@@ -469,7 +462,6 @@ export function RegionSettings({
           </Button>
           <Button
             aria-busy={pending || undefined}
-            className="px-5 text-sm font-bold"
             disabled={pending || !changed}
             onClick={requestSave}
             variant="primary"
@@ -485,19 +477,19 @@ export function RegionSettings({
     <section
       aria-busy={pending || undefined}
       aria-labelledby={titleId}
-      className="border-app-line bg-app-raised min-w-0 scroll-mt-24 rounded-[20px] border px-5 py-5"
+      className="rz-card min-w-0 scroll-mt-24"
       // Deep-link target: onboarding opens /settings/business#region.
       id={BUSINESS_SECTION_IDS.region}
     >
-      <div className="flex items-center gap-3">
-        <span className="border-app-line text-app-dim inline-flex size-7 shrink-0 items-center justify-center rounded-full border font-mono text-[11px]">
-          02
-        </span>
-        <h2 className="text-app-ink text-[15px] font-bold" id={titleId}>
-          {t('regionTitle')}
-        </h2>
-      </div>
-      <div className="mt-4 grid gap-3.5">
+      <header className="rz-card__head py-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="rz-code rz-code--sm">02</span>
+          <h2 className="rz-h-card" id={titleId}>
+            {t('regionTitle')}
+          </h2>
+        </div>
+      </header>
+      <div className="rz-card__body grid gap-3">
         {state.kind === 'success' && <Notice tone="ok">{t('saved')}</Notice>}
         {state.kind === 'checking' && (
           <Notice tone="info">{tl('checking')}</Notice>
@@ -538,7 +530,7 @@ export function RegionSettings({
         open={confirmOpen}
         title={t('confirmTitle')}
       >
-        <dl>
+        <dl className="rz-facts px-0 py-0">
           <ReadOnlyRow label={t('country')}>{countryName(country)}</ReadOnlyRow>
           <ReadOnlyRow label={t('tz')}>{zoneLabel(timeZone, t)}</ReadOnlyRow>
           <ReadOnlyRow label={t('docLang')} lang={docLanguage}>

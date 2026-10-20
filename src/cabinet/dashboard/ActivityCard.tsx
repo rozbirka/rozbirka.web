@@ -48,14 +48,14 @@ export function ActivityCard({
         entries.map((entry) => (
           <CardRow key={entry.key}>
             <div className="grid grid-cols-[44px_minmax(0,1fr)] items-baseline gap-3">
-              <p className="text-app-dim font-mono text-[12px] tabular-nums">
+              <p className="rz-caption rz-mono m-0">
                 {stamp(entry.activity.timestamp, format)}
               </p>
               <div className="min-w-0">
-                <p className="text-app-ink text-[14px] leading-[1.4] text-pretty">
+                <p className="m-0 text-pretty text-app-ink">
                   {activityLabel(entry.activity.type, locale)}
                 </p>
-                <p className="text-app-dim mt-[3px] text-[12px]">
+                <p className="rz-caption m-0 mt-0.5">
                   {entry.activity.userName} · {entry.scope}
                 </p>
               </div>

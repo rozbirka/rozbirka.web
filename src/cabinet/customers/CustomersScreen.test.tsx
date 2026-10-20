@@ -178,7 +178,7 @@ it('opens the new-customer form in the standard side drawer over the directory',
 
   expect(screen.getByText('Клієнти', { selector: 'h1' })).toBeInTheDocument()
   const drawer = screen.getByRole('dialog', { name: 'Новий клієнт' })
-  expect(drawer).toHaveClass('sm:max-w-[600px]')
+  expect(drawer).toHaveClass('rz-sheet')
   // The shared drawer: its footer keeps the save action in view.
   expect(
     within(drawer).getByRole('button', { name: 'Створити клієнта' }),
@@ -718,7 +718,7 @@ it('edits a customer in the side drawer over the customer card', async () => {
   const drawer = await screen.findByRole('dialog', {
     name: 'Редагувати клієнта',
   })
-  expect(drawer).toHaveClass('sm:max-w-[600px]')
+  expect(drawer).toHaveClass('rz-sheet')
   await within(drawer).findByDisplayValue('Ірина')
   expect(
     within(drawer).getByRole('button', { name: 'Зберегти зміни' }),

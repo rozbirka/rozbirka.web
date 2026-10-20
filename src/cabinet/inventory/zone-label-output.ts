@@ -104,14 +104,14 @@ export const buildZoneLabelHtml = async (
     @page { size: 40mm 58mm; margin: 0; }
     html,body{margin:0;padding:0}
     *{box-sizing:border-box}
-    .label{width:40mm;height:57mm;padding:2mm;display:flex;flex-direction:column;align-items:center;text-align:center;font-family:system-ui,sans-serif;background:#fff;color:#000;break-after:page;overflow:hidden}
+    .label{width:40mm;height:57mm;padding:2mm;display:flex;flex-direction:column;align-items:center;text-align:center;font-family:"Manrope",ui-sans-serif,sans-serif;background:#fff;color:#000;break-after:page;overflow:hidden}
     .label:last-child{break-after:auto}
     .qr{width:33mm;height:33mm;flex:none;margin-bottom:1mm}
     .qr svg{display:block;width:100%;height:100%}
     .details{width:100%;min-height:0;flex:1;display:flex;flex-direction:column;align-items:center;gap:.5mm}
     .kind{font-size:8px;line-height:1.1;font-weight:700}
     strong{max-width:100%;font-size:13px;line-height:1.1;overflow-wrap:anywhere;flex:none}
-    .code{font-size:10px;line-height:1.1;font-weight:700;overflow-wrap:anywhere}
+    .code{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10px;line-height:1.1;font-weight:700;overflow-wrap:anywhere}
     small{font-size:7px;line-height:1.15;color:#666;overflow-wrap:anywhere;margin-top:auto}
   </style>
 </head>

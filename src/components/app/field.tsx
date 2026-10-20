@@ -45,16 +45,14 @@ export function Field({
       : undefined
 
   return (
-    <div className={cn('grid content-start gap-1.5', className)}>
+    <div className={cn('rz-field', className)}>
       <div
-        className={cn('flex items-baseline gap-1', hiddenLabel && 'sr-only')}
+        className={cn('rz-label flex items-baseline', hiddenLabel && 'sr-only')}
       >
-        <label className="text-app-muted text-[13.5px]" htmlFor={id}>
-          {label}
-        </label>
+        <label htmlFor={id}>{label}</label>
         {/* Outside the label: its text content must stay the accessible name. */}
         {required ? (
-          <span aria-hidden className="text-brand text-[13.5px]">
+          <span aria-hidden className="rz-req">
             *
           </span>
         ) : null}
@@ -75,15 +73,11 @@ export function Field({
         {children}
       </FieldContext.Provider>
       {invalid ? (
-        <p className="text-state-danger text-[12.5px]" id={errorId}>
+        <p className="rz-error" id={errorId}>
           {error}
         </p>
       ) : describedBy === hintId ? (
-        <p
-          className="text-app-dim text-[12.5px]"
-          data-slot="field-hint"
-          id={hintId}
-        >
+        <p className="rz-hint" data-slot="field-hint" id={hintId}>
           {hint}
         </p>
       ) : null}

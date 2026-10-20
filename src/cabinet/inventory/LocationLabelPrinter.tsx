@@ -400,7 +400,6 @@ function ScopedLocationLabels({
       back={
         <>
           <SearchInput
-            className="min-h-12 text-base"
             aria-label={t('search')}
             placeholder={t('search')}
             value={search}
@@ -423,12 +422,12 @@ function ScopedLocationLabels({
         <>
           {error ? <Notice tone="danger">{error}</Notice> : null}
           {queue && !sameQueue ? (
-            <Notice block className="gap-3 px-4 py-4 sm:px-5">
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between xl:gap-6">
-                <p className="min-w-0 flex-1 break-words leading-6">
+            <Notice block>
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
+                <p className="m-0 min-w-0 flex-1 break-words">
                   {t('otherQueue', { name: queue.target.parentName })}
                 </p>
-                <div className="flex flex-wrap items-center gap-3 xl:shrink-0">
+                <div className="rz-btn-row items-center xl:shrink-0">
                   <Button asChild>
                     <Link to={continuation}>{t('continue')}</Link>
                   </Button>
@@ -452,7 +451,6 @@ function ScopedLocationLabels({
           actions={
             <>
               <Button
-                className="min-h-9 px-3 text-[12.5px]"
                 disabled={locked || loading || loadFailed || !visible.length}
                 onClick={() =>
                   updateSelection(
@@ -468,7 +466,6 @@ function ScopedLocationLabels({
                 })}
               </Button>
               <Button
-                className="min-h-9 px-3 text-[12.5px]"
                 disabled={locked || !selection.size}
                 onClick={() => updateSelection(new Set())}
               >
@@ -476,7 +473,6 @@ function ScopedLocationLabels({
               </Button>
               <Button
                 variant="quiet"
-                className="min-h-9 px-3 text-[12.5px]"
                 disabled={busy}
                 onClick={() => setOpen(false)}
               >
@@ -499,11 +495,11 @@ function ScopedLocationLabels({
           }
         >
           {loading ? (
-            <div className="p-5">
+            <div className="p-3">
               <SkeletonRows rows={4} />
             </div>
           ) : loadFailed ? (
-            <div className="p-5">
+            <div className="p-3">
               <Notice tone="danger">
                 {t('loadFailed')}{' '}
                 <Button
@@ -519,7 +515,7 @@ function ScopedLocationLabels({
             </div>
           ) : (
             <ul
-              className="divide-app-line grid divide-y"
+              className="divide-app-line m-0 grid list-none divide-y p-0"
               aria-label={t(target.kind)}
             >
               {visible
@@ -530,9 +526,9 @@ function ScopedLocationLabels({
                     appearance="location"
                     icon={
                       target.kind === 'shelf' ? (
-                        <Rows3 aria-hidden className="size-5" />
+                        <Rows3 aria-hidden className="size-4" />
                       ) : (
-                        <LayoutGrid aria-hidden className="size-5" />
+                        <LayoutGrid aria-hidden className="size-4" />
                       )
                     }
                     label={label.zoneName}
@@ -550,7 +546,7 @@ function ScopedLocationLabels({
                   />
                 ))}
               {!visible.length ? (
-                <li className="text-app-muted p-5">
+                <li className="rz-muted p-3">
                   {t(needle ? 'noMatches' : 'empty')}
                 </li>
               ) : null}
@@ -567,7 +563,8 @@ function ScopedLocationLabels({
             <>
               {!sameQueue ? (
                 <Button
-                  className="mt-5 w-full justify-center"
+                  className="w-full"
+                  size="lg"
                   variant="primary"
                   disabled={locked || !selection.size || loading || loadFailed}
                   onClick={prepareSelection}
@@ -579,7 +576,8 @@ function ScopedLocationLabels({
               {sameQueue ? (
                 <>
                   <Button
-                    className="mt-5 w-full justify-center"
+                    className="w-full"
+                    size="lg"
                     variant="primary"
                     disabled={locked || loading || loadFailed}
                     onClick={() => void output(batch)}
@@ -588,16 +586,14 @@ function ScopedLocationLabels({
                     {busy ? t('printing') : t('print', { count: batch.length })}
                   </Button>
                   <Button
-                    className="mt-2 w-full justify-center text-[12.5px]"
+                    className="w-full"
                     disabled={locked || loading || loadFailed}
                     onClick={() => void output(batch)}
                   >
                     <FileDown aria-hidden />
                     {t('pdf', { count: batch.length })}
                   </Button>
-                  <p className="text-app-dim mt-3 text-xs leading-5">
-                    {t('pdfHint')}
-                  </p>
+                  <p className="rz-caption m-0">{t('pdfHint')}</p>
                 </>
               ) : null}
             </>

@@ -42,7 +42,7 @@ export function TillsCard({
         lines.map((line) => (
           <CardRow key={line.key}>
             <div className="flex items-baseline justify-between gap-3">
-              <p className="min-w-0 truncate text-[14px] font-bold text-white">
+              <p className="rz-strong m-0 min-w-0 truncate font-medium">
                 {line.name}
               </p>
               <TillAmount amount={line.amount} currency={line.currency} />
@@ -65,10 +65,9 @@ function TillAmount({
   const money = useWholeMoney(null)
   const named = useWholeMoney(currency)
   return (
-    <p className="font-mono text-[15px] font-medium whitespace-nowrap tabular-nums text-white">
+    <p className="rz-mono rz-strong m-0 whitespace-nowrap">
       <span aria-hidden>
-        {money(amount)}{' '}
-        <span className="text-app-dim text-[12px]">{currency}</span>
+        {money(amount)} <span className="rz-dim text-caption">{currency}</span>
       </span>
       <span className="sr-only">{named(amount)}</span>
     </p>

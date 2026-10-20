@@ -78,7 +78,7 @@ export function CarExpenseDrawer({
     >
       <form
         aria-busy={busy}
-        className="grid content-start gap-5"
+        className="grid content-start gap-4"
         id={CAR_EXPENSE_FORM}
         onSubmit={onSubmit}
       >

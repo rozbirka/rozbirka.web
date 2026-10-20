@@ -14,8 +14,6 @@ import { amountPrecisionError } from '../currency/amount-precision'
 import { tillCurrencies } from '../currency/catalog-order'
 import { cashMessages } from './cash-messages'
 
-const eyebrowClass =
-  'text-app-dim font-mono text-[11.5px] tracking-[0.12em] uppercase'
 /** A till's own currencies (catalog order); a transfer never invents one. */
 const currencyOptions = (register: CashRegister | undefined) =>
   register === undefined
@@ -171,7 +169,7 @@ function OpenCashTransferDrawer({
     >
       <form
         aria-busy={busy}
-        className="grid content-start gap-4"
+        className="grid content-start gap-3"
         id={CASH_TRANSFER_FORM}
         onSubmit={submit}
       >
@@ -181,11 +179,11 @@ function OpenCashTransferDrawer({
           </Notice>
         ) : (
           <>
-            <section className="border-app-line bg-app-raised rounded-[16px] grid gap-4 border p-4">
-              <p className={eyebrowClass}>{t('fromHeading')}</p>
+            <section className="rz-inset grid gap-3">
+              <p className="rz-eyebrow m-0">{t('fromHeading')}</p>
               <Field label={t('sourceTill')}>
                 <Segmented
-                  className="w-fit max-w-full border-0 bg-transparent p-0 [&>label]:min-h-10 [&>label]:flex-none [&>label]:border [&>label]:border-app-line-2 [&>label]:bg-app-input [&>label]:px-3.5"
+                  className="w-fit max-w-full [&>label]:flex-none"
                   label={t('sourceTill')}
                   name="transfer-from-register"
                   onChange={(registerId) => {
@@ -206,7 +204,6 @@ function OpenCashTransferDrawer({
               <Field label={t('amountOut')}>
                 <div className="grid gap-2">
                   <TextInput
-                    className="h-11 min-h-11 rounded-[10px] px-3.5 font-mono text-[17px] font-semibold tabular-nums"
                     inputMode="decimal"
                     min="0"
                     numeric
@@ -218,7 +215,7 @@ function OpenCashTransferDrawer({
                     value={amountOut}
                   />
                   <Segmented
-                    className="w-fit max-w-full flex-wrap rounded-[10px] p-1 [&>label]:min-h-9 [&>label]:min-w-14 [&>label]:flex-none [&>label]:rounded-[7px] [&>label]:px-2 [&>label]:font-mono"
+                    className="w-fit max-w-full font-mono [&>label]:flex-none"
                     label={t('currencyOut')}
                     name="transfer-from-currency"
                     onChange={setFromCurrency}
@@ -229,7 +226,7 @@ function OpenCashTransferDrawer({
                 </div>
               </Field>
               {source && fromCurrency ? (
-                <p className="text-app-dim text-[12.5px] tabular-nums">
+                <p className="rz-caption rz-mono m-0">
                   {t('availableHere', {
                     amount: `${source.balances[fromCurrency] ?? '—'} ${fromCurrency}`,
                   })}
@@ -237,17 +234,17 @@ function OpenCashTransferDrawer({
               ) : null}
             </section>
 
-            <div aria-hidden className="flex items-center gap-3">
+            <div aria-hidden className="text-app-dim flex items-center gap-3">
               <span className="bg-app-line h-px flex-1" />
-              <ArrowDown className="text-app-dim size-4 shrink-0" />
+              <ArrowDown className="size-4 shrink-0" />
               <span className="bg-app-line h-px flex-1" />
             </div>
 
-            <section className="border-app-line bg-app-raised rounded-[16px] grid gap-4 border p-4">
-              <p className={eyebrowClass}>{t('toHeading')}</p>
+            <section className="rz-inset grid gap-3">
+              <p className="rz-eyebrow m-0">{t('toHeading')}</p>
               <Field label={t('destinationTill')}>
                 <Segmented
-                  className="w-fit max-w-full border-0 bg-transparent p-0 [&>label]:min-h-10 [&>label]:flex-none [&>label]:border [&>label]:border-app-line-2 [&>label]:bg-app-input [&>label]:px-3.5"
+                  className="w-fit max-w-full [&>label]:flex-none"
                   label={t('destinationTill')}
                   name="transfer-to-register"
                   onChange={(registerId) => {
@@ -266,7 +263,6 @@ function OpenCashTransferDrawer({
               <Field label={t('amountIn')}>
                 <div className="grid gap-2">
                   <TextInput
-                    className="h-11 min-h-11 rounded-[10px] px-3.5 font-mono text-[17px] font-semibold tabular-nums"
                     inputMode="decimal"
                     min="0"
                     numeric
@@ -278,7 +274,7 @@ function OpenCashTransferDrawer({
                     value={amountIn}
                   />
                   <Segmented
-                    className="w-fit max-w-full flex-wrap rounded-[10px] p-1 [&>label]:min-h-9 [&>label]:min-w-14 [&>label]:flex-none [&>label]:rounded-[7px] [&>label]:px-2 [&>label]:font-mono"
+                    className="w-fit max-w-full font-mono [&>label]:flex-none"
                     label={t('currencyIn')}
                     name="transfer-to-currency"
                     onChange={setToCurrency}
@@ -289,7 +285,7 @@ function OpenCashTransferDrawer({
                 </div>
               </Field>
               {destination && toCurrency ? (
-                <p className="text-app-dim text-[12.5px] tabular-nums">
+                <p className="rz-caption rz-mono m-0">
                   {t('destinationBalance', {
                     amount: `${destination.balances[toCurrency] ?? '—'} ${toCurrency}`,
                   })}

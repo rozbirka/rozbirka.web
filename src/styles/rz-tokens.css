@@ -1,0 +1,164 @@
+/* GENERATED from docs/design-system/v2/tokens.css by scripts/sync-design-system.mjs — do not edit. */
+/*
+ * Rozbirka Design System v2 — unified tokens for a CRM/ERP cabinet.
+ * Target system (to-be). Repo is unchanged; mapping from current code: v2/MIGRATION.md.
+ * Themes: :root = dark (default), [data-theme="light"].
+ * Density: [data-density="compact"] (default), [data-density="comfortable"].
+ * Fonts: Manrope (UI) + JetBrains Mono (codes, numbers, labels). No system sans.
+ */
+
+:root, [data-theme="dark"] {
+  color-scheme: dark;
+  /* Brand — reserved for primary action, focus, current selection */
+  --rz-brand: #f77425;
+  --rz-brand-hover: #ff8430;
+  --rz-on-brand: #000000;
+  --rz-brand-text: #f77425;          /* brand used as text/link */
+  --rz-brand-soft: rgb(247 116 37 / 0.14);
+
+  /* Surfaces: 4 levels, no more */
+  --rz-bg: #0b0b0b;                  /* app canvas */
+  --rz-bg-sidebar: #0f0f0e;
+  --rz-surface: #121212;             /* cards, table, panels */
+  --rz-surface-2: #191919;           /* inputs, nested blocks */
+  --rz-overlay: #1f1e1d;             /* menus, dialogs, popovers */
+
+  --rz-border: rgb(255 255 255 / 0.07);
+  --rz-border-strong: rgb(255 255 255 / 0.13);
+
+  /* Text: 4 levels */
+  --rz-text-strong: #ffffff;
+  --rz-text: #f6f4f2;
+  --rz-text-muted: #a29b93;
+  --rz-text-dim: #8a847c;
+
+  /* Interaction fills (one scale for every control) */
+  --rz-fill-hover: rgb(255 255 255 / 0.04);
+  --rz-fill-active: rgb(255 255 255 / 0.07);
+  --rz-fill-selected: rgb(255 255 255 / 0.09);
+  --rz-row-selected: rgb(247 116 37 / 0.08);
+
+  /* States: solid + one soft alpha (0.14) */
+  --rz-ok: #4cc38a;      --rz-ok-soft: rgb(76 195 138 / 0.14);
+  --rz-warn: #e8b13c;    --rz-warn-soft: rgb(232 177 60 / 0.14);
+  --rz-danger: #f2645a;  --rz-danger-soft: rgb(242 100 90 / 0.14);
+  --rz-info: #6ea8fe;    --rz-info-soft: rgb(110 168 254 / 0.14);
+  --rz-neutral-soft: rgb(255 255 255 / 0.06);
+
+  --rz-shadow-popover: 0 8px 24px rgb(0 0 0 / 0.40), 0 0 0 1px rgb(255 255 255 / 0.06);
+  --rz-shadow-dialog: 0 24px 64px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(255 255 255 / 0.08);
+  --rz-scrim: rgb(0 0 0 / 0.55);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --rz-brand: #f77425;
+  --rz-brand-hover: #e8661a;
+  --rz-on-brand: #000000;
+  --rz-brand-text: #b9520f;          /* 4.6:1 on white */
+  --rz-brand-soft: rgb(247 116 37 / 0.12);
+
+  --rz-bg: #f7f6f4;
+  --rz-bg-sidebar: #f1efec;
+  --rz-surface: #ffffff;
+  --rz-surface-2: #f4f2ef;
+  --rz-overlay: #ffffff;
+
+  --rz-border: rgb(28 25 23 / 0.08);
+  --rz-border-strong: rgb(28 25 23 / 0.15);
+
+  --rz-text-strong: #0f0d0c;
+  --rz-text: #1c1917;
+  --rz-text-muted: #5c554f;          /* 7.0:1 */
+  --rz-text-dim: #756d66;            /* 4.9:1 */
+
+  --rz-fill-hover: rgb(28 25 23 / 0.04);
+  --rz-fill-active: rgb(28 25 23 / 0.07);
+  --rz-fill-selected: rgb(28 25 23 / 0.08);
+  --rz-row-selected: rgb(247 116 37 / 0.09);
+
+  --rz-ok: #19804f;      --rz-ok-soft: rgb(25 128 79 / 0.12);
+  --rz-warn: #9a6400;    --rz-warn-soft: rgb(196 133 18 / 0.14);
+  --rz-danger: #c8322a;  --rz-danger-soft: rgb(200 50 42 / 0.11);
+  --rz-info: #2b62c9;    --rz-info-soft: rgb(43 98 201 / 0.11);
+  --rz-neutral-soft: rgb(28 25 23 / 0.06);
+
+  --rz-shadow-popover: 0 8px 24px rgb(28 25 23 / 0.12), 0 0 0 1px rgb(28 25 23 / 0.08);
+  --rz-shadow-dialog: 0 24px 64px rgb(28 25 23 / 0.18), 0 0 0 1px rgb(28 25 23 / 0.08);
+  --rz-scrim: rgb(28 25 23 / 0.35);
+}
+
+:root {
+  /* Type — one family per role */
+  --rz-font: 'Manrope', ui-sans-serif, sans-serif;
+  --rz-font-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+
+  /* Type scale (px): 11 · 12 · 13 · 14 · 16 · 20 · 28. Base UI = 13 */
+  --rz-fs-micro: 11px;   /* mono labels, kbd, column heads */
+  --rz-fs-caption: 12px; /* hints, meta, pills */
+  --rz-fs-body: 13px;    /* default UI text, table cells, buttons */
+  --rz-fs-input: 14px;   /* inputs, long text */
+  --rz-fs-title: 16px;   /* card / section / sheet title */
+  --rz-fs-page: 20px;    /* page title */
+  --rz-fs-display: 28px; /* KPI value, empty-state hero (rare) */
+  --rz-lh-tight: 1.2;
+  --rz-lh: 1.45;
+  --rz-fw-regular: 400; --rz-fw-medium: 500; --rz-fw-semibold: 600; --rz-fw-bold: 700;
+  --rz-ls-title: -0.01em;
+  --rz-ls-mono: 0.06em;
+
+  /* Space: 4px grid */
+  --rz-s-0_5: 2px; --rz-s-1: 4px; --rz-s-1_5: 6px; --rz-s-2: 8px; --rz-s-3: 12px;
+  --rz-s-4: 16px; --rz-s-5: 20px; --rz-s-6: 24px; --rz-s-8: 32px; --rz-s-10: 40px; --rz-s-12: 48px;
+
+  /* Radius: 4 steps */
+  --rz-r-xs: 4px;   /* kbd, code chip, checkbox */
+  --rz-r-sm: 6px;   /* buttons, inputs, menu items, tabs */
+  --rz-r-md: 8px;   /* cards, panels, table container, popovers */
+  --rz-r-lg: 12px;  /* dialogs, sheets */
+  --rz-r-full: 9999px;
+
+  /* Layout */
+  --rz-sidebar-w: 232px;
+  --rz-topbar-h: 44px;
+  --rz-peek-w: 400px;
+  --rz-content-max: 1440px;
+  --rz-target-touch: 44px;   /* min hit area on touch / mobile */
+  --rz-target-glove: 56px;   /* warehouse floor, scanner */
+
+  /* Motion */
+  --rz-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --rz-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --rz-dur-fast: 120ms;  /* hover, press */
+  --rz-dur: 180ms;       /* popover, tab */
+  --rz-dur-slow: 240ms;  /* sheet, peek panel */
+
+  /* Focus — one rule everywhere */
+  --rz-focus: 0 0 0 2px var(--rz-bg), 0 0 0 4px var(--rz-brand);
+
+  /* Z */
+  --rz-z-sticky: 20; --rz-z-popover: 40; --rz-z-dialog: 50; --rz-z-toast: 60;
+}
+
+/* Density */
+:root, [data-density="compact"] {
+  --rz-control-h: 28px;     /* toolbar buttons, filters, inputs */
+  --rz-control-h-lg: 32px;  /* primary page actions */
+  --rz-row-h: 34px;         /* table row */
+  --rz-cell-px: 12px;
+  --rz-card-p: 16px;
+}
+[data-density="comfortable"] {
+  --rz-control-h: 32px;
+  --rz-control-h-lg: 36px;
+  --rz-row-h: 44px;
+  --rz-cell-px: 16px;
+  --rz-card-p: 20px;
+}
+@media (pointer: coarse) {
+  :root { --rz-control-h: 44px; --rz-control-h-lg: 44px; --rz-row-h: 48px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

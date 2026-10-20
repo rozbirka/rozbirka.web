@@ -59,25 +59,17 @@ export function Switch({
   title?: string | undefined
 }) {
   return (
-    <button
+    <input
       aria-checked={checked}
       aria-label={label}
-      className={`inline-flex h-6 w-[42px] shrink-0 items-center rounded-full border p-[3px] transition-colors ${
-        checked
-          ? 'border-state-ok/35 bg-state-ok-soft justify-end'
-          : 'border-app-line-2 justify-start bg-white/[0.05]'
-      } ${disabled ? 'cursor-not-allowed opacity-55' : 'cursor-pointer'}`}
+      checked={checked}
+      className="rz-switch shrink-0 disabled:cursor-not-allowed disabled:opacity-55"
       disabled={disabled}
-      onClick={() => onChange(!checked)}
+      onChange={(event) => onChange(event.target.checked)}
       role="switch"
       title={title}
-      type="button"
-    >
-      <span
-        aria-hidden
-        className={`size-4 rounded-full ${checked ? 'bg-state-ok' : 'bg-app-dim'}`}
-      />
-    </button>
+      type="checkbox"
+    />
   )
 }
 
@@ -97,16 +89,14 @@ function Toggle({
   title?: string | undefined
 }) {
   return (
-    <div className="flex items-center gap-3.5">
-      <div className="min-w-0 flex-1">
+    <div className="flex items-center gap-3">
+      <div className="grid min-w-0 flex-1 gap-0.5">
         <p
-          className={`text-[14px] font-semibold ${checked ? 'text-app-ink' : 'text-app-muted'}`}
+          className={`m-0 font-medium ${checked ? 'text-app-ink' : 'text-app-muted'}`}
         >
           {label}
         </p>
-        <p className="text-app-dim mt-0.5 text-[12px] leading-[1.45] text-pretty">
-          {hint}
-        </p>
+        <p className="rz-hint m-0 text-pretty">{hint}</p>
       </div>
       <Switch
         checked={checked}
@@ -326,7 +316,7 @@ export function DispatchPointForm({
     <Sheet
       description={t('formDescription')}
       footer={
-        <div className="flex w-full flex-wrap items-center gap-2.5">
+        <div className="flex w-full flex-wrap items-center gap-2">
           {onDeactivate !== undefined && (
             <Button
               disabled={pending || deactivateLocked}
@@ -339,7 +329,7 @@ export function DispatchPointForm({
               {t('deactivate')}
             </Button>
           )}
-          <div className="ml-auto flex flex-wrap items-center gap-2.5">
+          <div className="rz-btn-row ml-auto items-center">
             <Button disabled={pending} onClick={onClose}>
               {tc('cancel')}
             </Button>
@@ -367,7 +357,7 @@ export function DispatchPointForm({
           : t('pointTitle', { name: point.name })
       }
     >
-      <form className="grid gap-3.5" id={FORM_ID} noValidate onSubmit={submit}>
+      <form className="grid gap-3" id={FORM_ID} noValidate onSubmit={submit}>
         {error !== null && <Notice tone="danger">{error}</Notice>}
         {lookupError !== null && (
           <Notice tone="warn">
@@ -497,7 +487,7 @@ export function DispatchPointForm({
           required
         >
           <TextInput
-            className="font-mono"
+            className="rz-mono"
             inputMode="tel"
             onChange={(event) => setPhone(event.target.value)}
             placeholder="+380"
@@ -516,7 +506,7 @@ export function DispatchPointForm({
             </Field>
             <Field label={t('companyTin')} required>
               <TextInput
-                className="font-mono"
+                className="rz-mono"
                 onChange={(event) => setCompanyTin(event.target.value)}
                 placeholder={t('companyTinPlaceholder')}
                 value={companyTin}
@@ -525,7 +515,7 @@ export function DispatchPointForm({
           </>
         )}
 
-        <div className="border-app-line bg-app-input grid gap-4 rounded-[14px] border px-5 py-4.5">
+        <div className="rz-inset grid gap-3">
           <Toggle
             checked={isCompany}
             hint={t('isCompanyHint')}

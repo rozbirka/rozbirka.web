@@ -2,9 +2,9 @@ import { useId, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
- * The redesign's card: 20px corners, one hairline, a 17px title and an aside
- * opposite it. Screens adopt it one at a time — `SectionPanel` still carries
- * the parts of the cabinet that have not been redrawn yet.
+ * `.rz-card` from the design system: 8px corners, one hairline, a head row with
+ * the title and an aside opposite it, then the body. One card for the whole
+ * cabinet — `SectionPanel` and `Panel` render the same frame.
  */
 export function Card({
   title,
@@ -26,26 +26,15 @@ export function Card({
   return (
     <section
       aria-labelledby={titleId}
-      className={cn(
-        'border-app-line bg-app-raised rounded-[20px] border',
-        className,
-      )}
+      className={cn('rz-card min-w-0', className)}
     >
-      <header
-        className={cn(
-          'flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-6 pt-[22px]',
-          headerClassName,
-        )}
-      >
-        <h2
-          className="text-[18px] font-bold tracking-[-0.01em] text-white"
-          id={titleId}
-        >
+      <header className={cn('rz-card__head py-2.5', headerClassName)}>
+        <h2 className="rz-h-card" id={titleId}>
           {title}
         </h2>
         {aside}
       </header>
-      <div className={cn('px-6 pt-5 pb-6', bodyClassName)}>{children}</div>
+      <div className={cn('rz-card__body', bodyClassName)}>{children}</div>
     </section>
   )
 }

@@ -15,7 +15,8 @@ import { normalizeApiProblem } from '@/api/errors'
 import { tenantPreference } from '@/api/tenant-preference'
 import { useAuth, type AuthContextValue } from '@/auth/AuthContext'
 import { cabinetPath } from '@/cabinet/cabinet-paths'
-import { BrandLogo } from '@/components/site/brand-logo'
+import { useDesignSystemRoot } from '@/components/app/use-design-system-root'
+import { AuthBrand } from './auth-brand'
 import { commonMessages, useT, type MessageKey } from '@/i18n'
 import { inviteMessages } from './invite-messages'
 import {
@@ -23,8 +24,7 @@ import {
   DateValue,
   DeniedState,
   ErrorState,
-  Fact,
-  FactList,
+  FactRows,
   Notice,
   SkeletonRows,
   StateScreen,
@@ -136,6 +136,7 @@ const acceptFailureMessage = (error: unknown): string =>
   normalizeApiProblem(error).message
 
 export function InviteScreen() {
+  useDesignSystemRoot()
   const { code = '' } = useParams<{ code: string }>()
   const auth = useAuth()
   const navigate = useNavigate()
@@ -255,20 +256,17 @@ export function InviteScreen() {
   }
 
   return (
-    <div className="bg-app-canvas text-app-ink flex min-h-screen flex-col">
-      <header className="flex items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-10">
-        <BrandLogo />
-        <Link
-          className="text-app-muted hover:text-app-ink -mr-2 inline-flex min-h-11 items-center gap-2 rounded-control px-2 text-[13px] transition-colors"
-          to="/"
-        >
-          <ArrowLeft aria-hidden className="size-4" />
+    <div className="rz flex min-h-screen flex-col">
+      <header className="flex items-center justify-end px-4 pt-4">
+        <Link className="rz-btn rz-btn--ghost" to="/">
+          <ArrowLeft aria-hidden />
           {t('toHome')}
         </Link>
       </header>
 
-      <main className="flex flex-1 justify-center px-4 pt-4 pb-16 sm:px-6 sm:pt-10">
-        <div className="w-full max-w-[480px] min-w-0">
+      <main className="grid flex-1 place-items-center p-6 pt-2">
+        <div className="grid w-full max-w-[420px] min-w-0 gap-5">
+          <AuthBrand />
           {loading && (
             <>
               <h1 className="sr-only">{t('heading')}</h1>
@@ -332,35 +330,36 @@ function InvitationCard({
   const tc = useT(commonMessages)
 
   return (
-    <section className="border-app-line rounded-sheet bg-app-raised border p-5 sm:p-7">
-      <p className="text-app-dim font-mono text-[10.5px] tracking-[0.12em] uppercase">
-        {t('eyebrow')}
-      </p>
-      <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em] break-words text-white">
-        {info.tenantName}
-      </h1>
-      <p className="text-app-muted mt-2 text-[13.5px] leading-6">{t('lead')}</p>
+    <section className="grid gap-5">
+      <div className="grid gap-1.5">
+        <p className="rz-eyebrow m-0">{t('eyebrow')}</p>
+        <h1 className="rz-h-page break-words">{info.tenantName}</h1>
+        <p className="text-app-muted m-0">{t('lead')}</p>
+      </div>
 
-      <div className="border-app-line rounded-panel bg-app-canvas/60 mt-5 border p-4">
-        <FactList columns={2}>
-          <Fact label={t('role')}>
-            <StatusPill tone="info">{info.roleName}</StatusPill>
-          </Fact>
-          <Fact label={t('invitedBy')}>{info.createdByName}</Fact>
-          <Fact label={t('validUntil')}>
-            <DateValue value={info.expiresAt} />
-          </Fact>
-        </FactList>
+      <div className="rz-card">
+        <FactRows
+          className="px-4"
+          rows={[
+            {
+              label: t('role'),
+              value: <StatusPill tone="info">{info.roleName}</StatusPill>,
+            },
+            { label: t('invitedBy'), value: info.createdByName },
+            {
+              label: t('validUntil'),
+              value: <DateValue value={info.expiresAt} />,
+            },
+          ]}
+        />
       </div>
 
       {authStatus === 'guest' ? (
         <>
-          <Notice className="mt-5" tone="info">
-            {t('signInFirst')}
-          </Notice>
+          <Notice tone="info">{t('signInFirst')}</Notice>
           <Button
             asChild
-            className="mt-4 w-full"
+            className="rz-btn--block"
             size="touch"
             variant="primary"
           >
@@ -372,12 +371,10 @@ function InvitationCard({
         </>
       ) : accepted ? (
         <>
-          <Notice className="mt-5" tone="ok">
-            {t('accepted')}
-          </Notice>
+          <Notice tone="ok">{t('accepted')}</Notice>
           <Button
             asChild
-            className="mt-4 w-full"
+            className="rz-btn--block"
             size="touch"
             variant="primary"
           >
@@ -390,13 +387,13 @@ function InvitationCard({
       ) : (
         <>
           {failed && accepting.error !== null && (
-            <Notice block className="mt-5" tone="danger">
+            <Notice block tone="danger">
               <p>{accepting.error}</p>
               <p className="text-app-muted mt-1">{t('acceptFailedHint')}</p>
             </Notice>
           )}
           <Button
-            className="mt-5 w-full"
+            className="rz-btn--block"
             onClick={accepting.run}
             size="touch"
             variant="primary"

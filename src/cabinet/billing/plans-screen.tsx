@@ -4,8 +4,10 @@ import { Check, Minus } from 'lucide-react'
 import {
   Amount,
   Button,
+  DataTable,
   ErrorState,
   Notice,
+  Segmented,
   SkeletonRows,
   StatusPill,
   useOperation,
@@ -194,7 +196,6 @@ export function PlansScreen() {
     ? isContractManagedSubscription(providerSubscription)
     : false
   const canCheckout = canStartWebCheckout(providerSubscription)
-  const recommendedCode = 'pro_monthly'
   const allPlans = currentPlansState.plans
   const intervals = [...new Set(allPlans.map((plan) => plan.interval))]
   const activeInterval =
@@ -208,32 +209,47 @@ export function PlansScreen() {
   // Every feature any plan sells, so a plan can also say what it does not give.
   const allFeatures = [...new Set(allPlans.flatMap((plan) => plan.features))]
 
+  const comparisonRows = [
+    ...limits.map((limit) => ({
+      key: `limit-${limit.key}`,
+      label: limit.label,
+      value: (plan: PublicPlanDto): ReactNode => (
+        <span className="rz-strong">{plan.limits[limit.key] ?? '∞'}</span>
+      ),
+    })),
+    ...allFeatures.map((code) => ({
+      key: `feature-${code}`,
+      label: featureLabel(code, locale),
+      value: (plan: PublicPlanDto): ReactNode =>
+        plan.features.includes(code) ? (
+          <Check
+            aria-label={t('included')}
+            className="text-state-ok ml-auto size-3.5"
+          />
+        ) : (
+          <Minus
+            aria-label={t('notIncluded')}
+            className="text-app-dim ml-auto size-3.5"
+          />
+        ),
+    })),
+  ]
+
   return (
     <PlansFrame
       actions={
         intervals.length > 1 ? (
-          <div
-            aria-label={t('billingPeriod')}
-            className="border-app-line bg-app-raised flex min-w-0 flex-wrap gap-1 rounded-[14px] border p-1"
-            role="group"
-          >
-            {intervals.map((one) => (
-              <button
-                aria-pressed={one === activeInterval}
-                className={cn(
-                  'inline-flex min-h-11 items-center gap-2 rounded-[10px] px-3.5 text-[13.5px] font-bold whitespace-nowrap',
-                  one === activeInterval
-                    ? 'text-app-ink bg-white/[0.08]'
-                    : 'text-app-muted hover:text-app-ink',
-                )}
-                key={one}
-                onClick={() => setInterval(one)}
-                type="button"
-              >
-                {intervalName(one, locale)}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            as="toggle"
+            label={t('billingPeriod')}
+            name="billing-period"
+            onChange={setInterval}
+            options={intervals.map((one) => ({
+              value: one,
+              label: intervalName(one, locale),
+            }))}
+            value={activeInterval ?? ''}
+          />
         ) : undefined
       }
     >
@@ -251,7 +267,7 @@ export function PlansScreen() {
         !contractManaged && <BillingUnavailableNotice />}
 
       <ul
-        className="grid min-w-0 items-start gap-5 sm:grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))]"
+        className="m-0 grid min-w-0 list-none items-start gap-4 p-0 sm:grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))]"
         role="list"
       >
         {plans.map((plan) => {
@@ -264,103 +280,94 @@ export function PlansScreen() {
           return (
             <li
               className={cn(
-                'border-app-line bg-app-raised flex min-w-0 flex-col gap-4 rounded-[20px] border px-5 py-5',
-                plan.code === recommendedCode && 'border-brand/35',
-                isSelected && 'ring-brand ring-1',
+                'rz-card flex min-w-0 flex-col',
+                // The plan the reader arrived for is the current selection.
+                isSelected && 'border-brand',
               )}
               key={plan.code}
             >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-app-ink text-[17px] font-bold">
-                  {plan.name}
-                </h2>
+              <header className="rz-card__head py-2.5">
+                <h2 className="rz-h-card">{plan.name}</h2>
                 {isSelected ? (
                   <StatusPill tone="info">{t('selected')}</StatusPill>
                 ) : isCurrent ? (
                   <StatusPill tone="ok">{t('currentPlan')}</StatusPill>
                 ) : null}
-              </div>
-              <div>
-                <p className="flex flex-wrap items-baseline gap-x-2">
-                  <Amount
-                    className="text-[30px] leading-none font-extrabold tracking-[-0.03em] text-white"
-                    currency={plan.currency}
-                    value={plan.amount}
-                  />
-                  <span className="text-app-dim text-[13px]">
-                    {intervalLabel(plan.interval, locale)}
-                  </span>
-                </p>
-                <p className="text-app-dim mt-2 text-[12.5px]">
-                  {plan.trialDays > 0
-                    ? t('trialFree', {
-                        days: daysText(plan.trialDays, locale),
-                      })
-                    : t('noTrial')}
-                </p>
-              </div>
-              <dl className="border-app-line grid gap-1.5 border-t pt-3.5">
-                {limits.map((limit) => (
-                  <div
-                    className="flex items-baseline justify-between gap-3"
-                    key={limit.key}
-                  >
-                    <dt className="text-app-muted text-[13px]">
-                      {limit.label}
-                    </dt>
-                    <dd className="text-app-ink font-mono text-[13px] tabular-nums">
-                      {plan.limits[limit.key] ?? '∞'}
+              </header>
+              <div className="rz-card__body grid gap-3">
+                <div className="grid gap-1">
+                  <p className="m-0 flex flex-wrap items-baseline gap-x-2">
+                    <Amount
+                      className="rz-strong text-page font-semibold"
+                      currency={plan.currency}
+                      value={plan.amount}
+                    />
+                    <span className="rz-dim">
+                      {intervalLabel(plan.interval, locale)}
+                    </span>
+                  </p>
+                  <p className="rz-caption m-0">
+                    {plan.trialDays > 0
+                      ? t('trialFree', {
+                          days: daysText(plan.trialDays, locale),
+                        })
+                      : t('noTrial')}
+                  </p>
+                </div>
+                <dl className="rz-facts px-0 py-0">
+                  {limits.map((limit) => (
+                    <div key={limit.key}>
+                      <dt>{limit.label}</dt>
+                      <dd className="rz-num">
+                        {plan.limits[limit.key] ?? '∞'}
+                      </dd>
+                    </div>
+                  ))}
+                  <div>
+                    <dt>{t('photosPerItem')}</dt>
+                    <dd className="rz-num">
+                      {plan.limits.photosPerPart ?? '∞'}
                     </dd>
                   </div>
-                ))}
-                <div className="flex items-baseline justify-between gap-3">
-                  <dt className="text-app-muted text-[13px]">
-                    {t('photosPerItem')}
-                  </dt>
-                  <dd className="text-app-ink font-mono text-[13px] tabular-nums">
-                    {plan.limits.photosPerPart ?? '∞'}
-                  </dd>
+                </dl>
+                <ul className="border-app-line m-0 grid list-none gap-1.5 border-t p-0 pt-3">
+                  {allFeatures.length === 0 ? (
+                    <li className="rz-caption">{t('noFeaturesListed')}</li>
+                  ) : (
+                    allFeatures.map((code) => {
+                      const included = plan.features.includes(code)
+                      return (
+                        <li
+                          className={cn(
+                            'flex items-start gap-2',
+                            included ? 'rz-muted' : 'rz-dim',
+                          )}
+                          key={code}
+                        >
+                          {included ? (
+                            <Check
+                              aria-label={t('includedInPlan')}
+                              className="text-state-ok mt-0.5 size-3.5 shrink-0"
+                            />
+                          ) : (
+                            <Minus
+                              aria-label={t('notInPlan')}
+                              className="text-app-dim mt-0.5 size-3.5 shrink-0"
+                            />
+                          )}
+                          {featureLabel(code, locale)}
+                        </li>
+                      )
+                    })
+                  )}
+                </ul>
+              </div>
+              {isCurrent ? (
+                <div className="rz-card__foot mt-auto">
+                  <p className="rz-dim m-0">{t('alreadyActive')}</p>
                 </div>
-              </dl>
-              <ul className="border-app-line grid gap-1.5 border-t pt-3.5">
-                {allFeatures.length === 0 ? (
-                  <li className="text-app-dim text-[12.5px]">
-                    {t('noFeaturesListed')}
-                  </li>
-                ) : (
-                  allFeatures.map((code) => {
-                    const included = plan.features.includes(code)
-                    return (
-                      <li
-                        className={cn(
-                          'flex items-start gap-2 text-[13px]',
-                          included ? 'text-app-muted' : 'text-app-dim',
-                        )}
-                        key={code}
-                      >
-                        {included ? (
-                          <Check
-                            aria-label={t('includedInPlan')}
-                            className="text-state-ok mt-0.5 size-4 shrink-0"
-                          />
-                        ) : (
-                          <Minus
-                            aria-label={t('notInPlan')}
-                            className="text-app-dim mt-0.5 size-4 shrink-0"
-                          />
-                        )}
-                        {featureLabel(code, locale)}
-                      </li>
-                    )
-                  })
-                )}
-              </ul>
-              <div className="mt-auto pt-1">
-                {isCurrent ? (
-                  <p className="text-app-dim text-[13px]">
-                    {t('alreadyActive')}
-                  </p>
-                ) : canCheckout ? (
+              ) : canCheckout ? (
+                <div className="rz-card__foot mt-auto">
                   <BillingMutationGate decision={controlDecision}>
                     <Button
                       onClick={() => {
@@ -374,69 +381,38 @@ export function PlansScreen() {
                       {t('choose')}
                     </Button>
                   </BillingMutationGate>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
             </li>
           )
         })}
       </ul>
 
-      <BillingCard title={t('whatsIncluded')}>
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-[13.5px]">
-            <caption className="sr-only">{t('comparison')}</caption>
-            <thead>
-              <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
-                <th className="py-2.5 pr-3 text-left">{t('feature')}</th>
-                {plans.map((plan) => (
-                  <th className="px-3 py-2.5 text-right" key={plan.code}>
-                    {plan.name}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {limits.map((limit) => (
-                <tr className="border-app-line border-b" key={limit.key}>
-                  <td className="text-app-muted py-2.5 pr-3">{limit.label}</td>
-                  {plans.map((plan) => (
-                    <td
-                      className="text-app-ink px-3 py-2.5 text-right font-mono tabular-nums"
-                      key={plan.code}
-                    >
-                      {plan.limits[limit.key] ?? '∞'}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-              {allFeatures.map((code) => (
-                <tr className="border-app-line border-b" key={code}>
-                  <td className="text-app-muted py-2.5 pr-3">
-                    {featureLabel(code, locale)}
-                  </td>
-                  {plans.map((plan) => (
-                    <td className="px-3 py-2.5 text-right" key={plan.code}>
-                      {plan.features.includes(code) ? (
-                        <Check
-                          aria-label={t('included')}
-                          className="text-state-ok ml-auto size-4"
-                        />
-                      ) : (
-                        <Minus
-                          aria-label={t('notIncluded')}
-                          className="text-app-dim ml-auto size-4"
-                        />
-                      )}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-          {t('noProration')} {t('noPlanCopy')}
-        </p>
+      <BillingCard
+        bodyClassName="p-0"
+        footer={`${t('noProration')} ${t('noPlanCopy')}`}
+        title={t('whatsIncluded')}
+      >
+        <DataTable
+          caption={t('comparison')}
+          columns={[
+            {
+              key: 'feature',
+              label: t('feature'),
+              variant: 'primary',
+              cell: (row) => row.label,
+            },
+            ...plans.map((plan) => ({
+              key: plan.code,
+              label: plan.name,
+              align: 'end' as const,
+              cell: (row: (typeof comparisonRows)[number]) => row.value(plan),
+            })),
+          ]}
+          embedded
+          rowKey={(row) => row.key}
+          rows={comparisonRows}
+        />
       </BillingCard>
     </PlansFrame>
   )

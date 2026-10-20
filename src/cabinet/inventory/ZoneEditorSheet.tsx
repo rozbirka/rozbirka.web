@@ -67,7 +67,7 @@ export function ZoneEditorSheet({
     >
       <form
         aria-busy={pending}
-        className="grid content-start gap-5"
+        className="grid content-start gap-4"
         id={FORM_ID}
         onSubmit={submit}
       >
@@ -85,6 +85,7 @@ export function ZoneEditorSheet({
         </Field>
         <Field hint={t('codeAutoHint')} label={t('codeLabel')} required>
           <TextInput
+            className="font-mono"
             onChange={(event) => setCode(toZoneCode(event.target.value))}
             value={code}
           />

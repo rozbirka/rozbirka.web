@@ -1,7 +1,7 @@
-import { Fragment, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router'
-import { Plus, Search } from 'lucide-react'
-import { Button } from '@/components/app'
+import { ArrowRightLeft, Plus, WalletCards } from 'lucide-react'
+import { Button, Notice, SearchInput, StatusPill } from '@/components/app'
 import { cn } from '@/lib/utils'
 import { useT } from '@/i18n'
 import type { CashDailySummary, CashRegister } from '@/api/cash'
@@ -9,7 +9,7 @@ import { useCashText } from './cash-labels'
 import { cashMessages } from './cash-messages'
 import type { CashFeedEntry } from './cash-feed'
 import { Kpi, KpiStrip } from '../redesign-kpi'
-import { RedesignShell, RedesignTitle } from '../redesign-shell'
+import { RedesignShell } from '../redesign-shell'
 
 const SEGMENTS = [
   { key: 'all', label: 'segAll' },
@@ -31,6 +31,7 @@ export function CashList({
   canCreate,
   canTransfer,
   onTransfer,
+  error = null,
 }: {
   registers: readonly CashRegister[]
   summary: CashDailySummary | null
@@ -42,6 +43,8 @@ export function CashList({
   canCreate: boolean
   canTransfer: boolean
   onTransfer: () => void
+  /** A failed load, shown under the page title. */
+  error?: string | null
 }) {
   const t = useT(cashMessages)
   const {
@@ -93,25 +96,14 @@ export function CashList({
     <RedesignShell
       actions={
         <>
-          <span className="border-app-line bg-app-raised focus-within:border-app-line-2 flex h-10 w-full min-w-0 items-center gap-2.5 rounded-[10px] border px-3 sm:w-[260px]">
-            <Search aria-hidden className="text-app-dim size-4 shrink-0" />
-            <input
-              aria-label={t('searchLabel')}
-              className="text-app-ink placeholder:text-app-dim min-w-0 flex-1 bg-transparent text-[14px] outline-none"
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t('tillName')}
-              value={query}
-            />
-          </span>
           {canTransfer ? (
-            <Button onClick={onTransfer}>{t('transfer')}</Button>
+            <Button onClick={onTransfer}>
+              <ArrowRightLeft aria-hidden />
+              {t('transfer')}
+            </Button>
           ) : null}
           {canCreate ? (
-            <Button
-              asChild
-              className="px-5 text-sm font-bold"
-              variant="primary"
-            >
+            <Button asChild variant="primary">
               <Link to="new">
                 <Plus aria-hidden />
                 {t('newTill')}
@@ -122,7 +114,12 @@ export function CashList({
       }
       crumb={t('crumb')}
     >
-      <RedesignTitle lead={t('lead')} title={t('title')} />
+      <div className="rz-page-head">
+        <h1 className="rz-h-page">{t('title')}</h1>
+        <span className="rz-muted text-pretty">{t('lead')}</span>
+      </div>
+
+      {error === null ? null : <Notice tone="danger">{error}</Notice>}
 
       <KpiStrip>
         <Kpi
@@ -145,184 +142,179 @@ export function CashList({
         />
       </KpiStrip>
 
-      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
-        <div
-          aria-label={t('filterLabel')}
-          className="border-app-line bg-app-raised flex min-w-0 flex-wrap gap-1 rounded-[14px] border p-1"
-          role="group"
-        >
+      <div className="rz-toolbar" role="search">
+        <SearchInput
+          aria-label={t('searchLabel')}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={t('tillName')}
+          value={query}
+        />
+        <div aria-label={t('filterLabel')} className="rz-seg" role="group">
           {SEGMENTS.map((one) => (
             <button
               aria-pressed={segment === one.key}
-              className={cn(
-                'inline-flex min-h-11 items-center gap-2 rounded-[10px] px-3.5 text-[13.5px] font-bold whitespace-nowrap',
-                segment === one.key
-                  ? 'text-app-ink bg-white/[0.08]'
-                  : 'text-app-muted hover:text-app-ink',
-              )}
               key={one.key}
               onClick={() => setSegment(one.key)}
               type="button"
             >
               {t(one.label)}
-              <span className="text-app-dim font-mono text-[12px]">
-                {count(counts[one.key])}
-              </span>
+              <span className="rz-mono rz-dim">{count(counts[one.key])}</span>
             </button>
           ))}
         </div>
-        <p className="text-app-dim text-[13px]">
+        <p className="rz-toolbar__end rz-dim m-0">
           {t('shownTills', { shown: shown.length, count: registers.length })}
         </p>
       </div>
 
-      {shown.length === 0 ? (
-        <p className="border-app-line bg-app-raised text-app-muted rounded-[20px] border px-6 py-10 text-center text-[14.5px]">
-          {t('noTillsFiltered')}
-        </p>
-      ) : (
-        <ul className="grid gap-3.5 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))]">
-          {shown.map((register) => {
-            const currencies = Object.entries(register.balances)
-            const today = dayOf(register.id)
-            const operationCount = today.reduce(
-              (sum, one) => sum + one.operationCount,
-              0,
-            )
-            return (
-              <li className="min-w-0" key={register.id}>
-                <Link
-                  className="border-app-line bg-app-raised hover:border-app-line-2 grid h-full min-w-0 content-start rounded-[20px] border px-5 py-4.5 transition-colors"
-                  to={register.id}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-app-ink text-[17px] font-bold tracking-[-0.01em]">
-                        {register.name}
-                      </p>
-                      <p className="text-app-muted mt-1 text-[13px]">
-                        {registerType(register.type)}
-                        {registerHint(register.type) === null
-                          ? ''
-                          : ` · ${registerHint(register.type)}`}
-                      </p>
-                    </div>
-                    <span
-                      className={cn(
-                        'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-bold',
-                        register.isActive
-                          ? 'border-state-ok/28 text-state-ok bg-state-ok/10'
-                          : 'border-app-line text-app-dim',
-                      )}
-                    >
-                      <span
-                        aria-hidden
-                        className={cn(
-                          'size-1.5 rounded-full',
-                          register.isActive ? 'bg-state-ok' : 'bg-app-dim',
-                        )}
-                      />
-                      {register.isActive ? t('active') : t('inactive')}
-                    </span>
-                  </div>
-
-                  <dl className="mt-4.5 grid grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-2.5">
-                    {currencies.length === 0 ? (
-                      <dd className="text-app-dim col-span-2 text-[13.5px]">
-                        {t('noCurrencies')}
-                      </dd>
-                    ) : (
-                      currencies.map(([currency, balance]) => (
-                        <Fragment key={currency}>
-                          <dt className="text-app-dim font-mono text-[11px] tracking-[0.1em]">
-                            {currency}
-                          </dt>
-                          <dd
-                            className={cn(
-                              'text-right font-mono text-[18px] tabular-nums',
-                              balance === 0
-                                ? 'text-app-dim'
-                                : 'text-app-ink font-medium',
-                            )}
-                          >
-                            {money(balance, currency)}
-                          </dd>
-                        </Fragment>
-                      ))
-                    )}
-                  </dl>
-
-                  <div className="border-app-line mt-4.5 border-t pt-3.5 text-[13px]">
-                    <span className="text-app-dim">
-                      {summary === null
-                        ? t('dayCounting')
-                        : t('operationsCount', { count: operationCount })}
-                    </span>
-                  </div>
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-
-      <section
-        aria-label={t('recent')}
-        className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
-      >
-        <h2 className="text-app-ink border-app-line border-b px-5.5 py-4 text-[15px] font-bold">
-          {t('recent')}
-        </h2>
-        {feed.length === 0 ? (
-          <p className="text-app-muted px-5.5 py-6 text-[14px]">
-            {t('noOperations')}
-          </p>
+      <div className="rz-table-wrap">
+        {shown.length === 0 ? (
+          <div className="rz-state">
+            <span className="rz-state__icon">
+              <WalletCards aria-hidden />
+            </span>
+            <h2 className="rz-state__title">{t('noTillsFiltered')}</h2>
+          </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[14px]">
-              <caption className="sr-only">{t('recentCaption')}</caption>
+          <div className="rz-table-scroll">
+            <table className="rz-table">
+              <caption>{t('title')}</caption>
               <thead>
-                <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
-                  <th className="px-5.5 py-2.5 text-left">{t('colDate')}</th>
-                  <th className="px-3 py-2.5 text-left">{t('colPurpose')}</th>
-                  <th className="px-3 py-2.5 text-left">{t('colTill')}</th>
-                  <th className="px-3 py-2.5 text-right">{t('colAmount')}</th>
-                  <th className="px-3 py-2.5 text-left">{t('colType')}</th>
+                <tr>
+                  <th scope="col">{t('colTill')}</th>
+                  <th scope="col">{t('currency')}</th>
+                  <th className="rz-num" scope="col">
+                    {t('balances')}
+                  </th>
+                  <th className="rz-num" scope="col">
+                    {t('kpiDayOperations')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((register) => {
+                  const currencies = Object.entries(register.balances)
+                  const hint = registerHint(register.type)
+                  const operationCount = dayOf(register.id).reduce(
+                    (sum, one) => sum + one.operationCount,
+                    0,
+                  )
+                  return (
+                    <tr key={register.id}>
+                      <th className="py-2" scope="row">
+                        <span className="rz-cell-main">
+                          <Link
+                            className="text-app-strong hover:text-brand-text"
+                            to={register.id}
+                          >
+                            {register.name}
+                          </Link>
+                          <StatusPill
+                            className="shrink-0"
+                            tone={register.isActive ? 'ok' : 'neutral'}
+                          >
+                            {register.isActive ? t('active') : t('inactive')}
+                          </StatusPill>
+                        </span>
+                        <span className="rz-caption block font-normal">
+                          {registerType(register.type)}
+                          {hint === null ? '' : ` · ${hint}`}
+                        </span>
+                      </th>
+                      <td className="py-2" data-label={t('currency')}>
+                        {currencies.length === 0 ? (
+                          <span className="rz-dim">{t('noCurrencies')}</span>
+                        ) : (
+                          <span className="grid gap-0.5">
+                            {currencies.map(([currency]) => (
+                              <span className="rz-mono" key={currency}>
+                                {currency}
+                              </span>
+                            ))}
+                          </span>
+                        )}
+                      </td>
+                      <td className="rz-num py-2" data-label={t('balances')}>
+                        <span className="grid justify-items-end gap-0.5">
+                          {currencies.map(([currency, balance]) => (
+                            <span
+                              className={cn(balance === 0 && 'rz-dim')}
+                              key={currency}
+                            >
+                              {money(balance, currency)}
+                            </span>
+                          ))}
+                        </span>
+                      </td>
+                      <td
+                        className="rz-num py-2"
+                        data-label={t('kpiDayOperations')}
+                      >
+                        {summary === null
+                          ? t('dayCounting')
+                          : t('operationsCount', { count: operationCount })}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <section aria-label={t('recent')} className="rz-card min-w-0">
+        <div className="rz-card__head">
+          <h2 className="rz-h-card">{t('recent')}</h2>
+        </div>
+        {feed.length === 0 ? (
+          <p className="rz-card__body rz-muted m-0">{t('noOperations')}</p>
+        ) : (
+          <div className="rz-table-scroll">
+            <table className="rz-table">
+              <caption>{t('recentCaption')}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t('colDate')}</th>
+                  <th scope="col">{t('colPurpose')}</th>
+                  <th scope="col">{t('colTill')}</th>
+                  <th className="rz-num" scope="col">
+                    {t('colAmount')}
+                  </th>
+                  <th scope="col">{t('colType')}</th>
                 </tr>
               </thead>
               <tbody>
                 {feed.map((entry) => (
-                  <tr className="border-app-line border-b" key={entry.id}>
-                    <td className="text-app-dim px-5.5 py-3.5 font-mono text-[13px] whitespace-nowrap">
-                      {moment(entry.createdAt)}
-                    </td>
-                    <td className="px-3 py-3.5">
-                      <span className="text-app-ink font-medium">
+                  <tr key={entry.id}>
+                    <th className="py-2" scope="row">
+                      <span className="rz-mono rz-dim font-normal whitespace-nowrap">
+                        {moment(entry.createdAt)}
+                      </span>
+                    </th>
+                    <td className="py-2" data-label={t('colPurpose')}>
+                      <span className="text-app-ink block font-medium">
                         {entry.note ?? movementText(entry.type)}
                       </span>
-                      <span className="text-app-dim mt-0.5 block text-[12.5px]">
+                      <span className="rz-caption block">
                         {entry.createdByName}
                       </span>
                     </td>
-                    <td className="px-3 py-3.5">
-                      <Link
-                        className="text-app-muted hover:text-brand underline-offset-4 hover:underline"
-                        to={entry.registerId}
-                      >
-                        {entry.registerName}
-                      </Link>
+                    <td className="py-2" data-label={t('colTill')}>
+                      <Link to={entry.registerId}>{entry.registerName}</Link>
                     </td>
                     <td
                       className={cn(
-                        'px-3 py-3.5 text-right font-mono tabular-nums',
+                        'rz-num py-2 whitespace-nowrap',
                         entry.direction === 'out'
-                          ? 'text-app-ink'
+                          ? 'text-app-strong'
                           : 'text-state-ok',
                       )}
+                      data-label={t('colAmount')}
                     >
                       {signedMoney(entry)}
                     </td>
-                    <td className="text-app-muted px-3 py-3.5">
+                    <td className="py-2" data-label={t('colType')}>
                       {movementText(entry.type)}
                     </td>
                   </tr>
@@ -331,7 +323,7 @@ export function CashList({
             </table>
           </div>
         )}
-        <p className="text-app-dim border-app-line border-t px-5.5 py-3.5 text-[13px] leading-5 text-pretty">
+        <p className="rz-card__foot rz-dim m-0 block text-pretty">
           {feedTruncated ? t('feedNoteTruncated') : t('feedNote')}
         </p>
       </section>

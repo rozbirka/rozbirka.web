@@ -8,11 +8,11 @@ import { commonMessages } from '@/i18n/common-messages'
 
 export type StateTone = 'neutral' | 'brand' | 'warn' | 'danger'
 
-const iconToneClass: Record<StateTone, string> = {
-  neutral: 'bg-white/[0.05] text-app-muted',
-  brand: 'bg-brand/[0.12] text-brand',
-  warn: 'bg-state-warn-soft text-state-warn',
-  danger: 'bg-state-danger-soft text-state-danger',
+const toneClass: Record<StateTone, string> = {
+  neutral: '',
+  brand: 'rz-state--brand',
+  warn: 'rz-state--warn',
+  danger: 'rz-state--danger',
 }
 
 export interface StateScreenProps {
@@ -44,36 +44,20 @@ export function StateScreen({
   return (
     <section
       aria-label={label}
-      className={cn(
-        'border-app-line-2 rounded-panel bg-app-raised grid justify-items-center gap-2.5 border border-dashed px-6 py-12 text-center',
-        className,
-      )}
+      className={cn('rz-state rz-card', toneClass[tone], className)}
       role={role}
     >
       {icon === undefined ? null : (
-        <span
-          className={cn(
-            'mb-1 grid size-11 place-items-center rounded-xl [&_svg]:size-5',
-            iconToneClass[tone],
-          )}
-        >
-          {icon}
-        </span>
+        <span className="rz-state__icon">{icon}</span>
       )}
-      <h2 className="text-base font-semibold text-white">{title}</h2>
+      <h2 className="rz-state__title">{title}</h2>
       {description === undefined ? null : (
-        <p className="text-app-muted max-w-[42ch] text-sm leading-6">
-          {description}
-        </p>
+        <p className="rz-state__body">{description}</p>
       )}
       {actions === undefined ? null : (
-        <div className="mt-1.5 flex flex-wrap justify-center gap-2">
-          {actions}
-        </div>
+        <div className="rz-btn-row mt-1 justify-center">{actions}</div>
       )}
-      {meta === undefined ? null : (
-        <p className="text-app-dim mt-1 font-mono text-[12px]">{meta}</p>
-      )}
+      {meta === undefined ? null : <p className="rz-state__meta m-0">{meta}</p>}
     </section>
   )
 }
@@ -86,9 +70,11 @@ export function EmptyState({
   tone = 'brand',
   role = 'status',
   label,
+  className,
 }: StateScreenProps) {
   return (
     <StateScreen
+      {...(className === undefined ? {} : { className })}
       actions={actions}
       description={description}
       icon={icon ?? <Inbox aria-hidden />}

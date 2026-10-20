@@ -120,53 +120,28 @@ function OpenCashMovementDrawer({
         id={CASH_MOVEMENT_FORM}
         onSubmit={submit}
       >
-        <Field label={t('movementType')}>
-          <div
-            aria-label={t('movementType')}
-            className="grid grid-cols-2 gap-2"
-            role="group"
-          >
-            <button
-              aria-pressed={type === 'manual_in'}
-              className={cn(
-                'min-h-12 rounded-[12px] border px-4 text-sm font-bold transition-colors',
-                type === 'manual_in'
-                  ? 'border-state-ok/70 bg-state-ok/14 text-state-ok'
-                  : 'border-state-ok/35 text-state-ok/75 hover:bg-state-ok/8',
-              )}
-              onClick={() => setType('manual_in')}
-              type="button"
-            >
-              {t('mvIncome')}
-            </button>
-            <button
-              aria-pressed={type === 'manual_out'}
-              className={cn(
-                'min-h-12 rounded-[12px] border px-4 text-sm font-bold transition-colors',
-                type === 'manual_out'
-                  ? 'border-state-danger/70 bg-state-danger/14 text-state-danger'
-                  : 'border-state-danger/35 text-state-danger/75 hover:bg-state-danger/8',
-              )}
-              onClick={() => setType('manual_out')}
-              type="button"
-            >
-              {t('mvExpense')}
-            </button>
-          </div>
-        </Field>
+        <div className="rz-field">
+          {/* The group is named by its own legend; this is the visible label. */}
+          <span aria-hidden className="rz-label">
+            {t('movementType')}
+          </span>
+          <Segmented
+            className="w-full"
+            label={t('movementType')}
+            name="movement-type"
+            onChange={setType}
+            options={[
+              { label: t('mvIncome'), value: 'manual_in' },
+              { label: t('mvExpense'), value: 'manual_out' },
+            ]}
+            value={type}
+          />
+        </div>
 
         <Field label={t('colAmount')}>
-          <div
-            className={cn(
-              'grid items-stretch gap-2',
-              // Up to three codes fit beside the amount; more wrap under it
-              // so no code is cut off.
-              currencies.length <= 3 &&
-                'grid-cols-[minmax(0,1fr)_minmax(7.25rem,auto)]',
-            )}
-          >
+          <div className="flex flex-wrap items-start gap-2">
             <TextInput
-              className="h-11 min-h-11 rounded-[10px] px-3.5 font-mono text-[17px] font-semibold tabular-nums"
+              className="min-w-0 flex-[1_1_8rem]"
               inputMode="decimal"
               min="0"
               numeric
@@ -178,12 +153,7 @@ function OpenCashMovementDrawer({
               value={amount}
             />
             <Segmented
-              className={cn(
-                'rounded-[10px] p-1 [&>label]:rounded-[7px] [&>label]:px-2 [&>label]:font-mono',
-                currencies.length <= 3
-                  ? 'h-11 flex-nowrap [&>label]:h-full [&>label]:min-h-0 [&>label]:min-w-0'
-                  : 'w-fit max-w-full flex-wrap [&>label]:min-h-9 [&>label]:min-w-14 [&>label]:flex-none',
-              )}
+              className="max-w-full flex-none font-mono"
               label={t('movementCurrency')}
               name="movement-currency"
               onChange={setCurrency}
@@ -197,30 +167,21 @@ function OpenCashMovementDrawer({
         </Field>
 
         {amount !== '' && selectedCurrency !== '' ? (
-          <div
-            className={cn(
-              'rounded-[14px] border px-4 py-3.5',
-              type === 'manual_in'
-                ? 'border-state-ok/45 bg-state-ok/8'
-                : 'border-state-danger/45 bg-state-danger/8',
-            )}
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <span className="text-app-muted text-[13.5px]">
-                {type === 'manual_in'
-                  ? t('incomeTo', { name: register.name })
-                  : t('expenseFrom', { name: register.name })}
-              </span>
-              <span
-                className={cn(
-                  'font-mono text-[18px] font-semibold tabular-nums',
-                  type === 'manual_in' ? 'text-state-ok' : 'text-state-danger',
-                )}
-              >
-                {type === 'manual_in' ? '+' : '−'}
-                {amount} {selectedCurrency}
-              </span>
-            </div>
+          <div className="rz-inset flex flex-wrap items-center justify-between gap-3">
+            <span className="rz-muted">
+              {type === 'manual_in'
+                ? t('incomeTo', { name: register.name })
+                : t('expenseFrom', { name: register.name })}
+            </span>
+            <span
+              className={cn(
+                'rz-mono font-semibold',
+                type === 'manual_in' ? 'text-state-ok' : 'text-state-danger',
+              )}
+            >
+              {type === 'manual_in' ? '+' : '−'}
+              {amount} {selectedCurrency}
+            </span>
           </div>
         ) : null}
 

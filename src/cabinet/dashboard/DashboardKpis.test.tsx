@@ -124,7 +124,7 @@ it('counts reserved positions only once the parts summary has arrived', () => {
   ).toHaveTextContent('14 у резерві')
 })
 
-it('uses three equal columns for three figures and a two-by-two grid for four', () => {
+it('lays the figures out as one KPI strip, a tile per figure it has', () => {
   const { rerender } = render(
     <DashboardKpis
       analytics={analytics()}
@@ -133,10 +133,14 @@ it('uses three equal columns for three figures and a two-by-two grid for four', 
     />,
   )
 
-  expect(screen.getByLabelText('Показники')).toHaveClass('sm:grid-cols-3')
+  const strip = screen.getByLabelText('Показники')
+  expect(strip).toHaveClass('rz-kpis')
+  expect(strip.querySelectorAll(':scope > .rz-kpi')).toHaveLength(3)
 
   rerender(<DashboardKpis analytics={analytics()} data={data()} parts={null} />)
-  expect(screen.getByLabelText('Показники')).toHaveClass('sm:grid-cols-2')
+  expect(
+    screen.getByLabelText('Показники').querySelectorAll(':scope > .rz-kpi'),
+  ).toHaveLength(4)
 })
 
 it('leaves out a figure the account may not see rather than showing a dash', () => {

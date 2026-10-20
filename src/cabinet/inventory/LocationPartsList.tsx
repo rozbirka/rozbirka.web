@@ -36,7 +36,7 @@ function LocationPartThumbnail({ source }: { source: string | null }) {
   return (
     <span
       aria-hidden
-      className="bg-app-input text-app-dim grid size-12 shrink-0 place-items-center overflow-hidden rounded-control"
+      className="bg-app-input text-app-dim grid size-control-lg shrink-0 place-items-center overflow-hidden rounded-control"
     >
       {source && !failed ? (
         <img
@@ -47,7 +47,7 @@ function LocationPartThumbnail({ source }: { source: string | null }) {
           onError={() => setFailed(true)}
         />
       ) : (
-        <Package className="size-5" />
+        <Package className="size-4" />
       )}
     </span>
   )
@@ -133,9 +133,8 @@ function OwnedLocationPartsList({
   const current = state.key === key && query === debounced ? state : undefined
   const data = current?.data
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
       <SearchInput
-        className="min-h-12 text-base"
         aria-label={t('search')}
         placeholder={t('search')}
         value={query}
@@ -161,11 +160,11 @@ function OwnedLocationPartsList({
           </Button>
         </Notice>
       ) : data ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-4">
-          <p className="text-app-ink bg-app-raised border-app-line shrink-0 rounded-control border px-4 py-3 text-base font-semibold tabular-nums">
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <p className="rz-muted m-0 shrink-0 tabular-nums">
             {t('positions', { count: data.total })}
           </p>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable] [&>div]:overflow-visible [&_thead_th]:bg-app-raised [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:font-sans [&_thead_th]:text-sm [&_thead_th]:font-semibold [&_thead_th]:tracking-normal [&_thead_th]:normal-case [&_thead_th]:text-app-muted">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable] [&>div]:overflow-visible [&_thead_th]:bg-app-raised [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10">
             <DataTable
               embedded
               caption={target.name}
@@ -179,23 +178,23 @@ function OwnedLocationPartsList({
                   cell: (part) => (
                     <Link
                       to={cabinetPath(slug, 'parts', part.id)}
-                      className="focus-visible:outline-brand hover:text-brand flex min-h-14 items-center gap-3 rounded-control py-1"
+                      className="flex items-center gap-3 rounded-control py-1.5 text-app-ink"
                     >
                       <LocationPartThumbnail
                         key={part.thumbnailUrl ?? ''}
                         source={part.thumbnailUrl}
                       />
                       <span className="min-w-0">
-                        <strong className="text-app-ink block break-words text-base leading-6 font-bold">
+                        <strong className="rz-strong block font-semibold break-words">
                           {part.name}
                         </strong>
                         {part.car ? (
-                          <span className="text-app-muted mt-1 block text-sm">
+                          <span className="rz-muted mt-0.5 block text-caption">
                             {part.car.make} {part.car.model} · {part.car.year}
                           </span>
                         ) : null}
                         {part.oemCode ? (
-                          <span className="text-app-muted mt-0.5 block break-all font-mono text-sm">
+                          <span className="rz-mono rz-caption mt-0.5 block break-all">
                             {part.oemCode}
                           </span>
                         ) : null}
@@ -208,7 +207,7 @@ function OwnedLocationPartsList({
                   label: t('quantity'),
                   align: 'end',
                   cell: (part) => (
-                    <span className="text-app-ink text-base font-semibold tabular-nums">
+                    <span className="rz-mono rz-strong">
                       {f.number(part.quantity)}
                     </span>
                   ),
@@ -222,7 +221,7 @@ function OwnedLocationPartsList({
                         part.status === 'reserved'
                           ? 'warn'
                           : part.status === 'sold'
-                            ? 'neutral'
+                            ? 'danger'
                             : 'ok'
                       }
                     >
@@ -237,7 +236,7 @@ function OwnedLocationPartsList({
                   ),
                 },
               ]}
-              empty={<p className="text-app-muted py-5">{t('empty')}</p>}
+              empty={<p className="rz-muted m-0 py-5">{t('empty')}</p>}
             />
           </div>
           {data.total > 10 ? (

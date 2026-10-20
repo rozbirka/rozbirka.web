@@ -70,13 +70,13 @@ export function Thumbnail({
   return (
     <span
       className={cn(
-        'bg-app-input border-app-line rounded-panel relative block overflow-hidden border',
+        'bg-app-input border-app-line rounded-control relative block overflow-hidden border',
         ratio === 'square' ? 'aspect-square' : 'aspect-4/3',
         className,
       )}
     >
       {failed ? (
-        <span className="text-app-dim grid h-full place-items-center gap-1 p-2 text-center text-[12px]">
+        <span className="text-app-dim grid h-full place-items-center gap-1 p-2 text-center text-caption">
           <ImageOff aria-hidden className="size-4" />
           {t('photoUnavailable')}
         </span>
@@ -159,7 +159,7 @@ function Lightbox({
   return (
     <Dialog.Root onOpenChange={(next) => !next && onClose()} open>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/90" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-app-scrim" />
         <Dialog.Content
           onCloseAutoFocus={(event) => {
             event.preventDefault()
@@ -170,7 +170,7 @@ function Lightbox({
           <Dialog.Title className="sr-only">{label}</Dialog.Title>
           <Dialog.Description className="sr-only">{alt}</Dialog.Description>
           <header className="flex items-center justify-between gap-3">
-            <p className="text-app-muted font-mono text-[12.5px] tabular-nums">
+            <p className="text-app-muted font-mono text-caption tabular-nums">
               {t('photoPosition', {
                 index: String(index + 1),
                 total: String(total),
@@ -221,7 +221,7 @@ function Lightbox({
                 <img
                   key={photo.url}
                   alt={alt}
-                  className="absolute inset-0 h-full w-full rounded-lg object-contain"
+                  className="absolute inset-0 h-full w-full rounded-control object-contain"
                   onError={() => setFailedSource(photo.url)}
                   src={photo.url}
                 />
@@ -254,7 +254,7 @@ function Lightbox({
                       number: String(position + 1),
                     })}
                     className={cn(
-                      'focus-visible:outline-brand block size-12 shrink-0 overflow-hidden rounded-md border',
+                      'block size-control-lg shrink-0 overflow-hidden rounded-control border',
                       position === index
                         ? 'border-brand'
                         : 'border-app-line opacity-60',
@@ -303,7 +303,7 @@ export function PhotoGrid({
 
   if (photos.length === 0) {
     return (
-      <p className={cn('text-app-dim text-[13.5px]', className)}>
+      <p className={cn('rz-caption m-0', className)}>
         {emptyLabel ?? t('noPhotos')}
       </p>
     )
@@ -313,16 +313,13 @@ export function PhotoGrid({
     <>
       <ul
         aria-label={label}
-        className={cn(
-          'grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6',
-          className,
-        )}
+        className={cn('rz-photos m-0 list-none p-0', className)}
       >
         {photos.map((photo, index) => (
           <li key={photo.id}>
             <button
               aria-label={photo.alt ?? `${label} ${String(index + 1)}`}
-              className="focus-visible:outline-brand block w-full cursor-zoom-in"
+              className="block w-full cursor-zoom-in"
               onClick={(event) => {
                 opener.current = event.currentTarget
                 setOpenIndex(index)
@@ -401,8 +398,8 @@ export function Gallery({
     return (
       <p
         className={cn(
-          'text-app-dim text-[13.5px]',
-          variant === 'framed' && 'px-6 py-5',
+          'rz-caption m-0',
+          variant === 'framed' && 'px-4 py-4',
           className,
         )}
       >
@@ -418,11 +415,11 @@ export function Gallery({
   const pad = (value: number) => String(value).padStart(2, '0')
 
   return (
-    <div className={cn('grid', framed ? 'gap-0' : 'gap-2', className)}>
+    <div className={cn('grid min-w-0', framed ? 'gap-0' : 'gap-2', className)}>
       <div className={cn('relative', framed && 'border-app-line border-y')}>
         <button
           aria-label={t('openFullScreen', { name: nameOf(shown, selected) })}
-          className="focus-visible:outline-brand block w-full cursor-zoom-in"
+          className="block w-full cursor-zoom-in"
           onClick={(event) => {
             opener.current = event.currentTarget
             setOpenIndex(Math.min(current, photos.length - 1))
@@ -440,7 +437,7 @@ export function Gallery({
         {photos.length > 1 ? (
           <span
             aria-hidden
-            className="border-app-line-2 text-app-muted pointer-events-none absolute bottom-3 left-3 rounded-full border bg-black/70 px-3 py-1 font-mono text-[12px] tracking-[0.08em] tabular-nums backdrop-blur-sm"
+            className="rz-photo__badge pointer-events-none top-auto bottom-2 left-2 font-mono tabular-nums"
           >
             {pad(selected + 1)} / {pad(photos.length)}
           </span>
@@ -450,9 +447,9 @@ export function Gallery({
         <ul
           aria-label={label}
           className={cn(
-            'grid',
+            'grid min-w-0',
             framed
-              ? 'auto-cols-fr grid-flow-col gap-2.5 overflow-x-auto p-3.5'
+              ? 'auto-cols-fr grid-flow-col gap-2 overflow-x-auto p-3'
               : 'grid-cols-4 gap-2 sm:grid-cols-5',
           )}
         >
@@ -462,10 +459,8 @@ export function Gallery({
                 aria-current={index === selected ? 'true' : undefined}
                 aria-label={t('showPhoto', { name: nameOf(photo, index) })}
                 className={cn(
-                  'focus-visible:outline-brand block w-full cursor-pointer overflow-hidden transition-opacity',
-                  framed
-                    ? 'rounded-[10px] border-[1.5px]'
-                    : 'rounded-panel border',
+                  'block w-full cursor-pointer overflow-hidden transition-opacity',
+                  'rounded-control border',
                   index === selected
                     ? 'border-brand'
                     : 'border-app-line-2 opacity-70 hover:opacity-100',
@@ -477,7 +472,7 @@ export function Gallery({
                   alt={nameOf(photo, index)}
                   className={cn(
                     'rounded-none border-0',
-                    framed && 'rounded-[9px]',
+                    framed && 'rounded-control',
                   )}
                   photo={photo}
                   ratio="wide"
@@ -537,11 +532,11 @@ export function RecordCard({
     <>
       <span className="flex items-start justify-between gap-3">
         <span className="min-w-0">
-          <span className="block text-sm font-semibold break-words text-white">
+          <span className="text-app-strong block font-semibold break-words">
             {title}
           </span>
           {meta === undefined ? null : (
-            <span className="text-app-dim mt-1 block font-mono text-[12px]">
+            <span className="text-app-dim mt-1 block font-mono text-caption">
               {meta}
             </span>
           )}
@@ -557,15 +552,15 @@ export function RecordCard({
   )
 
   const shell = cn(
-    'border-app-line rounded-panel bg-app-raised flex min-h-11 flex-col gap-2 border p-3 text-left transition-colors',
+    'rz-card flex flex-col gap-2 p-3 text-left transition-colors',
     (href !== undefined || onOpen !== undefined) &&
-      'hover:border-app-line-2 hover:bg-white/[0.02]',
+      'hover:border-app-line-2 hover:bg-app-hover',
     className,
   )
 
   const media =
     photo === undefined ? null : photo === null ? (
-      <span className="bg-app-input rounded-panel text-app-dim mb-1 grid aspect-4/3 place-items-center text-[12px]">
+      <span className="bg-app-input rounded-control text-app-dim mb-1 grid aspect-4/3 place-items-center text-caption">
         <ImageOff aria-hidden className="size-4" />
       </span>
     ) : (

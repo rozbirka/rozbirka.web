@@ -64,11 +64,9 @@ it('keeps controls top-aligned when a neighboring field has helper text', () => 
   )
 
   expect(screen.getByLabelText('Тип деталі').parentElement).toHaveClass(
-    'content-start',
+    'rz-field',
   )
-  expect(screen.getByLabelText('OEM-код').parentElement).toHaveClass(
-    'content-start',
-  )
+  expect(screen.getByLabelText('OEM-код').parentElement).toHaveClass('rz-field')
 })
 
 it('formats money, quantities and time for reading in a column', () => {
@@ -153,10 +151,10 @@ it('can mark the selected segmented option with a brand outline', () => {
 
   expect(
     screen.getByRole('radio', { name: 'USD' }).closest('label'),
-  ).toHaveClass('ring-brand')
+  ).toHaveClass('shadow-[inset_0_0_0_1px_var(--rz-brand)]')
   expect(
     screen.getByRole('radio', { name: 'UAH' }).closest('label'),
-  ).not.toHaveClass('ring-brand')
+  ).not.toHaveClass('shadow-[inset_0_0_0_1px_var(--rz-brand)]')
 })
 
 const photos = [

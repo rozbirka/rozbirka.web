@@ -1,0 +1,137 @@
+/*
+ * React adapter for the design system kit (rz-kit.css).
+ *
+ * The kit is written for lucide's icon font (`<i class="icon-*">`); the app
+ * renders lucide-react `<svg>`. These rules give the SVG the size and colour
+ * the kit gives the glyph — nothing else. Values come only from tokens.
+ */
+
+.rz {
+  /* Tailwind's font utilities resolve these at use. */
+  --font-sans: var(--rz-font);
+  --font-mono: var(--rz-font-mono);
+}
+
+.rz svg.lucide {
+  flex: none;
+}
+
+.rz-btn svg {
+  width: 14px;
+  height: 14px;
+  color: var(--rz-text-muted);
+}
+.rz-btn--primary svg {
+  color: var(--rz-on-brand);
+}
+.rz-btn--danger svg {
+  color: var(--rz-danger);
+}
+.rz-btn--touch svg,
+.rz-btn--glove svg {
+  width: 16px;
+  height: 16px;
+}
+
+.rz-nav-item svg {
+  width: 16px;
+  height: 16px;
+  color: var(--rz-text-dim);
+}
+.rz-nav-item[aria-current='page'] svg {
+  color: var(--rz-brand);
+}
+.rz-tabbar a svg {
+  width: 20px;
+  height: 20px;
+}
+
+.rz-search svg {
+  width: 14px;
+  height: 14px;
+  color: var(--rz-text-dim);
+}
+
+.rz-notice > svg {
+  width: 15px;
+  height: 15px;
+}
+.rz-notice--info > svg {
+  color: var(--rz-info);
+}
+.rz-notice--ok > svg {
+  color: var(--rz-ok);
+}
+.rz-notice--warn > svg {
+  color: var(--rz-warn);
+}
+.rz-notice--danger > svg {
+  color: var(--rz-danger);
+}
+
+.rz-menu__item svg {
+  width: 14px;
+  height: 14px;
+  color: var(--rz-text-muted);
+}
+.rz-menu__item--danger svg {
+  color: var(--rz-danger);
+}
+
+.rz-state__icon svg {
+  width: 16px;
+  height: 16px;
+}
+.rz-timeline__icon svg {
+  width: 11px;
+  height: 11px;
+}
+.rz-code button svg,
+.rz-stepper button svg {
+  width: 14px;
+  height: 14px;
+}
+
+/*
+ * React screens wrap `.rz-page` in an extra frame element the static
+ * references do not have. Without these, a long row inside it sets the
+ * page's min-content width and a phone screen scrolls sideways.
+ */
+.rz-main > * {
+  min-width: 0;
+}
+.rz-page {
+  grid-template-columns: minmax(0, 1fr);
+}
+/* `overflow: clip` does not zero a grid item's automatic minimum width. */
+.rz-card {
+  min-width: 0;
+}
+
+/*
+ * v2 lifts controls to the 44px touch target on a coarse pointer through
+ * `--rz-control-h`. The kit's small button, kit-sized icon buttons and
+ * checkbox rows have fixed sizes; give them the same lift.
+ */
+@media (pointer: coarse) {
+  .rz-btn--sm {
+    height: var(--rz-control-h);
+    padding: 0 10px;
+  }
+  .rz-btn--icon {
+    width: var(--rz-control-h);
+    height: var(--rz-control-h);
+  }
+  label:has(> .rz-check) {
+    min-height: var(--rz-target-touch);
+  }
+}
+
+/*
+ * On the selected card's brand-soft fill, the kit's dim text drops to 4.2:1
+ * (axe, WCAG AA 4.5:1). Muted text keeps the hierarchy and passes.
+ */
+.rz-choice-card:has(:checked)
+  :is(.rz-caption, .rz-dim, .rz-hint, .text-app-dim) {
+  color: var(--rz-text-muted);
+}

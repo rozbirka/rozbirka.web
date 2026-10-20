@@ -2,6 +2,7 @@ import {
   lazy,
   Suspense,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -15,6 +16,7 @@ import {
   useSearchParams,
 } from 'react-router'
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -23,12 +25,14 @@ import {
   CircleMinus,
   MapPin,
   Package,
+  Pencil,
   ShoppingBag,
   Tag,
   Plus,
   Printer,
-  Search,
+  SearchX,
   Trash2,
+  Upload,
 } from 'lucide-react'
 import {
   ActionMenu,
@@ -47,12 +51,13 @@ import {
   Button,
   ConfirmDialog,
   DataTable,
-  EmptyState,
   ErrorState,
   Field,
   InlineEdit,
   Notice,
+  SearchInput,
   SelectInput,
+  StateScreen,
   StatusPill,
   TextArea,
   TextInput,
@@ -106,6 +111,7 @@ import { mediaApi } from '@/api/media'
 import { useCabinet } from '../CabinetContext'
 import { cabinetPath } from '../cabinet-paths'
 import { FeatureGate } from '../FeatureFlags'
+import { RedesignShell } from '../redesign-shell'
 import { FEATURE_FLAGS } from '@/api/feature-flags'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import {
@@ -743,461 +749,589 @@ export function PartsScreen({ definition }: CabinetModuleScreenProps) {
     }
   }
 
+  const facetName = (dimension: keyof PartFacets, id: string) =>
+    facets?.[dimension].find((value) => value.id === id)?.name
+  const statusTabs = [
+    { value: '', label: t('all'), dot: null },
+    { value: 'available', label: t('statusInStock'), dot: 'rz-dot--ok' },
+    { value: 'reserved', label: t('statusReserved'), dot: 'rz-dot--warn' },
+    { value: 'sold', label: t('statusSold'), dot: 'rz-dot--danger' },
+  ] as const
+  const totals = [
+    { key: 'all', value: statusTotal ?? 0, label: t('totalAll') },
+    {
+      key: 'available',
+      value: facetCount('statuses', 'available') ?? 0,
+      label: t('totalAvailable'),
+    },
+    {
+      key: 'reserved',
+      value: facetCount('statuses', 'reserved') ?? 0,
+      label: t('totalReserved'),
+    },
+    {
+      key: 'sold',
+      value: facetCount('statuses', 'sold') ?? 0,
+      label: t('totalSold'),
+    },
+  ]
+  const loading = pageMeta === null && error === null
+
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="mx-auto grid w-full max-w-[1360px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-        {removedOrigin ? (
-          <Notice tone="info">{t('removedOrigin')}</Notice>
-        ) : null}
-        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
-          <div className="min-w-0">
-            <p className="text-app-dim font-mono text-[12px] tracking-[0.14em] uppercase">
-              {t('eyebrow')}
-            </p>
-            <h1 className="mt-1.5 text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px] lg:text-[54px]">
-              {t('title')}
-            </h1>
-          </div>
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-2.5">
+    <RedesignShell
+      actions={
+        manageDecision.kind === 'allowed' ||
+        createDecision.kind === 'allowed' ? (
+          <>
             {manageDecision.kind === 'allowed' ? (
               <FeatureGate name={FEATURE_FLAGS.partsBulkImport}>
                 <Button asChild>
-                  <Link to="imports">{t('importParts')}</Link>
+                  <Link to="imports">
+                    <Upload aria-hidden />
+                    {t('importParts')}
+                  </Link>
                 </Button>
               </FeatureGate>
             ) : null}
             {createDecision.kind === 'allowed' ? (
-              <Button
-                asChild
-                className="px-5 text-sm font-bold"
-                variant="primary"
-              >
+              <Button asChild variant="primary">
                 <Link to="new">
                   <Plus aria-hidden />
                   {t('addPart')}
                 </Link>
               </Button>
             ) : null}
-          </div>
+          </>
+        ) : undefined
+      }
+      crumb={
+        <>
+          <span>{t('eyebrow')}</span>
+          <ChevronRight aria-hidden className="size-3" />
+          <span aria-current="page">{t('title')}</span>
+        </>
+      }
+    >
+      <div className="rz-page-head">
+        <h1 className="rz-h-page">{t('title')}</h1>
+        {facets === null ? null : (
+          <dl className="rz-totals">
+            {totals.map((total) => (
+              <div className="flex items-baseline gap-1" key={total.key}>
+                <dt className="order-last">{total.label}</dt>
+                <dd>{total.value}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+
+      {removedOrigin ? <Notice tone="info">{t('removedOrigin')}</Notice> : null}
+
+      <div className="rz-toolbar" role="search">
+        <SearchInput
+          aria-label={t('searchLabel')}
+          name="q"
+          onChange={(event) => updateFilter('q', event.target.value)}
+          placeholder={t('searchPlaceholder')}
+          value={filters.q ?? ''}
+        />
+        <div
+          aria-label={t('filterStatus')}
+          className="rz-seg max-w-full overflow-x-auto"
+          role="group"
+        >
+          {statusTabs.map((tab) => (
+            <button
+              aria-pressed={filters.status === tab.value}
+              key={tab.value || 'all'}
+              onClick={() => updateFilter('status', tab.value)}
+              type="button"
+            >
+              {tab.dot === null ? null : (
+                <span aria-hidden className={cn('rz-dot', tab.dot)} />
+              )}
+              {tab.label}
+            </button>
+          ))}
         </div>
 
-        <span className="border-app-line bg-app-raised focus-within:border-app-line-2 flex h-13 items-center gap-3 rounded-[14px] border px-4">
-          <Search aria-hidden className="text-app-dim size-4 shrink-0" />
-          <input
-            aria-label={t('searchLabel')}
-            className="text-app-ink placeholder:text-app-dim min-w-0 flex-1 bg-transparent text-sm outline-none"
-            name="q"
-            onChange={(event) => updateFilter('q', event.target.value)}
-            placeholder={t('searchPlaceholder')}
-            value={filters.q ?? ''}
-          />
-        </span>
-
-        <div className="flex flex-wrap items-start gap-6">
-          <aside className="border-app-line bg-app-raised grid min-w-0 flex-[0_1_320px] gap-6 rounded-[20px] border p-5 sm:min-w-[260px]">
-            <FilterGroup label={t('filterStatus')}>
-              <FilterRow
-                active={filters.status === ''}
-                count={statusTotal}
-                dot="bg-app-dim"
-                label={t('all')}
-                onSelect={() => updateFilter('status', '')}
-              />
-              {[
-                {
-                  value: 'available',
-                  label: t('statusInStock'),
-                  dot: 'bg-state-ok',
-                },
-                {
-                  value: 'reserved',
-                  label: t('statusReserved'),
-                  dot: 'bg-state-warn',
-                },
-                {
-                  value: 'sold',
-                  label: t('statusSold'),
-                  dot: 'bg-state-danger',
-                },
-              ].map((option) => (
-                <FilterRow
-                  active={filters.status === option.value}
-                  count={facetCount('statuses', option.value)}
-                  dot={option.dot}
-                  key={option.value}
-                  label={option.label}
-                  onSelect={() => updateFilter('status', option.value)}
-                />
-              ))}
-            </FilterGroup>
-
-            <FilterGroup label={t('filterCompatibility')}>
-              <SelectInput
-                aria-label={t('make')}
-                name="make"
-                onChange={(event) => {
-                  const next = new URLSearchParams(searchParams)
-                  if (event.target.value) next.set('make', event.target.value)
-                  else next.delete('make')
-                  next.delete('model')
-                  next.delete('page')
-                  setSearchParams(next)
-                }}
-                value={filters.makeId}
-              >
-                <option value="">{t('makeAny')}</option>
-                {facetOptions('makes')}
-              </SelectInput>
-              <SelectInput
-                aria-label={t('model')}
-                className={filters.makeId ? undefined : 'opacity-55'}
-                disabled={!filters.makeId}
-                name="model"
-                onChange={(event) => updateFilter('model', event.target.value)}
-                title={filters.makeId ? undefined : t('chooseMakeFirst')}
-                value={filters.modelId}
-              >
-                <option value="">{t('modelAny')}</option>
-                {facetOptions('models')}
-              </SelectInput>
-            </FilterGroup>
-
-            <FilterGroup label={t('filterPlacement')}>
-              <PartLocationFilters
-                owner={`${cabinet.snapshot?.tenantId}:${cabinet.snapshot?.userId}:${cabinet.snapshot?.generation}`}
-                enabled={links.inventory}
-                warehouseId={filters.warehouseId}
-                fallbackWarehouses={facets?.warehouses ?? []}
-                fallbackZones={facets?.zones ?? []}
-                zoneId={filters.zoneId}
-                sectionId={filters.sectionId}
-                shelfId={filters.shelfId}
-                withoutSection={filters.withoutSection}
-                withoutShelf={filters.withoutShelf}
-                onChange={(level, value) => {
-                  const next = new URLSearchParams(searchParams)
-                  if (level === 'warehouse' || level === 'zone') {
-                    const descendants =
-                      level === 'warehouse'
-                        ? [
-                            'zone',
-                            'section',
-                            'shelf',
-                            'without_section',
-                            'without_shelf',
-                          ]
-                        : [
-                            'section',
-                            'shelf',
-                            'without_section',
-                            'without_shelf',
-                          ]
-                    for (const name of descendants) next.delete(name)
-                    if (value) next.set(level, value)
-                    else next.delete(level)
-                  } else if (level === 'section') {
-                    for (const name of [
-                      'section',
-                      'shelf',
-                      'without_section',
-                      'without_shelf',
-                    ])
-                      next.delete(name)
-                    if (value === WITHOUT_LOCATION)
-                      next.set('without_section', '1')
-                    else if (value) next.set('section', value)
-                  } else {
-                    next.delete('shelf')
-                    next.delete('without_shelf')
-                    if (value === WITHOUT_LOCATION)
-                      next.set('without_shelf', '1')
-                    else if (value) next.set('shelf', value)
-                  }
-                  next.delete('page')
-                  setSearchParams(next)
-                }}
-              />
-            </FilterGroup>
-
-            <FilterGroup label={t('filterCondition')}>
-              <FilterRow
-                active={filters.condition === ''}
-                count={facetTotal('conditions')}
-                dot="bg-transparent"
-                label={t('all')}
-                onSelect={() => updateFilter('condition', '')}
-              />
-              {(facets?.conditions ?? []).map((value) => (
-                <FilterRow
-                  active={filters.condition === value.id}
-                  count={value.count}
-                  dot="bg-transparent"
-                  key={value.id}
-                  label={conditionLabel(value.id, locale)}
-                  onSelect={() => updateFilter('condition', value.id)}
-                />
-              ))}
-            </FilterGroup>
-
-            <FilterGroup label={t('filterOrigin')}>
-              <FilterRow
-                active={filters.origin === ''}
-                count={facetTotal('origins')}
-                dot="bg-transparent"
-                label={t('all')}
-                onSelect={() => updateFilter('origin', '')}
-              />
-              {(facets?.origins ?? [])
-                .filter((value) => ['car', 'batch'].includes(value.id))
-                .map((value) => (
-                  <FilterRow
-                    active={filters.origin === value.id}
-                    count={value.count}
-                    dot="bg-transparent"
-                    key={value.id}
-                    label={originLabel(value.id, value.name, locale)}
-                    onSelect={() => updateFilter('origin', value.id)}
-                  />
-                ))}
-            </FilterGroup>
-
-            <Button
-              className="w-full text-sm font-semibold"
-              disabled={activeFilters.length === 0}
-              onClick={() => setSearchParams(new URLSearchParams())}
+        <FilterPopover
+          label={t('filterCompatibility')}
+          placeholder={t('makeAny')}
+          {...(filters.makeId
+            ? {
+                setKey: t('make'),
+                setValue: [
+                  facetName('makes', filters.makeId) ?? filters.makeId,
+                  filters.modelId
+                    ? (facetName('models', filters.modelId) ?? filters.modelId)
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · '),
+              }
+            : {})}
+        >
+          <div className="grid gap-2 p-3">
+            <SelectInput
+              aria-label={t('make')}
+              name="make"
+              onChange={(event) => {
+                const next = new URLSearchParams(searchParams)
+                if (event.target.value) next.set('make', event.target.value)
+                else next.delete('make')
+                next.delete('model')
+                next.delete('page')
+                setSearchParams(next)
+              }}
+              value={filters.makeId}
             >
-              {t('resetFilters')}
-            </Button>
-          </aside>
+              <option value="">{t('makeAny')}</option>
+              {facetOptions('makes')}
+            </SelectInput>
+            <SelectInput
+              aria-label={t('model')}
+              disabled={!filters.makeId}
+              name="model"
+              onChange={(event) => updateFilter('model', event.target.value)}
+              title={filters.makeId ? undefined : t('chooseMakeFirst')}
+              value={filters.modelId}
+            >
+              <option value="">{t('modelAny')}</option>
+              {facetOptions('models')}
+            </SelectInput>
+          </div>
+        </FilterPopover>
 
-          <div className="grid min-w-0 flex-[1_1_320px] gap-4">
-            <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
-              <p className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
-                <span className="text-app-muted flex items-baseline gap-2 text-sm">
-                  <span className="text-[22px] font-bold text-white tabular-nums">
-                    {statusTotal ?? 0}
-                  </span>
-                  {t('totalAll')}
-                </span>
-                <span className="text-app-muted flex items-baseline gap-2 text-sm">
-                  <span className="text-state-ok text-[22px] font-bold tabular-nums">
-                    {facetCount('statuses', 'available') ?? 0}
-                  </span>
-                  {t('totalAvailable')}
-                </span>
-                <span className="text-app-muted flex items-baseline gap-2 text-sm">
-                  <span className="text-state-warn text-[22px] font-bold tabular-nums">
-                    {facetCount('statuses', 'reserved') ?? 0}
-                  </span>
-                  {t('totalReserved')}
-                </span>
-                <span className="text-app-muted flex items-baseline gap-2 text-sm">
-                  <span className="text-state-danger text-[22px] font-bold tabular-nums">
-                    {facetCount('statuses', 'sold') ?? 0}
-                  </span>
-                  {t('totalSold')}
-                </span>
-              </p>
-              <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
-                <span className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
-                  {t('pageSize')}
-                </span>
-                <PillGroup
-                  label={t('pageSizeLabel')}
-                  onChange={(next) => updateFilter('per_page', next)}
-                  options={[
-                    { value: '30', label: '30' },
-                    { value: '60', label: '60' },
-                    { value: '100', label: '100' },
-                  ]}
-                  value={String(filters.pageSize)}
-                />
-              </div>
-            </div>
+        <FilterPopover
+          label={t('filterPlacement')}
+          placeholder={t('warehouseAll')}
+          {...(filters.warehouseId
+            ? {
+                setKey: t('warehouse'),
+                setValue: [
+                  facetName('warehouses', filters.warehouseId) ??
+                    t('selectedWarehouse'),
+                  filters.zoneId
+                    ? (facetName('zones', filters.zoneId) ?? t('selectedZone'))
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · '),
+              }
+            : {})}
+        >
+          <div className="grid gap-2 p-3">
+            <PartLocationFilters
+              owner={`${cabinet.snapshot?.tenantId}:${cabinet.snapshot?.userId}:${cabinet.snapshot?.generation}`}
+              enabled={links.inventory}
+              warehouseId={filters.warehouseId}
+              fallbackWarehouses={facets?.warehouses ?? []}
+              fallbackZones={facets?.zones ?? []}
+              zoneId={filters.zoneId}
+              sectionId={filters.sectionId}
+              shelfId={filters.shelfId}
+              withoutSection={filters.withoutSection}
+              withoutShelf={filters.withoutShelf}
+              onChange={(level, value) => {
+                const next = new URLSearchParams(searchParams)
+                if (level === 'warehouse' || level === 'zone') {
+                  const descendants =
+                    level === 'warehouse'
+                      ? [
+                          'zone',
+                          'section',
+                          'shelf',
+                          'without_section',
+                          'without_shelf',
+                        ]
+                      : ['section', 'shelf', 'without_section', 'without_shelf']
+                  for (const name of descendants) next.delete(name)
+                  if (value) next.set(level, value)
+                  else next.delete(level)
+                } else if (level === 'section') {
+                  for (const name of [
+                    'section',
+                    'shelf',
+                    'without_section',
+                    'without_shelf',
+                  ])
+                    next.delete(name)
+                  if (value === WITHOUT_LOCATION)
+                    next.set('without_section', '1')
+                  else if (value) next.set('section', value)
+                } else {
+                  next.delete('shelf')
+                  next.delete('without_shelf')
+                  if (value === WITHOUT_LOCATION) next.set('without_shelf', '1')
+                  else if (value) next.set('shelf', value)
+                }
+                next.delete('page')
+                setSearchParams(next)
+              }}
+            />
+          </div>
+        </FilterPopover>
 
-            {error ? (
-              <ErrorState
-                description={
-                  error.kind === 'network' || error.kind === 'timeout'
-                    ? t('networkDescription')
-                    : t('serverDescription')
-                }
-                onRetry={() =>
-                  setSearchParams(new URLSearchParams(searchParams))
-                }
-                title={
-                  error.kind === 'network' || error.kind === 'timeout'
-                    ? t('networkTitle')
-                    : t('serverTitle')
-                }
+        <FilterPopover
+          label={t('filterCondition')}
+          placeholder={t('filterCondition')}
+          {...(filters.condition
+            ? {
+                setKey: t('filterCondition'),
+                setValue: conditionLabel(filters.condition, locale),
+              }
+            : {})}
+        >
+          <div className="grid gap-px p-1">
+            <FilterOption
+              active={filters.condition === ''}
+              count={facetTotal('conditions')}
+              label={t('all')}
+              onSelect={() => updateFilter('condition', '')}
+            />
+            {(facets?.conditions ?? []).map((value) => (
+              <FilterOption
+                active={filters.condition === value.id}
+                count={value.count}
+                key={value.id}
+                label={conditionLabel(value.id, locale)}
+                onSelect={() => updateFilter('condition', value.id)}
               />
-            ) : (
-              <>
-                <div className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border">
-                  <DataTable
-                    caption={t('tableCaption')}
-                    columns={[
-                      {
-                        key: 'name',
-                        label: t('colPart'),
-                        variant: 'primary',
-                        cell: (part) => (
-                          <Link
-                            className="hover:text-brand block font-semibold"
-                            to={part.id}
-                          >
-                            {part.name}
-                          </Link>
-                        ),
-                      },
-                      {
-                        key: 'car',
-                        label: t('colCar'),
-                        cell: (part) =>
-                          part.car
-                            ? `${part.car.make} ${part.car.model} · ${String(part.car.year)}`
-                            : '—',
-                      },
-                      {
-                        key: 'status',
-                        label: t('colStatus'),
-                        cell: (part) => {
-                          const presentation = statusPresentation(
-                            part.status ?? '',
-                            locale,
-                          )
-                          return presentation.label === '' ? (
-                            '—'
-                          ) : (
-                            <StatusPill tone={presentation.tone}>
-                              {presentation.label}
-                            </StatusPill>
-                          )
-                        },
-                      },
-                      {
-                        key: 'quantity',
-                        label: t('colTotal'),
-                        align: 'end',
-                        cell: (part) => (
-                          <InlineEdit
-                            inputMode="numeric"
-                            label={t('quantityLabel', { name: part.name })}
-                            onCommit={(next) =>
-                              rewritePart(part.id, (current) => {
-                                const quantity = Number(next.trim())
-                                return Number.isInteger(quantity) &&
-                                  quantity >= 0
-                                  ? { ...current, quantity }
-                                  : t('quantityInvalid')
-                              })
-                            }
-                            value={String(part.quantity)}
-                            {...(canManage
-                              ? {}
-                              : {
-                                  unavailable: t('noManageRight'),
-                                })}
-                            {...(part.isInventoryLocked
-                              ? {
-                                  unavailable: t('inventoryLocked'),
-                                }
-                              : {})}
-                          >
-                            {part.quantity}
-                          </InlineEdit>
-                        ),
-                      },
-                      {
-                        key: 'available',
-                        label: t('colAvailable'),
-                        align: 'end',
-                        cell: (part) => part.quantityAvailable,
-                      },
-                      {
-                        key: 'reserved',
-                        label: t('colReserved'),
-                        align: 'end',
-                        cell: (part) => part.quantityReserved,
-                      },
+            ))}
+          </div>
+        </FilterPopover>
+
+        <FilterPopover
+          label={t('filterOrigin')}
+          placeholder={t('filterOrigin')}
+          {...(filters.origin
+            ? {
+                setKey: t('filterOrigin'),
+                setValue: originLabel(
+                  filters.origin,
+                  facetName('origins', filters.origin) ?? filters.origin,
+                  locale,
+                ),
+              }
+            : {})}
+        >
+          <div className="grid gap-px p-1">
+            <FilterOption
+              active={filters.origin === ''}
+              count={facetTotal('origins')}
+              label={t('all')}
+              onSelect={() => updateFilter('origin', '')}
+            />
+            {(facets?.origins ?? [])
+              .filter((value) => ['car', 'batch'].includes(value.id))
+              .map((value) => (
+                <FilterOption
+                  active={filters.origin === value.id}
+                  count={value.count}
+                  key={value.id}
+                  label={originLabel(value.id, value.name, locale)}
+                  onSelect={() => updateFilter('origin', value.id)}
+                />
+              ))}
+          </div>
+        </FilterPopover>
+
+        {activeFilters.length === 0 ? null : (
+          <Button
+            onClick={() => setSearchParams(new URLSearchParams())}
+            variant="quiet"
+          >
+            {t('resetFilters')}
+          </Button>
+        )}
+      </div>
+
+      {error ? (
+        <ErrorState
+          description={
+            error.kind === 'network' || error.kind === 'timeout'
+              ? t('networkDescription')
+              : t('serverDescription')
+          }
+          onRetry={() => setSearchParams(new URLSearchParams(searchParams))}
+          title={
+            error.kind === 'network' || error.kind === 'timeout'
+              ? t('networkTitle')
+              : t('serverTitle')
+          }
+        />
+      ) : loading ? (
+        <SkeletonRows columns={5} rows={8} />
+      ) : (
+        <DataTable
+          caption={t('tableCaption')}
+          columns={[
+            {
+              key: 'name',
+              label: t('colPart'),
+              variant: 'primary',
+              cell: (part) => (
+                <span className="rz-cell-main">
+                  <Link
+                    className="text-app-strong hover:text-brand-text"
+                    to={part.id}
+                  >
+                    {part.name}
+                  </Link>
+                  {part.oemCode ? (
+                    <span className="rz-mono">{part.oemCode}</span>
+                  ) : null}
+                </span>
+              ),
+            },
+            {
+              key: 'car',
+              label: t('colCar'),
+              cell: (part) => (
+                <span className="whitespace-nowrap">
+                  {part.car
+                    ? `${part.car.make} ${part.car.model} · ${String(part.car.year)}`
+                    : '—'}
+                </span>
+              ),
+            },
+            {
+              key: 'status',
+              label: t('colStatus'),
+              cell: (part) => {
+                const presentation = statusPresentation(
+                  part.status ?? '',
+                  locale,
+                )
+                return presentation.label === '' ? (
+                  '—'
+                ) : (
+                  <StatusPill tone={presentation.tone}>
+                    {presentation.label}
+                  </StatusPill>
+                )
+              },
+            },
+            {
+              key: 'quantity',
+              label: t('colTotal'),
+              align: 'end',
+              cell: (part) => (
+                <InlineEdit
+                  inputMode="numeric"
+                  label={t('quantityLabel', { name: part.name })}
+                  onCommit={(next) =>
+                    rewritePart(part.id, (current) => {
+                      const quantity = Number(next.trim())
+                      return Number.isInteger(quantity) && quantity >= 0
+                        ? { ...current, quantity }
+                        : t('quantityInvalid')
+                    })
+                  }
+                  value={String(part.quantity)}
+                  {...(canManage
+                    ? {}
+                    : {
+                        unavailable: t('noManageRight'),
+                      })}
+                  {...(part.isInventoryLocked
+                    ? {
+                        unavailable: t('inventoryLocked'),
+                      }
+                    : {})}
+                >
+                  {part.quantity}
+                </InlineEdit>
+              ),
+            },
+            {
+              key: 'available',
+              label: t('colAvailable'),
+              align: 'end',
+              cell: (part) => (
+                <span className="inline-flex items-center gap-1.5">
+                  {part.isInventoryLocked ? (
+                    <span className="text-app-dim" title={t('inventoryLocked')}>
+                      <Lock aria-hidden className="size-3" />
+                    </span>
+                  ) : null}
+                  {part.quantityAvailable}
+                </span>
+              ),
+            },
+            {
+              key: 'reserved',
+              label: t('colReserved'),
+              align: 'end',
+              cell: (part) => (
+                <span className="text-app-muted">{part.quantityReserved}</span>
+              ),
+            },
+          ]}
+          empty={
+            <StateScreen
+              className="border-0"
+              description={
+                activeFilters.length > 0
+                  ? t('emptyFilteredDescription')
+                  : t('emptyDescription')
+              }
+              icon={
+                activeFilters.length > 0 ? (
+                  <SearchX aria-hidden />
+                ) : (
+                  <Package aria-hidden />
+                )
+              }
+              title={
+                activeFilters.length > 0
+                  ? t('emptyFilteredTitle')
+                  : t('emptyTitle')
+              }
+              tone={activeFilters.length > 0 ? 'neutral' : 'brand'}
+              {...(activeFilters.length > 0
+                ? {
+                    actions: (
+                      <Button
+                        onClick={() => setSearchParams(new URLSearchParams())}
+                      >
+                        {t('resetFilters')}
+                      </Button>
+                    ),
+                  }
+                : {})}
+            />
+          }
+          footer={
+            pageMeta ? (
+              <nav aria-label={t('pagination')} className="rz-pager">
+                <p className="rz-mono m-0">
+                  {t('pageOf', {
+                    page: pageMeta.page,
+                    total: pageMeta.totalPages,
+                  })}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span>{t('pageSize')}</span>
+                  <PillGroup
+                    label={t('pageSizeLabel')}
+                    onChange={(next) => updateFilter('per_page', next)}
+                    options={[
+                      { value: '30', label: '30' },
+                      { value: '60', label: '60' },
+                      { value: '100', label: '100' },
                     ]}
-                    empty={
-                      <EmptyState
-                        description={
-                          activeFilters.length > 0
-                            ? t('emptyFilteredDescription')
-                            : t('emptyDescription')
-                        }
-                        title={
-                          activeFilters.length > 0
-                            ? t('emptyFilteredTitle')
-                            : t('emptyTitle')
-                        }
-                      />
-                    }
-                    footer={
-                      pageMeta ? (
-                        <nav
-                          aria-label={t('pagination')}
-                          className="border-app-line flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4"
-                        >
-                          <p className="text-app-dim text-[14px]">
-                            {t('pageOf', {
-                              page: pageMeta.page,
-                              total: pageMeta.totalPages,
-                            })}
-                          </p>
-                          <span className="flex items-center gap-2.5">
-                            <Button
-                              aria-label={t('previousPage')}
-                              className="px-4 text-sm font-semibold"
-                              disabled={pageMeta.page <= 1}
-                              onClick={() => updatePage(pageMeta.page - 1)}
-                            >
-                              <ChevronLeft aria-hidden />
-                              {tc('back')}
-                            </Button>
-                            <Button
-                              aria-label={t('nextPage')}
-                              className="px-4 text-sm font-semibold"
-                              disabled={pageMeta.page >= pageMeta.totalPages}
-                              onClick={() => updatePage(pageMeta.page + 1)}
-                            >
-                              {tc('next')}
-                              <ChevronRight aria-hidden />
-                            </Button>
-                          </span>
-                        </nav>
-                      ) : null
-                    }
-                    rowKey={(part) => part.id}
-                    rows={items}
+                    value={String(filters.pageSize)}
                   />
                 </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+                <div className="rz-pager__nav">
+                  <Button
+                    aria-label={t('previousPage')}
+                    disabled={pageMeta.page <= 1}
+                    onClick={() => updatePage(pageMeta.page - 1)}
+                    size="sm"
+                  >
+                    <ChevronLeft aria-hidden />
+                    {tc('back')}
+                  </Button>
+                  <Button
+                    aria-label={t('nextPage')}
+                    disabled={pageMeta.page >= pageMeta.totalPages}
+                    onClick={() => updatePage(pageMeta.page + 1)}
+                    size="sm"
+                  >
+                    {tc('next')}
+                    <ChevronRight aria-hidden />
+                  </Button>
+                </div>
+              </nav>
+            ) : null
+          }
+          rowKey={(part) => part.id}
+          rows={items}
+        />
+      )}
+    </RedesignShell>
   )
 }
 
-/** A titled block of the filter rail. */
-function FilterGroup({
+/**
+ * One filter of the toolbar: a dashed `.rz-filter` button that turns solid
+ * once a value is set, and a `.rz-popover` under it holding the choices.
+ * Choices apply as they are made, so the popover has no Apply button.
+ */
+function FilterPopover({
   label,
+  placeholder,
+  setKey,
+  setValue,
   children,
 }: {
+  /** Names the popover for assistive technology. */
   label: string
+  /** The button's text while nothing is chosen: "Марка: будь-яка". */
+  placeholder: string
+  /** Once set, the button reads "<key>: <value>". */
+  setKey?: string
+  setValue?: string
   children: ReactNode
 }) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const popoverId = useId()
+  const isSet = setKey !== undefined && setValue !== undefined
+
+  useEffect(() => {
+    if (!open) return
+    const close = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [open])
+
   return (
-    <section aria-label={label} className="grid gap-2.5">
-      <h2 className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
-        {label}
-      </h2>
-      {children}
-    </section>
+    <div
+      className="relative"
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || !open) return
+        event.stopPropagation()
+        setOpen(false)
+        buttonRef.current?.focus()
+      }}
+      ref={rootRef}
+    >
+      <button
+        aria-controls={open ? popoverId : undefined}
+        aria-expanded={open}
+        className={cn('rz-filter', isSet && 'rz-filter--set')}
+        onClick={() => setOpen((value) => !value)}
+        ref={buttonRef}
+        type="button"
+      >
+        {isSet ? (
+          <>
+            <span className="rz-filter__key">{setKey}:</span> {setValue}
+          </>
+        ) : (
+          placeholder
+        )}
+        <ChevronDown aria-hidden className="text-app-dim size-3" />
+      </button>
+      {open ? (
+        <div
+          aria-label={label}
+          className="rz-popover absolute top-full left-0 z-[var(--rz-z-popover)] mt-1 max-sm:fixed max-sm:inset-x-4 max-sm:top-auto max-sm:bottom-20 max-sm:w-auto"
+          id={popoverId}
+          role="dialog"
+        >
+          {children}
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -1205,56 +1339,30 @@ function FilterGroup({
  * One value of a filter, with how many records carry it. The count is the
  * point: it says whether the click is worth making before it is made.
  */
-function FilterRow({
+function FilterOption({
   label,
   count,
-  dot,
   active,
-  disabled = false,
-  hint,
   onSelect,
 }: {
   label: string
   count?: number | undefined
-  /** Colour class of the state this row stands for. */
-  dot: string
   active: boolean
-  /** The list endpoint cannot filter by this yet. */
-  disabled?: boolean
-  /** Said out loud by assistive technology when the row is out of reach. */
-  hint?: string
   onSelect: () => void
 }) {
   return (
     <button
       aria-pressed={active}
       className={cn(
-        'focus-visible:outline-brand flex min-h-10 w-full items-center justify-between gap-3 rounded-[10px] px-3 text-sm transition-colors',
-        disabled
-          ? 'text-app-dim cursor-not-allowed opacity-55'
-          : active
-            ? 'bg-app-input cursor-pointer font-semibold text-white'
-            : 'text-app-muted hover:bg-white/[0.03] hover:text-app-ink cursor-pointer',
+        'rz-menu__item w-full justify-between',
+        active && 'bg-app-selected font-semibold text-app-strong',
       )}
-      disabled={disabled}
       onClick={onSelect}
-      title={hint}
       type="button"
     >
-      <span className="flex min-w-0 items-center gap-2.5">
-        <span
-          aria-hidden
-          className={cn('size-1.5 shrink-0 rounded-full', dot)}
-        />
-        <span className="truncate">{label}</span>
-      </span>
+      <span className="min-w-0 truncate">{label}</span>
       {count === undefined ? null : (
-        <span
-          className={cn(
-            'text-[14px] tabular-nums',
-            active ? 'text-white' : 'text-app-dim',
-          )}
-        >
+        <span className="text-app-dim font-mono text-caption tabular-nums">
           {count}
         </span>
       )}
@@ -1275,15 +1383,6 @@ const partConditions = (locale: Locale) =>
     value,
     label: conditionLabel(value, locale),
   }))
-
-/** Two letters standing in for a person where a photo would be. */
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || '—'
 
 function PartDetailScreen({
   detail,
@@ -1476,8 +1575,19 @@ function PartDetailScreen({
     }
   }
 
+  const name = detail === null ? t('titleFallback') : detail.name
+  const editState = { partEditBackground: true }
+  const editHref = `${base}/${partId}/edit`
+  const salesTotal =
+    salesTab === 'reserved'
+      ? null
+      : salesRows.reduce(
+          (sum, row) => sum + (row.unitPrice ?? 0) * row.quantity,
+          0,
+        )
+
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
+    <div className="grid content-start">
       {placementOpen && links.inventory ? (
         <Suspense
           fallback={
@@ -1499,40 +1609,32 @@ function PartDetailScreen({
           />
         </Suspense>
       ) : null}
-      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-        <div className="flex min-w-0 items-center gap-5">
-          <Link
-            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-            to={base}
-          >
-            <ChevronLeft aria-hidden className="size-3.5" />
-            {t('backToWarehouse')}
+      <div className="rz-topbar min-h-topbar h-auto flex-wrap justify-between gap-y-1.5 py-1.5">
+        <p className="rz-crumbs m-0">
+          <Link className="hidden sm:inline" to={base}>
+            {t('breadcrumbWarehouse')}
           </Link>
-          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>{t('breadcrumbWarehouse')}</span>
-            <span aria-hidden className="text-white/20">
-              /
-            </span>
-            <span>{t('breadcrumbParts')}</span>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <Button asChild className="px-4 text-sm font-semibold">
+          <ChevronRight aria-hidden className="hidden size-3 sm:block" />
+          <Link to={base}>{t('breadcrumbParts')}</Link>
+          <ChevronRight aria-hidden className="size-3" />
+          <span aria-current="page">{name}</span>
+        </p>
+        <div className="rz-topbar__actions flex-wrap items-center">
+          <Button asChild>
             <Link to={`/app/${tenantSlug}/stickers?part=${partId ?? ''}`}>
+              <Printer aria-hidden />
               {t('printSticker')}
             </Link>
           </Button>
           {canManage ? (
             <>
-              <Button asChild className="px-4 text-sm font-semibold">
-                <Link
-                  state={{ partEditBackground: true }}
-                  to={`${base}/${partId}/edit`}
-                >
+              <Button asChild>
+                <Link state={editState} to={editHref}>
+                  <Pencil aria-hidden />
                   {tc('edit')}
                 </Link>
               </Button>
-              <Button disabled title={t('addToOrderHint')} variant="primary">
+              <Button disabled title={t('addToOrderHint')}>
                 {t('addToOrder')}
               </Button>
               <ActionMenu
@@ -1540,7 +1642,7 @@ function PartDetailScreen({
                   {
                     key: 'delete',
                     label: t('deletePart'),
-                    icon: <Trash2 aria-hidden className="size-4" />,
+                    icon: <Trash2 aria-hidden />,
                     destructive: true,
                     disabled: deleting,
                     onSelect: () => setConfirmingDelete(true),
@@ -1553,42 +1655,11 @@ function PartDetailScreen({
         </div>
       </div>
 
-      <div className="mx-auto grid w-full max-w-[1360px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-11 lg:px-12">
-        {deleteError !== null && !confirmingDelete ? (
-          <Notice tone="danger">{deleteError}</Notice>
-        ) : null}
-        {copied === null ? null : (
-          <Notice tone={copied.ok ? 'ok' : 'danger'}>{copied.text}</Notice>
-        )}
-
-        <div className="min-w-0">
+      <div className="rz-page max-w-[1240px]">
+        <div className="grid min-w-0 gap-2">
+          <h1 className="rz-h-page text-balance">{name}</h1>
           {detail === null ? null : (
-            <div className="flex flex-wrap items-center gap-3">
-              <StatusPill tone={statusPresentation(detail.status, locale).tone}>
-                {statusPresentation(detail.status, locale).label}
-              </StatusPill>
-              {detail.quantityReserved > 0 && detail.quantityAvailable > 0 ? (
-                <StatusPill tone="warn">
-                  {t('reservedCount', { count: detail.quantityReserved })}
-                </StatusPill>
-              ) : null}
-              <span className="text-app-ink flex items-center gap-[7px] text-[13px] font-semibold">
-                <span
-                  aria-hidden
-                  className={cn(
-                    'size-[7px] rounded-full',
-                    CONDITION_DOT[detail.condition] ?? 'bg-app-dim',
-                  )}
-                />
-                {conditionPhrase(detail.condition, locale)}
-              </span>
-            </div>
-          )}
-          <h1 className="mt-3.5 text-[38px] leading-[1.04] font-extrabold tracking-[-0.03em] text-balance text-white sm:text-[46px] lg:text-[48px]">
-            {detail === null ? t('titleFallback') : detail.name}
-          </h1>
-          {detail === null ? null : (
-            <div className="mt-3.5 flex flex-wrap items-center gap-2.5">
+            <div className="rz-btn-row items-center">
               {detail.qrCode ? (
                 <CodeChip
                   code={detail.qrCode}
@@ -1599,14 +1670,23 @@ function PartDetailScreen({
                 />
               ) : null}
               {detail.oemCode ? (
-                <span className="text-app-muted font-mono text-[13px]">
+                <span className="rz-code pr-2">
                   {t('oem', { code: detail.oemCode })}
                 </span>
               ) : null}
+              <StatusPill tone={statusPresentation(detail.status, locale).tone}>
+                {statusPresentation(detail.status, locale).label}
+              </StatusPill>
+              {detail.quantityReserved > 0 && detail.quantityAvailable > 0 ? (
+                <StatusPill tone="warn">
+                  {t('reservedCount', { count: detail.quantityReserved })}
+                </StatusPill>
+              ) : null}
+              <span className="text-app-muted">
+                {conditionPhrase(detail.condition, locale)}
+              </span>
               {detail.partType ? (
-                <span className="text-app-muted text-[13px]">
-                  {detail.partType}
-                </span>
+                <span className="text-app-dim">· {detail.partType}</span>
               ) : null}
               <SourceChip
                 href={
@@ -1635,764 +1715,706 @@ function PartDetailScreen({
           )}
         </div>
 
+        {deleteError !== null && !confirmingDelete ? (
+          <Notice tone="danger">{deleteError}</Notice>
+        ) : null}
+        {copied === null ? null : (
+          <Notice tone={copied.ok ? 'ok' : 'danger'}>{copied.text}</Notice>
+        )}
+
         {error ? (
           <ErrorState
+            actions={
+              <Button asChild>
+                <Link to={base}>
+                  <ChevronLeft aria-hidden />
+                  {t('backToWarehouse')}
+                </Link>
+              </Button>
+            }
             description={t('loadErrorDescription')}
             title={t('loadErrorTitle')}
           />
         ) : detail === null ? (
           <SkeletonRows columns={2} label={t('loading')} rows={4} />
         ) : (
-          <>
-            <div className="mt-4 flex flex-wrap items-start gap-6">
-              <div className="flex min-w-0 sm:min-w-[320px] flex-[1_1_560px] flex-col gap-6">
+          <div className="flex flex-wrap items-start gap-4">
+            <div className="grid min-w-0 flex-[1_1_480px] gap-4">
+              <Card
+                aside={
+                  <span className="text-app-dim">
+                    {t('photosCount', { count: detail.photos.length })}
+                  </span>
+                }
+                bodyClassName="p-0"
+                title={t('photos')}
+              >
+                <Gallery
+                  emptyLabel={t('galleryEmpty')}
+                  label={t('galleryLabel', { name: detail.name })}
+                  photos={detail.photos.map((photo, index) => ({
+                    id: photo.id,
+                    url: photo.url,
+                    ...(photo.thumbnailUrl
+                      ? { thumbnailUrl: photo.thumbnailUrl }
+                      : {}),
+                    alt: t('photoAlt', {
+                      name: detail.name,
+                      index: index + 1,
+                    }),
+                  }))}
+                  variant="framed"
+                />
+              </Card>
+
+              {reservations.length > 0 || soldOrders.length > 0 ? (
                 <Card
                   aside={
-                    <span className="text-app-dim font-mono text-[12px] tracking-[0.1em] uppercase">
-                      {t('photosCount', { count: detail.photos.length })}
-                    </span>
-                  }
-                  bodyClassName="p-0"
-                  className="min-w-0 sm:min-w-[320px] flex-[1_1_620px]"
-                  headerClassName="pb-4"
-                  title={t('photos')}
-                >
-                  <Gallery
-                    emptyLabel={t('galleryEmpty')}
-                    label={t('galleryLabel', { name: detail.name })}
-                    photos={detail.photos.map((photo, index) => ({
-                      id: photo.id,
-                      url: photo.url,
-                      ...(photo.thumbnailUrl
-                        ? { thumbnailUrl: photo.thumbnailUrl }
-                        : {}),
-                      alt: t('photoAlt', {
-                        name: detail.name,
-                        index: index + 1,
-                      }),
-                    }))}
-                    variant="framed"
-                  />
-                </Card>
-              </div>
-              <div className="flex min-w-0 sm:min-w-[320px] flex-[1_1_440px] flex-col gap-6">
-                <Card
-                  aside={
-                    canManage && detail.effectiveSalePrice !== null ? (
-                      <Button
-                        asChild
-                        className="min-h-8 px-3 text-[12px] font-bold"
-                      >
-                        <Link
-                          state={{ partEditBackground: true }}
-                          to={`${base}/${partId}/edit`}
-                        >
-                          {t('change')}
-                        </Link>
-                      </Button>
-                    ) : null
-                  }
-                  title={t('salePrice')}
-                >
-                  {detail.effectiveSalePrice === null ? (
-                    <div className="border-state-warn/25 bg-state-warn/[0.07] flex flex-wrap items-center justify-between gap-4 rounded-[12px] border px-4 py-3.5">
-                      <div className="min-w-0">
-                        <p className="text-state-warn text-[14px] font-bold">
-                          {t('noPriceTitle')}
-                        </p>
-                        <p className="text-app-muted mt-1 text-[13px] leading-[1.45] text-pretty">
-                          {t('noPriceBody')}
-                        </p>
-                      </div>
-                      {canManage ? (
-                        <Button asChild variant="primary">
-                          <Link
-                            state={{ partEditBackground: true }}
-                            to={`${base}/${partId}/edit`}
-                          >
-                            {t('setPrice')}
-                          </Link>
-                        </Button>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <>
-                      <p className="flex items-baseline gap-2.5">
-                        <Amount
-                          className="font-mono text-[30px] font-medium tracking-[-0.01em] text-white"
-                          currency={partCurrency}
-                          currencyDisplay="code"
-                          value={detail.effectiveSalePrice}
-                        />
-                        <span className="text-app-muted text-[13px]">
-                          {t('perUnit', {
-                            unit: unitLabel(detail.unit, locale),
-                          })}
-                        </span>
-                      </p>
-                      <p className="text-app-muted mt-1.5 text-[13px]">
-                        {detail.quantityAvailable > 0 ? (
-                          <>
-                            {t('freeStockWorth')}{' '}
-                            <Amount
-                              currency={partCurrency}
-                              currencyDisplay="code"
-                              value={
-                                detail.effectiveSalePrice *
-                                detail.quantityAvailable
-                              }
-                            />
-                            {detail.quantityReserved > 0
-                              ? t('moreReserved', {
-                                  count: detail.quantityReserved,
-                                  unit: unitLabel(detail.unit, locale),
-                                })
-                              : ''}
-                          </>
-                        ) : detail.quantityReserved > 0 ? (
-                          t('noneFreeReserved', {
-                            count: detail.quantityReserved,
-                            unit: unitLabel(detail.unit, locale),
-                          })
-                        ) : (
-                          t('allSold')
-                        )}
-                      </p>
-                      {detail.desiredSalePrice !== null &&
-                      detail.desiredSalePrice !== detail.effectiveSalePrice ? (
-                        <p className="text-app-dim mt-1 text-[12.5px]">
-                          {t('desired')}{' '}
+                    <dl className="rz-totals">
+                      <div className="flex items-baseline gap-1.5">
+                        <dt>{t('revenue')}</dt>
+                        <dd className="text-app-strong">
                           <Amount
                             currency={partCurrency}
                             currencyDisplay="code"
-                            value={detail.desiredSalePrice}
+                            value={soldRevenue}
                           />
-                        </p>
-                      ) : null}
-                    </>
-                  )}
-                </Card>
-                <Card
-                  aside={
-                    <span className="text-app-muted text-[13px] font-semibold">
-                      {t('received', {
-                        count: detail.quantityTotal,
-                        unit: unitLabel(detail.unit, locale),
-                      })}
-                    </span>
-                  }
-                  title={t('stock')}
-                >
-                  <dl className="grid gap-2 sm:grid-cols-3">
-                    <StockTile
-                      label={t('tileAvailable')}
-                      sub={
-                        detail.quantityAvailable > 0
-                          ? t('canSell')
-                          : t('noneFree')
-                      }
-                      tone="ok"
-                      value={detail.quantityAvailable}
-                    />
-                    <StockTile
-                      label={t('tileReserved')}
-                      sub={
-                        detail.quantityReserved > 0
-                          ? t('ordersCount', { count: reservations.length })
-                          : t('none')
-                      }
-                      tone="warn"
-                      value={detail.quantityReserved}
-                    />
-                    <StockTile
-                      label={t('tileSold')}
-                      sub={
-                        detail.quantitySoldTotal > 0
-                          ? t('ordersCount', { count: soldOrders.length })
-                          : t('neverSold')
-                      }
-                      tone="plain"
-                      value={detail.quantitySoldTotal}
-                    />
-                  </dl>
-
-                  {detail.quantityAvailable === 1 ? (
-                    <p className="text-app-muted mt-3 text-[13px]">
-                      {t('lastUnit')}
-                    </p>
-                  ) : detail.quantityAvailable === 0 &&
-                    detail.quantityReserved > 0 ? (
-                    <p className="text-state-warn mt-3 text-[13px] text-pretty">
-                      {t('allReserved')}
-                    </p>
-                  ) : null}
-
-                  <div className="border-app-line mt-[18px] flex flex-wrap items-center justify-between gap-4 border-t pt-4">
-                    <div className="min-w-0">
-                      <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                        {t('placement')}
-                      </p>
-                      <p className="text-app-ink mt-1.5 text-[15px] font-semibold text-pretty">
-                        {detail.quantityAvailable + detail.quantityReserved ===
-                        0
-                          ? t('notInStock', {
-                              place: placementLabel(
-                                zones,
-                                links.inventory,
-                                t,
-                              ).toLocaleLowerCase(locale),
-                            })
-                          : placementLabel(zones, links.inventory, t)}
-                      </p>
-                    </div>
-                    {links.inventory ? (
-                      <Button
-                        className="min-h-9 px-3 text-[12px] font-bold"
-                        onClick={() => setPlacementOpen(true)}
-                      >
-                        {t('move')}
-                      </Button>
-                    ) : null}
-                  </div>
-                </Card>
-              </div>
-            </div>
-
-            {reservations.length > 0 || soldOrders.length > 0 ? (
-              <Card
-                aside={
-                  <dl className="flex flex-wrap items-baseline gap-x-7 gap-y-2">
-                    <div className="flex items-baseline gap-2.5">
-                      <dt className="text-app-muted text-[13px]">
-                        {t('revenue')}
-                      </dt>
-                      <dd className="font-mono text-[17px] font-medium text-white">
-                        <Amount
-                          currency={partCurrency}
-                          currencyDisplay="code"
-                          value={soldRevenue}
-                        />
-                      </dd>
-                    </div>
-                    <div className="flex items-baseline gap-2.5">
-                      <dt className="text-app-muted text-[13px]">
-                        {t('reservedWorth')}
-                      </dt>
-                      <dd
-                        className="text-app-dim font-mono text-[17px] font-medium"
-                        title={t('reserveNoPrice')}
-                      >
-                        —
-                      </dd>
-                    </div>
-                    <div className="flex items-baseline gap-2.5">
-                      <dt className="text-app-muted text-[13px]">
-                        {t('discounts')}
-                      </dt>
-                      <dd
-                        className={cn(
-                          'font-mono text-[17px] font-medium',
-                          soldDiscount > 0 ? 'text-state-warn' : 'text-app-dim',
-                        )}
-                      >
-                        <Amount
-                          currency={partCurrency}
-                          currencyDisplay="code"
-                          value={soldDiscount}
-                        />
-                      </dd>
-                    </div>
-                  </dl>
-                }
-                bodyClassName="p-0"
-                headerClassName="pb-0"
-                title={t('sales')}
-              >
-                <div
-                  aria-label={t('salesTabs')}
-                  className="border-app-line flex flex-wrap gap-6 border-b px-6"
-                  role="tablist"
-                >
-                  {SALES_TABS.map((tab) => {
-                    const count =
-                      tab.value === 'reserved'
-                        ? reservations.length
-                        : tab.value === 'sold'
-                          ? soldOrders.length
-                          : reservations.length + soldOrders.length
-                    const active = salesTab === tab.value
-                    return (
-                      <button
-                        aria-selected={active}
-                        className={cn(
-                          'flex min-h-11 items-center gap-2 border-b-2 text-[14px] font-bold transition-colors',
-                          active
-                            ? 'border-brand text-white'
-                            : 'text-app-muted hover:text-app-ink border-transparent',
-                        )}
-                        key={tab.value}
-                        onClick={() => setSalesTab(tab.value)}
-                        role="tab"
-                        type="button"
-                      >
-                        {t(tab.label)}
-                        <span
-                          className={cn(
-                            'rounded-full px-1.5 font-mono text-[11px]',
-                            active
-                              ? 'bg-white/[0.12] text-white'
-                              : 'text-app-muted bg-white/[0.05]',
-                          )}
-                        >
-                          {count}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-
-                {salesRows.length === 0 ? (
-                  <p className="text-app-muted px-6 py-6 text-[13px]">
-                    {salesTab === 'reserved'
-                      ? t('noReserves')
-                      : t('notSoldYet')}
-                  </p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[720px] text-left">
-                      <caption className="sr-only">{t('salesCaption')}</caption>
-                      <thead>
-                        <tr className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
-                          <th className="px-6 pt-4 pb-3 font-normal">
-                            {t('colOrder')}
-                          </th>
-                          <th className="px-3 pt-4 pb-3 font-normal">
-                            {t('colCustomer')}
-                          </th>
-                          <th className="px-3 pt-4 pb-3 font-normal">
-                            {t('colStatus')}
-                          </th>
-                          <th className="px-3 pt-4 pb-3 text-right font-normal">
-                            {t('colQuantity')}
-                          </th>
-                          <th className="px-3 pt-4 pb-3 text-right font-normal">
-                            {t('colPrice')}
-                          </th>
-                          <th className="px-3 pt-4 pb-3 text-right font-normal">
-                            {t('colSum')}
-                          </th>
-                          <th className="px-6 pt-4 pb-3 font-normal">
-                            <span className="sr-only">{tc('actions')}</span>
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {salesRows.map((row) => (
-                          <tr
-                            className="border-app-line border-t align-top transition-colors hover:bg-white/[0.025]"
-                            key={`${row.kind}-${row.orderId}`}
-                          >
-                            <td className="px-6 py-4">
-                              {orderHref(row.orderId) === null ? (
-                                <span className="text-app-ink font-mono text-[15px]">
-                                  {t('orderNumber', {
-                                    number: String(row.orderNumber),
-                                  })}
-                                </span>
-                              ) : (
-                                <Link
-                                  className="text-brand font-mono text-[15px] underline-offset-4 hover:underline"
-                                  to={orderHref(row.orderId) ?? '#'}
-                                >
-                                  {t('orderNumber', {
-                                    number: String(row.orderNumber),
-                                  })}
-                                </Link>
-                              )}
-                              <span className="text-app-dim mt-1 block font-mono text-[12px]">
-                                {row.date === null ? (
-                                  '—'
-                                ) : (
-                                  <DateValue
-                                    value={row.date}
-                                    withTime={false}
-                                  />
-                                )}
-                              </span>
-                            </td>
-                            <td className="px-3 py-4">
-                              <span className="text-app-ink block text-[15px] font-semibold">
-                                {row.customerName ?? t('noCustomer')}
-                              </span>
-                              <span
-                                className="text-app-dim mt-1 block text-[13px]"
-                                title={t('deliveryNotOnPart')}
-                              >
-                                {t('deliveryHidden')}
-                              </span>
-                            </td>
-                            <td className="px-3 py-4">
-                              <StatusPill
-                                tone={row.kind === 'reserved' ? 'warn' : 'ok'}
-                              >
-                                {row.kind === 'reserved'
-                                  ? t('reserve')
-                                  : t('sold')}
-                              </StatusPill>
-                              <span
-                                className="text-app-dim mt-1.5 block text-[13px] text-pretty"
-                                title={
-                                  row.kind === 'reserved'
-                                    ? t('reserveNoTerm')
-                                    : undefined
-                                }
-                              >
-                                {row.kind === 'reserved'
-                                  ? t('reserveHolds')
-                                  : t('saleClosed')}
-                              </span>
-                            </td>
-                            <td className="text-app-ink px-3 py-4 text-right font-mono text-[15px]">
-                              {row.quantity}
-                            </td>
-                            <td className="px-3 py-4 text-right">
-                              <span className="text-app-ink block font-mono text-[15px]">
-                                {row.unitPrice === null ? (
-                                  <span title={t('reserveNoPrice')}>—</span>
-                                ) : (
-                                  <Amount
-                                    currency={partCurrency}
-                                    currencyDisplay="code"
-                                    value={row.unitPrice}
-                                  />
-                                )}
-                              </span>
-                              {row.discount > 0 ? (
-                                <span className="text-state-warn mt-1 block font-mono text-[12px]">
-                                  −
-                                  <Amount
-                                    currency={partCurrency}
-                                    currencyDisplay="code"
-                                    value={row.discount}
-                                  />
-                                </span>
-                              ) : null}
-                            </td>
-                            <td className="px-3 py-4 text-right font-mono text-[15px] text-white">
-                              {row.unitPrice === null ? (
-                                <span
-                                  className="text-app-dim"
-                                  title={t('reserveNoPrice')}
-                                >
-                                  —
-                                </span>
-                              ) : (
-                                <Amount
-                                  currency={partCurrency}
-                                  currencyDisplay="code"
-                                  value={row.unitPrice * row.quantity}
-                                />
-                              )}
-                            </td>
-                            <td className="px-6 py-4">
-                              <Button
-                                className="min-h-9 px-3 text-[12px] font-bold whitespace-nowrap"
-                                disabled
-                                title={
-                                  row.kind === 'reserved'
-                                    ? t('reserveNoTerm')
-                                    : t('returnNotFromPart')
-                                }
-                              >
-                                {row.kind === 'reserved'
-                                  ? t('extend')
-                                  : t('return')}
-                              </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-app-line border-t">
-                          <td
-                            className="text-app-muted px-6 py-4 text-right text-[13px]"
-                            colSpan={5}
-                          >
-                            {salesTab === 'reserved'
-                              ? t('totalReserved')
-                              : t('totalSold')}
-                          </td>
-                          <td className="px-3 py-4 text-right font-mono text-[17px] font-medium text-white">
-                            {salesTab === 'reserved' ? (
-                              <span
-                                className="text-app-dim"
-                                title={t('reserveNoPrice')}
-                              >
-                                —
-                              </span>
-                            ) : (
-                              <Amount
-                                currency={partCurrency}
-                                currencyDisplay="code"
-                                value={salesRows.reduce(
-                                  (sum, row) =>
-                                    sum + (row.unitPrice ?? 0) * row.quantity,
-                                  0,
-                                )}
-                              />
-                            )}
-                          </td>
-                          <td className="px-6 py-4" />
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                )}
-              </Card>
-            ) : null}
-
-            <div className="flex flex-wrap items-start gap-6">
-              <div className="flex min-w-0 sm:min-w-[320px] flex-[1_1_440px] flex-col gap-6">
-                <Card
-                  aside={
-                    compat === null ? null : (
-                      <span className="text-app-muted text-[13px] font-semibold">
-                        {t('carsCount', { count: compat.items.length })}
-                      </span>
-                    )
-                  }
-                  bodyClassName="p-0"
-                  headerClassName="pb-3.5"
-                  title={t('compatibility')}
-                >
-                  {compat === null ? (
-                    <p className="text-app-muted px-6 pb-5 text-[13px]">
-                      {t('loadingShort')}
-                    </p>
-                  ) : compat.items.length === 0 ? (
-                    <p className="text-app-muted px-6 pb-5 text-[13px] leading-5 text-pretty">
-                      {t('compatEmpty')}
-                    </p>
-                  ) : (
-                    <ul className="grid">
-                      {compat.items.map((item) => (
-                        <li
-                          className="border-app-line grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3.5 border-t px-6 py-3"
-                          key={item.id}
-                        >
-                          <span className="min-w-0">
-                            <span className="text-app-ink block text-[14px] font-semibold">
-                              {[item.makeName, item.modelName]
-                                .filter(Boolean)
-                                .join(' ') || item.equipmentTypeName}
-                            </span>
-                            <span className="text-app-dim mt-0.5 block text-[12px]">
-                              {item.evidenceType === 'DonorObservation'
-                                ? t('donorReadonly')
-                                : item.modelName === null
-                                  ? t('anyModel')
-                                  : ''}
-                            </span>
-                          </span>
-                          <span className="text-app-ink font-mono text-[13px] whitespace-nowrap">
-                            {yearSpan(item.yearFrom, item.yearTo, t)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </Card>
-                <Card title={t('notes')}>
-                  {detail.notes ? (
-                    <p className="text-app-ink text-[15px] leading-[1.55] whitespace-pre-line text-pretty">
-                      {detail.notes}
-                    </p>
-                  ) : (
-                    <p className="text-app-muted text-[14px]">
-                      {t('notesEmpty')}
-                    </p>
-                  )}
-                  {detail.createdByName ? (
-                    <div className="border-app-line text-app-muted mt-4 flex flex-wrap items-center gap-2.5 border-t pt-3.5 text-[13px]">
-                      <span
-                        aria-hidden
-                        className="text-app-ink grid size-[26px] place-items-center rounded-full bg-white/[0.07] text-[11px] font-bold"
-                      >
-                        {initials(detail.createdByName)}
-                      </span>
-                      <span>
-                        {t('createdBy')}{' '}
-                        <span className="text-app-ink font-semibold">
-                          {detail.createdByName}
-                        </span>{' '}
-                        · <DateValue value={detail.createdAt} />
-                      </span>
-                    </div>
-                  ) : null}
-                </Card>
-              </div>
-              <div className="flex min-w-0 sm:min-w-[320px] flex-[1_1_440px] flex-col gap-6">
-                <Card
-                  aside={
-                    history === null || history.events.length === 0 ? null : (
-                      <div
-                        aria-label={t('historyFilters')}
-                        className="border-app-line flex gap-0.5 rounded-[9px] border bg-white/[0.04] p-[3px]"
-                        role="group"
-                      >
-                        {HISTORY_FILTERS.map((filter) => {
-                          const active = historyFilter === filter.value
-                          return (
-                            <button
-                              aria-pressed={active}
-                              className={cn(
-                                // 26px to match the card's scale; the hit area
-                                // is grown back to 44px by the overlay.
-                                'relative h-[26px] rounded-[6px] px-2.5 text-[12px] font-bold whitespace-nowrap transition-colors',
-                                "after:absolute after:-inset-y-[9px] after:-inset-x-0 after:content-['']",
-                                active
-                                  ? 'bg-white/10 text-white'
-                                  : 'text-app-muted hover:text-app-ink',
-                              )}
-                              key={filter.value}
-                              onClick={() => {
-                                setHistoryFilter(filter.value)
-                                setHistoryAll(false)
-                              }}
-                              type="button"
-                            >
-                              {t(filter.label)}
-                            </button>
-                          )
-                        })}
+                        </dd>
                       </div>
-                    )
+                      <div className="flex items-baseline gap-1.5">
+                        <dt>{t('reservedWorth')}</dt>
+                        <dd
+                          className="text-app-dim"
+                          title={t('reserveNoPrice')}
+                        >
+                          —
+                        </dd>
+                      </div>
+                      <div className="flex items-baseline gap-1.5">
+                        <dt>{t('discounts')}</dt>
+                        <dd
+                          className={soldDiscount > 0 ? 'text-state-warn' : ''}
+                        >
+                          <Amount
+                            currency={partCurrency}
+                            currencyDisplay="code"
+                            value={soldDiscount}
+                          />
+                        </dd>
+                      </div>
+                    </dl>
                   }
                   bodyClassName="p-0"
-                  headerClassName="pb-3"
-                  title={t('history')}
+                  title={t('sales')}
                 >
-                  {history === null ? (
-                    <div className="px-6 pb-6">
-                      <SkeletonRows
-                        columns={1}
-                        label={t('loadingHistory')}
-                        rows={3}
-                      />
+                  <div className="border-app-line border-b px-4 py-2">
+                    <div
+                      aria-label={t('salesTabs')}
+                      className="rz-seg max-w-full overflow-x-auto"
+                      role="group"
+                    >
+                      {SALES_TABS.map((tab) => {
+                        const count =
+                          tab.value === 'reserved'
+                            ? reservations.length
+                            : tab.value === 'sold'
+                              ? soldOrders.length
+                              : reservations.length + soldOrders.length
+                        return (
+                          <button
+                            aria-pressed={salesTab === tab.value}
+                            key={tab.value}
+                            onClick={() => setSalesTab(tab.value)}
+                            type="button"
+                          >
+                            {t(tab.label)}
+                            <span className="rz-count">{count}</span>
+                          </button>
+                        )
+                      })}
                     </div>
-                  ) : shownHistory.length === 0 ? (
-                    <p className="text-app-muted px-6 pb-5 text-[13px] text-pretty">
-                      {history.events.length === 0
-                        ? t('historyEmpty')
-                        : t('historyFilteredEmpty')}
+                  </div>
+
+                  {salesRows.length === 0 ? (
+                    <p className="text-app-dim m-0 p-4">
+                      {salesTab === 'reserved'
+                        ? t('noReserves')
+                        : t('notSoldYet')}
                     </p>
                   ) : (
-                    <div className="px-6 pb-2">
-                      {historyGroups.map((group) => (
-                        <section className="pt-3" key={group.date}>
-                          <h3 className="text-app-dim pb-2 font-mono text-[10px] tracking-[0.14em] uppercase">
-                            {group.date}
-                          </h3>
-                          <ol>
-                            {group.items.map((event, index) => {
-                              const kind = historyKind(
-                                event.eventType,
-                                event.data,
-                              )
-                              const change = historyChange(event.data)
-                              const facts = historyDetails(event.data, locale)
-                              const last =
-                                group.last && index === group.items.length - 1
-                              return (
-                                <li
-                                  className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-start gap-3"
-                                  key={event.id}
-                                >
-                                  <span className="flex flex-col items-center self-stretch">
-                                    <span
-                                      aria-hidden
-                                      className={cn(
-                                        'grid size-7 shrink-0 place-items-center rounded-full',
-                                        HISTORY_ICON[kind].tint,
-                                      )}
-                                    >
-                                      {HISTORY_ICON[kind].icon}
+                    <>
+                      <div className="rz-table-scroll">
+                        <table className="rz-table">
+                          <caption>{t('salesCaption')}</caption>
+                          <thead>
+                            <tr>
+                              <th scope="col">{t('colOrder')}</th>
+                              <th scope="col">{t('colCustomer')}</th>
+                              <th scope="col">{t('colStatus')}</th>
+                              <th className="rz-num" scope="col">
+                                {t('colQuantity')}
+                              </th>
+                              <th className="rz-num" scope="col">
+                                {t('colPrice')}
+                              </th>
+                              <th className="rz-num" scope="col">
+                                {t('colSum')}
+                              </th>
+                              <th scope="col">
+                                <span className="sr-only">{tc('actions')}</span>
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {salesRows.map((row) => (
+                              <tr key={`${row.kind}-${row.orderId}`}>
+                                <th className="py-2 align-top" scope="row">
+                                  {orderHref(row.orderId) === null ? (
+                                    <span className="font-mono">
+                                      {t('orderNumber', {
+                                        number: String(row.orderNumber),
+                                      })}
                                     </span>
-                                    {last ? null : (
-                                      <span
-                                        aria-hidden
-                                        className="min-h-2.5 w-px flex-1 bg-white/[0.08]"
+                                  ) : (
+                                    <Link
+                                      className="font-mono"
+                                      to={orderHref(row.orderId) ?? '#'}
+                                    >
+                                      {t('orderNumber', {
+                                        number: String(row.orderNumber),
+                                      })}
+                                    </Link>
+                                  )}
+                                  <span className="rz-caption block font-mono font-normal">
+                                    {row.date === null ? (
+                                      '—'
+                                    ) : (
+                                      <DateValue
+                                        value={row.date}
+                                        withTime={false}
                                       />
                                     )}
                                   </span>
-                                  <span className="min-w-0 pt-1 pb-4">
-                                    <span className="text-app-ink block text-[14px] font-semibold text-pretty">
-                                      {historyLabel(event.eventType, locale)}
-                                      {event.order ? (
-                                        <>
-                                          {' '}
-                                          <span className="text-brand font-mono text-[13px]">
-                                            {t('orderNumber', {
-                                              number: String(
-                                                event.order.number,
-                                              ),
-                                            })}
-                                          </span>
-                                        </>
-                                      ) : null}
-                                    </span>
-                                    {change === null ? null : (
-                                      <span className="mt-1.5 inline-flex items-center gap-2 rounded-[7px] bg-white/[0.04] px-2.5 py-1 font-mono text-[12px]">
-                                        <span className="text-app-muted line-through">
-                                          {change.from}
-                                        </span>
-                                        <span className="text-app-dim">→</span>
-                                        <span className="text-app-ink">
-                                          {change.to}
-                                        </span>
-                                      </span>
-                                    )}
-                                    {change !== null ||
-                                    facts.length === 0 ? null : (
-                                      <span className="text-app-muted mt-1 block text-[13px] text-pretty">
-                                        {facts.join(' · ')}
-                                      </span>
-                                    )}
-                                    <span className="text-app-dim mt-1.5 flex items-center gap-[7px] text-[12px]">
-                                      <span
-                                        aria-hidden
-                                        className="text-app-muted grid size-[18px] place-items-center rounded-full bg-white/[0.07] text-[8px] font-extrabold"
-                                      >
-                                        {initials(event.user.name)}
-                                      </span>
-                                      {event.user.name}
-                                    </span>
+                                </th>
+                                <td
+                                  className="py-2 align-top"
+                                  data-label={t('colCustomer')}
+                                >
+                                  <span className="text-app-ink block">
+                                    {row.customerName ?? t('noCustomer')}
                                   </span>
-                                  <span className="text-app-muted pt-1.5 font-mono text-[12px] whitespace-nowrap">
-                                    {format.time(event.createdAt) ?? ''}
+                                  <span
+                                    className="rz-caption block"
+                                    title={t('deliveryNotOnPart')}
+                                  >
+                                    {t('deliveryHidden')}
                                   </span>
-                                </li>
-                              )
-                            })}
-                          </ol>
-                        </section>
+                                </td>
+                                <td
+                                  className="py-2 align-top"
+                                  data-label={t('colStatus')}
+                                >
+                                  <StatusPill
+                                    tone={
+                                      row.kind === 'reserved' ? 'warn' : 'ok'
+                                    }
+                                  >
+                                    {row.kind === 'reserved'
+                                      ? t('reserve')
+                                      : t('sold')}
+                                  </StatusPill>
+                                  <span
+                                    className="rz-caption mt-1 block text-pretty"
+                                    title={
+                                      row.kind === 'reserved'
+                                        ? t('reserveNoTerm')
+                                        : undefined
+                                    }
+                                  >
+                                    {row.kind === 'reserved'
+                                      ? t('reserveHolds')
+                                      : t('saleClosed')}
+                                  </span>
+                                </td>
+                                <td
+                                  className="rz-num py-2 align-top"
+                                  data-label={t('colQuantity')}
+                                >
+                                  {row.quantity}
+                                </td>
+                                <td
+                                  className="rz-num py-2 align-top"
+                                  data-label={t('colPrice')}
+                                >
+                                  {row.unitPrice === null ? (
+                                    <span
+                                      className="text-app-dim"
+                                      title={t('reserveNoPrice')}
+                                    >
+                                      —
+                                    </span>
+                                  ) : (
+                                    <Amount
+                                      currency={partCurrency}
+                                      currencyDisplay="code"
+                                      value={row.unitPrice}
+                                    />
+                                  )}
+                                  {row.discount > 0 ? (
+                                    <span className="text-state-warn block text-caption">
+                                      −
+                                      <Amount
+                                        currency={partCurrency}
+                                        currencyDisplay="code"
+                                        value={row.discount}
+                                      />
+                                    </span>
+                                  ) : null}
+                                </td>
+                                <td
+                                  className="rz-num py-2 align-top"
+                                  data-label={t('colSum')}
+                                >
+                                  {row.unitPrice === null ? (
+                                    <span
+                                      className="text-app-dim"
+                                      title={t('reserveNoPrice')}
+                                    >
+                                      —
+                                    </span>
+                                  ) : (
+                                    <Amount
+                                      currency={partCurrency}
+                                      currencyDisplay="code"
+                                      value={row.unitPrice * row.quantity}
+                                    />
+                                  )}
+                                </td>
+                                <td className="py-2 text-right align-top">
+                                  <Button
+                                    disabled
+                                    size="sm"
+                                    title={
+                                      row.kind === 'reserved'
+                                        ? t('reserveNoTerm')
+                                        : t('returnNotFromPart')
+                                    }
+                                  >
+                                    {row.kind === 'reserved'
+                                      ? t('extend')
+                                      : t('return')}
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="rz-card__foot">
+                        <span className="text-app-muted">
+                          {salesTab === 'reserved'
+                            ? t('totalReserved')
+                            : t('totalSold')}
+                        </span>
+                        {salesTotal === null ? (
+                          <span
+                            className="text-app-dim font-mono"
+                            title={t('reserveNoPrice')}
+                          >
+                            —
+                          </span>
+                        ) : (
+                          <span className="font-mono text-app-strong">
+                            <Amount
+                              currency={partCurrency}
+                              currencyDisplay="code"
+                              value={salesTotal}
+                            />
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </Card>
+              ) : null}
+
+              <Card
+                aside={
+                  compat === null ? null : (
+                    <span className="text-app-dim">
+                      {t('carsCount', { count: compat.items.length })}
+                    </span>
+                  )
+                }
+                bodyClassName={
+                  compat !== null && compat.items.length > 0 ? 'p-0' : ''
+                }
+                title={t('compatibility')}
+              >
+                {compat === null ? (
+                  <p className="text-app-dim m-0">{t('loadingShort')}</p>
+                ) : compat.items.length === 0 ? (
+                  <p className="text-app-dim m-0 text-pretty">
+                    {t('compatEmpty')}
+                  </p>
+                ) : (
+                  <dl className="rz-facts">
+                    {compat.items.map((item) => (
+                      <div key={item.id}>
+                        <dt className="text-app-ink">
+                          {[item.makeName, item.modelName]
+                            .filter(Boolean)
+                            .join(' ') || item.equipmentTypeName}
+                        </dt>
+                        <dd>
+                          <span className="font-mono">
+                            {yearSpan(item.yearFrom, item.yearTo, t)}
+                          </span>
+                          {item.evidenceType === 'DonorObservation' ? (
+                            <span className="rz-caption ml-2">
+                              {t('donorReadonly')}
+                            </span>
+                          ) : item.modelName === null ? (
+                            <span className="rz-caption ml-2">
+                              {t('anyModel')}
+                            </span>
+                          ) : null}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </Card>
+
+              <Card
+                aside={
+                  history === null || history.events.length === 0 ? null : (
+                    <div
+                      aria-label={t('historyFilters')}
+                      className="rz-seg max-w-full overflow-x-auto"
+                      role="group"
+                    >
+                      {HISTORY_FILTERS.map((filter) => (
+                        <button
+                          aria-pressed={historyFilter === filter.value}
+                          key={filter.value}
+                          onClick={() => {
+                            setHistoryFilter(filter.value)
+                            setHistoryAll(false)
+                          }}
+                          type="button"
+                        >
+                          {t(filter.label)}
+                        </button>
                       ))}
                     </div>
-                  )}
-                  {filteredHistory.length > HISTORY_LIMIT ? (
-                    <Button
-                      className="border-app-line w-full justify-center rounded-none border-0 border-t bg-transparent"
-                      onClick={() => setHistoryAll((value) => !value)}
-                    >
-                      {historyAll
-                        ? t('collapse')
-                        : t('showAll', { count: filteredHistory.length })}
-                    </Button>
-                  ) : null}
-                </Card>
-              </div>
+                  )
+                }
+                bodyClassName={
+                  history !== null && shownHistory.length > 0 ? 'p-0' : ''
+                }
+                title={t('history')}
+              >
+                {history === null ? (
+                  <SkeletonRows
+                    columns={1}
+                    label={t('loadingHistory')}
+                    rows={3}
+                  />
+                ) : shownHistory.length === 0 ? (
+                  <p className="text-app-dim m-0 text-pretty">
+                    {history.events.length === 0
+                      ? t('historyEmpty')
+                      : t('historyFilteredEmpty')}
+                  </p>
+                ) : (
+                  <>
+                    {historyGroups.map((group) => (
+                      <section
+                        className="border-app-line border-t first:border-t-0"
+                        key={group.date}
+                      >
+                        <h3 className="rz-eyebrow m-0 px-3 pt-3">
+                          {group.date}
+                        </h3>
+                        <ol className="rz-timeline">
+                          {group.items.map((event) => {
+                            const kind = historyKind(
+                              event.eventType,
+                              event.data,
+                            )
+                            const change = historyChange(event.data)
+                            const facts = historyDetails(event.data, locale)
+                            return (
+                              <li key={event.id}>
+                                <span aria-hidden className="rz-timeline__icon">
+                                  {HISTORY_ICON[kind]}
+                                </span>
+                                <span className="grid min-w-0 gap-1">
+                                  <span className="text-pretty">
+                                    <span className="font-medium text-app-strong">
+                                      {historyLabel(event.eventType, locale)}
+                                    </span>
+                                    {event.order ? (
+                                      <>
+                                        {' '}
+                                        <span className="text-app-muted font-mono">
+                                          {t('orderNumber', {
+                                            number: String(event.order.number),
+                                          })}
+                                        </span>
+                                      </>
+                                    ) : null}
+                                  </span>
+                                  {change === null ? null : (
+                                    <span className="rz-change">
+                                      <s>{change.from}</s>
+                                      <span
+                                        aria-hidden
+                                        className="text-app-dim"
+                                      >
+                                        →
+                                      </span>
+                                      <span className="text-app-ink">
+                                        {change.to}
+                                      </span>
+                                    </span>
+                                  )}
+                                  {change !== null ||
+                                  facts.length === 0 ? null : (
+                                    <span className="text-app-muted text-pretty">
+                                      {facts.join(' · ')}
+                                    </span>
+                                  )}
+                                  <span className="rz-caption">
+                                    {event.user.name}
+                                  </span>
+                                </span>
+                                <span className="rz-timeline__date">
+                                  {format.time(event.createdAt) ?? ''}
+                                </span>
+                              </li>
+                            )
+                          })}
+                        </ol>
+                      </section>
+                    ))}
+                    {filteredHistory.length > HISTORY_LIMIT ? (
+                      <div className="rz-card__foot justify-center bg-transparent">
+                        <Button
+                          onClick={() => setHistoryAll((value) => !value)}
+                          size="sm"
+                          variant="quiet"
+                        >
+                          {historyAll
+                            ? t('collapse')
+                            : t('showAll', { count: filteredHistory.length })}
+                        </Button>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </Card>
             </div>
-          </>
+
+            <aside className="grid w-full max-w-[380px] min-w-0 flex-[1_1_280px] gap-4">
+              <Card
+                aside={
+                  canManage && detail.effectiveSalePrice !== null ? (
+                    <Button asChild size="sm">
+                      <Link state={editState} to={editHref}>
+                        {t('change')}
+                      </Link>
+                    </Button>
+                  ) : null
+                }
+                bodyClassName="grid gap-1.5"
+                title={t('salePrice')}
+              >
+                {detail.effectiveSalePrice === null ? (
+                  <>
+                    <Notice block tone="warn">
+                      <strong className="block font-semibold text-app-strong">
+                        {t('noPriceTitle')}
+                      </strong>
+                      <span className="text-app-muted">{t('noPriceBody')}</span>
+                    </Notice>
+                    {canManage ? (
+                      <Button
+                        asChild
+                        className="justify-self-start"
+                        variant="primary"
+                      >
+                        <Link state={editState} to={editHref}>
+                          {t('setPrice')}
+                        </Link>
+                      </Button>
+                    ) : null}
+                  </>
+                ) : (
+                  <>
+                    <p className="m-0 flex flex-wrap items-baseline gap-1.5">
+                      <Amount
+                        className="rz-display"
+                        currency={partCurrency}
+                        currencyDisplay="code"
+                        value={detail.effectiveSalePrice}
+                      />
+                      <span className="rz-caption">
+                        {t('perUnit', {
+                          unit: unitLabel(detail.unit, locale),
+                        })}
+                      </span>
+                    </p>
+                    <p className="rz-caption m-0">
+                      {detail.quantityAvailable > 0 ? (
+                        <>
+                          {t('freeStockWorth')}{' '}
+                          <Amount
+                            currency={partCurrency}
+                            currencyDisplay="code"
+                            value={
+                              detail.effectiveSalePrice *
+                              detail.quantityAvailable
+                            }
+                          />
+                          {detail.quantityReserved > 0
+                            ? t('moreReserved', {
+                                count: detail.quantityReserved,
+                                unit: unitLabel(detail.unit, locale),
+                              })
+                            : ''}
+                        </>
+                      ) : detail.quantityReserved > 0 ? (
+                        t('noneFreeReserved', {
+                          count: detail.quantityReserved,
+                          unit: unitLabel(detail.unit, locale),
+                        })
+                      ) : (
+                        t('allSold')
+                      )}
+                    </p>
+                    {detail.desiredSalePrice !== null &&
+                    detail.desiredSalePrice !== detail.effectiveSalePrice ? (
+                      <p className="rz-caption m-0">
+                        {t('desired')}{' '}
+                        <Amount
+                          currency={partCurrency}
+                          currencyDisplay="code"
+                          value={detail.desiredSalePrice}
+                        />
+                      </p>
+                    ) : null}
+                  </>
+                )}
+              </Card>
+
+              <Card
+                aside={
+                  <span className="text-app-dim">
+                    {t('received', {
+                      count: detail.quantityTotal,
+                      unit: unitLabel(detail.unit, locale),
+                    })}
+                  </span>
+                }
+                bodyClassName="p-0"
+                title={t('stock')}
+              >
+                <dl className="rz-kpis m-0 grid-cols-3 rounded-none border-0">
+                  <StockTile
+                    label={t('tileAvailable')}
+                    sub={
+                      detail.quantityAvailable > 0
+                        ? t('canSell')
+                        : t('noneFree')
+                    }
+                    value={detail.quantityAvailable}
+                  />
+                  <StockTile
+                    label={t('tileReserved')}
+                    sub={
+                      detail.quantityReserved > 0
+                        ? t('ordersCount', { count: reservations.length })
+                        : t('none')
+                    }
+                    tone="warn"
+                    value={detail.quantityReserved}
+                  />
+                  <StockTile
+                    label={t('tileSold')}
+                    sub={
+                      detail.quantitySoldTotal > 0
+                        ? t('ordersCount', { count: soldOrders.length })
+                        : t('neverSold')
+                    }
+                    value={detail.quantitySoldTotal}
+                  />
+                </dl>
+                {detail.quantityAvailable === 1 ? (
+                  <div className="rz-card__foot justify-start">
+                    <span className="text-app-muted">{t('lastUnit')}</span>
+                  </div>
+                ) : detail.quantityAvailable === 0 &&
+                  detail.quantityReserved > 0 ? (
+                  <div className="rz-card__foot justify-start">
+                    <span className="text-state-warn text-pretty">
+                      {t('allReserved')}
+                    </span>
+                  </div>
+                ) : null}
+              </Card>
+
+              <Card
+                aside={
+                  links.inventory ? (
+                    <Button onClick={() => setPlacementOpen(true)} size="sm">
+                      {t('move')}
+                    </Button>
+                  ) : null
+                }
+                title={t('placement')}
+              >
+                <p className="text-app-ink m-0 text-pretty">
+                  {detail.quantityAvailable + detail.quantityReserved === 0
+                    ? t('notInStock', {
+                        place: placementLabel(
+                          zones,
+                          links.inventory,
+                          t,
+                        ).toLocaleLowerCase(locale),
+                      })
+                    : placementLabel(zones, links.inventory, t)}
+                </p>
+              </Card>
+
+              <Card
+                bodyClassName={detail.createdByName ? 'p-0' : ''}
+                title={t('notes')}
+              >
+                {detail.createdByName ? (
+                  <>
+                    <div className="rz-card__body">
+                      <NotesText notes={detail.notes} empty={t('notesEmpty')} />
+                    </div>
+                    <dl className="rz-facts border-app-line border-t">
+                      <div>
+                        <dt>{t('createdBy')}</dt>
+                        <dd>
+                          {detail.createdByName}{' '}
+                          <span className="rz-caption font-mono">
+                            · <DateValue value={detail.createdAt} />
+                          </span>
+                        </dd>
+                      </div>
+                    </dl>
+                  </>
+                ) : (
+                  <NotesText notes={detail.notes} empty={t('notesEmpty')} />
+                )}
+              </Card>
+            </aside>
+          </div>
         )}
       </div>
 
@@ -2407,6 +2429,15 @@ function PartDetailScreen({
         title={t('deleteTitle')}
       />
     </div>
+  )
+}
+
+/** The part's own note, or a line saying there is none yet. */
+function NotesText({ notes, empty }: { notes: string | null; empty: string }) {
+  return notes ? (
+    <p className="text-app-ink m-0 whitespace-pre-line text-pretty">{notes}</p>
+  ) : (
+    <p className="text-app-dim m-0">{empty}</p>
   )
 }
 
@@ -2620,7 +2651,7 @@ function PartMediaFields({
             const url = safeMediaUrl(item.url)
             return (
               <li
-                className="border-app-line rounded-control flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 border px-3 py-2"
+                className="rz-inset flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 py-2"
                 key={item.id}
               >
                 {previewUrl ? (
@@ -2631,10 +2662,10 @@ function PartMediaFields({
                   />
                 ) : null}
                 <div className="min-w-0 flex-1 basis-40">
-                  <p className="text-app-ink text-[14.5px] break-words">
+                  <p className="text-app-ink m-0 break-words">
                     {item.name} · {statusLabel(item)}
                   </p>
-                  <p className="text-app-dim text-[12.5px]">
+                  <p className="rz-caption m-0">
                     {mediaMetaLabel(item, locale)}
                   </p>
                 </div>
@@ -2678,7 +2709,7 @@ function PartMediaFields({
           })}
         </ul>
       ) : (
-        <p className="text-app-dim text-[13.5px]">{t('noPhotos')}</p>
+        <p className="text-app-dim text-body">{t('noPhotos')}</p>
       )}
     </SectionPanel>
   )
@@ -2751,33 +2782,24 @@ function SourceChip({
   )
   const body = (
     <>
-      <Icon aria-hidden className="text-app-muted size-[15px] shrink-0" />
-      <span className="text-app-muted text-[13px] font-semibold whitespace-nowrap">
-        {label}
-      </span>
-      <span className="text-app-ink text-[14px] font-bold whitespace-nowrap">
+      <Icon aria-hidden className="text-app-dim size-3.5 shrink-0" />
+      <span className="text-app-muted whitespace-nowrap">{label}</span>
+      <span className="font-medium whitespace-nowrap text-app-strong">
         {name}
       </span>
-      {meta === '' ? null : (
-        <span className="border-app-line-2 text-app-ink rounded-[4px] border px-1.5 font-mono text-[11px] leading-5 tracking-[0.06em] whitespace-nowrap">
-          {meta}
-        </span>
-      )}
+      {meta === '' ? null : <span className="rz-code rz-code--sm">{meta}</span>}
       {href === null ? null : (
-        <ChevronRight aria-hidden className="text-brand size-3" />
+        <ChevronRight aria-hidden className="text-app-dim size-3" />
       )}
     </>
   )
   const className =
-    'border-app-line flex items-center gap-2.5 rounded-[8px] border bg-white/[0.03] py-1 pr-2.5 pl-2'
+    'border-app-line inline-flex h-control items-center gap-2 rounded-control border px-2'
 
   return href === null ? (
     <span className={className}>{body}</span>
   ) : (
-    <Link
-      className={`${className} hover:border-app-line-2 hover:bg-white/[0.06]`}
-      to={href}
-    >
+    <Link className={`${className} hover:bg-app-hover`} to={href}>
       {body}
     </Link>
   )
@@ -2804,20 +2826,11 @@ const HISTORY_FILTERS = [
   { value: 'stock', label: 'filterStock' },
 ] as const
 
-/** A colour and a glyph per kind, so a long history can be skimmed. */
-const HISTORY_ICON: Record<HistoryKind, { icon: ReactNode; tint: string }> = {
-  sale: {
-    icon: <ShoppingBag aria-hidden className="size-3.5" />,
-    tint: 'bg-state-ok/15 text-state-ok',
-  },
-  price: {
-    icon: <Tag aria-hidden className="size-3.5" />,
-    tint: 'bg-state-info/15 text-state-info',
-  },
-  stock: {
-    icon: <MapPin aria-hidden className="size-3.5" />,
-    tint: 'text-app-muted bg-white/[0.07]',
-  },
+/** A glyph per kind, so a long history can be skimmed. */
+const HISTORY_ICON: Record<HistoryKind, ReactNode> = {
+  sale: <ShoppingBag aria-hidden className="size-3" />,
+  price: <Tag aria-hidden className="size-3" />,
+  stock: <MapPin aria-hidden className="size-3" />,
 }
 
 type DetailT = Translate<(typeof partDetailMessages)['uk']>
@@ -2860,69 +2873,35 @@ const placementLabel = (
     .join(', ')
 }
 
-/** The condition, as a colour a person can scan before reading the word. */
-const CONDITION_DOT: Record<string, string> = {
-  good: 'bg-state-ok',
-  fair: 'bg-state-warn',
-  scrap: 'bg-state-danger',
-}
-
-/** One of the three counts a part is split into, as its own tile. */
+/** One of the three counts a part is split into, as a `.rz-kpi` cell. */
 function StockTile({
   label,
   sub,
-  tone,
+  tone = 'plain',
   value,
 }: {
   label: string
   sub: string
-  tone: 'ok' | 'warn' | 'plain'
+  tone?: 'warn' | 'plain'
   value: number
 }) {
   return (
-    <div
-      className={cn(
-        'rounded-[14px] border px-3.5 pt-3 pb-3.5',
-        tone === 'ok' && value > 0
-          ? 'border-state-ok/20 bg-state-ok/[0.06]'
-          : 'border-app-line bg-white/[0.02]',
-      )}
-    >
-      <dt
-        className={cn(
-          'flex items-center gap-[7px] text-[12px] font-semibold',
-          tone === 'ok'
-            ? 'text-state-ok'
-            : tone === 'warn'
-              ? 'text-state-warn'
-              : 'text-app-muted',
-        )}
-      >
+    <div className="rz-kpi p-3">
+      <dt className="rz-kpi__label">{label}</dt>
+      <dd className="m-0 grid gap-1.5">
         <span
-          aria-hidden
           className={cn(
-            'size-1.5 shrink-0 rounded-full',
-            tone === 'ok'
-              ? 'bg-state-ok'
+            'font-mono text-page tabular-nums',
+            value === 0
+              ? 'text-app-dim'
               : tone === 'warn'
-                ? 'bg-state-warn'
-                : 'bg-app-dim',
-          )}
-        />
-        {label}
-      </dt>
-      <dd>
-        <span
-          className={cn(
-            'mt-1.5 block text-[26px] leading-none font-extrabold tracking-[-0.02em] tabular-nums',
-            value > 0 ? 'text-white' : 'text-app-dim',
+                ? 'text-state-warn'
+                : 'text-app-strong',
           )}
         >
           {value}
         </span>
-        <span className="text-app-dim mt-1.5 block text-[12px] text-pretty">
-          {sub}
-        </span>
+        <span className="rz-kpi__meta text-pretty">{sub}</span>
       </dd>
     </div>
   )
@@ -2948,18 +2927,14 @@ function SourceTile({
     <button
       aria-pressed={picked}
       className={cn(
-        'rounded-control min-h-16 border px-3.5 py-3 text-left transition-colors',
-        picked
-          ? 'border-app-line-2 bg-white/[0.07] text-white'
-          : 'border-app-line text-app-muted hover:border-app-line-2',
+        'rz-choice-card grid w-full gap-1 bg-transparent text-left',
+        picked && 'border-brand bg-brand-soft',
       )}
       onClick={onPick}
       type="button"
     >
-      <span className="block text-[14px] font-bold">{t(kind.label)}</span>
-      <span className="text-app-dim mt-1 block text-[12px] leading-[1.35] text-pretty">
-        {t(kind.hint)}
-      </span>
+      <span className="font-semibold text-app-strong">{t(kind.label)}</span>
+      <span className="rz-caption text-pretty">{t(kind.hint)}</span>
     </button>
   )
 }
@@ -3030,7 +3005,7 @@ function PartFields({
   const step = (number: string, title: string) =>
     variant === 'plain' ? (
       <span className="flex items-baseline gap-2.5">
-        <span className="text-app-dim font-mono text-[11px]">{number}</span>
+        <span className="text-app-dim font-mono text-micro">{number}</span>
         {title}
       </span>
     ) : (
@@ -3174,7 +3149,7 @@ function PartFields({
                 </Link>
               </Button>
             </div>
-            <p className="text-app-dim text-[12px] leading-5 text-pretty">
+            <p className="rz-caption m-0 text-pretty">
               {t('createReturnHint')}
             </p>
           </div>
@@ -3267,7 +3242,7 @@ function PartFields({
                 />
               ))}
             </div>
-            <p className="text-app-dim text-[12px] leading-5 text-pretty">
+            <p className="rz-caption m-0 text-pretty">
               {t('conditionVisible')}
             </p>
           </>
@@ -3335,22 +3310,19 @@ function PartFields({
           variant={variant}
         >
           {sourceCar === null ? null : (
-            <div className="border-app-line flex items-center gap-3.5 rounded-[14px] border bg-white/[0.03] px-4 py-3.5">
-              <span
-                aria-hidden
-                className="bg-app-input text-app-muted grid size-9 shrink-0 place-items-center rounded-[10px]"
-              >
+            <div className="rz-inset flex items-center gap-3">
+              <span aria-hidden className="rz-state__icon shrink-0">
                 <Lock className="size-4" />
               </span>
               <span className="min-w-0">
-                <span className="block text-[15px] font-bold tracking-[-0.01em] text-white">
+                <span className="block font-semibold text-app-strong">
                   {sourceCar.brand} {sourceCar.model}{' '}
                   <span className="text-app-dim">·</span>{' '}
                   <span className="text-app-ink font-mono font-medium">
                     {sourceCar.year}
                   </span>
                 </span>
-                <span className="text-app-muted mt-0.5 block text-[12px] text-pretty">
+                <span className="rz-caption mt-0.5 block text-pretty">
                   {t('compatFromSource')}
                 </span>
               </span>
@@ -3756,7 +3728,7 @@ function PartForm({
     <Sheet
       description={
         <>
-          {t('requiredFields')} <span className="text-brand">*</span>.{' '}
+          {t('requiredFields')} <span className="text-brand-text">*</span>.{' '}
           {t('restLater')}
         </>
       }
@@ -3765,7 +3737,7 @@ function PartForm({
           <div className="basis-full empty:hidden">{price.saveNotes}</div>
           <p
             className={cn(
-              'min-w-0 text-[12px] text-pretty',
+              'min-w-0 text-caption text-pretty',
               ready ? 'text-app-muted' : 'text-state-warn',
             )}
           >
@@ -3822,7 +3794,7 @@ function PartForm({
           <SectionPanel
             title={
               <span className="flex items-baseline gap-2.5">
-                <span className="text-app-dim font-mono text-[11px]">06</span>
+                <span className="text-app-dim font-mono text-micro">06</span>
                 {tPlacement('title')}
               </span>
             }
@@ -3843,7 +3815,7 @@ function PartForm({
           setItems={setMediaItems}
           title={
             <span className="flex items-baseline gap-2.5">
-              <span className="text-app-dim font-mono text-[11px]">
+              <span className="text-app-dim font-mono text-micro">
                 {canPlace ? '07' : '06'}
               </span>
               {t('photos')}
@@ -4118,7 +4090,7 @@ function PartEdit({
             <div className="grid">
               <SectionPanel
                 aside={
-                  <span className="text-app-dim text-[13px]">
+                  <span className="text-app-dim text-body">
                     {t('notEditable')}
                   </span>
                 }
@@ -4126,12 +4098,12 @@ function PartEdit({
                 variant="plain"
               >
                 <div className="grid gap-4">
-                  <p className="text-app-muted text-sm">
+                  <p className="text-app-muted text-body">
                     {t('sourceSetOnCreate')}
                   </p>
-                  <div className="border-app-line bg-app-input flex flex-wrap items-center justify-between gap-4 rounded-[14px] border px-4 py-4">
+                  <div className="rz-inset flex flex-wrap items-center justify-between gap-3">
                     <div className="grid min-w-0 gap-1">
-                      <span className="break-words text-[16px] font-semibold text-white">
+                      <span className="font-semibold break-words text-app-strong">
                         {detail?.carId && detail.carCode
                           ? t('fromCar', { code: detail.carCode })
                           : detail?.intakeId
@@ -4139,7 +4111,7 @@ function PartEdit({
                             : sourceLabel(values.sourceType, locale)}
                       </span>
                       {detail?.carId && detail.carBrand ? (
-                        <span className="text-app-muted text-sm">
+                        <span className="text-app-muted text-body">
                           {detail.carBrand} {detail.carModel}
                         </span>
                       ) : null}
@@ -4167,7 +4139,7 @@ function PartEdit({
 
               <SectionPanel title={t('describeStep')} variant="plain">
                 <div className="grid gap-4">
-                  <p className="text-app-muted text-sm">
+                  <p className="text-app-muted text-body">
                     {t('describeEditDescription')}
                   </p>
                   <Field error={errors.name} label={t('name')} required>
@@ -4227,7 +4199,7 @@ function PartEdit({
 
               <SectionPanel title={t('conditionStep')} variant="plain">
                 <div className="grid gap-4">
-                  <p className="text-app-muted text-sm">
+                  <p className="text-app-muted text-body">
                     {t('conditionDescription')}
                   </p>
                   <div
@@ -4251,7 +4223,7 @@ function PartEdit({
                       />
                     ))}
                   </div>
-                  <p className="text-app-dim text-[12px] leading-5 text-pretty">
+                  <p className="rz-caption m-0 text-pretty">
                     {t('conditionVisible')}
                   </p>
                 </div>
@@ -4259,7 +4231,7 @@ function PartEdit({
 
               <SectionPanel title={t('quantityStep')} variant="plain">
                 <div className="grid gap-4">
-                  <p className="text-app-muted text-sm">
+                  <p className="text-app-muted text-body">
                     {t('quantityDescription')}
                   </p>
                   <div className="grid items-start gap-4 sm:grid-cols-2">
@@ -4319,20 +4291,26 @@ function PartEdit({
 
               <SectionPanel
                 aside={
-                  <span className="text-app-dim text-[13px]">
+                  <span className="text-app-dim text-body">
                     {t('readOnly')}
                   </span>
                 }
                 title={t('compatStep')}
                 variant="plain"
               >
-                <p className="text-app-muted text-sm">{t('compatReadOnly')}</p>
+                <p className="text-app-muted text-body">
+                  {t('compatReadOnly')}
+                </p>
                 {compat?.error ? (
                   <Notice tone="danger">{t('compatLoadFailed')}</Notice>
                 ) : compat === null ? (
-                  <p className="text-app-muted text-sm">{td('loadingShort')}</p>
+                  <p className="text-app-muted text-body">
+                    {td('loadingShort')}
+                  </p>
                 ) : compat.data?.items.length === 0 ? (
-                  <p className="text-app-muted text-sm">{td('compatEmpty')}</p>
+                  <p className="text-app-muted text-body">
+                    {td('compatEmpty')}
+                  </p>
                 ) : (
                   <div className="grid gap-3">
                     {compat.data?.items.map((item) => (
@@ -4369,29 +4347,29 @@ function PartEdit({
 
             <aside className="grid">
               <SectionPanel title={t('summary')} variant="plain">
-                <dl className="grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
-                  <dt className="text-app-muted text-sm font-semibold">
-                    {t('available')}
-                  </dt>
-                  <dd className="font-mono text-[16px] text-white tabular-nums">
-                    {detail?.quantityAvailable ?? 0}{' '}
-                    {unitLabel(values.unit, locale)}
-                  </dd>
-                  <dt className="text-app-muted text-sm font-semibold">
-                    {t('reserved')}
-                  </dt>
-                  <dd className="font-mono text-[16px] text-white tabular-nums">
-                    {detail?.quantityReserved ?? 0}{' '}
-                    {unitLabel(values.unit, locale)}
-                  </dd>
-                  <dt className="text-app-muted text-sm font-semibold">
-                    {t('qrCode')}
-                  </dt>
-                  <dd className="font-mono text-[14px] break-all text-white">
-                    {detail?.qrCode ?? '—'}
-                  </dd>
+                <dl className="rz-facts px-0">
+                  <div>
+                    <dt>{t('available')}</dt>
+                    <dd className="font-mono text-app-strong tabular-nums">
+                      {detail?.quantityAvailable ?? 0}{' '}
+                      {unitLabel(values.unit, locale)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{t('reserved')}</dt>
+                    <dd className="font-mono text-app-strong tabular-nums">
+                      {detail?.quantityReserved ?? 0}{' '}
+                      {unitLabel(values.unit, locale)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{t('qrCode')}</dt>
+                    <dd className="font-mono break-all text-app-strong">
+                      {detail?.qrCode ?? '—'}
+                    </dd>
+                  </div>
                 </dl>
-                <Button asChild className="mt-4 w-full text-sm font-semibold">
+                <Button asChild className="w-full">
                   <Link to={`/app/${tenantSlug}/stickers?part=${partId}`}>
                     <Printer aria-hidden />
                     {t('printSticker')}
@@ -4400,13 +4378,13 @@ function PartEdit({
               </SectionPanel>
 
               <SectionPanel title={t('deletion')} variant="plain">
-                <p className="text-app-muted text-sm leading-5">
+                <p className="text-app-muted m-0">
                   {detail && detail.quantityReserved > 0
                     ? t('deleteBlocked')
                     : t('deleteAllowed')}
                 </p>
                 <Button
-                  className="mt-5 w-full text-sm font-semibold"
+                  className="w-full"
                   onClick={() => setConfirmingDelete(true)}
                   type="button"
                   variant="danger"

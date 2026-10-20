@@ -267,7 +267,7 @@ export function TrackingSubscriptionPanel({
   }
 
   if (tenant === null) {
-    return <p className="text-app-muted text-sm">{t('pickBusinessTracking')}</p>
+    return <p className="rz-muted m-0">{t('pickBusinessTracking')}</p>
   }
 
   const { busy } = session
@@ -282,25 +282,22 @@ export function TrackingSubscriptionPanel({
   const callbackReady = subscription?.publicCallbackConfigured ?? false
 
   return (
-    <section
-      aria-label={t('trackingTitle')}
-      className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-6 py-5"
-    >
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-          {t('trackingTitle')}
-        </h2>
+    <section aria-label={t('trackingTitle')} className="rz-card">
+      <header className="rz-card__head justify-start py-2.5">
+        <h2 className="rz-h-card">{t('trackingTitle')}</h2>
         {presentation !== null && (
           <StatusPill tone={presentation.tone}>{presentation.label}</StatusPill>
         )}
-      </div>
-      <p className="text-app-muted mt-2 max-w-[62ch] text-[13.5px] leading-5 text-pretty">
-        {t('trackingIntro')}
-      </p>
+        <p className="rz-caption m-0 w-full max-w-[62ch] text-pretty">
+          {t('trackingIntro')}
+        </p>
+      </header>
 
-      <div className="mt-4 grid gap-3.5">
+      <div className="rz-card__body grid gap-3">
         {state.kind === 'loading' && (
-          <p className="text-app-muted text-sm">{t('readingState')}</p>
+          <p className="rz-muted m-0" role="status">
+            {t('readingState')}
+          </p>
         )}
 
         {state.kind === 'denied' && <Notice tone="warn">{t('denied')}</Notice>}
@@ -309,7 +306,7 @@ export function TrackingSubscriptionPanel({
           <Notice tone="danger">
             {t('stateError')}{' '}
             <button
-              className="underline underline-offset-4"
+              className="text-brand-text cursor-pointer border-0 bg-transparent p-0 underline underline-offset-4"
               onClick={refresh}
               type="button"
             >
@@ -327,15 +324,15 @@ export function TrackingSubscriptionPanel({
           <>
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <p
-                className={`text-[16px] font-bold ${
+                className={`m-0 font-semibold ${
                   presentation.tone === 'danger'
                     ? 'text-state-danger'
-                    : 'text-app-ink'
+                    : 'text-app-strong'
                 }`}
               >
                 {presentation.detail}
               </p>
-              <p className="text-app-dim font-mono text-[12px]">
+              <p className="rz-mono rz-caption m-0">
                 {subscription.lastCallbackAt === null ? (
                   t('noUpdatesYet')
                 ) : (
@@ -354,7 +351,7 @@ export function TrackingSubscriptionPanel({
             )}
 
             {subscription.pendingNumbers > 0 && (
-              <p className="text-app-muted text-[13px] leading-5">
+              <p className="rz-muted m-0">
                 {t('pendingNumbers', { count: subscription.pendingNumbers })}
               </p>
             )}
@@ -366,7 +363,7 @@ export function TrackingSubscriptionPanel({
             )}
 
             {session.keyForm ? (
-              <form className="grid gap-3.5" noValidate onSubmit={submitKey}>
+              <form className="grid gap-3" noValidate onSubmit={submitKey}>
                 {session.keyPrompt !== null && (
                   <Notice tone="warn">{session.keyPrompt}</Notice>
                 )}
@@ -379,7 +376,7 @@ export function TrackingSubscriptionPanel({
                   <div className="flex items-start gap-2">
                     <TextInput
                       autoComplete="off"
-                      className="font-mono"
+                      className="rz-mono"
                       onChange={(event) =>
                         patch({ apiKey: event.target.value, keyError: null })
                       }
@@ -394,6 +391,7 @@ export function TrackingSubscriptionPanel({
                       }
                       aria-pressed={session.revealed}
                       onClick={() => patch({ revealed: !session.revealed })}
+                      className="shrink-0"
                       size="icon"
                       title={session.revealed ? t('hideKey') : t('showKey')}
                     >
@@ -405,7 +403,7 @@ export function TrackingSubscriptionPanel({
                     </Button>
                   </div>
                 </Field>
-                <div className="flex flex-wrap gap-2.5">
+                <div className="rz-btn-row">
                   <Button
                     aria-busy={busy === 'connect'}
                     disabled={busy !== null || !callbackReady}
@@ -432,7 +430,7 @@ export function TrackingSubscriptionPanel({
                 </div>
               </form>
             ) : (
-              <div className="flex flex-wrap gap-2.5">
+              <div className="rz-btn-row">
                 {subscription.state === 'Disabled' && (
                   <Button
                     aria-busy={busy === 'connect'}

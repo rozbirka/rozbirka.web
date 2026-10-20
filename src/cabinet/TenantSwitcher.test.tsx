@@ -48,9 +48,8 @@ it('exposes tenant names and awaits one switch before accepting another', async 
   expect(switcher).toHaveAccessibleName('Перемкнути розбірку')
   expect(screen.getByRole('option', { name: 'Koval Auto' })).toBeVisible()
   expect(screen.getByRole('option', { name: 'Luxe Parts' })).toBeVisible()
-  expect(switcher).toHaveClass('min-h-11', 'min-w-11')
-  const context = screen.getByText('owner · pro')
-  expect(context.closest('label')).toBeNull()
+  // Role and plan stay out of the select's accessible name.
+  expect(switcher.closest('[title="owner · pro"]')).not.toBeNull()
 
   fireEvent.change(switcher, { target: { value: 'luxe' } })
   fireEvent.change(switcher, { target: { value: 'luxe' } })

@@ -37,13 +37,12 @@ it('opens secondary record actions as one vertical menu', async () => {
   await user.click(screen.getByRole('button', { name: 'Інші дії з записом' }))
 
   const menu = screen.getByRole('menu')
-  expect(menu).toHaveClass('grid', 'min-w-52', 'p-1.5')
+  expect(menu).toHaveClass('rz-menu')
   expect(screen.getByRole('menuitem', { name: 'Архівувати' })).toHaveClass(
-    'min-h-11',
-    'text-[14.5px]',
+    'rz-menu__item',
   )
   expect(screen.getByRole('menuitem', { name: 'Видалити' })).toHaveClass(
-    'text-state-danger',
+    'rz-menu__item--danger',
   )
 })
 
@@ -283,9 +282,14 @@ it('shows a pressed and a busy state, not only hover and disabled', () => {
     </>,
   )
 
-  const save = screen.getByRole('button', { name: 'Зберегти' })
-  expect(save.className).toContain('active:')
-  expect(save.className).toContain('aria-busy:cursor-wait')
+  // `.rz-btn` carries :active and [aria-busy] in the design system kit.
+  expect(screen.getByRole('button', { name: 'Зберегти' })).toHaveClass(
+    'rz-btn',
+    'rz-btn--primary',
+  )
+  expect(screen.getByRole('button', { name: 'Зберігаємо…' })).toHaveClass(
+    'rz-btn',
+  )
 })
 
 it('keeps the copy chip small while the button stays easy to hit', async () => {
@@ -295,9 +299,9 @@ it('keeps the copy chip small while the button stays easy to hit', async () => {
   render(<CodeChip code="RZB-26-023C" label="Копіювати код" onCopy={onCopy} />)
 
   const button = screen.getByRole('button', { name: 'Копіювати код' })
-  expect(button).toHaveClass('size-6')
-  // The 44px target comes from an overlay, so the chip itself stays 30px tall.
-  expect(button.className).toContain('after:-inset-2.5')
+  expect(button.closest('.rz-code')).not.toBeNull()
+  // The 44px target comes from an overlay, so the chip itself stays 24px tall.
+  expect(button.className).toContain('after:-inset-3')
 
   await user.click(button)
 

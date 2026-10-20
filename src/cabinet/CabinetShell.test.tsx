@@ -125,15 +125,15 @@ it('renders nested cabinet content in a responsive overflow-safe shell', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByRole('main')).toHaveClass('min-w-0')
+    expect(screen.getByRole('main')).toHaveClass('rz-main')
     expect(screen.getByText('Вміст модуля')).toBeVisible()
     const shell = screen.getByRole('main').parentElement
     expect(shell).not.toBeNull()
     expect(getComputedStyle(shell!).overflowX).not.toMatch(/clip|hidden/)
-    expect(screen.getByLabelText('rozbirka — на головну')).toHaveAttribute(
-      'href',
-      '/app/koval/dashboard',
-    )
+    // v2 opens the sidebar with the business switcher, not the brand logo.
+    expect(
+      screen.getAllByRole('combobox', { name: 'Перемкнути розбірку' }).length,
+    ).toBeGreaterThan(0)
   } finally {
     style.remove()
   }

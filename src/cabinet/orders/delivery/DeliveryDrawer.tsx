@@ -409,7 +409,7 @@ export function DeliveryDrawer({
                 </SelectInput>
               </Field>
               {point !== null && (
-                <p className="text-app-dim text-[12.5px] leading-5 text-pretty">
+                <p className="rz-caption m-0 text-pretty">
                   {t('sender', {
                     details: [point.senderName, point.phone, point.companyName]
                       .filter((part) => part !== null && part !== '')
@@ -482,10 +482,10 @@ export function DeliveryDrawer({
               ))}
             </SelectInput>
           </Field>
-          <label className="flex items-center gap-2.5 text-[13.5px]">
+          <label className="rz-choice w-fit px-0 hover:bg-transparent">
             <input
               checked={isCompany}
-              className="accent-brand size-4"
+              className="rz-check"
               onChange={(event) => setIsCompany(event.target.checked)}
               type="checkbox"
             />
@@ -513,25 +513,22 @@ export function DeliveryDrawer({
 
         <Section
           aside={
-            <span className="text-app-dim font-mono text-[11px] tracking-[0.1em] uppercase">
+            <span className="rz-eyebrow">
               {t('parcelsCount', { count: parcels.length })}
             </span>
           }
           title={t('sectionParcels')}
         >
           {parcels.map((parcel, index) => (
-            <div
-              className="border-app-line bg-app-input grid gap-3 rounded-[12px] border px-3.5 py-3"
-              key={index}
-            >
+            <div className="rz-inset grid gap-3" key={index}>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
+                <span className="rz-eyebrow">
                   {t('parcelPlace', { number: index + 1 })}
                 </span>
                 {parcels.length > 1 && (
                   <Button
                     aria-label={t('parcelRemove', { number: index + 1 })}
-                    className="min-h-9 px-2.5 text-xs"
+                    size="sm"
                     onClick={() =>
                       setParcels((list) =>
                         list.filter((_, position) => position !== index),
@@ -558,8 +555,8 @@ export function DeliveryDrawer({
                     required
                   >
                     <TextInput
-                      className="font-mono"
                       inputMode="decimal"
+                      numeric
                       onChange={(event) =>
                         setParcels((list) =>
                           list.map((item, position) =>
@@ -590,8 +587,8 @@ export function DeliveryDrawer({
           </Field>
           <Field hint={t('declaredHint')} label={t('declaredLabel')} required>
             <TextInput
-              className="font-mono"
               inputMode="decimal"
+              numeric
               onChange={(event) => setDeclared(event.target.value)}
               value={declared}
             />
@@ -609,22 +606,20 @@ export function DeliveryDrawer({
       </div>
 
       <section
-        className={`grid gap-3.5 rounded-[16px] border px-4 py-4 ${
+        className={`grid gap-3 rounded-panel border p-3 ${
           quote.tone === 'ok'
-            ? 'border-state-ok/25 bg-state-ok-soft'
+            ? 'border-state-ok/30 bg-state-ok-soft'
             : quote.tone === 'warn'
-              ? 'border-state-warn/25 bg-state-warn-soft'
+              ? 'border-state-warn/30 bg-state-warn-soft'
               : quote.tone === 'danger'
-                ? 'border-state-danger/25 bg-state-danger-soft'
-                : 'border-app-line bg-app-raised'
+                ? 'border-state-danger/30 bg-state-danger-soft'
+                : 'border-app-line bg-app-inset'
         }`}
       >
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h3 className="text-[15px] font-bold tracking-[-0.01em] text-white">
-            {quote.title}
-          </h3>
+          <h3 className="rz-h-card">{quote.title}</h3>
           {shipment?.quoteAt != null && (
-            <span className="text-app-dim font-mono text-[11px]">
+            <span className="rz-dim font-mono text-micro">
               {t('quotedAt', {
                 when:
                   format.dateWith(shipment.quoteAt, {
@@ -637,9 +632,7 @@ export function DeliveryDrawer({
             </span>
           )}
         </div>
-        <p className="text-app-muted text-[13px] leading-5 text-pretty">
-          {quote.note}
-        </p>
+        <p className="text-app-muted m-0 text-pretty">{quote.note}</p>
 
         {paid === null ? null : (
           <Notice tone="info">
@@ -657,8 +650,8 @@ export function DeliveryDrawer({
           label={t('goodsLabel')}
         >
           <TextInput
-            className="font-mono tabular-nums"
             inputMode="decimal"
+            numeric
             onChange={(event) => setGoods(event.target.value)}
             placeholder="0"
             value={goods}
@@ -668,48 +661,48 @@ export function DeliveryDrawer({
         {/* Derived, never typed: the carrier collects what the order still
             owes, and showing it as a field invited editing the price of the
             goods by accident. */}
-        <dl className="border-app-line bg-app-raised grid grid-cols-[1fr_auto] items-baseline gap-y-2 rounded-[12px] border px-4 py-3.5 text-[13px]">
+        <dl className="rz-inset m-0 grid grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-2 bg-app-raised">
           <dt className="text-app-muted">{t('alreadyPaid')}</dt>
-          <dd className="text-right font-mono tabular-nums">
-            {uah(delivery.appliedUah, locale)}
-          </dd>
-          <dt className="font-semibold">{t('codOnWaybill')}</dt>
+          <dd className="rz-num m-0">{uah(delivery.appliedUah, locale)}</dd>
+          <dt className="rz-strong font-semibold">{t('codOnWaybill')}</dt>
           <dd
             className={cn(
-              'text-right font-mono text-[15px] tabular-nums',
-              codUah === null || codUah === 0 ? 'text-app-muted' : 'text-white',
+              'rz-num m-0 font-semibold',
+              codUah === null || codUah === 0
+                ? 'text-app-muted'
+                : 'text-app-strong',
             )}
           >
             {codUah === null ? '—' : uah(codUah, locale)}
           </dd>
-          <p className="text-app-dim col-span-2 -mt-0.5 text-[12px] text-pretty">
+          <p className="rz-caption col-span-2 m-0 text-pretty">
             {codUah === 0 ? t('codNothing') : t('codNote')}
           </p>
         </dl>
 
         {quote.showMoney && shipment?.quoteUah != null && (
           <dl
-            className={`border-app-line bg-app-raised grid gap-2.5 rounded-[12px] border px-4 py-3.5 text-[13px] ${
+            className={`rz-inset m-0 grid gap-2 bg-app-raised ${
               quote.dimMoney ? 'opacity-70' : ''
             }`}
           >
             <div className="flex items-baseline justify-between gap-4">
               <dt className="text-app-muted">{t('deliveryThere')}</dt>
-              <dd className="text-app-ink font-mono">
+              <dd className="rz-mono m-0">
                 {wholeUah(shipment.quoteUah, locale)}
               </dd>
             </div>
             <div className="flex items-baseline justify-between gap-4">
               <dt className="text-app-muted">{t('deliveryBack')}</dt>
-              <dd className="text-app-ink font-mono">
+              <dd className="rz-mono m-0">
                 {wholeUah(shipment.returnEstimateUah, locale)}
               </dd>
             </div>
-            <div className="border-app-line flex items-baseline justify-between gap-4 border-t pt-2.5">
-              <dt className="text-app-ink font-semibold">
+            <div className="border-app-line flex items-baseline justify-between gap-4 border-t pt-2">
+              <dt className="rz-strong font-semibold">
                 {t('prepaymentNeeded')}
               </dt>
-              <dd className="text-brand font-mono text-[16px] font-bold">
+              <dd className="rz-mono rz-strong m-0 font-semibold">
                 {total === null ? '—' : wholeUah(total, locale)}
               </dd>
             </div>
@@ -728,9 +721,7 @@ export function DeliveryDrawer({
           </Button>
         </div>
         {quote.showMoney && (
-          <p className="text-app-dim text-[12px] leading-5 text-pretty">
-            {t('quoteExplained')}
-          </p>
+          <p className="rz-caption m-0 text-pretty">{t('quoteExplained')}</p>
         )}
       </section>
     </Sheet>

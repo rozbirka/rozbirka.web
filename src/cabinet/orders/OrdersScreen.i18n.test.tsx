@@ -163,7 +163,8 @@ describe('in British English', () => {
     expect(within(list).getByText('Pending')).toBeVisible()
     // 22:30 UTC is already the next day in Kyiv, the business's own zone.
     expect(within(list).getByText('22/09/2026')).toBeVisible()
-    expect(within(list).getByText('1 order')).toBeVisible()
+    // The count sits in the page head next to the title (v2 `.rz-page-head`).
+    expect(screen.getByText('1 order')).toBeVisible()
   })
 
   it('renders the order page with its history in the business time zone', async () => {

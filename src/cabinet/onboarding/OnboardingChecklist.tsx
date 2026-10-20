@@ -16,6 +16,7 @@ import {
   Notice,
   Sheet,
   Skeleton,
+  StatusPill,
   useOptionalToast,
 } from '@/components/app'
 import { useT, type Translate } from '@/i18n'
@@ -202,7 +203,6 @@ export function OnboardingChecklist({
   const notice = (one: typeof action, failed: string) =>
     action !== one || status === 'idle' || status === 'saving' ? null : (
       <Notice
-        className="mt-4"
         role={status === 'failed' ? 'alert' : 'status'}
         tone={status === 'failed' ? 'danger' : 'info'}
       >
@@ -269,7 +269,7 @@ export function OnboardingChecklist({
           title={t('compactTitle')}
         >
           {notice('resume', t('resumeFailed'))}
-          <div className="mt-4">
+          <div className="rz-btn-row">
             <Button
               aria-busy={busyWith('resume')}
               disabled={!stepReachable(view.next) || busyWith('resume')}
@@ -300,7 +300,7 @@ export function OnboardingChecklist({
           subtitle={t('subtitle')}
           title={t('title')}
         >
-          <ol className="mt-4 grid gap-1">
+          <ol className="m-0 grid list-none gap-px p-0">
             {ONBOARDING_STEPS.map((step, index) => (
               <li key={step}>
                 <StepRow
@@ -326,7 +326,7 @@ export function OnboardingChecklist({
             ))}
           </ol>
           {notice('defer', t('deferFailed'))}
-          <div className="mt-4 flex flex-wrap gap-2.5">
+          <div className="rz-btn-row">
             <Button
               disabled={!stepReachable(next)}
               onClick={() => openStep(next, 'continue')}
@@ -375,14 +375,11 @@ function ChecklistFrame({
 }) {
   const titleId = useId()
   return (
-    <section
-      aria-labelledby={titleId}
-      className="border-app-line bg-app-raised rounded-[20px] border px-4 py-5 sm:px-6"
-    >
-      <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-        <div className="min-w-0 flex-[1_1_16rem]">
+    <section aria-labelledby={titleId} className="rz-card">
+      <header className="rz-card__head items-start gap-x-6 py-3">
+        <div className="grid min-w-0 flex-[1_1_16rem] gap-1">
           <h2
-            className="text-[18px] font-bold tracking-[-0.01em] text-balance text-white outline-none"
+            className="rz-h-card text-balance outline-none"
             id={titleId}
             ref={headingRef}
             tabIndex={headingRef === undefined ? undefined : -1}
@@ -390,14 +387,14 @@ function ChecklistFrame({
             {title}
           </h2>
           {subtitle === undefined ? null : (
-            <p className="text-app-muted mt-1.5 max-w-[60ch] text-[14px] leading-5 text-pretty">
+            <p className="rz-caption m-0 max-w-[60ch] text-pretty">
               {subtitle}
             </p>
           )}
         </div>
         {aside}
       </header>
-      {children}
+      <div className="rz-card__body grid gap-3">{children}</div>
     </section>
   )
 }
@@ -407,7 +404,7 @@ function Progress({ count, t }: { count: number; t: T }) {
   const label = t('progress', { n: count })
   return (
     <div className="grid w-full max-w-[12rem] shrink-0 gap-1.5 sm:w-48">
-      <span aria-hidden className="text-app-muted text-[13px] tabular-nums">
+      <span aria-hidden className="rz-caption rz-mono">
         {label}
       </span>
       <div
@@ -416,11 +413,11 @@ function Progress({ count, t }: { count: number; t: T }) {
         aria-valuemin={0}
         aria-valuenow={count}
         aria-valuetext={label}
-        className="bg-app-line-2 h-1.5 overflow-hidden rounded-full"
+        className="rz-meter"
         role="progressbar"
       >
-        <div
-          className="bg-brand h-full rounded-full motion-safe:transition-[width]"
+        <span
+          className="motion-safe:transition-[width]"
           style={{ width: `${String(count * 25)}%` }}
         />
       </div>
@@ -457,52 +454,42 @@ function StepRow({
       <span
         aria-hidden
         className={cn(
-          'mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full border font-mono text-[12px]',
-          done
-            ? 'border-state-ok/50 bg-state-ok-soft text-state-ok'
-            : current
-              ? 'border-brand text-brand bg-brand/10'
-              : 'border-app-line-2 text-app-dim',
+          'rz-steps__n mt-px shrink-0',
+          done && 'bg-state-ok-soft text-state-ok border-0',
+          current && 'bg-brand text-brand-foreground border-0',
         )}
       >
-        {done ? <Check className="size-3.5" /> : number}
+        {done ? <Check className="size-3" /> : number}
       </span>
-      <span className="min-w-0 flex-1">
+      <span className="grid min-w-0 flex-1 gap-0.5">
         <span
           className={cn(
-            'block text-[15px] font-bold text-pretty',
-            done ? 'text-app-muted' : 'text-white',
+            'font-semibold text-pretty',
+            done ? 'text-app-muted' : 'text-app-strong',
           )}
         >
           {title}
         </span>
-        <span className="text-app-dim mt-0.5 block text-[13px] leading-5 text-pretty">
+        <span className="rz-caption text-pretty">
           {reachable ? hint : t('stepUnavailable')}
         </span>
       </span>
       {done || current ? (
-        <span
-          className={cn(
-            'mt-1 shrink-0 text-[12.5px] font-bold',
-            done ? 'text-state-ok' : 'text-brand',
-          )}
-        >
+        <StatusPill className="shrink-0" tone={done ? 'ok' : 'neutral'}>
           {done ? t('done') : t('next')}
-        </span>
+        </StatusPill>
       ) : null}
       {reachable ? (
         <ChevronRight
           aria-hidden
-          className="text-app-dim mt-1 size-4 shrink-0"
+          className="text-app-dim mt-0.5 size-4 shrink-0"
         />
       ) : null}
     </>
   )
   const className = cn(
-    'flex min-h-11 w-full min-w-0 items-start gap-3 rounded-[14px] border px-3 py-3 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/40',
-    current
-      ? 'border-brand/30 bg-brand/[0.06]'
-      : 'border-transparent hover:bg-white/[0.03]',
+    'flex w-full min-w-0 items-start gap-3 rounded-control border-0 bg-transparent px-2 py-2 text-left text-app-ink transition-colors',
+    current ? 'bg-app-selected' : 'hover:bg-app-hover',
   )
   const ariaCurrent = current ? ('step' as const) : undefined
 
@@ -567,25 +554,23 @@ function SourceChooser({
       open={open}
       title={t('source')}
     >
-      <ul className="grid gap-2.5 px-5 py-5 sm:px-7">
+      <ul className="m-0 grid list-none gap-2 p-0">
         {options.map((option) =>
           option.href === null ? null : (
             <li key={option.title}>
               <Link
-                className="border-app-line bg-app-raised hover:border-app-line-2 flex min-h-11 min-w-0 items-start gap-3 rounded-[16px] border px-4 py-3.5 outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                className="rz-card text-app-ink hover:bg-app-hover flex min-w-0 items-start gap-3 px-3 py-2.5"
                 to={option.href}
               >
-                <span className="min-w-0 flex-1">
-                  <span className="text-app-ink block text-[15px] font-bold">
+                <span className="grid min-w-0 flex-1 gap-0.5">
+                  <span className="text-app-strong font-semibold">
                     {option.title}
                   </span>
-                  <span className="text-app-dim mt-1 block text-[13px] text-pretty">
-                    {option.hint}
-                  </span>
+                  <span className="rz-caption text-pretty">{option.hint}</span>
                 </span>
                 <ChevronRight
                   aria-hidden
-                  className="text-app-dim mt-1 size-4 shrink-0"
+                  className="text-app-dim mt-0.5 size-4 shrink-0"
                 />
               </Link>
             </li>
@@ -622,9 +607,9 @@ function CompletedCard({
       subtitle={t('doneSubtitle')}
       title={t('doneTitle')}
     >
-      <div className="mt-4 flex flex-wrap items-center gap-2.5">
+      <div className="flex flex-wrap items-center gap-2">
         {recommendations.length === 0 ? null : (
-          <ul className="flex flex-wrap gap-2.5">
+          <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
             {recommendations.map((one) => (
               <li key={one.href}>
                 <Button asChild>
@@ -654,15 +639,15 @@ function ChecklistSkeleton({ t }: { t: T }) {
     <section
       aria-busy="true"
       aria-label={t('title')}
-      className="border-app-line bg-app-raised grid gap-3 rounded-[20px] border px-4 py-5 sm:px-6"
+      className="rz-card rz-card__body grid gap-3"
     >
       <p className="sr-only" role="status">
         {t('loading')}
       </p>
-      <Skeleton className="h-5 w-40" />
+      <Skeleton className="h-4 w-40" />
       <Skeleton className="h-3 w-2/3" />
       {ONBOARDING_STEPS.map((step) => (
-        <Skeleton className="h-12 rounded-[14px]" key={step} />
+        <Skeleton className="h-control-lg" key={step} />
       ))}
     </section>
   )

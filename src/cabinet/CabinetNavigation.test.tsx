@@ -98,12 +98,10 @@ it('shows only released and allowed links with current-route semantics', () => {
   expect(
     screen
       .getByRole('navigation', { name: 'Навігація планшета' })
-      .querySelectorAll('a.min-h-11.min-w-11'),
+      .querySelectorAll('a.rz-nav-item'),
   ).not.toHaveLength(0)
-  expect(screen.getByRole('button', { name: 'Ще' })).toHaveClass(
-    'min-h-11',
-    'min-w-11',
-  )
+  // The tab bar's targets are 48px tall (`.rz-tabbar a`, h-12 on "Ще").
+  expect(screen.getByRole('button', { name: 'Ще' })).toHaveClass('h-12')
 })
 
 it('omits released links denied by the shared cabinet policy', () => {
@@ -261,17 +259,17 @@ it('folds the desktop menu away and back from the seam between it and the page',
 
   const toggle = screen.getByRole('button', { name: 'Сховати меню' })
   expect(toggle).toHaveAttribute('aria-expanded', 'true')
-  const menu = document.getElementById('cabinet-navigation')
-  expect(menu).not.toHaveAttribute('hidden')
+  expect(document.getElementById('cabinet-navigation')).toBeVisible()
 
   await user.click(toggle)
-  // The control keeps its place and turns around, so the way back is where
-  // the menu was folded away.
+  // Folded away, the desktop menu becomes the 56px rail, and the way back
+  // sits at its foot.
   const restore = screen.getByRole('button', { name: 'Показати меню' })
   expect(restore).toHaveAttribute('aria-expanded', 'false')
-  expect(document.getElementById('cabinet-navigation')).toHaveAttribute(
-    'hidden',
-  )
+  expect(document.getElementById('cabinet-navigation')).toBeNull()
+  expect(
+    screen.getAllByRole('navigation', { name: 'Навігація кабінету' }),
+  ).toHaveLength(1)
 
   await user.click(restore)
   expect(screen.getByRole('button', { name: 'Сховати меню' })).toHaveAttribute(

@@ -68,19 +68,11 @@ export function AccountDeletion({ compact = false }: { compact?: boolean }) {
   return (
     <section
       aria-label={t('deleteTitle')}
-      className={
-        compact
-          ? 'min-w-0'
-          : 'border-state-danger/30 bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5'
-      }
+      className={compact ? 'min-w-0' : 'rz-card rz-card__body min-w-0'}
     >
-      <h2
-        className={compact ? 'sr-only' : 'text-app-ink text-[15px] font-bold'}
-      >
-        {t('deleteTitle')}
-      </h2>
+      <h2 className={compact ? 'sr-only' : 'rz-h-card'}>{t('deleteTitle')}</h2>
       {(!compact || deleteState !== 'idle') && (
-        <p className="text-app-muted mt-2.5 text-[13px] leading-5 text-pretty">
+        <p className="text-app-muted mt-2 mb-0 text-pretty">
           {t('deleteBody')}
         </p>
       )}
@@ -93,14 +85,17 @@ export function AccountDeletion({ compact = false }: { compact?: boolean }) {
         <div
           aria-labelledby="delete-account-title"
           aria-live="polite"
-          className="border-state-danger/30 rounded-panel mt-3.5 grid gap-3 border p-4"
+          className="rz-inset bg-state-danger-soft mt-3 grid gap-3"
           role="group"
         >
-          <p className="text-sm text-white" id="delete-account-title">
+          <p
+            className="text-app-strong m-0 font-medium"
+            id="delete-account-title"
+          >
             {t('confirmPrompt')}
           </p>
           {deleteState === 'pending' ? (
-            <p className="text-app-muted text-sm" role="status">
+            <p className="text-app-muted m-0" role="status">
               {t('deleting')}
             </p>
           ) : (
@@ -112,12 +107,12 @@ export function AccountDeletion({ compact = false }: { compact?: boolean }) {
                   value={confirmation}
                 />
               </Field>
-              <p className="text-app-dim text-[12.5px]" role="status">
+              <p className="rz-caption m-0" role="status">
                 {secondsLeft > 0
                   ? t('waitSeconds', { seconds: secondsLeft })
                   : t('waitOver')}
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div className="rz-btn-row">
                 <Button
                   onClick={() => {
                     setDeleteState('idle')
@@ -142,9 +137,7 @@ export function AccountDeletion({ compact = false }: { compact?: boolean }) {
         </div>
       ) : (
         <Button
-          className={
-            compact ? 'w-full justify-center' : 'mt-3.5 w-full justify-center'
-          }
+          className={compact ? 'rz-btn--block' : 'rz-btn--block mt-3'}
           onClick={() => {
             setConfirmation('')
             setSecondsLeft(CONFIRMATION_DELAY_SECONDS)

@@ -501,11 +501,11 @@ function ShellFrame({
 }) {
   const t = useT(shellMessages)
   return (
-    <div className="bg-app-canvas grid min-h-dvh place-items-center px-4 py-10">
+    <div className="rz grid min-h-dvh place-items-center px-4 py-10">
       <div className="w-full max-w-md">
         {children}
         {account && (
-          <div className="mt-5 flex justify-center">
+          <div className="mt-3 flex justify-center">
             <Button asChild variant="quiet">
               <Link to="/account/security">{t('shell.account')}</Link>
             </Button>

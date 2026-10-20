@@ -140,7 +140,7 @@ it('renders the cars list in British English', async () => {
     await screen.findByRole('heading', { name: 'Cars', level: 1 }),
   ).toBeVisible()
   expect(screen.getByRole('link', { name: /Add car/ })).toBeVisible()
-  expect(screen.getByRole('textbox', { name: 'Search cars' })).toBeVisible()
+  expect(screen.getByRole('searchbox', { name: 'Search cars' })).toBeVisible()
   expect(screen.getByRole('list', { name: 'Car list' })).toBeVisible()
   expect(screen.getByText('BMW X5 (2020)')).toBeVisible()
   expect(screen.getByText('Active', { selector: 'span' })).toBeVisible()

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
-import { Check, Minus, PackageOpen } from 'lucide-react'
-import { Amount, Button, StateScreen } from '@/components/app'
+import { Check, Lock, Minus, PackageOpen } from 'lucide-react'
+import { Amount, Button, StateScreen, StatusPill } from '@/components/app'
 import { billingApi } from '@/api/billing'
 import type { BillingState, PublicPlanDto } from '@/api/types'
 import { useFormat, useLocale, useT, type MessageKey } from '@/i18n'
@@ -30,24 +30,26 @@ export function ModuleUnavailableScreen({
   const t = useT(accessMessages)
 
   return (
-    <StateScreen
-      actions={
-        targetTenant === null ? undefined : (
-          <Button asChild variant="primary">
-            <Link to={cabinetPath(targetTenant.slug, 'dashboard')}>
-              {t('toDashboard')}
-            </Link>
-          </Button>
-        )
-      }
-      className="min-h-[50dvh] content-center"
-      description={t('unavailableBody', {
-        module: moduleLabel(definition.key, locale),
-      })}
-      icon={<PackageOpen aria-hidden />}
-      title={t('unavailableTitle')}
-      tone="neutral"
-    />
+    <div className="rz-page">
+      <StateScreen
+        actions={
+          targetTenant === null ? undefined : (
+            <Button asChild variant="primary">
+              <Link to={cabinetPath(targetTenant.slug, 'dashboard')}>
+                {t('toDashboard')}
+              </Link>
+            </Button>
+          )
+        }
+        className="min-h-[50dvh]"
+        description={t('unavailableBody', {
+          module: moduleLabel(definition.key, locale),
+        })}
+        icon={<PackageOpen aria-hidden />}
+        title={t('unavailableTitle')}
+        tone="neutral"
+      />
+    </div>
   )
 }
 
@@ -93,113 +95,98 @@ export function FeatureUnavailableScreen({
   const label = moduleLabel(definition.key, locale)
 
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="mx-auto grid w-full max-w-[880px] gap-6 px-4 pt-14 pb-16 sm:px-6 md:px-8 md:pt-18 lg:px-12">
-        <div>
-          <span className="border-state-warn/30 bg-state-warn/10 text-state-warn inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[12px] font-bold">
-            <span aria-hidden className="bg-state-warn size-1.5 rounded-full" />
-            {currentPlan === null
-              ? t('notInCurrentPlan')
-              : t('notInPlan', { plan: currentPlan })}
-          </span>
-          <h1 className="mt-3.5 text-[32px] leading-[1.04] font-extrabold tracking-[-0.03em] text-white sm:text-[40px]">
-            {unlocking === null
-              ? t('notIncludedTitle', { module: label })
-              : t('includedInTitle', { module: label, plan: unlocking.name })}
-          </h1>
-          <p className="text-app-muted mt-3 max-w-[64ch] text-[14.5px] leading-6 text-pretty">
-            {t('planLockedBody')}
-          </p>
-        </div>
-
-        <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5.5 py-5">
-          <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-4">
-            <div className="min-w-0">
-              <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                {unlocking === null ? t('planWithModule') : t('planRequired')}
-              </p>
-              {unlocking === null ? (
-                <p className="text-app-dim mt-2.5 max-w-[52ch] text-[13.5px] leading-5 text-pretty">
-                  {plans === null ? t('findingPlan') : t('noPlanInCatalogue')}
-                </p>
-              ) : (
-                <>
-                  <p className="mt-2 flex flex-wrap items-baseline gap-x-2.5">
-                    <span className="text-app-ink text-[24px] leading-tight font-extrabold tracking-[-0.02em]">
-                      {unlocking.name}
-                    </span>
-                    <Amount
-                      className="text-app-muted text-[15px]"
-                      currency={unlocking.currency}
-                      value={unlocking.amount}
-                    />
-                  </p>
-                  <p className="text-app-dim mt-2 max-w-[52ch] text-[12.5px] leading-5 text-pretty">
-                    {currentPlan === null
-                      ? ''
-                      : `${t('currentPlan', { plan: currentPlan })} `}
-                    {t('noProration')}
-                  </p>
-                </>
-              )}
-            </div>
-            {targetTenant === null ? null : (
-              <div className="flex flex-wrap gap-2.5">
-                <Button asChild>
-                  <Link to={cabinetPath(targetTenant.slug, 'plans')}>
-                    {t('comparePlans')}
-                  </Link>
-                </Button>
-                {unlocking !== null && (
-                  <Button asChild variant="primary">
-                    <Link
-                      to={`${cabinetPath(targetTenant.slug, 'plans')}?plan=${encodeURIComponent(unlocking.code)}`}
-                    >
-                      {t('switchToPlan', { plan: unlocking.name })}
-                    </Link>
-                  </Button>
-                )}
-              </div>
+    <div className="rz-page">
+      <section className="rz-card rz-state">
+        <StatusPill>
+          <Lock aria-hidden className="size-3" />
+          {currentPlan === null
+            ? t('notInCurrentPlan')
+            : t('notInPlan', { plan: currentPlan })}
+        </StatusPill>
+        <h1 className="rz-state__title">
+          {unlocking === null
+            ? t('notIncludedTitle', { module: label })
+            : t('includedInTitle', { module: label, plan: unlocking.name })}
+        </h1>
+        <p className="rz-state__body text-pretty">{t('planLockedBody')}</p>
+        {targetTenant === null ? null : (
+          <div className="rz-btn-row mt-1.5 justify-center">
+            <Button asChild>
+              <Link to={cabinetPath(targetTenant.slug, 'plans')}>
+                {t('comparePlans')}
+              </Link>
+            </Button>
+            {unlocking !== null && (
+              <Button asChild variant="primary">
+                <Link
+                  to={`${cabinetPath(targetTenant.slug, 'plans')}?plan=${encodeURIComponent(unlocking.code)}`}
+                >
+                  {t('switchToPlan', { plan: unlocking.name })}
+                </Link>
+              </Button>
             )}
           </div>
-          {unlocking === null ? null : (
-            <ul className="border-app-line mt-5 grid gap-2 border-t pt-4">
-              {unlocking.features.map((code) => (
-                <li
-                  className="text-app-muted flex items-start gap-2.5 text-[13.5px]"
-                  key={code}
-                >
-                  <Check
-                    aria-hidden
-                    className="text-state-ok mt-0.5 size-4 shrink-0"
-                  />
-                  {code === required ? (
-                    <span className="text-app-ink font-medium">
-                      {featureLabel(code, locale)}
-                    </span>
-                  ) : (
-                    featureLabel(code, locale)
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-          <p className="text-app-dim mt-4 text-[12.5px] leading-5 text-pretty">
-            {t('noPlanPitch')}
-          </p>
-        </section>
+        )}
+      </section>
 
-        <p className="text-app-dim text-[13px]">
-          {t('onlyThisModule')}{' '}
-          <a
-            className="text-brand underline underline-offset-4"
-            href={`mailto:${SUPPORT_MAIL}`}
-          >
-            {t('writeToUs')}
-          </a>{' '}
-          {t('weWillHelp')}
-        </p>
-      </div>
+      <section className="rz-card">
+        <header className="rz-card__head">
+          <h2 className="rz-h-card">
+            {unlocking === null ? t('planWithModule') : t('planRequired')}
+          </h2>
+        </header>
+        <div className="rz-card__body grid gap-3">
+          {unlocking === null ? (
+            <p className="rz-muted m-0 max-w-[52ch] text-pretty">
+              {plans === null ? t('findingPlan') : t('noPlanInCatalogue')}
+            </p>
+          ) : (
+            <>
+              <p className="m-0 flex flex-wrap items-baseline gap-x-2.5">
+                <span className="rz-h-title">{unlocking.name}</span>
+                <Amount
+                  className="text-app-muted"
+                  currency={unlocking.currency}
+                  value={unlocking.amount}
+                />
+              </p>
+              <p className="rz-caption m-0 max-w-[52ch] text-pretty">
+                {currentPlan === null
+                  ? ''
+                  : `${t('currentPlan', { plan: currentPlan })} `}
+                {t('noProration')}
+              </p>
+              <ul className="border-app-line m-0 grid list-none gap-2 border-t p-0 pt-3">
+                {unlocking.features.map((code) => (
+                  <li
+                    className="text-app-muted flex items-start gap-2.5"
+                    key={code}
+                  >
+                    <Check
+                      aria-hidden
+                      className="text-state-ok mt-0.5 size-4 shrink-0"
+                    />
+                    {code === required ? (
+                      <span className="text-app-ink font-medium">
+                        {featureLabel(code, locale)}
+                      </span>
+                    ) : (
+                      featureLabel(code, locale)
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <p className="rz-caption m-0 text-pretty">{t('noPlanPitch')}</p>
+        </div>
+      </section>
+
+      <p className="rz-muted m-0">
+        {t('onlyThisModule')}{' '}
+        <a href={`mailto:${SUPPORT_MAIL}`}>{t('writeToUs')}</a>{' '}
+        {t('weWillHelp')}
+      </p>
     </div>
   )
 }
@@ -258,119 +245,103 @@ export function SubscriptionStateScreen({
         one.allowedSubscriptionStates.includes(state),
     }))
 
-  return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="mx-auto grid w-full max-w-[880px] gap-6 px-4 pt-14 pb-16 sm:px-6 md:px-8 md:pt-18 lg:px-12">
-        <div role="alert">
-          <span
-            className={cn(
-              'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[12px] font-bold',
-              state === 'blocked'
-                ? 'border-state-danger/30 bg-state-danger/10 text-state-danger'
-                : 'border-state-warn/30 bg-state-warn/10 text-state-warn',
-            )}
-          >
-            <span
-              aria-hidden
-              className={cn(
-                'size-1.5 rounded-full',
-                state === 'blocked' ? 'bg-state-danger' : 'bg-state-warn',
-              )}
-            />
-            {copy.chip}
-          </span>
-          <h1 className="mt-3.5 text-[32px] leading-[1.04] font-extrabold tracking-[-0.03em] text-white sm:text-[40px]">
-            {copy.title}
-          </h1>
-          <p className="text-app-muted mt-3 max-w-[64ch] text-[14.5px] leading-6 text-pretty">
-            {copy.body}{' '}
-            {t('triedToOpen', { module: moduleLabel(definition.key, locale) })}
-          </p>
-        </div>
+  const tone = state === 'blocked' ? 'danger' : 'warn'
 
-        <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5.5 py-5">
-          <dl className="grid gap-4 sm:grid-cols-3">
-            <div>
-              <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                {t('amountDue')}
-              </dt>
-              <dd className="text-app-ink mt-2 text-[20px] font-extrabold tracking-[-0.02em]">
+  return (
+    <div className="rz-page max-w-[1240px]">
+      <div className="grid gap-2" role="alert">
+        <div className="rz-page-head items-center">
+          <h1 className="rz-h-page">{copy.title}</h1>
+          <StatusPill tone={tone}>{copy.chip}</StatusPill>
+        </div>
+        <p className="rz-muted m-0 max-w-[64ch] text-pretty">
+          {copy.body}{' '}
+          {t('triedToOpen', { module: moduleLabel(definition.key, locale) })}
+        </p>
+      </div>
+
+      <section className="rz-card">
+        <dl className="rz-kpis m-0 rounded-none border-0">
+          <div className="rz-kpi">
+            <dt className="rz-kpi__label">{t('amountDue')}</dt>
+            <dd className="rz-kpi__value m-0">
+              <span className="rz-display">
                 {typeof subscription?.amount === 'number' ? (
                   <Amount
                     currency={subscription.currency}
                     value={subscription.amount}
                   />
                 ) : (
-                  <span className="text-app-dim">—</span>
+                  <span className="rz-dim">—</span>
                 )}
-              </dd>
-              <dd className="text-app-dim mt-1 text-[12.5px]">
-                {subscription?.planName ?? t('planNotSet')}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                {t('nextCharge')}
-              </dt>
-              <dd className="text-app-ink mt-2 text-[20px] font-extrabold tracking-[-0.02em]">
+              </span>
+            </dd>
+            <dd className="rz-kpi__meta m-0">
+              {subscription?.planName ?? t('planNotSet')}
+            </dd>
+          </div>
+          <div className="rz-kpi">
+            <dt className="rz-kpi__label">{t('nextCharge')}</dt>
+            <dd className="rz-kpi__value m-0">
+              <span className="rz-display">
                 {subscription?.nextChargeAt === null ||
                 subscription?.nextChargeAt === undefined ? (
-                  <span className="text-app-dim" title={noRetryDate}>
+                  <span className="rz-dim" title={noRetryDate}>
                     —
                   </span>
                 ) : (
                   format.date(subscription.nextChargeAt)
                 )}
-              </dd>
-              <dd className="text-app-dim mt-1 text-[12.5px]">{noRetryDate}</dd>
-            </div>
-            <div>
-              <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                {t('accessUntil')}
-              </dt>
-              <dd className="text-app-ink mt-2 text-[20px] font-extrabold tracking-[-0.02em]">
+              </span>
+            </dd>
+            <dd className="rz-kpi__meta m-0">{noRetryDate}</dd>
+          </div>
+          <div className="rz-kpi">
+            <dt className="rz-kpi__label">{t('accessUntil')}</dt>
+            <dd className="rz-kpi__value m-0">
+              <span className="rz-display">
                 {subscription?.currentPeriodEnd === null ||
                 subscription?.currentPeriodEnd === undefined ? (
-                  <span className="text-app-dim">—</span>
+                  <span className="rz-dim">—</span>
                 ) : (
                   format.date(subscription.currentPeriodEnd)
                 )}
-              </dd>
-              <dd className="text-app-dim mt-1 text-[12.5px]">
-                {t('noRetention')}
-              </dd>
-            </div>
-          </dl>
-          {targetTenant === null ? null : (
-            <div className="border-app-line mt-5 flex flex-wrap gap-2.5 border-t pt-4">
-              <Button asChild variant="primary">
-                <Link to={cabinetPath(targetTenant.slug, 'billing')}>
-                  {t('toSubscription')}
-                </Link>
-              </Button>
-              <Button asChild>
-                <Link to={cabinetPath(targetTenant.slug, 'plans')}>
-                  {t('comparePlans')}
-                </Link>
-              </Button>
-              <Button asChild>
-                <Link to={cabinetPath(targetTenant.slug, 'payments')}>
-                  {t('paymentHistory')}
-                </Link>
-              </Button>
-            </div>
-          )}
-        </section>
+              </span>
+            </dd>
+            <dd className="rz-kpi__meta m-0">{t('noRetention')}</dd>
+          </div>
+        </dl>
+        {targetTenant === null ? null : (
+          <div className="rz-card__foot flex-wrap justify-start">
+            <Button asChild variant="primary">
+              <Link to={cabinetPath(targetTenant.slug, 'billing')}>
+                {t('toSubscription')}
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link to={cabinetPath(targetTenant.slug, 'plans')}>
+                {t('comparePlans')}
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link to={cabinetPath(targetTenant.slug, 'payments')}>
+                {t('paymentHistory')}
+              </Link>
+            </Button>
+          </div>
+        )}
+      </section>
 
-        <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5.5 py-5">
-          <h2 className="text-app-ink text-[15px] font-bold">
-            {t('availableNow')}
-          </h2>
-          <ul className="mt-3.5 grid gap-2 sm:grid-cols-2">
+      <section className="rz-card">
+        <header className="rz-card__head">
+          <h2 className="rz-h-card">{t('availableNow')}</h2>
+        </header>
+        <div className="rz-card__body grid gap-3">
+          <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2">
             {modules.map((one) => (
               <li
                 className={cn(
-                  'flex items-start gap-2.5 text-[13.5px]',
+                  'flex items-start gap-2.5',
                   one.open ? 'text-app-muted' : 'text-app-dim',
                 )}
                 key={one.label}
@@ -390,22 +361,14 @@ export function SubscriptionStateScreen({
               </li>
             ))}
           </ul>
-          <p className="text-app-dim mt-4 text-[12.5px] leading-5 text-pretty">
-            {t('availableNowNote')}
-          </p>
-        </section>
+          <p className="rz-caption m-0 text-pretty">{t('availableNowNote')}</p>
+        </div>
+      </section>
 
-        <p className="text-app-dim text-[13px]">
-          {t('paymentQuestions')}{' '}
-          <a
-            className="text-brand underline underline-offset-4"
-            href={`mailto:${SUPPORT_MAIL}`}
-          >
-            {SUPPORT_MAIL}
-          </a>
-          .
-        </p>
-      </div>
+      <p className="rz-muted m-0">
+        {t('paymentQuestions')}{' '}
+        <a href={`mailto:${SUPPORT_MAIL}`}>{SUPPORT_MAIL}</a>.
+      </p>
     </div>
   )
 }

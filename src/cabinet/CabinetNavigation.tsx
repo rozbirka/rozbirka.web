@@ -1,9 +1,15 @@
 import { useMemo, useState, type ComponentProps, type ReactNode } from 'react'
-import { ChevronLeft, Ellipsis, LogOut, X } from 'lucide-react'
-import { Dialog } from 'radix-ui'
-import { NavLink } from 'react-router'
+import {
+  Ellipsis,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
+  UserRound,
+  X,
+} from 'lucide-react'
+import { Dialog, DropdownMenu } from 'radix-ui'
+import { Link, NavLink, useLocation } from 'react-router'
 import type { Tenant } from '../api/types'
-import { BrandLogo } from '../components/site/brand-logo'
 import { useLocale, useT, type Locale } from '@/i18n'
 import { cn } from '../lib/utils'
 import type { TenantAccessSnapshot } from './access-types'
@@ -54,6 +60,8 @@ const groupsOf = (entries: readonly NavigationEntry[], locale: Locale) =>
     .filter((section) => section.entries.length > 0)
 
 export interface CabinetNavigationProps {
+  /** Signed-in person's name, for the account menu. */
+  userName?: string | null
   tenant: Tenant
   tenants: readonly Tenant[]
   snapshot: TenantAccessSnapshot
@@ -62,6 +70,7 @@ export interface CabinetNavigationProps {
 }
 
 export function CabinetNavigation({
+  userName = null,
   tenant,
   tenants,
   snapshot,
@@ -104,6 +113,7 @@ export function CabinetNavigation({
     <>
       <DesktopNavigation
         entries={entries}
+        userName={userName}
         tenant={tenant}
         tenants={tenants}
         onSwitchTenant={onSwitchTenant}
@@ -137,11 +147,12 @@ interface PresentationProps {
 
 function DesktopNavigation({
   entries,
+  userName,
   tenant,
   tenants,
   onSwitchTenant,
   onLogout,
-}: PresentationProps) {
+}: PresentationProps & { userName: string | null }) {
   const primary = entries.filter((entry) => entry.placement === 'primary')
   const account = entries.filter((entry) => entry.placement === 'account')
 
@@ -149,100 +160,195 @@ function DesktopNavigation({
   const { locale } = useLocale()
   const t = useT(shellMessages)
 
+  if (collapsed) {
+    return (
+      <Rail
+        className="hidden lg:flex"
+        entries={entries}
+        label={t('nav.desktop')}
+        onLogout={onLogout}
+        onSwitchTenant={onSwitchTenant}
+        tenant={tenant}
+        tenants={tenants}
+        toggle={
+          <RailControl label={t('nav.showMenu')}>
+            <button
+              aria-controls="cabinet-navigation"
+              aria-expanded={false}
+              aria-label={t('nav.showMenu')}
+              className="rz-nav-item w-9 cursor-pointer justify-center border-0 bg-transparent p-0"
+              onClick={toggleCollapsed}
+              type="button"
+            >
+              <PanelLeftOpen aria-hidden />
+            </button>
+          </RailControl>
+        }
+      />
+    )
+  }
+
   return (
-    <div
-      className={cn(
-        'sticky top-0 hidden h-dvh shrink-0 self-start lg:block',
-        collapsed ? 'w-0' : 'w-[280px]',
-      )}
-    >
-      <aside
-        className="bg-surface-1 scrollbar-none flex h-full w-[280px] flex-col overflow-y-auto border-r border-white/[0.06] px-6 py-7"
-        hidden={collapsed}
-        id="cabinet-navigation"
-      >
-        <BrandLogo href={cabinetPath(tenant.slug, 'dashboard')} />
-        <nav
-          aria-label={t('nav.desktop')}
-          className="mt-8 flex flex-1 flex-col"
-        >
-          {groupsOf(primary, locale).map((section) => (
-            <NavigationList
-              className="mt-1"
-              entries={section.entries}
-              key={section.group}
-              label={section.label}
-              presentation="desktop"
-            />
-          ))}
-          {account.length > 0 ? (
-            <NavigationList
-              className="mt-auto pt-6"
-              entries={account}
-              label={navigationGroupLabel('settings', locale)}
-              presentation="desktop"
-            />
-          ) : null}
-        </nav>
-        <div className="mt-5 border-t border-white/[0.06] pt-5">
-          <TenantSwitcher
-            tenant={tenant}
-            tenants={tenants}
-            onSwitch={onSwitchTenant}
+    <aside className="rz-sidebar hidden lg:flex" id="cabinet-navigation">
+      <TenantSwitcher
+        tenant={tenant}
+        tenants={tenants}
+        onSwitch={onSwitchTenant}
+      />
+      <div aria-hidden className="h-2 shrink-0" />
+      <nav aria-label={t('nav.desktop')} className="flex flex-1 flex-col">
+        {groupsOf(primary, locale).map((section) => (
+          <NavigationList
+            entries={section.entries}
+            key={section.group}
+            label={section.label}
+            presentation="desktop"
           />
-          <LogoutButton onLogout={onLogout} presentation="desktop" />
-        </div>
-      </aside>
-      {/* Sits on the seam between menu and page, so the way back is exactly
-          where the menu was folded away. */}
-      <button
-        aria-controls="cabinet-navigation"
-        aria-expanded={!collapsed}
-        aria-label={collapsed ? t('nav.showMenu') : t('nav.hideMenu')}
-        className={cn(
-          "border-app-line-2 bg-app-raised text-app-muted hover:text-app-ink focus-visible:outline-brand absolute top-1/2 z-30 grid size-7 -translate-y-1/2 cursor-pointer place-items-center rounded-full border shadow-lg before:absolute before:-inset-2.5 before:content-[''] hover:bg-white/[0.06]",
-          // Folded away, the control still needs to be fully on screen.
-          collapsed ? 'left-2' : '-right-3.5',
-        )}
-        onClick={toggleCollapsed}
-        type="button"
-      >
-        <ChevronLeft
-          aria-hidden
-          className={cn(
-            'size-3.5 transition-transform',
-            collapsed && 'rotate-180',
-          )}
-        />
-      </button>
-    </div>
+        ))}
+        {account.length > 0 ? (
+          <NavigationList
+            className="rz-sidebar__bottom mb-0"
+            entries={account}
+            label={navigationGroupLabel('settings', locale)}
+            presentation="desktop"
+          />
+        ) : null}
+      </nav>
+      <div className="border-app-line mt-1.5 flex items-center gap-2 border-t px-2 pt-2 pb-1">
+        <AccountMenu onLogout={onLogout} userName={userName} />
+        <button
+          aria-controls="cabinet-navigation"
+          aria-expanded
+          aria-label={t('nav.hideMenu')}
+          className="rz-btn rz-btn--ghost rz-btn--sm rz-btn--icon size-6 pointer-coarse:size-control"
+          onClick={toggleCollapsed}
+          type="button"
+        >
+          <PanelLeftClose aria-hidden />
+        </button>
+      </div>
+    </aside>
   )
 }
 
-function TabletNavigation({
+/**
+ * Who is signed in, and the way out (D14: logout lives in the account menu,
+ * not in the navigation itself).
+ */
+function AccountMenu({
+  onLogout,
+  userName,
+}: {
+  onLogout: () => Promise<void>
+  userName: string | null
+}) {
+  const t = useT(shellMessages)
+  const trimmed = userName?.trim() ?? ''
+  const name = trimmed === '' ? null : trimmed
+  const initials =
+    name === null
+      ? '·'
+      : name
+          .split(/\s+/)
+          .slice(0, 2)
+          .map((part) => part.charAt(0).toUpperCase())
+          .join('')
+
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          className="rounded-control hover:bg-app-hover text-app-muted flex min-w-0 flex-1 cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-left"
+          type="button"
+        >
+          <span aria-hidden className="rz-avatar rz-avatar--round">
+            {initials}
+          </span>
+          <span className="min-w-0 flex-1 truncate">
+            {name ?? t('shell.account')}
+          </span>
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="start"
+          className="rz-menu z-50"
+          collisionPadding={16}
+          side="top"
+          sideOffset={6}
+        >
+          <DropdownMenu.Item asChild className="rz-menu__item outline-none">
+            <Link to="/account">
+              <UserRound aria-hidden />
+              {t('shell.account')}
+            </Link>
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator className="rz-menu__sep" />
+          <DropdownMenu.Item
+            className="rz-menu__item outline-none"
+            onSelect={() => void onLogout()}
+          >
+            <LogOut aria-hidden />
+            {t('nav.logout')}
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  )
+}
+
+function TabletNavigation(props: PresentationProps) {
+  const t = useT(shellMessages)
+  return (
+    <Rail
+      {...props}
+      className="hidden md:flex lg:hidden"
+      label={t('nav.tablet')}
+    />
+  )
+}
+
+/** `.rz-rail`: tablet, and the desktop menu folded away. */
+function Rail({
   entries,
   tenant,
   tenants,
   onSwitchTenant,
   onLogout,
-}: PresentationProps) {
+  className,
+  label,
+  toggle,
+}: PresentationProps & {
+  className: string
+  label: string
+  toggle?: ReactNode
+}) {
   const primary = entries.filter((entry) => entry.placement === 'primary')
   const account = entries.filter((entry) => entry.placement === 'account')
   const { locale } = useLocale()
   const t = useT(shellMessages)
 
   return (
-    <aside className="bg-surface-1 scrollbar-none sticky top-0 hidden h-dvh w-[72px] shrink-0 flex-col items-center self-start overflow-y-auto border-r border-white/[0.06] px-3 py-5 md:flex lg:hidden">
-      <span aria-hidden className="text-brand text-xl font-semibold">
-        r
-      </span>
+    <aside
+      className={cn(
+        'rz-rail scrollbar-none sticky top-0 h-dvh self-start overflow-y-auto',
+        className,
+      )}
+    >
+      <RailControl label={t('tenant.switch')}>
+        <TenantSwitcher
+          compact
+          tenant={tenant}
+          tenants={tenants}
+          onSwitch={onSwitchTenant}
+        />
+      </RailControl>
       <nav
-        aria-label={t('nav.tablet')}
-        className="mt-7 flex w-full flex-1 flex-col"
+        aria-label={label}
+        className="flex w-full flex-1 flex-col items-center"
       >
         {groupsOf(primary, locale).map((section) => (
           <NavigationList
-            className="mt-1"
             entries={section.entries}
             key={section.group}
             presentation="rail"
@@ -250,23 +356,14 @@ function TabletNavigation({
         ))}
         {account.length > 0 ? (
           <NavigationList
-            className="mt-auto pt-5"
+            className="mt-auto"
             entries={account}
             presentation="rail"
           />
         ) : null}
       </nav>
-      <div className="mt-4 border-t border-white/[0.06] pt-4">
-        <RailControl label={t('tenant.switch')}>
-          <TenantSwitcher
-            compact
-            tenant={tenant}
-            tenants={tenants}
-            onSwitch={onSwitchTenant}
-          />
-        </RailControl>
-        <LogoutButton onLogout={onLogout} presentation="rail" />
-      </div>
+      <LogoutButton onLogout={onLogout} presentation="rail" />
+      {toggle}
     </aside>
   )
 }
@@ -285,20 +382,20 @@ function MobileNavigation({
   const mobileKeys = new Set(mobileEntries.map((entry) => entry.key))
   const moreEntries = entries.filter((entry) => !mobileKeys.has(entry.key))
   const t = useT(shellMessages)
+  // D17: the scanner owns the bottom of the screen for its glove dock.
+  const scanning = /\/scan\/?$/.test(useLocation().pathname)
+  if (scanning) return null
 
   return (
     <Dialog.Root>
-      <nav
-        aria-label={t('nav.mobile')}
-        className="bg-surface-1/95 fixed inset-x-0 bottom-0 z-40 flex min-h-16 items-start justify-around border-t border-white/10 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden"
-      >
+      <nav aria-label={t('nav.mobile')} className="rz-tabbar md:hidden">
         {mobileEntries.map((entry) => (
           <NavigationLink key={entry.key} entry={entry} presentation="mobile" />
         ))}
         <Dialog.Trigger asChild>
           <button
             type="button"
-            className="flex min-h-11 min-w-11 flex-col items-center justify-center gap-1 rounded-xl px-3 text-[12px] text-neutral-400 transition-colors hover:bg-white/[0.05] hover:text-white"
+            className="text-app-muted flex h-12 min-w-14 cursor-pointer flex-col items-center justify-center gap-[3px] border-0 bg-transparent text-micro font-medium"
           >
             <Ellipsis aria-hidden className="size-5" />
             <span>{t('nav.more')}</span>
@@ -306,34 +403,33 @@ function MobileNavigation({
         </Dialog.Trigger>
       </nav>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm data-[state=closed]:animate-out data-[state=open]:animate-in" />
-        <Dialog.Content className="bg-surface-2 fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 max-h-[min(76dvh,42rem)] overflow-y-auto rounded-3xl border border-white/10 p-5 shadow-2xl data-[state=closed]:animate-out data-[state=open]:animate-in md:hidden">
-          <div className="flex items-center justify-between gap-4">
-            <Dialog.Title className="text-lg font-medium text-white">
+        <Dialog.Overlay className="bg-app-scrim fixed inset-0 z-50" />
+        <Dialog.Content className="rz-card bg-app-overlay border-app-line-2 rounded-sheet shadow-dialog fixed inset-x-2 bottom-[calc(72px+env(safe-area-inset-bottom))] z-50 grid max-h-[min(76dvh,42rem)] gap-3 overflow-y-auto p-3.5 md:hidden">
+          <div className="flex items-center justify-between">
+            <Dialog.Title className="rz-h-title">
               {t('nav.menuTitle')}
             </Dialog.Title>
             <Dialog.Close
               aria-label={t('nav.closeMenu')}
-              className="grid min-h-11 min-w-11 place-items-center rounded-full text-neutral-400 transition-colors hover:bg-white/[0.06] hover:text-white"
+              className="rz-btn rz-btn--ghost rz-btn--icon size-touch"
             >
-              <X aria-hidden className="size-5" />
+              <X aria-hidden className="size-[18px]" />
             </Dialog.Close>
           </div>
           <Dialog.Description className="sr-only">
             {t('nav.menuDescription')}
           </Dialog.Description>
-          <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-1">
             {moreEntries.map((entry) => (
               <Dialog.Close asChild key={entry.key}>
                 <NavigationLink entry={entry} presentation="dialog" />
               </Dialog.Close>
             ))}
           </div>
-          <div className="mt-5 border-t border-white/10 pt-5">
-            <p className="mb-2 text-xs text-neutral-500">
-              {t('nav.currentTenant')}
-            </p>
+          <div className="border-app-line grid gap-1 border-t pt-2.5">
+            <p className="rz-caption m-0">{t('nav.currentTenant')}</p>
             <TenantSwitcher
+              framed
               tenant={tenant}
               tenants={tenants}
               onSwitch={onSwitchTenant}
@@ -351,34 +447,31 @@ function MobileNavigation({
 function LogoutButton({
   onLogout,
   presentation,
+  ...props
 }: {
   onLogout: () => Promise<void>
-  presentation: 'desktop' | 'rail' | 'dialog'
-}) {
+  presentation: 'rail' | 'dialog'
+} & Omit<ComponentProps<'button'>, 'onClick'>) {
   const t = useT(shellMessages)
   const button = (
     <button
+      {...props}
       type="button"
       aria-label={presentation === 'rail' ? t('nav.logout') : undefined}
       onClick={() => void onLogout()}
       className={cn(
-        'min-h-11 min-w-11 rounded-xl text-neutral-400 transition-colors hover:bg-white/[0.05] hover:text-white',
-        presentation === 'desktop' &&
-          'mt-3 flex w-full items-center gap-3 px-4 text-sm',
-        presentation === 'rail' && 'grid place-items-center',
-        presentation === 'dialog' &&
-          'mt-3 flex w-full items-center gap-3 px-3 py-2 text-sm',
+        'rz-nav-item cursor-pointer border-0 bg-transparent',
+        presentation === 'rail' && 'w-9 justify-center p-0',
+        presentation === 'dialog' && 'h-touch px-2.5',
       )}
     >
-      <LogOut aria-hidden className="size-5 shrink-0" />
+      <LogOut aria-hidden />
       {presentation !== 'rail' && <span>{t('nav.logout')}</span>}
     </button>
   )
 
   return presentation === 'rail' ? (
-    <RailControl className="mt-3" label={t('nav.logout')}>
-      {button}
-    </RailControl>
+    <RailControl label={t('nav.logout')}>{button}</RailControl>
   ) : (
     button
   )
@@ -396,13 +489,17 @@ function NavigationList({
   label?: string | null
 }) {
   return (
-    <div className={className}>
+    <div
+      className={cn(
+        'rz-nav-group',
+        presentation === 'rail' && 'justify-items-center',
+        className,
+      )}
+    >
       {presentation === 'desktop' && label ? (
-        <p className="text-app-dim px-4 pt-3 pb-1.5 font-mono text-[11px] tracking-[0.12em] uppercase">
-          {label}
-        </p>
+        <p className="rz-nav-group__title">{label}</p>
       ) : null}
-      <ul role="list" className="grid gap-1">
+      <ul role="list" className="m-0 grid list-none gap-px p-0">
         {entries.map((entry) => (
           <li key={entry.key}>
             {presentation === 'rail' ? (
@@ -433,26 +530,15 @@ function NavigationLink({
     <NavLink
       {...props}
       aria-label={presentation === 'rail' ? entry.label : undefined}
-      className={({ isActive }) =>
-        cn(
-          'min-h-11 min-w-11 rounded-xl transition-colors',
-          presentation === 'desktop' && 'flex items-center gap-3 px-4 text-sm',
-          presentation === 'rail' && 'grid place-items-center',
-          presentation === 'mobile' &&
-            'flex flex-col items-center justify-center gap-1 px-3 text-[12px]',
-          presentation === 'dialog' &&
-            'flex items-center gap-3 px-3 py-2 text-sm',
-          isActive
-            ? presentation === 'mobile'
-              ? 'text-brand'
-              : 'bg-brand/[0.12] text-brand shadow-[inset_2px_0_0_var(--color-brand)]'
-            : 'text-app-muted hover:bg-white/[0.05] hover:text-white',
-        )
-      }
+      className={cn(
+        presentation === 'mobile' ? '' : 'rz-nav-item',
+        presentation === 'rail' && 'w-9 justify-center p-0',
+        presentation === 'dialog' && 'text-app-ink h-touch px-2.5',
+      )}
       end
       to={entry.to}
     >
-      <Icon aria-hidden className="size-5 shrink-0" />
+      <Icon aria-hidden />
       {presentation !== 'rail' && <span>{entry.label}</span>}
     </NavLink>
   )

@@ -137,7 +137,7 @@ export function DeliveryPreferencesPanel({
 
   return (
     <Card title={t('deliveryCard')}>
-      <div className="grid gap-3.5">
+      <div className="grid gap-3">
         {error === null ? null : <Notice tone="danger">{error}</Notice>}
         {loadError === null ? null : (
           <Notice tone="danger">

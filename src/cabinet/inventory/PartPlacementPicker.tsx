@@ -39,21 +39,21 @@ export function PartPlacementPicker({
 
   if (options.loading)
     return (
-      <p className="text-app-muted text-sm" role="status">
+      <p className="text-app-muted text-body" role="status">
         {t('loading')}
       </p>
     )
   if (options.error)
     return (
       <div className="flex items-center gap-3">
-        <span className="text-app-muted text-sm">{t('loadFailed')}</span>
+        <span className="text-app-muted text-body">{t('loadFailed')}</span>
         <Button onClick={options.retry} type="button">
           {t('retry')}
         </Button>
       </div>
     )
   if (warehouses.length === 0)
-    return <p className="text-app-muted text-sm">{t('noLocations')}</p>
+    return <p className="text-app-muted text-body">{t('noLocations')}</p>
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -150,12 +150,14 @@ export function PartPlacementPicker({
       {value.zoneId &&
       value.zoneId !== systemZone?.id &&
       sections.length === 0 ? (
-        <p className="text-app-muted text-sm sm:col-span-2">
+        <p className="text-app-muted text-body sm:col-span-2">
           {t('noSections')}
         </p>
       ) : null}
       {value.sectionId && shelves.length === 0 ? (
-        <p className="text-app-muted text-sm sm:col-span-2">{t('noShelves')}</p>
+        <p className="text-app-muted text-body sm:col-span-2">
+          {t('noShelves')}
+        </p>
       ) : null}
     </div>
   )

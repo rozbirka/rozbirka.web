@@ -59,69 +59,70 @@ export function FormDialog({
       open={open}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
-        <Dialog.Content
-          onCloseAutoFocus={onCloseAutoFocus}
-          className={cn(
-            'bg-app-overlay border-app-line-2 rounded-sheet fixed inset-x-3 top-1/2 z-50 grid max-h-[90dvh] -translate-y-1/2 grid-rows-[auto_1fr_auto] overflow-hidden border text-white shadow-2xl sm:inset-x-auto sm:left-1/2 sm:w-full sm:-translate-x-1/2',
-            size === 'lg' ? 'sm:max-w-2xl' : 'sm:max-w-md',
-          )}
-        >
-          <header className="border-app-line flex items-start justify-between gap-3 border-b px-5 py-4">
-            <div className="grid gap-1">
-              <Dialog.Title className="text-lg font-semibold">
-                {title}
-              </Dialog.Title>
-              {description === undefined ? (
-                <Dialog.Description className="sr-only">
-                  {typeof title === 'string' ? title : t('form')}
-                </Dialog.Description>
-              ) : (
-                <Dialog.Description className="text-app-muted text-sm">
-                  {description}
-                </Dialog.Description>
-              )}
-            </div>
-            <Dialog.Close asChild>
-              <Button
-                aria-label={tc('close')}
-                disabled={pending}
-                size="icon"
-                variant="quiet"
-              >
-                <X aria-hidden />
-              </Button>
-            </Dialog.Close>
-          </header>
-
-          <form
-            aria-busy={pending}
-            className="grid min-h-0 grid-rows-[1fr_auto]"
-            onSubmit={onSubmit}
+        <Dialog.Overlay className="rz-scrim max-sm:p-3">
+          <Dialog.Content
+            onCloseAutoFocus={onCloseAutoFocus}
+            className={cn(
+              'rz-dialog text-app-ink grid-rows-[auto_minmax(0,1fr)]',
+              size === 'lg' && 'rz-dialog--lg',
+            )}
           >
-            {/* The dialog sits on a lighter surface than a page, where the
-                page-level hint grey lands a hair under 4.5:1. */}
-            <div className="grid content-start gap-3 overflow-y-auto px-5 py-4 [&_[data-slot=field-hint]]:text-app-muted">
-              {error === null ? null : <Notice tone="danger">{error}</Notice>}
-              {children}
-            </div>
-            <div className="border-app-line flex flex-wrap justify-end gap-2 border-t px-5 py-3">
+            <header className="rz-dialog__head">
+              <div className="grid flex-1 gap-0.5">
+                <Dialog.Title className="rz-h-title">{title}</Dialog.Title>
+                {description === undefined ? (
+                  <Dialog.Description className="sr-only">
+                    {typeof title === 'string' ? title : t('form')}
+                  </Dialog.Description>
+                ) : (
+                  <Dialog.Description className="text-app-muted m-0">
+                    {description}
+                  </Dialog.Description>
+                )}
+              </div>
               <Dialog.Close asChild>
-                <Button disabled={pending}>
-                  {cancelLabel ?? tc('cancel')}
+                <Button
+                  aria-label={tc('close')}
+                  className="-mt-0.5 -mr-1.5"
+                  disabled={pending}
+                  size="icon"
+                  variant="quiet"
+                >
+                  <X aria-hidden />
                 </Button>
               </Dialog.Close>
-              <Button
-                aria-busy={pending}
-                disabled={pending || submitDisabled}
-                type="submit"
-                variant="primary"
-              >
-                {submitLabel}
-              </Button>
-            </div>
-          </form>
-        </Dialog.Content>
+            </header>
+
+            <form
+              aria-busy={pending}
+              className="grid min-h-0 grid-rows-[1fr_auto]"
+              onSubmit={onSubmit}
+            >
+              {/* The dialog sits on a lighter surface than a page, where the
+                page-level hint grey lands a hair under 4.5:1. */}
+              <div className="rz-dialog__body [&_[data-slot=field-hint]]:text-app-muted">
+                {error === null ? null : <Notice tone="danger">{error}</Notice>}
+                {children}
+              </div>
+              <div className="rz-dialog__foot">
+                <Dialog.Close asChild>
+                  <Button disabled={pending} size="lg">
+                    {cancelLabel ?? tc('cancel')}
+                  </Button>
+                </Dialog.Close>
+                <Button
+                  aria-busy={pending}
+                  disabled={pending || submitDisabled}
+                  size="lg"
+                  type="submit"
+                  variant="primary"
+                >
+                  {submitLabel}
+                </Button>
+              </div>
+            </form>
+          </Dialog.Content>
+        </Dialog.Overlay>
       </Dialog.Portal>
     </Dialog.Root>
   )
@@ -162,34 +163,25 @@ export function Sheet({
   return (
     <Dialog.Root onOpenChange={onOpenChange} open={open}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/80 backdrop-blur-[2px]" />
+        <Dialog.Overlay className="bg-app-scrim fixed inset-0 z-50" />
         <Dialog.Content
           // A hidden file input can receive focus when a photo is chosen.
           // Clip the shell without making it scrollable; only the body scrolls.
           className={cn(
-            'bg-app-canvas border-app-line fixed inset-x-0 bottom-0 z-50 grid max-h-[92dvh] grid-rows-[auto_1fr_auto] overflow-clip rounded-t-[24px] border-t text-white shadow-2xl sm:inset-y-0 sm:right-0 sm:left-auto sm:h-dvh sm:max-h-none sm:w-full sm:rounded-none sm:border-t-0 sm:border-l',
+            'rz-sheet text-app-ink overflow-clip',
             size === 'workspace'
-              ? 'sm:w-[calc(100vw-24px)] sm:max-w-[1440px] lg:w-[90vw]'
+              ? 'sm:w-[calc(100vw-24px)] sm:max-w-content lg:w-[90vw]'
               : size === 'lg'
-                ? 'sm:max-w-[640px]'
-                : 'sm:max-w-[600px]',
+                ? 'sm:w-[min(640px,100vw)]'
+                : '',
           )}
         >
-          <header className="border-app-line flex items-start justify-between gap-4 border-b px-5 pt-5 pb-5 sm:px-7 sm:pt-6 sm:pb-5">
-            <div className="min-w-0">
+          <header className="border-app-line flex items-start gap-3 border-b p-4">
+            <div className="grid min-w-0 flex-1 gap-1">
               {eyebrow === undefined ? null : (
-                <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                  {eyebrow}
-                </p>
+                <p className="rz-eyebrow m-0">{eyebrow}</p>
               )}
-              <Dialog.Title
-                className={cn(
-                  'text-[26px] leading-[1.1] font-extrabold tracking-[-0.02em] text-balance',
-                  eyebrow === undefined ? '' : 'mt-2',
-                  size === 'workspace' &&
-                    'text-[clamp(34px,4vw,48px)] leading-none tracking-[-0.035em]',
-                )}
-              >
+              <Dialog.Title className="rz-h-page text-balance">
                 {title}
               </Dialog.Title>
               {description === undefined ? (
@@ -197,35 +189,31 @@ export function Sheet({
                   {title}
                 </Dialog.Description>
               ) : (
-                <Dialog.Description className="text-app-muted mt-2 text-sm leading-5 text-pretty">
+                <Dialog.Description className="text-app-muted m-0 text-pretty">
                   {description}
                 </Dialog.Description>
               )}
             </div>
             <Dialog.Close asChild>
-              {/* The drawer's own close: a 34px square, as the design draws it,
-                  with the 44px hit area the cabinet keeps put back by a
-                  transparent overlay that costs the layout nothing. The
-                  inset starts inside the 1px border: 32 + 2 × 6 = 44px. */}
               <button
                 aria-label={tc('close')}
-                className="border-app-line-2 text-app-muted hover:text-app-ink relative grid size-[34px] shrink-0 place-items-center rounded-[10px] border transition-colors hover:bg-white/[0.06] after:absolute after:-inset-[6px] after:content-['']"
+                className="rz-btn rz-btn--icon relative after:absolute after:-inset-2 after:content-['']"
                 type="button"
               >
-                <X aria-hidden className="size-3.5" />
+                <X aria-hidden />
               </button>
             </Dialog.Close>
           </header>
           <div
             className={cn(
-              'grid min-h-0 content-start gap-5 overflow-y-auto px-5 pt-5 pb-7 sm:px-7',
+              'grid min-h-0 content-start gap-3.5 overflow-y-auto p-4',
               bodyClassName,
             )}
           >
             {children}
           </div>
           {footer === undefined ? null : (
-            <div className="border-app-line flex flex-wrap items-center justify-end gap-2.5 border-t bg-black/25 px-5 pt-4 pb-5 sm:px-7">
+            <div className="rz-sheet__foot flex-wrap items-center pb-[calc(12px+env(safe-area-inset-bottom))]">
               {footer}
             </div>
           )}
