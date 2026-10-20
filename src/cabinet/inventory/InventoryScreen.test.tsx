@@ -320,6 +320,7 @@ function LocationProbe() {
     <output data-testid="inventory-url">
       {location.pathname}
       {location.search}
+      {location.hash}
     </output>
   )
 }
@@ -343,10 +344,8 @@ const renderIn = (locale: Locale, path: string) =>
 
 it('renders the inventory overview in British English', async () => {
   renderIn('en-GB', '/app/yard/inventory')
-  const houses = await screen.findByRole('region', { name: 'Warehouses' })
-  // Warehouse names are user data and stay as entered.
-  expect(within(houses).getByText('Основний склад')).toBeInTheDocument()
-  expect(within(houses).getByText('4 zones')).toBeInTheDocument()
+  await screen.findByRole('heading', { level: 1, name: 'Stocktake' })
+  expect(screen.queryByRole('region', { name: 'Warehouses' })).toBeNull()
   expect(
     screen.getByRole('heading', { level: 1, name: 'Stocktake' }),
   ).toBeInTheDocument()
@@ -362,9 +361,9 @@ it('renders the inventory overview in British English', async () => {
 it('renders the inventory overview in Polish', async () => {
   renderIn('pl', '/app/yard/inventory')
   expect(
-    await screen.findByRole('region', { name: 'Magazyny' }),
+    await screen.findByRole('heading', { level: 1, name: 'Inwentaryzacja' }),
   ).toBeInTheDocument()
-  expect(screen.getByText('4 strefy')).toBeInTheDocument()
+  expect(screen.queryByRole('region', { name: 'Magazyny' })).toBeNull()
   expect(screen.getByRole('link', { name: 'Nowa sesja' })).toBeInTheDocument()
 })
 
@@ -378,10 +377,8 @@ it('renders a session in British English with zone lease and status', async () =
 
 it('renders responsive management overview without physical scanning controls', async () => {
   renderAt('/app/yard/inventory')
-  // The warehouse names the running session as well as its own card, so the
-  // list is the one that has to carry it.
-  const houses = await screen.findByRole('region', { name: 'Склади' })
-  expect(within(houses).getByText('Основний склад')).toBeInTheDocument()
+  await screen.findByRole('heading', { level: 1, name: 'Інвентаризація' })
+  expect(screen.queryByRole('region', { name: 'Склади' })).toBeNull()
   expect(screen.getByText('INV-001')).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Нова сесія' })).toBeInTheDocument()
   expect(screen.queryByText(/увімкнути камеру/i)).not.toBeInTheDocument()
@@ -956,7 +953,7 @@ it('opens zone creation in a side drawer and derives its code from the name', as
 
 it('updates the zone code when its name is edited in the side drawer', async () => {
   const user = userEvent.setup()
-  renderAt('/app/yard/inventory/warehouses/wh-1')
+  renderAt('/app/yard/warehouses/wh-1')
 
   await user.click(
     await screen.findByRole('button', { name: 'Редагувати зону Стелаж A1' }),
@@ -1072,7 +1069,7 @@ it('offers warehouse and zone management and prints actual zone QR labels', asyn
     opener: null,
   } as never)
 
-  renderAt('/app/yard/inventory/warehouses/wh-1')
+  renderAt('/app/yard/warehouses/wh-1')
 
   expect(await screen.findByText('Стелаж A1')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Редагувати' })).toBeInTheDocument()
@@ -1141,7 +1138,7 @@ it('browses locations without row actions or part counts and prints selected she
       partCount: 3,
     },
   ])
-  renderAt('/app/yard/inventory/zones/zone-1')
+  renderAt('/app/yard/warehouses/zones/zone-1')
   const sectionGroup = await screen.findByRole('group', {
     name: 'Секція: Секція B',
   })
@@ -1253,13 +1250,13 @@ it('keeps large section lists compact and opens shelves for one section at a tim
       isActive: true,
     },
   ])
-  renderAt('/app/yard/inventory/zones/zone-1')
+  renderAt('/app/yard/warehouses/zones/zone-1')
 
   const first = await screen.findByRole('link', { name: 'Секція B, B' })
   const second = screen.getByRole('link', { name: 'Секція C, C' })
   expect(first).toHaveAttribute(
     'href',
-    '/app/yard/inventory/sections/section-1',
+    '/app/yard/warehouses/sections/section-1',
   )
   expect(api.getShelves).toHaveBeenCalledTimes(1)
   expect(api.getShelves).toHaveBeenCalledWith(
@@ -1295,7 +1292,7 @@ it('keeps large section lists compact and opens shelves for one section at a tim
 
 it('creates a shelf in a side drawer for its section', async () => {
   const user = userEvent.setup()
-  renderAt('/app/yard/inventory/zones/zone-1')
+  renderAt('/app/yard/warehouses/zones/zone-1')
 
   const sectionGroup = await screen.findByRole('group', {
     name: 'Секція: Секція B',
@@ -1345,7 +1342,7 @@ it('creates a section inside a zone before adding locations', async () => {
     api.getSection.mockResolvedValue(created)
     return Promise.resolve(created)
   })
-  renderAt('/app/yard/inventory/zones/zone-1?locationSearch=B')
+  renderAt('/app/yard/warehouses/zones/zone-1?locationSearch=B')
 
   await user.click(
     await screen.findByRole('button', { name: /^Додати секцію/ }),
@@ -1374,7 +1371,7 @@ it('creates a section inside a zone before adding locations', async () => {
 
 it('creates a zone in a side drawer for its warehouse', async () => {
   const user = userEvent.setup()
-  renderAt('/app/yard/inventory/warehouses/wh-1')
+  renderAt('/app/yard/warehouses/wh-1')
 
   await user.click(await screen.findByRole('button', { name: 'Додати зону' }))
   const drawer = screen.getByRole('dialog', { name: 'Нова зона' })
@@ -1400,10 +1397,10 @@ it('creates a zone in a side drawer for its warehouse', async () => {
 
 it('keeps the warehouse as a zone overview and opens zone creation there', async () => {
   const user = userEvent.setup()
-  renderAt('/app/yard/inventory/warehouses/wh-1')
+  renderAt('/app/yard/warehouses/wh-1')
   expect(
     await screen.findByRole('link', { name: 'Стелаж A1' }),
-  ).toHaveAttribute('href', '/app/yard/inventory/zones/zone-1')
+  ).toHaveAttribute('href', '/app/yard/warehouses/zones/zone-1')
   expect(
     screen.queryByRole('region', { name: 'Секції та полиці за зонами' }),
   ).not.toBeInTheDocument()
@@ -1414,13 +1411,13 @@ it('keeps the warehouse as a zone overview and opens zone creation there', async
 })
 
 it('loads only the selected zone and links back to its warehouse', async () => {
-  renderAt('/app/yard/inventory/zones/zone-1')
+  renderAt('/app/yard/warehouses/zones/zone-1')
   expect(
     await screen.findByRole('heading', { name: 'Стелаж A1' }),
   ).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'До складу' })).toHaveAttribute(
     'href',
-    '/app/yard/inventory/warehouses/wh-1',
+    '/app/yard/warehouses/wh-1',
   )
   expect(
     screen.queryByRole('combobox', { name: 'Зона складу' }),
@@ -1438,10 +1435,10 @@ it('loads only the selected zone and links back to its warehouse', async () => {
 it('opens a physical zone without parts viewing permission', async () => {
   permissions.value.delete('parts.view')
   try {
-    renderAt('/app/yard/inventory/warehouses/wh-1')
+    renderAt('/app/yard/warehouses/wh-1')
     expect(
       await screen.findByRole('link', { name: 'Стелаж A1' }),
-    ).toHaveAttribute('href', '/app/yard/inventory/zones/zone-1')
+    ).toHaveAttribute('href', '/app/yard/warehouses/zones/zone-1')
   } finally {
     permissions.value.add('parts.view')
   }
@@ -1454,7 +1451,7 @@ it('does not expose section creation for the system unassigned zone', async () =
     name: 'Без зони',
   })
   api.getZone.mockClear()
-  renderAt('/app/yard/inventory/zones/zone-1')
+  renderAt('/app/yard/warehouses/zones/zone-1')
   await screen.findByRole('heading', { name: 'Без зони' })
   expect(
     screen.queryByRole('button', { name: /Додати секцію/ }),
@@ -1464,7 +1461,7 @@ it('does not expose section creation for the system unassigned zone', async () =
 
 it('edits a zone in the same side drawer', async () => {
   const user = userEvent.setup()
-  renderAt('/app/yard/inventory/warehouses/wh-1')
+  renderAt('/app/yard/warehouses/wh-1')
 
   await user.click(
     await screen.findByRole('button', { name: 'Редагувати зону Стелаж A1' }),
@@ -1490,7 +1487,7 @@ it('edits a zone in the same side drawer', async () => {
 
 it('updates an edited warehouse code from its name but keeps a manual code', async () => {
   const user = userEvent.setup()
-  renderAt('/app/yard/inventory/warehouses/wh-1')
+  renderAt('/app/yard/warehouses/wh-1')
 
   await user.click(await screen.findByRole('button', { name: 'Редагувати' }))
   const dialog = screen.getByRole('dialog', { name: 'Редагувати склад' })
@@ -1526,7 +1523,7 @@ it('selects a shelf directly from the list before opening its editor', async () 
     { ...shelf, id: 'shelf-2', name: 'Полиця 2', code: 'P2' },
     { ...shelf, id: 'other', name: 'Чужа полиця', sectionId: 'other-section' },
   ])
-  renderAt('/app/yard/inventory/sections/section-1')
+  renderAt('/app/yard/warehouses/sections/section-1')
   await user.click(
     await screen.findByRole('button', { name: 'Дії з секцією Секція B' }),
   )
@@ -1566,7 +1563,7 @@ it('hides shelf rename for users without zone management permission', async () =
   const user = userEvent.setup()
   permissions.value.delete('inventory.zones.manage')
   try {
-    renderAt('/app/yard/inventory/sections/section-1')
+    renderAt('/app/yard/warehouses/sections/section-1')
     await screen.findByRole('heading', { name: /Полиці ·/, level: 2 })
     await user.click(
       screen.getByRole('button', { name: 'Дії з секцією Секція B' }),
@@ -1580,7 +1577,7 @@ it('hides shelf rename for users without zone management permission', async () =
 })
 
 it('counts the warehouse stock from the parts module', async () => {
-  renderAt('/app/yard/inventory/warehouses/wh-1')
+  renderAt('/app/yard/warehouses/wh-1')
 
   await screen.findByText('Стелаж A1')
   // Both figures come from the parts search, scoped to this warehouse.
@@ -1597,7 +1594,7 @@ it('counts the warehouse stock from the parts module', async () => {
 })
 
 it('offers to continue the session that is already counting this warehouse', async () => {
-  renderAt('/app/yard/inventory/warehouses/wh-1')
+  renderAt('/app/yard/warehouses/wh-1')
 
   const rail = await screen.findByRole('region', { name: 'Активна сесія' })
   expect(
@@ -1636,9 +1633,9 @@ it('asks for a reason before booking the counted quantity', async () => {
   )
 })
 
-it('opens warehouse creation in a side drawer without leaving inventory', async () => {
+it('opens warehouse creation in a side drawer without leaving warehouses', async () => {
   const user = userEvent.setup()
-  renderAt('/app/yard/inventory')
+  renderAt('/app/yard/warehouses')
   await user.click(await screen.findByRole('button', { name: 'Додати склад' }))
   const drawer = screen.getByRole('dialog', { name: 'Новий склад' })
   expect(drawer).toHaveClass('sm:right-0')
@@ -1739,7 +1736,7 @@ it('keeps the placement drawer selection on failure and retries successfully', a
 
 it('creates a warehouse from its drawer', async () => {
   const user = userEvent.setup()
-  renderAt('/app/yard/inventory')
+  renderAt('/app/yard/warehouses')
   await user.click(await screen.findByRole('button', { name: 'Додати склад' }))
   const drawer = screen.getByRole('dialog', { name: 'Новий склад' })
   await user.type(
@@ -1845,7 +1842,7 @@ it('searches 100 sections and 100 shelves inside the placement drawer and submit
 })
 
 it('opens one section and requests only shelves belonging to it', async () => {
-  renderAt('/app/yard/inventory/sections/section-1')
+  renderAt('/app/yard/warehouses/sections/section-1')
   expect(
     await screen.findByRole('heading', { name: 'Секція B', level: 1 }),
   ).toBeInTheDocument()
@@ -1859,12 +1856,12 @@ it('opens one section and requests only shelves belonging to it', async () => {
   expect(api.getSections).not.toHaveBeenCalled()
   expect(screen.getByRole('link', { name: 'До зони' })).toHaveAttribute(
     'href',
-    '/app/yard/inventory/zones/zone-1',
+    '/app/yard/warehouses/zones/zone-1',
   )
 })
 
 it('links direct zone parts to the parts screen without fetching a drawer list', async () => {
-  renderAt('/app/yard/inventory/zones/zone-1')
+  renderAt('/app/yard/warehouses/zones/zone-1')
   expect(
     await screen.findByRole('link', { name: /У зоні без секції/ }),
   ).toHaveAttribute(
@@ -1879,7 +1876,7 @@ it('links direct zone parts to the parts screen without fetching a drawer list',
 })
 
 it('links all section parts while retaining the shelf navigation', async () => {
-  renderAt('/app/yard/inventory/sections/section-1')
+  renderAt('/app/yard/warehouses/sections/section-1')
   expect(
     await screen.findByRole('link', { name: 'Усі запчастини секції' }),
   ).toHaveAttribute(
@@ -1889,8 +1886,8 @@ it('links all section parts while retaining the shelf navigation', async () => {
 })
 
 it.each([
-  ['/app/yard/inventory/zones/zone-1', 'У зоні без секції'],
-  ['/app/yard/inventory/sections/section-1', 'У секції без полиці'],
+  ['/app/yard/warehouses/zones/zone-1', 'У зоні без секції'],
+  ['/app/yard/warehouses/sections/section-1', 'У секції без полиці'],
 ])(
   'keeps the direct-parts link without fetching its count at %s',
   async (path, name) => {
@@ -1903,7 +1900,7 @@ it.each([
 
 it('prints shelf labels and keeps section editing and archiving in its detail menu', async () => {
   const user = userEvent.setup()
-  renderAt('/app/yard/inventory/sections/section-1')
+  renderAt('/app/yard/warehouses/sections/section-1')
   await user.click(
     await screen.findByRole('button', { name: 'Дії з секцією Секція B' }),
   )
@@ -1954,7 +1951,7 @@ it('prints shelf labels and keeps section editing and archiving in its detail me
 
 it('opens section label printing only through the zone menu', async () => {
   const user = userEvent.setup()
-  renderAt('/app/yard/inventory/zones/zone-1')
+  renderAt('/app/yard/warehouses/zones/zone-1')
   await screen.findByRole('group', { name: 'Секція: Секція B' })
   expect(
     screen.queryByRole('button', { name: 'Етикетки секцій' }),
@@ -1983,7 +1980,7 @@ it('can cancel shelf editing mode and return to opening parts', async () => {
       isActive: true,
     },
   ])
-  renderAt('/app/yard/inventory/sections/section-1')
+  renderAt('/app/yard/warehouses/sections/section-1')
   await user.click(
     await screen.findByRole('button', { name: 'Дії з секцією Секція B' }),
   )
@@ -2006,21 +2003,21 @@ it('can cancel shelf editing mode and return to opening parts', async () => {
 
 it.each([
   [
-    '/app/yard/inventory/warehouses/wh-1',
+    '/app/yard/warehouses/wh-1',
     'Інші дії зі складом',
     'Друк стікерів зон',
     'Етикетки зон',
     'Основний склад',
   ],
   [
-    '/app/yard/inventory/zones/zone-1',
+    '/app/yard/warehouses/zones/zone-1',
     'Дії із зоною Стелаж A1',
     'Друк стікерів секцій',
     'Етикетки секцій',
     'Стелаж A1',
   ],
   [
-    '/app/yard/inventory/sections/section-1',
+    '/app/yard/warehouses/sections/section-1',
     'Дії з секцією Секція B',
     'Друк стікерів полиць',
     'Етикетки полиць',
@@ -2066,7 +2063,7 @@ it.each([
 
 it('restores the section browse filter after closing inline selection', async () => {
   const user = userEvent.setup()
-  renderAt('/app/yard/inventory/zones/zone-1?locationSearch=B')
+  renderAt('/app/yard/warehouses/zones/zone-1?locationSearch=B')
   await user.click(
     await screen.findByRole('button', { name: 'Дії із зоною Стелаж A1' }),
   )
@@ -2114,10 +2111,117 @@ it.each(['missing-section', 'archived-section', 'missing-warehouse'])(
     }
     renderAt(
       warehouse
-        ? '/app/yard/inventory/warehouses/wh-1?labels=1'
-        : '/app/yard/inventory/sections/section-1?labels=1',
+        ? '/app/yard/warehouses/wh-1?labels=1'
+        : '/app/yard/warehouses/sections/section-1?labels=1',
     )
     await user.click(await screen.findByRole('button', { name: 'Зняти' }))
     await waitFor(() => expect(readLabelQueue(key)).toBeNull())
   },
 )
+
+it('opens warehouses separately from stocktake sessions', async () => {
+  renderAt('/app/yard/warehouses')
+  expect(
+    await screen.findByRole('heading', { level: 1, name: 'Склади' }),
+  ).toBeVisible()
+  const warehouses = screen.getByRole('region', { name: 'Склади' })
+  expect(
+    within(warehouses).getByRole('link', { name: /Основний склад/ }),
+  ).toHaveAttribute('href', '/app/yard/warehouses/wh-1')
+  expect(
+    screen.queryByRole('region', { name: 'Сесії інвентаризації' }),
+  ).toBeNull()
+  expect(screen.queryByRole('link', { name: 'Нова сесія' })).toBeNull()
+})
+
+it('keeps stocktake usable when the warehouse list is unavailable', async () => {
+  api.getWarehouses.mockRejectedValue(new Error('unavailable'))
+  renderAt('/app/yard/inventory')
+  expect(await screen.findByText('INV-001')).toBeVisible()
+  expect(api.getWarehouses).not.toHaveBeenCalled()
+  expect(parts.facets).not.toHaveBeenCalled()
+})
+
+it.each([
+  ['warehouses/wh-1', 'wh-1'],
+  ['zones/zone-1', 'zones/zone-1'],
+  ['sections/section-1', 'sections/section-1'],
+])(
+  'redirects legacy %s links and preserves label parameters',
+  async (legacy, canonical) => {
+    renderAt(`/app/yard/inventory/${legacy}?labels=1#queue`)
+    await waitFor(() =>
+      expect(screen.getByTestId('inventory-url')).toHaveTextContent(
+        `/app/yard/warehouses/${canonical}?labels=1#queue`,
+      ),
+    )
+  },
+)
+
+it('returns from a warehouse to the warehouse list', async () => {
+  renderAt('/app/yard/warehouses/wh-1')
+  expect(
+    await screen.findByRole('link', { name: 'До складів' }),
+  ).toHaveAttribute('href', '/app/yard/warehouses')
+})
+
+it('starts stocktake for the selected warehouse from its details', async () => {
+  api.getSessions.mockResolvedValue([])
+  renderAt('/app/yard/warehouses/wh-1')
+  expect(
+    await screen.findByRole('link', { name: 'Нова сесія' }),
+  ).toHaveAttribute('href', '/app/yard/inventory/sessions/new?warehouseId=wh-1')
+  expect(screen.getByRole('link', { name: 'Почати сесію' })).toHaveAttribute(
+    'href',
+    '/app/yard/inventory/sessions/new?warehouseId=wh-1',
+  )
+})
+
+it('preselects the warehouse supplied by the warehouse details link', async () => {
+  api.getWarehouses.mockResolvedValue([
+    {
+      id: 'wh-1',
+      name: 'Основний склад',
+      code: 'main',
+      isSystemDefault: true,
+      isActive: true,
+      zoneCount: 1,
+    },
+    {
+      id: 'wh-2',
+      name: 'Другий склад',
+      code: 'second',
+      isSystemDefault: false,
+      isActive: true,
+      zoneCount: 1,
+    },
+  ])
+  renderAt('/app/yard/inventory/sessions/new?warehouseId=wh-2')
+  expect(
+    await screen.findByRole('radio', { name: 'Другий склад' }),
+  ).toHaveAttribute('aria-checked', 'true')
+  expect(screen.getByRole('radio', { name: 'Основний склад' })).toHaveAttribute(
+    'aria-checked',
+    'false',
+  )
+})
+
+it('shows an empty warehouse list with its creation action', async () => {
+  api.getWarehouses.mockResolvedValue([])
+  renderAt('/app/yard/warehouses')
+  expect(await screen.findByText('Складів ще немає')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Додати склад' })).toBeVisible()
+  expect(
+    screen.queryByRole('region', { name: 'Сесії інвентаризації' }),
+  ).toBeNull()
+})
+
+it('retries a failed warehouse list request', async () => {
+  const user = userEvent.setup()
+  api.getWarehouses.mockRejectedValueOnce(new Error('unavailable'))
+  renderAt('/app/yard/warehouses')
+  await user.click(await screen.findByRole('button', { name: 'Повторити' }))
+  expect(
+    await screen.findByRole('heading', { level: 1, name: 'Склади' }),
+  ).toBeVisible()
+})

@@ -45,6 +45,7 @@ export const overviewMessages = defineMessages({
       'Інвентаризацій ще немає — створіть сесію, і працівники порахують склад у застосунку.',
     noFiltered: 'За цим фільтром сесій немає.',
     warehouses: 'Склади',
+    warehousesLead: 'Місця зберігання та розміщення запчастин.',
     addWarehouse: 'Додати склад',
     noWarehousesTitle: 'Складів ще немає',
     noWarehousesHint:
@@ -97,6 +98,7 @@ export const overviewMessages = defineMessages({
       'No stocktakes yet — create a session and your team will count the warehouse in the app.',
     noFiltered: 'No sessions match this filter.',
     warehouses: 'Warehouses',
+    warehousesLead: 'Storage locations and parts placement.',
     addWarehouse: 'Add warehouse',
     noWarehousesTitle: 'No warehouses yet',
     noWarehousesHint:
@@ -154,6 +156,7 @@ export const overviewMessages = defineMessages({
       'Nie ma jeszcze inwentaryzacji — utwórz sesję, a pracownicy policzą magazyn w aplikacji.',
     noFiltered: 'Brak sesji dla tego filtra.',
     warehouses: 'Magazyny',
+    warehousesLead: 'Miejsca przechowywania i rozmieszczenie części.',
     addWarehouse: 'Dodaj magazyn',
     noWarehousesTitle: 'Nie ma jeszcze magazynów',
     noWarehousesHint:

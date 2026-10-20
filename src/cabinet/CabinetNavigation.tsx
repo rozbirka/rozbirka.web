@@ -449,7 +449,7 @@ function NavigationLink({
             : 'text-app-muted hover:bg-white/[0.05] hover:text-white',
         )
       }
-      end
+      end={entry.key !== 'warehouses' && entry.key !== 'inventory'}
       to={entry.to}
     >
       <Icon aria-hidden className="size-5 shrink-0" />

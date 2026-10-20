@@ -1630,9 +1630,9 @@ test('uses mobile, tablet, and desktop cabinet presentations at their breakpoint
   }
 })
 
-test('inventory overview remains usable at mobile and desktop widths @cabinet-smoke', async ({
+test('warehouses and stocktake remain separate at mobile and desktop widths @cabinet-smoke', async ({
   page,
-}) => {
+}, testInfo) => {
   await installCabinetApiBoundary(page)
   await loginFrom(page)
 
@@ -1642,12 +1642,41 @@ test('inventory overview remains usable at mobile and desktop widths @cabinet-sm
     await expect(
       page.getByRole('heading', { name: 'Інвентаризація' }),
     ).toBeVisible()
-    // The warehouse names both the running session and its own card, so the
-    // list of warehouses is where it has to be visible.
+    await expect(page.getByRole('region', { name: 'Склади' })).toHaveCount(0)
+    await expect(page.getByText('INV-001')).toBeVisible()
+    if (width === 1440)
+      await page.screenshot({
+        path: testInfo.outputPath('stocktake-separated.png'),
+        animations: 'disabled',
+      })
+    await page.getByRole('link', { name: 'Склади', exact: true }).last().click()
+    await expect(page).toHaveURL('/app/koval/warehouses')
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Склади' }),
+    ).toBeVisible()
     await expect(
       page.getByRole('region', { name: 'Склади' }).getByText('Основний склад'),
     ).toBeVisible()
-    await expect(page.getByText('INV-001')).toBeVisible()
+    await expect(
+      page.getByRole('region', { name: 'Сесії інвентаризації' }),
+    ).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Нова сесія' })).toHaveCount(0)
+    if (width === 1440) {
+      const navigation = page.getByRole('navigation', {
+        name: 'Навігація кабінету',
+      })
+      await expect(
+        navigation.getByRole('link', { name: 'Склади', exact: true }),
+      ).toHaveAttribute('aria-current', 'page')
+      await expect(
+        navigation.getByRole('link', { name: 'Інвентаризація', exact: true }),
+      ).not.toHaveAttribute('aria-current')
+    }
+    if (width === 1440)
+      await page.screenshot({
+        path: testInfo.outputPath('warehouses-separated.png'),
+        animations: 'disabled',
+      })
     // Font swapping changes intrinsic text widths after the content is visible.
     await page.evaluate(() => document.fonts.ready.then(() => undefined))
     const layout = await page.evaluate(() => ({
@@ -1673,6 +1702,11 @@ test('inventory overview remains usable at mobile and desktop widths @cabinet-sm
     ).toBeLessThanOrEqual(layout.width)
   }
 
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('/app/koval/inventory/warehouses/warehouse-1?labels=1#queue')
+  await expect(page).toHaveURL(
+    '/app/koval/warehouses/warehouse-1?labels=1#queue',
+  )
   await page.goto('/app/koval/inventory/sessions/session-1')
   await expect(page.getByRole('heading', { name: 'INV-001' })).toBeVisible()
   await expect(page.getByText(/увімкнути камеру/i)).toHaveCount(0)
@@ -1845,7 +1879,7 @@ test('compact location browser searches and pages large shelf lists @location-br
   await loginFrom(page)
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 900 })
-    await page.goto('/app/koval/inventory/warehouses/warehouse-1')
+    await page.goto('/app/koval/warehouses/warehouse-1')
     await page.getByRole('link', { name: 'Зона А', exact: true }).click()
     await expect(
       page.getByRole('link', { name: 'Секція 1, S1', exact: true }),
@@ -1863,7 +1897,7 @@ test('compact location browser searches and pages large shelf lists @location-br
     ).toBeVisible()
     await page.getByRole('searchbox', { name: 'Пошук секції' }).fill('S7')
     await page.getByRole('link', { name: 'Секція 7, S7', exact: true }).click()
-    await expect(page).toHaveURL(/inventory\/sections\/section-6$/)
+    await expect(page).toHaveURL(/warehouses\/sections\/section-6$/)
     const table = page.getByRole('table', { name: 'Полиці: Секція 7' })
     await expect(table.getByRole('row')).toHaveCount(11)
     await page
@@ -1937,7 +1971,7 @@ test('compact location browser searches and pages large shelf lists @location-br
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true)
-    await page.goto('/app/koval/inventory/sections/section-6')
+    await page.goto('/app/koval/warehouses/sections/section-6')
     await page.getByRole('link', { name: /У секції без полиці/ }).click()
     await expect(
       page.getByRole('combobox', { name: 'Полиця', exact: true }),
@@ -1949,7 +1983,7 @@ test('compact location browser searches and pages large shelf lists @location-br
         missingShelf: true,
         pageSize: 30,
       })
-    await page.goto('/app/koval/inventory/sections/section-6')
+    await page.goto('/app/koval/warehouses/sections/section-6')
     await page
       .getByRole('link', { name: 'Усі запчастини секції', exact: true })
       .click()
@@ -1965,7 +1999,7 @@ test('compact location browser searches and pages large shelf lists @location-br
         }
       })
       .toEqual({ sectionIds: ['section-6'], hasMissingShelf: false })
-    await page.goto('/app/koval/inventory/zones/zone-1')
+    await page.goto('/app/koval/warehouses/zones/zone-1')
     await page.getByRole('link', { name: /У зоні без секції/ }).click()
     await expect(
       page.getByRole('combobox', { name: 'Секція', exact: true }),

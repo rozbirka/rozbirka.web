@@ -110,7 +110,7 @@ export function BusinessSettingsScreen() {
     auth?.tenants.find(
       (candidate) => candidate.id === cabinet.targetTenant?.id,
     ) ?? cabinet.targetTenant
-  const inventoryPath = `/app/${tenant?.slug ?? ''}/inventory`
+  const warehousesPath = `/app/${tenant?.slug ?? ''}/warehouses`
   const generation = cabinet.snapshot?.generation
   const [name, setName] = useState(tenant?.name ?? '')
   const [city, setCity] = useState(tenant?.city ?? '')
@@ -373,7 +373,7 @@ export function BusinessSettingsScreen() {
           <Step
             action={
               <Button asChild>
-                <Link to={inventoryPath}>
+                <Link to={warehousesPath}>
                   <Plus aria-hidden />
                   {t('addWarehouse')}
                 </Link>
@@ -421,7 +421,7 @@ export function BusinessSettingsScreen() {
                       {t('partsNotCounted')}
                     </span>
                     <Button asChild>
-                      <Link to={inventoryPath}>{t('change')}</Link>
+                      <Link to={warehousesPath}>{t('change')}</Link>
                     </Button>
                   </li>
                 ))}

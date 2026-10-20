@@ -91,6 +91,10 @@ describe('production route boundary', () => {
 
   it.each([
     ['dashboard', 'DashboardScreen'],
+    ['warehouses', 'InventoryScreen'],
+    ['warehouses/:warehouseId', 'InventoryScreen'],
+    ['warehouses/zones/:zoneId', 'InventoryScreen'],
+    ['warehouses/sections/:sectionId', 'InventoryScreen'],
     ['cars', 'CarsScreen'],
     ['cars/new', 'CarsScreen'],
     ['cars/:carId', 'CarsScreen'],

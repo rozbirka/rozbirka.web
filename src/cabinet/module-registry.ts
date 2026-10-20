@@ -16,6 +16,7 @@ import {
   UserRoundCog,
   Users,
   WalletCards,
+  Warehouse,
   type LucideIcon,
 } from 'lucide-react'
 import {
@@ -30,6 +31,7 @@ export type CabinetModuleKey =
   | 'dashboard'
   | 'cars'
   | 'parts'
+  | 'warehouses'
   | 'inventory'
   | 'orders'
   | 'customers'
@@ -133,6 +135,20 @@ export const cabinetModules: Readonly<
       mobilePriority: 2,
     },
   },
+  warehouses: {
+    key: 'warehouses',
+    routeSegment: '/warehouses',
+    viewPermission: 'inventory.view',
+    mutationPermission: 'inventory.zones.manage',
+    allowedSubscriptionStates: BUSINESS_SUBSCRIPTION_STATES,
+    navigation: {
+      label: 'Склади',
+      icon: Warehouse,
+      placement: 'primary',
+      group: 'stock',
+      mobilePriority: 7,
+    },
+  },
   inventory: {
     key: 'inventory',
     routeSegment: '/inventory',
@@ -144,7 +160,7 @@ export const cabinetModules: Readonly<
       icon: ClipboardCheck,
       placement: 'primary',
       group: 'stock',
-      mobilePriority: 7,
+      mobilePriority: 8,
     },
   },
   orders: {

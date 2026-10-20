@@ -91,7 +91,7 @@ beforeEach(() => {
   vi.mocked(businessApi.update).mockResolvedValue(tenant)
 })
 
-it('opens inventory from the warehouse action', async () => {
+it('opens warehouses from the warehouse action', async () => {
   const router = createMemoryRouter(
     [
       {
@@ -101,7 +101,7 @@ it('opens inventory from the warehouse action', async () => {
             path: 'settings/business',
             element: <BusinessSettingsScreen />,
           },
-          { path: 'inventory', element: <p>Екран інвентаризації</p> },
+          { path: 'warehouses', element: <p>Екран складів</p> },
         ],
       },
     ],
@@ -113,9 +113,9 @@ it('opens inventory from the warehouse action', async () => {
   await user.click(screen.getByRole('link', { name: 'Додати склад' }))
 
   await waitFor(() =>
-    expect(router.state.location.pathname).toBe('/app/koval/inventory'),
+    expect(router.state.location.pathname).toBe('/app/koval/warehouses'),
   )
-  expect(screen.getByText('Екран інвентаризації')).toBeVisible()
+  expect(screen.getByText('Екран складів')).toBeVisible()
 })
 
 it('uses accessible secondary text on the dark business surface', () => {

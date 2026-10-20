@@ -7,7 +7,13 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
+import {
+  Link,
+  Navigate,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from 'react-router'
 import {
   Archive,
   ArrowRight,
@@ -81,6 +87,7 @@ import { LocationLabelsPage } from './LocationLabelPrinter'
 import { locationPartsHref } from './location-contents'
 import { locationBrowserMessages } from './location-browser-messages'
 import { warehouseMessages } from './warehouse-messages'
+import { RedesignShell, RedesignTitle } from '../redesign-shell'
 import { inventoryCodeFromName } from './inventory-code'
 import { ZoneEditorSheet, type ZoneDraft } from './ZoneEditorSheet'
 
@@ -143,21 +150,35 @@ function Resource<T>({
 export function InventoryScreen({
   definition: _definition,
 }: CabinetModuleScreenProps) {
-  const { pathname } = useLocation()
+  const { pathname, search, hash } = useLocation()
+  const warehouseBase = useWarehouseBase()
   const segments = pathname.split('/').filter(Boolean)
   const route = segments[0] === 'app' ? segments.slice(2) : segments
   const partId = route[0] === 'parts' ? route[1] : undefined
   if (partId && route[2] === 'inventory') {
     return <PartPlacementView partId={partId} />
   }
+  if (route[0] === 'warehouses') {
+    if (route[1] === 'zones' && route[2])
+      return <LocationView key={`zone:${route[2]}`} id={route[2]} kind="zone" />
+    if (route[1] === 'sections' && route[2])
+      return (
+        <LocationView
+          key={`section:${route[2]}`}
+          id={route[2]}
+          kind="section"
+        />
+      )
+    if (route[1]) return <WarehouseView key={route[1]} id={route[1]} />
+    return <WarehousesOverview />
+  }
   const tail = route[0] === 'inventory' ? route.slice(1) : []
-  if (tail[0] === 'warehouses' && tail[1]) return <WarehouseView id={tail[1]} />
-  if (tail[0] === 'zones' && tail[1])
-    return <LocationView key={`zone:${tail[1]}`} id={tail[1]} kind="zone" />
-  if (tail[0] === 'sections' && tail[1])
+  if (['warehouses', 'zones', 'sections'].includes(tail[0] ?? '') && tail[1]) {
+    const suffix = tail[0] === 'warehouses' ? tail[1] : `${tail[0]}/${tail[1]}`
     return (
-      <LocationView key={`section:${tail[1]}`} id={tail[1]} kind="section" />
+      <Navigate replace to={`${warehouseBase}/${suffix}${search}${hash}`} />
     )
+  }
   if (tail[0] === 'sessions' && tail[1] === 'new') return <NewSessionView />
   if (tail[0] === 'sessions' && tail[1] && tail[2] === 'results')
     return <ResultsView id={tail[1]} />
@@ -172,6 +193,11 @@ export function InventoryScreen({
 function useInventoryBase() {
   const { targetTenant } = useCabinet()
   return targetTenant ? cabinetPath(targetTenant.slug, 'inventory') : '/'
+}
+
+function useWarehouseBase() {
+  const { targetTenant } = useCabinet()
+  return targetTenant ? cabinetPath(targetTenant.slug, 'warehouses') : '/'
 }
 
 function usePermission(permission: string) {
@@ -199,11 +225,8 @@ const segmentOf = (status: InventorySession['status']): OverviewSegment =>
 const RECENT_DAYS = 30
 
 interface OverviewData {
-  warehouses: Warehouse[]
   sessions: InventorySession[]
   zones: InventoryZone[]
-  /** Parts per warehouse, when the viewer may read the parts module. */
-  byWarehouse: Map<string, number> | null
   /** The cut-off for "checked recently", taken once when the data loads. */
   since: number
 }
@@ -214,76 +237,28 @@ function Overview() {
   const { date, day, sessionStatus, locale } = useInventoryFormat()
   const base = useInventoryBase()
   const canManage = usePermission('inventory.manage')
-  const canZones = usePermission('inventory.zones.manage')
-  const canSeeParts = usePermission('parts.view')
-  const { requireLatestMutation } = useLatestMutationGuard(
-    cabinetModules.inventory,
-  )
+  const warehouseBase = useWarehouseBase()
   const loader = useCallback(
     async (signal: AbortSignal): Promise<OverviewData> => {
-      const [warehouses, sessions, zones, byWarehouse] = await Promise.all([
-        inventoryApi.getWarehouses({ signal }),
-        inventoryApi.getSessions({ signal }).then(
-          (list) => list,
-          () => [],
-        ),
-        inventoryApi.getZones({ activeOnly: true, signal }).then(
-          (list) => list,
-          () => [],
-        ),
-        canSeeParts
-          ? partsApi.facets({}, ['warehouse'], { signal }).then(
-              (facets) =>
-                new Map(facets.warehouses.map((item) => [item.id, item.count])),
-              () => null,
-            )
-          : Promise.resolve(null),
+      const [sessions, zones] = await Promise.all([
+        inventoryApi.getSessions({ signal }),
+        inventoryApi.getZones({ activeOnly: true, signal }).catch(() => []),
       ])
       return {
-        warehouses,
         sessions,
         zones,
-        byWarehouse,
         since: Date.now() - RECENT_DAYS * 24 * 60 * 60 * 1000,
       }
     },
-    [canSeeParts],
+    [],
   )
   const resource = useLoad(loader, 'inventory-overview')
   const [segment, setSegment] = useState<OverviewSegment>('active')
   const [query, setQuery] = useState('')
-  const [adding, setAdding] = useState(false)
-  const [draft, setDraft] = useState({ name: '', code: '' })
-  const [creating, setCreating] = useState(false)
-  const [operationError, setOperationError] = useState<string | null>(null)
-
-  const createWarehouse = async () => {
-    const name = draft.name.trim()
-    const code = draft.code.trim()
-    if (!name || !code) return
-    setCreating(true)
-    try {
-      setOperationError(null)
-      const scope = requireLatestMutation({
-        permission: 'inventory.zones.manage',
-        quota: false,
-      })
-      await inventoryApi.createWarehouse(
-        { name, code },
-        { signal: scope.signal },
-      )
-      setAdding(false)
-      resource.reload()
-    } catch (error) {
-      setOperationError(normalizeApiProblem(error).message)
-    } finally {
-      setCreating(false)
-    }
-  }
 
   return (
     <Resource retry={resource.reload} state={resource.state}>
-      {({ warehouses, sessions, zones, byWarehouse, since }: OverviewData) => {
+      {({ sessions, zones, since }: OverviewData) => {
         const zonesOf = (item: InventorySession) =>
           [...new Set(item.zones.map((zone) => zone.zoneCode))].join(', ')
         const houseOf = (item: InventorySession) =>
@@ -334,27 +309,6 @@ function Overview() {
           (sum, item) => sum + item.preview.conflictingPartCount,
           0,
         )
-        /* The last time each warehouse was counted, and whether one is
-           running there right now. */
-        const checkOf = (warehouseId: string) => {
-          if (
-            running.some((item) =>
-              item.zones.some((zone) => zone.warehouseId === warehouseId),
-            )
-          )
-            return t('checkRunning')
-          const done = completedSessions.find((item) =>
-            item.zones.some((zone) => zone.warehouseId === warehouseId),
-          )
-          return done === undefined
-            ? t('neverChecked')
-            : t('checkedOn', { date: day(done.completedAt) })
-        }
-        const stock = byWarehouse
-        const stockTotal =
-          stock === null
-            ? 0
-            : [...stock.values()].reduce((sum, value) => sum + value, 0)
 
         return (
           <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
@@ -375,6 +329,9 @@ function Overview() {
                     value={query}
                   />
                 </div>
+                <Button asChild variant="ghost">
+                  <Link to={warehouseBase}>{t('warehouses')}</Link>
+                </Button>
                 {canManage ? (
                   <Button
                     asChild
@@ -401,10 +358,6 @@ function Overview() {
                       })}
                 </p>
               </div>
-
-              {operationError ? (
-                <Notice tone="danger">{operationError}</Notice>
-              ) : null}
 
               <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-px overflow-hidden rounded-[20px] border">
                 <WarehouseStat
@@ -588,96 +541,216 @@ function Overview() {
                   </ul>
                 )}
               </section>
-
-              <section aria-label={t('warehouses')} className="grid gap-4.5">
-                <div className="flex flex-wrap items-baseline gap-3.5">
-                  <h2 className="text-app-muted font-mono text-[11px] tracking-[0.16em] uppercase">
-                    {t('warehouses')}
-                  </h2>
-                  <span aria-hidden className="bg-app-line h-px flex-1" />
-                  {canZones ? (
-                    <Button
-                      className="text-[13px] font-semibold"
-                      onClick={() => {
-                        setDraft({ name: '', code: '' })
-                        setAdding(true)
-                      }}
-                      variant="ghost"
-                    >
-                      <Plus aria-hidden />
-                      {t('addWarehouse')}
-                    </Button>
-                  ) : null}
-                </div>
-                {warehouses.length === 0 ? (
-                  <EmptyState
-                    description={t('noWarehousesHint')}
-                    title={t('noWarehousesTitle')}
-                  />
-                ) : (
-                  <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-4">
-                    {warehouses.map((item) => {
-                      const parts = stock?.get(item.id) ?? null
-                      const share =
-                        parts === null || stockTotal === 0
-                          ? 0
-                          : Math.round((parts / stockTotal) * 100)
-                      return (
-                        <li key={item.id}>
-                          <Link
-                            className="border-app-line bg-app-raised block h-full rounded-[18px] border px-5.5 pt-5 pb-5.5 hover:border-white/20"
-                            to={`${base}/warehouses/${item.id}`}
-                          >
-                            <span className="flex items-baseline justify-between gap-3">
-                              <span className="text-[17px] font-bold tracking-[-0.01em] text-white">
-                                {item.name}
-                              </span>
-                              <span className="text-app-muted font-mono text-[13px]">
-                                {ti('zones', { count: item.zoneCount })}
-                              </span>
-                            </span>
-                            <span className="text-app-muted mt-1 block text-[13px]">
-                              {[
-                                t('warehouseCode', { code: item.code }),
-                                item.isSystemDefault ? t('defaultTag') : null,
-                                item.isActive ? null : t('archivedTag'),
-                              ]
-                                .filter(Boolean)
-                                .join(' · ')}
-                            </span>
-                            <span
-                              aria-hidden
-                              className="bg-app-line-2 mt-4 block h-1.5 overflow-hidden rounded-full"
-                            >
-                              <span
-                                className="bg-state-ok block h-full rounded-full"
-                                style={{ width: `${String(share)}%` }}
-                              />
-                            </span>
-                            <span className="text-app-muted mt-2.5 flex items-baseline justify-between gap-3 text-[13px]">
-                              <span>
-                                {parts === null
-                                  ? ti('stockUnavailable')
-                                  : t('shareOfYard', { share })}
-                              </span>
-                              <span className="font-mono">
-                                {parts === null
-                                  ? '—'
-                                  : t('positionsShort', { count: parts })}
-                              </span>
-                            </span>
-                            <span className="border-app-line text-app-dim mt-3.5 block border-t pt-3.5 text-[13px]">
-                              {checkOf(item.id)}
-                            </span>
-                          </Link>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                )}
-              </section>
             </div>
+          </div>
+        )
+      }}
+    </Resource>
+  )
+}
 
+interface WarehousesOverviewData {
+  warehouses: Warehouse[]
+  sessions: InventorySession[]
+  byWarehouse: Map<string, number> | null
+}
+
+function WarehousesOverview() {
+  const t = useT(overviewMessages)
+  const ti = useT(inventoryMessages)
+  const { day } = useInventoryFormat()
+  const base = useWarehouseBase()
+  const inventoryBase = useInventoryBase()
+  const canZones = usePermission('inventory.zones.manage')
+  const canSeeParts = usePermission('parts.view')
+  const { requireLatestMutation } = useLatestMutationGuard(
+    cabinetModules.warehouses,
+  )
+  const loader = useCallback(
+    async (signal: AbortSignal): Promise<WarehousesOverviewData> => {
+      const [warehouses, sessions, byWarehouse] = await Promise.all([
+        inventoryApi.getWarehouses({ signal }),
+        inventoryApi.getSessions({ signal }).catch(() => []),
+        canSeeParts
+          ? partsApi.facets({}, ['warehouse'], { signal }).then(
+              (facets) =>
+                new Map(facets.warehouses.map((item) => [item.id, item.count])),
+              () => null,
+            )
+          : Promise.resolve(null),
+      ])
+      return { warehouses, sessions, byWarehouse }
+    },
+    [canSeeParts],
+  )
+  const resource = useLoad(loader, 'warehouses-overview')
+  const [adding, setAdding] = useState(false)
+  const [draft, setDraft] = useState({ name: '', code: '' })
+  const [creating, setCreating] = useState(false)
+  const [operationError, setOperationError] = useState<string | null>(null)
+
+  const createWarehouse = async () => {
+    const name = draft.name.trim()
+    const code = draft.code.trim()
+    if (!name || !code) return
+    setCreating(true)
+    try {
+      setOperationError(null)
+      const scope = requireLatestMutation({
+        permission: 'inventory.zones.manage',
+        quota: false,
+      })
+      await inventoryApi.createWarehouse(
+        { name, code },
+        { signal: scope.signal },
+      )
+      setAdding(false)
+      resource.reload()
+    } catch (error) {
+      setOperationError(normalizeApiProblem(error).message)
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <Resource retry={resource.reload} state={resource.state}>
+      {({ warehouses, sessions, byWarehouse }: WarehousesOverviewData) => {
+        const running = sessions.filter(
+          (item) => segmentOf(item.status) === 'active',
+        )
+        const completedSessions = sessions
+          .filter((item) => item.status === 'completed')
+          .sort((left, right) =>
+            (right.completedAt ?? right.createdAt).localeCompare(
+              left.completedAt ?? left.createdAt,
+            ),
+          )
+        /* The last time each warehouse was counted, and whether one is
+           running there right now. */
+        const checkOf = (warehouseId: string) => {
+          if (
+            running.some((item) =>
+              item.zones.some((zone) => zone.warehouseId === warehouseId),
+            )
+          )
+            return t('checkRunning')
+          const done = completedSessions.find((item) =>
+            item.zones.some((zone) => zone.warehouseId === warehouseId),
+          )
+          return done === undefined
+            ? t('neverChecked')
+            : t('checkedOn', { date: day(done.completedAt) })
+        }
+        const stock = byWarehouse
+        const stockTotal =
+          stock === null
+            ? 0
+            : [...stock.values()].reduce((sum, value) => sum + value, 0)
+
+        return (
+          <RedesignShell
+            crumb={ti('crumbWarehouses')}
+            actions={
+              <Button asChild variant="ghost">
+                <Link to={inventoryBase}>{ti('crumbInventory')}</Link>
+              </Button>
+            }
+          >
+            <RedesignTitle
+              title={ti('crumbWarehouses')}
+              lead={t('warehousesLead')}
+            />
+            {operationError ? (
+              <Notice tone="danger">{operationError}</Notice>
+            ) : null}
+            <section aria-label={t('warehouses')} className="grid gap-4.5">
+              <div className="flex flex-wrap items-baseline gap-3.5">
+                <h2 className="text-app-muted font-mono text-[11px] tracking-[0.16em] uppercase">
+                  {t('warehouses')}
+                </h2>
+                <span aria-hidden className="bg-app-line h-px flex-1" />
+                {canZones ? (
+                  <Button
+                    className="text-[13px] font-semibold"
+                    onClick={() => {
+                      setDraft({ name: '', code: '' })
+                      setAdding(true)
+                    }}
+                    variant="ghost"
+                  >
+                    <Plus aria-hidden />
+                    {t('addWarehouse')}
+                  </Button>
+                ) : null}
+              </div>
+              {warehouses.length === 0 ? (
+                <EmptyState
+                  description={t('noWarehousesHint')}
+                  title={t('noWarehousesTitle')}
+                />
+              ) : (
+                <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-4">
+                  {warehouses.map((item) => {
+                    const parts = stock?.get(item.id) ?? null
+                    const share =
+                      parts === null || stockTotal === 0
+                        ? 0
+                        : Math.round((parts / stockTotal) * 100)
+                    return (
+                      <li key={item.id}>
+                        <Link
+                          className="border-app-line bg-app-raised block h-full rounded-[18px] border px-5.5 pt-5 pb-5.5 hover:border-white/20"
+                          to={`${base}/${item.id}`}
+                        >
+                          <span className="flex items-baseline justify-between gap-3">
+                            <span className="text-[17px] font-bold tracking-[-0.01em] text-white">
+                              {item.name}
+                            </span>
+                            <span className="text-app-muted font-mono text-[13px]">
+                              {ti('zones', { count: item.zoneCount })}
+                            </span>
+                          </span>
+                          <span className="text-app-muted mt-1 block text-[13px]">
+                            {[
+                              t('warehouseCode', { code: item.code }),
+                              item.isSystemDefault ? t('defaultTag') : null,
+                              item.isActive ? null : t('archivedTag'),
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </span>
+                          <span
+                            aria-hidden
+                            className="bg-app-line-2 mt-4 block h-1.5 overflow-hidden rounded-full"
+                          >
+                            <span
+                              className="bg-state-ok block h-full rounded-full"
+                              style={{ width: `${String(share)}%` }}
+                            />
+                          </span>
+                          <span className="text-app-muted mt-2.5 flex items-baseline justify-between gap-3 text-[13px]">
+                            <span>
+                              {parts === null
+                                ? ti('stockUnavailable')
+                                : t('shareOfYard', { share })}
+                            </span>
+                            <span className="font-mono">
+                              {parts === null
+                                ? '—'
+                                : t('positionsShort', { count: parts })}
+                            </span>
+                          </span>
+                          <span className="border-app-line text-app-dim mt-3.5 block border-t pt-3.5 text-[13px]">
+                            {checkOf(item.id)}
+                          </span>
+                        </Link>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </section>
             <WarehouseEditorSheet
               open={adding}
               draft={draft}
@@ -687,7 +760,7 @@ function Overview() {
               pending={creating}
               error={operationError}
             />
-          </div>
+          </RedesignShell>
         )
       }}
     </Resource>
@@ -813,7 +886,8 @@ function WarehouseView({ id }: { id: string }) {
   const tc = useT(commonMessages)
   const { date, day } = useInventoryFormat()
   const { currency: inventoryCurrency } = useAccountingCurrency()
-  const base = useInventoryBase()
+  const base = useWarehouseBase()
+  const inventoryBase = useInventoryBase()
   const { targetTenant } = useCabinet()
   const navigate = useNavigate()
   const [labelParams] = useSearchParams()
@@ -827,7 +901,7 @@ function WarehouseView({ id }: { id: string }) {
     ? cabinetPath(targetTenant.slug, 'parts')
     : null
   const { requireLatestMutation } = useLatestMutationGuard(
-    cabinetModules.inventory,
+    cabinetModules.warehouses,
   )
   const loader = useCallback(
     async (signal: AbortSignal): Promise<WarehouseData> => {
@@ -1027,7 +1101,7 @@ function WarehouseView({ id }: { id: string }) {
                   to={base}
                 >
                   <ChevronLeft aria-hidden className="size-3.5" />
-                  {ti('backToInventory')}
+                  {ti('backToWarehouses')}
                 </Link>
                 <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
                   <span>{ti('crumbWarehouse')}</span>
@@ -1062,7 +1136,11 @@ function WarehouseView({ id }: { id: string }) {
                     className="px-5 text-sm font-bold"
                     variant="primary"
                   >
-                    <Link to={`${base}/sessions/new`}>{ti('newSession')}</Link>
+                    <Link
+                      to={`${inventoryBase}/sessions/new?warehouseId=${encodeURIComponent(id)}`}
+                    >
+                      {ti('newSession')}
+                    </Link>
                   </Button>
                 ) : null}
                 <ActionMenu
@@ -1074,7 +1152,7 @@ function WarehouseView({ id }: { id: string }) {
                       icon: <Printer aria-hidden />,
                       onSelect: () =>
                         void navigate(
-                          `${base}/warehouses/${encodeURIComponent(id)}?labels=1`,
+                          `${base}/${encodeURIComponent(id)}?labels=1`,
                         ),
                     },
                     {
@@ -1386,7 +1464,9 @@ function WarehouseView({ id }: { id: string }) {
                             className="mt-5 min-h-11 w-full text-sm font-bold"
                             variant="primary"
                           >
-                            <Link to={`${base}/sessions/new`}>
+                            <Link
+                              to={`${inventoryBase}/sessions/new?warehouseId=${encodeURIComponent(id)}`}
+                            >
                               {t('startSession')}
                             </Link>
                           </Button>
@@ -1441,7 +1521,7 @@ function WarehouseView({ id }: { id: string }) {
                           className="mt-5 min-h-11 w-full text-sm font-bold"
                           variant="primary"
                         >
-                          <Link to={`${base}/sessions/${active.id}`}>
+                          <Link to={`${inventoryBase}/sessions/${active.id}`}>
                             {t('continueSession')}
                           </Link>
                         </Button>
@@ -1453,7 +1533,7 @@ function WarehouseView({ id }: { id: string }) {
                     aside={
                       <Link
                         className="text-brand text-[13px] font-semibold hover:underline"
-                        to={base}
+                        to={inventoryBase}
                       >
                         {t('all')}
                       </Link>
@@ -1477,7 +1557,7 @@ function WarehouseView({ id }: { id: string }) {
                               <div className="min-w-0 flex-1">
                                 <Link
                                   className="text-[14px] font-semibold text-white hover:underline"
-                                  to={`${base}/sessions/${item.id}`}
+                                  to={`${inventoryBase}/sessions/${item.id}`}
                                 >
                                   {item.number} · {zonesOf(item)}
                                 </Link>
@@ -1610,7 +1690,7 @@ function WarehouseView({ id }: { id: string }) {
 function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
   const t = useT(warehouseMessages)
   const ti = useT(inventoryMessages)
-  const base = useInventoryBase()
+  const base = useWarehouseBase()
   const location = useLocation()
   const labelsOpen = new URLSearchParams(location.search).get('labels') === '1'
   const { targetTenant } = useCabinet()
@@ -1679,7 +1759,7 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
                   to={
                     section
                       ? `${base}/zones/${zone.id}${returnQuery}`
-                      : `${base}/warehouses/${zone.warehouseId}`
+                      : `${base}/${zone.warehouseId}`
                   }
                 >
                   <ChevronLeft aria-hidden className="size-3.5" />
@@ -1811,7 +1891,7 @@ function ZoneLocations({
   section?: InventorySection
   onStructureChange: () => void
 }) {
-  const base = useInventoryBase()
+  const base = useWarehouseBase()
   const navigate = useNavigate()
   const location = useLocation()
   const labelsOpen = new URLSearchParams(location.search).get('labels') === '1'
@@ -1831,7 +1911,7 @@ function ZoneLocations({
   const canManage = usePermission('inventory.zones.manage')
   const canViewParts = usePermission('parts.view')
   const { requireLatestMutation } = useLatestMutationGuard(
-    cabinetModules.inventory,
+    cabinetModules.warehouses,
   )
   const loader = useCallback(
     async (signal: AbortSignal) => {
@@ -2006,7 +2086,7 @@ function ZoneLocations({
           shelves={loadedShelves}
           canManage={canManage}
           canViewParts={canViewParts}
-          partsBase={base.replace(/\/inventory$/, '/parts')}
+          partsBase={base.replace(/\/warehouses$/, '/parts')}
           onAddSection={(zone) => {
             setError(null)
             setDraft({ name: '', code: '' })
@@ -2363,8 +2443,11 @@ function NewSessionView() {
     [canSeeParts, canSeeTeam],
   )
   const resource = useLoad(loader, 'new-session')
+  const [params] = useSearchParams()
   const [type, setType] = useState<SessionType>('zones')
-  const [warehouseId, setWarehouseId] = useState<string | null>(null)
+  const [warehouseId, setWarehouseId] = useState<string | null>(() =>
+    params.get('warehouseId'),
+  )
   const [picked, setPicked] = useState<string[]>([])
   const [busy, setBusy] = useState<'draft' | 'start' | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
@@ -2408,7 +2491,10 @@ function NewSessionView() {
                   ]),
                 ).values(),
               ]
-        const house = warehouseId ?? houses[0]?.id ?? null
+        const house =
+          houses.find((item) => item.id === warehouseId)?.id ??
+          houses[0]?.id ??
+          null
         const inHouse = countable.filter((zone) => zone.warehouseId === house)
         const selected =
           type === 'full'
@@ -5131,7 +5217,7 @@ function PartPlacementView({
   const canManage = usePermission('inventory.zones.manage')
   const canSeeParts = usePermission('parts.view')
   const { requireLatestMutation } = useLatestMutationGuard(
-    cabinetModules.inventory,
+    cabinetModules.warehouses,
   )
   const loader = useCallback(
     async (signal: AbortSignal): Promise<PlacementData> => {

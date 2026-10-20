@@ -137,7 +137,7 @@ function ScopedLocationLabels({
   const redesigned = target.kind === 'section' || target.kind === 'shelf'
   const documentLocale = useTenantSettings().documentLanguage ?? 'uk'
   const { requireLatestMutation } = useLatestMutationGuard(
-    cabinetModules.inventory,
+    cabinetModules.warehouses,
   )
   const [params, setParams] = useSearchParams()
   const navigationState = useLocation().state as unknown
@@ -313,7 +313,7 @@ function ScopedLocationLabels({
   const currentPage = Math.min(page, pageCount)
 
   const continuation = queue
-    ? `${inventoryBase}/${queue.target.kind === 'zone' ? 'warehouses' : queue.target.kind === 'section' ? 'zones' : 'sections'}/${encodeURIComponent(queue.target.parentId)}?labels=1`
+    ? `${inventoryBase}/${queue.target.kind === 'zone' ? '' : queue.target.kind === 'section' ? 'zones/' : 'sections/'}${encodeURIComponent(queue.target.parentId)}?labels=1`
     : ''
   const updateSelection = (next: ReadonlySet<string>) => {
     if (locked || busyRef.current) return
