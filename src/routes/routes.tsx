@@ -84,9 +84,9 @@ const releasedCabinetRoutes: Partial<Record<CabinetModuleKey, RouteObject>> = {
     return PartsScreen
   }),
   warehouses: cabinetScreenRoute('warehouses', async () => {
-    const { InventoryScreen } =
-      await import('@/cabinet/inventory/InventoryScreen')
-    return InventoryScreen
+    const { WarehousesScreen } =
+      await import('@/cabinet/warehouses/WarehousesScreen')
+    return WarehousesScreen
   }),
   inventory: cabinetScreenRoute('inventory', async () => {
     const { InventoryScreen } =
@@ -127,6 +127,18 @@ const commerceDetailRoutes: RouteObject[] = [
     'warehouses/:warehouseId',
     'warehouses/zones/:zoneId',
     'warehouses/sections/:sectionId',
+  ].map((path) =>
+    cabinetScreenRoute(
+      'warehouses',
+      async () => {
+        const { WarehousesScreen } =
+          await import('@/cabinet/warehouses/WarehousesScreen')
+        return WarehousesScreen
+      },
+      path,
+    ),
+  ),
+  ...[
     'inventory/warehouses/:warehouseId',
     'inventory/zones/:zoneId',
     'inventory/sections/:sectionId',
@@ -134,9 +146,9 @@ const commerceDetailRoutes: RouteObject[] = [
     cabinetScreenRoute(
       'warehouses',
       async () => {
-        const { InventoryScreen } =
-          await import('@/cabinet/inventory/InventoryScreen')
-        return InventoryScreen
+        const { LegacyWarehouseRedirect } =
+          await import('@/cabinet/warehouses/LegacyWarehouseRedirect')
+        return LegacyWarehouseRedirect
       },
       path,
     ),
@@ -208,9 +220,9 @@ const commerceDetailRoutes: RouteObject[] = [
   cabinetScreenRoute(
     'warehouses',
     async () => {
-      const { InventoryScreen } =
-        await import('@/cabinet/inventory/InventoryScreen')
-      return InventoryScreen
+      const { WarehousesScreen } =
+        await import('@/cabinet/warehouses/WarehousesScreen')
+      return WarehousesScreen
     },
     'parts/:partId/inventory',
   ),

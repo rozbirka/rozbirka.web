@@ -6,11 +6,16 @@ import {
   within,
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, useLocation } from 'react-router'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { LocaleProvider, type Locale } from '@/i18n'
 import type { InventorySection, InventoryZone } from '@/api/inventory'
-import { InventoryScreen, PartPlacementDrawer } from './InventoryScreen'
+import { InventoryScreen } from './InventoryScreen'
+import {
+  WarehousesScreen,
+  PartPlacementDrawer,
+} from '../warehouses/WarehousesScreen'
+import { LegacyWarehouseRedirect } from '../warehouses/LegacyWarehouseRedirect'
 
 const api = vi.hoisted(() => ({
   getWarehouses: vi.fn(),
@@ -325,10 +330,41 @@ function LocationProbe() {
   )
 }
 
+function StockRoutes() {
+  return (
+    <Routes>
+      <Route
+        path="/app/:tenant/warehouses/*"
+        element={<WarehousesScreen definition={definition as never} />}
+      />
+      <Route
+        path="/app/:tenant/inventory/warehouses/:warehouseId"
+        element={<LegacyWarehouseRedirect />}
+      />
+      <Route
+        path="/app/:tenant/inventory/zones/:zoneId"
+        element={<LegacyWarehouseRedirect />}
+      />
+      <Route
+        path="/app/:tenant/inventory/sections/:sectionId"
+        element={<LegacyWarehouseRedirect />}
+      />
+      <Route
+        path="/app/:tenant/inventory/*"
+        element={<InventoryScreen definition={definition as never} />}
+      />
+      <Route
+        path="/app/:tenant/parts/:partId/inventory"
+        element={<WarehousesScreen definition={definition as never} />}
+      />
+    </Routes>
+  )
+}
+
 const renderAt = (path: string) =>
   render(
     <MemoryRouter initialEntries={[path]}>
-      <InventoryScreen definition={definition as never} />
+      <StockRoutes />
       <LocationProbe />
     </MemoryRouter>,
   )
@@ -337,7 +373,7 @@ const renderIn = (locale: Locale, path: string) =>
   render(
     <LocaleProvider locale={locale} syncDocumentLang={false}>
       <MemoryRouter initialEntries={[path]}>
-        <InventoryScreen definition={definition as never} />
+        <StockRoutes />
       </MemoryRouter>
     </LocaleProvider>,
   )
@@ -1587,21 +1623,9 @@ it('counts the warehouse stock from the parts module', async () => {
   )
   const stock = screen.getByText('Позицій на складі').closest('div')
   expect(within(stock as HTMLElement).getByText('20')).toBeInTheDocument()
-  const differing = screen.getByText('Розходження').closest('div')
-  expect(within(differing as HTMLElement).getByText('3')).toBeInTheDocument()
+  expect(screen.queryByText('Розходження')).toBeNull()
   // The zone facet says how much of that stock sits in each zone.
   expect(screen.getByText('18')).toBeInTheDocument()
-})
-
-it('offers to continue the session that is already counting this warehouse', async () => {
-  renderAt('/app/yard/warehouses/wh-1')
-
-  const rail = await screen.findByRole('region', { name: 'Активна сесія' })
-  expect(
-    within(rail).getByRole('link', { name: 'Продовжити сесію' }),
-  ).toHaveAttribute('href', '/app/yard/inventory/sessions/session-1')
-  // The zone is being counted right now, so its check column says so.
-  expect(screen.getByText('триває')).toBeInTheDocument()
 })
 
 it('asks for a reason before booking the counted quantity', async () => {
@@ -2165,19 +2189,7 @@ it('returns from a warehouse to the warehouse list', async () => {
   ).toHaveAttribute('href', '/app/yard/warehouses')
 })
 
-it('starts stocktake for the selected warehouse from its details', async () => {
-  api.getSessions.mockResolvedValue([])
-  renderAt('/app/yard/warehouses/wh-1')
-  expect(
-    await screen.findByRole('link', { name: 'Нова сесія' }),
-  ).toHaveAttribute('href', '/app/yard/inventory/sessions/new?warehouseId=wh-1')
-  expect(screen.getByRole('link', { name: 'Почати сесію' })).toHaveAttribute(
-    'href',
-    '/app/yard/inventory/sessions/new?warehouseId=wh-1',
-  )
-})
-
-it('preselects the warehouse supplied by the warehouse details link', async () => {
+it('respects an explicitly selected warehouse when creating a stocktake', async () => {
   api.getWarehouses.mockResolvedValue([
     {
       id: 'wh-1',
@@ -2224,4 +2236,27 @@ it('retries a failed warehouse list request', async () => {
   expect(
     await screen.findByRole('heading', { level: 1, name: 'Склади' }),
   ).toBeVisible()
+})
+
+it('loads warehouses independently of stocktake sessions', async () => {
+  api.getSessions.mockRejectedValue(new Error('stocktake unavailable'))
+  renderAt('/app/yard/warehouses')
+  expect(
+    await screen.findByRole('heading', { level: 1, name: 'Склади' }),
+  ).toBeVisible()
+  expect(api.getSessions).not.toHaveBeenCalled()
+  expect(screen.queryByRole('link', { name: 'Інвентаризація' })).toBeNull()
+  expect(screen.queryByText('Ще не перевіряли')).toBeNull()
+})
+
+it('shows warehouse details without stocktake controls or requests', async () => {
+  renderAt('/app/yard/warehouses/wh-1')
+  expect(
+    await screen.findByRole('heading', { level: 1, name: 'Основний склад' }),
+  ).toBeVisible()
+  expect(api.getSessions).not.toHaveBeenCalled()
+  expect(screen.queryByRole('region', { name: 'Активна сесія' })).toBeNull()
+  expect(screen.queryByText('Історія перевірок')).toBeNull()
+  expect(screen.queryByRole('link', { name: 'Нова сесія' })).toBeNull()
+  expect(screen.queryByText('Розходження')).toBeNull()
 })

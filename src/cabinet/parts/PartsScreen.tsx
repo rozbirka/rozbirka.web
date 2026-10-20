@@ -152,7 +152,7 @@ import { amountPrecisionError } from '../currency/amount-precision'
 import { isLostResponse, lostResponseMessages } from '../lost-response'
 
 const PartPlacementDrawer = lazy(() =>
-  import('../inventory/InventoryScreen').then((module) => ({
+  import('../warehouses/WarehousesScreen').then((module) => ({
     default: module.PartPlacementDrawer,
   })),
 )

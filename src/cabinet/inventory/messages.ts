@@ -3,7 +3,7 @@ import { defineMessages } from '@/i18n'
 /** Words every inventory sub-screen shares. */
 export const inventoryMessages = defineMessages({
   uk: {
-    loading: 'Завантажуємо інвентаризацію…',
+    loading: 'Завантажуємо дані…',
     loadFailed: 'Не вдалося завантажити дані.',
     retry: 'Повторити',
     statusDraft: 'Чернетка',
@@ -54,7 +54,7 @@ export const inventoryMessages = defineMessages({
     },
   },
   'en-GB': {
-    loading: 'Loading stocktake…',
+    loading: 'Loading data…',
     loadFailed: 'Couldn’t load the data.',
     retry: 'Retry',
     statusDraft: 'Draft',
@@ -83,7 +83,7 @@ export const inventoryMessages = defineMessages({
     conflictsWord: { one: 'discrepancy', other: 'discrepancies' },
   },
   pl: {
-    loading: 'Wczytujemy inwentaryzację…',
+    loading: 'Wczytujemy dane…',
     loadFailed: 'Nie udało się wczytać danych.',
     retry: 'Ponów',
     statusDraft: 'Szkic',

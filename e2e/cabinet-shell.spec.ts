@@ -1635,6 +1635,11 @@ test('warehouses and stocktake remain separate at mobile and desktop widths @cab
 }, testInfo) => {
   await installCabinetApiBoundary(page)
   await loginFrom(page)
+  const stocktakeRequests: string[] = []
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/v1/inventory/sessions')
+      stocktakeRequests.push(request.url())
+  })
 
   for (const width of [320, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 })
@@ -1649,7 +1654,18 @@ test('warehouses and stocktake remain separate at mobile and desktop widths @cab
         path: testInfo.outputPath('stocktake-separated.png'),
         animations: 'disabled',
       })
-    await page.getByRole('link', { name: 'Склади', exact: true }).last().click()
+    const requestsBeforeWarehouses = stocktakeRequests.length
+    const activeNavigation = page.getByRole('navigation', {
+      name:
+        width < 768
+          ? 'Мобільна навігація'
+          : width < 1024
+            ? 'Навігація планшета'
+            : 'Навігація кабінету',
+    })
+    await activeNavigation
+      .getByRole('link', { name: 'Склади', exact: true })
+      .click()
     await expect(page).toHaveURL('/app/koval/warehouses')
     await expect(
       page.getByRole('heading', { level: 1, name: 'Склади' }),
@@ -1661,6 +1677,8 @@ test('warehouses and stocktake remain separate at mobile and desktop widths @cab
       page.getByRole('region', { name: 'Сесії інвентаризації' }),
     ).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Нова сесія' })).toHaveCount(0)
+    expect(stocktakeRequests).toHaveLength(requestsBeforeWarehouses)
+    await expect(page.getByText('Перевірка триває')).toHaveCount(0)
     if (width === 1440) {
       const navigation = page.getByRole('navigation', {
         name: 'Навігація кабінету',
