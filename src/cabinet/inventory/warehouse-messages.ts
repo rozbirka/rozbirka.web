@@ -69,6 +69,7 @@ export const warehouseMessages = defineMessages({
     defaultWarehouse: 'склад за замовчуванням',
     statPositions: 'Позицій на складі',
     statFilled: 'Зони із запчастинами',
+    filledRatio: '{filled} із {count}',
     needsPartsView: 'потрібне право «parts.view»',
     filledMeta: {
       one: '{filled} з {count} зони мають залишок',
@@ -191,6 +192,7 @@ export const warehouseMessages = defineMessages({
     defaultWarehouse: 'default warehouse',
     statPositions: 'Items in warehouse',
     statFilled: 'Zones with parts',
+    filledRatio: '{filled} of {count}',
     needsPartsView: 'requires the “parts.view” permission',
     filledMeta: {
       one: '{filled} of {count} zone hold stock',
@@ -312,6 +314,7 @@ export const warehouseMessages = defineMessages({
     defaultWarehouse: 'magazyn domyślny',
     statPositions: 'Pozycji w magazynie',
     statFilled: 'Strefy z częściami',
+    filledRatio: '{filled} z {count}',
     needsPartsView: 'wymaga uprawnienia „parts.view”',
     filledMeta: {
       one: '{filled} z {count} strefy ma stan',

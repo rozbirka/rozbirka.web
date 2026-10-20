@@ -641,15 +641,19 @@ function WarehouseView({ id }: { id: string }) {
                 <StockStat
                   label={t('statFilled')}
                   meta={
-                    occupancy === null
+                    stock.total === null
                       ? t('needsPartsView')
                       : t('filledMeta', { filled, count: real.length })
                   }
                   tone={
                     occupancy !== null && occupancy >= 80 ? 'warn' : 'plain'
                   }
-                  unit="%"
-                  value={occupancy == null ? '—' : String(occupancy)}
+                  unit=""
+                  value={
+                    stock.total === null
+                      ? '—'
+                      : t('filledRatio', { filled, count: real.length })
+                  }
                 />
               </div>
 
