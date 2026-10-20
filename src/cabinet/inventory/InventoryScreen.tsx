@@ -32,7 +32,6 @@ import {
   type Warehouse,
 } from '@/api/inventory'
 import { partsApi } from '@/api/parts'
-import { teamApi } from '@/api/team'
 import { normalizeApiProblem } from '@/api/errors'
 import { cn } from '@/lib/utils'
 import { cabinetPath } from '../cabinet-paths'
@@ -58,6 +57,8 @@ import {
 } from './use-stock-resource'
 import { useInventoryRefresh } from './use-inventory-refresh'
 import { InventoryRefreshStatus } from './InventoryRefreshStatus'
+import { InventoryTeamStatus } from './InventoryTeamStatus'
+import { useInventoryTeam } from './use-inventory-team'
 import { StockStat } from './StockStat'
 import { Step } from './StockStep'
 
@@ -465,7 +466,6 @@ interface NewSessionData {
   zones: InventoryZone[]
   /** Parts per zone, when the viewer may read the parts module. */
   byZone: Map<string, number> | null
-  people: { userId: string; name: string }[]
 }
 
 function NewSessionView() {
@@ -475,13 +475,14 @@ function NewSessionView() {
   const navigate = useNavigate()
   const canManage = usePermission('inventory.manage')
   const canSeeParts = usePermission('parts.view')
-  const canSeeTeam = usePermission('team.view')
+  const team = useInventoryTeam()
+  const { people } = team
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.inventory,
   )
   const loader = useCallback(
     async (signal: AbortSignal): Promise<NewSessionData> => {
-      const [warehouses, zones, byZone, people] = await Promise.all([
+      const [warehouses, zones, byZone] = await Promise.all([
         inventoryApi.getWarehouses({ signal }),
         inventoryApi.getZones({ activeOnly: true, signal }),
         canSeeParts
@@ -491,20 +492,10 @@ function NewSessionView() {
               () => null,
             )
           : Promise.resolve(null),
-        canSeeTeam
-          ? teamApi.listMembers({ signal }).then(
-              (members) =>
-                members.map((member) => ({
-                  userId: member.userId,
-                  name: member.name,
-                })),
-              () => [],
-            )
-          : Promise.resolve([]),
       ])
-      return { warehouses, zones, byZone, people }
+      return { warehouses, zones, byZone }
     },
-    [canSeeParts, canSeeTeam],
+    [canSeeParts],
   )
   const resource = useLoad(loader, 'new-session')
   const [params] = useSearchParams()
@@ -559,7 +550,7 @@ function NewSessionView() {
 
   return (
     <Resource retry={resource.reload} state={resource.state}>
-      {({ warehouses, zones, byZone, people }: NewSessionData) => {
+      {({ warehouses, zones, byZone }: NewSessionData) => {
         const countable = zones.filter(
           (zone) => zone.isActive && !zone.isSystemUnassigned,
         )
@@ -806,11 +797,12 @@ function NewSessionView() {
                     number="03"
                     title={t('peopleTitle')}
                   >
-                    {people.length === 0 ? (
+                    <InventoryTeamStatus team={team} />
+                    {!team.allowed || team.empty ? (
                       <p className="text-app-muted text-sm">
-                        {canSeeTeam ? t('noPeople') : t('teamHidden')}
+                        {team.allowed ? t('noPeople') : t('teamHidden')}
                       </p>
-                    ) : (
+                    ) : people.length > 0 ? (
                       <ul className="flex flex-wrap gap-2">
                         {people.map((person) => (
                           <li key={person.userId}>
@@ -829,7 +821,7 @@ function NewSessionView() {
                           </li>
                         ))}
                       </ul>
-                    )}
+                    ) : null}
                   </Step>
 
                   <Step number="04" title={t('rulesTitle')}>
@@ -1003,7 +995,6 @@ interface SessionData {
   results: InventorySessionResults | null
   /** Every zone's scans in one stream, newest first. */
   scans: InventoryScan[] | null
-  people: { userId: string; name: string }[]
 }
 
 const sessionDataComplete = (data: SessionData) =>
@@ -1030,14 +1021,15 @@ function SessionView({ id }: { id: string }) {
   )?.inventoryStartError
   const base = useInventoryBase()
   const canManage = usePermission('inventory.manage')
-  const canSeeTeam = usePermission('team.view')
+  const team = useInventoryTeam()
+  const { people } = team
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.inventory,
   )
   const loader = useCallback(
     async (signal: AbortSignal): Promise<SessionData> => {
       const session = await inventoryApi.getSession(id, { signal })
-      const [results, scanLists, people] = await Promise.all([
+      const [results, scanLists] = await Promise.all([
         session.status === 'draft'
           ? Promise.resolve(null)
           : inventoryApi
@@ -1048,16 +1040,6 @@ function SessionView({ id }: { id: string }) {
             inventoryApi.getScans(id, zone.zoneId, { signal }),
           ),
         ).catch(optionalInventoryData),
-        canSeeTeam
-          ? teamApi.listMembers({ signal }).then(
-              (members) =>
-                members.map((member) => ({
-                  userId: member.userId,
-                  name: member.name,
-                })),
-              () => [],
-            )
-          : Promise.resolve([]),
       ])
       const scans =
         scanLists === null
@@ -1067,12 +1049,18 @@ function SessionView({ id }: { id: string }) {
               .sort((left, right) =>
                 right.scannedAt.localeCompare(left.scannedAt),
               )
-      return { session, results, scans, people }
+      return { session, results, scans }
     },
-    [canSeeTeam, id],
+    [id],
   )
   const resource = useLoad(loader, id, sessionDataComplete)
-  useInventoryRefresh(resource.refresh)
+  const { refresh: refreshData } = resource
+  const { refresh: refreshTeam } = team
+  const refresh = useCallback(() => {
+    refreshData()
+    refreshTeam()
+  }, [refreshData, refreshTeam])
+  useInventoryRefresh(refresh)
   const [operationError, setOperationError] = useState<string | null>(() =>
     typeof startError === 'string' ? startError : null,
   )
@@ -1124,7 +1112,7 @@ function SessionView({ id }: { id: string }) {
 
   return (
     <Resource retry={resource.reload} state={resource.state}>
-      {({ session, results, scans: loadedScans, people }: SessionData) => {
+      {({ session, results, scans: loadedScans }: SessionData) => {
         const scans = loadedScans ?? []
         const resultsFailed = session.status !== 'draft' && results === null
         const [label, tone] = sessionStatus(session.status)
@@ -1287,8 +1275,9 @@ function SessionView({ id }: { id: string }) {
 
               <InventoryRefreshStatus
                 state={resource.state}
-                refresh={resource.refresh}
+                refresh={refresh}
               />
+              <InventoryTeamStatus team={team} />
 
               <div className="flex flex-wrap-reverse items-end gap-6">
                 <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-5">
@@ -1664,7 +1653,10 @@ function SessionView({ id }: { id: string }) {
                               </span>
                               <span className="min-w-0 flex-1">
                                 <span className="block text-[15px] font-semibold text-white">
-                                  {who ?? t('nameHidden')}
+                                  {who ??
+                                    (team.allowed
+                                      ? ti('teamNameUnavailable')
+                                      : t('nameHidden'))}
                                 </span>
                                 <span className="text-app-muted mt-0.5 block text-[12px]">
                                   {t('since', { time: timeOfDay(stat.since) })}
@@ -1677,7 +1669,7 @@ function SessionView({ id }: { id: string }) {
                           )
                         })}
                       </ul>
-                      {people.length === 0 ? (
+                      {!team.allowed ? (
                         <p className="text-app-muted mt-3.5 text-[12px] leading-[1.5]">
                           {t('namesHidden')}
                         </p>
@@ -1829,7 +1821,6 @@ interface ResultsData {
   results: InventorySessionResults
   session: InventorySession
   audit: InventoryAuditEvent[]
-  people: { userId: string; name: string }[]
 }
 
 function ResultsView({ id }: { id: string }) {
@@ -1838,33 +1829,30 @@ function ResultsView({ id }: { id: string }) {
   const { date, sessionStatus, locale } = useInventoryFormat()
   const base = useInventoryBase()
   const canAdjust = usePermission('inventory.adjust')
-  const canSeeTeam = usePermission('team.view')
+  const team = useInventoryTeam()
+  const { people } = team
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.inventory,
   )
   const loader = useCallback(
     async (signal: AbortSignal): Promise<ResultsData> => {
-      const [results, session, audit, people] = await Promise.all([
+      const [results, session, audit] = await Promise.all([
         inventoryApi.getResults(id, { signal }),
         inventoryApi.getSession(id, { signal }),
         inventoryApi.getAudit(id, { signal }),
-        canSeeTeam
-          ? teamApi.listMembers({ signal }).then(
-              (members) =>
-                members.map((member) => ({
-                  userId: member.userId,
-                  name: member.name,
-                })),
-              () => [],
-            )
-          : Promise.resolve([]),
       ])
-      return { results, session, audit, people }
+      return { results, session, audit }
     },
-    [canSeeTeam, id],
+    [id],
   )
   const resource = useLoad(loader, id)
-  useInventoryRefresh(resource.refresh)
+  const { refresh: refreshData } = resource
+  const { refresh: refreshTeam } = team
+  const refresh = useCallback(() => {
+    refreshData()
+    refreshTeam()
+  }, [refreshData, refreshTeam])
+  useInventoryRefresh(refresh)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [filter, setFilter] = useState<ResultFilter>('diff')
   /** The parts a reason is being asked for: one row, or every undecided row. */
@@ -1910,7 +1898,7 @@ function ResultsView({ id }: { id: string }) {
 
   return (
     <Resource retry={resource.reload} state={resource.state}>
-      {({ results, session, audit, people }: ResultsData) => {
+      {({ results, session, audit }: ResultsData) => {
         const adjusted = new Set(
           audit.flatMap((event) =>
             event.adjustmentId && event.partId ? [event.partId] : [],
@@ -1935,9 +1923,9 @@ function ResultsView({ id }: { id: string }) {
               : parts.filter((part) => part.delta === 0)
         /** A row can still be decided: it differs, nothing was booked yet, and
             the server will accept the write. */
-        const open = differing.filter(
-          (part) => !adjusted.has(part.partId) && !part.hasCoverageWarning,
-        )
+        const undecided = differing.filter((part) => !adjusted.has(part.partId))
+        const hasBlocked = undecided.some((part) => part.hasCoverageWarning)
+        const open = undecided.filter((part) => !part.hasCoverageWarning)
         const decidable =
           canAdjust && session.status === 'review' ? open : ([] as typeof open)
         const shortage = differing
@@ -2026,8 +2014,9 @@ function ResultsView({ id }: { id: string }) {
 
               <InventoryRefreshStatus
                 state={resource.state}
-                refresh={resource.refresh}
+                refresh={refresh}
               />
+              <InventoryTeamStatus team={team} />
 
               <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-px overflow-hidden rounded-[20px] border">
                 <JournalStat
@@ -2310,6 +2299,11 @@ function ResultsView({ id }: { id: string }) {
                       ),
                     )}
                   </ul>
+                  {decidable.length > 0 && hasBlocked ? (
+                    <p className="text-app-dim mt-5 text-[13px] leading-[1.5]">
+                      {t('coverageBlocked')}
+                    </p>
+                  ) : null}
                   {decidable.length > 0 ? (
                     <Button
                       className="mt-5 min-h-11 w-full text-sm font-bold"
@@ -2327,7 +2321,11 @@ function ResultsView({ id }: { id: string }) {
                         ? t('nothingToApply')
                         : session.status === 'review'
                           ? canAdjust
-                            ? t('allDecided')
+                            ? t(
+                                undecided.length === 0
+                                  ? 'allDecided'
+                                  : 'coverageBlocked',
+                              )
                             : t('needsAdjust')
                           : t('onlyInReview')}
                     </p>
@@ -2465,7 +2463,6 @@ const AUDIT_PAGE = 20
 interface AuditData {
   events: InventoryAuditEvent[]
   session: InventorySession
-  people: { userId: string; name: string }[]
 }
 
 function AuditView({ id }: { id: string }) {
@@ -2473,36 +2470,27 @@ function AuditView({ id }: { id: string }) {
   const ti = useT(inventoryMessages)
   const { date, locale } = useInventoryFormat()
   const base = useInventoryBase()
-  const canSeeTeam = usePermission('team.view')
+  const team = useInventoryTeam()
+  const { people } = team
   const [filter, setFilter] = useState<AuditFilter>('all')
   const [query, setQuery] = useState('')
   const [raw, setRaw] = useState(false)
   const [shown, setShown] = useState(AUDIT_PAGE)
   const loader = useCallback(
     async (signal: AbortSignal): Promise<AuditData> => {
-      const [events, session, people] = await Promise.all([
+      const [events, session] = await Promise.all([
         inventoryApi.getAudit(id, { signal }),
         inventoryApi.getSession(id, { signal }),
-        canSeeTeam
-          ? teamApi.listMembers({ signal }).then(
-              (members) =>
-                members.map((member) => ({
-                  userId: member.userId,
-                  name: member.name,
-                })),
-              () => [],
-            )
-          : Promise.resolve([]),
       ])
-      return { events, session, people }
+      return { events, session }
     },
-    [canSeeTeam, id],
+    [id],
   )
   const resource = useLoad(loader, id)
 
   return (
     <Resource retry={resource.reload} state={resource.state}>
-      {({ events, session, people }: AuditData) => {
+      {({ events, session }: AuditData) => {
         const nameOf = (userId: string) =>
           people.find((person) => person.userId === userId)?.name ?? null
         const counts: Record<AuditFilter, number> = {
@@ -2581,6 +2569,8 @@ function AuditView({ id }: { id: string }) {
                     .join(' · ')}
                 </p>
               </div>
+
+              <InventoryTeamStatus team={team} />
 
               <div className="flex flex-wrap items-center gap-3">
                 <div
@@ -2754,8 +2744,6 @@ interface JournalData {
   session: InventorySession
   /** Drafts have no totals; null means totals failed to load. */
   results: InventoryPartResult[] | null
-  /** Empty when this person cannot see the team; scanners then stay unnamed. */
-  people: { userId: string; name: string }[]
 }
 
 const journalDataComplete = (data: JournalData) => data.results !== null
@@ -2765,7 +2753,8 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
   const ti = useT(inventoryMessages)
   const { date, timeOfDay } = useInventoryFormat()
   const base = useInventoryBase()
-  const canSeeTeam = usePermission('team.view')
+  const team = useInventoryTeam()
+  const { people } = team
   const [filter, setFilter] = useState<JournalFilter>('all')
   const [who, setWho] = useState<string>('all')
   const [query, setQuery] = useState('')
@@ -2773,34 +2762,30 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
   const loader = useCallback(
     async (signal: AbortSignal): Promise<JournalData> => {
       const session = await inventoryApi.getSession(id, { signal })
-      const [scans, results, people] = await Promise.all([
+      const [scans, results] = await Promise.all([
         inventoryApi.getScans(id, zoneId, { signal }),
         session.status === 'draft'
           ? Promise.resolve([])
           : inventoryApi
               .getResults(id, { signal })
               .then((data) => data.parts, optionalInventoryData),
-        canSeeTeam
-          ? teamApi.listMembers({ signal }).then(
-              (members) =>
-                members.map((member) => ({
-                  userId: member.userId,
-                  name: member.name,
-                })),
-              () => [],
-            )
-          : Promise.resolve([]),
       ])
-      return { scans, session, results, people }
+      return { scans, session, results }
     },
-    [canSeeTeam, id, zoneId],
+    [id, zoneId],
   )
   const resource = useLoad(loader, `${id}:${zoneId}`, journalDataComplete)
-  useInventoryRefresh(resource.refresh)
+  const { refresh: refreshData } = resource
+  const { refresh: refreshTeam } = team
+  const refresh = useCallback(() => {
+    refreshData()
+    refreshTeam()
+  }, [refreshData, refreshTeam])
+  useInventoryRefresh(refresh)
 
   return (
     <Resource retry={resource.reload} state={resource.state}>
-      {({ scans, session, results, people }: JournalData) => {
+      {({ scans, session, results }: JournalData) => {
         const zone = session.zones.find((item) => item.zoneId === zoneId)
         const nameOf = (userId: string) =>
           people.find((person) => person.userId === userId)?.name ?? null
@@ -2905,8 +2890,9 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
 
               <InventoryRefreshStatus
                 state={resource.state}
-                refresh={resource.refresh}
+                refresh={refresh}
               />
+              <InventoryTeamStatus team={team} />
 
               {results === null ? (
                 <InventoryLoadError

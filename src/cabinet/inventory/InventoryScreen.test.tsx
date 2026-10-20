@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -62,6 +63,7 @@ const parts = vi.hoisted(() => ({
   get: vi.fn(),
   history: vi.fn(),
 }))
+const team = vi.hoisted(() => ({ listMembers: vi.fn() }))
 const printable = vi.hoisted(() => ({
   buildZoneLabelHtml: vi.fn().mockResolvedValue('<html>zones</html>'),
 }))
@@ -77,6 +79,7 @@ const permissions = vi.hoisted(() => ({
 
 vi.mock('@/api/inventory', () => ({ inventoryApi: api }))
 vi.mock('@/api/parts', () => ({ partsApi: parts }))
+vi.mock('@/api/team', () => ({ teamApi: team }))
 vi.mock('./zone-label-output', () => printable)
 vi.mock('../CabinetContext', () => ({
   useCabinet: () => ({
@@ -145,6 +148,39 @@ const session = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  permissions.value.delete('team.view')
+  team.listMembers.mockResolvedValue([
+    {
+      id: 'member-1',
+      userId: 'user-1',
+      name: 'Олена',
+      phone: null,
+      role: {
+        id: 'role-1',
+        name: 'Працівник',
+        isSystem: true,
+        permissions: null,
+        membersCount: null,
+      },
+      isActive: true,
+      joinedAt: '2026-09-01T10:00:00Z',
+    },
+    {
+      id: 'member-2',
+      userId: 'user-2',
+      name: 'Іван',
+      phone: null,
+      role: {
+        id: 'role-1',
+        name: 'Працівник',
+        isSystem: true,
+        permissions: null,
+        membersCount: null,
+      },
+      isActive: true,
+      joinedAt: '2026-09-01T10:00:00Z',
+    },
+  ])
   localStorage.clear()
   api.createWarehouse.mockResolvedValue({ id: 'wh-new' })
   api.getWarehouses.mockResolvedValue([
@@ -751,6 +787,184 @@ it('renders discrepancy results and adjustment affordance', async () => {
   ).toBeInTheDocument()
 })
 
+it.each([
+  ['new session', '/app/yard/inventory/sessions/new'],
+  ['session', '/app/yard/inventory/sessions/session-1'],
+  ['results', '/app/yard/inventory/sessions/session-1/results'],
+  ['audit', '/app/yard/inventory/sessions/session-1/audit'],
+  ['journal', '/app/yard/inventory/sessions/session-1/journal/zone-1'],
+])(
+  'shows and retries team loading failures in %s without hiding the screen',
+  async (_name, path) => {
+    const user = userEvent.setup()
+    permissions.value.add('team.view')
+    team.listMembers.mockRejectedValueOnce(new Error('Team unavailable'))
+    api.getAudit.mockResolvedValue([
+      {
+        id: 'audit-1',
+        inventorySessionId: 'session-1',
+        zoneId: null,
+        partId: null,
+        scanId: null,
+        adjustmentId: null,
+        action: 'session.started',
+        actorUserId: 'user-2',
+        detailsJson: null,
+        createdAt: '2026-09-02T11:00:00Z',
+      },
+    ])
+    renderAt(path)
+    expect(
+      await screen.findByText('Не вдалося завантажити команду.'),
+    ).toBeVisible()
+    expect(screen.queryByText('У команді ще нікого немає.')).toBeNull()
+    expect(
+      screen.queryByText('Імена видно тим, хто має право «team.view».'),
+    ).toBeNull()
+    expect(screen.getByRole('heading', { level: 1 })).toBeVisible()
+    if (path.endsWith('/new')) {
+      await user.click(screen.getByRole('checkbox', { name: /Стелаж A1/ }))
+    }
+    await user.click(
+      within(screen.getByRole('alert')).getByRole('button', {
+        name: 'Повторити',
+      }),
+    )
+    expect((await screen.findAllByText(/Олена|Іван/)).length).toBeGreaterThan(0)
+    expect(screen.queryByText('Не вдалося завантажити команду.')).toBeNull()
+    if (path.endsWith('/new')) {
+      expect(screen.getByRole('checkbox', { name: /Стелаж A1/ })).toBeChecked()
+    }
+  },
+)
+
+it('keeps known team names when refreshing the team fails', async () => {
+  const user = userEvent.setup()
+  permissions.value.add('team.view')
+  renderAt('/app/yard/inventory/sessions/session-1')
+  expect(
+    await screen.findByText('Іван', { selector: 'span.block' }),
+  ).toBeVisible()
+  team.listMembers.mockRejectedValueOnce(new Error('Offline'))
+  fireEvent.focus(window)
+  expect(await screen.findByText(/Не вдалося оновити команду/)).toBeVisible()
+  expect(screen.getByText('Іван', { selector: 'span.block' })).toBeVisible()
+  expect(
+    screen.queryByText('Імена видно тим, хто має право «team.view».'),
+  ).toBeNull()
+  await user.click(screen.getByRole('button', { name: 'Повторити' }))
+  await waitFor(() =>
+    expect(screen.queryByText(/Не вдалося оновити команду/)).toBeNull(),
+  )
+  expect(screen.getByText('Іван', { selector: 'span.block' })).toBeVisible()
+})
+
+it('keeps the form usable while team loading is pending without claiming it is empty', async () => {
+  permissions.value.add('team.view')
+  let resolve!: (members: []) => void
+  team.listMembers.mockImplementationOnce(
+    () =>
+      new Promise<[]>((done) => {
+        resolve = done
+      }),
+  )
+  renderAt('/app/yard/inventory/sessions/new')
+  expect(
+    await screen.findByRole('checkbox', { name: /Стелаж A1/ }),
+  ).toBeEnabled()
+  expect(screen.getByText('Завантажуємо імена команди…')).toBeVisible()
+  expect(screen.queryByText('У команді ще нікого немає.')).toBeNull()
+  await act(() => {
+    resolve([])
+    return Promise.resolve()
+  })
+  expect(await screen.findByText('У команді ще нікого немає.')).toBeVisible()
+})
+
+it('shows an empty team only after a successful empty response', async () => {
+  permissions.value.add('team.view')
+  team.listMembers.mockResolvedValue([])
+  renderAt('/app/yard/inventory/sessions/new')
+  expect(await screen.findByText('У команді ще нікого немає.')).toBeVisible()
+  expect(screen.queryByRole('alert')).toBeNull()
+})
+
+it('does not fetch the team without the permission', async () => {
+  renderAt('/app/yard/inventory/sessions/new')
+  expect(
+    await screen.findByText(
+      'Список команди видно тим, хто має право «team.view».',
+    ),
+  ).toBeVisible()
+  expect(team.listMembers).not.toHaveBeenCalled()
+})
+
+it.each(['blocked only', 'applied and blocked', 'open and blocked'])(
+  'does not call coverage-blocked discrepancies decided: %s',
+  async (scenario) => {
+    api.getSession.mockResolvedValue({ ...session, status: 'review' })
+    const blocked = {
+      partId: 'part-blocked',
+      partName: 'Двері',
+      partQrCode: 'QR-blocked',
+      expectedQuantity: 3,
+      actualQuantity: 2,
+      delta: -1,
+      result: 'Shortage',
+      hasCoverageWarning: true,
+      unselectedZoneIds: ['zone-2'],
+    }
+    api.getResults.mockResolvedValue({
+      inventorySessionId: 'session-1',
+      number: 'INV-001',
+      parts: [
+        blocked,
+        ...(scenario === 'blocked only'
+          ? []
+          : [
+              {
+                ...blocked,
+                partId: 'part-other',
+                partName: 'Крило',
+                hasCoverageWarning: false,
+                unselectedZoneIds: [],
+              },
+            ]),
+      ],
+    })
+    if (scenario === 'applied and blocked') {
+      api.getAudit.mockResolvedValue([
+        {
+          id: 'audit-1',
+          inventorySessionId: 'session-1',
+          zoneId: null,
+          partId: 'part-other',
+          scanId: null,
+          adjustmentId: 'adjustment-1',
+          action: 'adjustment.applied',
+          actorUserId: 'user-1',
+          detailsJson: null,
+          createdAt: '2026-09-02T11:00:00Z',
+        },
+      ])
+    }
+    renderAt('/app/yard/inventory/sessions/session-1/results')
+    expect(
+      await screen.findByText(
+        'Є розходження без рішення. Коригування для них недоступне через неповне покриття зон.',
+      ),
+    ).toBeVisible()
+    expect(screen.queryByText('Усі розходження вже мають рішення.')).toBeNull()
+    if (scenario === 'open and blocked') {
+      expect(
+        screen.getAllByRole('button', { name: 'Прийняти факт' }),
+      ).toHaveLength(1)
+    } else {
+      expect(screen.queryByRole('button', { name: 'Прийняти факт' })).toBeNull()
+    }
+  },
+)
+
 it('offers reopen only while a session is in review', async () => {
   api.getSession.mockResolvedValue({ ...session, status: 'review' })
   renderAt('/app/yard/inventory/sessions/session-1')
@@ -807,6 +1021,7 @@ it('does not offer duplicate or unsafe adjustments', async () => {
   renderAt('/app/yard/inventory/sessions/session-1/results')
 
   expect(await screen.findByText('Застосовано')).toBeInTheDocument()
+  expect(screen.getByText('Усі розходження вже мають рішення.')).toBeVisible()
   expect(
     screen.queryByRole('button', { name: 'Прийняти факт' }),
   ).not.toBeInTheDocument()
