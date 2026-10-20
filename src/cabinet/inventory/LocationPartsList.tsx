@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
 import { Package } from 'lucide-react'
 import {
@@ -27,6 +27,13 @@ interface Props {
   onPlace?: ((part: PartSearchItem) => void) | undefined
   refreshKey?: number
   emptyText?: string
+  selection?:
+    | {
+        parts: ReadonlyMap<string, PartSearchItem>
+        onChange: (parts: ReadonlyMap<string, PartSearchItem>) => void
+        actions: ReactNode
+      }
+    | undefined
 }
 interface ResultState {
   key: string
@@ -84,6 +91,7 @@ function OwnedLocationPartsList({
   onPlace,
   refreshKey = 0,
   emptyText,
+  selection,
 }: Props & { owner: string; slug: string }) {
   const t = useT(locationContentsMessages)
   const tc = useT(commonMessages)
@@ -162,6 +170,7 @@ function OwnedLocationPartsList({
           )
         }
       />
+      {selection?.actions}
       {!current ? (
         <SkeletonRows rows={3} />
       ) : current.error ? (
@@ -182,6 +191,29 @@ function OwnedLocationPartsList({
               caption={target.name}
               rows={data.items}
               rowKey={(part) => part.id}
+              {...(selection
+                ? {
+                    selection: {
+                      selected: new Set(selection.parts.keys()),
+                      rowLabel: (part: PartSearchItem) =>
+                        t('selectPart', { name: part.name }),
+                      unavailable: (part: PartSearchItem) =>
+                        part.isInventoryLocked
+                          ? t('placementLocked')
+                          : undefined,
+                      onChange: (ids: ReadonlySet<string>) => {
+                        const next = new Map(selection.parts)
+                        for (const id of next.keys())
+                          if (!ids.has(id)) next.delete(id)
+                        for (const part of data.items) {
+                          if (ids.has(part.id) && !part.isInventoryLocked)
+                            next.set(part.id, part)
+                        }
+                        selection.onChange(next)
+                      },
+                    },
+                  }
+                : {})}
               columns={[
                 {
                   key: 'name',

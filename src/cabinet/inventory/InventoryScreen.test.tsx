@@ -14,6 +14,7 @@ import type {
   InventoryScan,
   InventorySection,
   InventoryZone,
+  PartInventoryZone,
 } from '@/api/inventory'
 import { InventoryScreen } from './InventoryScreen'
 import {
@@ -3322,6 +3323,359 @@ it('does not load unassigned parts without parts viewing permission', async () =
     ).toBeVisible()
     expect(parts.search).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: /Розмістити/ })).toBeNull()
+  } finally {
+    permissions.value.add('parts.view')
+  }
+})
+
+function setupBulkUnassignedQueue() {
+  setupUnassignedQueue()
+  const queueParts = [
+    unassignedPart,
+    { ...unassignedPart, id: 'part-2', name: 'Фара' },
+    {
+      ...unassignedPart,
+      id: 'locked-part',
+      name: 'Бампер',
+      isInventoryLocked: true,
+    },
+  ]
+  const placed = new Set<string>()
+  parts.search.mockImplementation(() => {
+    const items = queueParts.filter((part) => !placed.has(part.id))
+    return Promise.resolve({
+      items,
+      page: 1,
+      pageSize: 10,
+      total: items.length,
+      totalPages: 1,
+    })
+  })
+  return { placed }
+}
+
+async function openBulkUnassignedPlacement(
+  user: ReturnType<typeof userEvent.setup>,
+) {
+  await user.click(
+    await screen.findByRole('checkbox', { name: 'Обрати всі на сторінці' }),
+  )
+  await user.click(screen.getByRole('button', { name: 'Розмістити вибрані' }))
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Розмістити вибрані запчастини',
+  })
+  await user.click(
+    await within(dialog).findByRole('button', { name: 'Зона: Виберіть зону' }),
+  )
+  await user.click(await screen.findByRole('option', { name: /Стелаж A1/ }))
+  return dialog
+}
+
+it('bulk places selected unassigned parts and excludes inventory-locked rows', async () => {
+  const user = userEvent.setup()
+  const { placed } = setupBulkUnassignedQueue()
+  api.replacePartZones.mockImplementation((partId: string) => {
+    placed.add(partId)
+    return Promise.resolve([])
+  })
+  renderAt('/app/yard/warehouses/wh-1/unassigned?unassignedSearch=OEM&keep=1')
+  expect(
+    await screen.findByRole('checkbox', { name: 'Обрати: Бампер' }),
+  ).toBeDisabled()
+  const dialog = await openBulkUnassignedPlacement(user)
+  expect(dialog).toHaveTextContent('Вибрано: 2')
+  await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
+  expect(await within(dialog).findByRole('status')).toHaveTextContent(
+    'Розміщено: 2 із 2',
+  )
+  expect(
+    api.replacePartZones.mock.calls.map((call: unknown[]) => call.slice(0, 2)),
+  ).toEqual([
+    ['part-1', ['zone-1']],
+    ['part-2', ['zone-1']],
+  ])
+  await user.click(within(dialog).getByRole('button', { name: 'Закрити' }))
+  expect(screen.queryByRole('checkbox', { name: 'Обрати: Крило' })).toBeNull()
+  expect(
+    screen.getByRole('checkbox', { name: 'Обрати: Бампер' }),
+  ).toBeDisabled()
+  expect(
+    screen.queryByRole('button', { name: 'Розмістити вибрані' }),
+  ).toBeNull()
+  expect(
+    screen.getByRole('searchbox', { name: 'Пошук запчастин' }),
+  ).toHaveValue('OEM')
+  expect(screen.getByTestId('inventory-url')).toHaveTextContent('keep=1')
+})
+
+it('bulk retries only failed parts and preserves the selected zone after a partial failure', async () => {
+  const user = userEvent.setup()
+  const { placed } = setupBulkUnassignedQueue()
+  let failedOnce = false
+  api.replacePartZones.mockImplementation((partId: string) => {
+    if (partId === 'part-2' && !failedOnce) {
+      failedOnce = true
+      return Promise.reject(new Error('Offline'))
+    }
+    placed.add(partId)
+    return Promise.resolve([])
+  })
+  renderAt('/app/yard/warehouses/wh-1/unassigned')
+  const dialog = await openBulkUnassignedPlacement(user)
+  await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent('Фара')
+  expect(within(dialog).getByRole('status')).toHaveTextContent(
+    'Розміщено: 1 із 2',
+  )
+  expect(
+    within(dialog).getByRole('button', { name: 'Зона: Стелаж A1' }),
+  ).toBeDisabled()
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Повторити для нерозміщених' }),
+  )
+  await waitFor(() =>
+    expect(within(dialog).getByRole('status')).toHaveTextContent(
+      'Розміщено: 2 із 2',
+    ),
+  )
+  expect(
+    api.replacePartZones.mock.calls.map((call: unknown[]) => call[0]),
+  ).toEqual(['part-1', 'part-2', 'part-2'])
+  expect(within(dialog).queryByRole('alert')).toBeNull()
+})
+
+it('bulk preserves physical placements and skips parts already moved out of the source queue', async () => {
+  const user = userEvent.setup()
+  setupBulkUnassignedQueue()
+  const systemPlacement = await (api.getPartZones('part-1') as Promise<
+    PartInventoryZone[]
+  >)
+  api.getPartZones.mockImplementation((partId: string) =>
+    Promise.resolve(
+      partId === 'part-1'
+        ? [
+            ...systemPlacement,
+            {
+              ...systemPlacement[0],
+              zoneId: 'zone-other',
+              zoneName: 'Інша зона',
+              isSystemUnassigned: false,
+              shelfId: 'shelf-other',
+              sectionId: 'section-other',
+            },
+          ]
+        : [
+            {
+              ...systemPlacement[0],
+              zoneId: 'zone-moved',
+              zoneName: 'Уже розміщено',
+              isSystemUnassigned: false,
+            },
+          ],
+    ),
+  )
+  renderAt('/app/yard/warehouses/wh-1/unassigned')
+  const dialog = await openBulkUnassignedPlacement(user)
+  await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
+  expect(
+    await within(dialog).findByText(/Фара.*вже не в «Без зони»/),
+  ).toBeVisible()
+  expect(api.replacePartZones).toHaveBeenCalledTimes(1)
+  expect(api.replacePartZones).toHaveBeenCalledWith(
+    'part-1',
+    ['zone-other', 'zone-1'],
+    expect.any(Object),
+    'shelf-other',
+    'section-other',
+  )
+  expect(within(dialog).getByRole('status')).toHaveTextContent(
+    'Розміщено: 1 із 2',
+  )
+  expect(
+    within(dialog).queryByRole('button', {
+      name: 'Повторити для нерозміщених',
+    }),
+  ).toBeNull()
+})
+
+it('bulk does not write a part when reading its current placement fails', async () => {
+  const user = userEvent.setup()
+  setupBulkUnassignedQueue()
+  api.getPartZones.mockRejectedValue(new Error('Offline'))
+  renderAt('/app/yard/warehouses/wh-1/unassigned')
+  const dialog = await openBulkUnassignedPlacement(user)
+  await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
+  expect(await within(dialog).findAllByRole('alert')).toHaveLength(2)
+  expect(api.replacePartZones).not.toHaveBeenCalled()
+  await user.click(within(dialog).getByRole('button', { name: 'Закрити' }))
+  expect(screen.getByRole('checkbox', { name: 'Обрати: Крило' })).toBeChecked()
+  expect(screen.getByRole('checkbox', { name: 'Обрати: Фара' })).toBeChecked()
+})
+
+it('bulk keeps selection across pages and search and can clear it', async () => {
+  const user = userEvent.setup()
+  setupUnassignedQueue()
+  parts.search.mockImplementation(
+    (request: { page?: number; query?: string }) => {
+      const second = request.page === 2 || request.query === 'Фара'
+      return Promise.resolve({
+        items: [
+          {
+            ...unassignedPart,
+            id: second ? 'part-2' : 'part-1',
+            name: second ? 'Фара' : 'Крило',
+          },
+        ],
+        page: request.page ?? 1,
+        pageSize: 10,
+        total: request.query ? 1 : 11,
+        totalPages: request.query ? 1 : 2,
+      })
+    },
+  )
+  renderAt('/app/yard/warehouses/wh-1/unassigned')
+  await user.click(
+    await screen.findByRole('checkbox', { name: 'Обрати: Крило' }),
+  )
+  await user.click(screen.getByRole('button', { name: 'Наступна сторінка' }))
+  await user.click(
+    await screen.findByRole('checkbox', { name: 'Обрати: Фара' }),
+  )
+  await user.type(
+    screen.getByRole('searchbox', { name: 'Пошук запчастин' }),
+    'Фара',
+  )
+  await waitFor(() =>
+    expect(parts.search.mock.lastCall?.[0]).toMatchObject({ query: 'Фара' }),
+  )
+  await user.click(screen.getByRole('button', { name: 'Розмістити вибрані' }))
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Розмістити вибрані запчастини',
+  })
+  const chosen = within(dialog).getByRole('list', {
+    name: 'Вибрані запчастини',
+  })
+  expect(within(chosen).getAllByRole('listitem')).toHaveLength(2)
+  expect(chosen).toHaveTextContent('Крило')
+  expect(chosen).toHaveTextContent('Фара')
+  await user.click(within(dialog).getByRole('button', { name: 'Скасувати' }))
+  await user.click(screen.getByRole('button', { name: 'Зняти вибір' }))
+  expect(
+    screen.queryByRole('button', { name: 'Розмістити вибрані' }),
+  ).toBeNull()
+  expect(
+    screen.getByRole('checkbox', { name: 'Обрати: Фара' }),
+  ).not.toBeChecked()
+})
+
+it('bulk confirms a lost save response by reading placement before retrying', async () => {
+  const user = userEvent.setup()
+  const { placed } = setupBulkUnassignedQueue()
+  const original = await (api.getPartZones('part-1') as Promise<
+    PartInventoryZone[]
+  >)
+  api.getPartZones.mockImplementation((id: string) =>
+    Promise.resolve(
+      placed.has(id)
+        ? [{ ...original[0], zoneId: 'zone-1', isSystemUnassigned: false }]
+        : original,
+    ),
+  )
+  api.replacePartZones.mockImplementation((id: string) => {
+    placed.add(id)
+    return id === 'part-1'
+      ? Promise.reject(new Error('Response lost'))
+      : Promise.resolve([])
+  })
+  renderAt('/app/yard/warehouses/wh-1/unassigned')
+  const dialog = await openBulkUnassignedPlacement(user)
+  await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent('Крило')
+  await user.click(
+    within(dialog).getByRole('button', { name: 'Повторити для нерозміщених' }),
+  )
+  await waitFor(() =>
+    expect(within(dialog).getByRole('status')).toHaveTextContent(
+      'Розміщено: 2 із 2',
+    ),
+  )
+  expect(api.replacePartZones).toHaveBeenCalledTimes(2)
+})
+
+it('bulk prevents duplicate submission and closing while a write is pending', async () => {
+  const user = userEvent.setup()
+  setupBulkUnassignedQueue()
+  let finish!: () => void
+  const saved = new Promise<never[]>((resolve) => {
+    finish = () => resolve([])
+  })
+  api.replacePartZones.mockImplementationOnce(() => saved)
+  renderAt('/app/yard/warehouses/wh-1/unassigned')
+  const dialog = await openBulkUnassignedPlacement(user)
+  const submit = within(dialog).getByRole('button', { name: 'Розмістити' })
+  await user.dblClick(submit)
+  await waitFor(() => expect(api.replacePartZones).toHaveBeenCalledTimes(1))
+  expect(submit).toBeDisabled()
+  expect(
+    within(dialog).getByRole('button', { name: 'Скасувати' }),
+  ).toBeDisabled()
+  await user.click(within(dialog).getByRole('button', { name: 'Закрити' }))
+  expect(dialog).toBeVisible()
+  await user.keyboard('{Escape}')
+  expect(dialog).toBeVisible()
+  await act(async () => {
+    finish()
+    await saved
+  })
+  await waitFor(() =>
+    expect(within(dialog).getByRole('status')).toHaveTextContent(
+      'Розміщено: 2 із 2',
+    ),
+  )
+})
+
+it('bulk stops after unmounting without writing remaining parts', async () => {
+  const user = userEvent.setup()
+  setupBulkUnassignedQueue()
+  let finish!: () => void
+  const saved = new Promise<never[]>((resolve) => {
+    finish = () => resolve([])
+  })
+  let signal: AbortSignal | undefined
+  api.replacePartZones.mockImplementationOnce(
+    (_id: string, _ids: string[], options: { signal?: AbortSignal }) => {
+      signal = options.signal
+      return saved
+    },
+  )
+  const view = renderAt('/app/yard/warehouses/wh-1/unassigned')
+  const dialog = await openBulkUnassignedPlacement(user)
+  await user.click(within(dialog).getByRole('button', { name: 'Розмістити' }))
+  await waitFor(() => expect(api.replacePartZones).toHaveBeenCalledTimes(1))
+  view.unmount()
+  expect(signal?.aborted).toBe(true)
+  await act(async () => {
+    finish()
+    await saved
+  })
+  expect(api.replacePartZones).toHaveBeenCalledTimes(1)
+})
+
+it('bulk hides selected part details when parts viewing permission is revoked', async () => {
+  const user = userEvent.setup()
+  setupBulkUnassignedQueue()
+  const view = renderAt('/app/yard/warehouses/wh-1/unassigned')
+  await openBulkUnassignedPlacement(user)
+  permissions.value.delete('parts.view')
+  try {
+    view.rerender(
+      <MemoryRouter>
+        <StockRoutes />
+        <LocationProbe />
+      </MemoryRouter>,
+    )
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(api.replacePartZones).not.toHaveBeenCalled()
   } finally {
     permissions.value.add('parts.view')
   }

@@ -13,6 +13,7 @@ import {
 import {
   ActionMenu,
   Button,
+  BulkBar,
   Card,
   ConfirmDialog,
   Field,
@@ -64,6 +65,7 @@ import { ZoneEditorSheet, type ZoneDraft } from '../inventory/ZoneEditorSheet'
 import { InventoryLoadError, Resource } from '../inventory/InventoryResource'
 import { LocationPartsList } from '../inventory/LocationPartsList'
 import { unassignedMessages } from './unassigned-messages'
+import { BulkPlacementSheet } from './BulkPlacementSheet'
 import { useLoad, usePermission } from '../inventory/use-stock-resource'
 import { StockStat } from '../inventory/StockStat'
 import { Step } from '../inventory/StockStep'
@@ -100,6 +102,7 @@ function UnassignedPartsView({ id }: { id: string }) {
   const tw = useT(warehouseMessages)
   const base = useWarehouseBase()
   const canManage = usePermission('inventory.zones.manage')
+  const canSeeParts = usePermission('parts.view')
   const loader = useCallback(
     (signal: AbortSignal) => inventoryApi.getWarehouse(id, { signal }),
     [id],
@@ -108,6 +111,10 @@ function UnassignedPartsView({ id }: { id: string }) {
   const [placing, setPlacing] = useState<PartSearchItem | null>(null)
   const [revision, setRevision] = useState(0)
   const [placedName, setPlacedName] = useState<string | null>(null)
+  const [selectedParts, setSelectedParts] = useState<
+    ReadonlyMap<string, PartSearchItem>
+  >(new Map())
+  const [bulkParts, setBulkParts] = useState<PartSearchItem[] | null>(null)
   return (
     <Resource state={resource.state} retry={resource.reload}>
       {(warehouse: WarehouseDetail) => {
@@ -153,6 +160,36 @@ function UnassignedPartsView({ id }: { id: string }) {
                   context="unassigned"
                   refreshKey={revision}
                   emptyText={t('empty')}
+                  selection={
+                    canManage && warehouse.isActive
+                      ? {
+                          parts: selectedParts,
+                          onChange: setSelectedParts,
+                          actions: selectedParts.size ? (
+                            <div className="grid gap-2">
+                              <BulkBar
+                                count={selectedParts.size}
+                                noun={t('partsNoun')}
+                                actions={[
+                                  {
+                                    key: 'place',
+                                    label: t('placeSelected'),
+                                    onRun: () => {
+                                      setPlacedName(null)
+                                      setBulkParts([...selectedParts.values()])
+                                    },
+                                  },
+                                ]}
+                                onClear={() => setSelectedParts(new Map())}
+                              />
+                              <p className="text-app-muted text-xs">
+                                {t('selectionHint')}
+                              </p>
+                            </div>
+                          ) : null,
+                        }
+                      : undefined
+                  }
                   onPlace={
                     canManage && warehouse.isActive
                       ? (part) => {
@@ -178,6 +215,32 @@ function UnassignedPartsView({ id }: { id: string }) {
                 onClose={() => setPlacing(null)}
                 onSaved={() => {
                   setPlacedName(placing.name)
+                  setSelectedParts((current) => {
+                    const next = new Map(current)
+                    next.delete(placing.id)
+                    return next
+                  })
+                  setRevision((value) => value + 1)
+                }}
+              />
+            ) : null}
+            {bulkParts &&
+            zone &&
+            canManage &&
+            canSeeParts &&
+            warehouse.isActive ? (
+              <BulkPlacementSheet
+                warehouseId={warehouse.id}
+                sourceZoneId={zone.id}
+                parts={bulkParts}
+                onClose={() => setBulkParts(null)}
+                onApplied={(ids) => {
+                  setSelectedParts(
+                    (current) =>
+                      new Map(
+                        [...current].filter(([partId]) => !ids.has(partId)),
+                      ),
+                  )
                   setRevision((value) => value + 1)
                 }}
               />
