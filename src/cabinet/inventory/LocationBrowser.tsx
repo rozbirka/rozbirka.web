@@ -21,6 +21,38 @@ const PAGE_SIZE = 10
 const matches = (query: string, name: string, code: string) =>
   !query || `${name} ${code}`.toLocaleLowerCase().includes(query)
 
+export function LocationBrowserHeader({
+  title,
+  total,
+  lead,
+  search,
+  actions,
+}: {
+  title: string
+  total: number
+  lead: string
+  search?: ReactNode
+  actions: ReactNode
+}) {
+  const f = useFormat()
+  return (
+    <header className="location-browser__toolbar">
+      <div className="min-w-0">
+        <h2
+          className="location-browser__heading"
+          aria-label={`${title} · ${f.number(total)}`}
+        >
+          {title}
+          <span className="location-browser__total">{f.number(total)}</span>
+        </h2>
+        <p className="location-browser__lead">{lead}</p>
+      </div>
+      {search ? <div className="location-browser__search">{search}</div> : null}
+      <div className="location-browser__actions">{actions}</div>
+    </header>
+  )
+}
+
 export function LocationBrowser({
   zone,
   section,
@@ -120,27 +152,18 @@ export function LocationBrowser({
 
   return (
     <div className="location-browser">
-      <header className="location-browser__toolbar">
-        <div className="min-w-0">
-          <h2
-            className="location-browser__heading"
-            aria-label={`${t(section ? 'shelves' : 'sections')} · ${f.number(total)}`}
-          >
-            {t(section ? 'shelves' : 'sections')}
-            <span className="location-browser__total">{f.number(total)}</span>
-          </h2>
-          <p className="location-browser__lead">
-            {t(
-              section
-                ? onEditShelf
-                  ? 'chooseShelfToEdit'
-                  : 'chooseShelf'
-                : 'chooseSection',
-            )}
-          </p>
-        </div>
-        {printWorkspace ? null : (
-          <div className="location-browser__search">
+      <LocationBrowserHeader
+        title={t(section ? 'shelves' : 'sections')}
+        total={total}
+        lead={t(
+          section
+            ? onEditShelf
+              ? 'chooseShelfToEdit'
+              : 'chooseShelf'
+            : 'chooseSection',
+        )}
+        search={
+          printWorkspace ? null : (
             <SearchInput
               className="min-h-11 text-sm"
               aria-label={t(section ? 'searchShelves' : 'searchSections')}
@@ -153,24 +176,26 @@ export function LocationBrowser({
                 })
               }
             />
-          </div>
-        )}
-        <div className="location-browser__actions">
-          {canManage ? (
-            <Button
-              className="px-3 text-[13px] sm:px-4 sm:text-sm"
-              variant="primary"
-              onClick={() =>
-                section ? onAddShelf(section) : onAddSection(zone)
-              }
-            >
-              <Plus aria-hidden />
-              {tw(section ? 'addShelf' : 'addSection')}
-            </Button>
-          ) : null}
-          {headerActions}
-        </div>
-      </header>
+          )
+        }
+        actions={
+          <>
+            {canManage ? (
+              <Button
+                className="px-3 text-[13px] sm:px-4 sm:text-sm"
+                variant="primary"
+                onClick={() =>
+                  section ? onAddShelf(section) : onAddSection(zone)
+                }
+              >
+                <Plus aria-hidden />
+                {tw(section ? 'addShelf' : 'addSection')}
+              </Button>
+            ) : null}
+            {headerActions}
+          </>
+        }
+      />
       {printWorkspace != null ? (
         <div className="px-4 pb-4 sm:px-6 sm:pb-6">{printWorkspace}</div>
       ) : (
@@ -368,7 +393,7 @@ export function LocationBrowser({
   )
 }
 
-function LocationName({ name, code }: { name: string; code: string }) {
+export function LocationName({ name, code }: { name: string; code: string }) {
   return (
     <span className="min-w-0">
       <strong className="location-browser__name">{name}</strong>

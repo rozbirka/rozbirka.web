@@ -992,7 +992,10 @@ it('updates the zone code when its name is edited in the side drawer', async () 
   renderAt('/app/yard/warehouses/wh-1')
 
   await user.click(
-    await screen.findByRole('button', { name: 'Редагувати зону Стелаж A1' }),
+    await screen.findByRole('button', { name: 'Дії із зоною Стелаж A1' }),
+  )
+  await user.click(
+    screen.getByRole('menuitem', { name: 'Редагувати зону Стелаж A1' }),
   )
   const drawer = screen.getByRole('dialog', { name: 'Редагувати зону' })
   expect(drawer).toHaveClass('sm:right-0')
@@ -1109,13 +1112,17 @@ it('offers warehouse and zone management and prints actual zone QR labels', asyn
 
   expect(await screen.findByText('Стелаж A1')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Редагувати' })).toBeInTheDocument()
+  await user.click(
+    screen.getByRole('button', { name: 'Дії із зоною Стелаж A1' }),
+  )
   expect(
-    screen.getByRole('button', { name: 'Архівувати зону Стелаж A1' }),
+    screen.getByRole('menuitem', { name: 'Архівувати зону Стелаж A1' }),
   ).toBeInTheDocument()
+  await user.keyboard('{Escape}')
 
   // Printing, exporting and archiving hide behind the overflow control, the
   // way the toolbar is drawn.
-  await user.click(screen.getByRole('button', { name: 'Інші дії зі складом' }))
+  await user.click(screen.getByRole('button', { name: 'Дії із зонами' }))
   await user.click(screen.getByRole('menuitem', { name: 'Друк стікерів зон' }))
 
   const picker = await screen.findByRole('region', { name: 'Етикетки зон' })
@@ -1500,7 +1507,10 @@ it('edits a zone in the same side drawer', async () => {
   renderAt('/app/yard/warehouses/wh-1')
 
   await user.click(
-    await screen.findByRole('button', { name: 'Редагувати зону Стелаж A1' }),
+    await screen.findByRole('button', { name: 'Дії із зоною Стелаж A1' }),
+  )
+  await user.click(
+    screen.getByRole('menuitem', { name: 'Редагувати зону Стелаж A1' }),
   )
   const drawer = screen.getByRole('dialog', { name: 'Редагувати зону' })
   expect(drawer).toHaveClass('sm:right-0')
@@ -2028,7 +2038,7 @@ it('can cancel shelf editing mode and return to opening parts', async () => {
 it.each([
   [
     '/app/yard/warehouses/wh-1',
-    'Інші дії зі складом',
+    'Дії із зонами',
     'Друк стікерів зон',
     'Етикетки зон',
     'Основний склад',

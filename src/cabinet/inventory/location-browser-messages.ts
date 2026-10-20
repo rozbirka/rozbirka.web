@@ -1,6 +1,13 @@
 import { defineMessages } from '@/i18n'
 export const locationBrowserMessages = defineMessages({
   uk: {
+    zonesActions: 'Дії із зонами',
+    chooseZone: 'Виберіть зону, щоб переглянути її секції',
+    searchZones: 'Пошук зони',
+    zoneList: 'Список зон',
+    zonePagination: 'Сторінки зон',
+    zoneParts: 'Запчастин',
+    zonePartsCount: 'Запчастин: {count}',
     printSections: 'Друк стікерів секцій',
     printShelves: 'Друк стікерів полиць',
     zoneActions: 'Дії із зоною {name}',
@@ -46,6 +53,13 @@ export const locationBrowserMessages = defineMessages({
     sectionView: 'Вміст секції',
   },
   'en-GB': {
+    zonesActions: 'Zone list actions',
+    chooseZone: 'Choose a zone to view its sections',
+    searchZones: 'Search zones',
+    zoneList: 'Zone list',
+    zonePagination: 'Zone pages',
+    zoneParts: 'Parts',
+    zonePartsCount: 'Parts: {count}',
     printSections: 'Print section stickers',
     printShelves: 'Print shelf stickers',
     zoneActions: 'Actions for zone {name}',
@@ -91,6 +105,13 @@ export const locationBrowserMessages = defineMessages({
     sectionView: 'Section contents',
   },
   pl: {
+    zonesActions: 'Działania na liście stref',
+    chooseZone: 'Wybierz strefę, aby zobaczyć jej sekcje',
+    searchZones: 'Szukaj strefy',
+    zoneList: 'Lista stref',
+    zonePagination: 'Strony stref',
+    zoneParts: 'Części',
+    zonePartsCount: 'Części: {count}',
     printSections: 'Drukuj naklejki sekcji',
     printShelves: 'Drukuj naklejki półek',
     zoneActions: 'Działania dla strefy {name}',

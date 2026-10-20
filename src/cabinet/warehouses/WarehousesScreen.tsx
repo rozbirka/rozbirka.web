@@ -5,7 +5,6 @@ import {
   ArrowRight,
   Check,
   ChevronLeft,
-  ChevronRight,
   Download,
   Pencil,
   Plus,
@@ -62,6 +61,7 @@ import { Resource } from '../inventory/InventoryResource'
 import { useLoad, usePermission } from '../inventory/use-stock-resource'
 import { StockStat } from '../inventory/StockStat'
 import { Step } from '../inventory/StockStep'
+import { WarehouseZoneBrowser } from './WarehouseZoneBrowser'
 
 export function WarehousesScreen({
   definition: _definition,
@@ -397,10 +397,11 @@ function WarehouseView({ id }: { id: string }) {
   const t = useT(warehouseMessages)
   const ti = useT(inventoryMessages)
   const tc = useT(commonMessages)
+  const tb = useT(locationBrowserMessages)
   const base = useWarehouseBase()
   const { targetTenant } = useCabinet()
   const navigate = useNavigate()
-  const [labelParams] = useSearchParams()
+  const [labelParams, setLabelParams] = useSearchParams()
   const labelsOpen = labelParams.get('labels') === '1'
   const labelTriggerRef = useRef<HTMLButtonElement>(null)
   const canManage = usePermission('inventory.zones.manage')
@@ -583,17 +584,7 @@ function WarehouseView({ id }: { id: string }) {
                   </Button>
                 ) : null}
                 <ActionMenu
-                  triggerRef={labelTriggerRef}
                   actions={[
-                    {
-                      key: 'print',
-                      label: t('printZones'),
-                      icon: <Printer aria-hidden />,
-                      onSelect: () =>
-                        void navigate(
-                          `${base}/${encodeURIComponent(id)}?labels=1`,
-                        ),
-                    },
                     {
                       key: 'export',
                       label: t('exportStock'),
@@ -678,24 +669,44 @@ function WarehouseView({ id }: { id: string }) {
                 />
               </div>
 
-              <div className="grid min-w-0 gap-5">
-                <Card
-                  aside={
-                    <div className="flex flex-wrap items-center gap-2">
-                      {canManage ? (
-                        <Button onClick={startAddingZone} variant="primary">
-                          <Plus aria-hidden />
-                          {t('addZone')}
-                        </Button>
-                      ) : null}
-                    </div>
-                  }
-                  bodyClassName={labelsOpen ? 'p-4 sm:p-6' : 'p-0 pt-4'}
-                  className="min-w-0"
-                  title={t('zonesTitle')}
-                >
-                  {labelsOpen ? (
+              <WarehouseZoneBrowser
+                zones={zones}
+                stock={stock.total === null ? null : stock.byZone}
+                base={base}
+                partsBase={partsBase}
+                canManage={canManage}
+                onAdd={startAddingZone}
+                onEdit={(zone) => {
+                  setOperationError(null)
+                  setEditingZone(zone)
+                }}
+                onArchive={setArchivingZone}
+                headerActions={
+                  <ActionMenu
+                    triggerRef={labelTriggerRef}
+                    label={tb('zonesActions')}
+                    actions={[
+                      {
+                        key: 'print',
+                        label: t('printZones'),
+                        icon: <Printer aria-hidden />,
+                        onSelect: () =>
+                          setLabelParams(
+                            (current) => {
+                              const next = new URLSearchParams(current)
+                              next.set('labels', '1')
+                              return next
+                            },
+                            { preventScrollReset: true },
+                          ),
+                      },
+                    ]}
+                  />
+                }
+                printWorkspace={
+                  labelsOpen ? (
                     <LocationLabelsPage
+                      flush
                       target={{
                         kind: 'zone',
                         parentId: id,
@@ -704,149 +715,9 @@ function WarehouseView({ id }: { id: string }) {
                       inventoryBase={base}
                       returnFocusRef={labelTriggerRef}
                     />
-                  ) : (
-                    <>
-                      <div
-                        aria-hidden
-                        className={cn(
-                          'border-app-line text-app-muted hidden gap-3 border-y px-6 py-3 font-mono text-[10px] tracking-[0.14em] uppercase md:grid',
-                          canManage
-                            ? 'grid-cols-[minmax(0,1fr)_4.5rem_10rem_5.5rem]'
-                            : 'grid-cols-[minmax(0,1fr)_4.5rem_10rem]',
-                        )}
-                      >
-                        <span>{t('colZone')}</span>
-                        <span className="text-right">{t('colPositions')}</span>
-                        <span>{t('colFill')}</span>
-                        {canManage ? (
-                          <span className="text-right">{t('colActions')}</span>
-                        ) : null}
-                      </div>
-                      <ul className="grid">
-                        {zones.length === 0 ? (
-                          <li className="text-app-muted px-6 py-6 text-sm">
-                            {t('noZones')}
-                          </li>
-                        ) : null}
-                        {zones.map((zone) => {
-                          const count = partsIn(zone.id)
-                          /** How much of the warehouse's stock lies in this zone. */
-                          const share =
-                            stock.total === null || stock.total === 0
-                              ? 0
-                              : Math.round((count / stock.total) * 100)
-                          return (
-                            <li
-                              className={cn(
-                                'border-app-line grid items-center gap-x-4 gap-y-2 border-b px-6 py-4 last:border-0 md:gap-3',
-                                canManage
-                                  ? 'md:grid-cols-[minmax(0,1fr)_4.5rem_10rem_5.5rem]'
-                                  : 'md:grid-cols-[minmax(0,1fr)_4.5rem_10rem]',
-                              )}
-                              key={zone.id}
-                            >
-                              <div className="min-w-0">
-                                {zone.isSystemUnassigned &&
-                                partsBase === null ? (
-                                  <span className="text-[15px] font-bold text-white">
-                                    {zone.name}
-                                  </span>
-                                ) : (
-                                  <Link
-                                    className="flex min-h-11 items-center justify-between gap-3 text-[15px] font-bold text-white hover:underline"
-                                    to={
-                                      zone.isSystemUnassigned
-                                        ? `${partsBase}?zone=${encodeURIComponent(zone.id)}`
-                                        : `${base}/zones/${encodeURIComponent(zone.id)}`
-                                    }
-                                  >
-                                    {zone.name}
-                                    {!zone.isSystemUnassigned ? (
-                                      <ChevronRight
-                                        aria-hidden
-                                        className="text-app-muted size-4 shrink-0"
-                                      />
-                                    ) : null}
-                                  </Link>
-                                )}
-                                <p className="text-app-muted mt-0.5 text-[13px]">
-                                  {[
-                                    zone.code,
-                                    zone.isSystemUnassigned
-                                      ? t('systemTag')
-                                      : null,
-                                    zone.isActive ? null : t('archivedZoneTag'),
-                                  ]
-                                    .filter(Boolean)
-                                    .join(' · ')}
-                                </p>
-                              </div>
-                              <p className="text-app-muted font-mono text-[14px] tabular-nums md:text-right">
-                                {stock.total === null ? '—' : count}
-                              </p>
-                              <div>
-                                <span
-                                  aria-hidden
-                                  className="bg-app-line-2 block h-1.5 overflow-hidden rounded-full"
-                                >
-                                  <span
-                                    className="bg-state-ok block h-full rounded-full"
-                                    style={{ width: `${String(share)}%` }}
-                                  />
-                                </span>
-                                <p className="text-app-muted mt-2 font-mono text-[12px]">
-                                  {stock.total === null
-                                    ? ti('stockUnavailable')
-                                    : t('shareOfWarehouse', { share })}
-                                </p>
-                              </div>
-                              {canManage ? (
-                                <div className="flex gap-1.5 md:justify-end">
-                                  <Button
-                                    aria-label={t('editZone', {
-                                      name: zone.name,
-                                    })}
-                                    className="min-w-11 px-0"
-                                    disabled={zone.isSystemUnassigned}
-                                    onClick={() => {
-                                      setOperationError(null)
-                                      setEditingZone(zone)
-                                    }}
-                                    title={
-                                      zone.isSystemUnassigned
-                                        ? t('systemNoEdit')
-                                        : undefined
-                                    }
-                                    variant="ghost"
-                                  >
-                                    <Pencil aria-hidden />
-                                  </Button>
-                                  <Button
-                                    aria-label={t('archiveZoneLabel', {
-                                      name: zone.name,
-                                    })}
-                                    className="min-w-11 px-0"
-                                    disabled={zone.isSystemUnassigned}
-                                    onClick={() => setArchivingZone(zone)}
-                                    title={
-                                      zone.isSystemUnassigned
-                                        ? t('systemNoArchive')
-                                        : undefined
-                                    }
-                                    variant="ghost"
-                                  >
-                                    <Archive aria-hidden />
-                                  </Button>
-                                </div>
-                              ) : null}
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    </>
-                  )}
-                </Card>
-              </div>
+                  ) : null
+                }
+              />
             </div>
 
             <FormDialog

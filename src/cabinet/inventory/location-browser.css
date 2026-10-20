@@ -168,6 +168,22 @@
   border-bottom: 1px solid var(--color-app-line);
 }
 
+.location-browser__zone {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 18px;
+  padding-right: 20px;
+}
+
+.location-browser__zone > .location-browser__row {
+  padding-right: 0;
+}
+
+.location-browser__columns--zones {
+  grid-template-columns: minmax(0, 1fr) 5rem 1.25rem 44px;
+}
+
 .location-browser__empty {
   padding: 32px 12px;
   color: var(--color-app-muted);
@@ -274,6 +290,11 @@
 
   .location-browser__row--shelf {
     grid-template-columns: minmax(0, 1fr) 14px;
+  }
+
+  .location-browser__zone {
+    gap: 10px;
+    padding-right: 8px;
   }
 
   .location-browser__shelves tbody th {

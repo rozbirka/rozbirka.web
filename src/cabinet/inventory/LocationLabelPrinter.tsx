@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { FileDown, LayoutGrid, Printer, X } from 'lucide-react'
+import { FileDown, Printer, X } from 'lucide-react'
 import QRCode from 'qrcode'
 import {
   Button,
@@ -134,7 +134,6 @@ function ScopedLocationLabels({
   const tw = useT(warehouseMessages)
   const tb = useT(locationBrowserMessages)
   const f = useFormat()
-  const redesigned = target.kind === 'section' || target.kind === 'shelf'
   const documentLocale = useTenantSettings().documentLanguage ?? 'uk'
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.warehouses,
@@ -412,11 +411,7 @@ function ScopedLocationLabels({
 
   return (
     <StickerWorkspace
-      className={
-        redesigned
-          ? `location-labels location-labels--${target.kind}${flush ? ' location-labels--flush' : ''}`
-          : undefined
-      }
+      className={`location-labels location-labels--${target.kind}${flush ? ' location-labels--flush' : ''}`}
       embedded
       showHeader={false}
       back={
@@ -520,15 +515,19 @@ function ScopedLocationLabels({
             ) : null
           }
         >
-          {redesigned ? (
-            <div className="location-labels__columns" aria-hidden>
-              <span />
-              <span>
-                {tw(target.kind === 'shelf' ? 'shelfType' : 'sectionType')}
-              </span>
-              {target.kind === 'section' ? <span>{tb('shelves')}</span> : null}
-            </div>
-          ) : null}
+          <div className="location-labels__columns" aria-hidden>
+            <span />
+            <span>
+              {tw(
+                target.kind === 'shelf'
+                  ? 'shelfType'
+                  : target.kind === 'section'
+                    ? 'sectionType'
+                    : 'zoneType',
+              )}
+            </span>
+            {target.kind === 'section' ? <span>{tb('shelves')}</span> : null}
+          </div>
           {loading ? (
             <div className="p-5">
               <SkeletonRows rows={4} />
@@ -565,11 +564,7 @@ function ScopedLocationLabels({
                     <StickerSelectionRow
                       key={label.id}
                       appearance="location"
-                      icon={
-                        redesigned ? null : (
-                          <LayoutGrid aria-hidden className="size-5" />
-                        )
-                      }
+                      icon={null}
                       label={label.zoneName}
                       checkboxLabel={t('select', { name: label.zoneName })}
                       selected={selection.has(label.id)}
