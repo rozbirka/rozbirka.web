@@ -5,6 +5,9 @@ export const inventoryMessages = defineMessages({
   uk: {
     loading: 'Завантажуємо дані…',
     loadFailed: 'Не вдалося завантажити дані.',
+    resultsLoadFailed: 'Не вдалося завантажити результати сесії.',
+    scansLoadFailed: 'Не вдалося завантажити сканування сесії.',
+    zonesLoadFailed: 'Не вдалося завантажити перелік зон.',
     retry: 'Повторити',
     statusDraft: 'Чернетка',
     statusInProgress: 'Триває',
@@ -56,6 +59,9 @@ export const inventoryMessages = defineMessages({
   'en-GB': {
     loading: 'Loading data…',
     loadFailed: 'Couldn’t load the data.',
+    resultsLoadFailed: 'Couldn’t load the session results.',
+    scansLoadFailed: 'Couldn’t load the session scans.',
+    zonesLoadFailed: 'Couldn’t load the zone list.',
     retry: 'Retry',
     statusDraft: 'Draft',
     statusInProgress: 'In progress',
@@ -85,6 +91,9 @@ export const inventoryMessages = defineMessages({
   pl: {
     loading: 'Wczytujemy dane…',
     loadFailed: 'Nie udało się wczytać danych.',
+    resultsLoadFailed: 'Nie udało się wczytać wyników sesji.',
+    scansLoadFailed: 'Nie udało się wczytać skanów sesji.',
+    zonesLoadFailed: 'Nie udało się wczytać listy stref.',
     retry: 'Ponów',
     statusDraft: 'Szkic',
     statusInProgress: 'W toku',

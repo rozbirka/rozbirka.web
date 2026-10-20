@@ -9,7 +9,11 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { LocaleProvider, type Locale } from '@/i18n'
-import type { InventorySection, InventoryZone } from '@/api/inventory'
+import type {
+  InventoryScan,
+  InventorySection,
+  InventoryZone,
+} from '@/api/inventory'
 import { InventoryScreen } from './InventoryScreen'
 import {
   WarehousesScreen,
@@ -524,6 +528,145 @@ it('picks every zone of the warehouse for a full check', async () => {
   expect(zone).toBeDisabled()
   // The sample check cannot be expressed as a list of zones.
   expect(screen.getByRole('radio', { name: /Вибіркова/ })).toBeDisabled()
+})
+
+it('retries a failed start from the existing draft without creating another session', async () => {
+  const user = userEvent.setup()
+  const draft = {
+    ...session,
+    id: 'session-9',
+    number: 'INV-009',
+    status: 'draft',
+  }
+  api.createSession.mockResolvedValue(draft)
+  api.startSession.mockRejectedValueOnce(new Error('Start unavailable'))
+  api.getSession.mockResolvedValue(draft)
+  renderAt('/app/yard/inventory/sessions/new')
+  await user.click(await screen.findByRole('checkbox', { name: /Стелаж A1/ }))
+  await user.click(
+    within(screen.getByRole('region', { name: 'Обсяг сесії' })).getByRole(
+      'button',
+      { name: 'Розпочати сесію' },
+    ),
+  )
+  expect(await screen.findByRole('heading', { name: 'INV-009' })).toBeVisible()
+  expect(screen.getByRole('alert')).toHaveTextContent(/INV-009/)
+  expect(api.createSession).toHaveBeenCalledTimes(1)
+  await user.click(screen.getByRole('button', { name: 'Запустити' }))
+  await user.click(
+    within(screen.getByRole('dialog')).getByRole('button', {
+      name: 'Запустити',
+    }),
+  )
+  await waitFor(() => expect(api.startSession).toHaveBeenCalledTimes(2))
+  expect(api.startSession).toHaveBeenLastCalledWith('session-9', {
+    signal: expect.any(AbortSignal) as AbortSignal,
+  })
+  expect(api.createSession).toHaveBeenCalledTimes(1)
+})
+
+it('shows and retries session result failures instead of saying counting has not started', async () => {
+  const user = userEvent.setup()
+  api.getResults.mockRejectedValueOnce(new Error('Results unavailable'))
+  renderAt('/app/yard/inventory/sessions/session-1')
+  expect(
+    await screen.findByText('Не вдалося завантажити результати сесії.'),
+  ).toBeVisible()
+  expect(
+    screen.queryByText('Сесія ще не запущена — рахувати нічого.'),
+  ).toBeNull()
+  const positions = screen.getByRole('region', { name: 'Позиції' })
+  await user.click(within(positions).getByRole('button', { name: 'Повторити' }))
+  expect(
+    await within(
+      await screen.findByRole('region', { name: 'Позиції' }),
+    ).findByText('Крило'),
+  ).toBeVisible()
+  expect(
+    screen.queryByText('Не вдалося завантажити результати сесії.'),
+  ).toBeNull()
+})
+
+it('shows and retries scan failures without presenting an empty scan journal', async () => {
+  const user = userEvent.setup()
+  api.getScans.mockRejectedValueOnce(new Error('Scans unavailable'))
+  renderAt('/app/yard/inventory/sessions/session-1')
+  expect(
+    await screen.findByText('Не вдалося завантажити сканування сесії.'),
+  ).toBeVisible()
+  expect(screen.queryByText('Сканувань ще не було.')).toBeNull()
+  expect(
+    within(screen.getByRole('region', { name: 'Позиції' })).getByText('Крило'),
+  ).toBeVisible()
+  await user.click(
+    within(
+      screen.getByRole('region', { name: 'Останні сканування' }),
+    ).getByRole('button', { name: 'Повторити' }),
+  )
+  const scans = await screen.findByRole('region', {
+    name: 'Останні сканування',
+  })
+  expect(await within(scans).findByText('Крило')).toBeVisible()
+})
+
+it('keeps raw journal scans visible when comparison results fail to load', async () => {
+  const user = userEvent.setup()
+  api.getResults.mockRejectedValueOnce(new Error('Results unavailable'))
+  renderAt('/app/yard/inventory/sessions/session-1/journal/zone-1')
+  expect(
+    await screen.findByText('Не вдалося завантажити результати сесії.'),
+  ).toBeVisible()
+  expect(within(screen.getByRole('table')).getByText('Крило')).toBeVisible()
+  expect(screen.getByRole('radio', { name: 'Розходження —' })).toBeDisabled()
+  await user.click(screen.getByRole('button', { name: 'Повторити' }))
+  expect(
+    await screen.findByRole('radio', { name: 'Розходження 1' }),
+  ).toBeEnabled()
+  expect(
+    screen.queryByText('Не вдалося завантажити результати сесії.'),
+  ).toBeNull()
+})
+
+it('does not present scans from only some zones as a complete session stream', async () => {
+  const loadScans = api.getScans.getMockImplementation() as (
+    ...args: unknown[]
+  ) => Promise<InventoryScan[]>
+  api.getSession.mockResolvedValue({
+    ...session,
+    zones: [session.zones[0], { ...session.zones[0], zoneId: 'zone-2' }],
+  })
+  api.getScans.mockImplementation((id, zoneId, options) =>
+    zoneId === 'zone-2'
+      ? Promise.reject(new Error('Second zone unavailable'))
+      : loadScans(id, zoneId, options),
+  )
+  renderAt('/app/yard/inventory/sessions/session-1')
+  expect(
+    await screen.findByText('Не вдалося завантажити сканування сесії.'),
+  ).toBeVisible()
+  expect(
+    within(
+      screen.getByRole('region', { name: 'Останні сканування' }),
+    ).queryByText('Крило'),
+  ).toBeNull()
+  expect(
+    within(screen.getByRole('region', { name: 'Позиції' })).getByText('Крило'),
+  ).toBeVisible()
+})
+
+it('does not show failed zone loading as a zero-zone overview', async () => {
+  const user = userEvent.setup()
+  api.getZones.mockRejectedValueOnce(new Error('Zones unavailable'))
+  renderAt('/app/yard/inventory')
+  expect(
+    await screen.findByText('Не вдалося завантажити перелік зон.'),
+  ).toBeVisible()
+  expect(screen.getByText('INV-001')).toBeVisible()
+  const stat = screen.getByText('Перевірено зон').closest('div') as HTMLElement
+  expect(within(stat).getByText('—')).toBeVisible()
+  await user.click(screen.getByRole('button', { name: 'Повторити' }))
+  expect(await screen.findByText('INV-001')).toBeVisible()
+  expect(screen.queryByText('Не вдалося завантажити перелік зон.')).toBeNull()
 })
 
 it('renders discrepancy results and adjustment affordance', async () => {

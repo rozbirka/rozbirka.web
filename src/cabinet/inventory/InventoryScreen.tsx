@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import {
   Archive,
@@ -51,7 +51,7 @@ import { newSessionMessages } from './new-session-messages'
 import { overviewMessages } from './overview-messages'
 import { resultsMessages } from './results-messages'
 import { sessionMessages } from './session-messages'
-import { Resource } from './InventoryResource'
+import { InventoryLoadError, Resource } from './InventoryResource'
 import { useLoad, usePermission } from './use-stock-resource'
 import { StockStat } from './StockStat'
 import { Step } from './StockStep'
@@ -103,7 +103,7 @@ const RECENT_DAYS = 30
 
 interface OverviewData {
   sessions: InventorySession[]
-  zones: InventoryZone[]
+  zones: InventoryZone[] | null
   /** The cut-off for "checked recently", taken once when the data loads. */
   since: number
 }
@@ -118,7 +118,7 @@ function Overview() {
     async (signal: AbortSignal): Promise<OverviewData> => {
       const [sessions, zones] = await Promise.all([
         inventoryApi.getSessions({ signal }),
-        inventoryApi.getZones({ activeOnly: true, signal }).catch(() => []),
+        inventoryApi.getZones({ activeOnly: true, signal }).catch(() => null),
       ])
       return {
         sessions,
@@ -177,7 +177,9 @@ function Overview() {
         const checkedZones = sessions
           .filter((item) => new Date(closedAt(item)).getTime() >= since)
           .reduce((sum, item) => sum + doneZones(item), 0)
-        const countable = zones.filter((zone) => !zone.isSystemUnassigned)
+        const countable = (zones ?? []).filter(
+          (zone) => !zone.isSystemUnassigned,
+        )
         const running = sessions.filter(
           (item) => segmentOf(item.status) === 'active',
         )
@@ -232,6 +234,13 @@ function Overview() {
                 </p>
               </div>
 
+              {zones === null ? (
+                <InventoryLoadError
+                  message={ti('zonesLoadFailed')}
+                  onRetry={resource.reload}
+                />
+              ) : null}
+
               <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-px overflow-hidden rounded-[20px] border">
                 <StockStat
                   label={t('statActive')}
@@ -254,7 +263,7 @@ function Overview() {
                       ? t('zonesUnit')
                       : t('ofTotal', { count: countable.length })
                   }
-                  value={String(checkedZones)}
+                  value={zones === null ? '—' : String(checkedZones)}
                 />
                 <StockStat
                   label={ti('discrepancies')}
@@ -501,23 +510,44 @@ function NewSessionView() {
   const [picked, setPicked] = useState<string[]>([])
   const [busy, setBusy] = useState<'draft' | 'start' | null>(null)
   const [operationError, setOperationError] = useState<string | null>(null)
+  const creatingSession = useRef(false)
 
   const create = async (zoneIds: readonly string[], start: boolean) => {
-    if (!canManage || zoneIds.length === 0) return
+    if (!canManage || zoneIds.length === 0 || creatingSession.current) return
+    creatingSession.current = true
     setBusy(start ? 'start' : 'draft')
     setOperationError(null)
+    let createdSession: InventorySession | null = null
+    let mutationSignal: AbortSignal | undefined
     try {
       const scope = requireLatestMutation({ quota: false })
+      mutationSignal = scope.signal
       const session = await inventoryApi.createSession([...zoneIds], {
         signal: scope.signal,
       })
+      createdSession = session
+      if (scope.signal.aborted) return
       if (start) {
         await inventoryApi.startSession(session.id, { signal: scope.signal })
       }
+      if (scope.signal.aborted) return
       void navigate(`${base}/sessions/${session.id}`, { replace: true })
     } catch (error) {
-      setOperationError(normalizeApiProblem(error).message)
+      if (mutationSignal?.aborted) return
+      const message = normalizeApiProblem(error).message
+      if (createdSession) {
+        void navigate(`${base}/sessions/${createdSession.id}`, {
+          replace: true,
+          state: {
+            inventoryStartError: t('startFailedAfterCreate', {
+              number: createdSession.number,
+              error: message,
+            }),
+          },
+        })
+      } else setOperationError(message)
     } finally {
+      creatingSession.current = false
       setBusy(null)
     }
   }
@@ -964,10 +994,10 @@ type SessionFilter = (typeof SESSION_FILTERS)[number]['value']
 
 interface SessionData {
   session: InventorySession
-  /** A draft has nothing counted yet, so it has no results to read. */
+  /** Drafts have no results; null for other statuses means loading failed. */
   results: InventorySessionResults | null
   /** Every zone's scans in one stream, newest first. */
-  scans: InventoryScan[]
+  scans: InventoryScan[] | null
   people: { userId: string; name: string }[]
 }
 
@@ -985,6 +1015,10 @@ function SessionView({ id }: { id: string }) {
   const ti = useT(inventoryMessages)
   const { date, sessionStatus, timeOfDay } = useInventoryFormat()
   const navigate = useNavigate()
+  const location = useLocation()
+  const startError = (
+    location.state as { inventoryStartError?: unknown } | null
+  )?.inventoryStartError
   const base = useInventoryBase()
   const canManage = usePermission('inventory.manage')
   const canSeeTeam = usePermission('team.view')
@@ -1003,12 +1037,9 @@ function SessionView({ id }: { id: string }) {
             ),
         Promise.all(
           session.zones.map((zone) =>
-            inventoryApi.getScans(id, zone.zoneId, { signal }).then(
-              (list) => list,
-              () => [],
-            ),
+            inventoryApi.getScans(id, zone.zoneId, { signal }),
           ),
-        ),
+        ).catch(() => null),
         canSeeTeam
           ? teamApi.listMembers({ signal }).then(
               (members) =>
@@ -1020,15 +1051,35 @@ function SessionView({ id }: { id: string }) {
             )
           : Promise.resolve([]),
       ])
-      const scans = scanLists
-        .flat()
-        .sort((left, right) => right.scannedAt.localeCompare(left.scannedAt))
+      const scans =
+        scanLists === null
+          ? null
+          : scanLists
+              .flat()
+              .sort((left, right) =>
+                right.scannedAt.localeCompare(left.scannedAt),
+              )
       return { session, results, scans, people }
     },
     [canSeeTeam, id],
   )
   const resource = useLoad(loader, id)
-  const [operationError, setOperationError] = useState<string | null>(null)
+  const [operationError, setOperationError] = useState<string | null>(() =>
+    typeof startError === 'string' ? startError : null,
+  )
+  useEffect(() => {
+    if (typeof startError !== 'string') return
+    const state = { ...(location.state as Record<string, unknown>) }
+    delete state['inventoryStartError']
+    void navigate(
+      {
+        pathname: location.pathname,
+        search: location.search,
+        hash: location.hash,
+      },
+      { replace: true, state },
+    )
+  }, [startError, location, navigate])
   const [acting, setActing] = useState(false)
   const [filter, setFilter] = useState<SessionFilter>('all')
   /** The action waiting for a confirmation, and the reason a cancel needs. */
@@ -1075,7 +1126,9 @@ function SessionView({ id }: { id: string }) {
 
   return (
     <Resource retry={resource.reload} state={resource.state}>
-      {({ session, results, scans, people }: SessionData) => {
+      {({ session, results, scans: loadedScans, people }: SessionData) => {
+        const scans = loadedScans ?? []
+        const resultsFailed = session.status !== 'draft' && results === null
         const [label, tone] = sessionStatus(session.status)
         const nameOf = (userId?: string | null) =>
           userId == null
@@ -1260,6 +1313,7 @@ function SessionView({ id }: { id: string }) {
                                   ? 'text-app-ink bg-white/[0.08]'
                                   : 'text-app-muted hover:text-app-ink',
                               )}
+                              disabled={resultsFailed}
                               key={option.value}
                               onClick={() => setFilter(option.value)}
                               role="radio"
@@ -1267,7 +1321,7 @@ function SessionView({ id }: { id: string }) {
                             >
                               {t(option.label)}{' '}
                               <span className="text-app-dim font-mono text-[11px] font-medium">
-                                {counts[option.value]}
+                                {resultsFailed ? '—' : counts[option.value]}
                               </span>
                             </button>
                           )
@@ -1288,7 +1342,14 @@ function SessionView({ id }: { id: string }) {
                       <span className="text-right">{t('colActual')}</span>
                       <span className="text-right">{t('colDelta')}</span>
                     </div>
-                    {rows.length === 0 ? (
+                    {resultsFailed ? (
+                      <div className="p-4 sm:p-6">
+                        <InventoryLoadError
+                          message={ti('resultsLoadFailed')}
+                          onRetry={resource.reload}
+                        />
+                      </div>
+                    ) : rows.length === 0 ? (
                       <p className="text-app-muted px-6 py-6 text-sm">
                         {results === null
                           ? t('notStarted')
@@ -1365,7 +1426,14 @@ function SessionView({ id }: { id: string }) {
                     className="min-w-0"
                     title={t('recentScans')}
                   >
-                    {scans.length === 0 ? (
+                    {loadedScans === null ? (
+                      <div className="p-4 sm:p-6">
+                        <InventoryLoadError
+                          message={ti('scansLoadFailed')}
+                          onRetry={resource.reload}
+                        />
+                      </div>
+                    ) : scans.length === 0 ? (
                       <p className="text-app-muted px-6 pt-4 pb-6 text-sm">
                         {t('noScans')}
                       </p>
@@ -2681,8 +2749,8 @@ const pace = (scans: readonly InventoryScan[]) => {
 interface JournalData {
   scans: InventoryScan[]
   session: InventorySession
-  /** Empty until the count is far enough along for the server to total it. */
-  results: InventoryPartResult[]
+  /** Drafts have no totals; null means totals failed to load. */
+  results: InventoryPartResult[] | null
   /** Empty when this person cannot see the team; scanners then stay unnamed. */
   people: { userId: string; name: string }[]
 }
@@ -2699,15 +2767,15 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
   const [shown, setShown] = useState(JOURNAL_PAGE)
   const loader = useCallback(
     async (signal: AbortSignal): Promise<JournalData> => {
-      const [scans, session, results, people] = await Promise.all([
+      const session = await inventoryApi.getSession(id, { signal })
+      const [scans, results, people] = await Promise.all([
         inventoryApi.getScans(id, zoneId, { signal }),
-        inventoryApi.getSession(id, { signal }),
-        // Totals exist once the server has something to total; before that the
-        // journal still stands on its own.
-        inventoryApi.getResults(id, { signal }).then(
-          (data) => data.parts,
-          () => [],
-        ),
+        session.status === 'draft'
+          ? Promise.resolve([])
+          : inventoryApi.getResults(id, { signal }).then(
+              (data) => data.parts,
+              () => null,
+            ),
         canSeeTeam
           ? teamApi.listMembers({ signal }).then(
               (members) =>
@@ -2732,7 +2800,8 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
         const nameOf = (userId: string) =>
           people.find((person) => person.userId === userId)?.name ?? null
         const resultOf = (partId: string) =>
-          results.find((part) => part.partId === partId) ?? null
+          results?.find((part) => part.partId === partId) ?? null
+        const effectiveFilter = results === null ? 'all' : filter
         const live = scans.filter((scan) => scan.voidedAt == null)
         const counts: Record<JournalFilter, number> = {
           all: scans.length,
@@ -2750,8 +2819,9 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
         const rows = scans.filter((scan) => {
           const part = resultOf(scan.partId)
           // A scan the server has not totalled yet belongs to neither side.
-          if (filter === 'diff' && (part?.delta ?? 0) === 0) return false
-          if (filter === 'same' && part?.delta !== 0) return false
+          if (effectiveFilter === 'diff' && (part?.delta ?? 0) === 0)
+            return false
+          if (effectiveFilter === 'same' && part?.delta !== 0) return false
           if (who !== 'all' && scan.scannedBy !== who) return false
           if (
             needle !== '' &&
@@ -2828,6 +2898,13 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
 
               <Notice tone="info">{t('readOnly')}</Notice>
 
+              {results === null ? (
+                <InventoryLoadError
+                  message={ti('resultsLoadFailed')}
+                  onRetry={resource.reload}
+                />
+              ) : null}
+
               <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-px overflow-hidden rounded-[20px] border">
                 <JournalStat
                   label={t('statScans')}
@@ -2844,11 +2921,15 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                 <JournalStat
                   label={t('statDiffs')}
                   meta={
-                    results.length === 0 ? t('totalsLater') : t('needDecision')
+                    results === null
+                      ? undefined
+                      : results.length === 0
+                        ? t('totalsLater')
+                        : t('needDecision')
                   }
                   tone={counts.diff > 0 ? 'danger' : undefined}
                   unit={ti('positionsUnit')}
-                  value={String(counts.diff)}
+                  value={results === null ? '—' : String(counts.diff)}
                 />
                 <JournalStat
                   label={t('statPace')}
@@ -2876,9 +2957,10 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                   role="radiogroup"
                 >
                   {JOURNAL_FILTERS.map((option) => {
-                    const active = option.value === filter
+                    const active = option.value === effectiveFilter
                     const locked =
-                      option.value !== 'all' && results.length === 0
+                      option.value !== 'all' &&
+                      (results === null || results.length === 0)
                     return (
                       <button
                         aria-checked={active}
@@ -2895,12 +2977,20 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                           setShown(JOURNAL_PAGE)
                         }}
                         role="radio"
-                        title={locked ? t('compareLater') : undefined}
+                        title={
+                          locked
+                            ? results === null
+                              ? ti('resultsLoadFailed')
+                              : t('compareLater')
+                            : undefined
+                        }
                         type="button"
                       >
                         {t(option.label)}{' '}
                         <span className="text-app-dim font-mono text-[11px] font-medium">
-                          {counts[option.value]}
+                          {results === null && option.value !== 'all'
+                            ? '—'
+                            : counts[option.value]}
                         </span>
                       </button>
                     )

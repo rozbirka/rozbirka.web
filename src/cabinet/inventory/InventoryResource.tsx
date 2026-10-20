@@ -1,8 +1,26 @@
 import type { ReactNode } from 'react'
-import { Notice, SkeletonRows } from '@/components/app'
+import { Button, Notice, SkeletonRows } from '@/components/app'
 import { useT } from '@/i18n'
 import { inventoryMessages } from './messages'
 import type { LoadState } from './use-stock-resource'
+
+export function InventoryLoadError({
+  message,
+  onRetry,
+}: {
+  message: string
+  onRetry: () => void
+}) {
+  const t = useT(inventoryMessages)
+  return (
+    <Notice
+      tone="danger"
+      action={<Button onClick={onRetry}>{t('retry')}</Button>}
+    >
+      {message}
+    </Notice>
+  )
+}
 
 export function Resource<T>({
   state,
