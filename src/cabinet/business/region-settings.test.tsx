@@ -6,6 +6,7 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import { businessApi } from '@/api/business'
 import { tenantsApi } from '@/api/tenants'
 import type { Tenant } from '@/api/types'
+import { ToastProvider } from '@/components/app'
 import { LocaleProvider } from '@/i18n/LocaleProvider'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { RegionSettings } from './region-settings'
@@ -93,11 +94,13 @@ function renderRegion(
 ) {
   return render(
     <LocaleProvider locale={locale}>
-      <RegionSettings
-        onSaved={onSaved}
-        role={role}
-        tenant={{ ...tenant, ...overrides }}
-      />
+      <ToastProvider>
+        <RegionSettings
+          onSaved={onSaved}
+          role={role}
+          tenant={{ ...tenant, ...overrides }}
+        />
+      </ToastProvider>
     </LocaleProvider>,
   )
 }
@@ -254,7 +257,9 @@ it('reads the region back after a lost answer and accepts what was saved', async
   await user.click(screen.getByRole('button', { name: 'Save region' }))
 
   await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved))
-  expect(screen.getByText('Region and document language saved.')).toBeVisible()
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Region and document language saved.',
+  )
   expect(businessApi.update).toHaveBeenCalledTimes(1)
 })
 

@@ -9,6 +9,7 @@ import {
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
+import { ToastProvider } from '@/components/app'
 import { LocaleProvider, type Locale } from '@/i18n'
 import type {
   InventoryScan,
@@ -404,10 +405,12 @@ function StockRoutes() {
 
 const renderAt = (path: string) =>
   render(
-    <MemoryRouter initialEntries={[path]}>
-      <StockRoutes />
-      <LocationProbe />
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <StockRoutes />
+        <LocationProbe />
+      </MemoryRouter>
+    </ToastProvider>,
   )
 
 const renderIn = (locale: Locale, path: string) =>
@@ -1549,7 +1552,21 @@ it('shows progress while part placement is being saved', async () => {
   finishSaving?.()
 })
 
-it('confirms that part placement was saved', async () => {
+it('confirms that part placement was saved with an ok toast', async () => {
+  renderAt('/app/yard/parts/part-1/inventory')
+  fireEvent.click(
+    await screen.findByRole('checkbox', { name: 'Основний склад · Стелаж A1' }),
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Зберегти розміщення' }))
+
+  const toast = (await screen.findByText('Розміщення збережено')).closest(
+    '.rz-toast',
+  )
+  expect(toast).toHaveAttribute('role', 'status')
+  expect(api.replacePartZones).toHaveBeenCalledTimes(1)
+})
+
+it('says nothing changed with an info toast when the set is the same', async () => {
   api.getPartZones.mockResolvedValue([
     {
       isSystemUnassigned: false,
@@ -1567,7 +1584,13 @@ it('confirms that part placement was saved', async () => {
     await screen.findByRole('button', { name: 'Зберегти розміщення' }),
   )
 
-  expect(await screen.findByText('Розміщення збережено')).toBeInTheDocument()
+  const toast = (
+    await screen.findByText('Нічого не змінилося — набір зон уже такий.', {
+      selector: '.rz-toast__msg',
+    })
+  ).closest('.rz-toast')
+  expect(toast).toHaveAttribute('role', 'status')
+  expect(screen.queryByText('Розміщення збережено')).not.toBeInTheDocument()
 })
 
 it('does not allow replacement when current part placement failed to load', async () => {

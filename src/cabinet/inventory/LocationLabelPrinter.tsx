@@ -22,6 +22,7 @@ import {
   StatusPill,
   type DataColumn,
   type NoticeTone,
+  useOptionalToast,
 } from '@/components/app'
 import { appMessages } from '@/components/app/app-messages'
 import { useTenantSettings } from '@/auth/useTenantSettings'
@@ -132,6 +133,7 @@ function ScopedLocationLabels({
   const t = useT(locationLabelMessages)
   const ta = useT(appMessages)
   const tb = useT(locationBrowserMessages)
+  const toast = useOptionalToast()
   const f = useFormat()
   const documentLocale = useTenantSettings().documentLanguage ?? 'uk'
   const { requireLatestMutation } = useLatestMutationGuard(
@@ -299,6 +301,24 @@ function ScopedLocationLabels({
     setSelected(new Set())
     setError(null)
   }
+  /* Module 12, 2.11: a failed print keeps the queue, so it is a danger toast
+     with a retry that stays until closed; without a toast host it stays on
+     the page. */
+  const printFailed = (text: string, ids: string[]) => {
+    if (toast === null) {
+      setError({ text, tone: 'danger' })
+      return
+    }
+    toast.show({
+      tone: 'danger',
+      message: text,
+      action: {
+        label: t('retry'),
+        kind: 'retry',
+        onAction: () => void output(ids),
+      },
+    })
+  }
   const output = async (ids: string[]) => {
     if (busyRef.current || !ids.length || ids.length > MAX_LOCATION_LABELS)
       return
@@ -312,7 +332,7 @@ function ScopedLocationLabels({
       // Open synchronously on the user's click, before network/QR rendering awaits.
       printWindow = window.open('', '_blank')
       if (!printWindow) {
-        setError({ text: t('blocked'), tone: 'danger' })
+        printFailed(t('blocked'), ids)
         return
       }
       printWindow.opener = null
@@ -353,7 +373,7 @@ function ScopedLocationLabels({
       // Browsers cannot tell cancellation, PDF export or physical printing apart.
     } catch {
       printWindow?.close()
-      if (alive.current) setError({ text: t('failed'), tone: 'danger' })
+      if (alive.current) printFailed(t('failed'), ids)
     } finally {
       busyRef.current = false
       if (alive.current) setBusy(false)

@@ -120,6 +120,10 @@
 .rz-search { display: flex; align-items: center; gap: 8px; height: var(--rz-control-h); padding: 0 10px; border: 1px solid var(--rz-border-strong); border-radius: var(--rz-r-sm); background: var(--rz-surface-2); }
 .rz-search i { font-size:var(--rz-icon); color: var(--rz-text-dim); }
 .rz-search input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; }
+.rz-search:focus-within { border-color: var(--rz-brand); box-shadow: 0 0 0 3px var(--rz-brand-soft); }
+/* Composite fields: the wrapper shows focus, the inner control never draws its own ring */
+.rz-input-group > input:focus-visible, .rz-search input:focus-visible, .rz-stepper input:focus-visible, .rz-input:focus-visible, .rz-select:focus-visible, .rz-textarea:focus-visible { box-shadow: none; outline: none; }
+.rz-input:focus, .rz-select:focus, .rz-textarea:focus { box-shadow: 0 0 0 3px var(--rz-brand-soft); }
 .rz-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
 .rz-form-inline { display: grid; border: 1px solid var(--rz-border); border-radius: var(--rz-r-md); background: var(--rz-surface); }
 .rz-form-inline > .rz-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; align-items: center; padding: 8px 12px; }

@@ -40,6 +40,7 @@ import {
   TextArea,
   TextInput,
   useOperation,
+  useOptionalToast,
 } from '@/components/app'
 import {
   CUSTOMER_ADDRESS_MAX_LENGTH,
@@ -537,7 +538,7 @@ function CustomerDetailScreen({
   const [ordersPage, setOrdersPage] = useState(1)
   /** Where focus goes when the delete question is answered or dismissed. */
   const deleteTriggerRef = useRef<HTMLButtonElement>(null)
-  const [copied, setCopied] = useState(false)
+  const toast = useOptionalToast()
   const [notes, setNotes] = useState('')
   const ordersTitleId = useId()
   const navigate = useNavigate()
@@ -585,7 +586,7 @@ function CustomerDetailScreen({
   const copyPhone = async (phone: string) => {
     try {
       await navigator.clipboard.writeText(phone)
-      setCopied(true)
+      toast?.show({ tone: 'ok', message: t('phoneCopied') })
     } catch {
       setError('copyFailed')
     }
@@ -765,7 +766,6 @@ function CustomerDetailScreen({
       width="record"
     >
       {error ? <Notice tone="danger">{t(error)}</Notice> : null}
-      {copied ? <Notice tone="ok">{t('phoneCopied')}</Notice> : null}
 
       <div className="grid gap-1.5">
         <h1 className="rz-h-page">{customer.name}</h1>

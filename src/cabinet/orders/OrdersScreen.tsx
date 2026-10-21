@@ -832,8 +832,9 @@ export function OrderForm({
       if (scope.signal.aborted) return
       guard.afterSave(true)
       const detailPath = `${createContext?.orderBasePath ?? location.pathname.replace(/\/new$/, '')}/${detail.id}`
-      toast?.show({ message: t('created'), tone: 'ok' })
+      // Module 00 §5: open the created record first, then confirm it.
       await navigate(detailPath, { replace: true })
+      toast?.show({ message: t('created'), tone: 'ok' })
     } catch (error) {
       setError(errorMessage(error))
       setBusy(false)
@@ -2109,6 +2110,7 @@ function OrderDetailScreen({
           const normalizedReason = refundReason.trim()
           if (!normalizedReason) return
           const input = { refundReason: normalizedReason }
+          const returnsMoney = summary.paid.length > 0
           void transition(
             (idempotencyKey) =>
               ordersApi.refund(order.id, input, {
@@ -2120,7 +2122,11 @@ function OrderDetailScreen({
             },
             'finance.manage',
           ).then((done) => {
-            if (done) changeRefundOpen(false)
+            if (!done) return
+            changeRefundOpen(false)
+            // Module 20, 6.5. Without payments the order is only cancelled.
+            if (returnsMoney)
+              toast?.show({ message: tp('statusRefunded'), tone: 'ok' })
           })
         }}
         onOpenChange={changeRefundOpen}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, it, vi } from 'vitest'
 import { Button } from './button'
@@ -12,7 +12,7 @@ import { TextInput } from './input'
 import { Pagination } from './pagination'
 import { EmptyState } from './state-screen'
 import { ToastProvider } from './toast'
-import { useToast } from './toast-context'
+import { useToast, type ToastRequest } from './toast-context'
 
 it('opens secondary record actions as one vertical menu', async () => {
   const archive = vi.fn()
@@ -222,6 +222,99 @@ it('announces a toast and dismisses it on request', async () => {
 
   await user.click(screen.getByRole('button', { name: 'Закрити сповіщення' }))
   expect(screen.queryByText('Деталь збережено')).not.toBeInTheDocument()
+})
+
+function ToastTrigger({ requests }: { requests: ToastRequest[] }) {
+  const toast = useToast()
+  return (
+    <Button onClick={() => requests.forEach((request) => toast.show(request))}>
+      Показати
+    </Button>
+  )
+}
+
+function renderToasts(requests: ToastRequest[]) {
+  render(
+    <ToastProvider>
+      <ToastTrigger requests={requests} />
+    </ToastProvider>,
+  )
+  act(() => screen.getByRole('button', { name: 'Показати' }).click())
+}
+
+it('keeps at most three toasts with the newest at the bottom', () => {
+  renderToasts([
+    { message: 'Перший.', tone: 'ok' },
+    { message: 'Замовлення створено.', tone: 'ok' },
+    { message: 'Оплату записано.', tone: 'ok' },
+    { message: 'Браузер заблокував вікно друку.', tone: 'danger' },
+  ])
+  expect(screen.queryByText('Перший.')).not.toBeInTheDocument()
+  const stack = [...document.querySelectorAll('.rz-toast .rz-toast__msg')].map(
+    (node) => node.textContent,
+  )
+  expect(stack).toEqual([
+    'Замовлення створено.',
+    'Оплату записано.',
+    'Браузер заблокував вікно друку.',
+  ])
+  expect(screen.getAllByRole('status')).toHaveLength(2)
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Браузер заблокував вікно друку.',
+  )
+})
+
+it('times toasts by the rule: 6 s, 10 s with undo, danger retry until closed', () => {
+  vi.useFakeTimers()
+  try {
+    renderToasts([
+      { message: 'Замовлення створено.', tone: 'ok' },
+      {
+        message: 'Позицію видалено.',
+        tone: 'ok',
+        action: { label: 'Скасувати', onAction: vi.fn(), kind: 'undo' },
+      },
+      {
+        message: 'Браузер заблокував вікно друку.',
+        tone: 'danger',
+        action: { label: 'Повторити', onAction: vi.fn(), kind: 'retry' },
+      },
+    ])
+    act(() => {
+      vi.advanceTimersByTime(5999)
+    })
+    expect(screen.getByText('Замовлення створено.')).toBeInTheDocument()
+    act(() => {
+      vi.advanceTimersByTime(1)
+    })
+    expect(screen.queryByText('Замовлення створено.')).not.toBeInTheDocument()
+    expect(screen.getByText('Позицію видалено.')).toBeInTheDocument()
+    act(() => {
+      vi.advanceTimersByTime(4000)
+    })
+    expect(screen.queryByText('Позицію видалено.')).not.toBeInTheDocument()
+    act(() => {
+      vi.advanceTimersByTime(60_000)
+    })
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Браузер заблокував вікно друку.',
+    )
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+it('honours an explicit duration over the rule', () => {
+  vi.useFakeTimers()
+  try {
+    renderToasts([{ message: 'Мову збережено.', tone: 'ok', duration: 4000 }])
+    act(() => {
+      vi.advanceTimersByTime(4000)
+    })
+    expect(screen.queryByText('Мову збережено.')).not.toBeInTheDocument()
+  } finally {
+    vi.useRealTimers()
+  }
 })
 
 function ConfirmProbe({

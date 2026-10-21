@@ -4,6 +4,7 @@ export default async function build() {
   const S = {};
   for (const id of ["business"]) S[id] = await loadScreen(id);
   const sections = [
-    { num: '1', title: 'Бізнес', route: '/app/:tenant/settings/business', source: 'business-settings-screen.tsx', unverified: "", frames: recordFrames(S.business, "Налаштування") }];
+    { num: '1', title: 'Бізнес', route: '/app/:tenant/settings/business', source: 'business-settings-screen.tsx', unverified: "", frames: recordFrames(S.business, "Налаштування") },
+    { num: '2', title: 'Сповіщення', route: 'після збереження', source: 'business-messages.ts · region-messages.ts · currency/messages.ts', frames: [{ ...recordFrame(S.business, 'data', 'Налаштування'), label: 'Налаштування збережено', note: 'тост ok · у коді зараз Notice', o: toast('Налаштування бізнесу збережено.') }, { ...recordFrame(S.business, 'data', 'Налаштування'), label: 'Регіон збережено', note: 'тост ok · у коді зараз Notice', o: toast('Регіон і мову документів збережено.') }, { ...recordFrame(S.business, 'data', 'Налаштування'), label: 'Валюту збережено', note: 'тост ok', o: toast('Валюту обліку збережено.') }] }];
   return { module: { num: '43', group: 'Налаштування', title: 'Бізнес', intro: "Реквізити розбірки, склади, регіон і валюта обліку.", sources: "business/business-messages.ts" }, nav: nav('Бізнес'), sections: finalize(sections) };
 }

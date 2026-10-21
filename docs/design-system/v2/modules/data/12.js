@@ -121,7 +121,7 @@ export default async function build() {
   const s4 = [
     U('Дані'),
     U('Вибрано 3', SEL),
-    U('Розміщення збережено', { notices: [notice('ok', 'icon-circle-check', 'Розміщення «Фара передня ліва» збережено.')], blocks: [one([uCard(false, uRows.slice(1))])] }),
+    U('Розміщення збережено', { note: 'тост ok', o: toast('Розміщення «Фара передня ліва» збережено.'), blocks: [one([uCard(false, uRows.slice(1))])] }),
     U('Порожньо', { toolbar: null, blocks: [one([stateCard('brand', 'icon-circle-check', 'Усі запчастини цього складу вже мають зону.', '', null, '', 420)])] }),
     U('Архівний склад', { notices: [notice('info', 'icon-archive', 'Склад в архіві. Список доступний для перегляду.')] }),
     U('Зону не визначено', { toolbar: null, blocks: [one([stateCard('danger', 'icon-triangle-alert', 'Не вдалося визначити зону нерозміщених запчастин.', '', [sb('Повторити', 'icon-refresh-cw')], '', 420)])] }),
@@ -147,7 +147,8 @@ export default async function build() {
     P('Лише склад', [{ ...whStep(0), form: { ...whStep(0).form, caption: '☑ Зберегти тільки на рівні складу' } }], [sum('Лише склад', true, '')]),
     P('Нічого не вибрано', [whStep(0), zoneStep(false)], [sum('—', false, 'Виберіть хоча б одну зону — запчастина не може лишитися без місця.')], { notices: [notice('info', 'icon-info', 'Виберіть зону для запчастини. За потреби уточніть секцію та полицю.')] }),
     P('Немає активних зон', [whStep(1), step('02', 'Зона', '', { state: { cls: 'rz-state', role: 'status', icon: 'icon-layout-grid', title: 'На цьому складі немає активних зон.', body: '', btns: null, meta: '', h: '160px', unverified: false } })], [sum('—', false, 'Виберіть склад або зону.')]),
-    P('Збережено', [whStep(0), zoneStep(true)], [sum(W + ' → Стелажі А', false, 'Нічого не змінилося — набір зон уже такий.')], { notices: [notice('ok', 'icon-circle-check', 'Розміщення збережено')] }),
+    P('Збережено', [whStep(0), zoneStep(true)], [sum(W + ' → Стелажі А', false, '')], { note: 'тост ok', o: toast('Розміщення збережено') }),
+    P('Нічого не змінилося', [whStep(0), zoneStep(true)], [sum(W + ' → Стелажі А', false, '')], { note: 'тост info', o: toast('Нічого не змінилося — набір зон уже такий.', 'info') }),
   ];
 
   // 6 · QR-етикетки місць

@@ -27,6 +27,7 @@ import {
   StateScreen,
   StatusPill,
   TextInput,
+  useOptionalToast,
 } from '@/components/app'
 import {
   inventoryApi,
@@ -123,7 +124,7 @@ function UnassignedPartsView({ id }: { id: string }) {
   const resource = useLoad(loader, id)
   const [placing, setPlacing] = useState<PartSearchItem | null>(null)
   const [revision, setRevision] = useState(0)
-  const [placedName, setPlacedName] = useState<string | null>(null)
+  const toast = useOptionalToast()
   const [selectedParts, setSelectedParts] = useState<
     ReadonlyMap<string, PartSearchItem>
   >(new Map())
@@ -162,9 +163,6 @@ function UnassignedPartsView({ id }: { id: string }) {
               title={t('title')}
               sub={t('lead', { warehouse: warehouse.name })}
             />
-            {placedName ? (
-              <Notice tone="ok">{t('placed', { name: placedName })}</Notice>
-            ) : null}
             {!warehouse.isActive ? <Notice>{t('archived')}</Notice> : null}
             {zone ? (
               <LocationPartsList
@@ -197,10 +195,8 @@ function UnassignedPartsView({ id }: { id: string }) {
                               {
                                 key: 'place',
                                 label: t('placeSelected'),
-                                onRun: () => {
-                                  setPlacedName(null)
-                                  setBulkParts([...selectedParts.values()])
-                                },
+                                onRun: () =>
+                                  setBulkParts([...selectedParts.values()]),
                               },
                               ...(targetTenant
                                 ? [
@@ -230,10 +226,7 @@ function UnassignedPartsView({ id }: { id: string }) {
                 }
                 onPlace={
                   canManage && warehouse.isActive
-                    ? (part) => {
-                        setPlacedName(null)
-                        setPlacing(part)
-                      }
+                    ? (part) => setPlacing(part)
                     : undefined
                 }
               />
@@ -259,7 +252,10 @@ function UnassignedPartsView({ id }: { id: string }) {
                 requirePhysicalZone
                 onClose={() => setPlacing(null)}
                 onSaved={() => {
-                  setPlacedName(placing.name)
+                  toast?.show({
+                    tone: 'ok',
+                    message: t('placed', { name: placing.name }),
+                  })
                   setSelectedParts((current) => {
                     const next = new Map(current)
                     next.delete(placing.id)
@@ -1776,7 +1772,7 @@ function PartPlacementView({
   const [query, setQuery] = useState('')
   const [saving, setSaving] = useState(false)
   const [operationError, setOperationError] = useState<string | null>(null)
-  const [saved, setSaved] = useState(false)
+  const toast = useOptionalToast()
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [createMode, setCreateMode] = useState<'warehouse' | 'zone' | null>(
@@ -1812,12 +1808,12 @@ function PartPlacementView({
             ),
         )))
 
-  const save = async () => {
+  /** `unchanged`: the chosen set equals the saved one (module 12, 5.7). */
+  const save = async (unchanged = false) => {
     if (!canManage || saving || !canSaveSelection) return
     setSaving(true)
     try {
       setOperationError(null)
-      setSaved(false)
       const scope = requireLatestMutation({
         permission: 'inventory.zones.manage',
         quota: false,
@@ -1854,7 +1850,11 @@ function PartPlacementView({
       setSelection(null)
       setShelfSelection(undefined)
       setSectionSelection(undefined)
-      setSaved(true)
+      toast?.show(
+        unchanged
+          ? { tone: 'info', message: t('unchanged') }
+          : { tone: 'ok', message: t('saved') },
+      )
       resource.reload()
     } catch (error) {
       setOperationError(normalizeApiProblem(error).message)
@@ -1915,7 +1915,6 @@ function PartPlacementView({
       })
       setWarehouseId(zone.warehouseId)
       setQuery('')
-      setSaved(false)
       setCreateMode(null)
       resource.refresh()
     } catch (error) {
@@ -2016,7 +2015,6 @@ function PartPlacementView({
           PLACEMENT_EVENTS.has(event.eventType),
         )
         const toggleZone = (zoneId: string) => {
-          setSaved(false)
           setShelfSelection(null)
           setSectionSelection(null)
           setSelection((currentSelection) => {
@@ -2133,7 +2131,6 @@ function PartPlacementView({
               {operationError ? (
                 <Notice tone="danger">{operationError}</Notice>
               ) : null}
-              {saved ? <Notice tone="ok">{t('saved')}</Notice> : null}
               {drawer?.requirePhysicalZone ? (
                 <Notice tone="info">{t('pickPhysicalZone')}</Notice>
               ) : null}
@@ -2230,7 +2227,6 @@ function PartPlacementView({
                             setSelection([warehouseOnly.id])
                             setSectionSelection(null)
                             setShelfSelection(null)
-                            setSaved(false)
                           }}
                         />
                         <span className="rz-caption text-app-muted">
@@ -2645,7 +2641,7 @@ function PartPlacementView({
                           aria-busy={saving}
                           className="w-full"
                           disabled={saving || selected.length === 0}
-                          onClick={() => void save()}
+                          onClick={() => void save(!changed)}
                           variant="primary"
                         >
                           {saving ? t('saving') : t('savePlacement')}

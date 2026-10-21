@@ -721,7 +721,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
   const navigate = useNavigate()
   const [car, setCar] = useState<Car | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
-  const [copyStatus, setCopyStatus] = useState<string | null>(null)
+  const toast = useOptionalToast()
   const [busy, setBusy] = useState(false)
   const [pendingAction, setPendingAction] = useState<
     'archive' | 'delete' | null
@@ -768,7 +768,7 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
       if (!navigator.clipboard?.writeText)
         throw new Error('Clipboard unavailable')
       await navigator.clipboard.writeText(vin)
-      setCopyStatus(t('vinCopied'))
+      toast?.show({ tone: 'ok', message: t('vinCopied') })
     } catch {
       setProblem(t('vinCopyFailed'))
     }
@@ -933,7 +933,6 @@ function CarDetail({ base, carId }: { base: string; carId: string }) {
       >
         <div className="grid gap-4">
           {problem ? <Notice tone="danger">{problem}</Notice> : null}
-          {copyStatus ? <Notice tone="ok">{copyStatus}</Notice> : null}
 
           <div className="grid gap-2">
             <div className="rz-page-head items-center">

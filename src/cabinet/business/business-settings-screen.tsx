@@ -7,7 +7,14 @@ import {
 } from 'react'
 import { Link } from 'react-router'
 import { Plus } from 'lucide-react'
-import { Button, Field, Notice, StatusPill, TextInput } from '@/components/app'
+import {
+  Button,
+  Field,
+  Notice,
+  StatusPill,
+  TextInput,
+  useOptionalToast,
+} from '@/components/app'
 import { cn } from '@/lib/utils'
 import { Switch } from '../integrations/dispatch-point-form'
 import { businessApi } from '@/api/business'
@@ -111,6 +118,7 @@ export function BusinessSettingsScreen() {
   const auth = useOptionalAuth()
   const t = useT(businessMessages)
   const tl = useT(lostResponseMessages)
+  const toast = useOptionalToast()
   // The auth list holds the tenant as last saved; the cabinet keeps the
   // object it committed at the switch.
   const tenant =
@@ -214,6 +222,7 @@ export function BusinessSettingsScreen() {
       setCity(updated.city ?? '')
       setDeposit(updated.requireDeliveryDeposit)
       setSaveState('success')
+      toast?.show({ tone: 'ok', message: t('saved') })
       auth?.mergeTenantSettings?.([updated])
       void Promise.resolve(cabinet.switchTenant(updated.id)).catch(
         () => undefined,
@@ -238,6 +247,7 @@ export function BusinessSettingsScreen() {
           fresh.requireDeliveryDeposit === deposit
         ) {
           setSaveState('success')
+          toast?.show({ tone: 'ok', message: t('saved') })
           auth?.mergeTenantSettings?.([fresh])
           void Promise.resolve(cabinet.switchTenant(fresh.id)).catch(
             () => undefined,
@@ -277,7 +287,6 @@ export function BusinessSettingsScreen() {
     >
       <RecordHead title={t('title')} />
 
-      {saveState === 'success' && <Notice tone="ok">{t('saved')}</Notice>}
       {saveState === 'denied' && <Notice tone="danger">{t('denied')}</Notice>}
       {saveState === 'error' && <Notice tone="danger">{t('error')}</Notice>}
       {saveState === 'checking' && (

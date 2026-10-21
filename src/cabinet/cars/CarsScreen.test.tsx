@@ -502,11 +502,13 @@ it('renders car identity, gallery, and VIN copy', async () => {
   })
   vi.mocked(useCabinet).mockReturnValue(cabinet(['cars.view', 'cars.manage']))
   render(
-    <MemoryRouter initialEntries={['/app/demo/cars/car-1']}>
-      <Routes>
-        <Route path="/app/:tenant/cars/:carId" element={<CarsScreen />} />
-      </Routes>
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/demo/cars/car-1']}>
+        <Routes>
+          <Route path="/app/:tenant/cars/:carId" element={<CarsScreen />} />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
   )
 
   // The year is part of the car's name now, not a spec row of its own.

@@ -9,6 +9,7 @@ import { tenantsApi } from '@/api/tenants'
 import type { BillingState, Tenant } from '@/api/types'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { LocaleProvider } from '@/i18n'
+import { ToastProvider } from '@/components/app'
 import { BUSINESS_SECTION_IDS } from './business-anchors'
 import { BusinessSettingsScreen } from './business-settings-screen'
 
@@ -139,9 +140,11 @@ it('round-trips trimmed business settings through the active tenant', async () =
   vi.mocked(useCabinet).mockReturnValue(currentCabinet)
   const user = userEvent.setup()
   render(
-    <MemoryRouter initialEntries={['/app/koval/settings/business']}>
-      <BusinessSettingsScreen />
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/koval/settings/business']}>
+        <BusinessSettingsScreen />
+      </MemoryRouter>
+    </ToastProvider>,
   )
 
   await user.clear(screen.getByLabelText('Назва бізнесу'))
@@ -158,12 +161,12 @@ it('round-trips trimmed business settings through the active tenant', async () =
     requireDeliveryDeposit: true,
   })
   expect(updateCall?.[2]?.signal).toBeInstanceOf(AbortSignal)
-  // The region block adds its own static notice, so find the save status by text.
+  // Saving is confirmed by a toast (module 00 §5), not a notice on the page.
   expect(
     (await screen.findByText('Налаштування бізнесу збережено.')).closest(
-      '[role="status"]',
+      '.rz-toast',
     ),
-  ).not.toBeNull()
+  ).toHaveAttribute('role', 'status')
   expect(screen.getByLabelText('Назва бізнесу')).toHaveValue('Koval Parts LLC')
   expect(screen.getByLabelText('Місто')).toHaveValue('Буча')
   expect(currentCabinet.switchTenant).toHaveBeenCalledWith('tenant-1')
@@ -305,9 +308,11 @@ it('reads the business back after a lost answer before saying it was not saved',
   vi.mocked(useCabinet).mockReturnValue(currentCabinet)
   const user = userEvent.setup()
   render(
-    <MemoryRouter initialEntries={['/app/koval/settings/business']}>
-      <BusinessSettingsScreen />
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/koval/settings/business']}>
+        <BusinessSettingsScreen />
+      </MemoryRouter>
+    </ToastProvider>,
   )
 
   await user.clear(screen.getByLabelText('Назва бізнесу'))
@@ -315,8 +320,10 @@ it('reads the business back after a lost answer before saying it was not saved',
   await user.click(screen.getAllByRole('button', { name: 'Зберегти' })[0]!)
 
   expect(
-    await screen.findByText('Налаштування бізнесу збережено.'),
-  ).toBeVisible()
+    (await screen.findByText('Налаштування бізнесу збережено.')).closest(
+      '.rz-toast',
+    ),
+  ).toHaveAttribute('role', 'status')
   expect(businessApi.update).toHaveBeenCalledTimes(1)
   expect(currentCabinet.switchTenant).toHaveBeenCalledWith('tenant-1')
 })

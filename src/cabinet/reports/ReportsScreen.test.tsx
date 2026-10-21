@@ -7,6 +7,7 @@ import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { reportsApi, type ReportJob } from '@/api/reports'
 import { LocaleProvider } from '@/i18n'
+import { ToastProvider } from '@/components/app'
 import { ReportsScreen } from './ReportsScreen'
 
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
@@ -614,8 +615,8 @@ it('shows the covered period for a report created in this session', async () => 
 
   await waitFor(() => expect(reportsApi.create).toHaveBeenCalledTimes(1))
   const row = await screen.findByRole('rowheader')
-  expect(row).toHaveTextContent('15.01.2026')
-  expect(row).toHaveTextContent('20.01.2026')
+  // v2 (module 31): the start drops the year the end already states.
+  expect(row).toHaveTextContent('15.01 – 20.01.2026')
 })
 
 it('marks a period the server never returned as unknown', async () => {
@@ -799,4 +800,27 @@ it('explains an invalid period in Polish', async () => {
   expect(
     screen.getByText('Koniec okresu nie może być wcześniej niż początek'),
   ).toBeInTheDocument()
+})
+
+it('confirms a created report with an ok toast and names its period compactly', async () => {
+  render(
+    <ToastProvider>
+      <ReportsScreen {...screenProps} />
+    </ToastProvider>,
+  )
+  const user = userEvent.setup()
+
+  fireEvent.change(await screen.findByLabelText('Початок періоду'), {
+    target: { value: '2026-10-15' },
+  })
+  fireEvent.change(screen.getByLabelText('Кінець періоду'), {
+    target: { value: '2026-10-21' },
+  })
+  await user.click(screen.getByRole('button', { name: 'Створити звіт' }))
+
+  expect(
+    await screen.findByText('Звіт поставлено у чергу. PDF з’явиться у списку.'),
+  ).toBeVisible()
+  const period = await screen.findByText(/15\.10\s*[–-]\s*21\.10\.2026/)
+  expect(period).toHaveClass('rz-mono')
 })

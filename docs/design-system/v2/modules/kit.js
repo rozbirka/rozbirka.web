@@ -22,7 +22,11 @@ export const grid = (cards, n) => ({ wrap: 'display:grid;gap:14px', cols: [{ sty
 export const stateCard = (cls, icon, title, body, btns, meta, h, unverified) => card({ state: { cls: 'rz-state' + (cls ? ' rz-state--' + cls : ''), role: cls === 'danger' ? 'alert' : 'status', icon, title, body: body || '', btns: btns || null, meta: meta || '', h: (h || 420) + 'px', unverified: !!unverified } });
 export const sb = (label, icon, kind) => ({ cls: 'rz-btn' + (kind ? ' rz-btn--' + kind : ''), icon: icon || '', label, off: 'false', style: '' });
 export const notice = (tone, icon, text, action, x) => ({ cls: 'rz-notice rz-notice--' + tone, icon, text, action: action || '', title: '', unverified: false, ...(x || {}) });
-export const toast = (text, tone, action) => ({ toast: { text, action: action || '', icon: tone === 'danger' ? 'icon-circle-alert' : 'icon-circle-check', iconStyle: 'font-size:var(--rz-icon-md);color:' + (tone === 'danger' ? 'var(--rz-danger)' : 'var(--rz-ok)') } });
+// Toast: transient result of a user action. tone ok|info|danger (as components/app/toast.tsx). Max 3, newest at the bottom.
+const TT = { ok: ['icon-circle-check', 'var(--rz-ok)'], info: ['icon-info', 'var(--rz-info)'], danger: ['icon-triangle-alert', 'var(--rz-danger)'] };
+const toastItem = (text, tone, action) => { const t = TT[tone] || TT.ok; return { text, action: action || '', role: tone === 'danger' ? 'alert' : 'status', icon: t[0], iconStyle: 'font-size:var(--rz-icon-md);flex:none;color:' + t[1] }; };
+export const toasts = (items) => ({ toasts: items.slice(-3).map((a) => toastItem(a[0], a[1], a[2])), stack: 'position:absolute;right:24px;bottom:24px;z-index:5;display:grid;gap:8px;justify-items:end' });
+export const toast = (text, tone, action) => toasts([[text, tone, action]]);
 export const fact = (k, v, x) => { x = x || {}; return { k, v, sub: x.sub || '', style: 'display:grid;grid-template-columns:' + (x.w || 140) + 'px minmax(0,1fr);gap:12px;padding:8px 0;border-top:1px solid var(--rz-border)', vStyle: 'margin:0;color:' + (TONE[x.tone] || 'var(--rz-text)') + ';' + (x.mono ? 'font-family:var(--rz-font-mono);' : '') + (x.strong ? 'font-weight:600;' : '') }; };
 export const facts = (arr) => arr.map((f, i) => (i === 0 ? { ...f, style: f.style.replace(';border-top:1px solid var(--rz-border)', '') } : f));
 export const field = (label, value, x) => {
@@ -49,7 +53,8 @@ export const table = (cols, rows, x) => {
           if (c == null || typeof c !== 'object') return { isText: true, text: c == null ? '' : String(c), sub: '', style: P + align + 'color:var(--rz-text-muted)' };
           if ('check' in c) return { isCheck: true, on: c.check ? 'true' : 'false', off: c.off ? 'true' : 'false', title: c.title || '', box: box(c.check, c.off), icon: c.check ? 'icon-check' : '', style: P + 'width:36px' };
           if ('main' in c) return { isMain: true, text: c.main, sub: c.sub || '', style: P };
-          if ('pill' in c) return { isPill: true, text: c.pill, pill: 'rz-pill' + (c.cls ? ' rz-pill--' + c.cls : ''), style: P + align };
+          if ('pill' in c) return { isPill: true, text: c.pill, sub: c.sub || '', pill: 'rz-pill' + (c.cls ? ' rz-pill--' + c.cls : ''), style: P + align + (c.sub ? 'padding-top:8px;padding-bottom:8px;' : '') };
+          if ('btns' in c) return { isBtns: true, btns: c.btns.map((b) => ({ label: b[0], icon: b[1] || '', cls: 'rz-btn rz-btn--sm' + (b[2] ? ' rz-btn--' + b[2] : ''), off: b[3] ? 'true' : 'false' })), style: P + 'text-align:right' };
           if ('dot' in c) return { isPill: true, text: c.dot, pill: 'rz-dot' + (c.cls ? ' rz-dot--' + c.cls : ''), style: P + align };
           if ('num' in c) return { isNum: true, text: String(c.num), lock: !!c.lock, style: P + 'text-align:right;color:' + (TONE[c.tone] || 'var(--rz-text-strong)') };
           if ('link' in c) return { isLink: true, text: c.link, style: P + align };
