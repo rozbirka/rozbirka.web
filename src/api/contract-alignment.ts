@@ -38,10 +38,6 @@ type Check<T extends true> = T
 /** Every value the web sends fits the contract's type for that field. */
 type Fits<Sent, Contract> = [Sent] extends [Contract] ? true : false
 
-/** Core codex/intake-oem-code adds OEM to intake creation; pin after publication. */
-type PendingIntakePartFields = 'oemCode'
-/** The warehouse restore change adds archivedOnly; update the published pin after Core publication. */
-type PendingLocationQueryFields = 'archivedOnly'
 type ZoneListQuery = NonNullable<
   paths['/api/v1/inventory/zones']['get']['parameters']['query']
 >
@@ -53,19 +49,19 @@ export type ContractAlignment = [
   Check<
     Same<
       Unknown<Omit<InventoryZoneQuery, keyof RequestOptions>, ZoneListQuery>,
-      PendingLocationQueryFields
+      never
     >
   >,
   Check<
     Same<
       Unknown<Omit<SectionListOptions, keyof RequestOptions>, SectionListQuery>,
-      PendingLocationQueryFields
+      never
     >
   >,
   Check<
     Same<
       Unknown<AddIntakePartRequest, Schemas['AddPartToIntakeRequest']>,
-      PendingIntakePartFields
+      never
     >
   >,
   Check<Same<Unknown<ImportMapping, Schemas['ImportMappingPlan']>, never>>,
