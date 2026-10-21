@@ -1,7 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 import { Lock } from 'lucide-react'
-import { Button, Field, Notice, Skeleton } from '@/components/app'
+import {
+  Button,
+  Field,
+  Notice,
+  Skeleton,
+  useOptionalToast,
+} from '@/components/app'
 import { businessApi } from '@/api/business'
 import { normalizeApiProblem } from '@/api/errors'
 import { tenantSettings, type TenantSettings } from '@/api/tenant-settings'
@@ -49,6 +55,8 @@ export function AccountingCurrencySection() {
     cabinetModules.business,
   )
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const toast = useOptionalToast()
   const tenant = cabinet.targetTenant
   const generation = cabinet.snapshot?.generation
   const [attempt, setAttempt] = useState(0)
@@ -92,16 +100,27 @@ export function AccountingCurrencySection() {
   const view = status === null ? 'unknown' : currencySettingsView(status, owner)
   const current = fresh?.accountingCurrency ?? null
   const busy = save === 'pending' || save === 'checking'
-  const returnPath =
-    save === 'saved'
-      ? currencyReturnPath(searchParams, `/app/${tenant.slug}`)
-      : null
-
   const accept = (settings: TenantSettings) => {
     setFresh(settings)
     setEditing(false)
     setPicked(null)
     setSave('saved')
+    // Saving is confirmed by a toast (module 00 §5). The way back to the price
+    // form the owner came from rides on it and stays until it is used or closed.
+    const returnPath = currencyReturnPath(searchParams, `/app/${tenant.slug}`)
+    toast?.show({
+      tone: 'ok',
+      message: t('saved'),
+      ...(returnPath === null
+        ? {}
+        : {
+            action: {
+              label: t('backToForm'),
+              onAction: () => void navigate(returnPath),
+            },
+            duration: 0,
+          }),
+    })
   }
 
   const verify = async (target: SupportedCurrency) => {
@@ -178,21 +197,6 @@ export function AccountingCurrencySection() {
 
   const feedback = (() => {
     switch (save) {
-      case 'saved':
-        return (
-          <Notice
-            action={
-              returnPath === null ? undefined : (
-                <Link className="font-medium" to={returnPath}>
-                  {t('backToForm')} →
-                </Link>
-              )
-            }
-            tone="ok"
-          >
-            {t('saved')}
-          </Notice>
-        )
       case 'refused':
         return <Notice tone="danger">{t('refused')}</Notice>
       case 'locked-meanwhile':

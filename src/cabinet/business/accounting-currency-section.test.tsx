@@ -1,12 +1,13 @@
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are asserted directly. */
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AxiosError, AxiosHeaders } from 'axios'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, useLocation } from 'react-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { businessApi } from '@/api/business'
 import { tenantsApi } from '@/api/tenants'
 import type { Tenant } from '@/api/types'
+import { ToastProvider } from '@/components/app'
 import { LocaleProvider, type SupportedCurrency } from '@/i18n'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { AccountingCurrencySection } from './accounting-currency-section'
@@ -79,14 +80,31 @@ const problem = (status: number | undefined, code?: string) => {
   return error
 }
 
+function CurrentPath() {
+  const location = useLocation()
+  return <p data-testid="path">{location.pathname + location.search}</p>
+}
+
 function renderSection(search = '', locale: 'uk' | 'en-GB' = 'uk') {
   return render(
     <LocaleProvider locale={locale}>
-      <MemoryRouter initialEntries={[`/app/koval/settings/business${search}`]}>
-        <AccountingCurrencySection />
-      </MemoryRouter>
+      <ToastProvider>
+        <MemoryRouter
+          initialEntries={[`/app/koval/settings/business${search}`]}
+        >
+          <AccountingCurrencySection />
+          <CurrentPath />
+        </MemoryRouter>
+      </ToastProvider>
     </LocaleProvider>,
   )
+}
+
+/** Saving is confirmed by a toast (module 00 §5), not a notice in the block. */
+async function findSavedToast(text: string) {
+  const toast = (await screen.findByText(text)).closest('.rz-toast')
+  expect(toast).toHaveAttribute('role', 'status')
+  return toast as HTMLElement
 }
 
 beforeEach(() => {
@@ -132,7 +150,7 @@ describe('accounting currency block', () => {
         signal: expect.any(AbortSignal) as AbortSignal,
       }),
     )
-    expect(await screen.findByText('Валюту обліку збережено.')).toBeVisible()
+    await findSavedToast('Валюту обліку збережено.')
     // Saved but no price yet: change stays possible with the permanent warning.
     expect(screen.getByRole('button', { name: 'Змінити' })).toBeVisible()
     expect(
@@ -200,7 +218,7 @@ describe('accounting currency block', () => {
     await user.type(input, 'JPY{Enter}')
     await user.click(screen.getByRole('button', { name: 'Зберегти' }))
 
-    expect(await screen.findByText('Валюту обліку збережено.')).toBeVisible()
+    await findSavedToast('Валюту обліку збережено.')
     expect(tenantsApi.list).toHaveBeenCalledTimes(2)
   })
 
@@ -281,8 +299,12 @@ describe('accounting currency block', () => {
     await user.type(input, 'hryv{Enter}')
     await user.click(screen.getByRole('button', { name: 'Save' }))
 
-    expect(
-      await screen.findByRole('link', { name: 'Back to the form →' }),
-    ).toHaveAttribute('href', '/app/koval/parts/new?car_id=c1&draft=1')
+    const toast = await findSavedToast('Accounting currency saved.')
+    await user.click(
+      within(toast).getByRole('button', { name: 'Back to the form' }),
+    )
+    expect(screen.getByTestId('path')).toHaveTextContent(
+      '/app/koval/parts/new?car_id=c1&draft=1',
+    )
   })
 })

@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Button, Card, Field, Notice, SelectInput } from '@/components/app'
+import {
+  Button,
+  Card,
+  Field,
+  Notice,
+  SelectInput,
+  useOptionalToast,
+} from '@/components/app'
 import { cashApi, type CashRegister } from '@/api/cash'
 import {
   integrationsApi,
@@ -32,6 +39,7 @@ export function DeliveryPreferencesPanel({
   const { locale } = useLocale()
   const t = useT(npFormsMessages)
   const tc = useT(commonMessages)
+  const toast = useOptionalToast()
   const [saved, setSaved] = useState<NovaPoshtaPreferences | null>(null)
   const [senders, setSenders] = useState<NovaPoshtaCounterparty[] | null>(null)
   const [contacts, setContacts] = useState<{
@@ -45,7 +53,6 @@ export function DeliveryPreferencesPanel({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<'senders' | 'country' | null>(null)
-  const [done, setDone] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -116,7 +123,6 @@ export function DeliveryPreferencesPanel({
     setBusy(true)
     setError(null)
     setLoadError(null)
-    setDone(false)
     void integrationsApi
       .savePreferences(integrationId, {
         codCashRegisterId: till,
@@ -125,7 +131,7 @@ export function DeliveryPreferencesPanel({
       })
       .then((next) => {
         setSaved(next)
-        setDone(true)
+        toast?.show({ tone: 'ok', message: t('prefsSaved') })
       })
       .catch((problem: unknown) => {
         setError(
@@ -146,7 +152,6 @@ export function DeliveryPreferencesPanel({
               : t('sendersError')}
           </Notice>
         )}
-        {done ? <Notice tone="ok">{t('prefsSaved')}</Notice> : null}
 
         <Field hint={t('senderHint')} label={t('senderLabel')}>
           <SelectInput
@@ -154,7 +159,6 @@ export function DeliveryPreferencesPanel({
             onChange={(event) => {
               setSender(event.target.value === '' ? null : event.target.value)
               setContact(null)
-              setDone(false)
             }}
             value={sender ?? ''}
           >
@@ -182,7 +186,6 @@ export function DeliveryPreferencesPanel({
             disabled={busy || sender === null || contactOptions === null}
             onChange={(event) => {
               setContact(event.target.value === '' ? null : event.target.value)
-              setDone(false)
             }}
             value={chosenContact ?? ''}
           >
@@ -206,7 +209,6 @@ export function DeliveryPreferencesPanel({
             disabled={busy || tills === null}
             onChange={(event) => {
               setTill(event.target.value === '' ? null : event.target.value)
-              setDone(false)
             }}
             value={till ?? ''}
           >

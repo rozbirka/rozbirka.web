@@ -12,6 +12,7 @@ export default defineConfig([
     'coverage',
     'node_modules',
     '.wrangler',
+    '.worktrees/',
     'worker-configuration.d.ts',
     'src/api/generated/*.ts',
   ]),

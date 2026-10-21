@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router'
 import { describe, expect, it } from 'vitest'
-import { LocationBrowser } from './LocationBrowser'
+import { LocationBrowser, LocationSearch } from './LocationBrowser'
 import type { InventorySection, InventoryShelf } from '@/api/inventory'
 
 const zoneFixture = {
@@ -70,11 +70,13 @@ function mount(
         },
       ]}
     >
+      <LocationSearch label="Пошук місця" placeholder="Назва або код" />
       <LocationBrowser
         zone={{ ...zoneFixture, warehouseId: 'w', warehouseName: 'Склад' }}
         {...(section ? { section: sections[0] } : {})}
         sections={sections}
         shelves={data}
+        sectionShelfCounts={new Map(sections.map((item) => [item.id, 100]))}
         base="/inventory"
         canManage={false}
         canViewParts={access}
@@ -87,37 +89,32 @@ function mount(
   )
 }
 describe('location resource navigation', () => {
-  it('shows active shelf totals per section independently of search and other zones', async () => {
-    const user = userEvent.setup()
-    const first = shelves[0]!
-    mount(false, '/warehouse', true, [
-      first,
-      { ...first, id: 'second' },
-      { ...first, id: 'inactive', isActive: false },
-      { ...first, id: 'foreign-zone', zoneId: 'other' },
-      { ...first, id: 'foreign-warehouse', warehouseId: 'other' },
-    ])
+  it('shows section names, codes and the shelf count', () => {
+    mount()
     expect(
-      within(screen.getByRole('group', { name: 'Секція: Секція 1' })).getByText(
-        /Полиць: 2/,
-      ),
-    ).toBeInTheDocument()
-    expect(
-      within(screen.getByRole('group', { name: 'Секція: Секція 2' })).getByText(
-        /Полиць: 0/,
-      ),
-    ).toBeInTheDocument()
-    await user.type(screen.getByRole('searchbox'), 'S1')
-    expect(
-      within(screen.getByRole('group', { name: 'Секція: Секція 1' })).getByText(
-        /Полиць: 2/,
-      ),
-    ).toBeInTheDocument()
+      screen.getByText('Виберіть секцію, щоб переглянути її полиці'),
+    ).toBeVisible()
+    const row = screen.getByRole('link', { name: 'Секція 1, S1' })
+    expect(row).toHaveTextContent('Секція 1')
+    expect(row).toHaveTextContent('S1')
+    expect(row).toHaveAccessibleDescription('Полиць: 100')
+    expect(within(row).getByText('100')).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Секції' })).toHaveTextContent(
+      /^Секції$/,
+    )
   })
-  it('pages sections by ten and restores page from the URL', async () => {
+  it('keeps the full shelf count when searching sections', async () => {
     const user = userEvent.setup()
     mount()
-    expect(screen.getAllByRole('link', { name: /^Секція \d/ })).toHaveLength(10)
+    await user.type(screen.getByRole('searchbox'), 'S7')
+    expect(
+      screen.getByRole('link', { name: 'Секція 7, S7' }),
+    ).toHaveAccessibleDescription('Полиць: 100')
+  })
+  it('pages sections by fifteen and restores page from the URL', async () => {
+    const user = userEvent.setup()
+    mount()
+    expect(screen.getAllByRole('link', { name: /^Секція \d/ })).toHaveLength(15)
     expect(screen.getByRole('link', { name: 'Секція 1, S1' })).toHaveAttribute(
       'href',
       '/inventory/sections/s0',
@@ -128,12 +125,23 @@ describe('location resource navigation', () => {
       ).getByRole('button', { name: /Наступна/ }),
     )
     expect(
-      screen.getByRole('link', { name: 'Секція 11, S11' }),
+      screen.getByRole('link', { name: 'Секція 16, S16' }),
     ).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'Секція 16, S16' }),
+    ).toHaveAccessibleDescription('Полиць: 100')
     expect(
       screen.queryByRole('link', { name: 'Секція 1, S1' }),
     ).not.toBeInTheDocument()
     expect(screen.getByTestId('url')).toHaveTextContent('locationPage=2')
+    expect(screen.getAllByRole('link', { name: /^Секція \d/ })).toHaveLength(6)
+    const pager = screen.getByRole('navigation', { name: 'Сторінки секцій' })
+    expect(pager).toHaveTextContent('16–21 з 21')
+    expect(
+      within(pager).getByRole('button', { name: /Наступна/ }),
+    ).toBeDisabled()
+    await user.click(within(pager).getByRole('button', { name: /Попередня/ }))
+    expect(screen.getAllByRole('link', { name: /^Секція \d/ })).toHaveLength(15)
   })
   it('searches sections and carries search into section navigation state', async () => {
     const user = userEvent.setup()
@@ -146,20 +154,25 @@ describe('location resource navigation', () => {
     )
     expect(screen.getByTestId('url')).toHaveTextContent('locationSearch=S7')
   })
-  it('pages only the selected section shelves by ten and restores URL page', async () => {
+  it('pages only the selected section shelves by fifteen and restores URL page', async () => {
     const user = userEvent.setup()
     mount(true, '/section?locationPage=2')
     expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(
-      11,
+      16,
     )
-    expect(screen.getByText('S1-P11')).toBeInTheDocument()
-    expect(screen.queryByText('S2-P11')).not.toBeInTheDocument()
+    expect(screen.getByText('S1-P16')).toBeInTheDocument()
+    expect(screen.queryByText('S2-P16')).not.toBeInTheDocument()
     await user.type(screen.getByRole('searchbox'), 'S1-P100')
     expect(screen.getByText('Полиця 100')).toBeInTheDocument()
+    const pager = screen.getByRole('navigation', { name: 'Сторінки полиць' })
+    expect(pager).toHaveTextContent('1–1 з 1')
+    expect(
+      within(pager).getByRole('button', { name: /Наступна/ }),
+    ).toBeDisabled()
     expect(screen.getByTestId('url')).not.toHaveTextContent('locationPage=2')
     expect(screen.getByTestId('url')).toHaveTextContent('"zoneSearch":"S7"')
   })
-  it('links a shelf to parts with its full hierarchy and ten rows, without a drawer', () => {
+  it('links a shelf to parts with its full hierarchy without a drawer', () => {
     mount(true, '/section?locationSearch=S1-P100')
     expect(
       screen.getByRole('link', { name: 'Переглянути запчастини: Полиця 100' }),
@@ -169,31 +182,35 @@ describe('location resource navigation', () => {
     )
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
-  it('links direct zone parts without a separate per-section count link', () => {
+  it('shows real sections without the direct zone parts row', () => {
     mount()
     expect(
-      screen.getByRole('link', { name: /У зоні без секції/ }),
-    ).toHaveAttribute('href', '/parts?warehouse=w&zone=z&without_section=1')
+      screen.queryByRole('link', { name: /У зоні без секції/ }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Секція 1, S1' })).toHaveAttribute(
+      'href',
+      '/inventory/sections/s0',
+    )
     expect(
       screen.queryByRole('link', {
         name: 'Переглянути запчастини секції: Секція 1',
       }),
     ).not.toBeInTheDocument()
   })
-  it('links direct section parts without creating a fake shelf', () => {
+  it('shows real shelves without the direct section parts row', () => {
     mount(true)
     expect(
-      screen.getByRole('link', { name: /У секції без полиці/ }),
+      screen.queryByRole('link', { name: /У секції без полиці/ }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: 'Переглянути запчастини: Полиця 1' }),
     ).toHaveAttribute(
       'href',
-      '/parts?warehouse=w&zone=z&section=s0&without_shelf=1',
+      '/parts?warehouse=w&zone=z&section=s0&shelf=s0-p0',
     )
   })
-  it('keeps the uncounted direct-parts link and hides unavailable management actions', () => {
+  it('hides unavailable management actions', () => {
     mount(true, '/section')
-    expect(
-      screen.getByRole('link', { name: /У секції без полиці/ }),
-    ).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: 'Додати полицю' }),
     ).not.toBeInTheDocument()

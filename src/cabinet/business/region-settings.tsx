@@ -14,6 +14,7 @@ import {
   Notice,
   Segmented,
   SelectInput,
+  useOptionalToast,
 } from '@/components/app'
 import { formatDateWith, formatMoney, formatTime } from '@/i18n/format'
 import { useT } from '@/i18n/hooks'
@@ -182,6 +183,7 @@ export function RegionSettings({
 }) {
   const t = useT(regionMessages)
   const tl = useT(lostResponseMessages)
+  const toast = useOptionalToast()
   const { locale } = useLocale()
   const titleId = useId()
   const alertRef = useRef<HTMLDivElement>(null)
@@ -257,6 +259,7 @@ export function RegionSettings({
       )
       if (scope.signal.aborted) return
       setState({ kind: 'success' })
+      toast?.show({ tone: 'ok', message: t('saved') })
       onSaved(updated)
     } catch (error) {
       if (scope.signal.aborted) return
@@ -280,6 +283,7 @@ export function RegionSettings({
             (!sendLanguage || read.documentLanguage === docLanguage)
           if (landed) {
             setState({ kind: 'success' })
+            toast?.show({ tone: 'ok', message: t('saved') })
             onSaved(fresh)
           } else setState({ kind: 'lost', saved: false })
         } catch {
@@ -490,7 +494,6 @@ export function RegionSettings({
         </div>
       </header>
       <div className="rz-card__body grid gap-3">
-        {state.kind === 'success' && <Notice tone="ok">{t('saved')}</Notice>}
         {state.kind === 'checking' && (
           <Notice tone="info">{tl('checking')}</Notice>
         )}

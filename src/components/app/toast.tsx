@@ -6,10 +6,11 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react'
+import { CircleCheck, Info, TriangleAlert, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   ToastContext,
+  toastDuration,
   type ToastApi,
   type ToastRequest,
   type ToastTone,
@@ -21,9 +22,10 @@ interface ActiveToast extends ToastRequest {
   id: number
 }
 
+/** Module 00 §5: icon-circle-check / icon-info / icon-triangle-alert. */
 const toneIcon: Record<ToastTone, typeof Info> = {
-  ok: CheckCircle2,
-  danger: AlertTriangle,
+  ok: CircleCheck,
+  danger: TriangleAlert,
   info: Info,
 }
 
@@ -33,7 +35,8 @@ const toneColor: Record<ToastTone, string> = {
   info: 'text-state-info',
 }
 
-const DEFAULT_DURATION = 6000
+/** At most three at once; the newest joins at the bottom, the oldest leaves. */
+const MAX_TOASTS = 3
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ActiveToast[]>([])
@@ -53,8 +56,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const show = useCallback(
     (request: ToastRequest) => {
       const id = nextId.current++
-      setToasts((current) => [...current.slice(-2), { ...request, id }])
-      const duration = request.duration ?? DEFAULT_DURATION
+      setToasts((current) => {
+        const kept = current.slice(-(MAX_TOASTS - 1))
+        // A toast pushed out of the stack must not keep a live timer.
+        for (const gone of current.slice(0, current.length - kept.length)) {
+          const timer = timers.current.get(gone.id)
+          if (timer !== undefined) clearTimeout(timer)
+          timers.current.delete(gone.id)
+        }
+        return [...kept, { ...request, id }]
+      })
+      const duration = toastDuration(request)
       if (duration > 0) {
         timers.current.set(
           id,
@@ -90,7 +102,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             >
               <Icon
                 aria-hidden
-                className={cn('size-[15px] shrink-0', toneColor[tone])}
+                className={cn('size-icon-md shrink-0', toneColor[tone])}
               />
               <span className="rz-toast__msg">{toast.message}</span>
               {toast.action === undefined ? null : (

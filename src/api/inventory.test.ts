@@ -129,3 +129,35 @@ it('omits part counts for every location list and allows explicit detail consume
     { includePartCounts: true },
   ])
 })
+
+it('requests archived locations explicitly and restores through tenant-scoped endpoints', async () => {
+  const requests = capture()
+  const controller = new AbortController()
+  await inventoryApi.getZones({
+    warehouseId: 'w',
+    archivedOnly: true,
+    signal: controller.signal,
+  })
+  await inventoryApi.getSections('z', {
+    archivedOnly: true,
+    signal: controller.signal,
+  })
+  await inventoryApi.restoreZone('zone/old', { signal: controller.signal })
+  await inventoryApi.restoreSection('section/old', {
+    signal: controller.signal,
+  })
+  expect(requests.map(({ method, url }) => [method, url])).toEqual([
+    ['get', '/inventory/zones'],
+    ['get', '/inventory/sections'],
+    ['post', '/inventory/zones/zone%2Fold/restore'],
+    ['post', '/inventory/sections/section%2Fold/restore'],
+  ])
+  expect(requests[0]?.params).toMatchObject({
+    warehouseId: 'w',
+    archivedOnly: true,
+  })
+  expect(requests[1]?.params).toMatchObject({ zoneId: 'z', archivedOnly: true })
+  expect(requests.every(({ signal }) => signal?.aborted === false)).toBe(true)
+  controller.abort()
+  expect(requests.every(({ signal }) => signal?.aborted === true)).toBe(true)
+})

@@ -457,6 +457,7 @@ describe('cabinetModules', () => {
       '/settings/profile',
       '/stickers',
       '/team',
+      '/warehouses',
     ])
     expect(new Set(routeSegments).size).toBe(routeSegments.length)
   })

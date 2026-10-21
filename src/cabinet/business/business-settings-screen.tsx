@@ -5,15 +5,16 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react'
-import { Link } from 'react-router'
-import { Plus } from 'lucide-react'
-import { Button, Field, Notice, StatusPill, TextInput } from '@/components/app'
-import { cn } from '@/lib/utils'
-import { Switch } from '../integrations/dispatch-point-form'
+import {
+  Button,
+  Field,
+  Notice,
+  TextInput,
+  useOptionalToast,
+} from '@/components/app'
 import { businessApi } from '@/api/business'
 import { tenantsApi } from '@/api/tenants'
 import { isLostResponse, lostResponseMessages } from '../lost-response'
-import { inventoryApi, type Warehouse } from '@/api/inventory'
 import { useCabinet } from '../CabinetContext'
 import {
   RecordColumns,
@@ -42,31 +43,14 @@ type SaveState =
 
 const FORM_ID = 'business-form'
 
-const LEGAL_FORMS = ['legalSole', 'legalLlc', 'legalNone'] as const
-const COSTING = [
-  { label: 'costWeight', hint: 'costWeightHint' },
-  { label: 'costManual', hint: 'costManualHint' },
-] as const
-const RULES = [
-  { label: 'ruleMinStock', hint: 'ruleMinStockHint' },
-  { label: 'ruleVin', hint: 'ruleVinHint' },
-  { label: 'ruleNegative', hint: 'ruleNegativeHint' },
-] as const
-
 /** A numbered `.rz-card` section of the settings page. */
 function Step({
   number,
   title,
-  action,
-  footer,
-  bodyClassName,
   children,
 }: {
   number: string
   title: string
-  action?: ReactNode
-  footer?: ReactNode
-  bodyClassName?: string
   children: ReactNode
 }) {
   return (
@@ -79,29 +63,10 @@ function Step({
           </span>
           <h2 className="rz-h-card">{title}</h2>
         </div>
-        {action}
       </header>
-      <div className={cn('rz-card__body grid gap-3', bodyClassName)}>
-        {children}
-      </div>
-      {footer === undefined ? null : (
-        <div className="rz-card__foot">{footer}</div>
-      )}
+      <div className="rz-card__body grid gap-3">{children}</div>
     </section>
   )
-}
-
-/** A control the design asks for and the API cannot back: shown, not faked. */
-function Dead({ children, title }: { children: ReactNode; title: string }) {
-  return (
-    <button className="rz-btn" disabled title={title} type="button">
-      {children}
-    </button>
-  )
-}
-
-function Note({ children }: { children: ReactNode }) {
-  return <p className="rz-caption m-0 text-pretty">{children}</p>
 }
 
 export function BusinessSettingsScreen() {
@@ -111,19 +76,17 @@ export function BusinessSettingsScreen() {
   const auth = useOptionalAuth()
   const t = useT(businessMessages)
   const tl = useT(lostResponseMessages)
+  const toast = useOptionalToast()
   // The auth list holds the tenant as last saved; the cabinet keeps the
   // object it committed at the switch.
   const tenant =
     auth?.tenants.find(
       (candidate) => candidate.id === cabinet.targetTenant?.id,
     ) ?? cabinet.targetTenant
-  const inventoryPath = `/app/${tenant?.slug ?? ''}/inventory`
   const generation = cabinet.snapshot?.generation
   const [name, setName] = useState(tenant?.name ?? '')
   const [city, setCity] = useState(tenant?.city ?? '')
-  const [deposit, setDeposit] = useState(tenant?.requireDeliveryDeposit ?? true)
   const [saveState, setSaveState] = useState<SaveState>('idle')
-  const [warehouses, setWarehouses] = useState<Warehouse[] | null>(null)
   const mountedRef = useRef(true)
   const latestCabinetRef = useRef(cabinet)
   const { requireLatestMutation } = useLatestMutationGuard(
@@ -138,7 +101,6 @@ export function BusinessSettingsScreen() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- drafts reset only at a tenant scope boundary.
     setName(tenant?.name ?? '')
     setCity(tenant?.city ?? '')
-    setDeposit(tenant?.requireDeliveryDeposit ?? true)
     setSaveState('idle')
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the reset is intentionally keyed by the cabinet scope.
   }, [generation, tenant?.id])
@@ -150,21 +112,6 @@ export function BusinessSettingsScreen() {
     }
   }, [])
 
-  useEffect(() => {
-    const controller = new AbortController()
-    void inventoryApi
-      .getWarehouses({ signal: controller.signal })
-      .then((list) => {
-        if (!controller.signal.aborted) setWarehouses(list)
-      })
-      .catch(() => {
-        // The warehouse list is read-only context here; the settings form
-        // still works without it, so a failure stays quiet.
-        if (!controller.signal.aborted) setWarehouses([])
-      })
-    return () => controller.abort()
-  }, [generation, tenant?.id])
-
   if (!tenant) {
     return <p className="rz-muted m-0 p-5">{t('noTenant')}</p>
   }
@@ -174,9 +121,7 @@ export function BusinessSettingsScreen() {
   const busy = saveState === 'pending' || saveState === 'checking'
   const canSave = !busy && normalizedName.length >= 2
   const changed =
-    normalizedName !== tenant.name ||
-    normalizedCity !== (tenant.city ?? '') ||
-    deposit !== tenant.requireDeliveryDeposit
+    normalizedName !== tenant.name || normalizedCity !== (tenant.city ?? '')
 
   const save = async (event: FormEvent) => {
     event.preventDefault()
@@ -196,7 +141,6 @@ export function BusinessSettingsScreen() {
         {
           name: normalizedName,
           city: normalizedCity || null,
-          requireDeliveryDeposit: deposit,
         },
         { signal: scope.signal },
       )
@@ -212,8 +156,8 @@ export function BusinessSettingsScreen() {
       }
       setName(updated.name)
       setCity(updated.city ?? '')
-      setDeposit(updated.requireDeliveryDeposit)
       setSaveState('success')
+      toast?.show({ tone: 'ok', message: t('saved') })
       auth?.mergeTenantSettings?.([updated])
       void Promise.resolve(cabinet.switchTenant(updated.id)).catch(
         () => undefined,
@@ -234,10 +178,10 @@ export function BusinessSettingsScreen() {
         if (!mountedRef.current || scope.signal.aborted) return
         if (
           fresh?.name === normalizedName &&
-          (fresh.city ?? '') === normalizedCity &&
-          fresh.requireDeliveryDeposit === deposit
+          (fresh.city ?? '') === normalizedCity
         ) {
           setSaveState('success')
+          toast?.show({ tone: 'ok', message: t('saved') })
           auth?.mergeTenantSettings?.([fresh])
           void Promise.resolve(cabinet.switchTenant(fresh.id)).catch(
             () => undefined,
@@ -252,7 +196,6 @@ export function BusinessSettingsScreen() {
   const reset = () => {
     setName(tenant.name)
     setCity(tenant.city ?? '')
-    setDeposit(tenant.requireDeliveryDeposit)
     setSaveState('idle')
   }
 
@@ -277,7 +220,6 @@ export function BusinessSettingsScreen() {
     >
       <RecordHead title={t('title')} />
 
-      {saveState === 'success' && <Notice tone="ok">{t('saved')}</Notice>}
       {saveState === 'denied' && <Notice tone="danger">{t('denied')}</Notice>}
       {saveState === 'error' && <Notice tone="danger">{t('error')}</Notice>}
       {saveState === 'checking' && (
@@ -312,19 +254,7 @@ export function BusinessSettingsScreen() {
                 </p>
               </div>
               <dl className="rz-facts border-app-line border-t">
-                <div>
-                  <dt>{t('warehouseCount')}</dt>
-                  <dd className="rz-mono">
-                    {warehouses === null ? '…' : warehouses.length}
-                  </dd>
-                </div>
                 <AccountingCurrencySummary />
-                <div>
-                  <dt>{t('costSummary')}</dt>
-                  <dd className="rz-dim" title={t('noCosting')}>
-                    —
-                  </dd>
-                </div>
               </dl>
               <div className="rz-card__foot grid justify-stretch gap-2">
                 <Button
@@ -340,24 +270,6 @@ export function BusinessSettingsScreen() {
                     ? t('summaryHint')
                     : t('nameRequired')}
                 </p>
-              </div>
-            </section>
-
-            <section className="rz-card min-w-0">
-              <header className="rz-card__head py-2.5">
-                <h2 className="rz-h-card">{t('dataTitle')}</h2>
-              </header>
-              <div className="rz-card__body grid gap-3">
-                <p className="rz-muted m-0 text-pretty">{t('dataBody')}</p>
-                <div className="rz-btn-row">
-                  <Dead title={t('noExport')}>{t('exportAll')}</Dead>
-                  <Dead title={t('noTenantDelete')}>{t('deleteCabinet')}</Dead>
-                </div>
-              </div>
-              <div className="rz-card__foot">
-                <Note>
-                  {t('noExport')} {t('noTenantDelete')}
-                </Note>
               </div>
             </section>
           </>
@@ -393,50 +305,6 @@ export function BusinessSettingsScreen() {
                   />
                 </Field>
               </form>
-              <div className="rz-form-grid">
-                <div className="rz-field">
-                  <p className="rz-label m-0">{t('legalForm')}</p>
-                  <div className="rz-seg flex-wrap self-start">
-                    {LEGAL_FORMS.map((key) => (
-                      <button
-                        disabled
-                        key={key}
-                        title={t('noLegalForm')}
-                        type="button"
-                      >
-                        {t(key)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <Field label={t('taxId')}>
-                  <TextInput
-                    disabled
-                    placeholder={t('notStored')}
-                    title={t('noTaxId')}
-                    value=""
-                  />
-                </Field>
-                <Field label={t('phone')}>
-                  <TextInput
-                    disabled
-                    placeholder={t('notStored')}
-                    title={t('noPhone')}
-                    value=""
-                  />
-                </Field>
-                <Field label={t('address')}>
-                  <TextInput
-                    disabled
-                    placeholder={t('onlyCity')}
-                    title={t('noAddress')}
-                    value=""
-                  />
-                </Field>
-              </div>
-              <Note>
-                {t('noLegalForm')} {t('noAddress')}
-              </Note>
             </Step>
 
             <RegionSettings
@@ -448,132 +316,6 @@ export function BusinessSettingsScreen() {
             />
 
             <AccountingCurrencySection />
-
-            <Step
-              action={
-                <Button asChild size="sm">
-                  <Link to={inventoryPath}>
-                    <Plus aria-hidden />
-                    {t('addWarehouse')}
-                  </Link>
-                </Button>
-              }
-              bodyClassName="p-0"
-              footer={
-                <Note>
-                  {t('warehousesNote')} {t('noWarehouseParts')}
-                </Note>
-              }
-              number="04"
-              title={t('warehouses')}
-            >
-              {warehouses === null ? (
-                <div className="rz-card__body">
-                  <Note>{t('warehousesLoading')}</Note>
-                </div>
-              ) : warehouses.length === 0 ? (
-                <div className="rz-card__body">
-                  <Note>{t('warehousesEmpty')}</Note>
-                </div>
-              ) : (
-                <ul className="m-0 grid list-none p-0">
-                  {warehouses.map((warehouse) => (
-                    <li
-                      className="border-app-line flex min-h-row flex-wrap items-center gap-x-4 gap-y-2 border-t px-[var(--rz-card-p)] py-2 first:border-t-0"
-                      key={warehouse.id}
-                    >
-                      <div className="grid min-w-0 flex-[1_1_200px] gap-0.5">
-                        <p className="m-0 flex flex-wrap items-center gap-2">
-                          <span className="rz-strong font-medium">
-                            {warehouse.name}
-                          </span>
-                          {warehouse.isSystemDefault && (
-                            <StatusPill>{t('warehouseMain')}</StatusPill>
-                          )}
-                          {!warehouse.isActive && (
-                            <StatusPill>{t('warehouseArchived')}</StatusPill>
-                          )}
-                        </p>
-                        <p className="rz-caption m-0">
-                          <span className="rz-mono">{warehouse.code}</span> ·{' '}
-                          {t('zones', { count: warehouse.zoneCount })}
-                        </p>
-                      </div>
-                      <span
-                        className="rz-dim ml-auto"
-                        title={t('noWarehouseParts')}
-                      >
-                        {t('partsNotCounted')}
-                      </span>
-                      <Button asChild size="sm">
-                        <Link to={inventoryPath}>{t('change')}</Link>
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Step>
-
-            <Step number="05" title={t('accounting')}>
-              <div className="rz-field">
-                <p className="rz-label m-0">{t('partCost')}</p>
-                <div className="flex flex-wrap gap-2">
-                  {COSTING.map((option) => (
-                    <button
-                      className="rz-choice-card min-w-0 flex-[1_1_200px] cursor-not-allowed flex-col gap-0.5 bg-transparent text-left opacity-50"
-                      disabled
-                      key={option.label}
-                      title={t('noCosting')}
-                      type="button"
-                    >
-                      <span className="rz-strong font-medium">
-                        {t(option.label)}
-                      </span>
-                      <span className="rz-caption">{t(option.hint)}</span>
-                    </button>
-                  ))}
-                </div>
-                <Note>{t('noCosting')}</Note>
-              </div>
-              {/* The one rule in this step the service actually keeps. It sits
-                  above the rest so a real control is not mistaken for the dead
-                  ones below it. */}
-              <div className="rz-inset flex items-start gap-3">
-                <Switch
-                  checked={deposit}
-                  disabled={busy}
-                  label={t('deposit')}
-                  onChange={setDeposit}
-                />
-                <span className="grid min-w-0 gap-0.5">
-                  <span className="rz-strong font-medium">{t('deposit')}</span>
-                  <span className="rz-caption rz-muted text-pretty">
-                    {deposit ? t('depositOn') : t('depositOff')}
-                  </span>
-                </span>
-              </div>
-              <ul className="border-app-line rounded-control m-0 grid list-none border p-0">
-                {RULES.map((rule) => (
-                  <li
-                    className="border-app-line flex items-start gap-3 border-t px-3 py-2.5 first:border-t-0"
-                    key={rule.label}
-                    title={t('noRules')}
-                  >
-                    <span
-                      aria-hidden
-                      className="rz-switch mt-0.5 inline-block shrink-0 cursor-not-allowed opacity-40"
-                    />
-                    <span className="grid min-w-0 gap-0.5">
-                      <span className="rz-dim font-medium">
-                        {t(rule.label)}
-                      </span>
-                      <span className="rz-caption">{t(rule.hint)}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <Note>{t('noRules')}</Note>
-            </Step>
           </>
         }
       />

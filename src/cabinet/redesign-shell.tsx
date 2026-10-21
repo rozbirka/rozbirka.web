@@ -22,12 +22,17 @@ export function RedesignShell({
   banner?: ReactNode
   /** `.rz-peek` beside the page (master-detail); the page and it share `.rz-split`. */
   peek?: ReactNode
-  /** `record` caps the page at 1240px, as Record.dc.html does. */
-  width?: 'list' | 'record'
+  /** `record` caps width; `workspace` fills the viewport for a scrollable working list. */
+  width?: 'list' | 'record' | 'workspace'
   children: ReactNode
 }) {
   return (
-    <div className="grid content-start">
+    <div
+      className={cn(
+        'grid content-start',
+        width === 'workspace' && 'rz-workspace',
+      )}
+    >
       <div className="rz-topbar min-h-topbar h-auto flex-wrap justify-between gap-y-1.5 py-1.5">
         <div className="rz-crumbs m-0">{crumb}</div>
         {actions === undefined ? null : (

@@ -13,6 +13,12 @@ export const locationContentsMessages = defineMessages({
     reserved: 'У резерві',
     sold: 'Продано',
     pages: 'Сторінки запчастин',
+    place: 'Розмістити',
+    selectPart: 'Обрати: {name}',
+    placePart: 'Розмістити {name}',
+    placementLocked: 'Розміщення заблоковано під час інвентаризації.',
+    placementNoStock: 'Немає залишку на складі. Розміщення недоступне.',
+    noMatches: 'Запчастин за цим запитом не знайдено.',
   },
   'en-GB': {
     search: 'Search parts',
@@ -27,6 +33,13 @@ export const locationContentsMessages = defineMessages({
     reserved: 'Reserved',
     sold: 'Sold',
     pages: 'Part pages',
+    place: 'Place',
+    selectPart: 'Select: {name}',
+    placePart: 'Place {name}',
+    placementLocked: 'Placement is locked during stocktake.',
+    placementNoStock:
+      'There is no stock in the warehouse. Placement is unavailable.',
+    noMatches: 'No parts match this search.',
   },
   pl: {
     search: 'Szukaj części',
@@ -41,5 +54,11 @@ export const locationContentsMessages = defineMessages({
     reserved: 'Zarezerwowane',
     sold: 'Sprzedane',
     pages: 'Strony części',
+    place: 'Umieść',
+    selectPart: 'Zaznacz: {name}',
+    placePart: 'Umieść {name}',
+    placementLocked: 'Lokalizacja jest zablokowana podczas inwentaryzacji.',
+    placementNoStock: 'Brak stanu magazynowego. Umieszczenie jest niedostępne.',
+    noMatches: 'Nie znaleziono części dla tego wyszukiwania.',
   },
 })

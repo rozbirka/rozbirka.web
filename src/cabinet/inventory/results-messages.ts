@@ -58,6 +58,8 @@ export const resultsMessages = defineMessages({
     },
     nothingToApply: 'Розходжень немає — застосовувати нічого.',
     allDecided: 'Усі розходження вже мають рішення.',
+    coverageBlocked:
+      'Є розходження без рішення. Коригування для них недоступне через неповне покриття зон.',
     needsAdjust: 'Застосування коригувань потребує права «inventory.adjust».',
     onlyInReview:
       'Коригування застосовуються, коли сесія в статусі «Перевірка».',
@@ -138,6 +140,8 @@ export const resultsMessages = defineMessages({
     },
     nothingToApply: 'No discrepancies — nothing to apply.',
     allDecided: 'Every discrepancy already has a decision.',
+    coverageBlocked:
+      'Some discrepancies are undecided. Adjustments for them are unavailable because zone coverage is incomplete.',
     needsAdjust:
       'Applying adjustments requires the “inventory.adjust” permission.',
     onlyInReview: 'Adjustments are applied when the session is in “Review”.',
@@ -217,6 +221,8 @@ export const resultsMessages = defineMessages({
     },
     nothingToApply: 'Brak rozbieżności — nie ma czego stosować.',
     allDecided: 'Wszystkie rozbieżności mają już decyzję.',
+    coverageBlocked:
+      'Niektóre rozbieżności nie mają decyzji. Korekty dla nich są niedostępne z powodu niepełnego pokrycia stref.',
     needsAdjust: 'Stosowanie korekt wymaga uprawnienia „inventory.adjust”.',
     onlyInReview: 'Korekty stosuje się, gdy sesja ma status „Weryfikacja”.',
     oneConsequence: 'Stan „{name}” wyniesie {count} szt.',

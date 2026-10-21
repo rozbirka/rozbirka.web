@@ -31,7 +31,7 @@ export const locationLabelMessages = defineMessages({
     print: 'Друк · {count}',
     pdf: 'PDF · {count}',
     pdfHint:
-      'Щоб зберегти PDF, у вікні друку браузера оберіть «Зберегти як PDF». Етикетки залишаться в черзі.',
+      'Щоб зберегти PDF, у вікні друку браузера оберіть «Зберегти як PDF».',
     cancelQueue: 'Скасувати чергу',
     cancelTitle: 'Скасувати чергу друку?',
     cancelHint: 'Решта вибраних етикеток буде прибрана з черги.',
@@ -42,12 +42,13 @@ export const locationLabelMessages = defineMessages({
     otherQueue:
       'Є незавершена черга: {name}. Продовжіть або скасуйте її перед створенням нової.',
     continue: 'Продовжити чергу',
-    limit: 'В одній черзі може бути не більше {max} етикеток. Зменште вибір.',
-    failed: 'Не вдалося підготувати друк. Чергу збережено.',
+    limit:
+      'За один раз можна надрукувати не більше {max} етикеток. Зменште вибір.',
+    failed: 'Не вдалося підготувати друк. Вибір збережено, спробуйте ще раз.',
     blocked:
       'Браузер заблокував вікно друку. Дозвольте спливаючі вікна для цього сайту.',
     missing:
-      'Деякі етикетки більше недоступні. Приберіть їх із черги перед друком.',
+      'Деякі етикетки більше недоступні. Перевірте вибір перед повторним друком.',
     confirmTitle: 'Що вдалося надрукувати?',
     confirmHint:
       'Позначте лише етикетки, які справді надруковані. Решта залишиться в черзі. Після збереження PDF нічого не підтверджуйте.',
@@ -85,8 +86,7 @@ export const locationLabelMessages = defineMessages({
     queued: 'Queued',
     print: 'Print · {count}',
     pdf: 'PDF · {count}',
-    pdfHint:
-      'Choose “Save as PDF” in the browser print dialog to save a PDF. Labels will stay in the queue.',
+    pdfHint: 'Choose “Save as PDF” in the browser print dialog to save a PDF.',
     cancelQueue: 'Cancel queue',
     cancelTitle: 'Cancel this print queue?',
     cancelHint: 'The remaining selected labels will be removed from the queue.',
@@ -97,12 +97,12 @@ export const locationLabelMessages = defineMessages({
     otherQueue:
       'There is an unfinished queue: {name}. Continue or cancel it before creating another.',
     continue: 'Continue queue',
-    limit: 'A queue can contain up to {max} labels. Reduce your selection.',
-    failed: 'Could not prepare printing. The queue was preserved.',
+    limit: 'You can print up to {max} labels at once. Reduce your selection.',
+    failed: 'Could not prepare printing. Your selection was kept. Try again.',
     blocked:
       'The browser blocked the print window. Allow pop-ups for this site.',
     missing:
-      'Some labels are no longer available. Remove them from the queue before printing.',
+      'Some labels are no longer available. Check your selection before printing again.',
     confirmTitle: 'Which labels were printed?',
     confirmHint:
       'Select only labels that were actually printed. The rest will stay queued. Do not confirm labels after saving a PDF.',
@@ -141,7 +141,7 @@ export const locationLabelMessages = defineMessages({
     print: 'Drukuj · {count}',
     pdf: 'PDF · {count}',
     pdfHint:
-      'Aby zapisać PDF, wybierz „Zapisz jako PDF” w oknie drukowania przeglądarki. Etykiety pozostaną w kolejce.',
+      'Aby zapisać PDF, wybierz „Zapisz jako PDF” w oknie drukowania przeglądarki.',
     cancelQueue: 'Anuluj kolejkę',
     cancelTitle: 'Anulować kolejkę druku?',
     cancelHint: 'Pozostałe wybrane etykiety zostaną usunięte z kolejki.',
@@ -152,12 +152,13 @@ export const locationLabelMessages = defineMessages({
     otherQueue:
       'Istnieje niezakończona kolejka: {name}. Kontynuuj lub anuluj ją przed utworzeniem kolejnej.',
     continue: 'Kontynuuj kolejkę',
-    limit: 'Kolejka może zawierać do {max} etykiet. Zmniejsz wybór.',
-    failed: 'Nie udało się przygotować druku. Kolejka została zachowana.',
+    limit: 'Można wydrukować do {max} etykiet jednocześnie. Zmniejsz wybór.',
+    failed:
+      'Nie udało się przygotować druku. Wybór został zachowany. Spróbuj ponownie.',
     blocked:
       'Przeglądarka zablokowała okno druku. Zezwól na wyskakujące okna dla tej witryny.',
     missing:
-      'Niektóre etykiety są już niedostępne. Usuń je z kolejki przed drukiem.',
+      'Niektóre etykiety są już niedostępne. Sprawdź wybór przed ponownym drukiem.',
     confirmTitle: 'Które etykiety wydrukowano?',
     confirmHint:
       'Zaznacz tylko faktycznie wydrukowane etykiety. Pozostałe zostaną w kolejce. Nie potwierdzaj po zapisaniu PDF.',

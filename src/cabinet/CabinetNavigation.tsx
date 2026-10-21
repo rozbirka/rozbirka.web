@@ -552,7 +552,7 @@ function NavigationLink({
         presentation === 'rail' && 'w-9 justify-center p-0',
         presentation === 'dialog' && 'text-app-ink h-touch px-2.5',
       )}
-      end
+      end={entry.key !== 'warehouses' && entry.key !== 'inventory'}
       to={entry.to}
     >
       <Icon aria-hidden />

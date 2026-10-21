@@ -1,7 +1,15 @@
-import { useMemo, type ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { ChevronRight, Plus, Pencil } from 'lucide-react'
-import { Button, DataTable, Pagination, SearchInput } from '@/components/app'
+import { ChevronRight, Plus, Pencil, Rows3, RotateCcw } from 'lucide-react'
+import {
+  ActionMenu,
+  Button,
+  Segmented,
+  DataTable,
+  Pagination,
+  SearchInput,
+  EmptyState,
+} from '@/components/app'
 import type {
   InventorySection,
   InventoryShelf,
@@ -10,22 +18,129 @@ import type {
 import { useFormat, useT } from '@/i18n'
 import { warehouseMessages } from './warehouse-messages'
 import { locationBrowserMessages } from './location-browser-messages'
-import {
-  locationPartsHref,
-  type LocationContentsTarget,
-} from './location-contents'
+import { locationPartsHref } from './location-contents'
 
 import './location-browser.css'
 
-const PAGE_SIZE = 10
+const PAGE_SIZE = 15
 const matches = (query: string, name: string, code: string) =>
   !query || `${name} ${code}`.toLocaleLowerCase().includes(query)
+
+/**
+ * The head row of a location card: title with its count, a hint under it and
+ * the card's own actions opposite (`.rz-card__head` in the v2 reference).
+ */
+export function LocationBrowserHeader({
+  title,
+  count,
+  lead,
+  actions,
+}: {
+  title: string
+  /** Shown dim beside the title: "Секції 3". */
+  count?: ReactNode
+  lead?: string | undefined
+  actions: ReactNode
+}) {
+  return (
+    <header className="location-browser__toolbar">
+      <div className="min-w-0">
+        <div className="location-browser__heading">
+          <h2 className="rz-h-card">{title}</h2>
+          {count === undefined || count === null ? null : (
+            <span className="location-browser__count-total rz-mono">
+              {count}
+            </span>
+          )}
+        </div>
+        {lead ? <p className="location-browser__lead">{lead}</p> : null}
+      </div>
+      <div className="location-browser__actions">{actions}</div>
+    </header>
+  )
+}
+
+/**
+ * The page toolbar search that filters the location list below it. The query
+ * lives in the URL (`locationSearch`), so the list and the search can sit in
+ * different places on the page and still agree.
+ */
+export function LocationSearch({
+  label,
+  placeholder,
+  end,
+}: {
+  label: string
+  placeholder: string
+  /** A caption at the far end of the toolbar. */
+  end?: ReactNode
+}) {
+  const [params, setParams] = useSearchParams()
+  const navigationState = useLocation().state as unknown
+  return (
+    <div className="rz-toolbar" role="search">
+      <SearchInput
+        aria-label={label}
+        className="flex-[0_1_320px]"
+        placeholder={placeholder}
+        value={params.get('locationSearch') ?? ''}
+        onChange={(event) =>
+          setParams(
+            (current) => {
+              const next = new URLSearchParams(current)
+              if (event.target.value)
+                next.set('locationSearch', event.target.value)
+              else next.delete('locationSearch')
+              next.delete('locationPage')
+              return next
+            },
+            { replace: true, preventScrollReset: true, state: navigationState },
+          )
+        }
+      />
+      {end ? <span className="rz-toolbar__end rz-caption">{end}</span> : null}
+    </div>
+  )
+}
+
+export function LocationStatusFilter({ label }: { label: string }) {
+  const t = useT(warehouseMessages)
+  const [params, setParams] = useSearchParams()
+  const state = useLocation().state as unknown
+  const name = useId()
+  return (
+    <Segmented<'active' | 'archived'>
+      label={label}
+      name={`location-status-${name}`}
+      value={
+        params.get('locationStatus') === 'archived' ? 'archived' : 'active'
+      }
+      options={[
+        { value: 'active', label: t('statusActive') },
+        { value: 'archived', label: t('statusArchived') },
+      ]}
+      onChange={(value) =>
+        setParams(
+          (current) => {
+            const next = new URLSearchParams(current)
+            if (value === 'archived') next.set('locationStatus', 'archived')
+            else next.delete('locationStatus')
+            next.delete('locationPage')
+            return next
+          },
+          { replace: true, preventScrollReset: true, state },
+        )
+      }
+    />
+  )
+}
 
 export function LocationBrowser({
   zone,
   section,
   sections,
   shelves,
+  sectionShelfCounts,
   base,
   canManage,
   canViewParts,
@@ -33,14 +148,20 @@ export function LocationBrowser({
   onAddSection,
   onAddShelf,
   headerActions,
+  statusFilter,
   onEditShelf,
   selectionNotice,
   printWorkspace,
+  archivedOnly = false,
+  onRestoreSection,
+  pending = false,
 }: {
   zone: InventoryZone
   section?: InventorySection
   sections: InventorySection[]
   shelves: InventoryShelf[]
+  /** Active shelves per section, counted over the full collection. */
+  sectionShelfCounts: ReadonlyMap<string, number>
   base: string
   canManage: boolean
   canViewParts: boolean
@@ -48,20 +169,25 @@ export function LocationBrowser({
   onAddSection: (zone: InventoryZone) => void
   onAddShelf: (section: InventorySection) => void
   headerActions?: ReactNode
+  statusFilter?: ReactNode
   onEditShelf?: ((shelf: InventoryShelf) => void) | undefined
   selectionNotice?: ReactNode
   printWorkspace?: ReactNode
+  archivedOnly?: boolean
+  onRestoreSection?: (section: InventorySection) => void
+  pending?: boolean
 }) {
   const t = useT(locationBrowserMessages)
-  const tw = useT(warehouseMessages)
   const f = useFormat()
+  const countId = useId()
+  const tw = useT(warehouseMessages)
   const [params, setParams] = useSearchParams()
   const navigationState = useLocation().state as unknown
   const query = params.get('locationSearch') ?? ''
   const needle = query.trim().toLocaleLowerCase()
   const visibleSections = sections.filter(
     (item) =>
-      item.isActive &&
+      item.isActive === !archivedOnly &&
       item.zoneId === zone.id &&
       matches(needle, item.name, item.code),
   )
@@ -72,20 +198,18 @@ export function LocationBrowser({
       item.sectionId === section?.id &&
       matches(needle, item.name, item.code),
   )
-  const shelfCounts = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const shelf of shelves) {
-      if (
-        !shelf.isActive ||
-        shelf.zoneId !== zone.id ||
-        shelf.warehouseId !== zone.warehouseId
-      )
-        continue
-      counts.set(shelf.sectionId, (counts.get(shelf.sectionId) ?? 0) + 1)
-    }
-    return counts
-  }, [shelves, zone.id, zone.warehouseId])
   const total = section ? visibleShelves.length : visibleSections.length
+  /** Everything the card holds, before the search narrows it. */
+  const allCount = section
+    ? shelves.filter(
+        (item) =>
+          item.isActive &&
+          item.zoneId === zone.id &&
+          item.sectionId === section.id,
+      ).length
+    : sections.filter(
+        (item) => item.isActive === !archivedOnly && item.zoneId === zone.id,
+      ).length
   const requestedPage = Number.parseInt(params.get('locationPage') ?? '1', 10)
   const page = Math.min(
     Math.max(Number.isFinite(requestedPage) ? requestedPage : 1, 1),
@@ -103,108 +227,95 @@ export function LocationBrowser({
       },
       { replace: true, preventScrollReset: true, state: navigationState },
     )
-  const direct: LocationContentsTarget = section
-    ? {
-        kind: 'direct',
-        zoneId: zone.id,
-        sectionId: section.id,
-        name: t('sectionDirect'),
-        path: [zone.warehouseName, zone.name, section.name],
-      }
-    : {
-        kind: 'zone-direct',
-        zoneId: zone.id,
-        name: t('zoneDirect'),
-        path: [zone.warehouseName, zone.name],
-      }
 
   return (
-    <div className="location-browser">
-      <header className="location-browser__toolbar">
-        <div className="min-w-0">
-          <h2
-            className="location-browser__heading"
-            aria-label={`${t(section ? 'shelves' : 'sections')} · ${f.number(total)}`}
-          >
-            {t(section ? 'shelves' : 'sections')}
-            <span className="location-browser__total">{f.number(total)}</span>
-          </h2>
-          <p className="location-browser__lead">
-            {t(
-              section
-                ? onEditShelf
-                  ? 'chooseShelfToEdit'
-                  : 'chooseShelf'
-                : 'chooseSection',
-            )}
-          </p>
-        </div>
-        {printWorkspace ? null : (
-          <div className="location-browser__search">
-            <SearchInput
-              className="min-h-control-lg text-body"
-              aria-label={t(section ? 'searchShelves' : 'searchSections')}
-              placeholder={t('nameOrCode')}
-              value={query}
-              onChange={(event) =>
-                update({
-                  locationSearch: event.target.value,
-                  locationPage: null,
-                })
-              }
-            />
-          </div>
-        )}
-        <div className="location-browser__actions">
-          {canManage ? (
-            <Button
-              className="px-3 text-body sm:px-4 sm:text-body"
-              variant="primary"
-              onClick={() =>
-                section ? onAddShelf(section) : onAddSection(zone)
-              }
-            >
-              <Plus aria-hidden />
-              {tw(section ? 'addShelf' : 'addSection')}
-            </Button>
-          ) : null}
-          {headerActions}
-        </div>
-      </header>
+    <div
+      className={[
+        'location-browser',
+        printWorkspace == null && 'location-browser--navigation',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      <LocationBrowserHeader
+        title={t(section ? 'shelves' : 'sections')}
+        count={printWorkspace ? undefined : allCount}
+        lead={
+          printWorkspace || archivedOnly
+            ? undefined
+            : section
+              ? t(onEditShelf ? 'chooseShelfToEdit' : 'chooseShelf')
+              : allCount > 0
+                ? t('chooseSection')
+                : undefined
+        }
+        actions={
+          <>
+            {statusFilter}
+            {canManage && !archivedOnly && (allCount > 0 || needle) ? (
+              <Button
+                onClick={() =>
+                  section ? onAddShelf(section) : onAddSection(zone)
+                }
+              >
+                <Plus aria-hidden />
+                {tw(section ? 'addShelf' : 'addSection')}
+              </Button>
+            ) : null}
+            {headerActions}
+          </>
+        }
+      />
       {printWorkspace != null ? (
-        <div className="px-4 pb-4 sm:px-6 sm:pb-6">{printWorkspace}</div>
+        <div className="p-[var(--rz-card-p)]">{printWorkspace}</div>
+      ) : allCount === 0 && !needle ? (
+        <EmptyState
+          className="location-browser__placeholder"
+          icon={<Rows3 aria-hidden />}
+          tone={archivedOnly ? 'neutral' : 'brand'}
+          title={
+            archivedOnly
+              ? tw('noArchivedSections')
+              : t(section ? 'noShelves' : 'noSections')
+          }
+          {...(!archivedOnly
+            ? {
+                description: t(section ? 'noShelvesHint' : 'noSectionsHint'),
+              }
+            : {})}
+          {...(!archivedOnly && canManage
+            ? {
+                actions: (
+                  <Button
+                    onClick={() =>
+                      section ? onAddShelf(section) : onAddSection(zone)
+                    }
+                    variant="primary"
+                  >
+                    <Plus aria-hidden />
+                    {tw(section ? 'addShelf' : 'addSection')}
+                  </Button>
+                ),
+              }
+            : {})}
+        />
       ) : (
         <>
           {selectionNotice ? (
-            <div className="px-4 pb-4 sm:px-6">{selectionNotice}</div>
-          ) : null}
-          {canViewParts ? (
-            <div className="location-browser__direct">
-              <Link
-                className="location-browser__row location-browser__row--direct"
-                to={locationPartsHref(partsBase, zone.warehouseId, direct)}
-              >
-                <span className="min-w-0">
-                  <strong className="location-browser__name">
-                    {direct.name}
-                  </strong>
-                  <span className="location-browser__hint">
-                    {t(section ? 'sectionDirectHint' : 'zoneDirectHint')}
-                  </span>
-                </span>
-                <span aria-hidden />
-                <ChevronRight aria-hidden className="location-browser__arrow" />
-              </Link>
+            <div className="px-[var(--rz-card-p)] pt-3 pb-1">
+              {selectionNotice}
             </div>
           ) : null}
           <div
             aria-hidden
-            className={`location-browser__columns${section ? ' location-browser__columns--shelves' : ''}`}
+            className={`location-browser__columns ${section ? 'location-browser__columns--plain' : 'location-browser__columns--section'}`}
           >
-            <span>{t(section ? 'shelfName' : 'sections')}</span>
-            {section ? null : (
-              <span className="text-right">{t('shelves')}</span>
-            )}
+            <span>{t('name')}</span>
+            {!section ? (
+              <span className="text-right">
+                {archivedOnly ? null : t('shelvesColumn')}
+              </span>
+            ) : null}
             <span />
           </div>
           {section ? (
@@ -231,7 +342,7 @@ export function LocationBrowser({
                           {onEditShelf ? (
                             <Pencil
                               aria-hidden
-                              className="location-browser__arrow"
+                              className="location-browser__arrow text-brand"
                             />
                           ) : (
                             <ChevronRight
@@ -242,7 +353,7 @@ export function LocationBrowser({
                         </>
                       )
                       const rowClassName =
-                        'location-browser__row location-browser__row--shelf'
+                        'location-browser__row location-browser__row--plain'
                       if (onEditShelf)
                         return (
                           <Button
@@ -303,7 +414,40 @@ export function LocationBrowser({
                 visibleSections
                   .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
                   .map((item) => {
-                    const count = f.number(shelfCounts.get(item.id) ?? 0) ?? '0'
+                    const shelfCount = sectionShelfCounts.get(item.id)
+                    const shelfCountId = `${countId}-${item.id}-shelves`
+                    if (archivedOnly)
+                      return (
+                        <div
+                          key={item.id}
+                          role="group"
+                          aria-label={tw('sectionGroup', { name: item.name })}
+                          className="location-browser__section"
+                        >
+                          <div className="location-browser__row location-browser__row--section">
+                            <LocationName name={item.name} code={item.code} />
+                            <span />
+                            {canManage && onRestoreSection ? (
+                              <ActionMenu
+                                label={tw('sectionActionsLabel', {
+                                  name: item.name,
+                                })}
+                                actions={[
+                                  {
+                                    key: 'restore',
+                                    label: tw('restoreLocation'),
+                                    icon: <RotateCcw aria-hidden />,
+                                    disabled: pending,
+                                    onSelect: () => onRestoreSection(item),
+                                  },
+                                ]}
+                              />
+                            ) : (
+                              <span />
+                            )}
+                          </div>
+                        </div>
+                      )
                     return (
                       <div
                         key={item.id}
@@ -312,27 +456,29 @@ export function LocationBrowser({
                         className="location-browser__section"
                       >
                         <Link
-                          className="location-browser__row"
+                          className="location-browser__row location-browser__row--section"
                           to={`${base}/sections/${encodeURIComponent(item.id)}`}
                           state={{
                             zoneId: zone.id,
                             zoneQuery: params.toString(),
                           }}
                           aria-label={`${item.name}, ${item.code}`}
+                          aria-describedby={shelfCountId}
                         >
                           <LocationName name={item.name} code={item.code} />
-                          <span className="location-browser__count">
-                            <span className="sr-only">
-                              {t('shelvesCount', { count })}
-                            </span>
-                            <span aria-hidden>{count}</span>
-                            <span
-                              aria-hidden
-                              className="location-browser__count-label"
-                            >
-                              {t('shelves')}
-                            </span>
-                          </span>
+                          <dl
+                            id={shelfCountId}
+                            className="location-browser__count m-0"
+                          >
+                            <dt className="sr-only max-md:not-sr-only">
+                              {t('shelvesColumn')}:{' '}
+                            </dt>
+                            <dd>
+                              {shelfCount === undefined
+                                ? '—'
+                                : (f.number(shelfCount) ?? String(shelfCount))}
+                            </dd>
+                          </dl>
                           <ChevronRight
                             aria-hidden
                             className="location-browser__arrow"
@@ -343,12 +489,16 @@ export function LocationBrowser({
                   })
               ) : (
                 <p className="location-browser__empty">
-                  {t(needle ? 'noMatches' : 'noSections')}
+                  {needle
+                    ? t('noMatches')
+                    : archivedOnly
+                      ? tw('noArchivedSections')
+                      : t('noSections')}
                 </p>
               )}
             </div>
           )}
-          {total > PAGE_SIZE ? (
+          {total > 0 ? (
             <div className="location-browser__pagination">
               <Pagination
                 label={t(section ? 'shelfPagination' : 'sectionPagination')}
@@ -368,11 +518,12 @@ export function LocationBrowser({
   )
 }
 
-function LocationName({ name, code }: { name: string; code: string }) {
+/** A location's name with its mono code on the same line. */
+export function LocationName({ name, code }: { name: string; code: string }) {
   return (
-    <span className="min-w-0">
+    <span className="location-browser__label">
       <strong className="location-browser__name">{name}</strong>
-      <span className="location-browser__code">{code}</span>
+      {code ? <span className="location-browser__code">{code}</span> : null}
     </span>
   )
 }

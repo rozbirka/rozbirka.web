@@ -27,7 +27,6 @@ import {
   Plus,
   Printer,
   RefreshCw,
-  Rows3,
   SearchX,
   Trash2,
   Upload,
@@ -650,6 +649,7 @@ const partStatusPill = (
 }
 
 function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
+  const { pathname } = useLocation()
   const money = useWholeMoney(useAccountingCurrency().currency)
   const {
     cabinet,
@@ -675,16 +675,21 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
   const { requireLatestMutation } = useLatestMutationGuard(
     cabinetModules.intakes,
   )
+  // The record stays mounted behind the add-part drawer. Reload its parts
+  // when navigation returns here, including after saving several positions.
   useEffect(() => {
     const controller = new AbortController()
-    void intakesApi
-      .get(intakeId, { signal: controller.signal })
-      .then(setIntake, (error: unknown) => {
+    void intakesApi.get(intakeId, { signal: controller.signal }).then(
+      (next) => {
+        if (!controller.signal.aborted) setIntake(next)
+      },
+      (error: unknown) => {
         if (!controller.signal.aborted)
           setProblem(normalizeApiProblem(error).message)
-      })
+      },
+    )
     return () => controller.abort()
-  }, [intakeId, attempt])
+  }, [intakeId, attempt, pathname])
   const remove = async () => {
     if (busy) return
     setConfirmDelete(false)
@@ -835,14 +840,6 @@ function IntakeDetail({ base, intakeId }: { base: string; intakeId: string }) {
         actions={
           manage ? (
             <>
-              {partCreateDecision.kind === 'allowed' ? (
-                <Button asChild>
-                  <Link to={`${base}/${intake.id}/parts/batch`}>
-                    <Rows3 aria-hidden />
-                    {t('addBatch')}
-                  </Link>
-                </Button>
-              ) : null}
               {partCreateDecision.kind === 'allowed' ? (
                 <Button asChild variant="primary">
                   <Link to={`${base}/${intake.id}/parts/new`}>
@@ -1804,6 +1801,7 @@ function PartForm({
   const cabinet = useCabinet()
   const t = useT(intakesMessages)
   const tf = useT(intakeFormMessages)
+  const tc = useT(commonMessages)
   const tp = useT(partFormMessages)
   const tPlacement = useT(placementMessages)
   const params = useParams<{ tenant: string }>()
@@ -1907,6 +1905,7 @@ function PartForm({
     const request: AddIntakePartRequest = {
       name: values.name.trim(),
       partType: values.partType.trim() || null,
+      oemCode: values.oemCode.trim() || null,
       condition: values.condition || null,
       quantity: values.quantity,
       unit: values.unit || null,
@@ -2038,7 +2037,7 @@ function PartForm({
           <p className="rz-caption m-0 w-full">{saveNote}</p>
           <div className="w-full empty:hidden">{priceSlots.saveNotes}</div>
           <Button disabled={busy} onClick={() => void navigate(backTo)}>
-            {tf('backToIntake')}
+            {tc('cancel')}
           </Button>
           <Button
             aria-busy={busy}
@@ -2104,11 +2103,13 @@ function PartForm({
               </Field>
               <Field hint={tf('oemHint')} label={tf('oemLabel')}>
                 <TextInput
+                  autoComplete="off"
                   className="font-mono"
-                  disabled
+                  maxLength={100}
                   name="oemCode"
+                  onChange={(event) => update('oemCode', event.target.value)}
                   placeholder="1RV-8820-02"
-                  value=""
+                  value={values.oemCode}
                 />
               </Field>
             </div>

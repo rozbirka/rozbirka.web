@@ -86,7 +86,7 @@ export default async function build() {
       { ...detail({ loading: true }), label: 'Завантаження', note: '' },
       { ...detail({ error: true }), label: 'Помилка', note: '' },
     ] },
-    { num: '3', title: 'Нове замовлення', route: 'список → «Нове замовлення»', source: 'OrdersScreen.tsx:1243 · order-form-messages.ts', frames: drawerFrames(D, 'order-new', () => list(), 'Нове замовлення') },
+    { num: '3', title: 'Нове замовлення', route: 'список → «Нове замовлення»', source: 'OrdersScreen.tsx:1243 · order-form-messages.ts', frames: [...drawerFrames(D, 'order-new', () => list(), 'Нове замовлення'), { ...detail({ o: toast('Замовлення створено.') }), label: 'Замовлення створено', note: 'тост ok · після переходу в картку' }] },
     { num: '4', title: 'Позиції, клієнт, оплата', route: 'картка замовлення', source: 'OrderItemDrawer · OrderCustomerDrawer · OrderPaymentDrawer', frames: [
       ...drawerFrames(D, 'order-item', () => detail(), 'Позиція'),
       ...drawerFrames(D, 'order-customer', () => detail(), 'Клієнт'),

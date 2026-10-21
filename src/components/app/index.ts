@@ -33,6 +33,7 @@ export { ToastProvider } from './toast'
 export {
   useOptionalToast,
   useToast,
+  type ToastActionKind,
   type ToastApi,
   type ToastRequest,
   type ToastTone,

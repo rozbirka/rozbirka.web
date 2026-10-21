@@ -23,6 +23,8 @@ export interface DataTableSelection<Row> {
   rowLabel: (row: Row) => string
   /** Why this row cannot be picked. Set means the checkbox is disabled. */
   unavailable?: (row: Row) => string | undefined
+  /** True enables row-space selection after the first pick; 'always' enables it immediately. Controls keep their own actions. */
+  selectOnRowClick?: boolean | 'always'
 }
 
 export interface DataTableProps<Row> {
@@ -83,6 +85,9 @@ export function DataTable<Row>({
     else for (const row of pickable) next.add(rowKey(row))
     selection.onChange(next)
   }
+  const rowSelectionActive =
+    selection?.selectOnRowClick === 'always' ||
+    (selection?.selectOnRowClick === true && selection.selected.size > 0)
   const toggleRow = (id: string) => {
     if (selection === undefined) return
     const next = new Set(selection.selected)
@@ -152,14 +157,33 @@ export function DataTable<Row>({
               const id = rowKey(row)
               const unavailable = selection?.unavailable?.(row)
               const picked = selection?.selected.has(id) === true
+              const clickable = rowSelectionActive
+                ? unavailable === undefined
+                : onRowClick !== undefined
               return (
                 <tr
                   {...(picked ? { 'aria-selected': true } : {})}
                   {...(activeKey === id ? { 'data-active': 'true' } : {})}
-                  className={cn(onRowClick !== undefined && 'cursor-pointer')}
+                  className={cn(clickable && 'cursor-pointer')}
                   key={id}
                   onClick={
-                    onRowClick === undefined ? undefined : () => onRowClick(row)
+                    clickable
+                      ? (event) => {
+                          if (!rowSelectionActive) {
+                            onRowClick?.(row)
+                            return
+                          }
+                          if (
+                            event.defaultPrevented ||
+                            (event.target instanceof Element &&
+                              event.target.closest(
+                                'a, button, input, select, textarea, label, summary, [role="button"], [role="link"], [role="checkbox"], [contenteditable]',
+                              ))
+                          )
+                            return
+                          toggleRow(id)
+                        }
+                      : undefined
                   }
                   role="row"
                 >
@@ -167,10 +191,15 @@ export function DataTable<Row>({
                     <td
                       className="rz-col-check"
                       data-label={t('selectRow')}
-                      // The checkbox is the point of the cell; a row that navigates
-                      // must not swallow the click that picks it.
+                      // A checkbox never opens or toggles the row twice. In
+                      // selection mode, the cell's empty space belongs to the row.
                       onClick={(event) => {
-                        event.stopPropagation()
+                        if (
+                          !rowSelectionActive ||
+                          (event.target instanceof Element &&
+                            event.target.closest('input'))
+                        )
+                          event.stopPropagation()
                       }}
                       role="cell"
                     >

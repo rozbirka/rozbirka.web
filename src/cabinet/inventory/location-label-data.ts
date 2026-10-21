@@ -2,7 +2,7 @@ import { inventoryApi } from '@/api/inventory'
 import type { LocationLabelTarget } from './location-label-queue'
 import type { PrintableZoneLabel } from './zone-label-output'
 
-/** Fetch current records for exactly one collection; queue storage contains IDs only. */
+/** Fetch current labels for exactly one location collection. */
 export async function loadLocationLabels(
   target: LocationLabelTarget,
   signal: AbortSignal,

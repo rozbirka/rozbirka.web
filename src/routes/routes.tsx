@@ -83,6 +83,11 @@ const releasedCabinetRoutes: Partial<Record<CabinetModuleKey, RouteObject>> = {
     const { PartsScreen } = await import('@/cabinet/parts/PartsScreen')
     return PartsScreen
   }),
+  warehouses: cabinetScreenRoute('warehouses', async () => {
+    const { WarehousesScreen } =
+      await import('@/cabinet/warehouses/WarehousesScreen')
+    return WarehousesScreen
+  }),
   inventory: cabinetScreenRoute('inventory', async () => {
     const { InventoryScreen } =
       await import('@/cabinet/inventory/InventoryScreen')
@@ -119,9 +124,37 @@ const releasedCabinetRoutes: Partial<Record<CabinetModuleKey, RouteObject>> = {
 
 const commerceDetailRoutes: RouteObject[] = [
   ...[
+    'warehouses/:warehouseId',
+    'warehouses/:warehouseId/unassigned',
+    'warehouses/zones/:zoneId',
+    'warehouses/sections/:sectionId',
+  ].map((path) =>
+    cabinetScreenRoute(
+      'warehouses',
+      async () => {
+        const { WarehousesScreen } =
+          await import('@/cabinet/warehouses/WarehousesScreen')
+        return WarehousesScreen
+      },
+      path,
+    ),
+  ),
+  ...[
     'inventory/warehouses/:warehouseId',
     'inventory/zones/:zoneId',
     'inventory/sections/:sectionId',
+  ].map((path) =>
+    cabinetScreenRoute(
+      'warehouses',
+      async () => {
+        const { LegacyWarehouseRedirect } =
+          await import('@/cabinet/warehouses/LegacyWarehouseRedirect')
+        return LegacyWarehouseRedirect
+      },
+      path,
+    ),
+  ),
+  ...[
     'inventory/sessions/new',
     'inventory/sessions/:sessionId',
     'inventory/sessions/:sessionId/results',
@@ -186,11 +219,11 @@ const commerceDetailRoutes: RouteObject[] = [
     ),
   ),
   cabinetScreenRoute(
-    'inventory',
+    'warehouses',
     async () => {
-      const { InventoryScreen } =
-        await import('@/cabinet/inventory/InventoryScreen')
-      return InventoryScreen
+      const { WarehousesScreen } =
+        await import('@/cabinet/warehouses/WarehousesScreen')
+      return WarehousesScreen
     },
     'parts/:partId/inventory',
   ),

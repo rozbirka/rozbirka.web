@@ -2,6 +2,7 @@ import type { PartSearchRequest } from '@/api/parts'
 
 export type LocationContentsTarget = {
   zoneId: string
+  warehouseId?: string
   name: string
   path: string[]
 } & (
@@ -14,8 +15,10 @@ export function locationPartsFilter(
   target: LocationContentsTarget,
   query: string,
   page: number,
+  pageSize = 10,
 ): PartSearchRequest {
   return {
+    ...(target.warehouseId ? { warehouseIds: [target.warehouseId] } : {}),
     zoneIds: [target.zoneId],
     ...('sectionId' in target ? { sectionIds: [target.sectionId] } : {}),
     ...(target.kind === 'zone-direct' ? { missingSection: true } : {}),
@@ -23,7 +26,7 @@ export function locationPartsFilter(
     ...(target.kind === 'direct' ? { missingShelf: true } : {}),
     ...(query.trim() ? { query: query.trim() } : {}),
     page,
-    pageSize: 10,
+    pageSize,
     sort: 'name_asc',
   }
 }

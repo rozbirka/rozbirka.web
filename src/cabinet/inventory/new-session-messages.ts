@@ -16,6 +16,8 @@ export const newSessionMessages = defineMessages({
     saveDraft: 'Зберегти чернетку',
     starting: 'Запускаємо…',
     start: 'Розпочати сесію',
+    startFailedAfterCreate:
+      'Сесію {number} створено, але запуск не вдалося підтвердити. {error}',
     title: 'Нова сесія інвентаризації',
     intro:
       'Поки сесія активна, позиції в її зонах не можна редагувати вручну. Рахують у мобільному застосунку.',
@@ -79,6 +81,8 @@ export const newSessionMessages = defineMessages({
     saveDraft: 'Save draft',
     starting: 'Starting…',
     start: 'Start session',
+    startFailedAfterCreate:
+      'Session {number} was created, but its start could not be confirmed. {error}',
     title: 'New stocktake session',
     intro:
       'While the session is active, items in its zones can’t be edited manually. Counting happens in the mobile app.',
@@ -144,6 +148,8 @@ export const newSessionMessages = defineMessages({
     saveDraft: 'Zapisz szkic',
     starting: 'Uruchamiamy…',
     start: 'Rozpocznij sesję',
+    startFailedAfterCreate:
+      'Sesja {number} została utworzona, ale nie udało się potwierdzić jej uruchomienia. {error}',
     title: 'Nowa sesja inwentaryzacji',
     intro:
       'Dopóki sesja jest aktywna, pozycji w jej strefach nie można edytować ręcznie. Liczenie odbywa się w aplikacji mobilnej.',

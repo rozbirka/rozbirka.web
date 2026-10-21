@@ -1,0 +1,11 @@
+/* One row size for browsing and selecting storage locations for printing. */
+.location-browser,
+.location-labels {
+  --location-list-row-height: 44px;
+}
+
+.location-browser__pagination > nav,
+.location-labels .rz-pager {
+  padding: 10px var(--rz-card-p);
+  border-top: 1px solid var(--rz-border);
+}

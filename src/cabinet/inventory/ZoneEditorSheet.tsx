@@ -41,10 +41,16 @@ export function ZoneEditorSheet({
 
   return (
     <Sheet
-      /* Scheme 1b keeps one muted line under the title: the warehouse it
-         belongs to leads it, so the context is not lost with the eyebrow. */
       description={
-        description ?? [eyebrow, t('newZoneHint')].filter(Boolean).join(' · ')
+        <>
+          {eyebrow ? (
+            <>
+              <span>{eyebrow}</span>
+              <span aria-hidden> · </span>
+            </>
+          ) : null}
+          {description ?? t('newZoneHint')}
+        </>
       }
       footer={
         <>
@@ -70,7 +76,7 @@ export function ZoneEditorSheet({
     >
       <form
         aria-busy={pending}
-        className="grid content-start gap-4"
+        className="grid content-start gap-5"
         id={FORM_ID}
         onSubmit={submit}
       >
@@ -88,7 +94,6 @@ export function ZoneEditorSheet({
         </Field>
         <Field hint={t('codeAutoHint')} label={t('codeLabel')} required>
           <TextInput
-            className="font-mono"
             onChange={(event) => setCode(toZoneCode(event.target.value))}
             value={code}
           />

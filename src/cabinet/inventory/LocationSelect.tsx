@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { Popover } from 'radix-ui'
 import { Check, ChevronDown } from 'lucide-react'
-import { Button, SearchInput } from '@/components/app'
+import { SearchInput } from '@/components/app'
 import { useT } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { locationBrowserMessages } from './location-browser-messages'
@@ -13,24 +13,31 @@ interface LocationOption {
   context?: string
 }
 
-/** A single location choice; filtering never changes the saved selection. */
-export function LocationSelect({
-  label,
-  searchLabel,
-  noneLabel,
-  value,
-  onChange,
-  options,
-  disabled = false,
-}: {
+type LocationSelectProps = {
   label: string
   searchLabel: string
   noneLabel: string
-  value: string | null
-  onChange: (id: string | null) => void
   options: LocationOption[]
   disabled?: boolean
-}) {
+  allowNone?: boolean
+} & (
+  | {
+      multiple?: false
+      value: string | null
+      onChange: (id: string | null) => void
+    }
+  | {
+      multiple: true
+      value: readonly string[]
+      onChange: (ids: string[]) => void
+    }
+)
+
+/** Compact location choices; filtering never changes the saved selection. */
+export function LocationSelect(props: LocationSelectProps) {
+  const { label, searchLabel, noneLabel, options, disabled = false } = props
+  const hasEmptyOption = !props.multiple && props.allowNone !== false
+  const values = props.multiple ? props.value : props.value ? [props.value] : []
   const t = useT(locationBrowserMessages)
   const id = useId()
   const listRef = useRef<HTMLDivElement>(null)
@@ -45,17 +52,36 @@ export function LocationSelect({
         text?.toLocaleLowerCase().includes(needle),
       ),
   )
-  const items = [{ id: '', name: noneLabel }, ...matches]
+  const items = hasEmptyOption
+    ? [{ id: '', name: noneLabel }, ...matches]
+    : matches
   const requestedIndex = items.findIndex((item) => item.id === activeId)
   const activeIndex =
-    requestedIndex >= 0 ? requestedIndex : needle && matches.length ? 1 : 0
+    requestedIndex >= 0
+      ? requestedIndex
+      : hasEmptyOption && needle && matches.length
+        ? 1
+        : 0
   const active = needle && !matches.length ? null : items[activeIndex]
-  const selected = options.find((option) => option.id === value)
-  const selectedName = selected
-    ? [selected.context, selected.name].filter(Boolean).join(' · ')
-    : noneLabel
+  const selected = options.filter((option) => values.includes(option.id))
+  const selectedName =
+    selected.length > 1
+      ? t('selectedLocations', { count: selected.length })
+      : selected[0]
+        ? [selected[0].context, selected[0].name].filter(Boolean).join(' · ')
+        : noneLabel
+  const isSelected = (id: string) =>
+    id ? values.includes(id) : values.length === 0
   const choose = (id: string) => {
-    onChange(id || null)
+    if (props.multiple) {
+      props.onChange(
+        values.includes(id)
+          ? values.filter((value) => value !== id)
+          : [...values, id],
+      )
+    } else {
+      props.onChange(id || null)
+    }
     setOpen(false)
   }
   useEffect(() => {
@@ -95,20 +121,21 @@ export function LocationSelect({
       onOpenChange={(next) => {
         setOpen(next)
         setQuery('')
-        setActiveId(value ?? '')
+        setActiveId(values[0] ?? '')
       }}
     >
       <Popover.Trigger asChild>
-        <Button
+        <button
+          type="button"
           disabled={disabled}
           aria-haspopup="listbox"
           aria-controls={`${id}-list`}
           aria-label={`${label}: ${selectedName}`}
-          className="bg-app-input text-app-ink h-auto min-h-control-lg w-full justify-between gap-3 py-1 text-left whitespace-normal"
+          className="rz-select flex h-auto min-h-[var(--rz-control-h-lg)] items-center justify-between gap-3 pr-2.5 text-left"
         >
           <span className="min-w-0 break-words">{selectedName}</span>
           <ChevronDown aria-hidden className="text-app-dim size-3.5 shrink-0" />
-        </Button>
+        </button>
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
@@ -116,7 +143,7 @@ export function LocationSelect({
           align="start"
           sideOffset={6}
           collisionPadding={12}
-          className="rz-popover z-[60] flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1.5rem)] flex-col"
+          className="bg-app-overlay border-app-line-2 rounded-control z-[60] flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden border shadow-dialog"
         >
           <div className="border-app-line shrink-0 border-b p-2">
             <SearchInput
@@ -142,8 +169,9 @@ export function LocationSelect({
             ref={listRef}
             id={`${id}-list`}
             role="listbox"
+            aria-multiselectable={props.multiple}
             aria-label={label}
-            className="grid min-h-0 max-h-64 gap-px overflow-y-auto overscroll-contain p-1"
+            className="min-h-0 max-h-64 overflow-y-auto overscroll-contain p-1.5"
           >
             {items.map((option, index) => (
               <button
@@ -151,31 +179,30 @@ export function LocationSelect({
                 id={`${id}-option-${index}`}
                 type="button"
                 role="option"
-                aria-selected={(value ?? '') === option.id}
+                aria-selected={isSelected(option.id)}
                 tabIndex={-1}
                 data-active={active?.id === option.id}
                 onClick={() => choose(option.id)}
                 className={cn(
-                  'rz-menu__item h-auto min-h-[30px] w-full justify-between gap-3 py-1.5',
-                  active?.id === option.id && 'bg-app-active',
+                  'text-app-ink hover:bg-app-raised flex min-h-control w-full cursor-pointer items-center justify-between gap-3 rounded-control px-3 py-2 text-left text-sm',
+                  active?.id === option.id && 'bg-app-raised',
                 )}
               >
                 <span className="min-w-0 break-words">
                   <span className="block font-semibold">{option.name}</span>
                   {'code' in option && option.code ? (
-                    <span className="rz-mono rz-caption block">
+                    <span className="text-app-muted block font-mono text-xs">
                       {option.code}
                     </span>
                   ) : null}
                   {'context' in option && option.context ? (
-                    <span className="rz-caption block">{option.context}</span>
+                    <span className="text-app-muted block text-xs">
+                      {option.context}
+                    </span>
                   ) : null}
                 </span>
-                {(value ?? '') === option.id ? (
-                  <Check
-                    aria-hidden
-                    className="text-brand-text size-4 shrink-0"
-                  />
+                {isSelected(option.id) ? (
+                  <Check aria-hidden className="text-brand size-4 shrink-0" />
                 ) : null}
               </button>
             ))}
@@ -183,7 +210,7 @@ export function LocationSelect({
           {needle && !matches.length ? (
             <p
               role="status"
-              className="rz-muted border-app-line m-0 border-t px-3 py-2.5"
+              className="text-app-muted border-app-line border-t px-4 py-3 text-sm"
             >
               {t('noMatches')}
             </p>

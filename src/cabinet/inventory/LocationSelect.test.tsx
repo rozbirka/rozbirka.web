@@ -27,6 +27,24 @@ function Example({ disabled = false }: { disabled?: boolean }) {
   )
 }
 
+function MultipleExample() {
+  const [value, setValue] = useState<string[]>(['p50', 'other-warehouse'])
+  return (
+    <>
+      <LocationSelect
+        multiple
+        label="Зона"
+        searchLabel="Пошук зони"
+        noneLabel="Виберіть зону"
+        value={value}
+        onChange={setValue}
+        options={options}
+      />
+      <output data-testid="selected">{value.join(',')}</output>
+    </>
+  )
+}
+
 describe('compact location selection', () => {
   it('keeps 100 options collapsed and searches by name or code without changing the selection', async () => {
     const user = userEvent.setup()
@@ -67,6 +85,34 @@ describe('compact location selection', () => {
       }),
     )
     expect(screen.getByTestId('selected')).toHaveTextContent('none')
+  })
+
+  it('toggles multiple locations while searching and preserves selections outside the current options', async () => {
+    const user = userEvent.setup()
+    render(<MultipleExample />)
+    await user.click(screen.getByRole('button', { name: 'Зона: Полиця 50' }))
+    expect(screen.getByRole('listbox')).toHaveAttribute(
+      'aria-multiselectable',
+      'true',
+    )
+    await user.type(screen.getByRole('combobox'), 'a01-100')
+    expect(screen.getAllByRole('option')).toHaveLength(1)
+    await user.keyboard('{Enter}')
+    expect(screen.getByTestId('selected')).toHaveTextContent(
+      'p50,other-warehouse,p100',
+    )
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Зона: Вибрано: 2' }),
+    ).toHaveFocus()
+    await user.click(screen.getByRole('button', { name: 'Зона: Вибрано: 2' }))
+    await user.type(screen.getByRole('combobox'), 'a01-100')
+    expect(screen.getByRole('option')).toHaveAttribute('aria-selected', 'true')
+    await user.click(screen.getByRole('option'))
+    expect(screen.getByTestId('selected')).toHaveTextContent(
+      'p50,other-warehouse',
+    )
+    expect(screen.queryByRole('listbox')).toBeNull()
   })
 
   it('does not open a disabled selector', async () => {

@@ -17,6 +17,7 @@ export interface TeamMemberDto {
   role: RoleDto
   isActive: boolean
   joinedAt: string
+  lastActiveAt?: string | null
 }
 
 export interface TeamMemberDetailDto extends TeamMemberDto {

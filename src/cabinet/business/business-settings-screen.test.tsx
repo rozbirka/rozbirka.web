@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are asserted directly. */
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router'
+import { MemoryRouter } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { AxiosError } from 'axios'
 import { businessApi } from '@/api/business'
@@ -9,13 +9,11 @@ import { tenantsApi } from '@/api/tenants'
 import type { BillingState, Tenant } from '@/api/types'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { LocaleProvider } from '@/i18n'
+import { ToastProvider } from '@/components/app'
 import { BUSINESS_SECTION_IDS } from './business-anchors'
 import { BusinessSettingsScreen } from './business-settings-screen'
 
 vi.mock('@/api/business', () => ({ businessApi: { update: vi.fn() } }))
-vi.mock('@/api/inventory', () => ({
-  inventoryApi: { getWarehouses: vi.fn(() => Promise.resolve([])) },
-}))
 vi.mock('../CabinetContext', () => ({ useCabinet: vi.fn() }))
 // The accounting currency block re-reads the tenant; here it is locked, so it
 // renders as text and adds no controls or alerts to these scenarios.
@@ -91,33 +89,6 @@ beforeEach(() => {
   vi.mocked(businessApi.update).mockResolvedValue(tenant)
 })
 
-it('opens inventory from the warehouse action', async () => {
-  const router = createMemoryRouter(
-    [
-      {
-        path: '/app/:tenant',
-        children: [
-          {
-            path: 'settings/business',
-            element: <BusinessSettingsScreen />,
-          },
-          { path: 'inventory', element: <p>Екран інвентаризації</p> },
-        ],
-      },
-    ],
-    { initialEntries: ['/app/koval/settings/business'] },
-  )
-  const user = userEvent.setup()
-  render(<RouterProvider router={router} />)
-
-  await user.click(screen.getByRole('link', { name: 'Додати склад' }))
-
-  await waitFor(() =>
-    expect(router.state.location.pathname).toBe('/app/koval/inventory'),
-  )
-  expect(screen.getByText('Екран інвентаризації')).toBeVisible()
-})
-
 it('uses accessible secondary text on the dark business surface', () => {
   const view = render(
     <MemoryRouter initialEntries={['/app/koval/settings/business']}>
@@ -139,9 +110,11 @@ it('round-trips trimmed business settings through the active tenant', async () =
   vi.mocked(useCabinet).mockReturnValue(currentCabinet)
   const user = userEvent.setup()
   render(
-    <MemoryRouter initialEntries={['/app/koval/settings/business']}>
-      <BusinessSettingsScreen />
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/koval/settings/business']}>
+        <BusinessSettingsScreen />
+      </MemoryRouter>
+    </ToastProvider>,
   )
 
   await user.clear(screen.getByLabelText('Назва бізнесу'))
@@ -155,15 +128,14 @@ it('round-trips trimmed business settings through the active tenant', async () =
   expect(updateCall?.[1]).toEqual({
     name: 'Koval Parts',
     city: 'Київ',
-    requireDeliveryDeposit: true,
   })
   expect(updateCall?.[2]?.signal).toBeInstanceOf(AbortSignal)
-  // The region block adds its own static notice, so find the save status by text.
+  // Saving is confirmed by a toast (module 00 §5), not a notice on the page.
   expect(
     (await screen.findByText('Налаштування бізнесу збережено.')).closest(
-      '[role="status"]',
+      '.rz-toast',
     ),
-  ).not.toBeNull()
+  ).toHaveAttribute('role', 'status')
   expect(screen.getByLabelText('Назва бізнесу')).toHaveValue('Koval Parts LLC')
   expect(screen.getByLabelText('Місто')).toHaveValue('Буча')
   expect(currentCabinet.switchTenant).toHaveBeenCalledWith('tenant-1')
@@ -216,52 +188,42 @@ it('rechecks subscription access immediately before dispatching a business updat
   )
 })
 
-it('shows the business fields the tenant record cannot hold as disabled', async () => {
-  vi.mocked(useCabinet).mockReturnValue(cabinet())
+it('only shows supported business settings and leaves delivery policy to Nova Poshta', async () => {
   render(
     <MemoryRouter initialEntries={['/app/koval/settings/business']}>
       <BusinessSettingsScreen />
     </MemoryRouter>,
   )
 
-  // `PATCH /tenants/{id}` takes a name, a city and a logo — nothing else.
+  expect(screen.getByLabelText('Назва бізнесу')).toBeEnabled()
+  expect(screen.getByLabelText('Місто')).toBeEnabled()
+  expect(screen.queryByRole('heading', { name: 'Склади' })).toBeNull()
+  expect(screen.queryByText('Складів')).toBeNull()
+  expect(screen.queryByRole('link', { name: 'Додати склад' })).toBeNull()
   for (const label of ['ЄДРПОУ / ІПН', 'Телефон', 'Адреса'])
-    expect(await screen.findByLabelText(label)).toBeDisabled()
-  for (const label of ['ФОП', 'Експорт усіх даних', 'Видалити кабінет'])
-    expect(screen.getByRole('button', { name: label })).toBeDisabled()
-  // The accounting currency is a real setting now, not a dead control.
-  expect(screen.queryByRole('button', { name: 'USD' })).toBeNull()
-  expect(await screen.findByText('Зафіксовано')).toBeVisible()
+    expect(screen.queryByLabelText(label)).toBeNull()
+  for (const label of [
+    'ФОП',
+    'Експорт усіх даних',
+    'Видалити кабінет',
+    'Розподіл за вагою',
+    'Вручну',
+  ])
+    expect(screen.queryByRole('button', { name: label })).toBeNull()
   expect(
-    screen.getByRole('button', { name: 'Видалити кабінет' }).title,
-  ).toContain('Видалити розбірку з кабінету не можна')
-})
-
-it('saves the delivery deposit policy the yard actually keeps', async () => {
-  const user = userEvent.setup()
-  vi.mocked(businessApi.update).mockResolvedValue({
-    ...tenant,
-    requireDeliveryDeposit: false,
-  })
-  vi.mocked(useCabinet).mockReturnValue(cabinet())
-  render(
-    <MemoryRouter initialEntries={['/app/koval/settings/business']}>
-      <BusinessSettingsScreen />
-    </MemoryRouter>,
-  )
-
-  await user.click(
-    screen.getByRole('switch', { name: 'Вимагати депозит за доставку' }),
-  )
-  await user.click(screen.getAllByRole('button', { name: 'Зберегти' })[0]!)
-
-  expect(businessApi.update).toHaveBeenCalledWith(
-    tenant.id,
-    expect.objectContaining({ requireDeliveryDeposit: false }),
-    expect.anything(),
-  )
-  // Turning it off is a real change, so the form offers to save it.
-  expect(await screen.findByText(/Відправляєте без передоплати/)).toBeVisible()
+    screen.queryByRole('switch', { name: 'Вимагати депозит за доставку' }),
+  ).toBeNull()
+  for (const label of [
+    'Дані кабінету',
+    'Облік',
+    'Собівартість',
+    'Контролювати мінімальний залишок',
+    'Вимагати VIN при додаванні авто',
+    'Дозволити відʼємний залишок',
+  ])
+    expect(screen.queryByText(label)).toBeNull()
+  // Locked settings are real persisted values, so they remain visible as facts.
+  expect(await screen.findByText('Зафіксовано')).toBeVisible()
 })
 
 it('numbers the sections and anchors region and accounting currency', async () => {
@@ -283,9 +245,9 @@ it('numbers the sections and anchors region and accounting currency', async () =
   })
   expect(region).toHaveTextContent('02')
   expect(currency).toHaveTextContent('03')
-  expect(screen.getByRole('heading', { name: 'Warehouses' })).toBeVisible()
-  expect(screen.getByRole('heading', { name: 'Accounting' })).toBeVisible()
-  expect(screen.getByText('Require a delivery deposit')).toBeVisible()
+  expect(screen.queryByRole('heading', { name: 'Warehouses' })).toBeNull()
+  expect(screen.queryByRole('heading', { name: 'Accounting' })).toBeNull()
+  expect(screen.queryByText('Require a delivery deposit')).toBeNull()
   expect(screen.queryByText('Валюти й облік')).toBeNull()
 })
 
@@ -305,9 +267,11 @@ it('reads the business back after a lost answer before saying it was not saved',
   vi.mocked(useCabinet).mockReturnValue(currentCabinet)
   const user = userEvent.setup()
   render(
-    <MemoryRouter initialEntries={['/app/koval/settings/business']}>
-      <BusinessSettingsScreen />
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={['/app/koval/settings/business']}>
+        <BusinessSettingsScreen />
+      </MemoryRouter>
+    </ToastProvider>,
   )
 
   await user.clear(screen.getByLabelText('Назва бізнесу'))
@@ -315,8 +279,10 @@ it('reads the business back after a lost answer before saying it was not saved',
   await user.click(screen.getAllByRole('button', { name: 'Зберегти' })[0]!)
 
   expect(
-    await screen.findByText('Налаштування бізнесу збережено.'),
-  ).toBeVisible()
+    (await screen.findByText('Налаштування бізнесу збережено.')).closest(
+      '.rz-toast',
+    ),
+  ).toHaveAttribute('role', 'status')
   expect(businessApi.update).toHaveBeenCalledTimes(1)
   expect(currentCabinet.switchTenant).toHaveBeenCalledWith('tenant-1')
 })

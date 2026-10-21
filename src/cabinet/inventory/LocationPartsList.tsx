@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { Package } from 'lucide-react'
+import { CircleCheck } from 'lucide-react'
 import {
   Button,
   DataTable,
+  EmptyState,
   Notice,
   Pagination,
   SearchInput,
@@ -20,37 +21,34 @@ import {
   locationPartsFilter,
   type LocationContentsTarget,
 } from './location-contents'
+import './location-parts.css'
+import {
+  hasPlacementStock,
+  warehouseStockStatuses,
+} from '../warehouses/placement-availability'
 
 interface Props {
   target: LocationContentsTarget
-  context: 'sheet' | 'section'
+  context: 'sheet' | 'section' | 'unassigned'
+  onPlace?: ((part: PartSearchItem) => void) | undefined
+  refreshKey?: number
+  emptyText?: string
+  /** The card title; the target's own name when absent. */
+  title?: string
+  /** A caption at the far end of the search toolbar. */
+  searchHint?: ReactNode
+  selection?:
+    | {
+        parts: ReadonlyMap<string, PartSearchItem>
+        onChange: (parts: ReadonlyMap<string, PartSearchItem>) => void
+        actions: ReactNode
+      }
+    | undefined
 }
 interface ResultState {
   key: string
   data?: Page<PartSearchItem>
   error?: boolean
-}
-
-function LocationPartThumbnail({ source }: { source: string | null }) {
-  const [failed, setFailed] = useState(false)
-  return (
-    <span
-      aria-hidden
-      className="bg-app-input text-app-dim grid size-control-lg shrink-0 place-items-center overflow-hidden rounded-control"
-    >
-      {source && !failed ? (
-        <img
-          src={source}
-          alt=""
-          loading="lazy"
-          className="size-full object-cover"
-          onError={() => setFailed(true)}
-        />
-      ) : (
-        <Package className="size-4" />
-      )}
-    </span>
-  )
 }
 
 export function LocationPartsList(props: Props) {
@@ -78,16 +76,28 @@ function OwnedLocationPartsList({
   context,
   owner,
   slug,
+  onPlace,
+  refreshKey = 0,
+  emptyText,
+  selection,
+  title,
+  searchHint,
 }: Props & { owner: string; slug: string }) {
   const t = useT(locationContentsMessages)
   const tc = useT(commonMessages)
   const f = useFormat()
   const [params, setParams] = useSearchParams()
   const navigationState = useLocation().state as unknown
-  const prefix = context === 'sheet' ? 'locationContents' : 'locationParts'
+  const prefix =
+    context === 'sheet'
+      ? 'locationContents'
+      : context === 'unassigned'
+        ? 'unassigned'
+        : 'locationParts'
   const query = params.get(`${prefix}Search`) ?? ''
   const requestedPage = Number.parseInt(params.get(`${prefix}Page`) ?? '1', 10)
   const page = Math.max(1, Number.isFinite(requestedPage) ? requestedPage : 1)
+  const pageSize = context === 'unassigned' ? 20 : 10
   const [debounced, setDebounced] = useState(query)
   const [revision, setRevision] = useState(0)
   const [state, setState] = useState<ResultState>({ key: '' })
@@ -95,22 +105,23 @@ function OwnedLocationPartsList({
     const timeout = setTimeout(() => setDebounced(query), 300)
     return () => clearTimeout(timeout)
   }, [query])
-  const serializedFilter = JSON.stringify(
-    locationPartsFilter(target, debounced, page),
-  )
+  const serializedFilter = JSON.stringify({
+    ...locationPartsFilter(target, debounced, page, pageSize),
+    ...(context === 'unassigned' ? { statuses: warehouseStockStatuses } : {}),
+  })
   const filter = useMemo(
     () =>
       JSON.parse(serializedFilter) as ReturnType<typeof locationPartsFilter>,
     [serializedFilter],
   )
-  const key = JSON.stringify([owner, filter, revision])
+  const key = JSON.stringify([owner, filter, revision, refreshKey])
   useEffect(() => {
     if (query !== debounced) return
     const controller = new AbortController()
     void partsApi.search(filter, { signal: controller.signal }).then(
       (data) => {
         if (controller.signal.aborted) return
-        const last = Math.max(1, Math.ceil(data.total / 10))
+        const last = Math.max(1, Math.ceil(data.total / pageSize))
         if (page > last) {
           setParams(
             (current) => {
@@ -129,29 +140,67 @@ function OwnedLocationPartsList({
       },
     )
     return () => controller.abort()
-  }, [filter, key, page, prefix, query, debounced, setParams, navigationState])
+  }, [
+    filter,
+    key,
+    page,
+    pageSize,
+    prefix,
+    query,
+    debounced,
+    setParams,
+    navigationState,
+  ])
   const current = state.key === key && query === debounced ? state : undefined
   const data = current?.data
+  const items =
+    data?.items.filter(
+      (part) => context !== 'unassigned' || hasPlacementStock(part),
+    ) ?? []
+  const placementBlock = (part: PartSearchItem) =>
+    !hasPlacementStock(part)
+      ? t('placementNoStock')
+      : part.isInventoryLocked
+        ? t('placementLocked')
+        : undefined
+  const setQuery = (value: string) =>
+    setParams(
+      (currentParams) => {
+        const next = new URLSearchParams(currentParams)
+        next.set(`${prefix}Search`, value)
+        next.delete(`${prefix}Page`)
+        return next
+      },
+      { replace: true, preventScrollReset: true, state: navigationState },
+    )
+  /* Nothing to place at all: the list gives way to one calm state, without a
+     search that could only ever find nothing. */
+  const settledEmpty =
+    context === 'unassigned' &&
+    data?.total === 0 &&
+    query.trim() === '' &&
+    page === 1
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
-      <SearchInput
-        aria-label={t('search')}
-        placeholder={t('search')}
-        value={query}
-        onChange={(event) =>
-          setParams(
-            (currentParams) => {
-              const next = new URLSearchParams(currentParams)
-              next.set(`${prefix}Search`, event.target.value)
-              next.delete(`${prefix}Page`)
-              return next
-            },
-            { replace: true, preventScrollReset: true, state: navigationState },
-          )
-        }
-      />
+    <div
+      className={`grid min-w-0 content-start gap-[14px]${context === 'unassigned' ? ' location-parts--unassigned' : ''}`}
+    >
+      {selection?.actions}
+      <div className="rz-toolbar" hidden={settledEmpty} role="search">
+        <SearchInput
+          className="flex-[0_1_320px]"
+          aria-label={t('search')}
+          placeholder={t('search')}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        {searchHint ? (
+          <span className="rz-toolbar__end rz-caption">{searchHint}</span>
+        ) : null}
+      </div>
       {!current ? (
-        <SkeletonRows rows={3} />
+        <div className="rz-card p-[var(--rz-card-p)]">
+          <SkeletonRows rows={3} />
+        </div>
       ) : current.error ? (
         <Notice tone="danger">
           {t('failed')}{' '}
@@ -159,47 +208,79 @@ function OwnedLocationPartsList({
             {tc('retry')}
           </Button>
         </Notice>
+      ) : settledEmpty ? (
+        <EmptyState
+          icon={<CircleCheck aria-hidden />}
+          title={emptyText ?? t('empty')}
+        />
       ) : data ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
-          <p className="rz-muted m-0 shrink-0 tabular-nums">
-            {t('positions', { count: data.total })}
-          </p>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable] [&>div]:overflow-visible [&_thead_th]:bg-app-raised [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10">
+        <section
+          aria-label={title ?? target.name}
+          className="rz-card location-parts__card"
+        >
+          <header className="rz-card__head">
+            <h2 className="rz-h-card flex flex-wrap items-baseline gap-1">
+              {title ?? target.name}
+              <span className="rz-dim rz-mono font-normal">
+                {title
+                  ? f.number(data.total)
+                  : t('positions', { count: data.total })}
+              </span>
+            </h2>
+          </header>
+          <div
+            className={`location-parts__table${context === 'unassigned' && items.length === pageSize ? ' location-parts__table--full' : ''}`}
+          >
             <DataTable
               embedded
               caption={target.name}
-              rows={data.items}
+              rows={items}
               rowKey={(part) => part.id}
+              {...(selection
+                ? {
+                    selection: {
+                      selected: new Set(selection.parts.keys()),
+                      rowLabel: (part: PartSearchItem) =>
+                        t('selectPart', { name: part.name }),
+                      unavailable: placementBlock,
+                      selectOnRowClick: context === 'unassigned',
+                      onChange: (ids: ReadonlySet<string>) => {
+                        const next = new Map(selection.parts)
+                        for (const id of next.keys())
+                          if (!ids.has(id)) next.delete(id)
+                        for (const part of items) {
+                          if (ids.has(part.id) && !placementBlock(part))
+                            next.set(part.id, part)
+                        }
+                        selection.onChange(next)
+                      },
+                    },
+                  }
+                : {})}
               columns={[
                 {
                   key: 'name',
                   label: t('name'),
                   variant: 'primary',
                   cell: (part) => (
-                    <Link
-                      to={cabinetPath(slug, 'parts', part.id)}
-                      className="flex items-center gap-3 rounded-control py-1.5 text-app-ink"
-                    >
-                      <LocationPartThumbnail
-                        key={part.thumbnailUrl ?? ''}
-                        source={part.thumbnailUrl}
-                      />
-                      <span className="min-w-0">
-                        <strong className="rz-strong block font-semibold break-words">
-                          {part.name}
-                        </strong>
-                        {part.car ? (
-                          <span className="rz-muted mt-0.5 block text-caption">
-                            {part.car.make} {part.car.model} · {part.car.year}
-                          </span>
-                        ) : null}
-                        {part.oemCode ? (
-                          <span className="rz-mono rz-caption mt-0.5 block break-all">
-                            {part.oemCode}
-                          </span>
-                        ) : null}
-                      </span>
-                    </Link>
+                    <span className="rz-cell-main">
+                      <Link
+                        to={cabinetPath(slug, 'parts', part.id)}
+                        title={
+                          context === 'unassigned'
+                            ? [part.name, part.oemCode]
+                                .filter(Boolean)
+                                .join(' · ')
+                            : undefined
+                        }
+                        className="text-app-strong hover:text-brand-text"
+                      >
+                        {part.name}
+                      </Link>
+                      {part.oemCode ? (
+                        <span className="rz-mono rz-dim">{part.oemCode}</span>
+                      ) : null}
+                    </span>
                   ),
                 },
                 {
@@ -207,9 +288,7 @@ function OwnedLocationPartsList({
                   label: t('quantity'),
                   align: 'end',
                   cell: (part) => (
-                    <span className="rz-mono rz-strong">
-                      {f.number(part.quantity)}
-                    </span>
+                    <span className="rz-mono">{f.number(part.quantity)}</span>
                   ),
                 },
                 {
@@ -235,36 +314,80 @@ function OwnedLocationPartsList({
                     </StatusPill>
                   ),
                 },
+                ...(onPlace
+                  ? [
+                      {
+                        key: 'place',
+                        label: t('place'),
+                        headerHidden: true,
+                        align: 'end' as const,
+                        cell: (part: PartSearchItem) => (
+                          <span className="inline-grid max-w-full justify-items-end gap-1">
+                            {hasPlacementStock(part) ? (
+                              <Button
+                                className="rz-mono text-brand-text px-0"
+                                variant="quiet"
+                                onClick={() => onPlace(part)}
+                                disabled={part.isInventoryLocked}
+                                aria-label={t('placePart', { name: part.name })}
+                              >
+                                {t('place')}
+                              </Button>
+                            ) : null}
+                            {part.isInventoryLocked ? (
+                              <span className="rz-caption max-w-52 whitespace-normal">
+                                {t('placementLocked')}
+                              </span>
+                            ) : null}
+                          </span>
+                        ),
+                      },
+                    ]
+                  : []),
               ]}
-              empty={<p className="rz-muted m-0 py-5">{t('empty')}</p>}
+              empty={
+                <p className="text-app-muted m-0 px-[var(--rz-card-p)] py-5">
+                  {context === 'unassigned' && query.trim()
+                    ? t('noMatches')
+                    : (emptyText ?? t('empty'))}
+                </p>
+              }
+              footer={
+                data.total > pageSize || context === 'unassigned' ? (
+                  <div
+                    className={
+                      context === 'unassigned'
+                        ? 'location-parts__pager'
+                        : 'border-app-line border-t px-[var(--rz-card-p)] py-2.5'
+                    }
+                  >
+                    <Pagination
+                      page={page}
+                      totalPages={Math.max(1, Math.ceil(data.total / pageSize))}
+                      total={data.total}
+                      pageSize={pageSize}
+                      label={t('pages')}
+                      onPage={(nextPage) =>
+                        setParams(
+                          (currentParams) => {
+                            const next = new URLSearchParams(currentParams)
+                            next.set(`${prefix}Page`, String(nextPage))
+                            return next
+                          },
+                          {
+                            replace: true,
+                            preventScrollReset: true,
+                            state: navigationState,
+                          },
+                        )
+                      }
+                    />
+                  </div>
+                ) : undefined
+              }
             />
           </div>
-          {data.total > 10 ? (
-            <div className="shrink-0">
-              <Pagination
-                page={page}
-                totalPages={Math.ceil(data.total / 10)}
-                total={data.total}
-                pageSize={10}
-                label={t('pages')}
-                onPage={(nextPage) =>
-                  setParams(
-                    (currentParams) => {
-                      const next = new URLSearchParams(currentParams)
-                      next.set(`${prefix}Page`, String(nextPage))
-                      return next
-                    },
-                    {
-                      replace: true,
-                      preventScrollReset: true,
-                      state: navigationState,
-                    },
-                  )
-                }
-              />
-            </div>
-          ) : null}
-        </div>
+        </section>
       ) : null}
     </div>
   )

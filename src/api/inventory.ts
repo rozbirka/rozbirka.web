@@ -74,9 +74,13 @@ export interface ZoneUpdate {
 export interface InventoryZoneQuery extends RequestOptions {
   warehouseId?: string
   activeOnly?: boolean
+  archivedOnly?: boolean
 }
 
 type LocationListOptions = RequestOptions & { includePartCounts?: boolean }
+export type SectionListOptions = LocationListOptions & {
+  archivedOnly?: boolean
+}
 
 const config = ({ signal }: RequestOptions = {}) =>
   signal ? { signal } : undefined
@@ -99,13 +103,14 @@ export const inventoryApi = {
     ).data
   },
   async getZones(options: InventoryZoneQuery = {}): Promise<InventoryZone[]> {
-    const { warehouseId, activeOnly, ...requestOptions } = options
+    const { warehouseId, activeOnly, archivedOnly, ...requestOptions } = options
     return (
       await apiClient.get<InventoryZone[]>('/inventory/zones', {
         ...config(requestOptions),
         params: {
           ...(warehouseId ? { warehouseId } : {}),
           ...(activeOnly !== undefined ? { activeOnly } : {}),
+          ...(archivedOnly !== undefined ? { archivedOnly } : {}),
         },
       })
     ).data
@@ -173,6 +178,19 @@ export const inventoryApi = {
       )
     ).data
   },
+  /** Requires the local Core restore contract until its published pin is updated. */
+  async restoreZone(
+    locationId: string,
+    options: RequestOptions = {},
+  ): Promise<InventoryZone> {
+    return (
+      await apiClient.post<InventoryZone>(
+        `/inventory/zones/${id(locationId)}/restore`,
+        undefined,
+        config(options),
+      )
+    ).data
+  },
   async archiveZone(
     zoneId: string,
     options: RequestOptions = {},
@@ -219,7 +237,7 @@ export const inventoryApi = {
   },
   async getSections(
     zoneId?: string,
-    options: LocationListOptions = {},
+    options: SectionListOptions = {},
   ): Promise<InventorySection[]> {
     return (
       await apiClient.get<InventorySection[]>('/inventory/sections', {
@@ -227,6 +245,9 @@ export const inventoryApi = {
         params: {
           ...(zoneId ? { zoneId } : {}),
           includePartCounts: options.includePartCounts ?? false,
+          ...(options.archivedOnly !== undefined
+            ? { archivedOnly: options.archivedOnly }
+            : {}),
         },
       })
     ).data
@@ -252,6 +273,19 @@ export const inventoryApi = {
       await apiClient.put<InventorySection>(
         `/inventory/sections/${id(sectionId)}`,
         input,
+        config(options),
+      )
+    ).data
+  },
+  /** Requires the local Core restore contract until its published pin is updated. */
+  async restoreSection(
+    locationId: string,
+    options: RequestOptions = {},
+  ): Promise<InventorySection> {
+    return (
+      await apiClient.post<InventorySection>(
+        `/inventory/sections/${id(locationId)}/restore`,
+        undefined,
         config(options),
       )
     ).data

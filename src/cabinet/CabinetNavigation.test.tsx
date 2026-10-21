@@ -68,9 +68,10 @@ const snapshot = (permissions: string[]): TenantAccessSnapshot => ({
 const renderNavigation = (
   permissions = ['billing.view'],
   onLogout = vi.fn<() => Promise<void>>(),
+  path = '/app/koval/settings/billing/overview',
 ) =>
   render(
-    <MemoryRouter initialEntries={['/app/koval/settings/billing/overview']}>
+    <MemoryRouter initialEntries={[path]}>
       <CabinetNavigation
         tenant={activeTenant}
         tenants={[activeTenant, otherTenant]}
@@ -331,4 +332,34 @@ it('keeps billing sub-pages under Підписка and offers search in the side
   )
   expect(open).toHaveBeenCalledOnce()
   window.removeEventListener('cabinet:open-command-palette', open)
+})
+
+it('provides separate warehouse and stocktake links for inventory viewers', () => {
+  renderNavigation(['inventory.view'])
+  const navigation = screen.getByRole('navigation', {
+    name: 'Навігація кабінету',
+  })
+  expect(
+    within(navigation).getByRole('link', { name: 'Склади' }),
+  ).toHaveAttribute('href', '/app/koval/warehouses')
+  expect(
+    within(navigation).getByRole('link', { name: 'Інвентаризація' }),
+  ).toHaveAttribute('href', '/app/koval/inventory')
+})
+
+it.each([
+  ['/app/koval/warehouses/wh-1', 'Склади', 'Інвентаризація'],
+  ['/app/koval/warehouses/zones/zone-1', 'Склади', 'Інвентаризація'],
+  ['/app/koval/inventory/sessions/session-1', 'Інвентаризація', 'Склади'],
+])('keeps its own navigation entry active at %s', (path, active, inactive) => {
+  renderNavigation(['inventory.view'], vi.fn(), path)
+  const navigation = screen.getByRole('navigation', {
+    name: 'Навігація кабінету',
+  })
+  expect(
+    within(navigation).getByRole('link', { name: active }),
+  ).toHaveAttribute('aria-current', 'page')
+  expect(
+    within(navigation).getByRole('link', { name: inactive }),
+  ).not.toHaveAttribute('aria-current')
 })
