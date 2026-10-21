@@ -3,6 +3,15 @@ import { defineMessages } from '@/i18n'
 /** One warehouse: its zones, figures, active session and dialogs. */
 export const warehouseMessages = defineMessages({
   uk: {
+    statusZones: 'Стан зон',
+    statusSections: 'Стан секцій',
+    statusActive: 'Активні',
+    statusArchived: 'Архів',
+    restoreLocation: 'Розархівувати',
+    noArchivedZones: 'Архівних зон немає',
+    noArchivedSections: 'Архівних секцій немає',
+    sectionActionsLabel: 'Дії із секцією {name}',
+
     allSectionParts: 'Усі запчастини секції',
     zoneBrowseHint:
       'Виберіть секцію — відкриються її полиці. Натисніть на полицю — відкриється список її запчастин.',
@@ -71,6 +80,8 @@ export const warehouseMessages = defineMessages({
     statFilled: 'Зони із запчастинами',
     filledTotal: 'із {count}',
     needsPartsView: 'потрібне право «parts.view»',
+    statisticsFailed:
+      'Не вдалося завантажити статистику запчастин. Склади та місця залишаються доступними.',
     filledMeta: {
       one: '{filled} з {count} зони мають залишок',
       few: '{filled} з {count} зон мають залишок',
@@ -112,11 +123,11 @@ export const warehouseMessages = defineMessages({
     editZoneHint: 'Зона «{zone}» складу «{warehouse}».',
     editZoneTitle: 'Редагувати зону',
     archiveWarehouseConsequence:
-      'Склад «{name}» зникне зі списків і з фільтрів. Запчастини залишаться на своїх зонах.',
+      'Склад «{name}» зникне зі списків і з фільтрів. Спочатку перемістіть усі запчастини, включно з «Без зони», до іншого складу.',
     archiveWarehouseTitle: 'Архівувати склад?',
     archiveZone: 'Архівувати зону',
     archiveZoneConsequence:
-      'Зона «{name}» більше не зʼявиться у виборі місця. Запчастини, що в ній лежать, доведеться перекласти вручну.',
+      'Зона «{name}» більше не зʼявиться у виборі місця. Спочатку перемістіть усі її запчастини до іншого місця.',
     archiveZoneTitle: 'Архівувати зону?',
     name: 'Назва',
     codeLabel: 'Код',
@@ -125,6 +136,15 @@ export const warehouseMessages = defineMessages({
       'Код формується з назви автоматично. За потреби його можна змінити.',
   },
   'en-GB': {
+    statusZones: 'Zone status',
+    statusSections: 'Section status',
+    statusActive: 'Active',
+    statusArchived: 'Archive',
+    restoreLocation: 'Restore',
+    noArchivedZones: 'No archived zones',
+    noArchivedSections: 'No archived sections',
+    sectionActionsLabel: 'Actions for section {name}',
+
     allSectionParts: 'All parts in section',
     zoneBrowseHint:
       'Choose a section to open its shelves. Select a shelf to view its parts.',
@@ -194,6 +214,8 @@ export const warehouseMessages = defineMessages({
     statFilled: 'Zones with parts',
     filledTotal: 'of {count}',
     needsPartsView: 'requires the “parts.view” permission',
+    statisticsFailed:
+      'Could not load part statistics. Warehouses and locations remain available.',
     filledMeta: {
       one: '{filled} of {count} zone hold stock',
       other: '{filled} of {count} zones hold stock',
@@ -233,11 +255,11 @@ export const warehouseMessages = defineMessages({
     editZoneHint: 'Zone “{zone}” in warehouse “{warehouse}”.',
     editZoneTitle: 'Edit zone',
     archiveWarehouseConsequence:
-      'Warehouse “{name}” will disappear from lists and filters. Parts stay in their zones.',
+      'Warehouse “{name}” will disappear from lists and filters. Move all parts, including those in “No zone”, to another warehouse first.',
     archiveWarehouseTitle: 'Archive warehouse?',
     archiveZone: 'Archive zone',
     archiveZoneConsequence:
-      'Zone “{name}” will no longer be offered as a location. Parts in it will have to be moved manually.',
+      'Zone “{name}” will no longer be offered as a location. Move all its parts elsewhere first.',
     archiveZoneTitle: 'Archive zone?',
     name: 'Name',
     codeLabel: 'Code',
@@ -246,6 +268,15 @@ export const warehouseMessages = defineMessages({
       'The code follows the name automatically. You can change it if needed.',
   },
   pl: {
+    statusZones: 'Stan stref',
+    statusSections: 'Stan sekcji',
+    statusActive: 'Aktywne',
+    statusArchived: 'Archiwum',
+    restoreLocation: 'Przywróć',
+    noArchivedZones: 'Brak archiwalnych stref',
+    noArchivedSections: 'Brak archiwalnych sekcji',
+    sectionActionsLabel: 'Działania dla sekcji {name}',
+
     allSectionParts: 'Wszystkie części sekcji',
     zoneBrowseHint:
       'Wybierz sekcję, aby otworzyć jej półki. Wybierz półkę, aby zobaczyć części.',
@@ -316,6 +347,8 @@ export const warehouseMessages = defineMessages({
     statFilled: 'Strefy z częściami',
     filledTotal: 'z {count}',
     needsPartsView: 'wymaga uprawnienia „parts.view”',
+    statisticsFailed:
+      'Nie udało się wczytać statystyk części. Magazyny i lokalizacje pozostają dostępne.',
     filledMeta: {
       one: '{filled} z {count} strefy ma stan',
       few: '{filled} z {count} stref ma stan',
@@ -358,11 +391,11 @@ export const warehouseMessages = defineMessages({
     editZoneHint: 'Strefa „{zone}” magazynu „{warehouse}”.',
     editZoneTitle: 'Edytuj strefę',
     archiveWarehouseConsequence:
-      'Magazyn „{name}” zniknie z list i filtrów. Części pozostaną w swoich strefach.',
+      'Magazyn „{name}” zniknie z list i filtrów. Najpierw przenieś wszystkie części, również z „Bez strefy”, do innego magazynu.',
     archiveWarehouseTitle: 'Zarchiwizować magazyn?',
     archiveZone: 'Archiwizuj strefę',
     archiveZoneConsequence:
-      'Strefa „{name}” nie będzie już proponowana jako miejsce. Części, które w niej leżą, trzeba będzie przełożyć ręcznie.',
+      'Strefa „{name}” nie będzie już proponowana jako miejsce. Najpierw przenieś wszystkie jej części do innej lokalizacji.',
     archiveZoneTitle: 'Zarchiwizować strefę?',
     name: 'Nazwa',
     codeLabel: 'Kod',

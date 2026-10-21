@@ -100,11 +100,12 @@ export function CarExpenseDrawer({
           label={t('expenseAmount')}
         >
           <MoneyInput
+            className="text-left"
             currency={price.currency}
+            dir="ltr"
             disabled={price.disabled}
             inputMode="decimal"
             min="0"
-            numeric
             onChange={(event) => onAmountChange(event.target.value)}
             placeholder="0"
             step="0.01"

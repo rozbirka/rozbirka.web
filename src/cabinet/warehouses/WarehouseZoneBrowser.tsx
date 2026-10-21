@@ -1,12 +1,20 @@
 import type { ReactNode } from 'react'
 import { Link, useLocation, useSearchParams } from 'react-router'
-import { Archive, ChevronRight, LayoutGrid, Pencil, Plus } from 'lucide-react'
+import {
+  Archive,
+  ChevronRight,
+  LayoutGrid,
+  Pencil,
+  Plus,
+  RotateCcw,
+} from 'lucide-react'
 import { ActionMenu, Button, EmptyState, Pagination } from '@/components/app'
 import type { WarehouseDetail } from '@/api/inventory'
 import { useT } from '@/i18n'
 import {
   LocationBrowserHeader,
   LocationName,
+  LocationStatusFilter,
 } from '../inventory/LocationBrowser'
 import { locationBrowserMessages } from '../inventory/location-browser-messages'
 import { warehouseMessages } from '../inventory/warehouse-messages'
@@ -25,6 +33,8 @@ export function WarehouseZoneBrowser({
   headerActions,
   printWorkspace,
   unassignedHref,
+  onRestore,
+  pending = false,
 }: {
   zones: Zone[]
   base: string
@@ -36,18 +46,25 @@ export function WarehouseZoneBrowser({
   headerActions: ReactNode
   printWorkspace: ReactNode
   unassignedHref: string
+  onRestore?: (zone: Zone) => void
+  pending?: boolean
 }) {
   const t = useT(warehouseMessages)
   const tb = useT(locationBrowserMessages)
   const [params, setParams] = useSearchParams()
   const navigationState = useLocation().state as unknown
+  const archivedOnly = params.get('locationStatus') === 'archived'
   const query = params.get('locationSearch') ?? ''
   const needle = query.trim().toLocaleLowerCase()
-  const physical = zones.filter((zone) => !zone.isSystemUnassigned)
+  const physical = zones.filter(
+    (zone) => !zone.isSystemUnassigned && zone.isActive === !archivedOnly,
+  )
   const visible = physical.filter((zone) =>
     `${zone.name} ${zone.code}`.toLocaleLowerCase().includes(needle),
   )
-  const unassigned = zones.filter((zone) => zone.isSystemUnassigned)
+  const unassigned = archivedOnly
+    ? []
+    : zones.filter((zone) => zone.isSystemUnassigned)
   const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE))
   const requestedPage = Number.parseInt(params.get('locationPage') ?? '1', 10)
   const page = Math.min(
@@ -92,24 +109,38 @@ export function WarehouseZoneBrowser({
   const zoneMenu = (zone: Zone) => (
     <ActionMenu
       label={tb('zoneActions', { name: zone.name })}
-      actions={[
-        {
-          key: 'edit',
-          label: t('editZone', { name: zone.name }),
-          icon: <Pencil aria-hidden />,
-          onSelect: () => onEdit(zone),
-        },
-        {
-          key: 'archive',
-          label: t('archiveZoneLabel', { name: zone.name }),
-          icon: <Archive aria-hidden />,
-          destructive: true,
-          onSelect: () => onArchive(zone),
-        },
-      ]}
+      actions={
+        archivedOnly
+          ? onRestore
+            ? [
+                {
+                  key: 'restore',
+                  label: t('restoreLocation'),
+                  icon: <RotateCcw aria-hidden />,
+                  disabled: pending,
+                  onSelect: () => onRestore(zone),
+                },
+              ]
+            : []
+          : [
+              {
+                key: 'edit',
+                label: t('editZone', { name: zone.name }),
+                icon: <Pencil aria-hidden />,
+                onSelect: () => onEdit(zone),
+              },
+              {
+                key: 'archive',
+                label: t('archiveZoneLabel', { name: zone.name }),
+                icon: <Archive aria-hidden />,
+                destructive: true,
+                onSelect: () => onArchive(zone),
+              },
+            ]
+      }
     />
   )
-  const noZones = physical.length === 0 && !printWorkspace
+  const noZones = physical.length === 0 && !printWorkspace && !archivedOnly
 
   return (
     <>
@@ -119,16 +150,23 @@ export function WarehouseZoneBrowser({
       >
         <LocationBrowserHeader
           title={t('zonesTitle')}
-          lead={noZones || printWorkspace ? undefined : tb('chooseZone')}
+          lead={
+            noZones || printWorkspace || archivedOnly
+              ? undefined
+              : tb('chooseZone')
+          }
           actions={
             <>
-              {canManage ? (
+              {!printWorkspace ? (
+                <LocationStatusFilter label={t('statusZones')} />
+              ) : null}
+              {canManage && !archivedOnly ? (
                 <Button onClick={onAdd}>
                   <Plus aria-hidden />
                   {t('addZone')}
                 </Button>
               ) : null}
-              {headerActions}
+              {archivedOnly ? null : headerActions}
             </>
           }
         />
@@ -193,19 +231,27 @@ export function WarehouseZoneBrowser({
                         className={`location-browser__section${canManage ? ' location-browser__zone' : ''}`}
                         key={zone.id}
                       >
-                        <Link
-                          aria-label={zone.name}
-                          className={`location-browser__row location-browser__row--plain${zone.isActive ? '' : ' location-browser__row--muted'}`}
-                          to={`${base}/zones/${encodeURIComponent(zone.id)}`}
-                        >
-                          {zoneContents(zone)}
-                        </Link>
+                        {archivedOnly ? (
+                          <div className="location-browser__row location-browser__row--plain">
+                            {zoneContents(zone, false)}
+                          </div>
+                        ) : (
+                          <Link
+                            aria-label={zone.name}
+                            className={`location-browser__row location-browser__row--plain${zone.isActive ? '' : ' location-browser__row--muted'}`}
+                            to={`${base}/zones/${encodeURIComponent(zone.id)}`}
+                          >
+                            {zoneContents(zone)}
+                          </Link>
+                        )}
                         {canManage ? zoneMenu(zone) : null}
                       </div>
                     ))
                 ) : (
                   <p className="location-browser__empty">
-                    {needle ? tb('noMatches') : t('noZones')}
+                    {needle
+                      ? tb('noMatches')
+                      : t(archivedOnly ? 'noArchivedZones' : 'noZones')}
                   </p>
                 )}
               </div>

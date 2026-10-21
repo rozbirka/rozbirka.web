@@ -33,7 +33,14 @@ export function useLoad<T>(
   loader: (signal: AbortSignal) => Promise<T>,
   key: string,
   isComplete: (data: T) => boolean = complete,
+  options?: {
+    /** Preserve valid fields when a response contains an optional-data failure. */
+    mergeIncomplete?: (previous: T, next: T) => T
+    retainOnReload?: boolean
+  },
 ) {
+  const mergeIncomplete = options?.mergeIncomplete
+  const retainOnReload = options?.retainOnReload ?? false
   const [revision, setRevision] = useState(0)
   const [entry, setEntry] = useState<{
     loader: typeof loader
@@ -75,7 +82,14 @@ export function useLoad<T>(
             previous.loader === loader &&
             previous.key === key &&
             previous.state.kind === 'ready'
-              ? { ...previous.state, refreshing: false, refreshError: true }
+              ? {
+                  ...previous.state,
+                  data: mergeIncomplete
+                    ? mergeIncomplete(previous.state.data, data)
+                    : previous.state.data,
+                  refreshing: false,
+                  refreshError: true,
+                }
               : {
                   kind: 'ready',
                   data,
@@ -110,11 +124,11 @@ export function useLoad<T>(
       controller.abort()
       if (flight.current === request) flight.current = null
     }
-  }, [key, loader, revision, isComplete])
+  }, [key, loader, revision, isComplete, mergeIncomplete])
   const reload = useCallback(() => {
-    setEntry({ loader, key, state: loading })
+    if (!retainOnReload) setEntry({ loader, key, state: loading })
     setRevision((value) => value + 1)
-  }, [loader, key])
+  }, [loader, key, retainOnReload])
   const refresh = useCallback(() => {
     if (
       queued.current ||

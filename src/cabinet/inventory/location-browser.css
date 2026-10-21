@@ -1,3 +1,5 @@
+@import './location-list-layout.css';
+
 /*
  * Warehouse, zone, section and shelf lists, drawn as the v2 table
  * (docs/design-system/v2/modules/12 Склади.dc.html): a `.rz-card` with a head
@@ -76,6 +78,11 @@
   grid-template-columns: minmax(0, 1fr) 40px;
 }
 
+.location-browser__row--section,
+.location-browser__columns--section {
+  grid-template-columns: minmax(0, 1fr) 80px 40px;
+}
+
 .location-browser__row--warehouse,
 .location-browser__columns--warehouse {
   grid-template-columns: minmax(0, 1fr) auto 40px;
@@ -95,7 +102,7 @@
 .location-browser__row {
   width: 100%;
   min-width: 0;
-  min-height: 44px;
+  min-height: var(--location-list-row-height);
   padding: 0 var(--rz-cell-px);
   border: 0;
   border-radius: 0;
@@ -262,11 +269,6 @@
   margin-top: 0;
 }
 
-.location-browser__pagination > nav {
-  padding: 10px var(--rz-card-p);
-  border-top: 1px solid var(--rz-border);
-}
-
 /* Stand-in for a list that waits on a choice elsewhere on the page. */
 .location-browser__placeholder {
   min-height: 176px;
@@ -286,6 +288,11 @@
 
   .location-browser__row--plain {
     grid-template-columns: minmax(0, 1fr) 24px;
+  }
+
+  .location-browser__row--section {
+    grid-template-columns: minmax(0, 1fr) auto 24px;
+    column-gap: 8px;
   }
 
   .location-browser__warehouse-counts {
@@ -309,4 +316,44 @@
     display: block;
     width: 100%;
   }
+}
+
+/* Navigation fills the same bounded workspace as the unassigned parts list.
+ * Only the list scrolls on small/short viewports; the pager stays accessible. */
+.rz-workspace > .rz-page > .location-browser-layout,
+.rz-workspace .location-browser-card,
+.rz-workspace .location-browser--navigation {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.rz-workspace .location-browser-card {
+  overflow: hidden;
+}
+
+.rz-workspace .location-browser--navigation > :not(.location-browser__list) {
+  flex-shrink: 0;
+}
+
+.rz-workspace .location-browser__list {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.rz-workspace .location-browser__shelves > div,
+.rz-workspace .location-browser__shelves .rz-table-scroll {
+  overflow: visible;
+}
+
+/* Shelf cards follow the current page's row count, shrinking only when the
+ * available workspace is shorter than the list. The pager stays below it. */
+.rz-workspace > .rz-page > .location-browser-layout--shelves,
+.rz-workspace .location-browser-layout--shelves .location-browser-card,
+.rz-workspace .location-browser-layout--shelves .location-browser--navigation,
+.rz-workspace .location-browser-layout--shelves .location-browser__list {
+  flex: 0 1 auto;
 }

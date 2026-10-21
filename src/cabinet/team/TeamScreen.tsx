@@ -10,6 +10,7 @@ import {
 import { Link } from 'react-router'
 import {
   Ban,
+  Copy,
   KeyRound,
   Power,
   PowerOff,
@@ -26,6 +27,7 @@ import {
   EmptyState,
   ErrorState,
   Notice,
+  Pagination,
   SearchInput,
   SelectInput,
   Skeleton,
@@ -36,9 +38,10 @@ import {
   type StatusTone,
   Sheet,
 } from '@/components/app'
-import { commonMessages, translate, useLocale, useT } from '@/i18n'
+import { commonMessages, translate, useFormat, useLocale, useT } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { roleLabel, teamMessages } from './messages'
+import { activityDayDifference } from './activity-day'
 import { Crumbs, RedesignShell } from '../redesign-shell'
 import { ALL_PERMISSIONS } from '../access-types'
 import { useCabinet } from '../CabinetContext'
@@ -132,7 +135,13 @@ const invitationStatus = (
 
 export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
   const cabinet = useCabinet()
-  const { locale } = useLocale()
+  const { locale, timeZone } = useLocale()
+  const format = useFormat()
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
   const t = useT(teamMessages)
   const tc = useT(commonMessages)
   const toast = useOptionalToast()
@@ -146,6 +155,8 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
   const [refreshNonce, setRefreshNonce] = useState(0)
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null)
   const [query, setQuery] = useState('')
+  const [roleFilter, setRoleFilter] = useState('')
+  const [page, setPage] = useState(1)
   const [segment, setSegment] =
     useState<(typeof MEMBER_SEGMENTS)[number]['key']>('all')
   const [permissionMember, setPermissionMember] =
@@ -250,6 +261,19 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
 
   const teamData =
     data?.tenantId === tenantId && data.generation === generation ? data : null
+  const copyInvitationCode = async (code: string) => {
+    const signal = tenantRequestScope.signal
+    try {
+      await navigator.clipboard.writeText(code)
+      if (signal.aborted) return
+      toast?.show({ tone: 'ok', message: t('invitationCodeCopied') })
+    } catch {
+      if (signal.aborted) return
+      if (toast)
+        toast.show({ tone: 'danger', message: t('invitationCodeCopyFailed') })
+      else setError(t('invitationCodeCopyFailed'))
+    }
+  }
   const availableRoles = useMemo(() => teamData?.roles ?? [], [teamData?.roles])
   const assignableRoles = useMemo(
     () => availableRoles.filter((role) => !isOwnerRole(role)),
@@ -406,7 +430,11 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
     off: offMembers,
   }
   const needle = query.trim().toLowerCase()
+  const selectedRole = availableRoles.some((role) => role.id === roleFilter)
+    ? roleFilter
+    : ''
   const shownMembers = members
+    .filter((one) => !selectedRole || one.role.id === selectedRole)
     .filter(
       (one) =>
         segment === 'all' ||
@@ -418,6 +446,13 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
         one.name.toLowerCase().includes(needle) ||
         (one.phone ?? '').toLowerCase().includes(needle),
     )
+  const pageSize = 20
+  const totalPages = Math.max(1, Math.ceil(shownMembers.length / pageSize))
+  const currentPage = Math.min(page, totalPages)
+  const pageMembers = shownMembers.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
+  )
   const openInvitations = (teamData?.invitations ?? []).filter(
     (one) => invitationStatus(one).active,
   )
@@ -433,6 +468,16 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
   // becomes the error state with its retry. A failure after data arrived is a
   // notice above the data that is still true.
   const loadFailed = teamData === null && !loading && error !== null
+  const activityLabel = (value: string | null | undefined) => {
+    const days = activityDayDifference(value, now, timeZone)
+    return days === null
+      ? '—'
+      : days === 0
+        ? t('activityToday')
+        : days === 1
+          ? t('activityYesterday')
+          : format.date(value)
+  }
 
   return (
     <>
@@ -489,10 +534,29 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
             <div className="rz-toolbar" role="search">
               <SearchInput
                 aria-label={t('searchMembers')}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  setQuery(event.target.value)
+                  setPage(1)
+                }}
                 placeholder={t('searchPlaceholder')}
                 value={query}
               />
+              <SelectInput
+                aria-label={t('roleFilter')}
+                className="w-auto min-w-40"
+                value={selectedRole}
+                onChange={(event) => {
+                  setRoleFilter(event.target.value)
+                  setPage(1)
+                }}
+              >
+                <option value="">{t('allRoles')}</option>
+                {availableRoles.map((role) => (
+                  <option key={role.id} value={role.id}>
+                    {roleLabel(role, locale)}
+                  </option>
+                ))}
+              </SelectInput>
               <div
                 aria-label={t('memberState')}
                 className="rz-seg"
@@ -502,7 +566,10 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                   <button
                     aria-pressed={segment === one.key}
                     key={one.key}
-                    onClick={() => setSegment(one.key)}
+                    onClick={() => {
+                      setSegment(one.key)
+                      setPage(1)
+                    }}
                     type="button"
                   >
                     {t(one.message)}
@@ -542,9 +609,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                       <tr>
                         <th scope="col">{t('columnUser')}</th>
                         <th scope="col">{t('columnRole')}</th>
-                        <th scope="col" title={t('noLastSeen')}>
-                          {t('columnActivity')}
-                        </th>
+                        <th scope="col">{t('columnActivity')}</th>
                         <th scope="col">{t('columnStatus')}</th>
                         {canManageAccess && (
                           // `relative` keeps the visually hidden label's
@@ -558,7 +623,7 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {shownMembers.map((member) => (
+                      {pageMembers.map((member) => (
                         <tr key={member.id}>
                           <th className="py-1.5" scope="row">
                             <span className="grid min-w-0 gap-0.5">
@@ -613,12 +678,14 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                             className="py-1.5"
                             data-label={t('columnActivity')}
                           >
-                            <span className="rz-muted">{t('inTeamSince')}</span>{' '}
-                            <span className="rz-mono">
-                              <DateValue
-                                value={member.joinedAt}
-                                withTime={false}
-                              />
+                            <span
+                              className="rz-mono rz-muted"
+                              title={
+                                format.dateTime(member.lastActiveAt) ??
+                                t('activityUnknown')
+                              }
+                            >
+                              {activityLabel(member.lastActiveAt)}
                             </span>
                           </td>
                           <td className="py-1.5" data-label={t('columnStatus')}>
@@ -737,9 +804,16 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                   </table>
                 </div>
               )}
+              <Pagination
+                label={t('membersPagination')}
+                page={currentPage}
+                pageSize={pageSize}
+                totalPages={totalPages}
+                total={shownMembers.length}
+                onPage={setPage}
+              />
               <div className="border-app-line flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t px-[var(--rz-cell-px)] py-2.5">
                 <p className="rz-caption m-0 text-pretty">
-                  <span title={t('noLastSeen')}>{t('lastSeenNote')}</span>{' '}
                   {seats === null
                     ? t('seatsNoteUnknown')
                     : seats.max == null
@@ -784,12 +858,30 @@ export const TeamScreen: ComponentType<CabinetModuleScreenProps> = () => {
                       key={item.id}
                     >
                       <div className="min-w-0 flex-1 overflow-hidden">
-                        <p
-                          className="rz-mono text-app-strong m-0 truncate font-semibold"
-                          title={item.code}
-                        >
-                          {item.code}
-                        </p>
+                        {status.active ? (
+                          <Button
+                            aria-label={t('copyInvitationCode', {
+                              code: item.code,
+                            })}
+                            title={t('copyInvitationCode', { code: item.code })}
+                            className="rz-mono text-app-strong max-w-full justify-start gap-1.5 px-0 font-semibold"
+                            variant="quiet"
+                            onClick={() => void copyInvitationCode(item.code)}
+                          >
+                            <span className="truncate">{item.code}</span>
+                            <Copy
+                              aria-hidden
+                              className="text-app-dim size-3.5 shrink-0"
+                            />
+                          </Button>
+                        ) : (
+                          <p
+                            className="rz-mono text-app-strong m-0 truncate font-semibold"
+                            title={item.code}
+                          >
+                            {item.code}
+                          </p>
+                        )}
                         <p className="rz-caption m-0">
                           {t('validUntil', {
                             role: roleLabel(item.role, locale),

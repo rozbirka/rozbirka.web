@@ -18,6 +18,9 @@ vi.mock('../auth/AuthContext', () => ({
   useOptionalAuth: () => null,
 }))
 vi.mock('./CabinetContext', () => ({ useCabinet: vi.fn() }))
+vi.mock('@/api/user-activity', () => ({
+  recordUserActivity: vi.fn().mockResolvedValue(undefined),
+}))
 
 const tenant: Tenant = {
   id: 'tenant-1',

@@ -17,6 +17,7 @@ export const locationContentsMessages = defineMessages({
     selectPart: 'Обрати: {name}',
     placePart: 'Розмістити {name}',
     placementLocked: 'Розміщення заблоковано під час інвентаризації.',
+    placementNoStock: 'Немає залишку на складі. Розміщення недоступне.',
     noMatches: 'Запчастин за цим запитом не знайдено.',
   },
   'en-GB': {
@@ -36,6 +37,8 @@ export const locationContentsMessages = defineMessages({
     selectPart: 'Select: {name}',
     placePart: 'Place {name}',
     placementLocked: 'Placement is locked during stocktake.',
+    placementNoStock:
+      'There is no stock in the warehouse. Placement is unavailable.',
     noMatches: 'No parts match this search.',
   },
   pl: {
@@ -55,6 +58,7 @@ export const locationContentsMessages = defineMessages({
     selectPart: 'Zaznacz: {name}',
     placePart: 'Umieść {name}',
     placementLocked: 'Lokalizacja jest zablokowana podczas inwentaryzacji.',
+    placementNoStock: 'Brak stanu magazynowego. Umieszczenie jest niedostępne.',
     noMatches: 'Nie znaleziono części dla tego wyszukiwania.',
   },
 })

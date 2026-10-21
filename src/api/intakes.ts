@@ -89,6 +89,7 @@ export interface UpdateIntakeRequest {
 export interface AddIntakePartRequest {
   name: string
   partType?: string | null | undefined
+  oemCode?: string | null | undefined
   condition?: string | null | undefined
   quantity: number
   unit?: string | null | undefined
@@ -101,6 +102,7 @@ export interface IntakePartCreateResult {
   id: string
   name: string
   partType: string | null
+  oemCode: string | null
   condition: string
   unit: string
   source: string
@@ -201,6 +203,7 @@ export const intakesApi = {
     const safeRequest: AddIntakePartRequest = {
       name: request.name,
       partType: request.partType,
+      oemCode: request.oemCode,
       condition: request.condition,
       quantity: request.quantity,
       unit: request.unit,

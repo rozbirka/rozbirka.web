@@ -1,4 +1,6 @@
-/* QR label print queue (docs/design-system/v2/modules/12 Склади, section 6).
+@import './location-list-layout.css';
+
+/* QR label selection (docs/design-system/v2/modules/12 Склади, section 6).
    Everything else comes from kit classes; this file only lays out the rows
    the kit has no pattern for. */
 .location-labels__head {
@@ -17,4 +19,17 @@
   flex: 1 1 220px;
   min-width: 0;
   margin: 0;
+}
+
+.location-labels__code {
+  color: var(--rz-text-dim);
+  font-family: var(--rz-font-mono);
+  font-size: var(--rz-fs-caption);
+}
+
+@media (min-width: 768px) {
+  .location-labels .rz-table tbody tr {
+    /* Browser links have a separate 1px row divider. */
+    height: calc(var(--location-list-row-height) + 1px);
+  }
 }

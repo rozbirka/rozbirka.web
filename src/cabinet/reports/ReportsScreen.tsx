@@ -128,20 +128,9 @@ const rangeProblems = (range: DateRange, locale: Locale) => ({
       : null,
 })
 
-const localDayBoundaryUtc = (value: string, endOfDay: boolean) => {
-  const year = Number(value.slice(0, 4))
-  const month = Number(value.slice(5, 7))
-  const day = Number(value.slice(8, 10))
-  return new Date(
-    year,
-    month - 1,
-    day,
-    endOfDay ? 23 : 0,
-    endOfDay ? 59 : 0,
-    endOfDay ? 59 : 0,
-    endOfDay ? 999 : 0,
-  ).toISOString()
-}
+// Core stores calendar dates and applies the report's business time zone itself.
+const calendarBoundary = (value: string, endOfDay: boolean) =>
+  `${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z`
 
 const statusOf = (report: ReportJob): DisplayStatus => {
   if (
@@ -272,7 +261,9 @@ const sameReport = (left: ReportJob, right: ReportJob) =>
   left.completedAt === right.completedAt &&
   left.expiresAt === right.expiresAt &&
   left.errorMessage === right.errorMessage &&
-  left.fileSizeBytes === right.fileSizeBytes
+  left.fileSizeBytes === right.fileSizeBytes &&
+  left.period?.from === right.period?.from &&
+  left.period?.to === right.period?.to
 
 export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
   definition,
@@ -299,9 +290,8 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
   const [creatingScopeKey, setCreatingScopeKey] = useState<string | null>(null)
   const [downloading, setDownloading] = useState<ScopedDownload | null>(null)
   /**
-   * The list endpoint does not return the range a job covers, so the period is
-   * known only for jobs this session asked for — in this tenant. Everything
-   * else says the period is unknown rather than guessing one.
+   * Compatibility fallback for jobs created against an older Core version.
+   * Persisted API periods take precedence and survive reopening the screen.
    */
   const [periods, setPeriods] = useState<Record<string, ScopedPeriod>>({})
   const currentScopeRef = useRef(scope?.key ?? null)
@@ -439,8 +429,8 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
         {
           type: 'carSales',
           carSales: {
-            from: localDayBoundaryUtc(range.from, false),
-            to: localDayBoundaryUtc(range.to, true),
+            from: calendarBoundary(range.from, false),
+            to: calendarBoundary(range.to, true),
           },
         },
         { signal },
@@ -641,7 +631,13 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
               variant: 'primary',
               cell: (report) => {
                 const known = periods[report.id]
-                const period = known?.key === scopeKey ? known.range : undefined
+                const persisted = report.period
+                const period =
+                  persisted && validRange(persisted)
+                    ? persisted
+                    : known?.key === scopeKey
+                      ? known.range
+                      : undefined
                 if (period === undefined) {
                   return (
                     <>

@@ -15,6 +15,7 @@ export function locationPartsFilter(
   target: LocationContentsTarget,
   query: string,
   page: number,
+  pageSize = 10,
 ): PartSearchRequest {
   return {
     ...(target.warehouseId ? { warehouseIds: [target.warehouseId] } : {}),
@@ -25,7 +26,7 @@ export function locationPartsFilter(
     ...(target.kind === 'direct' ? { missingShelf: true } : {}),
     ...(query.trim() ? { query: query.trim() } : {}),
     page,
-    pageSize: 10,
+    pageSize,
     sort: 'name_asc',
   }
 }

@@ -33,6 +33,7 @@ import { RedesignShell } from '../redesign-shell'
 import { Kpi, KpiStrip } from '../redesign-kpi'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { DeliveryPreferencesPanel } from './delivery-preferences-panel'
+import { DeliveryDepositPanel } from './delivery-deposit-panel'
 import { DispatchPointsPanel } from './dispatch-points-panel'
 import { TrackingSubscriptionPanel } from './tracking-panel'
 import { WebhookPanel } from './webhook-panel'
@@ -572,6 +573,7 @@ export function NovaPoshtaScreen() {
 
       {tab === 'settings' && (
         <div className="grid max-w-[640px] gap-4">
+          <DeliveryDepositPanel key={scopeKey} />
           <DeliveryPreferencesPanel integrationId={integration.id} />
           <Card title={t('connectionCard')}>
             <Field hint={t('noRename')} label={t('nameLabel')}>

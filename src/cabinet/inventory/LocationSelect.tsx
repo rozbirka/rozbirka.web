@@ -13,24 +13,31 @@ interface LocationOption {
   context?: string
 }
 
-/** A single location choice; filtering never changes the saved selection. */
-export function LocationSelect({
-  label,
-  searchLabel,
-  noneLabel,
-  value,
-  onChange,
-  options,
-  disabled = false,
-}: {
+type LocationSelectProps = {
   label: string
   searchLabel: string
   noneLabel: string
-  value: string | null
-  onChange: (id: string | null) => void
   options: LocationOption[]
   disabled?: boolean
-}) {
+  allowNone?: boolean
+} & (
+  | {
+      multiple?: false
+      value: string | null
+      onChange: (id: string | null) => void
+    }
+  | {
+      multiple: true
+      value: readonly string[]
+      onChange: (ids: string[]) => void
+    }
+)
+
+/** Compact location choices; filtering never changes the saved selection. */
+export function LocationSelect(props: LocationSelectProps) {
+  const { label, searchLabel, noneLabel, options, disabled = false } = props
+  const hasEmptyOption = !props.multiple && props.allowNone !== false
+  const values = props.multiple ? props.value : props.value ? [props.value] : []
   const t = useT(locationBrowserMessages)
   const id = useId()
   const listRef = useRef<HTMLDivElement>(null)
@@ -45,17 +52,36 @@ export function LocationSelect({
         text?.toLocaleLowerCase().includes(needle),
       ),
   )
-  const items = [{ id: '', name: noneLabel }, ...matches]
+  const items = hasEmptyOption
+    ? [{ id: '', name: noneLabel }, ...matches]
+    : matches
   const requestedIndex = items.findIndex((item) => item.id === activeId)
   const activeIndex =
-    requestedIndex >= 0 ? requestedIndex : needle && matches.length ? 1 : 0
+    requestedIndex >= 0
+      ? requestedIndex
+      : hasEmptyOption && needle && matches.length
+        ? 1
+        : 0
   const active = needle && !matches.length ? null : items[activeIndex]
-  const selected = options.find((option) => option.id === value)
-  const selectedName = selected
-    ? [selected.context, selected.name].filter(Boolean).join(' · ')
-    : noneLabel
+  const selected = options.filter((option) => values.includes(option.id))
+  const selectedName =
+    selected.length > 1
+      ? t('selectedLocations', { count: selected.length })
+      : selected[0]
+        ? [selected[0].context, selected[0].name].filter(Boolean).join(' · ')
+        : noneLabel
+  const isSelected = (id: string) =>
+    id ? values.includes(id) : values.length === 0
   const choose = (id: string) => {
-    onChange(id || null)
+    if (props.multiple) {
+      props.onChange(
+        values.includes(id)
+          ? values.filter((value) => value !== id)
+          : [...values, id],
+      )
+    } else {
+      props.onChange(id || null)
+    }
     setOpen(false)
   }
   useEffect(() => {
@@ -95,7 +121,7 @@ export function LocationSelect({
       onOpenChange={(next) => {
         setOpen(next)
         setQuery('')
-        setActiveId(value ?? '')
+        setActiveId(values[0] ?? '')
       }}
     >
       <Popover.Trigger asChild>
@@ -143,6 +169,7 @@ export function LocationSelect({
             ref={listRef}
             id={`${id}-list`}
             role="listbox"
+            aria-multiselectable={props.multiple}
             aria-label={label}
             className="min-h-0 max-h-64 overflow-y-auto overscroll-contain p-1.5"
           >
@@ -152,7 +179,7 @@ export function LocationSelect({
                 id={`${id}-option-${index}`}
                 type="button"
                 role="option"
-                aria-selected={(value ?? '') === option.id}
+                aria-selected={isSelected(option.id)}
                 tabIndex={-1}
                 data-active={active?.id === option.id}
                 onClick={() => choose(option.id)}
@@ -174,7 +201,7 @@ export function LocationSelect({
                     </span>
                   ) : null}
                 </span>
-                {(value ?? '') === option.id ? (
+                {isSelected(option.id) ? (
                   <Check aria-hidden className="text-brand size-4 shrink-0" />
                 ) : null}
               </button>

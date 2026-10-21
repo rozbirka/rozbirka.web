@@ -3,7 +3,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { ToastProvider } from '@/components/app'
 import { LocaleProvider } from '@/i18n'
 import {
@@ -127,6 +127,8 @@ const teamScreen = () => (
 )
 const renderScreen = () => render(teamScreen())
 
+afterEach(() => vi.restoreAllMocks())
+
 /** The member row keeps its actions in a menu, as the design has it. */
 const openMemberMenu = async (
   user: ReturnType<typeof userEvent.setup>,
@@ -244,7 +246,11 @@ it('loads the member, role, and invitation lifecycle with tenant cancellation', 
     await screen.findByRole('heading', { name: 'Команда' }),
   ).toBeInTheDocument()
   expect(await screen.findByText('Олена')).toBeInTheDocument()
-  expect(screen.queryByRole('option', { name: 'Власник' })).toBeNull()
+  expect(
+    within(
+      screen.getByRole('combobox', { name: 'Роль для Олена' }),
+    ).queryByRole('option', { name: 'Власник' }),
+  ).toBeNull()
   expect(screen.getByText('Активне')).toBeInTheDocument()
   expect(teamApi.listMembers).toHaveBeenCalledWith({
     signal: tenantRequestScope.signal,
@@ -259,6 +265,114 @@ it('loads the member, role, and invitation lifecycle with tenant cancellation', 
   const options = vi.mocked(teamApi.listMembers).mock.calls[0]?.[0]
   tenantRequestScope.rotate()
   expect(options?.signal?.aborted).toBe(true)
+})
+
+it.each(['code', 'icon', 'keyboard'])(
+  'copies the exact invitation code using the %s',
+  async (target) => {
+    const user = userEvent.setup()
+    const writeText = vi
+      .spyOn(navigator.clipboard, 'writeText')
+      .mockResolvedValue()
+    renderScreen()
+    const button = await screen.findByRole('button', {
+      name: 'Копіювати код запрошення INVITE-1',
+    })
+    if (target === 'code')
+      await user.click(within(button).getByText('INVITE-1'))
+    else if (target === 'icon') await user.click(button.querySelector('svg')!)
+    else {
+      button.focus()
+      await user.keyboard('{Enter}')
+    }
+    expect(writeText).toHaveBeenCalledWith('INVITE-1')
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Код запрошення скопійовано.',
+    )
+  },
+)
+
+it('shows a clipboard failure without claiming that the invitation was copied', async () => {
+  const user = userEvent.setup()
+  vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(
+    new Error('Denied'),
+  )
+  renderScreen()
+  await user.click(
+    await screen.findByRole('button', {
+      name: 'Копіювати код запрошення INVITE-1',
+    }),
+  )
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Не вдалося скопіювати код запрошення.',
+  )
+  expect(
+    screen.queryByText('Код запрошення скопійовано.'),
+  ).not.toBeInTheDocument()
+})
+
+it('shows actual last activity instead of the join date', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-21T12:00:00Z'))
+  vi.mocked(teamApi.listMembers).mockResolvedValue([
+    { ...member, lastActiveAt: '2026-10-21T08:00:00Z' },
+    {
+      ...member,
+      id: 'yesterday',
+      userId: 'yesterday',
+      name: 'Учора',
+      lastActiveAt: '2026-10-20T08:00:00Z',
+    },
+    {
+      ...member,
+      id: 'old',
+      userId: 'old',
+      name: 'Давно',
+      lastActiveAt: '2026-09-01T08:00:00Z',
+    },
+  ])
+  renderScreen()
+  expect(await screen.findByText('Сьогодні')).toBeVisible()
+  expect(screen.getByText('Вчора')).toBeVisible()
+  expect(screen.getByText('01.09.2026')).toBeVisible()
+  expect(screen.queryByText(/У команді з/)).not.toBeInTheDocument()
+})
+
+it('paginates members and resets the page when filtering by role or search', async () => {
+  const user = userEvent.setup()
+  vi.mocked(teamApi.listMembers).mockResolvedValue(
+    Array.from({ length: 25 }, (_, i) => ({
+      ...member,
+      id: `member-${i}`,
+      userId: `user-${i}`,
+      name: `Учасник ${i + 1}`,
+      role: i === 24 ? managerRole : mechanicRole,
+    })),
+  )
+  renderScreen()
+  expect(await screen.findByText('Учасник 1')).toBeVisible()
+  expect(screen.queryByText('Учасник 21')).not.toBeInTheDocument()
+  const pager = screen.getByRole('navigation', { name: 'Пагінація учасників' })
+  await user.click(
+    within(pager).getByRole('button', { name: 'Наступна сторінка' }),
+  )
+  expect(screen.getByText('Учасник 21')).toBeVisible()
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Фільтр за роллю' }),
+    managerRole.id,
+  )
+  expect(screen.getByText('Учасник 25')).toBeVisible()
+  expect(screen.queryByText('Учасник 21')).not.toBeInTheDocument()
+  expect(within(pager).getByText('1–1 з 1')).toBeVisible()
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Фільтр за роллю' }),
+    '',
+  )
+  await user.type(
+    screen.getByRole('searchbox', { name: 'Пошук учасників' }),
+    'Учасник 25',
+  )
+  expect(screen.getByText('Учасник 25')).toBeVisible()
+  expect(within(pager).getByText('1–1 з 1')).toBeVisible()
 })
 
 it('marks invitation lifecycle states and only allows revoking active invitations', async () => {
@@ -813,7 +927,7 @@ it('keeps the owner role read-only and excludes Owner from role assignment and i
   expect(
     screen.getByRole('button', { name: 'Дії з учасником Олена' }),
   ).toBeInTheDocument()
-  expect(screen.getByText('Власник')).toBeInTheDocument()
+  expect(screen.getByText('Власник', { selector: 'span' })).toBeInTheDocument()
   expect(
     within(screen.getByLabelText('Роль для Олена')).queryByRole('option', {
       name: 'Власник',
@@ -947,9 +1061,10 @@ it('says what the team endpoints do not carry instead of inventing it', async ()
   vi.mocked(teamApi.listInvitations).mockResolvedValue([invitation()])
   renderScreen()
 
-  // No last-seen field exists, so the activity column says so rather than
-  // dressing the join date up as a login.
-  expect(await screen.findByText(/Останній вхід не зберігається/)).toBeVisible()
+  // Missing history stays unknown instead of substituting the join date.
+  expect(
+    await screen.findByTitle('Ще немає даних про активність.'),
+  ).toHaveTextContent('—')
   expect(screen.getByText('пошти й телефону не вказано')).toBeVisible()
   // An invitation is a code, not a letter: the UI does not pretend it can
   // resend something when the backend has no delivery target.
@@ -996,15 +1111,19 @@ it('renders the team in English (UK)', async () => {
   expect(screen.getByText('Showing 2 of 2 members')).toBeInTheDocument()
   expect(screen.getByText('you')).toBeInTheDocument()
   // System role translated, custom role name as the business gave it.
-  expect(screen.queryByRole('option', { name: 'Owner' })).toBeNull()
+  expect(
+    within(
+      screen.getByRole('combobox', { name: 'Role for Олена' }),
+    ).queryByRole('option', { name: 'Owner' }),
+  ).toBeNull()
   expect(screen.queryByLabelText('Role for Ivan')).toBeNull()
-  expect(screen.getByText('Owner')).toBeInTheDocument()
+  expect(screen.getByText('Owner', { selector: 'span' })).toBeInTheDocument()
   expect(
     screen.getAllByRole('option', { name: 'Механік' }).length,
   ).toBeGreaterThan(0)
   expect(
-    screen.getAllByText(/in the team since/)[0]?.closest('td'),
-  ).toHaveTextContent('01/08/2026')
+    screen.getAllByTitle('No activity recorded yet.')[0],
+  ).toHaveTextContent('—')
   expect(screen.getByText('1 active')).toBeInTheDocument()
   expect(screen.getByText(/Механік · valid until/)).toHaveTextContent(
     '01/09/2026',

@@ -24,14 +24,23 @@ function Url() {
   return <output data-testid="url">{useLocation().search}</output>
 }
 
-function mount(canManage = true) {
+function mount(canManage = true, archivedOnly = false) {
   const onEdit = vi.fn()
   const onArchive = vi.fn()
+  const onRestore = vi.fn()
   render(
-    <MemoryRouter initialEntries={['/warehouses/wh?locationPage=2&keep=1']}>
+    <MemoryRouter
+      initialEntries={[
+        `/warehouses/wh?locationPage=2&keep=1${archivedOnly ? '&locationStatus=archived' : ''}`,
+      ]}
+    >
       <LocationSearch label="Пошук зони" placeholder="Назва або код" />
       <WarehouseZoneBrowser
-        zones={[unassigned, ...physical]}
+        zones={[
+          unassigned,
+          ...physical,
+          { ...physical[0]!, id: 'old', name: 'Архівна зона', isActive: false },
+        ]}
         base="/warehouses"
         partsBase={canManage ? '/parts' : null}
         unassignedHref="/warehouses/wh/unassigned"
@@ -39,13 +48,14 @@ function mount(canManage = true) {
         onAdd={vi.fn()}
         onEdit={onEdit}
         onArchive={onArchive}
+        onRestore={onRestore}
         headerActions={null}
         printWorkspace={null}
       />
       <Url />
     </MemoryRouter>,
   )
-  return { onEdit, onArchive }
+  return { onEdit, onArchive, onRestore }
 }
 
 it('searches physical zones by code, resets pagination and keeps unassigned separate', async () => {
@@ -102,3 +112,28 @@ it('keeps zone navigation without management or parts links', () => {
     screen.queryByRole('button', { name: 'Дії із зоною Зона 11' }),
   ).toBeNull()
 })
+
+it.each([true, false])(
+  'shows archived zones and gates restore by management permission (%s)',
+  async (canManage) => {
+    const user = userEvent.setup()
+    const { onRestore } = mount(canManage, true)
+    expect(screen.getByText('Архівна зона')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Архівна зона' }),
+    ).not.toBeInTheDocument()
+    const action = screen.queryByRole('button', {
+      name: 'Дії із зоною Архівна зона',
+    })
+    if (canManage) {
+      await user.click(action!)
+      expect(
+        screen.queryByRole('menuitem', { name: /Архівувати зону/ }),
+      ).not.toBeInTheDocument()
+      await user.click(screen.getByRole('menuitem', { name: 'Розархівувати' }))
+      expect(onRestore).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'old' }),
+      )
+    } else expect(action).not.toBeInTheDocument()
+  },
+)

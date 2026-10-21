@@ -380,7 +380,7 @@ it('recovers an expired report by creating a replacement with the selected range
   expect(options?.signal).toBeInstanceOf(AbortSignal)
 })
 
-it('serializes Europe/Kyiv winter-to-summer calendar boundaries as inclusive UTC instants', async () => {
+it('preserves calendar dates across Europe/Kyiv winter-to-summer offsets', async () => {
   const originalTimeZone = process.env['TZ']
   process.env['TZ'] = 'Europe/Kyiv'
 
@@ -397,8 +397,8 @@ it('serializes Europe/Kyiv winter-to-summer calendar boundaries as inclusive UTC
     await waitFor(() => expect(reportsApi.create).toHaveBeenCalledTimes(1))
     const [request] = vi.mocked(reportsApi.create).mock.calls[0] ?? []
     expect(request?.carSales).toEqual({
-      from: '2026-01-14T22:00:00.000Z',
-      to: '2026-07-15T20:59:59.999Z',
+      from: '2026-01-15T00:00:00.000Z',
+      to: '2026-07-15T23:59:59.999Z',
     })
   } finally {
     if (originalTimeZone === undefined) delete process.env['TZ']
@@ -617,6 +617,31 @@ it('shows the covered period for a report created in this session', async () => 
   const row = await screen.findByRole('rowheader')
   // v2 (module 31): the start drops the year the end already states.
   expect(row).toHaveTextContent('15.01 – 20.01.2026')
+})
+
+it('shows persisted report periods after reopening the screen', async () => {
+  vi.mocked(reportsApi.list).mockResolvedValue({
+    items: [
+      {
+        ...report('completed'),
+        period: { from: '2026-10-15', to: '2026-10-21' },
+      },
+    ],
+    page: 1,
+    pageSize: 20,
+    total: 1,
+    totalPages: 1,
+  })
+  const view = render(<ReportsScreen {...screenProps} />)
+  expect(await screen.findByRole('rowheader')).toHaveTextContent(
+    '15.10 – 21.10.2026',
+  )
+  view.unmount()
+  render(<ReportsScreen {...screenProps} />)
+  expect(await screen.findByRole('rowheader')).toHaveTextContent(
+    '15.10 – 21.10.2026',
+  )
+  expect(reportsApi.create).not.toHaveBeenCalled()
 })
 
 it('marks a period the server never returned as unknown', async () => {

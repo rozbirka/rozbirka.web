@@ -7,7 +7,6 @@ import {
   LayoutGrid,
   Pencil,
   Plus,
-  MousePointerClick,
   Printer,
   RefreshCw,
   TriangleAlert,
@@ -61,28 +60,43 @@ import { placementMessages } from '../inventory/placement-messages'
 import { LocationSelect } from '../inventory/LocationSelect'
 import {
   LocationBrowser,
-  LocationBrowserHeader,
   LocationSearch,
+  LocationStatusFilter,
 } from '../inventory/LocationBrowser'
 import { LocationLabelsPage } from '../inventory/LocationLabelPrinter'
 import { locationPartsHref } from '../inventory/location-contents'
 import { locationBrowserMessages } from '../inventory/location-browser-messages'
+import { locationContentsMessages } from '../inventory/location-contents-messages'
 import { warehouseMessages } from '../inventory/warehouse-messages'
 import { Crumbs, RedesignShell } from '../redesign-shell'
 import { BackAction, WarehousePageHead } from './warehouse-page'
 import { inventoryCodeFromName } from '../inventory/inventory-code'
 import { ZoneEditorSheet, type ZoneDraft } from '../inventory/ZoneEditorSheet'
 import { Resource } from '../inventory/InventoryResource'
+import { WarehouseStatisticsError } from './WarehouseStatisticsError'
 import { LocationPartsList } from '../inventory/LocationPartsList'
 import { unassignedMessages } from './unassigned-messages'
 import { BulkPlacementSheet } from './BulkPlacementSheet'
+import { PlacementPartInfo } from './PlacementPartInfo'
+import {
+  hasPlacementStock,
+  warehouseStockStatuses,
+} from './placement-availability'
 import { useLoad, usePermission } from '../inventory/use-stock-resource'
 import { StockStat } from '../inventory/StockStat'
 import { Step } from '../inventory/StockStep'
 import { WarehouseZoneBrowser } from './WarehouseZoneBrowser'
 import { WarehouseBrowser } from './WarehouseBrowser'
 
-export function WarehousesScreen({
+export function WarehousesScreen({ ...props }: CabinetModuleScreenProps) {
+  return (
+    <div className="warehouse-module contents">
+      <WarehouseRoutes {...props} />
+    </div>
+  )
+}
+
+function WarehouseRoutes({
   definition: _definition,
 }: CabinetModuleScreenProps) {
   const { pathname } = useLocation()
@@ -135,6 +149,7 @@ function UnassignedPartsView({ id }: { id: string }) {
         const zone = warehouse.zones.find((item) => item.isSystemUnassigned)
         return (
           <RedesignShell
+            width="workspace"
             crumb={
               <Crumbs
                 items={[
@@ -244,18 +259,22 @@ function UnassignedPartsView({ id }: { id: string }) {
                 }
               />
             )}
-            {placing ? (
-              <PartPlacementDrawer
+            {placing && zone ? (
+              <BulkPlacementSheet
                 key={placing.id}
-                partId={placing.id}
-                initialWarehouseId={warehouse.id}
-                requirePhysicalZone
+                parts={[placing]}
+                warehouseId={warehouse.id}
+                sourceZoneId={zone.id}
+                single
                 onClose={() => setPlacing(null)}
-                onSaved={() => {
-                  toast?.show({
-                    tone: 'ok',
-                    message: t('placed', { name: placing.name }),
-                  })
+                onApplied={(_ids, placedIds) => {
+                  if (placedIds.has(placing.id)) {
+                    toast?.show({
+                      tone: 'ok',
+                      message: t('placed', { name: placing.name }),
+                    })
+                    setPlacing(null)
+                  }
                   setSelectedParts((current) => {
                     const next = new Map(current)
                     next.delete(placing.id)
@@ -297,6 +316,27 @@ interface WarehousesOverviewData {
   warehouses: Warehouse[]
   byWarehouse: Map<string, number> | null
   partsTotal: number | null
+  statisticsError: boolean
+}
+
+const overviewComplete = (data: WarehousesOverviewData) => !data.statisticsError
+const overviewLoadOptions = {
+  retainOnReload: true,
+  mergeIncomplete: (
+    previous: WarehousesOverviewData,
+    next: WarehousesOverviewData,
+  ): WarehousesOverviewData => ({
+    ...next,
+    partsTotal: next.partsTotal ?? previous.partsTotal,
+    byWarehouse:
+      next.byWarehouse ??
+      (next.warehouses.length === previous.warehouses.length &&
+      next.warehouses.every((warehouse) =>
+        previous.warehouses.some((item) => item.id === warehouse.id),
+      )
+        ? previous.byWarehouse
+        : null),
+  }),
 }
 
 function WarehousesOverview() {
@@ -314,28 +354,44 @@ function WarehousesOverview() {
     async (signal: AbortSignal): Promise<WarehousesOverviewData> => {
       const warehouses = await inventoryApi.getWarehouses({ signal })
       const warehouseIds = warehouses.map((warehouse) => warehouse.id)
-      const [byWarehouse, partsTotal] = await Promise.all([
-        canSeeParts
-          ? partsApi.facets({}, ['warehouse'], { signal }).then(
-              (facets) =>
-                new Map(facets.warehouses.map((item) => [item.id, item.count])),
-              () => null,
-            )
-          : Promise.resolve(null),
-        canSeeParts
-          ? warehouseIds.length === 0
-            ? Promise.resolve(0)
-            : partsApi.search({ warehouseIds, pageSize: 1 }, { signal }).then(
-                (result) => result.total,
-                () => null,
-              )
-          : Promise.resolve(null),
+      if (!canSeeParts || warehouseIds.length === 0) {
+        return {
+          warehouses,
+          byWarehouse: canSeeParts ? new Map() : null,
+          partsTotal: canSeeParts ? 0 : null,
+          statisticsError: false,
+        }
+      }
+      const [facets, total] = await Promise.allSettled([
+        partsApi.facets({ statuses: warehouseStockStatuses }, ['warehouse'], {
+          signal,
+        }),
+        partsApi.search(
+          { warehouseIds, statuses: warehouseStockStatuses, pageSize: 1 },
+          { signal },
+        ),
       ])
-      return { warehouses, byWarehouse, partsTotal }
+      return {
+        warehouses,
+        byWarehouse:
+          facets.status === 'fulfilled'
+            ? new Map(
+                facets.value.warehouses.map((item) => [item.id, item.count]),
+              )
+            : null,
+        partsTotal: total.status === 'fulfilled' ? total.value.total : null,
+        statisticsError:
+          facets.status === 'rejected' || total.status === 'rejected',
+      }
     },
     [canSeeParts],
   )
-  const resource = useLoad(loader, 'warehouses-overview')
+  const resource = useLoad(
+    loader,
+    'warehouses-overview',
+    overviewComplete,
+    overviewLoadOptions,
+  )
   const [adding, setAdding] = useState(false)
   const [draft, setDraft] = useState({ name: '', code: '' })
   const [creating, setCreating] = useState(false)
@@ -367,7 +423,12 @@ function WarehousesOverview() {
 
   return (
     <Resource retry={resource.reload} state={resource.state}>
-      {({ warehouses, byWarehouse, partsTotal }: WarehousesOverviewData) => {
+      {({
+        warehouses,
+        byWarehouse,
+        partsTotal,
+        statisticsError,
+      }: WarehousesOverviewData) => {
         const activeCount = warehouses.filter(
           (warehouse) => warehouse.isActive,
         ).length
@@ -395,6 +456,15 @@ function WarehousesOverview() {
               title={ti('crumbWarehouses')}
               sub={t('warehousesPageLead')}
             />
+            {statisticsError ||
+            (resource.state.kind === 'ready' && resource.state.refreshError) ? (
+              <WarehouseStatisticsError
+                onRetry={resource.refresh}
+                pending={
+                  resource.state.kind === 'ready' && resource.state.refreshing
+                }
+              />
+            ) : null}
             {warehouses.length ? (
               <>
                 <LocationSearch
@@ -535,6 +605,7 @@ interface WarehouseStock {
   /** Parts per zone, counted under this warehouse's filter. */
   byZone: Map<string, number>
   total: number | null
+  loadError: boolean
 }
 
 interface WarehouseData {
@@ -545,6 +616,21 @@ interface WarehouseData {
 const EMPTY_STOCK: WarehouseStock = {
   byZone: new Map(),
   total: null,
+  loadError: false,
+}
+
+const warehouseComplete = (data: WarehouseData) => !data.stock.loadError
+const warehouseLoadOptions = {
+  retainOnReload: true,
+  mergeIncomplete: (
+    previous: WarehouseData,
+    next: WarehouseData,
+  ): WarehouseData => ({
+    ...next,
+    stock: next.stock.loadError
+      ? { ...previous.stock, loadError: true }
+      : next.stock,
+  }),
 }
 
 /**
@@ -558,15 +644,27 @@ async function loadWarehouseStock(
 ): Promise<WarehouseStock> {
   try {
     const [facets, all] = await Promise.all([
-      partsApi.facets({ warehouseIds: [warehouseId] }, ['zone'], { signal }),
-      partsApi.search({ warehouseIds: [warehouseId], pageSize: 1 }, { signal }),
+      partsApi.facets(
+        { warehouseIds: [warehouseId], statuses: warehouseStockStatuses },
+        ['zone'],
+        { signal },
+      ),
+      partsApi.search(
+        {
+          warehouseIds: [warehouseId],
+          statuses: warehouseStockStatuses,
+          pageSize: 1,
+        },
+        { signal },
+      ),
     ])
     return {
       byZone: new Map(facets.zones.map((zone) => [zone.id, zone.count])),
       total: all.total,
+      loadError: false,
     }
   } catch {
-    return EMPTY_STOCK
+    return { ...EMPTY_STOCK, loadError: true }
   }
 }
 
@@ -579,6 +677,7 @@ function WarehouseView({ id }: { id: string }) {
   const navigate = useNavigate()
   const [labelParams, setLabelParams] = useSearchParams()
   const labelsOpen = labelParams.get('labels') === '1'
+  const archivedOnly = labelParams.get('locationStatus') === 'archived'
   const labelTriggerRef = useRef<HTMLButtonElement>(null)
   const canManage = usePermission('inventory.zones.manage')
   const canSeeParts = usePermission('parts.view')
@@ -590,17 +689,37 @@ function WarehouseView({ id }: { id: string }) {
   )
   const loader = useCallback(
     async (signal: AbortSignal): Promise<WarehouseData> => {
-      const [warehouse, stock] = await Promise.all([
+      const [warehouse, stock, archivedZones] = await Promise.all([
         inventoryApi.getWarehouse(id, { signal }),
         canSeeParts
           ? loadWarehouseStock(id, signal)
           : Promise.resolve(EMPTY_STOCK),
+        archivedOnly
+          ? inventoryApi.getZones({
+              warehouseId: id,
+              archivedOnly: true,
+              signal,
+            })
+          : Promise.resolve([]),
       ])
-      return { warehouse, stock }
+      return {
+        warehouse: {
+          ...warehouse,
+          zones: [
+            ...new Map(
+              [...warehouse.zones, ...archivedZones].map((zone) => [
+                zone.id,
+                zone,
+              ]),
+            ).values(),
+          ],
+        },
+        stock,
+      }
     },
-    [canSeeParts, id],
+    [canSeeParts, id, archivedOnly],
   )
-  const resource = useLoad(loader, id)
+  const resource = useLoad(loader, id, warehouseComplete, warehouseLoadOptions)
   const [operationError, setOperationError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   /** Which write is asking for input: at most one dialog is open at a time. */
@@ -707,13 +826,20 @@ function WarehouseView({ id }: { id: string }) {
             inventoryBase={base}
             returnFocusRef={labelTriggerRef}
           />
+        ) : archivedOnly ? (
+          <div className="grid gap-3 p-[var(--rz-card-p)]">
+            <LocationStatusFilter label={t('statusZones')} />
+            <Button onClick={resource.reload}>{ti('retry')}</Button>
+          </div>
         ) : null
       }
     >
       {({ warehouse, stock }: WarehouseData) => {
         const zones = warehouse.zones
         /** The zones a person actually fills — the catch-all is not one. */
-        const real = zones.filter((zone) => !zone.isSystemUnassigned)
+        const real = zones.filter(
+          (zone) => zone.isActive && !zone.isSystemUnassigned,
+        )
         const partsIn = (zoneId: string) => stock.byZone.get(zoneId) ?? 0
         const filled = real.filter((zone) => partsIn(zone.id) > 0).length
         const occupancy =
@@ -766,7 +892,10 @@ function WarehouseView({ id }: { id: string }) {
                             label: t('archiveWarehouse'),
                             icon: <Archive aria-hidden />,
                             destructive: true as const,
-                            onSelect: () => setArchivingWarehouse(true),
+                            onSelect: () => {
+                              setOperationError(null)
+                              setArchivingWarehouse(true)
+                            },
                           },
                         ]
                       : []),
@@ -807,6 +936,16 @@ function WarehouseView({ id }: { id: string }) {
               <Notice tone="danger">{operationError}</Notice>
             ) : null}
 
+            {stock.loadError ||
+            (resource.state.kind === 'ready' && resource.state.refreshError) ? (
+              <WarehouseStatisticsError
+                onRetry={resource.refresh}
+                pending={
+                  resource.state.kind === 'ready' && resource.state.refreshing
+                }
+              />
+            ) : null}
+
             <div className="rz-kpis">
               <StockStat
                 label={t('statPositions')}
@@ -816,7 +955,7 @@ function WarehouseView({ id }: { id: string }) {
               />
               <StockStat
                 label={t('statFilled')}
-                meta={stock.total === null ? t('needsPartsView') : ''}
+                meta={!canSeeParts ? t('needsPartsView') : ''}
                 tone={occupancy !== null && occupancy >= 80 ? 'warn' : 'plain'}
                 unit={
                   stock.total === null
@@ -838,7 +977,21 @@ function WarehouseView({ id }: { id: string }) {
                 setOperationError(null)
                 setEditingZone(zone)
               }}
-              onArchive={setArchivingZone}
+              pending={busy}
+              onRestore={(zone) => {
+                if (busy) return
+                void run((signal) =>
+                  inventoryApi
+                    .restoreZone(zone.id, { signal })
+                    .then(() => undefined),
+                ).then((ok) => {
+                  if (ok) resource.reload()
+                })
+              }}
+              onArchive={(zone) => {
+                setOperationError(null)
+                setArchivingZone(zone)
+              }}
               headerActions={
                 <ActionMenu
                   triggerRef={labelTriggerRef}
@@ -916,6 +1069,7 @@ function WarehouseView({ id }: { id: string }) {
 
             <ConfirmDialog
               confirmLabel={t('archiveWarehouse')}
+              error={operationError}
               consequence={t('archiveWarehouseConsequence', {
                 name: warehouse.name,
               })}
@@ -931,6 +1085,7 @@ function WarehouseView({ id }: { id: string }) {
 
             <ConfirmDialog
               confirmLabel={t('archiveZone')}
+              error={operationError}
               consequence={
                 archivingZone === null
                   ? ''
@@ -1025,6 +1180,7 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
           !zone.isSystemUnassigned
         return (
           <RedesignShell
+            width={usable && !labelsOpen ? 'workspace' : 'list'}
             crumb={
               <Crumbs
                 items={[
@@ -1158,6 +1314,9 @@ function ZoneLocations({
   const navigate = useNavigate()
   const location = useLocation()
   const labelsOpen = new URLSearchParams(location.search).get('labels') === '1'
+  const archivedOnly =
+    !section &&
+    new URLSearchParams(location.search).get('locationStatus') === 'archived'
   const labelTriggerRef = useRef<HTMLButtonElement>(null)
   const warehouseId = zone.warehouseId
   const mounted = useRef(true)
@@ -1189,6 +1348,7 @@ function ZoneLocations({
           : inventoryApi.getSections(zone.id, {
               signal,
               includePartCounts: false,
+              ...(archivedOnly ? { archivedOnly: true } : {}),
             }),
       ])
       return {
@@ -1203,7 +1363,7 @@ function ZoneLocations({
         ),
       }
     },
-    [warehouseId, zone.id, section],
+    [warehouseId, zone.id, section, archivedOnly],
   )
   const resource = useLoad(loader, `${zone.id}:${section?.id ?? ''}`)
   const [addingTo, setAddingTo] = useState<InventorySection | null>(null)
@@ -1228,7 +1388,7 @@ function ZoneLocations({
     const counts = new Map<string, number>()
     if (resource.state.kind !== 'ready') return counts
     for (const item of resource.state.data.sections) {
-      if (item.isActive) counts.set(item.id, 0)
+      counts.set(item.id, 0)
     }
     for (const shelf of resource.state.data.shelves) {
       if (shelf.isActive && counts.has(shelf.sectionId))
@@ -1320,9 +1480,13 @@ function ZoneLocations({
   const noSections =
     ready &&
     !section &&
+    !archivedOnly &&
     !loadedSections.some((item) => item.isActive && item.zoneId === zone.id)
   return (
     <>
+      {resource.state.kind === 'error' && !section && !labelsOpen ? (
+        <LocationStatusFilter label={t('statusSections')} />
+      ) : null}
       {ready && !labelsOpen && !noSections ? (
         <LocationSearch
           label={tb(section ? 'searchShelves' : 'searchSections')}
@@ -1331,18 +1495,15 @@ function ZoneLocations({
           )}
         />
       ) : null}
-      {noSections && !labelsOpen ? (
-        <Notice tone="info">{t('zoneStructureHint')}</Notice>
-      ) : null}
       <div
         className={cn(
-          'grid min-w-0 items-start gap-[14px]',
-          !section && ready && !labelsOpen && !noSections && 'lg:grid-cols-2',
+          'location-browser-layout grid min-w-0 items-stretch gap-[14px]',
+          section && 'location-browser-layout--shelves',
         )}
       >
         <section
           aria-label={t(section ? 'shelfType' : 'sectionType')}
-          className="rz-card min-w-0"
+          className="location-browser-card rz-card min-w-0"
         >
           {error ? (
             <div className="p-[var(--rz-card-p)]">
@@ -1370,6 +1531,15 @@ function ZoneLocations({
               base={base}
               sections={loadedSections}
               shelves={loadedShelves}
+              sectionShelfCounts={sectionShelfCounts}
+              archivedOnly={archivedOnly}
+              pending={busy}
+              onRestoreSection={(item) => {
+                if (!busy)
+                  void write((signal) =>
+                    inventoryApi.restoreSection(item.id, { signal }),
+                  )
+              }}
               canManage={canManage}
               canViewParts={canViewParts}
               partsBase={base.replace(/\/warehouses$/, '/parts')}
@@ -1419,69 +1589,78 @@ function ZoneLocations({
                   />
                 ) : null
               }
+              statusFilter={
+                !section && !labelsOpen ? (
+                  <LocationStatusFilter label={t('statusSections')} />
+                ) : null
+              }
               headerActions={
-                <ActionMenu
-                  triggerRef={labelTriggerRef}
-                  label={
-                    section
-                      ? t('sectionActions', { name: section.name })
-                      : tb('zoneActions', { name: zone.name })
-                  }
-                  actions={[
-                    {
-                      key: 'print',
-                      label: tb(section ? 'printShelves' : 'printSections'),
-                      icon: <Printer aria-hidden />,
-                      onSelect: () => {
-                        setChoosingShelf(false)
-                        const params = new URLSearchParams(location.search)
-                        params.set('labels', '1')
-                        void navigate(
-                          { search: `?${params}` },
-                          {
-                            state: location.state as unknown,
-                            preventScrollReset: true,
+                <>
+                  {!archivedOnly ? (
+                    <ActionMenu
+                      triggerRef={labelTriggerRef}
+                      label={
+                        section
+                          ? t('sectionActions', { name: section.name })
+                          : tb('zoneActions', { name: zone.name })
+                      }
+                      actions={[
+                        {
+                          key: 'print',
+                          label: tb(section ? 'printShelves' : 'printSections'),
+                          icon: <Printer aria-hidden />,
+                          onSelect: () => {
+                            setChoosingShelf(false)
+                            const params = new URLSearchParams(location.search)
+                            params.set('labels', '1')
+                            void navigate(
+                              { search: `?${params}` },
+                              {
+                                state: location.state as unknown,
+                                preventScrollReset: true,
+                              },
+                            )
                           },
-                        )
-                      },
-                    },
-                    ...(canManage && section
-                      ? [
-                          {
-                            key: 'edit',
-                            label: t('editSection'),
-                            icon: <Pencil aria-hidden />,
-                            onSelect: () => {
-                              setError(null)
-                              setDraft({
-                                name: section.name,
-                                code: section.code,
-                              })
-                              setEditingSection(section)
-                            },
-                          },
-                          {
-                            key: 'edit-shelf',
-                            label: t('editShelf'),
-                            icon: <Pencil aria-hidden />,
-                            disabled: !loadedShelves.some(
-                              (shelf) => shelf.isActive,
-                            ),
-                            onSelect: () => {
-                              setChoosingShelf(true)
-                            },
-                          },
-                          {
-                            key: 'archive',
-                            label: t('archiveSection'),
-                            icon: <Archive aria-hidden />,
-                            destructive: true,
-                            onSelect: () => setArchivingSection(section),
-                          },
-                        ]
-                      : []),
-                  ]}
-                />
+                        },
+                        ...(canManage && section
+                          ? [
+                              {
+                                key: 'edit',
+                                label: t('editSection'),
+                                icon: <Pencil aria-hidden />,
+                                onSelect: () => {
+                                  setError(null)
+                                  setDraft({
+                                    name: section.name,
+                                    code: section.code,
+                                  })
+                                  setEditingSection(section)
+                                },
+                              },
+                              {
+                                key: 'edit-shelf',
+                                label: t('editShelf'),
+                                icon: <Pencil aria-hidden />,
+                                disabled: !loadedShelves.some(
+                                  (shelf) => shelf.isActive,
+                                ),
+                                onSelect: () => {
+                                  setChoosingShelf(true)
+                                },
+                              },
+                              {
+                                key: 'archive',
+                                label: t('archiveSection'),
+                                icon: <Archive aria-hidden />,
+                                destructive: true,
+                                onSelect: () => setArchivingSection(section),
+                              },
+                            ]
+                          : []),
+                      ]}
+                    />
+                  ) : null}
+                </>
               }
             />
           ) : null}
@@ -1591,16 +1770,6 @@ function ZoneLocations({
             }}
           />
         </section>
-        {!section && ready && !labelsOpen && !noSections ? (
-          <section aria-label={tb('shelves')} className="rz-card min-w-0">
-            <LocationBrowserHeader title={tb('shelves')} actions={null} />
-            <StateScreen
-              className="location-browser__placeholder min-h-[176px]"
-              icon={<MousePointerClick aria-hidden />}
-              title={tb('chooseSection')}
-            />
-          </section>
-        ) : null}
       </div>
     </>
   )
@@ -1689,7 +1858,9 @@ function PartPlacementView({
   partId: string
   drawer?: PlacementDrawerOptions
 }) {
+  const isDrawer = drawer !== undefined
   const t = useT(placementMessages)
+  const tl = useT(locationContentsMessages)
   const tc = useT(commonMessages)
   const mounted = useRef(true)
   useEffect(() => {
@@ -1731,13 +1902,13 @@ function PartPlacementView({
               () => null,
             )
           : Promise.resolve(null),
-        canSeeParts
+        canSeeParts && !isDrawer
           ? partsApi.history(partId, { signal }).then(
               (data) => data,
               () => null,
             )
           : Promise.resolve(null),
-        canSeeParts
+        canSeeParts && !isDrawer
           ? partsApi.facets({}, ['zone'], { signal }).then(
               (facets) =>
                 new Map(facets.zones.map((zone) => [zone.id, zone.count])),
@@ -1756,7 +1927,7 @@ function PartPlacementView({
         byZone,
       }
     },
-    [canSeeParts, partId],
+    [canSeeParts, partId, isDrawer],
   )
   const resource = useLoad(loader, partId)
   const [selection, setSelection] = useState<string[] | null>(null)
@@ -1792,6 +1963,7 @@ function PartPlacementView({
     resource.state.kind === 'ready' ? resource.state.data : null
   const canSaveSelection =
     selected.length > 0 &&
+    (placementData?.part == null || hasPlacementStock(placementData.part)) &&
     (!drawer?.requirePhysicalZone ||
       (placementData !== null &&
         !placementData.zones.some(
@@ -1959,6 +2131,12 @@ function PartPlacementView({
             zone.isSystemUnassigned &&
             zone.isActive,
         )
+        const zoneOptions = [
+          ...(warehouseOnly && !drawer?.requirePhysicalZone
+            ? [{ id: warehouseOnly.id, name: t('warehouseOnly') }]
+            : []),
+          ...inHouse,
+        ]
         const needle = query.trim().toLowerCase()
         const shown = inHouse.filter(
           (zone) =>
@@ -2057,6 +2235,9 @@ function PartPlacementView({
               drawer ? 'grid min-w-0 content-start' : 'grid content-start'
             }
           >
+            {part && !hasPlacementStock(part) ? (
+              <Notice>{tl('placementNoStock')}</Notice>
+            ) : null}
             {!drawer ? (
               <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
                 <Crumbs
@@ -2077,8 +2258,8 @@ function PartPlacementView({
                   {canManage ? (
                     <Button
                       aria-busy={saving}
-                      disabled={saving || selected.length === 0}
-                      onClick={() => void save()}
+                      disabled={saving || !canSaveSelection}
+                      onClick={() => void save(!changed)}
                       variant="primary"
                     >
                       {saving ? t('saving') : t('place')}
@@ -2089,24 +2270,7 @@ function PartPlacementView({
             ) : null}
 
             <div className={drawer ? 'grid min-w-0 gap-[14px]' : 'rz-page'}>
-              {drawer ? (
-                part === null ? (
-                  <p className="rz-caption m-0">{t('partHidden')}</p>
-                ) : (
-                  <p className="rz-caption m-0 flex flex-wrap items-baseline gap-x-2">
-                    <span className="rz-strong font-semibold">{part.name}</span>
-                    <span className="max-w-full font-mono break-all">
-                      {part.qrCode}
-                    </span>
-                    <span>
-                      {t('inStock', {
-                        count: part.quantityTotal,
-                        unit: unitLabel(part.unit, locale),
-                      })}
-                    </span>
-                  </p>
-                )
-              ) : (
+              {!drawer ? (
                 <WarehousePageHead
                   title={t('title')}
                   sub={
@@ -2126,7 +2290,7 @@ function PartPlacementView({
                     )
                   }
                 />
-              )}
+              ) : null}
 
               {operationError ? (
                 <Notice tone="danger">{operationError}</Notice>
@@ -2135,522 +2299,680 @@ function PartPlacementView({
                 <Notice tone="info">{t('pickPhysicalZone')}</Notice>
               ) : null}
 
-              <div
-                className={
-                  drawer
-                    ? 'grid min-w-0 gap-[14px]'
-                    : 'grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]'
-                }
-              >
-                <div className="grid min-w-0 gap-[14px]">
-                  <Step
-                    hint={t('warehouseHint')}
-                    number="01"
-                    title={t('warehouse')}
-                  >
-                    <div
-                      aria-label={t('warehouse')}
-                      className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,180px),1fr))] gap-2"
-                      role="radiogroup"
-                    >
-                      {houses.length === 0 ? (
-                        <StateScreen
-                          className="location-browser__placeholder col-span-full min-h-[160px]"
-                          icon={<WarehouseIcon aria-hidden />}
-                          title={t('noActiveWarehouses')}
-                          {...(canManage
-                            ? {
-                                actions: (
-                                  <Button
-                                    onClick={() => openCreate('warehouse')}
-                                  >
-                                    <Plus aria-hidden />
-                                    {to('addWarehouse')}
-                                  </Button>
-                                ),
-                              }
-                            : {})}
-                        />
+              {drawer ? (
+                <div className="grid min-w-0 gap-4">
+                  <div className="grid gap-1.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="rz-label m-0">{t('warehouse')}</p>
+                      {canManage ? (
+                        <Button
+                          disabled={saving || creating}
+                          onClick={() => openCreate('warehouse')}
+                        >
+                          <Plus aria-hidden />
+                          {to('addWarehouse')}
+                        </Button>
                       ) : null}
-                      {houses.map((item) => {
-                        const active = item.id === house
-                        const count = real.filter(
-                          (zone) => zone.warehouseId === item.id,
-                        ).length
-                        return (
-                          <button
-                            aria-checked={active}
-                            className={cn(
-                              'rz-choice-card focus-visible:outline-brand min-w-0 bg-transparent text-left',
-                              active && 'border-brand bg-brand-soft',
-                            )}
-                            key={item.id}
-                            onClick={() => {
-                              setWarehouseId(item.id)
-                              setQuery('')
-                            }}
-                            role="radio"
-                            type="button"
-                          >
-                            <span
-                              aria-hidden
-                              className={cn(
-                                'mt-0.5 grid size-3.5 shrink-0 place-items-center rounded-full border',
-                                active ? 'border-brand' : 'border-app-line-2',
-                              )}
-                            >
-                              {active ? (
-                                <span className="bg-brand size-1.5 rounded-full" />
-                              ) : null}
-                            </span>
-                            <span className="grid min-w-0 gap-0.5">
-                              <span className="rz-strong font-semibold break-words">
-                                {item.name}
-                              </span>
-                              <span className="rz-caption">
-                                {ti('zones', { count })}
-                              </span>
-                            </span>
-                          </button>
-                        )
-                      })}
                     </div>
-                    {warehouseOnly && !drawer?.requirePhysicalZone ? (
-                      <label className="rz-choice w-fit">
-                        <input
-                          type="radio"
-                          name="placement-location"
-                          className="rz-radio"
-                          disabled={!canManage}
-                          checked={warehouseOnlyChecked}
-                          onChange={() => {
-                            setSelection([warehouseOnly.id])
-                            setSectionSelection(null)
-                            setShelfSelection(null)
+                    <LocationSelect
+                      label={t('warehouse')}
+                      searchLabel={to('searchWarehouses')}
+                      noneLabel={t('noActiveWarehouses')}
+                      allowNone={false}
+                      options={houses}
+                      value={house}
+                      disabled={!canManage || saving || creating}
+                      onChange={(id) => {
+                        setWarehouseId(id)
+                        setQuery('')
+                      }}
+                    />
+                  </div>
+                  {house ? (
+                    <div className="grid gap-1.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="rz-label m-0">{t('zone')}</p>
+                        {canManage ? (
+                          <Button
+                            disabled={saving || creating}
+                            onClick={() => openCreate('zone')}
+                          >
+                            <Plus aria-hidden />
+                            {tw('addZone')}
+                          </Button>
+                        ) : null}
+                      </div>
+                      {zoneOptions.length ? (
+                        <LocationSelect
+                          multiple
+                          label={t('zone')}
+                          searchLabel={t('zoneSearch')}
+                          noneLabel={t('noZonesPicked')}
+                          options={zoneOptions}
+                          value={zoneOptions
+                            .filter((zone) => selected.includes(zone.id))
+                            .map((zone) => zone.id)}
+                          disabled={!canManage || saving || creating}
+                          onChange={(ids) => {
+                            const current = zoneOptions
+                              .filter((zone) => selected.includes(zone.id))
+                              .map((zone) => zone.id)
+                            const toggled = [...current, ...ids].find(
+                              (id) => current.includes(id) !== ids.includes(id),
+                            )
+                            if (toggled && toggled === warehouseOnly?.id) {
+                              setSelection([toggled])
+                              setSectionSelection(null)
+                              setShelfSelection(null)
+                            } else if (toggled) {
+                              toggleZone(toggled)
+                            }
                           }}
                         />
-                        <span className="rz-caption text-app-muted">
-                          {t('warehouseOnly')}
-                        </span>
-                      </label>
-                    ) : null}
-                  </Step>
-
-                  {house === null ? null : (
-                    <Step
-                      aside={
-                        <p className="rz-caption m-0 flex flex-wrap items-center gap-3">
-                          <span className="flex items-center gap-1.5">
-                            <span
-                              aria-hidden
-                              className="bg-app-line-2 size-2 rounded-control"
-                            />
-                            {t('legendEmpty')}
-                          </span>
-                          <span className="flex items-center gap-1.5">
-                            <span
-                              aria-hidden
-                              className="bg-state-warn size-2 rounded-control"
-                            />
-                            {t('legendFilled')}
-                          </span>
-                          <span className="flex items-center gap-1.5">
-                            <span
-                              aria-hidden
-                              className="bg-state-danger size-2 rounded-control"
-                            />
-                            {t('legendBusiest')}
-                          </span>
-                        </p>
-                      }
-                      hint={inHouse.length === 0 ? undefined : t('zoneHint')}
-                      number="02"
-                      title={t('zone')}
-                    >
-                      {inHouse.length === 0 ? (
-                        <StateScreen
-                          className="location-browser__placeholder min-h-[160px]"
-                          icon={<LayoutGrid aria-hidden />}
-                          title={t('noActiveZones')}
-                          {...(canManage
-                            ? {
-                                actions: (
-                                  <Button onClick={() => openCreate('zone')}>
-                                    <Plus aria-hidden />
-                                    {tw('addZone')}
-                                  </Button>
-                                ),
-                              }
-                            : {})}
-                        />
                       ) : (
-                        <>
-                          {shown.length === 0 ? (
-                            <p className="rz-caption m-0 py-3 text-center">
-                              {t('noZonesFound')}
-                            </p>
-                          ) : (
-                            <ul
-                              className={cn(
-                                'm-0 grid list-none gap-2 p-0',
-                                !drawer &&
-                                  'grid-cols-[repeat(auto-fit,minmax(min(100%,180px),1fr))]',
-                              )}
-                            >
-                              {shown.map((zone) => {
-                                const on = selected.includes(zone.id)
-                                const count = partsIn(zone.id)
-                                const load =
-                                  count === null
-                                    ? 0
-                                    : Math.round((count / busiest) * 100)
-                                return (
-                                  <li className="min-w-0" key={zone.id}>
-                                    <label className="rz-choice-card min-w-0">
-                                      <input
-                                        aria-label={`${zone.warehouseName} · ${zone.name}`}
-                                        checked={on}
-                                        className="rz-check mt-0.5"
-                                        disabled={!canManage}
-                                        onChange={() => toggleZone(zone.id)}
-                                        type="checkbox"
-                                      />
-                                      <span className="grid min-w-0 flex-1 gap-0.5">
-                                        <span className="rz-strong font-semibold break-words">
-                                          {zone.name}
-                                        </span>
-                                        <span className="rz-caption">
-                                          <span className="font-mono">
-                                            {zone.code}
-                                          </span>
-                                          {' · '}
-                                          {count === null
-                                            ? ti('stockUnavailable')
-                                            : ti('positions', { count })}
-                                        </span>
-                                        <span
-                                          aria-hidden
-                                          className="bg-app-hover mt-1 block h-1 overflow-hidden rounded-full"
-                                        >
-                                          <span
-                                            className={cn(
-                                              'block h-full rounded-full',
-                                              load >= 100
-                                                ? 'bg-state-danger'
-                                                : load > 0
-                                                  ? 'bg-state-warn'
-                                                  : 'bg-transparent',
-                                            )}
-                                            style={{
-                                              width: `${String(load)}%`,
-                                            }}
-                                          />
-                                        </span>
-                                      </span>
-                                    </label>
-                                  </li>
-                                )
-                              })}
-                            </ul>
-                          )}
-                          <div className="flex flex-wrap items-center gap-2">
-                            <SearchInput
-                              aria-label={t('zoneSearch')}
-                              className="min-w-0 flex-1"
-                              onChange={(event) => setQuery(event.target.value)}
-                              placeholder={t('zoneSearchPlaceholder')}
-                              value={query}
-                            />
-                            {canManage ? (
-                              <Button onClick={() => openCreate('zone')}>
-                                <Plus aria-hidden />
-                                {tw('addZone')}
-                              </Button>
-                            ) : null}
-                          </div>
-                        </>
+                        <Notice tone="info">{t('noActiveZones')}</Notice>
                       )}
-                    </Step>
-                  )}
-
+                      {chosen.length > 1 ? (
+                        <div className="text-app-muted text-caption">
+                          <p className="m-0">
+                            {t('zonesPicked')}: {chosen.length}
+                          </p>
+                          <ul className="m-0 max-h-32 list-none overflow-y-auto p-0">
+                            {chosen.map((zone) => (
+                              <li key={zone.id}>{levelOf(zone)}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {hasPhysicalZone ? (
-                    <div
-                      className={cn(
-                        'grid min-w-0 items-start gap-[14px]',
-                        !drawer && selectedSectionId && 'md:grid-cols-2',
-                      )}
+                    <div className="grid gap-1.5">
+                      <p className="rz-label m-0">{t('section')}</p>
+                      <LocationSelect
+                        label={t('section')}
+                        searchLabel={t('sectionSearch')}
+                        noneLabel={t('noSection')}
+                        options={availableSections.map((section) => ({
+                          ...section,
+                          ...(chosen.length > 1
+                            ? { context: section.zoneName }
+                            : {}),
+                        }))}
+                        value={selectedSectionId}
+                        disabled={!canManage || saving || creating}
+                        onChange={(id) => {
+                          setSectionSelection(id)
+                          setShelfSelection(null)
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                  {hasPhysicalZone && selectedSectionId ? (
+                    <div className="grid gap-1.5">
+                      <p className="rz-label m-0">{t('shelf')}</p>
+                      <LocationSelect
+                        label={t('shelf')}
+                        searchLabel={t('shelfSearch')}
+                        noneLabel={t('noShelf')}
+                        options={availableShelves}
+                        value={selectedShelfId}
+                        disabled={!canManage || saving || creating}
+                        onChange={setShelfSelection}
+                      />
+                    </div>
+                  ) : null}
+                  <div className="grid gap-1.5">
+                    <p className="rz-label m-0">{t('partDetails')}</p>
+                    {part ? (
+                      <div className="border-app-line bg-app-raised flex min-w-0 rounded-panel border px-3 py-2">
+                        <PlacementPartInfo
+                          name={part.name}
+                          oemCode={part.oemCode}
+                          code={part.qrCode}
+                          quantity={part.quantityTotal}
+                          unit={unitLabel(part.unit, locale)}
+                          status={part.status}
+                          car={[part.carBrand, part.carModel, part.carYear]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        />
+                      </div>
+                    ) : (
+                      <p className="rz-caption m-0">{t('partHidden')}</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className={
+                    drawer
+                      ? 'grid min-w-0 gap-[14px]'
+                      : 'grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_320px]'
+                  }
+                >
+                  <div className="grid min-w-0 gap-[14px]">
+                    <Step
+                      hint={t('warehouseHint')}
+                      number="01"
+                      title={t('warehouse')}
                     >
-                      <Step
-                        number="03"
-                        title={t('section')}
-                        hint={t('sectionHint')}
+                      <div
+                        aria-label={t('warehouse')}
+                        className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,180px),1fr))] gap-2"
+                        role="radiogroup"
                       >
-                        {drawer ? (
-                          <LocationSelect
-                            label={t('section')}
-                            searchLabel={t('sectionSearch')}
-                            noneLabel={t('noSection')}
-                            value={selectedSectionId}
-                            options={availableSections.map((section) => ({
-                              id: section.id,
-                              name: section.name,
-                              code: section.code,
-                              ...(chosen.length > 1
-                                ? { context: section.zoneName }
-                                : {}),
-                            }))}
-                            disabled={!canManage || saving || creating}
-                            onChange={(id) => {
-                              setSectionSelection(id)
+                        {houses.length === 0 ? (
+                          <StateScreen
+                            className="location-browser__placeholder col-span-full min-h-[160px]"
+                            icon={<WarehouseIcon aria-hidden />}
+                            title={t('noActiveWarehouses')}
+                            {...(canManage
+                              ? {
+                                  actions: (
+                                    <Button
+                                      onClick={() => openCreate('warehouse')}
+                                    >
+                                      <Plus aria-hidden />
+                                      {to('addWarehouse')}
+                                    </Button>
+                                  ),
+                                }
+                              : {})}
+                          />
+                        ) : null}
+                        {houses.map((item) => {
+                          const active = item.id === house
+                          const count = real.filter(
+                            (zone) => zone.warehouseId === item.id,
+                          ).length
+                          return (
+                            <button
+                              aria-checked={active}
+                              className={cn(
+                                'rz-choice-card focus-visible:outline-brand min-w-0 bg-transparent text-left',
+                                active && 'border-brand bg-brand-soft',
+                              )}
+                              key={item.id}
+                              onClick={() => {
+                                setWarehouseId(item.id)
+                                setQuery('')
+                              }}
+                              role="radio"
+                              type="button"
+                            >
+                              <span
+                                aria-hidden
+                                className={cn(
+                                  'mt-0.5 grid size-3.5 shrink-0 place-items-center rounded-full border',
+                                  active ? 'border-brand' : 'border-app-line-2',
+                                )}
+                              >
+                                {active ? (
+                                  <span className="bg-brand size-1.5 rounded-full" />
+                                ) : null}
+                              </span>
+                              <span className="grid min-w-0 gap-0.5">
+                                <span className="rz-strong font-semibold break-words">
+                                  {item.name}
+                                </span>
+                                <span className="rz-caption">
+                                  {ti('zones', { count })}
+                                </span>
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                      {warehouseOnly ? (
+                        <label className="rz-choice w-fit">
+                          <input
+                            type="radio"
+                            name="placement-location"
+                            className="rz-radio"
+                            disabled={!canManage}
+                            checked={warehouseOnlyChecked}
+                            onChange={() => {
+                              setSelection([warehouseOnly.id])
+                              setSectionSelection(null)
                               setShelfSelection(null)
                             }}
                           />
-                        ) : (
-                          <div className="grid gap-2">
-                            <label className="rz-choice-card">
-                              <input
-                                type="radio"
-                                name="placement-section"
-                                className="rz-radio mt-0.5"
-                                disabled={!canManage || selected.length === 0}
-                                checked={!selectedSectionId}
-                                onChange={() => {
-                                  setSectionSelection(null)
-                                  setShelfSelection(null)
-                                }}
+                          <span className="rz-caption text-app-muted">
+                            {t('warehouseOnly')}
+                          </span>
+                        </label>
+                      ) : null}
+                    </Step>
+
+                    {house === null ? null : (
+                      <Step
+                        aside={
+                          <p className="rz-caption m-0 flex flex-wrap items-center gap-3">
+                            <span className="flex items-center gap-1.5">
+                              <span
+                                aria-hidden
+                                className="bg-app-line-2 size-2 rounded-control"
                               />
-                              <span className="min-w-0">{t('noSection')}</span>
-                            </label>
-                            {availableSections.map((section) => (
-                              <label
-                                className="rz-choice-card"
-                                key={section.id}
+                              {t('legendEmpty')}
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              <span
+                                aria-hidden
+                                className="bg-state-warn size-2 rounded-control"
+                              />
+                              {t('legendFilled')}
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                              <span
+                                aria-hidden
+                                className="bg-state-danger size-2 rounded-control"
+                              />
+                              {t('legendBusiest')}
+                            </span>
+                          </p>
+                        }
+                        hint={inHouse.length === 0 ? undefined : t('zoneHint')}
+                        number="02"
+                        title={t('zone')}
+                      >
+                        {inHouse.length === 0 ? (
+                          <StateScreen
+                            className="location-browser__placeholder min-h-[160px]"
+                            icon={<LayoutGrid aria-hidden />}
+                            title={t('noActiveZones')}
+                            {...(canManage
+                              ? {
+                                  actions: (
+                                    <Button onClick={() => openCreate('zone')}>
+                                      <Plus aria-hidden />
+                                      {tw('addZone')}
+                                    </Button>
+                                  ),
+                                }
+                              : {})}
+                          />
+                        ) : (
+                          <>
+                            {shown.length === 0 ? (
+                              <p className="rz-caption m-0 py-3 text-center">
+                                {t('noZonesFound')}
+                              </p>
+                            ) : (
+                              <ul
+                                className={cn(
+                                  'm-0 grid list-none gap-2 p-0',
+                                  !drawer &&
+                                    'grid-cols-[repeat(auto-fit,minmax(min(100%,180px),1fr))]',
+                                )}
                               >
-                                <input
-                                  type="radio"
-                                  name="placement-section"
-                                  className="rz-radio mt-0.5"
-                                  disabled={!canManage}
-                                  checked={selectedSectionId === section.id}
-                                  onChange={() => {
-                                    setSectionSelection(section.id)
-                                    setShelfSelection(null)
-                                  }}
-                                />
-                                <span className="min-w-0 break-words">
-                                  {section.zoneName} · {section.name}
-                                </span>
-                              </label>
-                            ))}
-                          </div>
+                                {shown.map((zone) => {
+                                  const on = selected.includes(zone.id)
+                                  const count = partsIn(zone.id)
+                                  const load =
+                                    count === null
+                                      ? 0
+                                      : Math.round((count / busiest) * 100)
+                                  return (
+                                    <li className="min-w-0" key={zone.id}>
+                                      <label className="rz-choice-card min-w-0">
+                                        <input
+                                          aria-label={`${zone.warehouseName} · ${zone.name}`}
+                                          checked={on}
+                                          className="rz-check mt-0.5"
+                                          disabled={!canManage}
+                                          onChange={() => toggleZone(zone.id)}
+                                          type="checkbox"
+                                        />
+                                        <span className="grid min-w-0 flex-1 gap-0.5">
+                                          <span className="rz-strong font-semibold break-words">
+                                            {zone.name}
+                                          </span>
+                                          <span className="rz-caption">
+                                            <span className="font-mono">
+                                              {zone.code}
+                                            </span>
+                                            {' · '}
+                                            {count === null
+                                              ? ti('stockUnavailable')
+                                              : ti('positions', { count })}
+                                          </span>
+                                          <span
+                                            aria-hidden
+                                            className="bg-app-hover mt-1 block h-1 overflow-hidden rounded-full"
+                                          >
+                                            <span
+                                              className={cn(
+                                                'block h-full rounded-full',
+                                                load >= 100
+                                                  ? 'bg-state-danger'
+                                                  : load > 0
+                                                    ? 'bg-state-warn'
+                                                    : 'bg-transparent',
+                                              )}
+                                              style={{
+                                                width: `${String(load)}%`,
+                                              }}
+                                            />
+                                          </span>
+                                        </span>
+                                      </label>
+                                    </li>
+                                  )
+                                })}
+                              </ul>
+                            )}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <SearchInput
+                                aria-label={t('zoneSearch')}
+                                className="min-w-0 flex-1"
+                                onChange={(event) =>
+                                  setQuery(event.target.value)
+                                }
+                                placeholder={t('zoneSearchPlaceholder')}
+                                value={query}
+                              />
+                              {canManage ? (
+                                <Button onClick={() => openCreate('zone')}>
+                                  <Plus aria-hidden />
+                                  {tw('addZone')}
+                                </Button>
+                              ) : null}
+                            </div>
+                          </>
                         )}
                       </Step>
+                    )}
 
-                      {selectedSectionId ? (
+                    {hasPhysicalZone ? (
+                      <div
+                        className={cn(
+                          'grid min-w-0 items-start gap-[14px]',
+                          !drawer && selectedSectionId && 'md:grid-cols-2',
+                        )}
+                      >
                         <Step
-                          number="04"
-                          title={t('shelf')}
-                          hint={t('shelfHint')}
+                          number="03"
+                          title={t('section')}
+                          hint={t('sectionHint')}
                         >
                           {drawer ? (
                             <LocationSelect
-                              label={t('shelf')}
-                              searchLabel={t('shelfSearch')}
-                              noneLabel={t('noShelf')}
-                              value={selectedShelfId}
-                              options={availableShelves.map((shelf) => ({
-                                id: shelf.id,
-                                name: shelf.name,
-                                code: shelf.code,
+                              label={t('section')}
+                              searchLabel={t('sectionSearch')}
+                              noneLabel={t('noSection')}
+                              value={selectedSectionId}
+                              options={availableSections.map((section) => ({
+                                id: section.id,
+                                name: section.name,
+                                code: section.code,
+                                ...(chosen.length > 1
+                                  ? { context: section.zoneName }
+                                  : {}),
                               }))}
                               disabled={!canManage || saving || creating}
-                              onChange={setShelfSelection}
+                              onChange={(id) => {
+                                setSectionSelection(id)
+                                setShelfSelection(null)
+                              }}
                             />
                           ) : (
                             <div className="grid gap-2">
                               <label className="rz-choice-card">
                                 <input
                                   type="radio"
-                                  name="placement-shelf"
+                                  name="placement-section"
                                   className="rz-radio mt-0.5"
-                                  disabled={!canManage || !selectedSectionId}
-                                  checked={!selectedShelfId}
-                                  onChange={() => setShelfSelection(null)}
+                                  disabled={!canManage || selected.length === 0}
+                                  checked={!selectedSectionId}
+                                  onChange={() => {
+                                    setSectionSelection(null)
+                                    setShelfSelection(null)
+                                  }}
                                 />
-                                <span className="min-w-0">{t('noShelf')}</span>
+                                <span className="min-w-0">
+                                  {t('noSection')}
+                                </span>
                               </label>
-                              {availableShelves.map((shelf) => (
+                              {availableSections.map((section) => (
                                 <label
                                   className="rz-choice-card"
-                                  key={shelf.id}
+                                  key={section.id}
                                 >
                                   <input
                                     type="radio"
-                                    name="placement-shelf"
+                                    name="placement-section"
                                     className="rz-radio mt-0.5"
                                     disabled={!canManage}
-                                    checked={selectedShelfId === shelf.id}
-                                    onChange={() => setShelfSelection(shelf.id)}
+                                    checked={selectedSectionId === section.id}
+                                    onChange={() => {
+                                      setSectionSelection(section.id)
+                                      setShelfSelection(null)
+                                    }}
                                   />
                                   <span className="min-w-0 break-words">
-                                    {shelf.zoneName} · {shelf.sectionName} ·{' '}
-                                    {shelf.name}
+                                    {section.zoneName} · {section.name}
                                   </span>
                                 </label>
                               ))}
                             </div>
                           )}
                         </Step>
-                      ) : null}
-                    </div>
-                  ) : null}
 
-                  <Step
-                    hint={t('quantityHint')}
-                    number={
-                      selectedSectionId ? '05' : hasPhysicalZone ? '04' : '03'
-                    }
-                    title={t('quantity')}
-                  >
-                    <div className="flex flex-wrap items-center gap-4">
-                      <span
-                        className="border-app-line text-app-muted flex items-center gap-1 rounded-control border p-0.5"
-                        title={t('notSplitTitle')}
+                        {selectedSectionId ? (
+                          <Step
+                            number="04"
+                            title={t('shelf')}
+                            hint={t('shelfHint')}
+                          >
+                            {drawer ? (
+                              <LocationSelect
+                                label={t('shelf')}
+                                searchLabel={t('shelfSearch')}
+                                noneLabel={t('noShelf')}
+                                value={selectedShelfId}
+                                options={availableShelves.map((shelf) => ({
+                                  id: shelf.id,
+                                  name: shelf.name,
+                                  code: shelf.code,
+                                }))}
+                                disabled={!canManage || saving || creating}
+                                onChange={setShelfSelection}
+                              />
+                            ) : (
+                              <div className="grid gap-2">
+                                <label className="rz-choice-card">
+                                  <input
+                                    type="radio"
+                                    name="placement-shelf"
+                                    className="rz-radio mt-0.5"
+                                    disabled={!canManage || !selectedSectionId}
+                                    checked={!selectedShelfId}
+                                    onChange={() => setShelfSelection(null)}
+                                  />
+                                  <span className="min-w-0">
+                                    {t('noShelf')}
+                                  </span>
+                                </label>
+                                {availableShelves.map((shelf) => (
+                                  <label
+                                    className="rz-choice-card"
+                                    key={shelf.id}
+                                  >
+                                    <input
+                                      type="radio"
+                                      name="placement-shelf"
+                                      className="rz-radio mt-0.5"
+                                      disabled={!canManage}
+                                      checked={selectedShelfId === shelf.id}
+                                      onChange={() =>
+                                        setShelfSelection(shelf.id)
+                                      }
+                                    />
+                                    <span className="min-w-0 break-words">
+                                      {shelf.zoneName} · {shelf.sectionName} ·{' '}
+                                      {shelf.name}
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </Step>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <Step
+                      hint={t('quantityHint')}
+                      number={
+                        selectedSectionId ? '05' : hasPhysicalZone ? '04' : '03'
+                      }
+                      title={t('quantity')}
+                    >
+                      <div className="flex flex-wrap items-center gap-4">
+                        <span
+                          className="border-app-line text-app-muted flex items-center gap-1 rounded-control border p-0.5"
+                          title={t('notSplitTitle')}
+                        >
+                          <span
+                            aria-hidden
+                            className="grid size-7 place-items-center opacity-40"
+                          >
+                            −
+                          </span>
+                          <span className="rz-mono rz-strong w-10 text-center">
+                            {part?.quantityTotal ?? '—'}
+                          </span>
+                          <span
+                            aria-hidden
+                            className="grid size-7 place-items-center opacity-40"
+                          >
+                            +
+                          </span>
+                        </span>
+                        <p className="rz-caption m-0 min-w-[12rem] flex-1">
+                          {t('notSplit')}
+                        </p>
+                      </div>
+                    </Step>
+
+                    {!drawer ? (
+                      <Card
+                        aside={
+                          <span className="rz-th-label">
+                            {t('records', { count: moves.length })}
+                          </span>
+                        }
+                        bodyClassName="p-0"
+                        className="min-w-0"
+                        title={t('historyTitle')}
                       >
-                        <span
-                          aria-hidden
-                          className="grid size-7 place-items-center opacity-40"
-                        >
-                          −
-                        </span>
-                        <span className="rz-mono rz-strong w-10 text-center">
-                          {part?.quantityTotal ?? '—'}
-                        </span>
-                        <span
-                          aria-hidden
-                          className="grid size-7 place-items-center opacity-40"
-                        >
-                          +
-                        </span>
-                      </span>
-                      <p className="rz-caption m-0 min-w-[12rem] flex-1">
-                        {t('notSplit')}
-                      </p>
-                    </div>
-                  </Step>
+                        {moves.length === 0 ? (
+                          <p className="rz-caption m-0 px-[var(--rz-card-p)] py-4">
+                            {history === null
+                              ? t('historyHidden')
+                              : t('neverMoved')}
+                          </p>
+                        ) : (
+                          <ul className="m-0 grid list-none p-0">
+                            {moves.slice(0, 8).map((event, index) => (
+                              <li
+                                className={cn(
+                                  'flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-[var(--rz-card-p)] py-2',
+                                  index > 0 && 'border-app-line border-t',
+                                )}
+                                key={event.id}
+                              >
+                                <span className="rz-strong w-28 shrink-0 font-medium">
+                                  {historyLabel(event.eventType, locale)}
+                                </span>
+                                <span className="text-app-muted min-w-0 flex-1">
+                                  {historyDetails(event.data, locale).join(
+                                    ' · ',
+                                  )}
+                                </span>
+                                <span className="rz-mono rz-dim whitespace-nowrap">
+                                  {date(event.createdAt)}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </Card>
+                    ) : null}
+                  </div>
 
                   {!drawer ? (
-                    <Card
-                      aside={
-                        <span className="rz-th-label">
-                          {t('records', { count: moves.length })}
-                        </span>
-                      }
-                      bodyClassName="p-0"
-                      className="min-w-0"
-                      title={t('historyTitle')}
+                    <section
+                      aria-label={t('newPlacement')}
+                      className="rz-card min-w-0 lg:sticky lg:top-[calc(var(--rz-topbar-h)+16px)]"
                     >
-                      {moves.length === 0 ? (
-                        <p className="rz-caption m-0 px-[var(--rz-card-p)] py-4">
-                          {history === null
-                            ? t('historyHidden')
-                            : t('neverMoved')}
-                        </p>
-                      ) : (
-                        <ul className="m-0 grid list-none p-0">
-                          {moves.slice(0, 8).map((event, index) => (
-                            <li
-                              className={cn(
-                                'flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-[var(--rz-card-p)] py-2',
-                                index > 0 && 'border-app-line border-t',
-                              )}
-                              key={event.id}
-                            >
-                              <span className="rz-strong w-28 shrink-0 font-medium">
-                                {historyLabel(event.eventType, locale)}
+                      <header className="rz-card__head py-2.5">
+                        <h2 className="rz-h-card">{t('newPlacement')}</h2>
+                      </header>
+                      <dl className="m-0 px-[var(--rz-card-p)] py-1">
+                        <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2">
+                          <dt className="text-app-muted">
+                            {t('locationLevel')}
+                          </dt>
+                          <dd className="rz-strong m-0 font-semibold">
+                            {chosen.length > 0 ? (
+                              <ul className="m-0 grid list-none gap-1 p-0">
+                                {chosen.map((zone) => (
+                                  <li
+                                    className="min-w-0 break-words"
+                                    key={zone.id}
+                                  >
+                                    {levelOf(zone)}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <span className="text-app-muted font-normal">
+                                {t('noLocationSelected')}
                               </span>
-                              <span className="text-app-muted min-w-0 flex-1">
-                                {historyDetails(event.data, locale).join(' · ')}
-                              </span>
-                              <span className="rz-mono rz-dim whitespace-nowrap">
-                                {date(event.createdAt)}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </Card>
-                  ) : null}
-                </div>
-
-                {!drawer ? (
-                  <section
-                    aria-label={t('newPlacement')}
-                    className="rz-card min-w-0 lg:sticky lg:top-[calc(var(--rz-topbar-h)+16px)]"
-                  >
-                    <header className="rz-card__head py-2.5">
-                      <h2 className="rz-h-card">{t('newPlacement')}</h2>
-                    </header>
-                    <dl className="m-0 px-[var(--rz-card-p)] py-1">
-                      <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 py-2">
-                        <dt className="text-app-muted">{t('locationLevel')}</dt>
-                        <dd className="rz-strong m-0 font-semibold">
-                          {chosen.length > 0 ? (
-                            <ul className="m-0 grid list-none gap-1 p-0">
-                              {chosen.map((zone) => (
-                                <li
-                                  className="min-w-0 break-words"
-                                  key={zone.id}
-                                >
-                                  {levelOf(zone)}
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <span className="text-app-muted font-normal">
-                              {t('noLocationSelected')}
-                            </span>
-                          )}
-                        </dd>
-                      </div>
-                      {placement.length > 0 ? (
-                        <div className="border-app-line grid grid-cols-[120px_minmax(0,1fr)] gap-3 border-t py-2">
-                          <dt className="text-app-muted">{t('before')}</dt>
-                          <dd className="text-app-muted m-0 break-words">
-                            {placement
-                              .map((zone) =>
-                                zone.isSystemUnassigned
-                                  ? `${zone.warehouseName} → ${t('warehouseLevel')}`
-                                  : `${zone.warehouseName} → ${zone.zoneName}`,
-                              )
-                              .join(', ')}
+                            )}
                           </dd>
                         </div>
-                      ) : null}
-                    </dl>
-                    <div className="grid gap-3 px-[var(--rz-card-p)] pt-3.5 pb-4">
-                      <p className="rz-caption m-0 text-pretty">
-                        {selected.length === 0
-                          ? t('pickOne')
-                          : changed
-                            ? t('replacesAll')
-                            : t('unchanged')}
-                      </p>
-                      {canManage ? (
-                        <Button
-                          aria-busy={saving}
-                          className="w-full"
-                          disabled={saving || selected.length === 0}
-                          onClick={() => void save(!changed)}
-                          variant="primary"
-                        >
-                          {saving ? t('saving') : t('savePlacement')}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </section>
-                ) : null}
-              </div>
+                        {placement.length > 0 ? (
+                          <div className="border-app-line grid grid-cols-[120px_minmax(0,1fr)] gap-3 border-t py-2">
+                            <dt className="text-app-muted">{t('before')}</dt>
+                            <dd className="text-app-muted m-0 break-words">
+                              {placement
+                                .map((zone) =>
+                                  zone.isSystemUnassigned
+                                    ? `${zone.warehouseName} → ${t('warehouseLevel')}`
+                                    : `${zone.warehouseName} → ${zone.zoneName}`,
+                                )
+                                .join(', ')}
+                            </dd>
+                          </div>
+                        ) : null}
+                      </dl>
+                      <div className="grid gap-3 px-[var(--rz-card-p)] pt-3.5 pb-4">
+                        <p className="rz-caption m-0 text-pretty">
+                          {selected.length === 0
+                            ? t('pickOne')
+                            : changed
+                              ? t('replacesAll')
+                              : t('unchanged')}
+                        </p>
+                        {canManage ? (
+                          <Button
+                            aria-busy={saving}
+                            className="w-full"
+                            disabled={saving || !canSaveSelection}
+                            onClick={() => void save(!changed)}
+                            variant="primary"
+                          >
+                            {saving ? t('saving') : t('savePlacement')}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </section>
+                  ) : null}
+                </div>
+              )}
             </div>
             <WarehouseEditorSheet
               open={createMode === 'warehouse'}

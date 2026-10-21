@@ -1,6 +1,7 @@
 import { defineMessages } from '@/i18n'
 export const locationBrowserMessages = defineMessages({
   uk: {
+    selectedLocations: 'Вибрано: {count}',
     zonesActions: 'Дії із зонами',
     chooseZone: 'Виберіть зону, щоб переглянути її секції',
     searchZones: 'Пошук зони',
@@ -13,6 +14,7 @@ export const locationBrowserMessages = defineMessages({
     editShelfName: 'Редагувати полицю: {name}',
     renameShelf: 'Перейменувати полицю',
     shelvesCount: 'Полиць: {count}',
+    shelvesColumn: 'Полиць',
     sectionPagination: 'Сторінки секцій',
     sectionParts: 'Переглянути запчастини секції: {name}',
     positionsLabel: 'Позицій',
@@ -24,6 +26,8 @@ export const locationBrowserMessages = defineMessages({
     shelfList: 'Список полиць',
     positionCount: 'Позицій: {count}',
     noShelves: 'Полиць поки немає',
+    noShelvesHint:
+      'Додайте першу полицю, щоб точніше вказувати місце зберігання запчастин у секції.',
     nameOrCode: 'Назва або код',
     search: 'Пошук секції або полиці',
     searchHint: 'Назва або код у вибраній зоні',
@@ -34,6 +38,8 @@ export const locationBrowserMessages = defineMessages({
     shelves: 'Полиці',
     noMatches: 'Місць не знайдено',
     noSections: 'Секцій поки немає',
+    noSectionsHint:
+      'Додайте першу секцію, щоб упорядкувати зону. У секціях можна створювати полиці для запчастин.',
     chooseSection: 'Виберіть секцію, щоб переглянути її полиці',
     chooseShelf: 'Виберіть полицю, щоб переглянути її запчастини',
     name: 'Назва',
@@ -47,6 +53,7 @@ export const locationBrowserMessages = defineMessages({
     sectionView: 'Вміст секції',
   },
   'en-GB': {
+    selectedLocations: 'Selected: {count}',
     zonesActions: 'Zone list actions',
     chooseZone: 'Choose a zone to view its sections',
     searchZones: 'Search zones',
@@ -59,6 +66,7 @@ export const locationBrowserMessages = defineMessages({
     editShelfName: 'Edit shelf: {name}',
     renameShelf: 'Rename shelf',
     shelvesCount: 'Shelves: {count}',
+    shelvesColumn: 'Shelves',
     sectionPagination: 'Section pages',
     sectionParts: 'View section parts: {name}',
     positionsLabel: 'Positions',
@@ -70,6 +78,8 @@ export const locationBrowserMessages = defineMessages({
     shelfList: 'Shelf list',
     positionCount: '{count} positions',
     noShelves: 'No shelves yet',
+    noShelvesHint:
+      'Add the first shelf to specify where parts are stored within this section.',
     nameOrCode: 'Name or code',
     search: 'Search sections or shelves',
     searchHint: 'Name or code in the selected zone',
@@ -80,6 +90,8 @@ export const locationBrowserMessages = defineMessages({
     shelves: 'Shelves',
     noMatches: 'No locations found',
     noSections: 'No sections yet',
+    noSectionsHint:
+      'Add the first section to organise this zone. You can create shelves for parts within each section.',
     chooseSection: 'Choose a section to view its shelves',
     chooseShelf: 'Choose a shelf to view its parts',
     name: 'Name',
@@ -93,6 +105,7 @@ export const locationBrowserMessages = defineMessages({
     sectionView: 'Section contents',
   },
   pl: {
+    selectedLocations: 'Wybrano: {count}',
     zonesActions: 'Działania na liście stref',
     chooseZone: 'Wybierz strefę, aby zobaczyć jej sekcje',
     searchZones: 'Szukaj strefy',
@@ -105,6 +118,7 @@ export const locationBrowserMessages = defineMessages({
     editShelfName: 'Edytuj półkę: {name}',
     renameShelf: 'Zmień nazwę półki',
     shelvesCount: 'Półek: {count}',
+    shelvesColumn: 'Półek',
     sectionPagination: 'Strony sekcji',
     sectionParts: 'Zobacz części sekcji: {name}',
     positionsLabel: 'Pozycji',
@@ -116,6 +130,8 @@ export const locationBrowserMessages = defineMessages({
     shelfList: 'Lista półek',
     positionCount: '{count} pozycji',
     noShelves: 'Brak półek',
+    noShelvesHint:
+      'Dodaj pierwszą półkę, aby dokładniej określić miejsce przechowywania części w sekcji.',
     nameOrCode: 'Nazwa lub kod',
     search: 'Szukaj sekcji lub półki',
     searchHint: 'Nazwa lub kod w wybranej strefie',
@@ -126,6 +142,8 @@ export const locationBrowserMessages = defineMessages({
     shelves: 'Półki',
     noMatches: 'Nie znaleziono lokalizacji',
     noSections: 'Brak sekcji',
+    noSectionsHint:
+      'Dodaj pierwszą sekcję, aby uporządkować strefę. W sekcjach możesz tworzyć półki na części.',
     chooseSection: 'Wybierz sekcję, aby zobaczyć jej półki',
     chooseShelf: 'Wybierz półkę, aby zobaczyć jej części',
     name: 'Nazwa',

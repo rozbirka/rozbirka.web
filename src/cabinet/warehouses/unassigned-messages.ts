@@ -5,7 +5,7 @@ export const unassignedMessages = defineMessages({
     title: 'Без зони',
     lead: 'Запчастини складу «{warehouse}», для яких ще не вибрано зону. Розміщуйте по одній або виберіть кілька запчастин для спільного розміщення.',
     list: 'Запчастини без зони',
-    empty: 'Усі запчастини цього складу вже мають зону.',
+    empty: 'Немає запчастин для розміщення.',
     missingZone: 'Не вдалося визначити зону нерозміщених запчастин.',
     placed: 'Розміщення «{name}» збережено.',
     archived: 'Склад в архіві. Список доступний для перегляду.',
@@ -13,8 +13,12 @@ export const unassignedMessages = defineMessages({
     placeSelected: 'Розмістити вибрані',
     selectionHint: 'Вибір зберігається між сторінками й під час пошуку.',
     bulkTitle: 'Розмістити вибрані запчастини',
+    singleTitle: 'Розмістити запчастину',
+    externalCode: 'Код: {code}',
+    existingSpecificLocation:
+      'Запчастина вже має секцію або полицю в іншій зоні. Перевірте її поточні місця в картці деталі, щоб не втратити розміщення.',
     bulkHint:
-      'Виберіть одну зону цього складу для всіх вибраних запчастин. Наявні фізичні прив’язки збережуться.',
+      'Виберіть зону, а за потреби — секцію та полицю для вибраних запчастин. Наявні фізичні прив’язки збережуться.',
     selectedCount: 'Вибрано: {count}',
     selectedParts: 'Вибрані запчастини',
     zone: 'Зона',
@@ -33,7 +37,7 @@ export const unassignedMessages = defineMessages({
     title: 'No zone',
     lead: 'Parts in “{warehouse}” without a zone. Place one part or select several to place together.',
     list: 'Parts without a zone',
-    empty: 'All parts in this warehouse already have a zone.',
+    empty: 'No parts to place.',
     missingZone: 'Couldn’t identify the zone for unplaced parts.',
     placed: 'Placement of “{name}” saved.',
     archived: 'This warehouse is archived. The list is read-only.',
@@ -41,8 +45,12 @@ export const unassignedMessages = defineMessages({
     placeSelected: 'Place selected',
     selectionHint: 'Selection is kept across pages and searches.',
     bulkTitle: 'Place selected parts',
+    singleTitle: 'Place part',
+    externalCode: 'Code: {code}',
+    existingSpecificLocation:
+      'This part already has a section or shelf in another zone. Review its current locations on the part card to keep the placement intact.',
     bulkHint:
-      'Choose one zone in this warehouse for all selected parts. Existing physical locations will be kept.',
+      'Choose a zone and, optionally, a section and shelf for the selected parts. Existing physical locations will be kept.',
     selectedCount: 'Selected: {count}',
     selectedParts: 'Selected parts',
     zone: 'Zone',
@@ -62,7 +70,7 @@ export const unassignedMessages = defineMessages({
     title: 'Bez strefy',
     lead: 'Części magazynu „{warehouse}” bez przypisanej strefy. Umieść jedną część lub zaznacz kilka, aby umieścić je razem.',
     list: 'Części bez strefy',
-    empty: 'Wszystkie części tego magazynu mają już strefę.',
+    empty: 'Brak części do umieszczenia.',
     missingZone: 'Nie udało się ustalić strefy nieumieszczonych części.',
     placed: 'Zapisano lokalizację „{name}”.',
     archived:
@@ -71,8 +79,12 @@ export const unassignedMessages = defineMessages({
     placeSelected: 'Umieść wybrane',
     selectionHint: 'Wybór jest zachowywany między stronami i wyszukiwaniami.',
     bulkTitle: 'Umieść wybrane części',
+    singleTitle: 'Umieść część',
+    externalCode: 'Kod: {code}',
+    existingSpecificLocation:
+      'Ta część ma już sekcję lub półkę w innej strefie. Sprawdź bieżące lokalizacje na karcie części, aby zachować jej położenie.',
     bulkHint:
-      'Wybierz jedną strefę tego magazynu dla wszystkich wybranych części. Istniejące lokalizacje fizyczne zostaną zachowane.',
+      'Wybierz strefę oraz opcjonalnie sekcję i półkę dla wybranych części. Istniejące lokalizacje fizyczne zostaną zachowane.',
     selectedCount: 'Wybrano: {count}',
     selectedParts: 'Wybrane części',
     zone: 'Strefa',

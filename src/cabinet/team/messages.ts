@@ -52,8 +52,6 @@ export const teamMessages = defineMessages({
     invitationExpired: 'Прострочено',
     invitationActive: 'Активне',
 
-    noLastSeen:
-      'Останній вхід учасника не зберігається — відома лише дата приєднання.',
     noEmail:
       'Пошти в учасника немає — кабінет знає імʼя й телефон, а телефон тут не вказано.',
     noEmailInvite:
@@ -98,11 +96,16 @@ export const teamMessages = defineMessages({
     columnUser: 'Користувач',
     columnRole: 'Роль',
     columnActivity: 'Активність',
+    activityToday: 'Сьогодні',
+    activityYesterday: 'Вчора',
+    activityUnknown: 'Ще немає даних про активність.',
+    roleFilter: 'Фільтр за роллю',
+    allRoles: 'Усі ролі',
+    membersPagination: 'Пагінація учасників',
     columnStatus: 'Статус',
     itsYou: 'це ви',
     noContact: 'пошти й телефону не вказано',
     roleFor: 'Роль для {name}',
-    inTeamSince: 'у команді з',
     memberActive: 'Активний',
     memberOff: 'Вимкнений',
     permissions: 'Права',
@@ -127,14 +130,15 @@ export const teamMessages = defineMessages({
       'Не вдалося видалити учасника. Перевірте зв’язок і спробуйте ще раз.',
     deleted: 'Учасника видалено.',
     memberActions: 'Дії з учасником {name}',
-    lastSeenNote:
-      'Останній вхід не зберігається — у колонці «Активність» лише дата приєднання.',
     seatsNoteUnknown: 'Скільки місць дає тариф, зараз невідомо.',
     seatsNoteUnlimited: 'Зайнято {used} — тариф не обмежує кількість людей.',
     seatsNote: 'Зайнято {used} з {max} місць тарифу.',
     raiseLimit: 'Збільшити ліміт',
     invitations: 'Запрошення',
     invitationsLead: 'Передайте активний код людині для реєстрації.',
+    copyInvitationCode: 'Копіювати код запрошення {code}',
+    invitationCodeCopied: 'Код запрошення скопійовано.',
+    invitationCodeCopyFailed: 'Не вдалося скопіювати код запрошення.',
     noActive: 'жодного активного',
     activeInvitations: {
       one: '{count} діє',
@@ -221,8 +225,6 @@ export const teamMessages = defineMessages({
     invitationExpired: 'Expired',
     invitationActive: 'Active',
 
-    noLastSeen:
-      'A member’s last sign-in isn’t stored — only the date they joined.',
     noEmail:
       'Members have no email — the account knows their name and phone, and no phone is given here.',
     noEmailInvite:
@@ -255,11 +257,16 @@ export const teamMessages = defineMessages({
     columnUser: 'User',
     columnRole: 'Role',
     columnActivity: 'Activity',
+    activityToday: 'Today',
+    activityYesterday: 'Yesterday',
+    activityUnknown: 'No activity recorded yet.',
+    roleFilter: 'Filter by role',
+    allRoles: 'All roles',
+    membersPagination: 'Member pagination',
     columnStatus: 'Status',
     itsYou: 'you',
     noContact: 'no email or phone given',
     roleFor: 'Role for {name}',
-    inTeamSince: 'in the team since',
     memberActive: 'Active',
     memberOff: 'Deactivated',
     permissions: 'Permissions',
@@ -284,8 +291,6 @@ export const teamMessages = defineMessages({
       'Couldn’t remove the member. Check your connection and try again.',
     deleted: 'Member removed.',
     memberActions: 'Actions for {name}',
-    lastSeenNote:
-      'Last sign-in isn’t stored — the Activity column only shows the join date.',
     seatsNoteUnknown: 'It’s not known how many seats the plan gives.',
     seatsNoteUnlimited:
       '{used} taken — the plan doesn’t limit the number of people.',
@@ -293,6 +298,9 @@ export const teamMessages = defineMessages({
     raiseLimit: 'Raise the limit',
     invitations: 'Invitations',
     invitationsLead: 'Give an active code to the person so they can sign up.',
+    copyInvitationCode: 'Copy invitation code {code}',
+    invitationCodeCopied: 'Invitation code copied.',
+    invitationCodeCopyFailed: 'Couldn’t copy the invitation code.',
     noActive: 'none active',
     activeInvitations: { one: '{count} active', other: '{count} active' },
     validUntil: '{role} · valid until',
@@ -374,8 +382,6 @@ export const teamMessages = defineMessages({
     invitationExpired: 'Wygasłe',
     invitationActive: 'Aktywne',
 
-    noLastSeen:
-      'Ostatnie logowanie nie jest zapisywane — znana jest tylko data dołączenia.',
     noEmail:
       'Członek zespołu nie ma e-maila — konto zna imię i telefon, a telefonu tu nie podano.',
     noEmailInvite:
@@ -420,11 +426,16 @@ export const teamMessages = defineMessages({
     columnUser: 'Użytkownik',
     columnRole: 'Rola',
     columnActivity: 'Aktywność',
+    activityToday: 'Dzisiaj',
+    activityYesterday: 'Wczoraj',
+    activityUnknown: 'Brak zapisanej aktywności.',
+    roleFilter: 'Filtruj według roli',
+    allRoles: 'Wszystkie role',
+    membersPagination: 'Strony członków zespołu',
     columnStatus: 'Status',
     itsYou: 'to Ty',
     noContact: 'nie podano e-maila ani telefonu',
     roleFor: 'Rola dla: {name}',
-    inTeamSince: 'w zespole od',
     memberActive: 'Aktywny',
     memberOff: 'Wyłączony',
     permissions: 'Uprawnienia',
@@ -449,14 +460,15 @@ export const teamMessages = defineMessages({
       'Nie udało się usunąć członka zespołu. Sprawdź połączenie i spróbuj ponownie.',
     deleted: 'Członek zespołu usunięty.',
     memberActions: 'Działania: {name}',
-    lastSeenNote:
-      'Ostatnie logowanie nie jest zapisywane — kolumna „Aktywność” pokazuje tylko datę dołączenia.',
     seatsNoteUnknown: 'Nie wiadomo, ile miejsc daje plan.',
     seatsNoteUnlimited: 'Zajęte: {used} — plan nie ogranicza liczby osób.',
     seatsNote: 'Zajęte {used} z {max} miejsc w planie.',
     raiseLimit: 'Zwiększ limit',
     invitations: 'Zaproszenia',
     invitationsLead: 'Przekaż aktywny kod osobie do rejestracji.',
+    copyInvitationCode: 'Kopiuj kod zaproszenia {code}',
+    invitationCodeCopied: 'Kod zaproszenia skopiowano.',
+    invitationCodeCopyFailed: 'Nie udało się skopiować kodu zaproszenia.',
     noActive: 'brak aktywnych',
     activeInvitations: {
       one: '{count} aktywne',

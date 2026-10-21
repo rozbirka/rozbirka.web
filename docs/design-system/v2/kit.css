@@ -120,7 +120,7 @@
 .rz-search { display: flex; align-items: center; gap: 8px; height: var(--rz-control-h); padding: 0 10px; border: 1px solid var(--rz-border-strong); border-radius: var(--rz-r-sm); background: var(--rz-surface-2); }
 .rz-search i { font-size:var(--rz-icon); color: var(--rz-text-dim); }
 .rz-search input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; }
-.rz-search:focus-within { border-color: var(--rz-brand); box-shadow: 0 0 0 3px var(--rz-brand-soft); }
+.rz-search:focus-within { border-color: var(--rz-text-muted); }
 /* Composite fields: the wrapper shows focus, the inner control never draws its own ring */
 .rz-input-group > input:focus-visible, .rz-search input:focus-visible, .rz-stepper input:focus-visible, .rz-input:focus-visible, .rz-select:focus-visible, .rz-textarea:focus-visible { box-shadow: none; outline: none; }
 .rz-input:focus, .rz-select:focus, .rz-textarea:focus { box-shadow: 0 0 0 3px var(--rz-brand-soft); }
@@ -208,6 +208,7 @@
 .rz-toolbar__end { margin-left: auto; display: flex; gap: 4px; }
 .rz-filter { display: inline-flex; align-items: center; gap: 6px; height: var(--rz-control-h); padding: 0 8px 0 10px; border: 1px dashed var(--rz-border-strong); border-radius: var(--rz-r-sm); background: transparent; color: var(--rz-text-muted); cursor: pointer; white-space: nowrap; }
 .rz-filter:hover { background: var(--rz-fill-hover); color: var(--rz-text); }
+.rz-filter select:focus-visible { outline: none; box-shadow: none; text-decoration: underline; }
 .rz-filter--set { border-style: solid; background: var(--rz-surface); color: var(--rz-text); }
 .rz-filter--set .rz-filter__key { color: var(--rz-text-dim); }
 .rz-chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 4px 0 8px; border: 1px solid var(--rz-border-strong); border-radius: var(--rz-r-xs); background: var(--rz-surface-2); font-size: var(--rz-fs-caption); color: var(--rz-text); cursor: pointer; }

@@ -3,6 +3,7 @@ import { defineMessages } from '@/i18n'
 /** Where one part lies: warehouse, zones and placement history. */
 export const placementMessages = defineMessages({
   uk: {
+    partDetails: 'Дані запчастини',
     backToPart: 'До деталі',
     crumbParts: 'Запчастини',
     scanUnavailable:
@@ -72,6 +73,7 @@ export const placementMessages = defineMessages({
     unchanged: 'Нічого не змінилося — набір зон уже такий.',
   },
   'en-GB': {
+    partDetails: 'Part details',
     backToPart: 'Back to part',
     crumbParts: 'Parts',
     scanUnavailable:
@@ -137,6 +139,7 @@ export const placementMessages = defineMessages({
     unchanged: 'Nothing has changed — the zones are already set like this.',
   },
   pl: {
+    partDetails: 'Dane części',
     backToPart: 'Do części',
     crumbParts: 'Części',
     scanUnavailable:

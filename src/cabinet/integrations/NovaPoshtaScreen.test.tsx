@@ -1,16 +1,22 @@
 /* eslint-disable @typescript-eslint/unbound-method -- Vitest mock methods are asserted directly. */
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { integrationsApi, type Integration } from '@/api/integrations'
-import type { Tenant } from '@/api/types'
+import { AxiosError } from 'axios'
+import { businessApi } from '@/api/business'
+import { tenantsApi } from '@/api/tenants'
+import type { BillingState, Tenant } from '@/api/types'
 import { tenantSettings } from '@/api/tenant-settings'
 import { useTenantSettings } from '@/auth/useTenantSettings'
 import { LocaleProvider } from '@/i18n'
 import { useCabinet, type CabinetContextValue } from '../CabinetContext'
 import { ToastProvider } from '@/components/app'
 import { NovaPoshtaScreen } from './NovaPoshtaScreen'
+
+vi.mock('@/api/business', () => ({ businessApi: { update: vi.fn() } }))
+vi.mock('@/api/tenants', () => ({ tenantsApi: { list: vi.fn() } }))
 
 vi.mock('@/api/integrations', () => ({
   integrationsApi: {
@@ -85,7 +91,7 @@ const cabinet = () =>
       permissions: new Set(['team.manage']),
       features: new Set(),
       entitlement: {
-        state: 'active',
+        state: 'active' as BillingState,
         usage: {
           cars: { used: 1, max: 10 },
           intakes: { used: 1, max: 10 },
@@ -113,7 +119,7 @@ const cabinet = () =>
     error: null,
     retry: vi.fn(),
     switchTenant: vi.fn(),
-  }) as unknown as CabinetContextValue
+  }) satisfies CabinetContextValue
 
 const integration: Integration = {
   id: 'integration-1',
@@ -132,6 +138,13 @@ beforeEach(() => {
   vi.mocked(useCabinet).mockReturnValue(cabinet())
   vi.mocked(useTenantSettings).mockReturnValue(tenantSettings(null))
   vi.mocked(integrationsApi.getById).mockResolvedValue(integration)
+  vi.mocked(businessApi.update).mockResolvedValue({
+    ...tenant,
+    requireDeliveryDeposit: false,
+  })
+  vi.mocked(tenantsApi.list).mockResolvedValue([
+    { ...tenant, requireDeliveryDeposit: false },
+  ])
 })
 
 const renderScreen = (tab = '') =>
@@ -410,4 +423,153 @@ it('turns a 409 integration_country_unavailable into the same state', async () =
   ).toBeVisible()
   expect(screen.queryByText(/Не вдалося відкрити інтеграцію/)).toBeNull()
   expect(screen.queryByRole('textbox')).toBeNull()
+})
+
+it('saves the real delivery deposit policy from Nova Poshta settings without rewriting business details', async () => {
+  const currentCabinet = cabinet()
+  vi.mocked(useCabinet).mockReturnValue(currentCabinet)
+  const user = userEvent.setup()
+  renderScreen('/settings')
+  const toggle = await screen.findByRole('switch', {
+    name: 'Вимагати депозит за доставку',
+  })
+  expect(toggle).toHaveAttribute('aria-checked', 'true')
+  const panel = within(toggle.closest('section')!)
+  await user.click(toggle)
+  await user.click(panel.getByRole('button', { name: 'Зберегти' }))
+  await waitFor(() =>
+    expect(businessApi.update).toHaveBeenCalledWith(
+      tenant.id,
+      { requireDeliveryDeposit: false },
+      expect.anything(),
+    ),
+  )
+  expect(
+    vi.mocked(businessApi.update).mock.calls[0]?.[2]?.signal,
+  ).toBeInstanceOf(AbortSignal)
+  expect(
+    await screen.findByText('Налаштування депозиту збережено.'),
+  ).toBeVisible()
+  expect(currentCabinet.switchTenant).toHaveBeenCalledWith(tenant.id)
+  expect(integrationsApi.savePreferences).not.toHaveBeenCalled()
+})
+
+it('does not put the delivery deposit control on other Nova Poshta tabs', async () => {
+  renderScreen()
+  await screen.findByRole('heading', { name: 'Нова пошта' })
+  expect(
+    screen.queryByRole('switch', { name: 'Вимагати депозит за доставку' }),
+  ).toBeNull()
+})
+
+it('keeps the deposit draft and offers retry when saving fails', async () => {
+  vi.mocked(businessApi.update).mockRejectedValue(new Error('offline'))
+  const user = userEvent.setup()
+  renderScreen('/settings')
+  const toggle = await screen.findByRole('switch', {
+    name: 'Вимагати депозит за доставку',
+  })
+  const panel = within(toggle.closest('section')!)
+  await user.click(toggle)
+  await user.click(panel.getByRole('button', { name: 'Зберегти' }))
+  expect(await panel.findByRole('alert')).toHaveTextContent(
+    'Не вдалося зберегти налаштування депозиту.',
+  )
+  expect(toggle).toHaveAttribute('aria-checked', 'false')
+  expect(panel.getByRole('button', { name: 'Зберегти' })).toBeEnabled()
+  expect(screen.queryByText('Налаштування депозиту збережено.')).toBeNull()
+})
+
+it('reads the persisted deposit setting back after a lost response', async () => {
+  vi.mocked(businessApi.update).mockRejectedValue(
+    new AxiosError('timeout', 'ECONNABORTED'),
+  )
+  const user = userEvent.setup()
+  renderScreen('/settings')
+  const toggle = await screen.findByRole('switch', {
+    name: 'Вимагати депозит за доставку',
+  })
+  await user.click(toggle)
+  await user.click(
+    within(toggle.closest('section')!).getByRole('button', {
+      name: 'Зберегти',
+    }),
+  )
+  expect(
+    await screen.findByText('Налаштування депозиту збережено.'),
+  ).toBeVisible()
+  expect(tenantsApi.list).toHaveBeenCalledTimes(1)
+  expect(businessApi.update).toHaveBeenCalledTimes(1)
+})
+
+it('allows only the owner to change the tenant-wide deposit policy', async () => {
+  const currentCabinet = cabinet()
+  if (currentCabinet.snapshot) currentCabinet.snapshot.role = 'manager'
+  vi.mocked(useCabinet).mockReturnValue(currentCabinet)
+  renderScreen('/settings')
+  const toggle = await screen.findByRole('switch', {
+    name: 'Вимагати депозит за доставку',
+  })
+  expect(toggle).toBeDisabled()
+  expect(
+    screen.getByText('Змінити вимогу депозиту може лише власник бізнесу.'),
+  ).toBeVisible()
+  expect(businessApi.update).not.toHaveBeenCalled()
+})
+
+it.each(['permission', 'role', 'subscription'])(
+  'rechecks %s before saving a deposit change',
+  async (revoked) => {
+    const currentCabinet = cabinet()
+    vi.mocked(useCabinet).mockReturnValue(currentCabinet)
+    const user = userEvent.setup()
+    renderScreen('/settings')
+    const toggle = await screen.findByRole('switch', {
+      name: 'Вимагати депозит за доставку',
+    })
+    await user.click(toggle)
+    if (revoked === 'permission')
+      currentCabinet.snapshot?.permissions.delete('team.manage')
+    if (revoked === 'role' && currentCabinet.snapshot)
+      currentCabinet.snapshot.role = 'manager'
+    if (revoked === 'subscription' && currentCabinet.snapshot?.entitlement)
+      currentCabinet.snapshot.entitlement.state = 'blocked'
+    await user.click(
+      within(toggle.closest('section')!).getByRole('button', {
+        name: 'Зберегти',
+      }),
+    )
+    expect(
+      await screen.findByText(
+        'Ви більше не маєте права змінювати налаштування депозиту.',
+      ),
+    ).toBeVisible()
+    expect(businessApi.update).not.toHaveBeenCalled()
+  },
+)
+
+it('ignores a deposit response after leaving the integration settings', async () => {
+  let finish!: (value: Tenant) => void
+  vi.mocked(businessApi.update).mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve
+    }),
+  )
+  const currentCabinet = cabinet()
+  vi.mocked(useCabinet).mockReturnValue(currentCabinet)
+  const user = userEvent.setup()
+  const view = renderScreen('/settings')
+  const toggle = await screen.findByRole('switch', {
+    name: 'Вимагати депозит за доставку',
+  })
+  await user.click(toggle)
+  const panel = within(toggle.closest('section')!)
+  await user.click(panel.getByRole('button', { name: 'Зберегти' }))
+  expect(toggle).toBeDisabled()
+  view.unmount()
+  await act(async () => {
+    finish({ ...tenant, requireDeliveryDeposit: false })
+    await Promise.resolve()
+  })
+  expect(currentCabinet.switchTenant).not.toHaveBeenCalled()
 })

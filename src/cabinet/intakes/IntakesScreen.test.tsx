@@ -639,6 +639,7 @@ it('allows no-photo part creation without parts.manage and exposes upload only w
     {
       name: 'Бампер',
       partType: null,
+      oemCode: null,
       condition: 'good',
       quantity: 1,
       unit: 'шт',
@@ -707,6 +708,259 @@ it('uses the standard condition choices and compatibility section without invent
       expect.objectContaining({ condition: 'fair' }),
       expect.anything(),
     ),
+  )
+})
+
+it.each(['save', 'save-and-add-another'] as const)(
+  'refreshes intake parts after %s and returning from the drawer',
+  async (mode) => {
+    const user = userEvent.setup()
+    vi.mocked(useCabinet).mockReturnValue(
+      cabinet(['intakes.view', 'intakes.manage', 'parts.view']),
+    )
+    let serverDetail = detail
+    vi.mocked(intakesApi.get).mockImplementation(() =>
+      Promise.resolve(serverDetail),
+    )
+    vi.mocked(intakesApi.addPart).mockImplementation(() => {
+      serverDetail = {
+        ...detail,
+        partsCount: detail.partsCount + 1,
+        parts: [
+          {
+            ...detail.parts[0]!,
+            id: 'part-new',
+            name: 'Нова фара',
+            qrCode: 'QR-NEW',
+          },
+          ...detail.parts,
+        ],
+      }
+      return Promise.resolve({ id: 'part-new' } as never)
+    })
+    render(
+      <MemoryRouter initialEntries={['/app/demo/intakes/intake-1']}>
+        <Routes>
+          <Route
+            path="/app/:tenant/intakes/:intakeId/*"
+            element={<IntakesScreen />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('link', { name: /Бампер/ })
+    await user.click(screen.getAllByRole('link', { name: 'Додати деталь' })[0]!)
+    const drawer = await screen.findByRole('dialog', { name: 'Додати деталь' })
+    await user.type(
+      within(drawer).getByRole('textbox', { name: 'Назва' }),
+      'Нова фара',
+    )
+    await user.type(
+      within(drawer).getByRole('textbox', { name: 'OEM-код' }),
+      '001RV-8820-02',
+    )
+    await user.click(
+      within(drawer).getByRole('button', {
+        name: mode === 'save' ? 'Додати деталь' : 'Зберегти й додати ще',
+      }),
+    )
+    if (mode === 'save-and-add-another') {
+      await waitFor(() =>
+        expect(
+          within(drawer).getByRole('textbox', { name: 'Назва' }),
+        ).toHaveValue(''),
+      )
+      await user.click(
+        within(drawer).getByRole('button', { name: 'Скасувати' }),
+      )
+    }
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Додати деталь' }),
+      ).not.toBeInTheDocument(),
+    )
+    expect(await screen.findByRole('link', { name: /Нова фара/ })).toBeVisible()
+    expect(screen.getByRole('link', { name: /Бампер/ })).toBeVisible()
+    expect(intakesApi.addPart).toHaveBeenCalledTimes(1)
+  },
+)
+
+it('cancels a filled intake part without creating it', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage', 'parts.view']),
+  )
+  vi.mocked(intakesApi.addPart).mockReset()
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId/*"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const drawer = await screen.findByRole('dialog', { name: 'Додати деталь' })
+  await user.type(
+    within(drawer).getByRole('textbox', { name: 'Назва' }),
+    'Не зберігати',
+  )
+  await user.type(
+    within(drawer).getByRole('textbox', { name: 'OEM-код' }),
+    'CANCEL-TEST',
+  )
+  await user.click(within(drawer).getByRole('button', { name: 'Скасувати' }))
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  )
+  expect(intakesApi.addPart).not.toHaveBeenCalled()
+  expect(
+    screen.queryByRole('link', { name: /Не зберігати/ }),
+  ).not.toBeInTheDocument()
+})
+
+it('limits pasted OEM to 100 characters and saves the complete allowed value', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage', 'parts.view']),
+  )
+  vi.mocked(intakesApi.addPart).mockResolvedValue({
+    id: 'part-long-oem',
+  } as never)
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId/*"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const drawer = await screen.findByRole('dialog', { name: 'Додати деталь' })
+  await user.type(
+    within(drawer).getByRole('textbox', { name: 'Назва' }),
+    'Довгий OEM',
+  )
+  const oem = within(drawer).getByRole('textbox', { name: 'OEM-код' })
+  await user.click(oem)
+  await user.paste('0'.repeat(101))
+  expect(oem).toHaveValue('0'.repeat(100))
+  await user.click(
+    within(drawer).getByRole('button', { name: 'Зберегти й додати ще' }),
+  )
+  await waitFor(() =>
+    expect(intakesApi.addPart).toHaveBeenCalledWith(
+      'intake-1',
+      expect.objectContaining({ oemCode: '0'.repeat(100) }),
+      expect.anything(),
+    ),
+  )
+})
+
+it('keeps name and OEM when Add part fails offline and creates it on retry', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage', 'parts.view']),
+  )
+  vi.mocked(intakesApi.addPart)
+    .mockReset()
+    .mockRejectedValueOnce({ kind: 'network', message: 'Немає мережі' })
+    .mockResolvedValueOnce({ id: 'part-retried' } as never)
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId/*"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+  const drawer = await screen.findByRole('dialog', { name: 'Додати деталь' })
+  const name = within(drawer).getByRole('textbox', { name: 'Назва' })
+  const oem = within(drawer).getByRole('textbox', { name: 'OEM-код' })
+  await user.type(name, 'Тест OEM — Фара')
+  await user.type(oem, '001RV-8820-02')
+  await user.click(
+    within(drawer).getByRole('button', { name: 'Додати деталь' }),
+  )
+  expect(await within(drawer).findByRole('alert')).toHaveTextContent(
+    'Немає мережі',
+  )
+  expect(name).toHaveValue('Тест OEM — Фара')
+  expect(oem).toHaveValue('001RV-8820-02')
+  await user.click(
+    within(drawer).getByRole('button', { name: 'Додати деталь' }),
+  )
+  await waitFor(() =>
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
+  )
+  expect(intakesApi.addPart).toHaveBeenCalledTimes(2)
+  expect(intakesApi.addPart).toHaveBeenLastCalledWith(
+    'intake-1',
+    expect.objectContaining({
+      name: 'Тест OEM — Фара',
+      oemCode: '001RV-8820-02',
+    }),
+    expect.anything(),
+  )
+})
+
+it('keeps OEM after a failed intake save and clears it only after saving and adding another', async () => {
+  const user = userEvent.setup()
+  vi.mocked(useCabinet).mockReturnValue(
+    cabinet(['intakes.view', 'intakes.manage', 'parts.view']),
+  )
+  vi.mocked(intakesApi.addPart)
+    .mockReset()
+    .mockRejectedValueOnce({ kind: 'network', message: 'Network unavailable' })
+    .mockResolvedValueOnce({ id: 'part-new' } as never)
+    .mockResolvedValueOnce({ id: 'part-next' } as never)
+  render(
+    <MemoryRouter initialEntries={['/app/demo/intakes/intake-1/parts/new']}>
+      <Routes>
+        <Route
+          path="/app/:tenant/intakes/:intakeId/parts/new"
+          element={<IntakesScreen />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+  const oem = await screen.findByRole('textbox', { name: 'OEM-код' })
+  expect(oem).toBeEnabled()
+  expect(oem).toHaveAttribute('maxlength', '100')
+  await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Фара')
+  await user.type(oem, '  001RV-8820-02  ')
+  await user.click(saveButton('Зберегти й додати ще'))
+  await screen.findByText('Network unavailable')
+  expect(oem).toHaveValue('  001RV-8820-02  ')
+  expect(intakesApi.addPart).toHaveBeenLastCalledWith(
+    'intake-1',
+    expect.objectContaining({ oemCode: '001RV-8820-02' }),
+    expect.anything(),
+  )
+
+  await user.click(saveButton('Зберегти й додати ще'))
+  await waitFor(() => expect(oem).toHaveValue(''))
+  expect(intakesApi.addPart).toHaveBeenCalledTimes(2)
+  expect(intakesApi.addPart).toHaveBeenLastCalledWith(
+    'intake-1',
+    expect.objectContaining({ oemCode: '001RV-8820-02' }),
+    expect.anything(),
+  )
+
+  await user.type(screen.getByRole('textbox', { name: 'Назва' }), 'Двері')
+  await user.click(saveButton('Зберегти й додати ще'))
+  await waitFor(() => expect(intakesApi.addPart).toHaveBeenCalledTimes(3))
+  expect(intakesApi.addPart).toHaveBeenLastCalledWith(
+    'intake-1',
+    expect.objectContaining({ oemCode: null }),
+    expect.anything(),
   )
 })
 
