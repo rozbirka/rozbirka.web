@@ -1907,22 +1907,22 @@ test('compact location browser searches and pages large shelf lists @location-br
     })
     await sectionPager.getByRole('button', { name: /Наступна/ }).click()
     await expect(
-      page.getByRole('link', { name: 'Секція 11, S11', exact: true }),
+      page.getByRole('link', { name: 'Секція 16, S16', exact: true }),
     ).toBeVisible()
     await page.reload()
     await expect(
-      page.getByRole('link', { name: 'Секція 11, S11', exact: true }),
+      page.getByRole('link', { name: 'Секція 16, S16', exact: true }),
     ).toBeVisible()
     await page.getByRole('searchbox', { name: 'Пошук секції' }).fill('S7')
     await page.getByRole('link', { name: 'Секція 7, S7', exact: true }).click()
     await expect(page).toHaveURL(/warehouses\/sections\/section-6$/)
     const table = page.getByRole('table', { name: 'Полиці: Секція 7' })
-    await expect(table.getByRole('row')).toHaveCount(11)
+    await expect(table.getByRole('row')).toHaveCount(16)
     await page
       .getByRole('navigation', { name: 'Сторінки полиць' })
       .getByRole('button', { name: /Наступна/ })
       .click()
-    await expect(page.getByText('S7-P11', { exact: true })).toBeVisible()
+    await expect(page.getByText('S7-P16', { exact: true })).toBeVisible()
     await page.getByRole('searchbox', { name: 'Пошук полиці' }).fill('S7-P100')
     await page
       .getByRole('link', {
