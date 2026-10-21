@@ -1,6 +1,8 @@
 import { Link } from 'react-router'
-import { Button } from '@/components/app'
+import { AlertTriangle } from 'lucide-react'
+import { Button, SectionPanel, StatusPill } from '@/components/app'
 import { cn } from '@/lib/utils'
+import { Kpi, KpiStrip } from '../redesign-kpi'
 import {
   commonMessages,
   formatDate,
@@ -27,50 +29,6 @@ const day = (value: string | null, locale: Locale, timeZone: string) =>
 /** Rows the server will pick up again; everything else needs the file fixed. */
 const RETRYABLE = ['Pending', 'RetryableFailure']
 
-function Kpi({
-  label,
-  value,
-  meta,
-  tone,
-  title,
-}: {
-  label: string
-  value: string
-  meta: string
-  tone?: 'plain' | 'good' | 'warn' | 'dim'
-  title?: string
-}) {
-  return (
-    <div className="bg-app-raised px-6 pt-5.5 pb-6" title={title}>
-      <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-        {label}
-      </p>
-      <p
-        className={cn(
-          'mt-3.5 text-[26px] leading-none font-extrabold tracking-[-0.03em]',
-          tone === 'good' && 'text-state-ok',
-          tone === 'warn' && 'text-state-warn',
-          tone === 'dim' && 'text-app-dim',
-          (tone === undefined || tone === 'plain') && 'text-app-ink',
-        )}
-      >
-        {value}
-      </p>
-      <p className="text-app-dim mt-3.5 text-[13px] leading-5 text-pretty">
-        {meta}
-      </p>
-    </div>
-  )
-}
-
-function Strip({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,190px),1fr))] gap-px overflow-hidden rounded-[20px] border">
-      {children}
-    </div>
-  )
-}
-
 function Panel({
   label,
   title,
@@ -83,16 +41,13 @@ function Panel({
   footer?: React.ReactNode
 }) {
   return (
-    <section
-      aria-label={label}
-      className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
-    >
-      <h2 className="text-app-ink border-app-line border-b px-5.5 py-4 text-[15px] font-bold">
-        {title}
-      </h2>
+    <section aria-label={label} className="rz-card min-w-0">
+      <header className="rz-card__head py-2.5">
+        <h2 className="rz-h-card">{title}</h2>
+      </header>
       {children}
       {footer === undefined ? null : (
-        <p className="text-app-dim border-app-line border-t px-5.5 py-3.5 text-[13px] leading-5 text-pretty">
+        <p className="rz-caption border-app-line m-0 border-t px-(--rz-card-p) py-2.5 text-pretty">
           {footer}
         </p>
       )}
@@ -212,79 +167,72 @@ export function ImportResultStep({
           : t('ledeDone')
 
   return (
-    <div className="flex min-w-0 flex-col gap-3.5">
-      <section
-        aria-label={t('importState')}
-        className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-6 pb-6 sm:px-8"
-      >
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <span
-            className={cn(
-              'inline-flex items-center rounded-full border px-3 py-1 text-[12.5px] font-bold',
-              running && 'border-brand/34 text-brand bg-brand/10',
-              !running &&
-                !expired &&
-                !partial &&
-                !stopped &&
-                'border-state-ok/30 text-state-ok bg-state-ok/10',
-              (partial || stopped) &&
-                'border-state-warn/30 text-state-warn bg-state-warn-soft',
-              expired && 'border-app-line text-app-dim',
-            )}
-          >
-            {statusLabel(status.status, locale)}
-          </span>
-          <span className="text-app-dim text-[13.5px]">
-            {t('createdAt', {
-              date: moment(status.createdAt, locale, timeZone) ?? '',
-            })}
-          </span>
-        </p>
-        <h2 className="text-app-ink mt-4 text-[26px] leading-[1.12] font-extrabold tracking-[-0.03em] text-pretty sm:text-[32px]">
-          {headline}
-        </h2>
-        <p className="text-app-muted mt-2.5 max-w-[68ch] text-[14.5px] leading-6 text-pretty">
-          {lede}
-        </p>
-
-        {running ? (
-          <div className="mt-6">
-            <p className="flex flex-wrap items-baseline gap-x-3">
-              <span className="text-[40px] leading-none font-extrabold tracking-[-0.03em] text-white">
-                {count(committed)}
-              </span>
-              <span className="text-app-muted text-[15px] font-bold">
-                {t('createdOf', { count: count(selected) })}
-              </span>
-            </p>
-            <progress
-              aria-label={t('progress')}
-              className="mt-4 h-2 w-full"
-              max={Math.max(1, selected)}
-              value={committed}
-            />
-            <p className="text-app-dim mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[13px]">
-              <span>{t('createdCount', { count: count(committed) })}</span>
-              <span className={cn(failed > 0 && 'text-state-warn')}>
-                {t('failedCount', { count: count(failed) })}
-              </span>
-              <span>{t('queuedCount', { count: count(queued) })}</span>
-            </p>
-          </div>
-        ) : null}
-
-        {status.errorCode ? (
-          <p className="border-state-warn/26 bg-state-warn-soft text-state-warn mt-5 rounded-[14px] border px-4 py-3 text-[13.5px] leading-5 text-pretty">
-            {issueText(status.errorCode, locale)}
+    <div className="flex min-w-0 flex-col gap-3">
+      <section aria-label={t('importState')} className="rz-card">
+        <div className="rz-card__body grid gap-2">
+          <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <StatusPill
+              tone={
+                running
+                  ? 'info'
+                  : expired
+                    ? 'neutral'
+                    : partial || stopped
+                      ? 'warn'
+                      : 'ok'
+              }
+            >
+              {statusLabel(status.status, locale)}
+            </StatusPill>
+            <span className="rz-caption">
+              {t('createdAt', {
+                date: moment(status.createdAt, locale, timeZone) ?? '',
+              })}
+            </span>
           </p>
-        ) : null}
+          <h2 className="rz-h-title mt-1 text-pretty">{headline}</h2>
+          <p className="text-app-muted m-0 max-w-[68ch] text-pretty">{lede}</p>
+
+          {running ? (
+            <div className="mt-3 grid gap-2">
+              <p className="m-0 flex flex-wrap items-baseline gap-x-3">
+                <span className="rz-display">{count(committed)}</span>
+                <span className="text-app-muted font-semibold">
+                  {t('createdOf', { count: count(selected) })}
+                </span>
+              </p>
+              <progress
+                aria-label={t('progress')}
+                className="accent-state-ok h-1 w-full"
+                max={Math.max(1, selected)}
+                value={committed}
+              />
+              <p className="rz-caption m-0 flex flex-wrap gap-x-4 gap-y-1">
+                <span>{t('createdCount', { count: count(committed) })}</span>
+                <span className={cn(failed > 0 && 'text-state-warn')}>
+                  {t('failedCount', { count: count(failed) })}
+                </span>
+                <span>{t('queuedCount', { count: count(queued) })}</span>
+              </p>
+            </div>
+          ) : null}
+
+          {status.errorCode ? (
+            <div className="rz-notice rz-notice--warn mt-2">
+              <AlertTriangle aria-hidden />
+              <p className="rz-notice__body m-0 text-pretty">
+                {issueText(status.errorCode, locale)}
+              </p>
+            </div>
+          ) : null}
+        </div>
       </section>
 
-      <Strip>
+      <KpiStrip>
         <Kpi
           label={t('itemsCreated')}
           meta={unitsMeta}
-          tone={committed > 0 ? 'good' : 'dim'}
+          tone={committed > 0 ? 'plain' : 'dim'}
           value={t('createdOfTotal', {
             created: count(committed),
             total: count(selected),
@@ -335,12 +283,12 @@ export function ImportResultStep({
                   : t('reportInProgress')
           }
         />
-      </Strip>
+      </KpiStrip>
 
       {expired ? (
-        <div className="flex flex-wrap items-start gap-3.5">
+        <div className="grid items-start gap-3 md:grid-cols-2">
           <Panel label={t('whatIsGone')} title={t('whatIsGone')}>
-            <ul className="text-app-muted grid gap-2.5 px-5.5 py-4 text-[13.5px] leading-6">
+            <ul className="text-app-muted m-0 grid list-none gap-2 px-(--rz-card-p) py-3">
               {[
                 t('goneSource'),
                 t('goneRows'),
@@ -361,7 +309,7 @@ export function ImportResultStep({
             label={t('whatRemains')}
             title={t('whatRemains')}
           >
-            <ul className="text-app-muted grid gap-2.5 px-5.5 py-4 text-[13.5px] leading-6">
+            <ul className="text-app-muted m-0 grid list-none gap-2 px-(--rz-card-p) py-3">
               {[
                 t('partsInCatalogue', { count: committed }),
                 t('remainsTotals'),
@@ -387,41 +335,35 @@ export function ImportResultStep({
             count: count(broken.length),
           })}
         >
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[14px]">
+          <div className="rz-table-scroll">
+            <table className="rz-table">
               <thead>
-                <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
-                  <th className="px-5.5 py-2.5 text-left">{t('row')}</th>
-                  <th className="px-3 py-2.5 text-left">{t('item')}</th>
-                  <th className="px-3 py-2.5 text-left">{t('reason')}</th>
-                  <th className="px-3 py-2.5 text-left">{t('whatToDo')}</th>
+                <tr>
+                  <th scope="col">{t('row')}</th>
+                  <th scope="col">{t('item')}</th>
+                  <th scope="col">{t('reason')}</th>
+                  <th scope="col">{t('whatToDo')}</th>
                 </tr>
               </thead>
               <tbody>
                 {broken.map((row) => {
                   const again = RETRYABLE.includes(row.executionStatus ?? '')
                   return (
-                    <tr className="border-app-line border-b" key={row.rowId}>
-                      <td className="text-app-dim px-5.5 py-3.5 font-mono text-[13px] tabular-nums">
+                    <tr key={row.rowId}>
+                      <th
+                        className="text-app-dim font-mono tabular-nums"
+                        scope="row"
+                      >
                         {count(row.sourceRow)}
-                      </td>
-                      <td className="text-app-ink px-3 py-3.5 font-medium">
+                      </th>
+                      <td className="text-app-strong font-medium">
                         {row.draft?.values['Name'] ?? '—'}
                       </td>
-                      <td className="text-app-muted px-3 py-3.5">
-                        {issueText(row.executionErrorCode ?? '', locale)}
-                      </td>
-                      <td className="px-3 py-3.5">
-                        <span
-                          className={cn(
-                            'inline-flex rounded-full border px-2.5 py-1 text-[12.5px] font-medium whitespace-nowrap',
-                            again
-                              ? 'border-state-ok/24 text-state-ok bg-state-ok/10'
-                              : 'border-state-warn/24 text-state-warn bg-state-warn-soft',
-                          )}
-                        >
+                      <td>{issueText(row.executionErrorCode ?? '', locale)}</td>
+                      <td>
+                        <StatusPill tone={again ? 'ok' : 'warn'}>
                           {again ? t('canRetry') : t('fixFile')}
-                        </span>
+                        </StatusPill>
                       </td>
                     </tr>
                   )
@@ -443,15 +385,19 @@ export function ImportResultStep({
           label={t('createdItems')}
           title={t('createdItems')}
         >
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[14px]">
+          <div className="rz-table-scroll">
+            <table className="rz-table">
               <thead>
-                <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
-                  <th className="px-5.5 py-2.5 text-left">{t('row')}</th>
-                  <th className="px-3 py-2.5 text-left">{t('part')}</th>
-                  <th className="px-3 py-2.5 text-right">{t('quantity')}</th>
-                  <th className="px-3 py-2.5 text-right">{t('price')}</th>
-                  <th className="px-3 py-2.5 text-left">{t('zone')}</th>
+                <tr>
+                  <th scope="col">{t('row')}</th>
+                  <th scope="col">{t('part')}</th>
+                  <th className="rz-num" scope="col">
+                    {t('quantity')}
+                  </th>
+                  <th className="rz-num" scope="col">
+                    {t('price')}
+                  </th>
+                  <th scope="col">{t('zone')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -465,42 +411,41 @@ export function ImportResultStep({
                     .join(' · ')
                   const price = Number(values['DesiredSalePrice'] ?? '')
                   return (
-                    <tr className="border-app-line border-b" key={row.rowId}>
-                      <td className="text-app-dim px-5.5 py-3.5 font-mono text-[13px] tabular-nums">
+                    <tr key={row.rowId}>
+                      <th
+                        className="text-app-dim font-mono tabular-nums"
+                        scope="row"
+                      >
                         {count(row.sourceRow)}
-                      </td>
-                      <td className="px-3 py-3.5">
+                      </th>
+                      <td className="py-2">
                         {row.partId ? (
                           <Link
-                            className="text-app-ink hover:text-brand font-medium underline-offset-4 hover:underline"
+                            className="text-app-strong hover:text-brand-text font-medium underline-offset-4 hover:underline"
                             to={partHref(row.partId)}
                           >
                             {values['Name'] ??
                               t('rowFallback', { row: String(row.sourceRow) })}
                           </Link>
                         ) : (
-                          <span className="text-app-ink font-medium">
+                          <span className="text-app-strong font-medium">
                             {values['Name'] ??
                               t('rowFallback', { row: String(row.sourceRow) })}
                           </span>
                         )}
                         {code === '' ? null : (
-                          <span className="text-app-dim mt-1 block font-mono text-[12px]">
+                          <span className="rz-caption mt-0.5 block font-mono">
                             {code}
                           </span>
                         )}
                       </td>
-                      <td className="text-app-ink px-3 py-3.5 text-right font-mono tabular-nums">
-                        {values['Quantity'] ?? '—'}
-                      </td>
-                      <td className="text-app-ink px-3 py-3.5 text-right font-mono tabular-nums">
+                      <td className="rz-num">{values['Quantity'] ?? '—'}</td>
+                      <td className="rz-num">
                         {Number.isFinite(price) && values['DesiredSalePrice']
                           ? wholeMoney(price, accountingCurrency, locale)
                           : '—'}
                       </td>
-                      <td className="text-app-muted px-3 py-3.5">
-                        {values['InventoryZoneId'] ?? '—'}
-                      </td>
+                      <td>{values['InventoryZoneId'] ?? '—'}</td>
                     </tr>
                   )
                 })}
@@ -510,86 +455,60 @@ export function ImportResultStep({
         </Panel>
       ) : null}
 
-      <div className="flex flex-wrap items-start gap-3.5">
-        <section
-          aria-label={t('createdTogether')}
-          className="border-app-line bg-app-raised min-w-0 flex-[1_1_320px] rounded-[20px] border px-5.5 py-5"
+      <div className="flex flex-wrap items-start gap-3">
+        <SectionPanel
+          className="min-w-0 flex-[1_1_320px]"
+          title={t('createdTogether')}
         >
-          <h2 className="text-app-ink text-[15px] font-bold">
-            {t('createdTogether')}
-          </h2>
-          <dl className="mt-3.5 grid gap-2.5">
-            <div className="flex flex-wrap items-baseline justify-between gap-3">
-              <dt className="text-app-muted text-[13.5px]">
-                {t('totalsParts')}
-              </dt>
-              <dd className="text-app-ink font-mono text-[13px] tabular-nums">
-                {count(committed)}
-              </dd>
+          <dl className="rz-facts px-0 py-0">
+            <div>
+              <dt>{t('totalsParts')}</dt>
+              <dd className="font-mono tabular-nums">{count(committed)}</dd>
             </div>
             {[t('totalsIntakes'), t('totalsZones'), t('totalsOrders')].map(
               (label) => (
-                <div
-                  className="flex flex-wrap items-baseline justify-between gap-3"
-                  key={label}
-                  title={noTotals}
-                >
-                  <dt className="text-app-dim text-[13.5px]">{label}</dt>
-                  <dd className="text-app-dim font-mono text-[13px]">—</dd>
+                <div key={label} title={noTotals}>
+                  <dt>{label}</dt>
+                  <dd className="text-app-dim font-mono">—</dd>
                 </div>
               ),
             )}
           </dl>
-          <p className="text-app-dim mt-4 text-[13px] leading-5 text-pretty">
-            {t('totalsNote')}
-          </p>
-          <div className="mt-4">
+          <p className="rz-caption m-0 text-pretty">{t('totalsNote')}</p>
+          <div className="rz-btn-row">
             <Button asChild>
               <Link to={partsHref}>{t('toCatalogue')}</Link>
             </Button>
           </div>
-        </section>
+        </SectionPanel>
 
-        <section
-          aria-label={t('fileAndReport')}
-          className="border-app-line bg-app-raised min-w-0 flex-[1_1_320px] rounded-[20px] border px-5.5 py-5"
+        <SectionPanel
+          className="min-w-0 flex-[1_1_320px]"
+          title={t('fileAndReport')}
         >
-          <h2 className="text-app-ink text-[15px] font-bold">
-            {t('fileAndReport')}
-          </h2>
-          <dl className="mt-3.5 grid gap-2.5">
-            <div
-              className="flex flex-wrap items-baseline justify-between gap-3"
-              {...(fileName === null ? { title: noFileName } : {})}
-            >
-              <dt className="text-app-muted text-[13.5px]">{t('file')}</dt>
+          <dl className="rz-facts px-0 py-0">
+            <div {...(fileName === null ? { title: noFileName } : {})}>
+              <dt>{t('file')}</dt>
               <dd
                 className={cn(
-                  'min-w-0 text-[13.5px] break-all',
-                  fileName === null ? 'text-app-dim' : 'text-app-ink',
+                  'break-all',
+                  fileName === null ? 'text-app-dim' : 'text-app-strong',
                 )}
               >
                 {fileName ?? '—'}
               </dd>
             </div>
-            <div className="flex flex-wrap items-baseline justify-between gap-3">
-              <dt className="text-app-muted text-[13.5px]">
-                {t('rowsInFile')}
-              </dt>
-              <dd className="text-app-ink font-mono text-[13px] tabular-nums">
+            <div>
+              <dt>{t('rowsInFile')}</dt>
+              <dd className="font-mono tabular-nums">
                 {count(status.rowCount)}
               </dd>
             </div>
-            <div className="flex flex-wrap items-baseline justify-between gap-3">
-              <dt className="text-app-muted text-[13.5px]">
-                {t('availableUntil')}
-              </dt>
+            <div>
+              <dt>{t('availableUntil')}</dt>
               <dd
                 className={cn(
-                  'text-[13.5px]',
-                  status.retentionExpiresAt === null
-                    ? 'text-app-dim'
-                    : 'text-app-ink',
+                  status.retentionExpiresAt === null && 'text-app-dim',
                 )}
               >
                 {day(status.retentionExpiresAt, locale, timeZone) ??
@@ -597,7 +516,7 @@ export function ImportResultStep({
               </dd>
             </div>
           </dl>
-          <div className="mt-4 flex flex-wrap gap-2.5">
+          <div className="rz-btn-row">
             <Button
               disabled={busy || !reportReady}
               onClick={onReport}
@@ -616,27 +535,29 @@ export function ImportResultStep({
               </Button>
             )}
           </div>
-        </section>
+        </SectionPanel>
       </div>
 
       {!expired && rowTotal > PAGE_SIZE ? (
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-app-dim text-[13px]">
+          <p className="rz-caption m-0">
             {t('pageOf', {
               page: count(rowPage),
               pages: count(Math.ceil(rowTotal / PAGE_SIZE)),
             })}
           </p>
-          <div className="flex gap-2.5">
+          <div className="rz-btn-row">
             <Button
               disabled={busy || rowPage === 1}
               onClick={() => onRowPage(rowPage - 1)}
+              size="sm"
             >
               {tc('back')}
             </Button>
             <Button
               disabled={busy || rowPage * PAGE_SIZE >= rowTotal}
               onClick={() => onRowPage(rowPage + 1)}
+              size="sm"
             >
               {tc('next')}
             </Button>
@@ -644,30 +565,32 @@ export function ImportResultStep({
         </div>
       ) : null}
 
-      <div className="border-app-line bg-app-raised flex flex-wrap items-center justify-between gap-4 rounded-[18px] border px-5.5 py-5">
-        <p className="text-app-muted min-w-0 flex-[1_1_320px] text-[13.5px] leading-6 text-pretty">
-          {running
-            ? t('footerRunning')
-            : expired
-              ? t('footerExpired')
-              : t('footerDone')}
-        </p>
-        <div className="flex flex-wrap gap-2.5">
-          {running ? (
-            <Button disabled={busy} onClick={onCancel} variant="primary">
-              {t('stopImport')}
+      <div className="rz-card">
+        <div className="rz-card__body flex flex-wrap items-center justify-between gap-3">
+          <p className="text-app-muted m-0 min-w-0 flex-[1_1_320px] text-pretty">
+            {running
+              ? t('footerRunning')
+              : expired
+                ? t('footerExpired')
+                : t('footerDone')}
+          </p>
+          <div className="rz-btn-row">
+            {running ? (
+              <Button disabled={busy} onClick={onCancel} variant="primary">
+                {t('stopImport')}
+              </Button>
+            ) : null}
+            {!running && !expired && (queued > 0 || retryable > 0) ? (
+              <Button disabled={busy} onClick={onRetry} variant="primary">
+                {queued > 0
+                  ? t('importRest', { count: queued })
+                  : t('retryRows', { count: retryable })}
+              </Button>
+            ) : null}
+            <Button disabled={busy} onClick={onNewImport}>
+              {t('newImport')}
             </Button>
-          ) : null}
-          {!running && !expired && (queued > 0 || retryable > 0) ? (
-            <Button disabled={busy} onClick={onRetry} variant="primary">
-              {queued > 0
-                ? t('importRest', { count: queued })
-                : t('retryRows', { count: retryable })}
-            </Button>
-          ) : null}
-          <Button disabled={busy} onClick={onNewImport}>
-            {t('newImport')}
-          </Button>
+          </div>
         </div>
       </div>
     </div>

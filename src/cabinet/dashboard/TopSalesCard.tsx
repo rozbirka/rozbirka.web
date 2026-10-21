@@ -76,20 +76,20 @@ function Row({
   const body = (
     <>
       <span className="min-w-0">
-        <span className="block truncate text-[14px] font-bold text-white">
+        <span className="rz-strong block truncate font-medium">
           {topPart.name}
         </span>
-        <span className="text-app-dim mt-[3px] block font-mono text-[12px]">
+        <span className="rz-caption rz-mono mt-0.5 block">
           {t('salesInPeriod', { count: topPart.salesCount })}
         </span>
       </span>
-      <span className="font-mono text-[15px] font-medium whitespace-nowrap tabular-nums text-white">
+      <span className="rz-num rz-strong whitespace-nowrap">
         {revenue === null ? '—' : money(revenue.amount)}
       </span>
     </>
   )
   const className =
-    'grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 outline-none focus-visible:ring-2 focus-visible:ring-white/40'
+    'grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3 outline-none'
 
   return partsPath === null ? (
     <div className={className}>{body}</div>

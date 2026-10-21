@@ -32,32 +32,32 @@ function useEyebrow() {
 /** One line of a checklist: what was checked, what was found, and whether it passed. */
 function CheckRow({ check }: { check: ReadinessCheck }) {
   return (
-    <li className="bg-app-raised flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3">
+    <li className="border-app-line flex min-h-10 flex-wrap items-center gap-x-2.5 gap-y-1 border-t px-3 py-2 first:border-t-0">
       <span
         aria-hidden
         className={cn(
-          'grid size-[18px] shrink-0 place-items-center rounded-full border',
+          'rz-timeline__icon shrink-0',
           check.deferred === true || check.pending === true
-            ? 'border-app-line-2 text-app-dim'
+            ? 'text-app-dim'
             : check.ok
-              ? 'bg-state-ok border-transparent text-black'
-              : 'border-state-danger/50 text-state-danger',
+              ? 'bg-state-ok text-(--rz-on-brand)'
+              : 'border-state-danger text-state-danger border bg-transparent',
         )}
       >
         {check.deferred === true ? null : check.ok ? (
-          <Check className="size-3" />
+          <Check />
         ) : check.pending === true ? (
-          <Dot className="size-3" />
+          <Dot />
         ) : (
-          <X className="size-3" />
+          <X />
         )}
       </span>
-      <span className="min-w-0 flex-1 text-[14px] font-semibold text-white text-pretty">
+      <span className="rz-strong min-w-0 flex-1 font-medium text-pretty">
         {check.label}
       </span>
       <span
         className={cn(
-          'ml-auto font-mono text-[12px] tabular-nums',
+          'ml-auto font-mono text-caption tabular-nums',
           check.deferred === true || check.pending === true
             ? 'text-app-muted'
             : check.ok
@@ -114,7 +114,7 @@ export function WaybillReadinessDrawer({
         <>
           <p
             className={cn(
-              'min-w-0 flex-1 text-[13px]',
+              'm-0 min-w-0 flex-1',
               passed ? 'text-app-muted' : 'text-state-warn',
             )}
           >
@@ -141,23 +141,19 @@ export function WaybillReadinessDrawer({
       open
       title={t('readinessTitle')}
     >
-      <Notice tone={passed ? 'ok' : 'warn'}>
-        <p className="font-semibold">{next.title}</p>
-        <p className="mt-1">{next.note}</p>
+      <Notice block tone={passed ? 'ok' : 'warn'}>
+        <p className="rz-strong m-0 font-semibold">{next.title}</p>
+        <p className="m-0 mt-1">{next.note}</p>
       </Notice>
 
       <section className="grid gap-2">
-        <h3 className="text-app-ink text-[13px] font-bold">
-          {t('readinessChecks')}
-        </h3>
-        <ul className="border-app-line bg-app-input grid gap-px overflow-hidden rounded-[14px] border">
+        <h3 className="rz-h-card">{t('readinessChecks')}</h3>
+        <ul className="border-app-line m-0 grid min-h-fit list-none overflow-hidden rounded-rz-md border bg-(--rz-sheet-field) p-0">
           {checks.map((check) => (
             <CheckRow check={check} key={check.key} />
           ))}
         </ul>
-        <p className="text-app-muted text-[12px] leading-5 text-pretty">
-          {t('readinessLastRow')}
-        </p>
+        <p className="rz-caption m-0 text-pretty">{t('readinessLastRow')}</p>
       </section>
     </Sheet>
   )
@@ -243,21 +239,21 @@ export function WaybillDataDrawer({
       title={t('waybillTitle')}
     >
       {codMatches ? null : <Notice tone="danger">{t('codMismatch')}</Notice>}
-      <dl className="border-app-line bg-app-input grid gap-px overflow-hidden rounded-[14px] border">
+      <dl className="border-app-line m-0 grid min-h-fit rounded-rz-md border bg-(--rz-sheet-field) px-3 py-1">
         {rows.map((row) => (
           <div
-            className="bg-app-raised flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-3"
+            className="border-app-line grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] items-baseline gap-3 border-t py-2 first:border-t-0"
             key={row.label}
           >
-            <dt className="text-app-muted text-[13px]">{row.label}</dt>
+            <dt className="text-app-muted">{row.label}</dt>
             <dd
               className={cn(
-                'text-right font-mono text-[13px]',
+                'm-0 text-right font-mono text-pretty',
                 row.tone === 'ok'
                   ? 'text-state-ok'
                   : row.tone === 'danger'
                     ? 'text-state-danger'
-                    : 'text-app-ink',
+                    : 'text-app-strong',
               )}
             >
               {row.value}
@@ -266,21 +262,29 @@ export function WaybillDataDrawer({
         ))}
       </dl>
       {shipment.events.length === 0 ? null : (
-        <ol aria-label={t('shipmentStatuses')} className="grid gap-2">
-          {shipment.events.map((event) => (
-            <li
-              className="flex items-baseline justify-between gap-3 text-[13px]"
-              key={`${event.recordedAt}-${event.code}`}
-            >
-              <span className="text-app-ink min-w-0 text-pretty">
-                {event.name}
-              </span>
-              <span className="text-app-dim font-mono text-[12px] whitespace-nowrap">
-                {when(event.occurredAt ?? event.recordedAt)}
-              </span>
-            </li>
-          ))}
-        </ol>
+        <section className="grid min-h-fit gap-2.5">
+          <h3 aria-hidden className="rz-h-card">
+            {t('shipmentStatuses')}
+          </h3>
+          <ol
+            aria-label={t('shipmentStatuses')}
+            className="border-app-line m-0 grid list-none rounded-rz-md border bg-(--rz-sheet-field) px-3 py-1"
+          >
+            {shipment.events.map((event) => (
+              <li
+                className="border-app-line flex items-baseline justify-between gap-3 border-t py-2 first:border-t-0"
+                key={`${event.recordedAt}-${event.code}`}
+              >
+                <span className="text-app-muted min-w-0 text-pretty">
+                  {event.name}
+                </span>
+                <span className="text-app-strong font-mono whitespace-nowrap">
+                  {when(event.occurredAt ?? event.recordedAt)}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
       )}
     </Sheet>
   )
@@ -361,7 +365,7 @@ export function WaybillAttachDrawer({
 
       <Field hint={t('attachHint')} label={t('attachNumber')} required>
         <TextInput
-          className="font-mono text-[18px] tabular-nums"
+          className="h-12 font-mono text-page tabular-nums"
           inputMode="numeric"
           onChange={(event) => setNumber(event.target.value)}
           placeholder="20451931 5540"
@@ -369,9 +373,9 @@ export function WaybillAttachDrawer({
         />
       </Field>
 
-      <Notice tone={delivery.outstandingUah > 0 ? 'warn' : 'ok'}>
-        <p className="font-semibold">{t('attachConditions')}</p>
-        <ul className="mt-1.5 grid gap-1">
+      <Notice block tone={delivery.outstandingUah > 0 ? 'warn' : 'ok'}>
+        <p className="rz-strong m-0 font-semibold">{t('attachConditions')}</p>
+        <ul className="m-0 mt-1.5 grid list-none gap-1 p-0">
           <li>
             {t('attachCodEquals')}{' '}
             <span className="font-mono">
@@ -435,7 +439,7 @@ export function WaybillLabelDrawer({
       eyebrow={eyebrow(orderNumber, t('partLabel'))}
       footer={
         <>
-          <p className="text-app-muted min-w-0 flex-1 font-mono text-[13px]">
+          <p className="rz-muted m-0 min-w-0 flex-1 font-mono">
             {waybillNumber}
           </p>
           <Button onClick={onClose}>{tc('close')}</Button>
@@ -461,11 +465,11 @@ export function WaybillLabelDrawer({
       {url === null ? null : (
         <object
           aria-label={t('labelAria')}
-          className="border-app-line h-[60vh] w-full rounded-[14px] border"
+          className="border-app-line h-[60vh] w-full rounded-rz-md border"
           data={url}
           type="application/pdf"
         >
-          <p className="text-app-muted p-4 text-[14px]">{t('labelFallback')}</p>
+          <p className="text-app-muted m-0 p-4">{t('labelFallback')}</p>
         </object>
       )}
     </Sheet>

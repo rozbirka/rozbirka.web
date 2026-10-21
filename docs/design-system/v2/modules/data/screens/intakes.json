@@ -1,0 +1,73 @@
+{
+ "id": "C11",
+ "module": "intakes",
+ "eyebrow": "Склад",
+ "title": "Приймання",
+ "subtitle": "Надходження запчастин з авто, від постачальників і з аукціонів",
+ "icon": "icon-scan-line",
+ "route": "/app/:tenant/intakes",
+ "source": "intakes/messages.ts, intake-form-messages.ts",
+ "unverified": "колонки, статуси, emptyBody, searchPlaceholder/дії, яких немає в пошуку по коду",
+ "searchLabel": "Пошук приймань",
+ "searchPlaceholder": "Назва, постачальник",
+ "emptyTitle": "Приймань поки немає",
+ "emptyBody": "Створіть приймання, щоб оприбуткувати деталі партією.",
+ "actions": [
+  {
+   "label": "Створити приймання",
+   "icon": "icon-plus",
+   "href": "#"
+  }
+ ],
+ "filters": [
+  "Джерело"
+ ],
+ "columns": [
+  {
+   "key": "name",
+   "label": "Приймання",
+   "sub": "by"
+  },
+  {
+   "key": "source",
+   "label": "Джерело"
+  },
+  {
+   "key": "status",
+   "label": "Статус",
+   "pill": {
+    "Чернетка": "rz-pill",
+    "Прийнято": "rz-pill rz-pill--ok"
+   }
+  },
+  {
+   "key": "parts",
+   "label": "Деталей",
+   "align": "end"
+  }
+ ],
+ "rows": [
+  {
+   "name": "Партія з аукціону #12",
+   "by": "Створив Олег К., 14.10",
+   "source": "Аукціон",
+   "status": "Чернетка",
+   "parts": 18
+  },
+  {
+   "name": "Постачальник «Авто-Схід»",
+   "by": "Створив Ірина М., 10.10",
+   "source": "Постачальник",
+   "status": "Прийнято",
+   "parts": 42
+  },
+  {
+   "name": "VW Passat B8 · A-0142",
+   "by": "Створив Олег К., 02.10",
+   "source": "Авто",
+   "status": "Прийнято",
+   "parts": 38
+  }
+ ],
+ "detailHref": "./Record.dc.html?screen=intake"
+}

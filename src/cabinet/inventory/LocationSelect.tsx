@@ -104,10 +104,10 @@ export function LocationSelect({
           aria-haspopup="listbox"
           aria-controls={`${id}-list`}
           aria-label={`${label}: ${selectedName}`}
-          className="bg-app-input text-app-ink min-h-12 w-full justify-between gap-3 px-3.5 text-left font-medium"
+          className="bg-app-input text-app-ink h-auto min-h-control-lg w-full justify-between gap-3 py-1 text-left whitespace-normal"
         >
           <span className="min-w-0 break-words">{selectedName}</span>
-          <ChevronDown aria-hidden className="text-app-muted size-4 shrink-0" />
+          <ChevronDown aria-hidden className="text-app-dim size-3.5 shrink-0" />
         </Button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -116,7 +116,7 @@ export function LocationSelect({
           align="start"
           sideOffset={6}
           collisionPadding={12}
-          className="bg-app-overlay border-app-line-2 rounded-control z-[60] flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden border shadow-2xl"
+          className="rz-popover z-[60] flex max-h-[var(--radix-popover-content-available-height)] w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1.5rem)] flex-col"
         >
           <div className="border-app-line shrink-0 border-b p-2">
             <SearchInput
@@ -143,7 +143,7 @@ export function LocationSelect({
             id={`${id}-list`}
             role="listbox"
             aria-label={label}
-            className="min-h-0 max-h-64 overflow-y-auto overscroll-contain p-1.5"
+            className="grid min-h-0 max-h-64 gap-px overflow-y-auto overscroll-contain p-1"
           >
             {items.map((option, index) => (
               <button
@@ -156,25 +156,26 @@ export function LocationSelect({
                 data-active={active?.id === option.id}
                 onClick={() => choose(option.id)}
                 className={cn(
-                  'text-app-ink hover:bg-app-raised flex min-h-11 w-full cursor-pointer items-center justify-between gap-3 rounded-control px-3 py-2 text-left text-sm',
-                  active?.id === option.id && 'bg-app-raised',
+                  'rz-menu__item h-auto min-h-[30px] w-full justify-between gap-3 py-1.5',
+                  active?.id === option.id && 'bg-app-active',
                 )}
               >
                 <span className="min-w-0 break-words">
                   <span className="block font-semibold">{option.name}</span>
                   {'code' in option && option.code ? (
-                    <span className="text-app-muted block font-mono text-xs">
+                    <span className="rz-mono rz-caption block">
                       {option.code}
                     </span>
                   ) : null}
                   {'context' in option && option.context ? (
-                    <span className="text-app-muted block text-xs">
-                      {option.context}
-                    </span>
+                    <span className="rz-caption block">{option.context}</span>
                   ) : null}
                 </span>
                 {(value ?? '') === option.id ? (
-                  <Check aria-hidden className="text-brand size-4 shrink-0" />
+                  <Check
+                    aria-hidden
+                    className="text-brand-text size-4 shrink-0"
+                  />
                 ) : null}
               </button>
             ))}
@@ -182,7 +183,7 @@ export function LocationSelect({
           {needle && !matches.length ? (
             <p
               role="status"
-              className="text-app-muted border-app-line border-t px-4 py-3 text-sm"
+              className="rz-muted border-app-line m-0 border-t px-3 py-2.5"
             >
               {t('noMatches')}
             </p>

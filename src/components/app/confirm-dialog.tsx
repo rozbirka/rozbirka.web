@@ -1,5 +1,5 @@
 import { useRef, type ReactNode } from 'react'
-import type { LucideIcon } from 'lucide-react'
+import { X, type LucideIcon } from 'lucide-react'
 import { Dialog } from 'radix-ui'
 import { cn } from '@/lib/utils'
 import { Button } from './button'
@@ -20,7 +20,7 @@ export interface ConfirmDialogProps {
   effects?: readonly ReactNode[]
   /** Anything the confirmation itself needs: a reason, a date, a choice. */
   children?: ReactNode
-  /** Names the action at a glance above the question. */
+  /** Ignored since v2 (scheme 1b has no icon square); kept for callers. */
   icon?: LucideIcon
   confirmLabel: string
   cancelLabel?: string
@@ -46,7 +46,6 @@ export function ConfirmDialog({
   consequence,
   effects,
   children,
-  icon: Icon,
   confirmLabel,
   cancelLabel,
   onConfirm,
@@ -68,79 +67,81 @@ export function ConfirmDialog({
       open={open}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
-        <Dialog.Content
-          onCloseAutoFocus={onCloseAutoFocus}
-          onOpenAutoFocus={(event) => {
-            // Opening a destructive question lands on the way out of it.
-            event.preventDefault()
-            cancelRef.current?.focus()
-          }}
-          className="bg-app-overlay border-app-line-2 rounded-sheet fixed inset-x-4 top-1/2 z-50 grid max-w-md -translate-y-1/2 gap-3 border p-5 text-white shadow-2xl sm:inset-x-auto sm:left-1/2 sm:w-full sm:-translate-x-1/2"
-        >
-          {Icon === undefined ? null : (
-            <span
-              aria-hidden
-              className={cn(
-                'grid size-10 place-items-center rounded-[12px]',
-                destructive
-                  ? 'bg-state-danger-soft text-state-danger'
-                  : 'bg-brand/15 text-brand',
-              )}
-            >
-              <Icon className="size-[18px]" />
-            </span>
-          )}
-          <Dialog.Title className="text-[22px] font-extrabold tracking-[-0.02em]">
-            {title}
-          </Dialog.Title>
-          <Dialog.Description className="text-app-muted text-sm leading-6 text-pretty">
-            {consequence}
-          </Dialog.Description>
-          {effects === undefined || effects.length === 0 ? null : (
-            <ul
-              className={cn(
-                'grid gap-2.5 rounded-[12px] border p-4',
-                destructive
-                  ? 'border-state-danger/20 bg-state-danger/[0.06]'
-                  : 'border-app-line bg-white/[0.03]',
-              )}
-            >
-              {effects.map((effect, index) => (
-                <li
-                  className="text-app-ink flex gap-2.5 text-[13px] leading-[1.45] text-pretty"
-                  key={index}
+        <Dialog.Overlay className="rz-scrim">
+          <Dialog.Content
+            onCloseAutoFocus={onCloseAutoFocus}
+            onOpenAutoFocus={(event) => {
+              // Opening a destructive question lands on the way out of it.
+              event.preventDefault()
+              cancelRef.current?.focus()
+            }}
+            className="rz-dialog text-app-ink grid-rows-[auto_minmax(0,1fr)_auto]"
+          >
+            {/* Scheme 1b: a band with the question, the consequence in the
+                body, a band with the way out and the verb. The icon square
+                is gone from v2; `icon` is kept for callers and ignored. */}
+            <header className="rz-dialog__head items-center">
+              <Dialog.Title className="rz-h-title flex-1">{title}</Dialog.Title>
+              <Dialog.Close asChild>
+                <Button
+                  aria-label={tc('close')}
+                  disabled={pending}
+                  size="icon"
+                  variant="quiet"
                 >
-                  <span
-                    aria-hidden
-                    className={cn(
-                      'mt-[7px] size-[5px] shrink-0 rounded-full',
-                      destructive ? 'bg-state-danger' : 'bg-brand',
-                    )}
-                  />
-                  {effect}
-                </li>
-              ))}
-            </ul>
-          )}
-          {children}
-          {error === null ? null : <Notice tone="danger">{error}</Notice>}
-          <div className="mt-3 flex flex-wrap justify-end gap-2.5">
-            <Dialog.Close asChild>
-              <Button disabled={pending} ref={cancelRef}>
-                {cancelLabel ?? tc('cancel')}
+                  <X aria-hidden />
+                </Button>
+              </Dialog.Close>
+            </header>
+            <div className="rz-dialog__body">
+              <Dialog.Description className="text-app-ink m-0 text-pretty">
+                {consequence}
+              </Dialog.Description>
+              {effects === undefined || effects.length === 0 ? null : (
+                <ul
+                  className={cn(
+                    'rz-inset m-0 grid list-none gap-2',
+                    destructive && 'bg-state-danger-soft',
+                  )}
+                >
+                  {effects.map((effect, index) => (
+                    <li
+                      className="text-app-ink flex gap-2.5 text-pretty"
+                      key={index}
+                    >
+                      <span
+                        aria-hidden
+                        className={cn(
+                          'mt-[7px] size-[5px] shrink-0 rounded-full',
+                          destructive ? 'bg-state-danger' : 'bg-app-dim',
+                        )}
+                      />
+                      {effect}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {children}
+              {error === null ? null : <Notice tone="danger">{error}</Notice>}
+            </div>
+            <footer className="rz-dialog__foot">
+              <Dialog.Close asChild>
+                <Button disabled={pending} ref={cancelRef} size="lg">
+                  {cancelLabel ?? tc('cancel')}
+                </Button>
+              </Dialog.Close>
+              <Button
+                aria-busy={pending}
+                disabled={pending || confirmDisabled}
+                onClick={onConfirm}
+                size="lg"
+                variant={destructive ? 'danger' : 'primary'}
+              >
+                {confirmLabel}
               </Button>
-            </Dialog.Close>
-            <Button
-              aria-busy={pending}
-              disabled={pending || confirmDisabled}
-              onClick={onConfirm}
-              variant={destructive ? 'danger' : 'primary'}
-            >
-              {confirmLabel}
-            </Button>
-          </div>
-        </Dialog.Content>
+            </footer>
+          </Dialog.Content>
+        </Dialog.Overlay>
       </Dialog.Portal>
     </Dialog.Root>
   )

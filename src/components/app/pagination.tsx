@@ -42,11 +42,8 @@ export function Pagination({
       : Math.min(page * pageSize, total)
 
   return (
-    <nav
-      aria-label={label ?? t('pagination')}
-      className="border-app-line bg-app-raised flex flex-wrap items-center justify-between gap-3 border-t px-3.5 py-2.5"
-    >
-      <p className="text-app-dim text-[13.5px] tabular-nums">
+    <nav aria-label={label ?? t('pagination')} className="rz-pager">
+      <p className="font-mono tabular-nums">
         {from === undefined || to === undefined
           ? t('pageOf', { page: String(page), total: String(totalPages) })
           : t('rangeOf', {
@@ -55,9 +52,10 @@ export function Pagination({
               total: String(total),
             })}
       </p>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="rz-pager__nav flex-wrap">
         <Button
           aria-label={t('previousPage')}
+          size="sm"
           disabled={page <= 1}
           onClick={() => onPage(page - 1)}
         >
@@ -66,6 +64,7 @@ export function Pagination({
         </Button>
         <Button
           aria-label={t('nextPage')}
+          size="sm"
           disabled={totalPages === 0 || page >= totalPages}
           onClick={() => onPage(page + 1)}
         >
@@ -75,7 +74,7 @@ export function Pagination({
         {onPageSize === undefined || pageSize === undefined ? null : (
           <SelectInput
             aria-label={t('pageSize')}
-            className="w-auto min-w-32"
+            className="rz-input--sm w-auto min-w-32"
             onChange={(event) => onPageSize(Number(event.target.value))}
             value={pageSize}
           >

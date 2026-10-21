@@ -146,7 +146,7 @@ export function OrderPaymentDrawer({
         <>
           <p
             className={cn(
-              'min-w-0 flex-1 truncate text-[13px]',
+              'm-0 min-w-0 flex-1 truncate',
               valid ? 'text-app-muted' : 'text-app-dim',
             )}
           >
@@ -194,10 +194,10 @@ export function OrderPaymentDrawer({
     >
       {outcome === null ? null : outcome.kind === 'refused' ? (
         <Notice block tone="danger">
-          <p className="font-semibold">{t('refusedTitle')}</p>
-          <p className="mt-1 text-[13px] text-pretty">{outcome.message}</p>
+          <p className="rz-strong m-0 font-semibold">{t('refusedTitle')}</p>
+          <p className="m-0 mt-1 text-pretty">{outcome.message}</p>
           {amount !== null && active !== null ? (
-            <p className="text-app-muted mt-1 text-[13px]">
+            <p className="text-app-muted m-0 mt-1">
               {t('refusedKept', {
                 amount: format.money(amount, active) ?? typedAmount,
               })}
@@ -206,9 +206,9 @@ export function OrderPaymentDrawer({
         </Notice>
       ) : outcome.kind === 'checking' ? (
         <Notice block tone="warn">
-          <p className="font-semibold">{t('unknownTitle')}</p>
-          <p className="mt-1 text-[13px] text-pretty">{t('unknownBody')}</p>
-          <p className="text-app-muted mt-1 text-[13px]">{t('refreshing')}</p>
+          <p className="rz-strong m-0 font-semibold">{t('unknownTitle')}</p>
+          <p className="m-0 mt-1 text-pretty">{t('unknownBody')}</p>
+          <p className="text-app-muted m-0 mt-1">{t('refreshing')}</p>
         </Notice>
       ) : outcome.kind === 'not-recorded' ? (
         <Notice tone="warn">{t('notRecorded')}</Notice>
@@ -219,29 +219,25 @@ export function OrderPaymentDrawer({
 
       <section
         aria-labelledby={`${groupId}-value`}
-        className="border-app-line bg-app-raised grid gap-1 rounded-[14px] border px-[18px] py-4"
+        className="rz-inset grid min-h-fit gap-1"
       >
-        <h3
-          className="text-app-muted text-[13px] font-semibold"
-          id={`${groupId}-value`}
-        >
-          {t('orderValue')}
-        </h3>
-        <p className="font-mono text-[22px] font-bold text-white tabular-nums">
-          {accountingCurrency === null
-            ? (format.number(orderValue) ?? '—')
-            : (format.money(orderValue, accountingCurrency) ?? '—')}
-        </p>
-        <p className="text-app-dim text-[12px]">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h3 className="rz-muted m-0 font-normal" id={`${groupId}-value`}>
+            {t('orderValue')}
+          </h3>
+          <p className="rz-mono rz-strong m-0 font-semibold">
+            {accountingCurrency === null
+              ? (format.number(orderValue) ?? '—')
+              : (format.money(orderValue, accountingCurrency) ?? '—')}
+          </p>
+        </div>
+        <p className="rz-muted m-0 text-caption font-semibold">
           {accountingCurrency === null ? t('valueUnknown') : t('inAccounting')}
         </p>
       </section>
 
-      <section aria-labelledby={`${groupId}-paid`} className="grid gap-4">
-        <h3
-          className="text-app-ink text-[15px] font-bold"
-          id={`${groupId}-paid`}
-        >
+      <section aria-labelledby={`${groupId}-paid`} className="grid gap-3.5">
+        <h3 className="rz-h-card m-0" id={`${groupId}-paid`}>
           {t('actualPayment')}
         </h3>
         {loading ? (
@@ -250,39 +246,39 @@ export function OrderPaymentDrawer({
           <Notice tone="warn">{t('noTills')}</Notice>
         ) : (
           <>
-            <fieldset className="grid gap-2">
-              <legend className="text-app-ink mb-2 text-[13px] font-bold">
-                {t('till')}
-              </legend>
-              {tills.map((option) => {
-                const chosen = till?.id === option.id
-                return (
-                  <label
-                    className={cn(
-                      'flex min-h-11 cursor-pointer items-center gap-3 rounded-[11px] border px-3.5 py-3 transition-colors',
-                      chosen
-                        ? 'border-app-line-2 bg-white/[0.05]'
-                        : 'border-app-line bg-app-input hover:border-app-line-2',
-                    )}
-                    key={option.id}
-                  >
-                    <input
-                      checked={chosen}
-                      className="accent-brand size-4 shrink-0"
-                      name={`${groupId}-till`}
-                      onChange={() => pickTill(option)}
-                      type="radio"
-                      value={option.id}
-                    />
-                    <span className="min-w-0 flex-1 text-[14px] font-semibold text-pretty text-white">
-                      {option.name}
-                    </span>
-                    <span className="text-app-muted font-mono text-[12px] whitespace-nowrap">
-                      {tillCurrencies(option).join(', ')}
-                    </span>
-                  </label>
-                )
-              })}
+            <fieldset className="m-0 grid min-h-fit gap-2 border-0 p-0">
+              <legend className="rz-label mb-2 p-0">{t('till')}</legend>
+              <div className="border-app-line grid overflow-hidden rounded-rz-md border bg-(--rz-sheet-field)">
+                {tills.map((option) => {
+                  const chosen = till?.id === option.id
+                  return (
+                    <label
+                      className={cn(
+                        'border-app-line flex min-h-11 cursor-pointer items-center gap-3 border-t px-3 py-2 first:border-t-0',
+                        chosen
+                          ? 'bg-(--rz-row-selected) shadow-[inset_2px_0_0_var(--rz-brand)]'
+                          : 'hover:bg-app-hover',
+                      )}
+                      key={option.id}
+                    >
+                      <input
+                        checked={chosen}
+                        className="rz-radio shrink-0"
+                        name={`${groupId}-till`}
+                        onChange={() => pickTill(option)}
+                        type="radio"
+                        value={option.id}
+                      />
+                      <span className="rz-strong min-w-0 flex-1 font-semibold text-pretty">
+                        {option.name}
+                      </span>
+                      <span className="rz-muted font-mono text-caption whitespace-nowrap">
+                        {tillCurrencies(option).join(', ')}
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
             </fieldset>
 
             {reselectFrom !== null && till !== undefined ? (
@@ -295,10 +291,12 @@ export function OrderPaymentDrawer({
             ) : null}
 
             {available.length === 1 && reselectFrom === null ? (
-              <div className="grid gap-1.5">
-                <p className="text-app-muted text-[13.5px]">{t('currency')}</p>
-                <p className="text-app-ink text-[14px]">
-                  <span className="font-mono font-bold">{available[0]}</span>
+              <div className="rz-inset flex min-h-fit items-center justify-between gap-3">
+                <p className="rz-muted m-0">{t('currency')}</p>
+                <p className="text-app-strong m-0">
+                  <span className="font-mono font-semibold">
+                    {available[0]}
+                  </span>
                   <span className="sr-only">
                     {` (${currencyNameOf(available[0], locale)})`}
                   </span>
@@ -306,30 +304,18 @@ export function OrderPaymentDrawer({
               </div>
             ) : (
               <fieldset>
-                <legend className="text-app-ink mb-2 text-[13px] font-bold">
-                  {t('currency')}
-                </legend>
+                <legend className="rz-label mb-1.5 p-0">{t('currency')}</legend>
                 <div
                   className={cn(
-                    'bg-app-input grid gap-1 rounded-[12px] border p-1',
-                    reselectFrom === null
-                      ? 'border-app-line'
-                      : 'border-state-warn/50',
+                    'rz-seg flex w-full flex-wrap',
+                    reselectFrom !== null && 'border-state-warn/30',
                   )}
-                  style={{
-                    gridTemplateColumns: `repeat(auto-fit, minmax(72px, 1fr))`,
-                  }}
                 >
                   {available.map((code) => (
                     <button
                       aria-label={`${code} (${currencyNameOf(code, locale)})`}
                       aria-pressed={active === code}
-                      className={cn(
-                        'flex h-11 items-center justify-center rounded-[9px] font-mono text-[14px] font-bold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-white/40',
-                        active === code
-                          ? 'bg-white/[0.09] text-white'
-                          : 'text-app-muted hover:bg-white/[0.04]',
-                      )}
+                      className="flex-1 justify-center font-mono"
                       key={code}
                       onClick={() => {
                         setCurrency(code)
@@ -346,9 +332,10 @@ export function OrderPaymentDrawer({
 
             <Field error={precision ?? undefined} label={t('amount')}>
               <MoneyInput
-                className="h-[52px] rounded-[12px] px-4 font-mono text-[22px] tabular-nums"
+                className="h-12 text-page"
                 currency={active}
                 inputMode="decimal"
+                numeric
                 onChange={(event) => setDraft(event.target.value)}
                 placeholder="0"
                 value={draft}

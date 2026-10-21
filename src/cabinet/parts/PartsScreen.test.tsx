@@ -474,6 +474,11 @@ function LocationProbe() {
   )
 }
 
+/** Toolbar filters live in popovers; open one to reach its controls. */
+function openFilter(name: string | RegExp) {
+  fireEvent.click(screen.getByRole('button', { name }))
+}
+
 function DetailNavigation() {
   const navigate = useNavigate()
   return (
@@ -513,13 +518,13 @@ it('normalizes invalid URL filters before requesting inventory', async () => {
   expect(partMocks.search.mock.calls.at(-1)?.[0]).not.toHaveProperty('statuses')
   expect(partMocks.search.mock.calls.at(-1)?.[0]).not.toHaveProperty('carIds')
   const statusRow = (name: string | RegExp) =>
-    within(screen.getByRole('region', { name: 'Статус' })).getByRole('button', {
+    within(screen.getByRole('group', { name: 'Статус' })).getByRole('button', {
       name,
     })
   expect(statusRow(/Усі/)).toHaveAttribute('aria-pressed', 'true')
   expect(
     within(
-      screen.getByRole('radiogroup', {
+      await screen.findByRole('radiogroup', {
         name: 'Кількість деталей на сторінці',
       }),
     ).getByRole('radio', { name: '30' }),
@@ -556,10 +561,11 @@ it('keeps controlled filters synced with back navigation and resets page when fi
   )
 
   const statusRow = (name: string | RegExp) =>
-    within(screen.getByRole('region', { name: 'Статус' })).getByRole('button', {
+    within(screen.getByRole('group', { name: 'Статус' })).getByRole('button', {
       name,
     })
   expect(statusRow(/У резерві/)).toHaveAttribute('aria-pressed', 'true')
+  openFilter('Марка: будь-яка')
   const make = screen.getByLabelText('Марка')
   // Options arrive with the facets, so wait for the one we are about to pick.
   await vi.waitFor(() =>
@@ -1931,9 +1937,10 @@ it('counts every filter value from the server and narrows the search by it', asy
     </MemoryRouter>,
   )
 
-  const conditions = await screen.findByRole('region', {
-    name: /Стан деталі/,
-  })
+  // The counts arrive with the facets, which also fill the page-head totals.
+  await screen.findByText('усього', { selector: 'dt' })
+  openFilter('Стан деталі')
+  const conditions = screen.getByRole('dialog', { name: 'Стан деталі' })
   // The numbers are the server's, counted under the rest of the filter.
   expect(
     within(conditions).getByRole('button', { name: /Хороший/i }),
@@ -1958,7 +1965,8 @@ it('counts every filter value from the server and narrows the search by it', asy
     expect.anything(),
   )
 
-  const origins = screen.getByRole('region', { name: 'Походження' })
+  openFilter('Походження')
+  const origins = screen.getByRole('dialog', { name: 'Походження' })
   expect(within(origins).getByRole('button', { name: /З авто/i })).toBeVisible()
   expect(
     within(origins).getByRole('button', { name: /З партії/i }),
@@ -2000,12 +2008,23 @@ it('keeps the selected car and fills its compatibility and placement filters', a
     </MemoryRouter>,
   )
 
+  // The preset shows on the toolbar buttons and inside their popovers.
   await vi.waitFor(() => {
-    expect(screen.getByLabelText('Марка')).toHaveValue('make-ford')
-    expect(screen.getByLabelText('Модель')).toHaveValue('model-focus')
-    expect(screen.getByLabelText('Склад')).toHaveValue('w1')
-    expect(screen.getByLabelText('Зона')).toHaveValue('z1')
+    expect(
+      screen.getByRole('button', { name: 'Марка: Ford · Focus' }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', {
+        name: 'Склад: Львів, Городоцька · Стелаж A3',
+      }),
+    ).toBeVisible()
   })
+  openFilter('Марка: Ford · Focus')
+  expect(screen.getByLabelText('Марка')).toHaveValue('make-ford')
+  expect(screen.getByLabelText('Модель')).toHaveValue('model-focus')
+  openFilter('Склад: Львів, Городоцька · Стелаж A3')
+  expect(screen.getByLabelText('Склад')).toHaveValue('w1')
+  expect(screen.getByLabelText('Зона')).toHaveValue('z1')
   expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(
     'car_ids=car-1',
   )
@@ -2044,6 +2063,8 @@ it('opens the model filter only once a make is chosen', async () => {
     </MemoryRouter>,
   )
 
+  await screen.findByRole('button', { name: 'Марка: будь-яка' })
+  openFilter('Марка: будь-яка')
   const model = await screen.findByLabelText('Модель')
   expect(model).toBeDisabled()
   fireEvent.change(screen.getByLabelText('Марка'), {
@@ -2328,14 +2349,152 @@ it('tells the operator that the parts search accepts a VIN', async () => {
   )
 })
 
-it('does not show selection checkboxes or bulk actions in the parts directory', async () => {
+it('keeps the add button in place but switched off with the reason once the quota is spent', async () => {
+  cabinetMock.snapshot.entitlement = {
+    ...cabinetMock.snapshot.entitlement,
+    usage: {
+      ...cabinetMock.snapshot.entitlement.usage,
+      parts: { used: 10, max: 10 },
+    },
+  }
   renderDirectory()
 
   await screen.findByRole('link', { name: 'Фара ліва' })
-  expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  expect(screen.queryByRole('link', { name: 'Додати деталь' })).toBeNull()
+  const add = screen.getByRole('button', { name: 'Додати деталь' })
+  expect(add).toBeDisabled()
+  expect(add).toHaveAttribute('title', 'Ліміт деталей вичерпано.')
+})
+
+function StickerProbe() {
+  const location = useLocation()
+  return <output aria-label="Стікери">{location.search}</output>
+}
+
+function renderDirectoryWithStickers() {
+  partMocks.search.mockResolvedValue({
+    items: pickableRows,
+    page: 1,
+    pageSize: 30,
+    total: 2,
+    totalPages: 1,
+  })
+  return render(
+    <MemoryRouter initialEntries={['/app/yard/parts']}>
+      <Routes>
+        <Route
+          element={<PartsScreen definition={partsDefinition as never} />}
+          path="/app/:tenant/parts"
+        />
+        <Route element={<StickerProbe />} path="/app/:tenant/stickers" />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
+
+it('picks rows into a working set whose one bulk action prints their stickers', async () => {
+  const user = userEvent.setup()
+  renderDirectoryWithStickers()
+
+  await screen.findByRole('link', { name: 'Фара ліва' })
+  expect(screen.getByRole('search')).toBeVisible()
   expect(
     screen.queryByRole('region', { name: 'Дії над обраними' }),
   ).not.toBeInTheDocument()
+
+  await user.click(screen.getByRole('checkbox', { name: 'Обрати: Фара ліва' }))
+  const bulk = screen.getByRole('region', { name: 'Дії над обраними' })
+  // The bulk bar takes the toolbar's place (D15) and counts what is picked.
+  expect(bulk).toHaveTextContent('1 деталь обрано')
+  expect(screen.queryByRole('search')).toBeNull()
+  // Only a read-only action: no bulk price change or delete comes back.
+  expect(
+    within(bulk)
+      .getAllByRole('button')
+      .map((b) => b.textContent),
+  ).toEqual(['Обрати всі на сторінці (2)', 'Друк стікера', ''])
+
+  await user.click(
+    within(bulk).getByRole('button', { name: /Обрати всі на сторінці/ }),
+  )
+  expect(bulk).toHaveTextContent('2 деталі обрано')
+
+  await user.click(within(bulk).getByRole('button', { name: 'Друк стікера' }))
+  expect(await screen.findByLabelText('Стікери')).toHaveTextContent(
+    '?part=part-1&part=part-2',
+  )
+})
+
+it('clears the working set from the bulk bar and gives the toolbar back', async () => {
+  const user = userEvent.setup()
+  renderDirectory()
+
+  await user.click(
+    await screen.findByRole('checkbox', { name: 'Обрати: Бампер передній' }),
+  )
+  await user.click(screen.getByRole('button', { name: 'Зняти вибір' }))
+  expect(
+    screen.queryByRole('region', { name: 'Дії над обраними' }),
+  ).not.toBeInTheDocument()
+  expect(screen.getByRole('search')).toBeVisible()
+})
+
+it('opens a part beside the list on row click and walks the page from there', async () => {
+  const user = userEvent.setup()
+  partMocks.get.mockImplementation((id: string) =>
+    Promise.resolve({
+      id,
+      name: id === 'part-1' ? 'Фара ліва' : 'Бампер передній',
+      condition: 'used',
+      status: 'available',
+      source: 'car',
+      quantityTotal: 2,
+      quantityAvailable: 2,
+      quantityReserved: 0,
+      quantitySoldTotal: 0,
+      oemCode: id === 'part-1' ? '3G1941005' : null,
+      effectiveSalePrice: 1800,
+      unit: 'pcs',
+      photos: [],
+      reservations: null,
+      order: null,
+      soldOrders: null,
+      createdByName: 'Olena',
+      createdAt: '2026-08-28T12:00:00Z',
+    }),
+  )
+  renderDirectory()
+
+  const row = (await screen.findByRole('link', { name: 'Фара ліва' })).closest(
+    'tr',
+  )!
+  await user.click(within(row).getByRole('cell', { name: /2/ }).closest('td')!)
+  const peek = await screen.findByRole('complementary', {
+    name: 'Деталь: Фара ліва',
+  })
+  expect(
+    screen.getByRole('link', { name: 'Фара ліва' }).closest('tr'),
+  ).toHaveAttribute('data-active', 'true')
+  expect(within(peek).getByText('OEM 3G1941005')).toBeVisible()
+  expect(within(peek).getByText('Наявність')).toBeVisible()
+  expect(
+    within(peek).getByRole('link', { name: 'Відкрити картку деталі' }),
+  ).toHaveAttribute('href', '/app/yard/parts/part-1')
+  expect(
+    within(peek).getByRole('button', { name: 'Попередня деталь' }),
+  ).toBeDisabled()
+
+  await user.click(
+    within(peek).getByRole('button', { name: 'Наступна деталь' }),
+  )
+  expect(
+    await screen.findByRole('complementary', {
+      name: 'Деталь: Бампер передній',
+    }),
+  ).toBeVisible()
+
+  await user.keyboard('{Escape}')
+  expect(screen.queryByRole('complementary')).toBeNull()
 })
 
 it('does not expose web-only saved filters', async () => {
@@ -2367,7 +2526,7 @@ it('uses standard row spacing without exposing density controls', async () => {
     </MemoryRouter>,
   )
 
-  expect(await screen.findByRole('table')).toHaveClass('text-[14.5px]')
+  expect(await screen.findByRole('table')).toHaveClass('rz-table')
   expect(
     screen.queryByRole('radiogroup', { name: 'Щільність рядків' }),
   ).toBeNull()
@@ -2402,14 +2561,20 @@ it('keeps the top stock totals in sync with the filtered status counts', async (
 
   renderDirectory()
 
-  const soldLabel = await screen.findByText('продано')
-  expect(soldLabel).toHaveTextContent(/85\s*продано/)
-  expect(screen.getByText('усього')).toHaveTextContent(/193\s*усього/)
-  expect(screen.getByText('доступно')).toHaveTextContent(/104\s*доступно/)
-  expect(screen.getByText('у резерві')).toHaveTextContent(/4\s*у резерві/)
-  expect(screen.getByText('Розмір сторінки').parentElement).toHaveClass(
-    'ml-auto',
-  )
+  // Each total is a term of the page head's list, named by its label.
+  const total = (label: string) =>
+    screen.getByText(label, { selector: 'dt' }).parentElement
+  await screen.findByText('продано', { selector: 'dt' })
+  expect(total('продано')).toHaveTextContent(/^продано\s*85$/)
+  expect(total('усього')).toHaveTextContent(/^усього\s*193$/)
+  expect(total('доступно')).toHaveTextContent(/^доступно\s*104$/)
+  expect(total('у резерві')).toHaveTextContent(/^у резерві\s*4$/)
+  // The page size sits with the pagination, not with the totals.
+  expect(
+    within(
+      screen.getByRole('navigation', { name: 'Пагінація деталей' }),
+    ).getByText('Розмір сторінки'),
+  ).toBeVisible()
 })
 
 it('edits a quantity in the row by rewriting the whole record', async () => {
@@ -2617,7 +2782,7 @@ it('opens the new part as a drawer and names the next thing to fix', async () =>
   )
 
   const drawer = await screen.findByRole('dialog')
-  expect(drawer).toHaveClass('sm:right-0')
+  expect(drawer).toHaveClass('rz-sheet')
   expect(within(drawer).getByText(/Введіть назву деталі/)).toBeVisible()
 
   await user.type(within(drawer).getByLabelText('Назва'), 'Цапфа RR')
@@ -2880,10 +3045,14 @@ it('says the part cannot be ordered from its own page yet, instead of pretending
     </MemoryRouter>,
   )
 
-  const order = await screen.findByRole('button', {
+  // The action lives in the record's menu, switched off with its reason.
+  await userEvent
+    .setup()
+    .click(await screen.findByRole('button', { name: 'Інші дії з деталлю' }))
+  const order = await screen.findByRole('menuitem', {
     name: 'Додати в замовлення',
   })
-  expect(order).toBeDisabled()
+  expect(order).toHaveAttribute('aria-disabled', 'true')
   expect(order).toHaveAttribute(
     'title',
     expect.stringContaining('ще не підключене'),
@@ -2964,9 +3133,11 @@ it('names where the part actually sits, and says when it sits nowhere', async ()
     </MemoryRouter>,
   )
 
-  const stock = await screen.findByRole('region', { name: 'Наявність' })
+  const placement = await screen.findByRole('region', {
+    name: 'Місце на складі',
+  })
   expect(
-    await within(stock).findByText('Склад А · Стелаж 3 · полиця 2'),
+    await within(placement).findByText('Склад А · Стелаж 3 · полиця 2'),
   ).toBeVisible()
   unmount()
 
@@ -3190,7 +3361,7 @@ it('narrows the sales table to reserves or to sales', async () => {
   expect(within(sales).getByText('Андрій Коваль')).toBeVisible()
   expect(within(sales).getByText('Олег Шевчук')).toBeVisible()
 
-  await user.click(within(sales).getByRole('tab', { name: /Продано/ }))
+  await user.click(within(sales).getByRole('button', { name: /Продано/ }))
 
   expect(within(sales).queryByText('Андрій Коваль')).toBeNull()
   expect(within(sales).getByText('Олег Шевчук')).toBeVisible()
@@ -3375,9 +3546,12 @@ it('reads the parts directory in English (UK)', async () => {
   )
   expect(screen.getByRole('link', { name: 'Add part' })).toBeVisible()
   expect(screen.getByRole('button', { name: /In stock/ })).toBeVisible()
+  openFilter('Part condition')
   expect(screen.getByRole('button', { name: /For parts/ })).toBeVisible()
+  openFilter('Origin')
   expect(screen.getByRole('button', { name: /From an intake/ })).toBeVisible()
-  expect(screen.getByRole('button', { name: 'Reset filters' })).toBeDisabled()
+  // Nothing is narrowed yet, so there is nothing to reset.
+  expect(screen.queryByRole('button', { name: 'Reset filters' })).toBeNull()
   expect(
     screen.getByRole('columnheader', { name: 'Source car' }),
   ).toBeInTheDocument()
@@ -3523,7 +3697,11 @@ it('reads the part page and its history in English (UK)', async () => {
   expect(screen.getByText('Fair condition')).toBeVisible()
   expect(screen.getByText('0 photos')).toBeVisible()
   expect(screen.getByText('per 1 pcs')).toBeVisible()
-  expect(screen.getByRole('link', { name: 'Back to warehouse' })).toBeVisible()
+  // The way back is the breadcrumb.
+  expect(screen.getByRole('link', { name: 'Parts' })).toHaveAttribute(
+    'href',
+    '/app/yard/parts',
+  )
 })
 
 describe('asking price and the accounting currency', () => {
@@ -3761,6 +3939,8 @@ it('applies section and shelf filters from a warehouse link and resets descendan
   expect(screen.getByLabelText('Поточний маршрут')).toHaveTextContent(
     'per_page=30',
   )
+  await screen.findByRole('button', { name: 'Склад: Основний склад · Зона А' })
+  openFilter('Склад: Основний склад · Зона А')
   fireEvent.change(screen.getByRole('combobox', { name: 'Зона' }), {
     target: { value: '' },
   })

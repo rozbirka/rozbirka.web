@@ -233,16 +233,20 @@ export function DeliveryOrderBody({
 
       {error === null ? null : <Notice tone="danger">{error}</Notice>}
       {load.error === null ? null : (
-        <Notice tone="danger">
+        <Notice
+          action={
+            <Button onClick={load.reload} size="sm">
+              {tc('retry')}
+            </Button>
+          }
+          tone="danger"
+        >
           {load.error}
-          <Button className="mt-2.5" onClick={load.reload}>
-            {tc('retry')}
-          </Button>
         </Notice>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-        <div className="grid min-w-0 gap-5">
+      <div className="flex flex-wrap items-start gap-4">
+        <div className="grid min-w-0 flex-[1_1_480px] gap-4">
           {tab === 'sales' ? (
             <>
               <OrderItemsCard
@@ -291,8 +295,8 @@ export function DeliveryOrderBody({
               {novaPoshtaAvailable &&
               integrationId === null &&
               carrier !== null ? (
-                <Notice tone="warn">
-                  <p className="font-semibold">
+                <Notice block tone="warn">
+                  <p className="rz-strong m-0 font-semibold">
                     {carrier.status === 'missing'
                       ? t('npNotConnected')
                       : t('npUnavailable', {
@@ -303,17 +307,14 @@ export function DeliveryOrderBody({
                         })}
                   </p>
                   {carrier.errorCode === null ? null : (
-                    <p className="mt-1">
+                    <p className="m-0 mt-1">
                       {integrationErrorMessage(carrier.errorCode, locale)}
                     </p>
                   )}
-                  <p className="mt-1">{t('npDownNote')}</p>
+                  <p className="m-0 mt-1">{t('npDownNote')}</p>
                   {integrationsPath === null ? null : (
-                    <p className="mt-2">
-                      <RouterLink
-                        className="text-brand hover:text-brand-hover font-semibold"
-                        to={integrationsPath}
-                      >
+                    <p className="m-0 mt-2">
+                      <RouterLink className="font-medium" to={integrationsPath}>
                         {t('openIntegrations')}
                       </RouterLink>
                     </p>
@@ -390,7 +391,7 @@ export function DeliveryOrderBody({
           )}
         </div>
 
-        <aside className="grid min-w-0 gap-5 lg:sticky lg:top-24">
+        <aside className="grid max-w-full min-w-0 flex-[1_1_280px] gap-4 lg:sticky lg:top-(--rz-topbar-h) lg:max-w-95">
           <DeliveryDueCard
             busy={busy}
             delivery={delivery}

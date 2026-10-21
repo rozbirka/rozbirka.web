@@ -1,0 +1,80 @@
+{
+ "id": "C31",
+ "module": "billing",
+ "crumbs": [
+  "Налаштування",
+  "Підписка"
+ ],
+ "title": "Платежі",
+ "route": "/app/:tenant/settings/billing/payments",
+ "source": "billing/payments-messages.ts",
+ "unverified": "колонки",
+ "actions": [
+  {
+   "label": "Додати спосіб оплати",
+   "icon": "icon-plus",
+   "variant": "primary"
+  }
+ ],
+ "states": [
+  [
+   "data",
+   "Дані"
+  ],
+  [
+   "loading",
+   "Завантаження"
+  ],
+  [
+   "error",
+   "Помилка"
+  ]
+ ],
+ "main": [
+  {
+   "type": "table",
+   "title": "Історія платежів",
+   "columns": [
+    {
+     "label": "Дата",
+     "mono": true
+    },
+    {
+     "label": "Тариф"
+    },
+    {
+     "label": "Статус",
+     "pill": {
+      "Оплачено": "rz-pill rz-pill--ok",
+      "Помилка": "rz-pill rz-pill--danger"
+     }
+    },
+    {
+     "label": "Сума",
+     "align": "end"
+    }
+   ],
+   "rows": [
+    [
+     "01.10.2026",
+     "Бізнес",
+     "Оплачено",
+     "1 490 ₴"
+    ],
+    [
+     "01.09.2026",
+     "Бізнес",
+     "Оплачено",
+     "1 490 ₴"
+    ],
+    [
+     "01.08.2026",
+     "Бізнес",
+     "Помилка",
+     "1 490 ₴"
+    ]
+   ]
+  }
+ ],
+ "aside": []
+}

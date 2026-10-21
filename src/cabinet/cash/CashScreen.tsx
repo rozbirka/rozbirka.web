@@ -5,15 +5,14 @@ import {
   ErrorState,
   Field,
   Notice,
-  PageBody,
   Pagination,
+  SelectInput,
   Sheet,
   SkeletonRows,
   TextInput,
   Toolbar,
   useOptionalToast,
 } from '@/components/app'
-import { cn } from '@/lib/utils'
 import {
   commonMessages,
   currencyName,
@@ -32,10 +31,11 @@ import {
   type CashTransactionInput,
 } from '@/api/cash'
 import { useCabinet } from '../CabinetContext'
+import { RedesignShell } from '../redesign-shell'
 import { CashCard } from './cash-card'
 import { useCashText } from './cash-labels'
 import { cashMessages } from './cash-messages'
-import { CashList } from './cash-list'
+import { CashCrumbs, CashList } from './cash-list'
 import { readCashFeed, type CashFeedEntry } from './cash-feed'
 import { CashMovementDrawer } from './CashMovementDrawer'
 import { CashTransferDrawer } from './CashTransferDrawer'
@@ -177,6 +177,7 @@ function CashOverview({ definition }: CabinetModuleScreenProps) {
   const [feed, setFeed] = useState<CashFeedEntry[]>([])
   const [feedTruncated, setFeedTruncated] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
   const [transferBusy, setTransferBusy] = useState(false)
   const [transferError, setTransferError] = useState<string | null>(null)
@@ -191,6 +192,7 @@ function CashOverview({ definition }: CabinetModuleScreenProps) {
           setRegisters(list)
           setSummary(daily)
           setError(null)
+          setLoaded(true)
           const latest = await readCashFeed(
             list,
             signal ?? new AbortController().signal,
@@ -239,12 +241,17 @@ function CashOverview({ definition }: CabinetModuleScreenProps) {
   const activeRegisters = registers.filter((register) => register.isActive)
   return (
     <>
-      {error && <Notice tone="danger">{error}</Notice>}
       <CashList
         canCreate={mutationsAllowed}
         canTransfer={transferAllowed && activeRegisters.length > 0}
         date={date}
+        error={error}
         feed={feed}
+        loading={!loaded && error === null}
+        onRetry={() => {
+          setError(null)
+          void load()
+        }}
         feedTruncated={feedTruncated}
         onTransfer={() => {
           setTransferError(null)
@@ -376,15 +383,15 @@ function CashRegisterDetail({
   }
   if (error && !register)
     return (
-      <PageBody width="narrow">
+      <RedesignShell crumb={<CashCrumbs />}>
         <ErrorState description={error} title={t('loadFailed')} />
-      </PageBody>
+      </RedesignShell>
     )
   if (!register)
     return (
-      <PageBody width="narrow">
+      <RedesignShell crumb={<CashCrumbs />}>
         <SkeletonRows label={t('loadingTill')} rows={3} />
-      </PageBody>
+      </RedesignShell>
     )
   const setFilter = (key: 'currency' | 'from' | 'to', value: string) => {
     const next = new URLSearchParams(params)
@@ -414,12 +421,10 @@ function CashRegisterDetail({
         }
         error={error}
         filters={
-          <Toolbar>
-            <label className="grid min-w-[130px] gap-1 text-[12px] text-app-dim">
-              {t('currency')}
-              <select
+          <Toolbar className="items-end">
+            <Field className="min-w-[130px]" label={t('currency')}>
+              <SelectInput
                 aria-label={t('ledgerCurrency')}
-                className="border-app-line bg-app-input text-app-ink h-10 rounded-[10px] border px-3 text-[14px]"
                 onChange={(event) => setFilter('currency', event.target.value)}
                 value={ledgerCurrency ?? ''}
               >
@@ -429,28 +434,24 @@ function CashRegisterDetail({
                     {currency}
                   </option>
                 ))}
-              </select>
-            </label>
-            <label className="grid min-w-[150px] gap-1 text-[12px] text-app-dim">
-              {t('from')}
-              <input
+              </SelectInput>
+            </Field>
+            <Field className="min-w-[150px]" label={t('from')}>
+              <TextInput
                 aria-label={t('operationsFrom')}
-                className="border-app-line bg-app-input text-app-ink h-10 rounded-[10px] border px-3 text-[14px]"
                 onChange={(event) => setFilter('from', event.target.value)}
                 type="date"
                 value={ledgerFrom ?? ''}
               />
-            </label>
-            <label className="grid min-w-[150px] gap-1 text-[12px] text-app-dim">
-              {t('to')}
-              <input
+            </Field>
+            <Field className="min-w-[150px]" label={t('to')}>
+              <TextInput
                 aria-label={t('operationsTo')}
-                className="border-app-line bg-app-input text-app-ink h-10 rounded-[10px] border px-3 text-[14px]"
                 onChange={(event) => setFilter('to', event.target.value)}
                 type="date"
                 value={ledgerTo ?? ''}
               />
-            </label>
+            </Field>
           </Toolbar>
         }
         lastOperationAt={lastOperationAt}
@@ -490,7 +491,7 @@ function CashRegisterEdit({
   const t = useT(cashMessages)
   const tc = useT(commonMessages)
   const { locale } = useLocale()
-  const { money } = useCashText()
+  const { money, registerType } = useCashText()
   const cabinet = useCabinet()
   const location = useLocation()
   const { requireLatestMutation } = useLatestMutationGuard(definition)
@@ -615,6 +616,7 @@ function CashRegisterEdit({
             error={named ? null : t('nameEmpty')}
             hint={t('nameHintEdit')}
             label={t('tillName')}
+            required
           >
             <TextInput
               disabled={!mutationsAllowed}
@@ -623,29 +625,33 @@ function CashRegisterEdit({
               value={name}
             />
           </Field>
+          <div className="rz-inset grid gap-1">
+            <p className="rz-muted m-0">
+              {t('tillType', { type: registerType(register.type) })}
+            </p>
+            <p className="rz-caption m-0">{t('typeFixed')}</p>
+          </div>
           {register.type === 'cash' && (
             <fieldset className="grid gap-3">
-              <legend className="text-app-muted text-sm font-semibold">
-                {t('currencies')}
-              </legend>
+              <legend className="rz-label mb-2">{t('currencies')}</legend>
               <div className="grid gap-2">
                 {Object.entries(register.balances).map(([code, balance]) => {
                   const supportedCode = parseCurrency(code)
                   const canRemove = mutationsAllowed && balance === 0
                   return (
                     <div
-                      className="border-app-line bg-app-input rounded-control flex items-center justify-between gap-3 border px-3 py-2"
+                      className="rz-inset flex items-center justify-between gap-3 py-2"
                       key={code}
                     >
                       <div>
-                        <p className="text-sm font-semibold">
+                        <p className="text-app-strong m-0 font-semibold">
                           {code} (
                           {supportedCode
                             ? currencyName(supportedCode, locale)
                             : code}
                           )
                         </p>
-                        <p className="text-app-dim text-xs">
+                        <p className="rz-caption rz-mono m-0">
                           {money(balance, code)}
                         </p>
                       </div>
@@ -794,7 +800,7 @@ function CashRegisterForm({
         id={CASH_REGISTER_FORM}
         onSubmit={(event) => void save(event)}
       >
-        <Field hint={t('nameHint')} label={t('name')}>
+        <Field hint={t('nameHint')} label={t('name')} required>
           <TextInput
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -802,17 +808,15 @@ function CashRegisterForm({
           />
         </Field>
         {registerId ? (
-          <div className="border-app-line bg-app-canvas rounded-control grid gap-1 border px-3.5 py-3">
-            <p className="text-app-muted text-[14.5px]">
+          <div className="rz-inset grid gap-1">
+            <p className="rz-muted m-0">
               {t('tillType', { type: registerType(type) })}
             </p>
-            <p className="text-app-dim text-[12.5px]">{t('typeFixed')}</p>
+            <p className="rz-caption m-0">{t('typeFixed')}</p>
           </div>
         ) : (
           <fieldset className="grid gap-2">
-            <legend className="text-app-muted text-sm font-semibold">
-              {t('colType')}
-            </legend>
+            <legend className="rz-h-card mb-2">{t('colType')}</legend>
             <div className="grid gap-2 sm:grid-cols-2">
               {[
                 {
@@ -826,23 +830,22 @@ function CashRegisterForm({
                   hint: t('bankOptionHint'),
                 },
               ].map((option) => (
-                <button
-                  aria-pressed={type === option.value}
-                  className={cn(
-                    'border-app-line rounded-control grid min-h-20 gap-1 border p-3 text-left',
-                    type === option.value
-                      ? 'border-brand bg-brand/10'
-                      : 'bg-app-input',
-                  )}
-                  key={option.value}
-                  onClick={() => setType(option.value)}
-                  type="button"
-                >
-                  <span className="font-semibold text-white">
-                    {option.label}
+                <label className="rz-choice-card" key={option.value}>
+                  <input
+                    checked={type === option.value}
+                    className="rz-radio mt-0.5 shrink-0"
+                    name="cash-register-type"
+                    onChange={() => setType(option.value)}
+                    type="radio"
+                    value={option.value}
+                  />
+                  <span className="grid min-w-0 gap-0.5">
+                    <span className="rz-strong font-semibold">
+                      {option.label}
+                    </span>
+                    <span className="rz-caption">{option.hint}</span>
                   </span>
-                  <span className="text-app-dim text-xs">{option.hint}</span>
-                </button>
+                </label>
               ))}
             </div>
           </fieldset>
@@ -851,25 +854,18 @@ function CashRegisterForm({
           <>
             {type !== 'bank' && (
               <fieldset className="grid gap-2">
-                <legend className="text-app-muted text-sm font-semibold">
-                  {t('currencies')}
-                </legend>
+                <legend className="rz-label mb-2">{t('currencies')}</legend>
                 {/* The supported catalog with ISO codes: symbols cannot tell
                   CAD from USD. A till may keep any of them; this is not the
                   accounting currency. */}
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                <div className="rz-seg grid w-full grid-cols-5">
                   {SUPPORTED_CURRENCIES.map((code) => {
                     const selected = currencies.includes(code)
                     return (
                       <button
                         aria-label={`${code} (${currencyName(code, locale)})`}
                         aria-pressed={selected}
-                        className={cn(
-                          'border-app-line rounded-control grid min-h-14 content-center gap-0.5 border px-3 py-2 text-left',
-                          selected
-                            ? 'border-brand bg-brand/10 text-white'
-                            : 'bg-app-input text-app-muted',
-                        )}
+                        className="justify-center px-1 font-mono font-semibold"
                         key={code}
                         onClick={() =>
                           setCurrencies((current) =>
@@ -880,14 +876,10 @@ function CashRegisterForm({
                               : [...current, code],
                           )
                         }
+                        title={currencyName(code, locale)}
                         type="button"
                       >
-                        <span className="font-mono text-sm font-bold">
-                          {code}
-                        </span>
-                        <span className="text-app-dim text-[11px] leading-tight text-pretty">
-                          {currencyName(code, locale)}
-                        </span>
+                        {code}
                       </button>
                     )
                   })}
@@ -895,10 +887,8 @@ function CashRegisterForm({
               </fieldset>
             )}
             <fieldset className="grid gap-3">
-              <legend className="text-app-muted text-sm font-semibold">
-                {t('initialBalances')}
-              </legend>
-              <p className="text-app-dim text-xs">{t('initialBalancesHint')}</p>
+              <legend className="rz-h-card mb-2">{t('initialBalances')}</legend>
+              <p className="rz-hint m-0">{t('initialBalancesHint')}</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 {effectiveCurrencies.map((code) => (
                   <Field key={code} label={t('balanceOf', { code })}>

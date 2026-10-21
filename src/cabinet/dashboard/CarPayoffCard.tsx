@@ -81,19 +81,16 @@ function PayoffRow({
 
   return (
     <CardRow hover>
-      <Link
-        className="block outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-        to={`${base}/${car.id}`}
-      >
+      <Link className="block outline-none" to={`${base}/${car.id}`}>
         <span className="flex items-baseline justify-between gap-3">
-          <span className="min-w-0 truncate text-[15px] font-bold tracking-[-0.01em] text-white">
+          <span className="rz-strong min-w-0 truncate font-medium">
             {car.brand} {car.model} {car.year}
           </span>
           <span
             className={cn(
-              'font-mono text-[14px] font-medium tabular-nums',
+              'rz-mono',
               percent === null
-                ? 'text-app-dim'
+                ? 'rz-dim'
                 : percent >= 100
                   ? 'text-state-ok'
                   : percent >= 60
@@ -104,31 +101,32 @@ function PayoffRow({
             {percent == null ? '—' : `${String(percent)}%`}
           </span>
         </span>
-        <span aria-hidden className="mt-2.5 flex gap-0.5">
+        {/* `.rz-meter`: ok once paid off, neutral past 60%, warn below. */}
+        <span
+          aria-hidden
+          className={cn(
+            'rz-meter mt-2',
+            percent !== null && percent < 60 && 'rz-meter--warn',
+          )}
+        >
           <span
             className={cn(
-              'h-[5px] rounded-l-full',
-              percent !== null && percent >= 100
-                ? 'bg-state-ok'
-                : percent !== null && percent >= 60
-                  ? 'bg-white/35'
-                  : 'bg-state-warn',
+              percent !== null &&
+                percent >= 60 &&
+                percent < 100 &&
+                'bg-app-muted',
             )}
-            style={{ flex: done || 1 }}
-          />
-          <span
-            className="bg-app-line h-[5px] rounded-r-full"
-            style={{ flex: 100 - done }}
+            style={{ width: `${String(done)}%` }}
           />
         </span>
-        <span className="text-app-dim mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1 font-mono text-[12px]">
+        <span className="rz-caption rz-mono mt-1.5 flex flex-wrap justify-between gap-x-3 gap-y-1">
           <span className="min-w-0 truncate">
             {car.code} ·{' '}
             {t('soldOf', { sold: car.soldPartsCount, total: car.partsCount })}
             {days === null ? '' : ` · ${t('daysShort', { count: days })}`}
           </span>
           {invested === null || recouped === null ? null : (
-            <span className="whitespace-nowrap tabular-nums">
+            <span className="whitespace-nowrap">
               {sum(recouped)} / {sum(invested)}
               {accountingCurrency === null ? '' : ` ${accountingCurrency}`}
             </span>

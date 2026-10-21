@@ -1,0 +1,121 @@
+{
+ "id": "C4",
+ "module": "orders",
+ "eyebrow": "Продажі",
+ "title": "Замовлення",
+ "icon": "icon-clipboard-list",
+ "route": "/app/:tenant/orders",
+ "source": "orders/messages.ts",
+ "unverified": "вкладки статусів (у коді — фільтр «Статус замовлення»)",
+ "searchLabel": "Пошук замовлень",
+ "searchPlaceholder": "Номер замовлення або покупець",
+ "emptyTitle": "Замовлень поки немає",
+ "emptyBody": "Замовлення зʼявляться тут, щойно ви створите перше.",
+ "actions": [
+  {
+   "label": "Нове замовлення",
+   "icon": "icon-plus",
+   "href": "#"
+  }
+ ],
+ "filters": [
+  "Статус замовлення"
+ ],
+ "detailHref": "./Record.dc.html?screen=order",
+ "tabs": [
+  {
+   "label": "Усі"
+  },
+  {
+   "label": "Очікує",
+   "value": "Очікує"
+  },
+  {
+   "label": "Підтверджено",
+   "value": "Підтверджено"
+  },
+  {
+   "label": "Оплачено",
+   "value": "Оплачено"
+  }
+ ],
+ "tabField": "status",
+ "columns": [
+  {
+   "key": "no",
+   "label": "Замовлення",
+   "mono": true
+  },
+  {
+   "key": "buyer",
+   "label": "Покупець"
+  },
+  {
+   "key": "items",
+   "label": "Позиції",
+   "sub": "pay"
+  },
+  {
+   "key": "status",
+   "label": "Статус",
+   "pill": {
+    "Очікує": "rz-pill rz-pill--info",
+    "Резерв": "rz-pill rz-pill--warn",
+    "Підтверджено": "rz-pill rz-pill--ok",
+    "Оплачено": "rz-pill rz-pill--ok",
+    "Скасовано": "rz-pill",
+    "Повернено": "rz-pill rz-pill--danger"
+   }
+  },
+  {
+   "key": "sum",
+   "label": "Сума",
+   "align": "end"
+  }
+ ],
+ "rows": [
+  {
+   "no": "#358",
+   "buyer": "Без покупця",
+   "items": "2 позиції",
+   "pay": "платежів ще немає",
+   "status": "Очікує",
+   "sum": "8 400 ₴"
+  },
+  {
+   "no": "#357",
+   "buyer": "СТО «Мотор»",
+   "items": "5 позицій",
+   "pay": "",
+   "status": "Підтверджено",
+   "sum": "12 600 ₴"
+  },
+  {
+   "no": "#341",
+   "buyer": "Олена Коваль",
+   "items": "3 позиції",
+   "pay": "",
+   "status": "Оплачено",
+   "sum": "6 600 ₴"
+  },
+  {
+   "no": "#339",
+   "buyer": "Ігор Ткач",
+   "items": "1 позиція",
+   "pay": "",
+   "status": "Скасовано",
+   "sum": "2 100 ₴"
+  },
+  {
+   "no": "#322",
+   "buyer": "Андрій Фастов",
+   "items": "1 позиція",
+   "pay": "",
+   "status": "Повернено",
+   "sum": "4 800 ₴"
+  }
+ ],
+ "filteredTitle": "Нічого не знайдено",
+ "filteredBody": "Спробуйте змінити пошук або статус.",
+ "resetLabel": "Скинути фільтри"
+}

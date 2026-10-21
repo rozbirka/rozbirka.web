@@ -1,11 +1,12 @@
 import { useEffect, useId, useState } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import {
   Button,
   Field,
   Notice,
   Sheet,
   SkeletonRows,
+  SearchInput,
   TextInput,
 } from '@/components/app'
 import { cn } from '@/lib/utils'
@@ -164,7 +165,7 @@ function OpenOrderCustomerDrawer({
       eyebrow={t('eyebrow', { number: String(orderNumber) })}
       footer={
         <>
-          <p className="text-app-muted min-w-0 flex-1 truncate text-[13px]">
+          <p className="rz-muted m-0 min-w-0 flex-1 truncate">
             {currentName === null
               ? t('noCustomer')
               : t('current', { name: currentName })}
@@ -192,20 +193,15 @@ function OpenOrderCustomerDrawer({
       {error === null ? null : <Notice tone="danger">{error}</Notice>}
 
       <Field hiddenLabel label={t('searchLabel')}>
-        <span className="relative block">
-          <Search
-            aria-hidden
-            className="text-app-dim pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2"
-          />
-          <TextInput
-            aria-controls={listId}
-            autoComplete="off"
-            className="h-[46px] rounded-[11px] pl-10"
-            onChange={(event) => changeQuery(event.target.value)}
-            placeholder={t('searchPlaceholder')}
-            value={query}
-          />
-        </span>
+        <SearchInput
+          aria-controls={listId}
+          autoComplete="off"
+          className="h-control-lg"
+          onChange={(event) => changeQuery(event.target.value)}
+          placeholder={t('searchPlaceholder')}
+          type="text"
+          value={query}
+        />
       </Field>
 
       {searchError === null ? null : (
@@ -213,19 +209,19 @@ function OpenOrderCustomerDrawer({
       )}
 
       <div
-        className="border-app-line bg-app-raised overflow-hidden rounded-[14px] border"
+        className="border-app-line min-h-fit overflow-hidden rounded-rz-md border bg-(--rz-sheet-field)"
         id={listId}
       >
         {results === null ? (
-          <div className="p-4">
+          <div className="p-3">
             <SkeletonRows label={t('searching')} rows={3} />
           </div>
         ) : results.length === 0 ? (
-          <p className="text-app-muted px-4 py-5 text-center text-[13px]">
+          <p className="rz-muted border-app-line m-0 border-b px-4 py-4 text-center">
             {t('notFound')}
           </p>
         ) : (
-          <ul aria-label={t('foundLabel')}>
+          <ul aria-label={t('foundLabel')} className="m-0 list-none p-0">
             {results.map((customer) => {
               const active = !creating && customer.id === picked
               const current = customer.id === currentId
@@ -233,10 +229,10 @@ function OpenOrderCustomerDrawer({
                 <li key={customer.id}>
                   <button
                     className={cn(
-                      'flex w-full items-center gap-3 border-b border-white/5 px-3.5 py-3 text-left transition-colors',
+                      'border-app-line flex min-h-11 w-full cursor-pointer items-center gap-3 border-0 border-b bg-transparent px-3 py-2 text-left transition-colors',
                       active
-                        ? 'bg-brand/[0.07] shadow-[inset_3px_0_0_var(--color-brand)]'
-                        : 'hover:bg-white/[0.04]',
+                        ? 'bg-app-selected shadow-[inset_2px_0_0_var(--rz-brand)]'
+                        : 'hover:bg-app-hover',
                     )}
                     onClick={() => {
                       setPicked(customer.id)
@@ -244,14 +240,17 @@ function OpenOrderCustomerDrawer({
                     }}
                     type="button"
                   >
-                    <span className="bg-brand/15 text-brand grid size-9 shrink-0 place-items-center rounded-full text-[13px] font-bold">
+                    <span
+                      aria-hidden
+                      className="rz-avatar rz-avatar--round size-8"
+                    >
                       {initials(customer.name)}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] font-bold tracking-[-0.01em] text-white">
+                      <span className="rz-strong block truncate font-semibold">
                         {customer.name}
                       </span>
-                      <span className="text-app-muted mt-[3px] block font-mono text-[12px]">
+                      <span className="rz-dim block font-mono text-caption">
                         {customer.phone === null
                           ? t('noPhone')
                           : displayCustomerPhone(customer.phone)}{' '}
@@ -261,8 +260,8 @@ function OpenOrderCustomerDrawer({
                     {current || active ? (
                       <span
                         className={cn(
-                          'shrink-0 text-[12px] font-bold whitespace-nowrap',
-                          current ? 'text-app-muted' : 'text-brand',
+                          'shrink-0 text-caption font-semibold whitespace-nowrap',
+                          current ? 'text-app-muted' : 'text-brand-text',
                         )}
                       >
                         {current ? t('currentTag') : t('pickedTag')}
@@ -276,8 +275,10 @@ function OpenOrderCustomerDrawer({
         )}
         <button
           className={cn(
-            'text-brand flex w-full items-center gap-3 px-3.5 py-3 text-left text-[14px] font-bold transition-colors',
-            creating ? 'bg-brand/[0.07]' : 'hover:bg-brand/[0.08]',
+            'text-brand-text flex min-h-10 w-full cursor-pointer items-center gap-2.5 border-0 bg-transparent px-3 py-2 text-left font-semibold transition-colors',
+            creating
+              ? 'bg-app-selected shadow-[inset_2px_0_0_var(--rz-brand)]'
+              : 'hover:bg-app-hover',
           )}
           onClick={() => {
             setCreating((was) => !was)
@@ -288,15 +289,13 @@ function OpenOrderCustomerDrawer({
           }}
           type="button"
         >
-          <span className="border-brand/50 grid size-9 shrink-0 place-items-center rounded-full border border-dashed">
-            <Plus aria-hidden className="size-4" />
-          </span>
+          <Plus aria-hidden className="size-3.5 shrink-0" />
           {t('newCustomer')}
         </button>
       </div>
 
       {creating ? (
-        <div className="border-app-line bg-app-raised grid gap-3 rounded-[14px] border px-[18px] py-4">
+        <div className="grid gap-3">
           <Field label={t('name')}>
             <TextInput
               autoComplete="off"

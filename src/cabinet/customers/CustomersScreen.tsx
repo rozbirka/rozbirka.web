@@ -1,15 +1,22 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import {
-  ChevronLeft,
+  ArrowLeft,
+  ChevronDown,
+  ChevronRight,
   Copy,
   MessageSquare,
+  Pencil,
   Phone,
   Plus,
   Power,
   PowerOff,
+  SearchX,
   ShoppingCart,
   Trash2,
+  UserPlus,
+  Users,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -18,14 +25,14 @@ import {
   Button,
   Card,
   ConfirmDialog,
+  DataTable,
+  type DataColumn,
   DeniedState,
   ErrorState,
   Field,
   Notice,
-  PageBody,
   Pagination,
   SearchInput,
-  SectionPanel,
   SelectInput,
   Sheet,
   SkeletonRows,
@@ -51,6 +58,7 @@ import { normalizeApiProblem } from '@/api/errors'
 import { useTenantSettings } from '@/auth/useTenantSettings'
 import {
   commonMessages,
+  formatMoney,
   intlLocale,
   useFormat,
   useLocale,
@@ -59,6 +67,8 @@ import {
 } from '@/i18n'
 import { phoneExample } from '@/lib/phone'
 import { orderStatusPresentation } from '../orders/order-labels'
+import { orderMessages } from '../orders/messages'
+import { SheetGroup } from '../orders/sheet-group'
 import type { Permission } from '../access-types'
 import type { CabinetModuleScreenProps } from '../ModuleBoundary'
 import { useCabinet } from '../CabinetContext'
@@ -70,6 +80,8 @@ import {
 } from '../policy'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { cabinetModules } from '../module-registry'
+import { RedesignShell } from '../redesign-shell'
+import { Kpi, KpiStrip } from '../redesign-kpi'
 import { OrderForm } from '../orders/OrdersScreen'
 import {
   customerPhoneForSave,
@@ -156,35 +168,6 @@ function useDay() {
   return (value: string) => format.date(value) ?? value
 }
 
-/**
- * Avatar colours. The server keeps none, so the chip picks one by the name —
- * the same person gets the same colour on every screen and every reload, and
- * a wall of identical orange circles stops being a wall.
- */
-const AVATAR_TONES = [
-  'bg-brand/15 text-brand',
-  'bg-state-ok/15 text-state-ok',
-  'bg-state-info/15 text-state-info',
-  'bg-state-warn/15 text-state-warn',
-  'bg-white/[0.08] text-app-ink',
-] as const
-
-const avatarTone = (seed: string) => {
-  let hash = 0
-  for (const character of seed)
-    hash = (hash * 31 + character.codePointAt(0)!) % 9973
-  return AVATAR_TONES[hash % AVATAR_TONES.length] ?? AVATAR_TONES[0]
-}
-
-/** Two initials for the avatar chip; a single word gives one. */
-const customerInitials = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || '?'
-
 /** How a customer is grouped by how often they buy. */
 const CUSTOMER_SEGMENTS = [
   { value: 'all' as const, label: 'segmentAll' as const },
@@ -223,6 +206,7 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
   const day = useDay()
   const { currency: accountingCurrency } = useAccountingCurrency()
   const cabinet = useCabinet()
+  const navigate = useNavigate()
   const mutationsAllowed = canAccess(definition, cabinet, 'mutation')
   const financeViewAllowed = canAccess(
     definition,
@@ -237,6 +221,10 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [error, setError] = useState(false)
+  /** False until the first answer: skeleton rows, not «no customers». */
+  const [loaded, setLoaded] = useState(false)
+  /** Bumped by «Спробувати ще раз» to ask for the same page again. */
+  const [attempt, setAttempt] = useState(0)
   const [segment, setSegment] = useState<CustomerSegment>('all')
   const [sort, setSort] = useState<CustomerSort>('sum')
 
@@ -249,12 +237,15 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
         setTotal(result.total)
         setTotalPages(result.totalPages)
         setError(false)
+        setLoaded(true)
       })
       .catch(() => {
-        if (!controller.signal.aborted) setError(true)
+        if (controller.signal.aborted) return
+        setError(true)
+        setLoaded(true)
       })
     return () => controller.abort()
-  }, [page, q])
+  }, [page, q, attempt])
 
   const counts: Record<CustomerSegment, number> = {
     all: customers.length,
@@ -275,279 +266,238 @@ function CustomerDirectory({ definition }: CabinetModuleScreenProps) {
     )
   const filtered = q !== '' || segment !== 'all'
 
-  return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="mx-auto grid w-full max-w-[1240px] gap-4 px-4 pt-10 pb-16 sm:px-6 md:px-8 lg:px-12">
-        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-5">
-          <div className="min-w-0">
-            <p className="text-app-dim font-mono text-[11px] tracking-[0.14em] uppercase">
-              {t('section')}
-            </p>
-            <h1 className="mt-2.5 text-[38px] leading-none font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-              {t('title')}
-            </h1>
-          </div>
-          {mutationsAllowed ? (
-            <Button
-              asChild
-              className="min-h-11 px-5.5 text-[15px] font-bold"
-              variant="primary"
-            >
-              <Link to="new">
-                <Plus aria-hidden />
-                {t('newCustomer')}
-              </Link>
-            </Button>
-          ) : null}
-        </div>
-
-        <div className="mt-2.5">
-          <SearchInput
-            aria-label={t('searchLabel')}
-            className="min-h-12.5 text-[15px]"
-            onChange={(event) =>
-              setParams(
-                event.target.value ? { q: event.target.value, page: '1' } : {},
-              )
-            }
-            placeholder={t('searchPlaceholder')}
-            value={q}
-          />
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
-          <div
-            aria-label={t('segmentsLabel')}
-            className="border-app-line bg-app-raised flex flex-wrap gap-[3px] rounded-xl border p-[3px]"
-            role="radiogroup"
+  const columns: DataColumn<CustomerListItem>[] = [
+    {
+      key: 'customer',
+      label: t('columnCustomer'),
+      variant: 'primary',
+      cell: (customer) => (
+        <span className="grid min-w-0 py-1">
+          <Link
+            className="text-app-strong truncate"
+            onClick={(event) => event.stopPropagation()}
+            to={customer.id}
           >
-            {CUSTOMER_SEGMENTS.map((option) => {
-              const active = option.value === segment
-              return (
-                <button
-                  aria-checked={active}
-                  className={cn(
-                    'focus-visible:outline-brand flex min-h-11 cursor-pointer items-center gap-2.5 rounded-[9px] px-3.5 text-[14px] font-semibold',
-                    active
-                      ? 'text-app-ink bg-white/[0.09]'
-                      : 'text-app-muted hover:bg-white/[0.05]',
-                  )}
-                  key={option.value}
-                  onClick={() => setSegment(option.value)}
-                  role="radio"
-                  type="button"
-                >
-                  {t(option.label)}
-                  <span className="text-app-muted font-mono text-[12px] font-medium">
-                    {counts[option.value]}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-          <div className="flex items-center gap-2.5">
-            <span
-              className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase"
-              id="customer-sort-label"
-            >
-              {t('sortLabel')}
-            </span>
-            <div
-              aria-labelledby="customer-sort-label"
-              className="border-app-line bg-app-raised flex gap-[3px] rounded-xl border p-[3px]"
-              role="radiogroup"
-            >
-              {CUSTOMER_SORTS.map((option) => {
-                const active = option.value === sort
-                return (
-                  <button
-                    aria-checked={active}
-                    className={cn(
-                      'focus-visible:outline-brand min-h-9 cursor-pointer rounded-lg px-3.5 text-[13px] font-semibold',
-                      active
-                        ? 'text-app-ink bg-white/[0.09]'
-                        : 'text-app-muted hover:bg-white/[0.05]',
-                    )}
-                    key={option.value}
-                    onClick={() => setSort(option.value)}
-                    role="radio"
-                    type="button"
-                  >
-                    {t(option.label)}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
+            {customer.name}
+          </Link>
+          <span className="rz-caption font-normal">
+            {t(segmentTag(customer.ordersCount))}
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: 'phone',
+      label: t('columnPhone'),
+      cell: (customer) => (
+        <span
+          className={cn(
+            'font-mono whitespace-nowrap',
+            customer.phone === null ? 'rz-dim' : 'text-app-ink',
+          )}
+        >
+          {customer.phone === null ? '—' : displayCustomerPhone(customer.phone)}
+        </span>
+      ),
+    },
+    {
+      key: 'last',
+      label: t('columnLastPurchase'),
+      cell: (customer) => (
+        <span
+          className={cn(
+            'font-mono whitespace-nowrap',
+            customer.lastOrderAt === null ? 'rz-dim' : 'text-app-muted',
+          )}
+        >
+          {customer.lastOrderAt === null ? '—' : day(customer.lastOrderAt)}
+        </span>
+      ),
+    },
+    {
+      key: 'orders',
+      label: t('columnOrders'),
+      align: 'end',
+      cell: (customer) => (
+        <span
+          className={cn('font-mono', customer.ordersCount === 0 && 'rz-dim')}
+        >
+          {customer.ordersCount}
+        </span>
+      ),
+    },
+    ...(financeViewAllowed
+      ? [
+          {
+            key: 'amount',
+            label: t('columnAmount'),
+            align: 'end' as const,
+            cell: (customer: CustomerListItem) => (
+              <span
+                className={cn(
+                  'whitespace-nowrap',
+                  (customer.totalAmount ?? 0) > 0 ? '' : 'rz-dim',
+                )}
+              >
+                {customer.totalAmount === null || customer.totalAmount === 0 ? (
+                  '—'
+                ) : (
+                  <Amount
+                    currency={accountingCurrency}
+                    currencyDisplay="code"
+                    value={customer.totalAmount}
+                  />
+                )}
+              </span>
+            ),
+          },
+        ]
+      : []),
+  ]
 
+  const newCustomerButton = mutationsAllowed ? (
+    <Button asChild variant="primary">
+      <Link to="new">
+        <UserPlus aria-hidden />
+        {t('newCustomer')}
+      </Link>
+    </Button>
+  ) : undefined
+  const resetAll = () => {
+    setSegment('all')
+    setParams({})
+  }
+
+  return (
+    <RedesignShell
+      actions={newCustomerButton}
+      crumb={
+        <>
+          <span>{t('section')}</span>
+          <ChevronRight aria-hidden className="size-3" />
+          <span aria-current="page">{t('title')}</span>
+        </>
+      }
+    >
+      <div className="rz-page-head">
+        <h1 className="rz-h-page">{t('title')}</h1>
         {totalPages > 1 ? (
-          <p className="text-app-dim text-[13px]">
+          <p className="rz-muted m-0 max-w-[72ch] text-pretty">
             {t('pageScope', { count: total })}
           </p>
         ) : null}
-
-        {error ? <Notice tone="danger">{t('loadError')}</Notice> : null}
-
-        <section
-          aria-label={t('listLabel')}
-          className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
-        >
-          <div
-            aria-hidden
-            className={cn(
-              'border-app-line text-app-dim hidden gap-4 border-b px-6 py-3.5 font-mono text-[10px] tracking-[0.14em] uppercase md:grid',
-              financeViewAllowed
-                ? 'md:grid-cols-[1.5fr_1fr_1fr_7rem_8rem]'
-                : 'md:grid-cols-[1.5fr_1fr_1fr_7rem]',
-            )}
-          >
-            <span>{t('columnCustomer')}</span>
-            <span>{t('columnPhone')}</span>
-            <span>{t('columnLastPurchase')}</span>
-            <span className="text-right">{t('columnOrders')}</span>
-            {financeViewAllowed ? (
-              <span className="text-right">{t('columnAmount')}</span>
-            ) : null}
-          </div>
-
-          {rows.length === 0 ? (
-            <div className="flex flex-col items-center gap-3.5 px-6 py-14 text-center">
-              <p className="text-[16px] font-bold text-white">
-                {filtered ? t('emptyFilteredTitle') : t('emptyTitle')}
-              </p>
-              <p className="text-app-muted text-[14px]">
-                {filtered ? t('emptyFilteredHint') : t('emptyHint')}
-              </p>
-              {filtered ? (
-                <Button
-                  className="text-[13px] font-bold"
-                  onClick={() => {
-                    setSegment('all')
-                    setParams({})
-                  }}
-                >
-                  {t('resetFilters')}
-                </Button>
-              ) : null}
-            </div>
-          ) : (
-            <ul className="grid">
-              {rows.map((customer) => (
-                <li
-                  className="border-app-line border-b last:border-0"
-                  key={customer.id}
-                >
-                  <Link
-                    className={cn(
-                      'grid items-center gap-x-4 gap-y-1.5 px-6 py-3.5 hover:bg-white/[0.03]',
-                      financeViewAllowed
-                        ? 'md:grid-cols-[1.5fr_1fr_1fr_7rem_8rem]'
-                        : 'md:grid-cols-[1.5fr_1fr_1fr_7rem]',
-                    )}
-                    to={customer.id}
-                  >
-                    <span className="flex min-w-0 items-center gap-3.5">
-                      <span
-                        aria-hidden
-                        className={cn(
-                          'flex size-9 shrink-0 items-center justify-center rounded-full text-[13px] font-bold',
-                          avatarTone(customer.name),
-                        )}
-                      >
-                        {customerInitials(customer.name)}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate text-[15px] font-semibold tracking-[-0.01em] text-white">
-                          {customer.name}
-                        </span>
-                        <span className="text-app-muted mt-0.5 block text-[12px]">
-                          {t(segmentTag(customer.ordersCount))}
-                        </span>
-                      </span>
-                    </span>
-                    <span
-                      className={cn(
-                        'font-mono text-[14px]',
-                        customer.phone === null
-                          ? 'text-app-dim'
-                          : 'text-app-ink',
-                      )}
-                    >
-                      {customer.phone === null
-                        ? '—'
-                        : displayCustomerPhone(customer.phone)}
-                    </span>
-                    <span
-                      className={cn(
-                        'text-[14px] font-medium',
-                        customer.lastOrderAt === null
-                          ? 'text-app-dim'
-                          : 'text-app-muted',
-                      )}
-                    >
-                      <span className="text-app-dim mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
-                        {t('columnLastPurchase')}
-                      </span>
-                      {customer.lastOrderAt === null
-                        ? '—'
-                        : day(customer.lastOrderAt)}
-                    </span>
-                    <span
-                      className={cn(
-                        'font-mono text-[15px] tabular-nums md:text-right',
-                        customer.ordersCount > 0
-                          ? 'text-app-ink'
-                          : 'text-app-dim',
-                      )}
-                    >
-                      <span className="text-app-dim mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
-                        {t('columnOrders')}
-                      </span>
-                      {customer.ordersCount}
-                    </span>
-                    {financeViewAllowed ? (
-                      <span
-                        className={cn(
-                          'text-[16px] font-bold tracking-[-0.01em] tabular-nums md:text-right',
-                          (customer.totalAmount ?? 0) > 0
-                            ? 'text-white'
-                            : 'text-app-dim',
-                        )}
-                      >
-                        {customer.totalAmount === null ||
-                        customer.totalAmount === 0 ? (
-                          '—'
-                        ) : (
-                          <Amount
-                            currency={accountingCurrency}
-                            currencyDisplay="code"
-                            value={customer.totalAmount}
-                          />
-                        )}
-                      </span>
-                    ) : null}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          <div className="border-app-line border-t px-6 py-3.5">
-            <Pagination
-              label={t('pagesLabel')}
-              onPage={(nextPage) => {
-                const next = new URLSearchParams(params)
-                next.set('page', String(nextPage))
-                setParams(next)
-              }}
-              page={page}
-              totalPages={Math.max(totalPages, 1)}
-            />
-          </div>
-        </section>
       </div>
-    </div>
+
+      <div className="rz-toolbar" role="search">
+        <SearchInput
+          aria-label={t('searchLabel')}
+          onChange={(event) =>
+            setParams(
+              event.target.value ? { q: event.target.value, page: '1' } : {},
+            )
+          }
+          placeholder={t('searchPlaceholder')}
+          value={q}
+        />
+        <div
+          aria-label={t('segmentsLabel')}
+          className="rz-seg max-w-full flex-wrap"
+          role="radiogroup"
+        >
+          {CUSTOMER_SEGMENTS.map((option) => (
+            <button
+              aria-checked={option.value === segment}
+              key={option.value}
+              onClick={() => setSegment(option.value)}
+              role="radio"
+              type="button"
+            >
+              {t(option.label)}
+              <span className="rz-count">{counts[option.value]}</span>
+            </button>
+          ))}
+        </div>
+        <label className="rz-filter rz-filter--set relative">
+          <span className="rz-filter__key">{t('sortLabel')}:</span>
+          <select
+            aria-label={t('sortLabel')}
+            className="cursor-pointer appearance-none border-0 bg-transparent pr-4 text-inherit outline-none focus-visible:underline"
+            onChange={(event) => setSort(event.target.value as CustomerSort)}
+            value={sort}
+          >
+            {CUSTOMER_SORTS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {t(option.label)}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            aria-hidden
+            className="pointer-events-none absolute right-2 size-3"
+          />
+        </label>
+        {filtered ? (
+          <Button onClick={resetAll} variant="ghost">
+            {t('resetFilters')}
+          </Button>
+        ) : null}
+      </div>
+
+      <section aria-label={t('listLabel')}>
+        {error ? (
+          <ErrorState
+            description={t('loadError')}
+            onRetry={() => setAttempt((value) => value + 1)}
+          />
+        ) : !loaded ? (
+          <SkeletonRows columns={5} rows={8} />
+        ) : (
+          <DataTable
+            caption={t('listLabel')}
+            columns={columns}
+            empty={
+              <div
+                className={cn('rz-state', !filtered && 'rz-state--brand')}
+                role="status"
+              >
+                <span className="rz-state__icon">
+                  {filtered ? <SearchX aria-hidden /> : <Users aria-hidden />}
+                </span>
+                <h2 className="rz-state__title">
+                  {filtered ? t('emptyFilteredTitle') : t('emptyTitle')}
+                </h2>
+                <p className="rz-state__body">
+                  {filtered ? t('emptyFilteredHint') : t('emptyHint')}
+                </p>
+                {filtered ? (
+                  <Button onClick={resetAll}>
+                    <X aria-hidden />
+                    {t('resetFilters')}
+                  </Button>
+                ) : (
+                  newCustomerButton
+                )}
+              </div>
+            }
+            footer={
+              <Pagination
+                label={t('pagesLabel')}
+                onPage={(nextPage) => {
+                  const next = new URLSearchParams(params)
+                  next.set('page', String(nextPage))
+                  setParams(next)
+                }}
+                page={page}
+                totalPages={Math.max(totalPages, 1)}
+              />
+            }
+            onRowClick={(customer) => void navigate(customer.id)}
+            rowKey={(customer) => customer.id}
+            rows={rows}
+          />
+        )}
+      </section>
+    </RedesignShell>
   )
 }
 
@@ -556,6 +506,7 @@ function CustomerDetailScreen({
   customerId,
 }: CabinetModuleScreenProps & { customerId: string }) {
   const t = useT(customerMessages)
+  const to = useT(orderMessages)
   const tc = useT(commonMessages)
   const { locale } = useLocale()
   const day = useDay()
@@ -588,6 +539,7 @@ function CustomerDetailScreen({
   const deleteTriggerRef = useRef<HTMLButtonElement>(null)
   const [copied, setCopied] = useState(false)
   const [notes, setNotes] = useState('')
+  const ordersTitleId = useId()
   const navigate = useNavigate()
   const directoryPath = `/app/${cabinet.targetTenant?.slug ?? ''}/customers`
   useEffect(() => {
@@ -672,27 +624,47 @@ function CustomerDetailScreen({
       setBusy(false)
     }
   }
+  const crumbTrail = (current: string) => (
+    <>
+      <span className="max-sm:hidden">{t('section')}</span>
+      <ChevronRight aria-hidden className="size-3 max-sm:hidden" />
+      <Link to={directoryPath}>{t('title')}</Link>
+      <ChevronRight aria-hidden className="size-3" />
+      <span aria-current="page">{current}</span>
+    </>
+  )
   if (!ordersViewAllowed)
     return (
-      <PageBody width="narrow">
+      <RedesignShell crumb={crumbTrail(t('title'))} width="record">
         <DeniedState
           description={t('deniedDescription')}
           role="alert"
           title={t('deniedTitle')}
         />
-      </PageBody>
+      </RedesignShell>
     )
-  if (error)
+  if (error && !customer)
     return (
-      <PageBody width="narrow">
-        <ErrorState description={t(error)} title={t('loadFailedTitle')} />
-      </PageBody>
+      <RedesignShell crumb={crumbTrail(t('title'))} width="record">
+        <ErrorState
+          actions={
+            <Button asChild>
+              <Link to={directoryPath}>
+                <ArrowLeft aria-hidden />
+                {t('backToCustomers')}
+              </Link>
+            </Button>
+          }
+          description={t(error)}
+          title={t('loadFailedTitle')}
+        />
+      </RedesignShell>
     )
   if (!customer)
     return (
-      <PageBody width="narrow">
-        <SkeletonRows label={t('loading')} rows={3} />
-      </PageBody>
+      <RedesignShell crumb={crumbTrail(t('title'))} width="record">
+        <SkeletonRows label={t('loading')} rows={6} />
+      </RedesignShell>
     )
   const ordersPath = `/app/${cabinet.targetTenant?.slug ?? ''}/orders`
   const orderHref = (orderId: string) =>
@@ -708,49 +680,45 @@ function CustomerDetailScreen({
     currentOrdersPage * ordersPageSize,
   )
   const addressLines = customerAddressLines(customer, locale)
-  const money = (value: number | null | undefined) =>
-    typeof value === 'number' && Number.isFinite(value) ? (
-      <Amount
-        currency={accountingCurrency}
-        currencyDisplay="code"
-        value={value}
-      />
-    ) : (
-      '—'
-    )
-
+  /** A KPI figure: the number large, the ISO code as the strip's unit. */
+  const kpiMoney = (value: number | null | undefined) => {
+    const text =
+      typeof value === 'number' && Number.isFinite(value)
+        ? formatMoney(value, accountingCurrency, locale)
+        : null
+    if (text === null) return { value: '—' }
+    const code = accountingCurrency?.toUpperCase()
+    return code !== undefined && text.endsWith(`\u00a0${code}`)
+      ? { value: text.slice(0, -(code.length + 1)), unit: code }
+      : { value: text }
+  }
+  const canCreateOrder = orderCreateAllowed && customer.isActive
   return (
-    <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-      <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-        <div className="flex min-w-0 items-center gap-5">
-          <Link
-            className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-            to={directoryPath}
-          >
-            <ChevronLeft aria-hidden className="size-3.5" />
-            {t('backToCustomers')}
-          </Link>
-          <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-            <span>{t('section')}</span>
-            <span aria-hidden className="text-white/20">
-              /
-            </span>
-            <span className="text-app-muted">{t('title')}</span>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
+    <RedesignShell
+      actions={
+        <>
+          {customer.phone === null ? null : (
+            <>
+              <Button asChild>
+                <a href={`tel:${customer.phone}`}>
+                  <Phone aria-hidden />
+                  {t('call')}
+                </a>
+              </Button>
+              <Button asChild>
+                <a href={`sms:${customer.phone}`}>
+                  <MessageSquare aria-hidden />
+                  {t('sms')}
+                </a>
+              </Button>
+            </>
+          )}
           {mutationsAllowed ? (
-            <Button asChild className="px-[18px] text-sm font-semibold">
-              <Link to="edit">{tc('edit')}</Link>
-            </Button>
-          ) : null}
-          {orderCreateAllowed && customer.isActive ? (
-            <Button
-              className="px-5 text-sm font-bold"
-              onClick={() => setOrderDrawerOpen(true)}
-              variant="primary"
-            >
-              {t('createOrder')}
+            <Button asChild>
+              <Link to="edit">
+                <Pencil aria-hidden />
+                {tc('edit')}
+              </Link>
             </Button>
           ) : null}
           {mutationsAllowed ? (
@@ -785,150 +753,89 @@ function CustomerDetailScreen({
               triggerRef={deleteTriggerRef}
             />
           ) : null}
+          {canCreateOrder ? (
+            <Button onClick={() => setOrderDrawerOpen(true)} variant="primary">
+              <Plus aria-hidden />
+              {t('createOrder')}
+            </Button>
+          ) : null}
+        </>
+      }
+      crumb={crumbTrail(customer.name)}
+      width="record"
+    >
+      {error ? <Notice tone="danger">{t(error)}</Notice> : null}
+      {copied ? <Notice tone="ok">{t('phoneCopied')}</Notice> : null}
+
+      <div className="grid gap-1.5">
+        <h1 className="rz-h-page">{customer.name}</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusPill tone={customer.isActive ? 'ok' : 'neutral'}>
+            {customer.isActive ? t('active') : t('inactive')}
+          </StatusPill>
+          {customer.ordersCount === null ? null : (
+            <StatusPill tone="neutral">
+              {t(segmentTag(customer.ordersCount))}
+            </StatusPill>
+          )}
         </div>
       </div>
 
-      <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-        {error ? <Notice tone="danger">{t(error)}</Notice> : null}
-        {copied ? <Notice tone="ok">{t('phoneCopied')}</Notice> : null}
-
-        <div className="flex flex-wrap items-start gap-x-6 gap-y-5">
-          <span
-            aria-hidden
-            className={cn(
-              'flex size-16 shrink-0 items-center justify-center rounded-full text-[22px] font-bold',
-              avatarTone(customer.name),
-            )}
-          >
-            {customerInitials(customer.name)}
-          </span>
-          <div className="min-w-0 flex-[1_1_18rem]">
-            <div className="flex flex-wrap items-center gap-3.5">
-              <h1 className="text-[32px] leading-[1.05] font-extrabold tracking-[-0.03em] text-white sm:text-[40px]">
-                {customer.name}
-              </h1>
-              <StatusPill tone={customer.isActive ? 'ok' : 'neutral'}>
-                {customer.isActive ? t('active') : t('inactive')}
-              </StatusPill>
-            </div>
-            {customer.phone === null ? (
-              <p className="text-app-muted mt-3 text-[15px]">
-                {t('phoneMissing')}
-              </p>
-            ) : (
-              <div className="mt-3 flex flex-wrap items-center gap-2.5">
-                <span className="text-app-ink font-mono text-[15px]">
-                  {displayCustomerPhone(customer.phone)}
-                </span>
-                <Button
-                  className="min-h-9 px-3 text-[12px] font-bold"
-                  onClick={() => void copyPhone(customer.phone ?? '')}
-                >
-                  <Copy aria-hidden />
-                  {t('copyPhone')}
-                </Button>
-                <Button asChild className="min-h-9 px-3 text-[12px] font-bold">
-                  <a href={`tel:${customer.phone}`}>
-                    <Phone aria-hidden />
-                    {t('call')}
-                  </a>
-                </Button>
-                <Button asChild className="min-h-9 px-3 text-[12px] font-bold">
-                  <a href={`sms:${customer.phone}`}>
-                    <MessageSquare aria-hidden />
-                    {t('sms')}
-                  </a>
-                </Button>
-              </div>
-            )}
-          </div>
-          <dl className="border-app-line bg-app-raised ml-auto grid grid-cols-2 gap-x-7 gap-y-4 rounded-[16px] border px-6 py-4.5 sm:grid-cols-3">
-            <div>
-              <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                {t('statOrders')}
-              </dt>
-              <dd
-                className={cn(
-                  'mt-2 text-[28px] leading-none font-bold tracking-[-0.02em] tabular-nums',
-                  (customer.ordersCount ?? 0) > 0
-                    ? 'text-white'
-                    : 'text-app-dim',
-                )}
-              >
-                {customer.ordersCount === null
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid min-w-0 gap-3.5">
+          <KpiStrip>
+            <Kpi
+              label={t('statOrders')}
+              meta=""
+              tone={(customer.ordersCount ?? 0) > 0 ? 'plain' : 'dim'}
+              value={
+                customer.ordersCount === null
                   ? '—'
-                  : String(customer.ordersCount)}
-              </dd>
-            </div>
+                  : String(customer.ordersCount)
+              }
+            />
             {financeViewAllowed ? (
               <>
-                <div>
-                  <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                    {t('statSpent')}
-                  </dt>
-                  <dd
-                    className={cn(
-                      'mt-2 text-[28px] leading-none font-bold tracking-[-0.02em] tabular-nums',
-                      (customer.totalAmount ?? 0) > 0
-                        ? 'text-white'
-                        : 'text-app-dim',
-                    )}
-                  >
-                    {money(customer.totalAmount)}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                    {t('statAverage')}
-                  </dt>
-                  <dd
-                    className={cn(
-                      'mt-2 text-[28px] leading-none font-bold tracking-[-0.02em] tabular-nums',
-                      (customer.averageAmount ?? 0) > 0
-                        ? 'text-white'
-                        : 'text-app-dim',
-                    )}
-                  >
-                    {money(
-                      typeof customer.averageAmount === 'number'
-                        ? Math.round(customer.averageAmount)
-                        : null,
-                    )}
-                  </dd>
-                </div>
+                <Kpi
+                  label={t('statSpent')}
+                  meta=""
+                  tone={(customer.totalAmount ?? 0) > 0 ? 'plain' : 'dim'}
+                  {...kpiMoney(customer.totalAmount)}
+                />
+                <Kpi
+                  label={t('statAverage')}
+                  meta=""
+                  tone={(customer.averageAmount ?? 0) > 0 ? 'plain' : 'dim'}
+                  {...kpiMoney(
+                    typeof customer.averageAmount === 'number'
+                      ? Math.round(customer.averageAmount)
+                      : null,
+                  )}
+                />
               </>
             ) : null}
-          </dl>
-        </div>
+          </KpiStrip>
 
-        <div className="flex flex-wrap items-start gap-6">
-          <Card
-            aside={
-              <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
-                {t('ordersCount', { count: customer.orders.length })}
-              </span>
-            }
-            bodyClassName="p-0"
-            className="min-w-0 flex-[2_1_34rem]"
-            title={t('orderHistory')}
-          >
-            {customer.orders.length === 0 ? (
-              <div className="border-app-line flex flex-col items-center gap-3 border-t px-6 pt-14 pb-15 text-center">
-                <span
-                  aria-hidden
-                  className="bg-brand-soft text-brand flex size-13 items-center justify-center rounded-[15px]"
-                >
-                  <ShoppingCart className="size-6" />
+          <section aria-labelledby={ordersTitleId} className="rz-card min-w-0">
+            <div className="rz-card__head py-2">
+              <h2 className="rz-h-card" id={ordersTitleId}>
+                {t('orderHistory')}{' '}
+                <span className="rz-dim font-mono text-caption font-normal">
+                  {t('ordersCount', { count: customer.orders.length })}
                 </span>
-                <p className="text-[17px] font-bold text-white">
-                  {t('noOrdersTitle')}
-                </p>
-                <p className="text-app-muted max-w-[21rem] text-[14px] leading-[1.5] text-pretty">
+              </h2>
+            </div>
+            {customer.orders.length === 0 ? (
+              <div className="rz-state rz-state--brand min-h-60" role="status">
+                <span className="rz-state__icon">
+                  <ShoppingCart aria-hidden />
+                </span>
+                <h3 className="rz-state__title">{t('noOrdersTitle')}</h3>
+                <p className="rz-state__body text-pretty">
                   {t('noOrdersHint')}
                 </p>
-                {orderCreateAllowed && customer.isActive ? (
+                {canCreateOrder ? (
                   <Button
-                    className="mt-1.5 px-5 text-sm font-bold"
                     onClick={() => setOrderDrawerOpen(true)}
                     variant="primary"
                   >
@@ -938,83 +845,154 @@ function CustomerDetailScreen({
               </div>
             ) : (
               <>
-                <ul className="grid">
-                  {visibleOrders.map((order) => (
-                    <li
-                      className="border-app-line border-t first:border-t-0"
-                      key={order.id}
-                    >
-                      <Link
-                        className="grid items-center gap-x-4 gap-y-1 px-6 py-4 hover:bg-white/[0.03] sm:grid-cols-[minmax(0,1fr)_auto]"
-                        to={orderHref(order.id)}
-                      >
-                        <span className="min-w-0">
-                          <span className="block text-[15px] font-bold text-white">
-                            #{order.number}
-                          </span>
-                          <span className="text-app-muted mt-0.5 block truncate text-[13px]">
-                            {[
-                              day(order.createdAt),
-                              orderStatusPresentation(order.status, locale)
-                                .label,
-                              order.partNames.join(', ') || null,
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </span>
-                        </span>
-                        <span className="font-mono text-[15px] whitespace-nowrap text-white tabular-nums">
-                          {/* The ISO code the server sends, never a symbol:
-                              CAD and USD would both read «$». */}
-                          <Amount
-                            currency={order.currency ?? null}
-                            currencyDisplay="code"
-                            value={order.totalAmount}
-                          />
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
+                <div className="rz-table-scroll">
+                  <table className="rz-table">
+                    <caption>{t('orderHistory')}</caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">{to('columnOrder')}</th>
+                        <th scope="col">{to('columnStatus')}</th>
+                        <th className="rz-num" scope="col">
+                          {to('columnTotal')}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleOrders.map((order) => {
+                        const status = orderStatusPresentation(
+                          order.status,
+                          locale,
+                        )
+                        return (
+                          <tr className="h-auto" key={order.id}>
+                            <th className="py-1.5" scope="row">
+                              <Link
+                                className="text-app-strong block w-fit font-mono"
+                                title={order.partNames.join(', ') || undefined}
+                                to={orderHref(order.id)}
+                              >
+                                #{order.number}
+                              </Link>
+                              <span className="rz-caption block font-mono font-normal">
+                                {day(order.createdAt)}
+                              </span>
+                            </th>
+                            <td data-label={to('columnStatus')}>
+                              <StatusPill tone={status.tone}>
+                                {status.label}
+                              </StatusPill>
+                            </td>
+                            <td
+                              className="rz-num whitespace-nowrap"
+                              data-label={to('columnTotal')}
+                            >
+                              {/* The ISO code the server sends, never a
+                                  symbol: CAD and USD would both read «$». */}
+                              <Amount
+                                currency={order.currency ?? null}
+                                currencyDisplay="code"
+                                value={order.totalAmount}
+                              />
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
                 {ordersTotalPages > 1 ? (
-                  <div className="border-app-line border-t px-6 py-3.5">
-                    <Pagination
-                      label={t('ordersPagesLabel')}
-                      onPage={setOrdersPage}
-                      page={currentOrdersPage}
-                      totalPages={ordersTotalPages}
-                    />
-                  </div>
+                  <Pagination
+                    label={t('ordersPagesLabel')}
+                    onPage={setOrdersPage}
+                    page={currentOrdersPage}
+                    totalPages={ordersTotalPages}
+                  />
                 ) : null}
               </>
             )}
-          </Card>
+          </section>
 
-          <div className="flex min-w-0 flex-[1_1_18rem] flex-col gap-5">
-            <Card title={t('details')}>
-              <dl className="grid grid-cols-[1fr_auto] items-baseline gap-x-4 gap-y-3.5">
-                <dt className="text-app-muted text-[14px] font-semibold">
-                  {t('phone')}
-                </dt>
+          <Card
+            aside={
+              mutationsAllowed && notes.trim() !== (customer.notes ?? '') ? (
+                <div className="rz-btn-row gap-1.5">
+                  <Button
+                    disabled={busy}
+                    onClick={() => setNotes(customer.notes ?? '')}
+                    size="sm"
+                  >
+                    {tc('cancel')}
+                  </Button>
+                  <Button
+                    aria-busy={busy}
+                    disabled={busy}
+                    onClick={() => void saveNotes()}
+                    size="sm"
+                  >
+                    {t('saveNotes')}
+                  </Button>
+                </div>
+              ) : undefined
+            }
+            headerClassName="py-2"
+            title={t('notes')}
+          >
+            {mutationsAllowed ? (
+              <Field label={t('notesLabel')} srLabel={customer.name}>
+                <TextArea
+                  disabled={busy}
+                  onChange={(event) => setNotes(event.target.value)}
+                  placeholder={t('notesPlaceholder')}
+                  rows={3}
+                  value={notes}
+                />
+              </Field>
+            ) : (
+              <p
+                className={cn(
+                  'm-0 whitespace-pre-wrap',
+                  customer.notes === null ? 'text-app-dim' : 'text-app-muted',
+                )}
+              >
+                {customer.notes ?? t('noNotes')}
+              </p>
+            )}
+          </Card>
+        </div>
+
+        <aside className="grid min-w-0 gap-3.5">
+          <Card bodyClassName="p-0" headerClassName="py-2" title={t('details')}>
+            <dl className="rz-facts">
+              <div>
+                <dt>{t('phone')}</dt>
                 <dd
                   className={cn(
-                    'font-mono text-[14px]',
-                    customer.phone === null ? 'text-app-dim' : 'text-app-ink',
+                    'flex flex-wrap items-center gap-x-2 gap-y-1 font-mono',
+                    customer.phone === null && 'text-app-dim',
                   )}
                 >
-                  {customer.phone === null
-                    ? '—'
-                    : displayCustomerPhone(customer.phone)}
+                  {customer.phone === null ? (
+                    t('phoneMissing')
+                  ) : (
+                    <>
+                      <span>{displayCustomerPhone(customer.phone)}</span>
+                      <Button
+                        aria-label={t('copyPhone')}
+                        className="relative after:absolute after:-inset-2.5 after:content-['']"
+                        onClick={() => void copyPhone(customer.phone ?? '')}
+                        size="icon"
+                        title={t('copyPhone')}
+                        variant="quiet"
+                      >
+                        <Copy aria-hidden />
+                      </Button>
+                    </>
+                  )}
                 </dd>
-                <dt className="text-app-muted text-[14px] font-semibold">
-                  {t('address')}
-                </dt>
-                <dd
-                  className={cn(
-                    'text-right text-[14px] font-semibold',
-                    addressLines.length === 0 ? 'text-app-dim' : 'text-app-ink',
-                  )}
-                >
+              </div>
+              <div>
+                <dt>{t('address')}</dt>
+                <dd className={cn(addressLines.length === 0 && 'text-app-dim')}>
                   {addressLines.length === 0
                     ? tc('notSet')
                     : addressLines.map((line) => (
@@ -1023,96 +1001,44 @@ function CustomerDetailScreen({
                         </span>
                       ))}
                 </dd>
-                <dt
-                  className="text-app-muted text-[14px] font-semibold"
-                  title={t('channelHint')}
-                >
-                  {t('channel')}
-                </dt>
-                <dd className="text-app-dim text-[14px] font-semibold">—</dd>
-                <dt className="text-app-muted text-[14px] font-semibold">
-                  {t('customerSince')}
-                </dt>
-                <dd className="text-app-ink text-[14px] font-semibold">
-                  {day(customer.createdAt)}
-                </dd>
-                <dt className="text-app-muted text-[14px] font-semibold">
-                  {t('firstPurchase')}
-                </dt>
+              </div>
+              <div>
+                <dt title={t('channelHint')}>{t('channel')}</dt>
+                <dd className="text-app-dim">—</dd>
+              </div>
+              <div>
+                <dt>{t('customerSince')}</dt>
+                <dd className="font-mono">{day(customer.createdAt)}</dd>
+              </div>
+              <div>
+                <dt>{t('firstPurchase')}</dt>
                 <dd
                   className={cn(
-                    'text-[14px] font-semibold',
-                    customer.firstOrderAt === null
-                      ? 'text-app-dim'
-                      : 'text-app-ink',
+                    'font-mono',
+                    customer.firstOrderAt === null && 'text-app-dim',
                   )}
                 >
                   {customer.firstOrderAt === null
                     ? '—'
                     : day(customer.firstOrderAt)}
                 </dd>
-                <dt className="text-app-muted text-[14px] font-semibold">
-                  {t('lastPurchase')}
-                </dt>
+              </div>
+              <div>
+                <dt>{t('lastPurchase')}</dt>
                 <dd
                   className={cn(
-                    'text-[14px] font-semibold',
-                    customer.lastOrderAt === null
-                      ? 'text-app-dim'
-                      : 'text-app-ink',
+                    'font-mono',
+                    customer.lastOrderAt === null && 'text-app-dim',
                   )}
                 >
                   {customer.lastOrderAt === null
                     ? '—'
                     : day(customer.lastOrderAt)}
                 </dd>
-              </dl>
-            </Card>
-
-            <Card title={t('notes')}>
-              {mutationsAllowed ? (
-                <>
-                  <Field label={t('notesLabel')} srLabel={customer.name}>
-                    <TextArea
-                      disabled={busy}
-                      onChange={(event) => setNotes(event.target.value)}
-                      placeholder={t('notesPlaceholder')}
-                      rows={4}
-                      value={notes}
-                    />
-                  </Field>
-                  {notes.trim() === (customer.notes ?? '') ? null : (
-                    <div className="mt-3 flex flex-wrap items-center justify-end gap-2.5">
-                      <Button
-                        disabled={busy}
-                        onClick={() => setNotes(customer.notes ?? '')}
-                      >
-                        {tc('cancel')}
-                      </Button>
-                      <Button
-                        aria-busy={busy}
-                        disabled={busy}
-                        onClick={() => void saveNotes()}
-                        variant="primary"
-                      >
-                        {t('saveNotes')}
-                      </Button>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <p
-                  className={cn(
-                    'text-[14px] leading-[1.6] whitespace-pre-wrap',
-                    customer.notes === null ? 'text-app-dim' : 'text-app-muted',
-                  )}
-                >
-                  {customer.notes ?? t('noNotes')}
-                </p>
-              )}
-            </Card>
-          </div>
-        </div>
+              </div>
+            </dl>
+          </Card>
+        </aside>
       </div>
 
       <ConfirmDialog
@@ -1140,7 +1066,7 @@ function CustomerDetailScreen({
           definition={cabinetModules.orders}
         />
       ) : null}
-    </div>
+    </RedesignShell>
   )
 }
 
@@ -1333,17 +1259,13 @@ function CustomerForm({
       {mutationsAllowed ? null : <Notice tone="warn">{t('readOnly')}</Notice>}
       <form
         aria-busy={save.pending}
-        className="grid gap-4"
+        className="grid gap-5"
         id={CUSTOMER_FORM}
         noValidate
         onSubmit={submit}
       >
-        <SectionPanel
-          variant="plain"
-          description={t('contactDescription')}
-          title={t('contactTitle')}
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
+        <SheetGroup hint={t('contactDescription')} title={t('contactTitle')}>
+          <div className="grid gap-3">
             <Field
               error={touched.name ? nameIssue : null}
               hint={t('nameExample')}
@@ -1381,13 +1303,9 @@ function CustomerForm({
               />
             </Field>
           </div>
-        </SectionPanel>
-        <SectionPanel
-          variant="plain"
-          description={t('addressDescription')}
-          title={t('addressTitle')}
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
+        </SheetGroup>
+        <SheetGroup hint={t('addressDescription')} title={t('addressTitle')}>
+          <div className="grid gap-3 sm:grid-cols-3">
             <Field label={t('country')}>
               <SelectInput
                 autoComplete="country"
@@ -1413,12 +1331,8 @@ function CustomerForm({
             {addressText('building', 'address-line2')}
             {addressText('postcode', 'postal-code')}
           </div>
-        </SectionPanel>
-        <SectionPanel
-          variant="plain"
-          description={t('notesDescription')}
-          title={t('notesTitle')}
-        >
+        </SheetGroup>
+        <SheetGroup hint={t('notesDescription')} title={t('notesTitle')}>
           <Field hint={t('notesHint')} label={t('notes')}>
             <TextArea
               disabled={!mutationsAllowed}
@@ -1427,13 +1341,13 @@ function CustomerForm({
               value={notes}
             />
           </Field>
-        </SectionPanel>
+        </SheetGroup>
         {duplicate === null ? null : (
           <Notice block role="alert" tone="warn">
-            <p>
+            <p className="m-0">
               {duplicate.message} {t('duplicateHint')}
             </p>
-            <div className="mt-2.5 flex flex-wrap gap-2">
+            <div className="rz-btn-row mt-2">
               <Button asChild>
                 <Link to={`${directoryPath}/${duplicate.customerId}`}>
                   {t('useExisting', { name: duplicate.customerName })}
@@ -1476,11 +1390,11 @@ function CustomerForm({
       description={editing ? t('descriptionEdit') : t('descriptionNew')}
       eyebrow={t('eyebrow')}
       footer={
-        <div className="flex w-full flex-wrap items-center gap-2.5">
-          <p className="text-app-muted min-w-0 text-[12px] text-pretty">
+        <div className="flex w-full flex-wrap items-center gap-2">
+          <p className="rz-caption m-0 min-w-0 text-pretty">
             {t('requiredNote')}
           </p>
-          <div className="ml-auto flex items-center gap-2.5">
+          <div className="rz-btn-row ml-auto">
             <Button
               disabled={busy}
               onClick={() => void navigate(backPath)}

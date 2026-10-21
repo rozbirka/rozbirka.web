@@ -11,6 +11,7 @@ export function CarExpenseDrawer({
   busy,
   editing,
   error,
+  fieldErrors = { name: null, amount: null },
   name,
   onAmountChange,
   onNameChange,
@@ -23,6 +24,8 @@ export function CarExpenseDrawer({
   busy: boolean
   editing: CarExpense | null
   error: string | null
+  /** Problems with one field, shown under that field. */
+  fieldErrors?: { name: string | null; amount: string | null }
   name: string
   onAmountChange: (value: string) => void
   onNameChange: (value: string) => void
@@ -78,12 +81,12 @@ export function CarExpenseDrawer({
     >
       <form
         aria-busy={busy}
-        className="grid content-start gap-5"
+        className="grid content-start gap-4"
         id={CAR_EXPENSE_FORM}
         onSubmit={onSubmit}
       >
         {error ? <Notice tone="danger">{error}</Notice> : null}
-        <Field label={t('expenseName')}>
+        <Field error={fieldErrors.name ?? undefined} label={t('expenseName')}>
           <TextInput
             autoFocus
             onChange={(event) => onNameChange(event.target.value)}
@@ -91,7 +94,11 @@ export function CarExpenseDrawer({
             value={name}
           />
         </Field>
-        <Field hint={price.hint} label={t('expenseAmount')}>
+        <Field
+          error={fieldErrors.amount ?? undefined}
+          hint={price.hint}
+          label={t('expenseAmount')}
+        >
           <MoneyInput
             currency={price.currency}
             disabled={price.disabled}

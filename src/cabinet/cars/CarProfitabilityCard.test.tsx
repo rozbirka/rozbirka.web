@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { expect, it } from 'vitest'
 import type { CarProfitability } from '@/api/cars'
-import { CarProfitabilityCard } from './CarProfitabilityCard'
+import { CarPayoffPill, CarProfitabilityCard } from './CarProfitabilityCard'
 
 const profit = (over: Partial<CarProfitability> = {}): CarProfitability => ({
   invested: 13760,
@@ -16,12 +16,16 @@ const profit = (over: Partial<CarProfitability> = {}): CarProfitability => ({
 
 const renderCard = (over: Partial<CarProfitability> = {}, expensesTotal = 0) =>
   render(
-    <CarProfitabilityCard
-      currency="USD"
-      expensesTotal={expensesTotal}
-      profit={profit(over)}
-      purchasePrice={13760}
-    />,
+    <>
+      {/* The payoff pill sits beside the car's name; the strip carries the figures. */}
+      <CarPayoffPill profit={profit(over)} />
+      <CarProfitabilityCard
+        currency="USD"
+        expensesTotal={expensesTotal}
+        profit={profit(over)}
+        purchasePrice={13760}
+      />
+    </>,
   )
 
 it('names what the invested figure is made of', () => {

@@ -26,25 +26,15 @@ export function CompatibilityRowCard({
   const problem = rowProblem(row, locale)
   const title = t('vehicleN', { n: index })
   return (
-    <section
-      aria-label={title}
-      className="border-app-line bg-app-raised rounded-[14px] border px-4 pt-3.5 pb-4"
-    >
+    <section aria-label={title} className="rz-inset grid gap-3">
       <div className="flex items-center justify-between gap-3">
-        <h4 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-          {title}
-        </h4>
-        <Button
-          className="min-h-8 px-2.5 text-[12px]"
-          onClick={onRemove}
-          type="button"
-          variant="quiet"
-        >
-          <X aria-hidden className="size-3" />
+        <h4 className="rz-eyebrow m-0">{title}</h4>
+        <Button onClick={onRemove} size="sm" type="button" variant="quiet">
+          <X aria-hidden />
           {t('remove')}
         </Button>
       </div>
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3">
         <VehicleCatalogPicker
           disabled={false}
           label={t('make')}
@@ -77,11 +67,7 @@ export function CompatibilityRowCard({
         </Field>
       </div>
 
-      {problem === null ? null : (
-        <Notice className="mt-3" tone="danger">
-          {problem}
-        </Notice>
-      )}
+      {problem === null ? null : <Notice tone="danger">{problem}</Notice>}
     </section>
   )
 }
@@ -91,13 +77,10 @@ export function CompatibilityRowCard({
  * under it is what stops "задовільний" and "на запчастини" being used
  * interchangeably.
  */
-const CONDITION_HINTS: Record<
-  string,
-  { hint: 'hintGood' | 'hintFair' | 'hintScrap'; tone: string }
-> = {
-  good: { hint: 'hintGood', tone: 'border-state-ok bg-state-ok' },
-  fair: { hint: 'hintFair', tone: 'border-state-warn bg-state-warn' },
-  scrap: { hint: 'hintScrap', tone: 'border-state-danger bg-state-danger' },
+const CONDITION_HINTS: Record<string, 'hintGood' | 'hintFair' | 'hintScrap'> = {
+  good: 'hintGood',
+  fair: 'hintFair',
+  scrap: 'hintScrap',
 }
 
 export function ConditionTile({
@@ -120,44 +103,24 @@ export function ConditionTile({
       aria-describedby={hintId}
       aria-label={label}
       className={cn(
-        'rounded-control flex min-h-[92px] flex-col items-start gap-2 border px-3.5 py-3 text-left transition-colors',
-        picked
-          ? 'border-app-line-2 bg-white/[0.06]'
-          : 'border-app-line hover:border-app-line-2',
+        'rz-choice-card w-full bg-transparent text-left',
+        picked && 'border-brand bg-brand-soft',
       )}
       onClick={onPick}
       role="radio"
       type="button"
     >
-      <span className="flex w-full items-center gap-2">
-        <span
-          aria-hidden
-          className={cn(
-            'grid size-4 shrink-0 place-items-center rounded-full border-[1.5px]',
-            picked ? meaning?.tone.split(' ')[0] : 'border-white/20',
-          )}
-        >
-          <span
-            className={cn(
-              'size-[7px] rounded-full',
-              picked ? meaning?.tone.split(' ')[1] : '',
-            )}
-          />
-        </span>
-        <span
-          className={cn(
-            'text-[14px] font-bold whitespace-nowrap',
-            picked ? 'text-white' : 'text-app-ink',
-          )}
-        >
-          {label}
-        </span>
-      </span>
       <span
-        className="text-app-dim text-[12px] leading-[1.4] text-pretty"
-        id={hintId}
+        aria-hidden
+        className={cn('rz-radio mt-0.5 shrink-0', picked && 'border-brand')}
       >
-        {meaning ? t(meaning.hint) : null}
+        {picked ? <span className="bg-brand size-1.5 rounded-full" /> : null}
+      </span>
+      <span className="grid min-w-0 gap-1">
+        <span className="font-semibold text-app-strong">{label}</span>
+        <span className="rz-caption text-pretty" id={hintId}>
+          {meaning ? t(meaning) : null}
+        </span>
       </span>
     </button>
   )

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../kit.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}</style>
+</helmet>
+<div class="rz" data-theme="{{ theme }}" data-density="{{ density }}" style="min-height:100vh">
+  <div class="rz-app">
+    <dc-import name="Sidebar" active="{{ c.module }}" hint-size="232px,100vh" style="flex:0 0 232px"></dc-import>
+    <div class="rz-main">
+      <header class="rz-topbar">
+        <nav class="rz-crumbs" aria-label="Навігаційний ланцюжок"><span>{{ c.eyebrow }}</span><i class="icon-chevron-right" style="font-size:var(--rz-icon-sm)"></i><span aria-current="page">{{ c.title }}</span></nav>
+        <sc-if value="{{ showActions }}" hint-placeholder-val="{{ true }}">
+          <div class="rz-topbar__actions"><sc-for list="{{ actions }}" as="a" hint-placeholder-count="2"><a class="{{ a.cls }}" href="{{ a.href }}" aria-disabled="{{ roAria }}" title="{{ roReason }}"><i class="{{ a.icon }}"></i>{{ a.label }}</a></sc-for></div>
+        </sc-if>
+      </header>
+      <sc-if value="{{ ro }}" hint-placeholder-val="{{ false }}"><div class="rz-banner rz-banner--warn" role="status"><span class="rz-pill rz-pill--warn">Кабінет у режимі перегляду</span><span class="rz-muted" style="flex:1;min-width:240px">Склад, замовлення й історія грошей збереглися повністю, але створювати й змінювати записи не можна, доки підписка не відновиться.</span><a href="./Record.dc.html?screen=subscription">Перейти до підписки</a></div></sc-if>
+      <main class="rz-page">
+        <sc-if value="{{ denied }}" hint-placeholder-val="{{ false }}"><section class="rz-card"><div class="rz-state" role="status" style="min-height:420px"><span class="rz-state__icon"><i class="icon-lock"></i></span><h1 class="rz-state__title">Недостатньо прав</h1><p class="rz-state__body">Доступ до цього розділу відкриває власник розбірки в «Команді».</p><a class="rz-btn" href="./Record.dc.html?screen=dashboard">До головної</a></div></section></sc-if>
+        <sc-if value="{{ notDenied }}" hint-placeholder-val="{{ true }}">
+          <div class="rz-page-head"><h1 class="rz-h-page">{{ c.title }}</h1><sc-if value="{{ c.subtitle }}" hint-placeholder-val="{{ false }}"><span class="rz-muted">{{ c.subtitle }}</span></sc-if></div>
+          <sc-if value="{{ showKpis }}" hint-placeholder-val="{{ false }}"><div class="rz-kpis"><sc-for list="{{ c.kpis }}" as="k" hint-placeholder-count="4"><div class="rz-kpi"><span class="rz-kpi__label">{{ k.label }}</span><span class="rz-kpi__value"><span class="rz-display">{{ k.value }}</span><span class="rz-kpi__unit">{{ k.unit }}</span></span><span class="rz-kpi__meta">{{ k.meta }}</span></div></sc-for></div></sc-if>
+          <sc-if value="{{ showToolbar }}" hint-placeholder-val="{{ true }}">
+            <div class="rz-toolbar" role="search">
+              <label class="rz-search"><i class="icon-search"></i><input aria-label="{{ c.searchLabel }}" placeholder="{{ c.searchPlaceholder }}" value="{{ query }}" onChange="{{ onQuery }}"></label>
+              <sc-if value="{{ hasTabs }}" hint-placeholder-val="{{ true }}"><div class="rz-seg" role="radiogroup" aria-label="Статус"><sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3"><button type="button" role="radio" aria-checked="{{ t.checked }}" onClick="{{ t.onClick }}">{{ t.label }}</button></sc-for></div></sc-if>
+              <sc-for list="{{ c.filters }}" as="f" hint-placeholder-count="2"><button class="rz-filter" type="button">{{ f }}<i class="icon-chevron-down" style="font-size:var(--rz-icon-sm)"></i></button></sc-for>
+            </div>
+          </sc-if>
+          <div class="rz-table-wrap">
+            <sc-if value="{{ showTable }}" hint-placeholder-val="{{ true }}">
+              <div class="rz-table-scroll"><table class="rz-table" style="min-width:680px"><caption>{{ c.title }}</caption>
+                <thead><tr><sc-for list="{{ cols }}" as="h" hint-placeholder-count="5"><th class="{{ h.cls }}">{{ h.label }}</th></sc-for></tr></thead>
+                <tbody>
+                  <sc-if value="{{ loading }}" hint-placeholder-val="{{ false }}"><sc-for list="{{ skel }}" as="k" hint-placeholder-count="6"><tr><sc-for list="{{ k.cells }}" as="w" hint-placeholder-count="5"><td><span class="rz-skel" style="width:{{ w }}"></span></td></sc-for></tr></sc-for></sc-if>
+                  <sc-for list="{{ rows }}" as="r" hint-placeholder-count="8"><tr style="cursor:pointer" onClick="{{ r.onOpen }}"><sc-for list="{{ r.cells }}" as="x" hint-placeholder-count="5"><td class="{{ x.cls }}" data-label="{{ x.label }}"><sc-if value="{{ x.pill }}" hint-placeholder-val="{{ false }}"><span class="{{ x.pill }}">{{ x.v }}</span></sc-if><sc-if value="{{ x.plain }}" hint-placeholder-val="{{ true }}"><span class="{{ x.inner }}">{{ x.v }}</span><sc-if value="{{ x.sub }}" hint-placeholder-val="{{ false }}"><div class="rz-caption">{{ x.sub }}</div></sc-if></sc-if></td></sc-for></tr></sc-for>
+                </tbody></table></div>
+              <nav class="rz-pager" aria-label="Пагінація"><span class="rz-mono">{{ range }}</span><div class="rz-pager__nav"><button class="rz-btn rz-btn--icon" type="button" aria-label="Попередня сторінка" disabled="disabled"><i class="icon-chevron-left"></i></button><button class="rz-btn rz-btn--icon" type="button" aria-label="Наступна сторінка" disabled="disabled"><i class="icon-chevron-right"></i></button></div></nav>
+            </sc-if>
+            <sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}"><div class="rz-state rz-state--brand" role="status" style="min-height:340px"><span class="rz-state__icon"><i class="{{ c.icon }}"></i></span><h2 class="rz-state__title">{{ c.emptyTitle }}</h2><p class="rz-state__body">{{ c.emptyBody }}</p><sc-if value="{{ primary }}" hint-placeholder-val="{{ true }}"><a class="rz-btn rz-btn--primary" href="{{ primary.href }}"><i class="{{ primary.icon }}"></i>{{ primary.label }}</a></sc-if></div></sc-if>
+            <sc-if value="{{ filtered }}" hint-placeholder-val="{{ false }}"><div class="rz-state" role="status" style="min-height:300px"><span class="rz-state__icon"><i class="icon-search-x"></i></span><h2 class="rz-state__title">{{ fTitle }}</h2><p class="rz-state__body">{{ fBody }}</p><button class="rz-btn" type="button" onClick="{{ reset }}">{{ fReset }}</button></div></sc-if>
+            <sc-if value="{{ error }}" hint-placeholder-val="{{ false }}"><div class="rz-state rz-state--danger" role="alert" style="min-height:300px"><span class="rz-state__icon"><i class="icon-triangle-alert"></i></span><h2 class="rz-state__title">Не вдалося завантажити дані</h2><p class="rz-state__body">Зв’язок із сервером перервався. Спробуйте ще раз.</p><button class="rz-btn" type="button" onClick="{{ retry }}"><i class="icon-refresh-cw"></i>Спробувати ще раз</button><span class="rz-state__meta">звернення 5d0c2a81-e3f9</span></div></sc-if>
+          </div>
+          <p class="rz-caption">{{ sourceNote }}</p>
+        </sc-if>
+      </main>
+    </div>
+  </div>
+  <dc-import name="StateBar" title="{{ barTitle }}" file="{{ barFile }}" current="{{ view }}" states="{{ stateList }}" on-change="{{ setView }}" hint-size="400px,40px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;screen&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;cars&quot;, &quot;customers&quot;, &quot;intakes&quot;, &quot;orders&quot;, &quot;cash&quot;, &quot;team&quot;, &quot;imports&quot;, &quot;inventory&quot;], &quot;default&quot;: &quot;cars&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;state&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;data&quot;, &quot;loading&quot;, &quot;empty&quot;, &quot;filtered&quot;, &quot;error&quot;, &quot;denied&quot;, &quot;readonly&quot;], &quot;default&quot;: &quot;data&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dark&quot;, &quot;light&quot;], &quot;default&quot;: &quot;dark&quot;, &quot;tsType&quot;: &quot;'dark' | 'light'&quot;}, &quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;, &quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+const STATES = [['data', 'Дані'], ['loading', 'Завантаження'], ['empty', 'Порожньо'], ['filtered', 'Нічого не знайдено'], ['error', 'Помилка'], ['denied', 'Немає прав'], ['readonly', 'Лише перегляд']];
+const BLANK = { module: 'parts', eyebrow: '', title: '', columns: [], rows: [], filters: [], tabs: [], actions: [], kpis: [] };
+class Component extends DCLogic {
+  state = { cfg: null, screen: null, view: null, query: '', tab: 0 };
+  componentDidMount() {
+    let s = null, k = null;
+    try { const u = new URLSearchParams(location.search); s = u.get('screen'); k = u.get('state'); } catch (e) {}
+    s = s || this.props.screen || 'cars';
+    this.setState({ screen: s, view: k && STATES.some((x) => x[0] === k) ? k : null });
+    fetch('./screens/' + s + '.json').then((r) => r.json()).then((cfg) => this.setState({ cfg })).catch(() => {});
+  }
+  componentDidUpdate(prev) {
+    if (this.props.screen && this.props.screen !== prev.screen) {
+      const s = this.props.screen;
+      this.setState({ screen: s, view: null, query: '', tab: 0 });
+      fetch('./screens/' + s + '.json').then((r) => r.json()).then((cfg) => this.setState({ cfg })).catch(() => {});
+    }
+  }
+  componentWillUnmount() { clearTimeout(this._t); }
+  setView = (k) => { try { const u = new URL(location.href); u.searchParams.set('state', k); history.replaceState(null, '', u); } catch (e) {} this.setState({ view: k, query: k === 'filtered' ? 'zzz' : '', tab: 0 }); };
+  renderVals() {
+    const c = { ...BLANK, ...(this.state.cfg || {}) };
+    const v = this.state.view ?? this.props.state ?? 'data';
+    const q = this.state.query.trim().toLowerCase();
+    const tabField = c.tabField;
+    const tabVal = c.tabs[this.state.tab] && c.tabs[this.state.tab].value;
+    const list = ['data', 'readonly', 'filtered'].includes(v) ? c.rows.filter((r) => (!q || Object.values(r).join(' ').toLowerCase().includes(q)) && (!tabVal || r[tabField] === tabVal)) : [];
+    const filteredEmpty = ['data', 'filtered'].includes(v) && list.length === 0;
+    const showTable = (['data', 'readonly', 'filtered'].includes(v) && !filteredEmpty) || v === 'loading';
+    const ro = v === 'readonly';
+    return {
+      theme: this.props.theme ?? 'dark', density: this.props.density ?? 'compact',
+      c, view: v, stateList: STATES, setView: this.setView,
+      barTitle: (c.id || '') + ' · ' + c.title, barFile: 'List.dc.html?screen=' + (this.state.screen || ''),
+      ro, roAria: ro ? 'true' : 'false', roReason: ro ? 'Поточна підписка не дозволяє цю дію.' : '',
+      denied: v === 'denied', notDenied: v !== 'denied', showActions: v !== 'denied',
+      actions: c.actions.map((a, i) => ({ ...a, cls: (i === c.actions.length - 1 ? 'rz-btn rz-btn--primary' : 'rz-btn') })),
+      primary: c.actions.length ? c.actions[c.actions.length - 1] : null,
+      showKpis: c.kpis.length > 0 && ['data', 'readonly'].includes(v),
+      showToolbar: v !== 'empty' && v !== 'error',
+      query: this.state.query, onQuery: (e) => this.setState({ query: e.target.value }),
+      hasTabs: c.tabs.length > 0,
+      tabs: c.tabs.map((t, i) => ({ label: t.label, checked: i === this.state.tab ? 'true' : 'false', onClick: () => this.setState({ tab: i }) })),
+      cols: c.columns.map((h) => ({ label: h.label, cls: h.align === 'end' ? 'rz-num' : '' })),
+      loading: v === 'loading', skel: [1, 2, 3, 4, 5, 6].map((n) => ({ cells: c.columns.map((h, i) => (i === 0 ? 30 + ((n * 7) % 20) + '%' : 40 + ((n * 13 + i * 9) % 40) + '%')) })),
+      rows: list.map((r) => ({ onOpen: () => c.detailHref && (location.href = c.detailHref),
+        cells: c.columns.map((h, i) => { const val = r[h.key]; const pill = h.pill ? (h.pill[val] || 'rz-pill') : null; return { v: val, sub: h.sub ? r[h.sub] : null, label: h.label, pill, plain: !pill, cls: h.align === 'end' ? 'rz-num' : '', inner: i === 0 ? 'rz-strong' : h.mono ? 'rz-mono' : '' }; }) })),
+      showTable, range: `1–${list.length} з ${list.length}`,
+      empty: v === 'empty', filtered: filteredEmpty, error: v === 'error',
+      reset: () => this.setState({ query: '', tab: 0 }),
+      fTitle: c.filteredTitle || 'Нічого не знайдено', fBody: c.filteredBody || 'За цими фільтрами нічого немає. Спробуйте прибрати частину умов.', fReset: c.resetLabel || 'Скинути',
+      retry: () => { this.setView('loading'); clearTimeout(this._t); this._t = setTimeout(() => this.setView('data'), 1000); },
+      sourceNote: c.source ? 'Демо-дані. Рядки — ' + c.source + (c.unverified ? ' · не звірено: ' + c.unverified : '') : '',
+    };
+  }
+}
+</script>
+</body>
+</html>

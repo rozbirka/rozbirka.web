@@ -1,6 +1,7 @@
+import { useDesignSystemRoot } from '@/components/app/use-design-system-root'
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { ArrowRight, Loader2, LogOut } from 'lucide-react'
+import { Loader2, LogOut } from 'lucide-react'
 import { normalizeApiProblem } from '@/api/errors'
 import { tenantsApi } from '@/api/tenants'
 import { tenantPreference } from '@/api/tenant-preference'
@@ -25,6 +26,7 @@ import { tenantOnboardingMessages } from './tenant-onboarding-messages'
  * step after onboarding, not part of it.
  */
 export function TenantOnboardingScreen() {
+  useDesignSystemRoot()
   const t = useT(tenantOnboardingMessages)
   const auth = useAuth()
   const navigate = useNavigate()
@@ -140,16 +142,13 @@ export function TenantOnboardingScreen() {
   }
 
   return (
-    <div className="bg-app-canvas text-app-ink type-redesign relative flex min-h-dvh flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-10">
+    <div className="rz flex min-h-dvh flex-col">
+      <header className="rz-topbar min-h-topbar h-auto flex-wrap justify-between gap-y-1.5 py-1.5">
         <BrandLogo />
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            className="text-app-muted hover:text-app-ink text-[13px] transition-colors"
-            to="/account/security"
-          >
-            {t('account')}
-          </Link>
+        <div className="rz-topbar__actions flex-wrap items-center">
+          <Button asChild variant="quiet">
+            <Link to="/account/security">{t('account')}</Link>
+          </Button>
           <Button onClick={() => void handleLogout()} variant="quiet">
             <LogOut aria-hidden />
             {t('signOut')}
@@ -157,26 +156,22 @@ export function TenantOnboardingScreen() {
         </div>
       </header>
 
-      <main className="flex flex-1 justify-center px-4 pb-16 sm:px-6">
-        <div className="grid w-full max-w-[600px] content-start gap-6">
-          <div>
-            <span className="text-brand text-[11px] font-medium tracking-[0.28em] uppercase">
-              {t('step')}
-            </span>
-            <h1 className="text-[32px] leading-[1.04] font-extrabold tracking-[-0.03em] text-white sm:text-[40px]">
-              {t('title')}
-            </h1>
-            <p className="text-app-muted mt-3 max-w-[56ch] text-[14.5px] leading-6 text-pretty">
-              {t('subtitle')}
-            </p>
-          </div>
+      <main className="rz-page mx-auto w-full max-w-[880px]">
+        <div className="grid gap-2">
+          <span className="rz-eyebrow">{t('step')}</span>
+          <h1 className="rz-h-page">{t('title')}</h1>
+          <p className="rz-muted m-0 max-w-[56ch] text-pretty">
+            {t('subtitle')}
+          </p>
+        </div>
 
-          <form
-            aria-busy={create.pending}
-            className="grid gap-5"
-            noValidate
-            onSubmit={submit}
-          >
+        <form
+          aria-busy={create.pending}
+          className="rz-card"
+          noValidate
+          onSubmit={submit}
+        >
+          <div className="rz-card__body grid items-start gap-4 sm:grid-cols-2">
             <Field
               error={touched ? nameIssue : null}
               hint={t('nameHint')}
@@ -203,6 +198,7 @@ export function TenantOnboardingScreen() {
 
             {create.error === null ? null : (
               <Notice
+                className="sm:col-span-2"
                 action={
                   <Button onClick={attemptCreate} {...create.triggerProps}>
                     {t('retry')}
@@ -213,36 +209,28 @@ export function TenantOnboardingScreen() {
                 {create.error}
               </Notice>
             )}
+          </div>
 
-            <div className="border-app-line flex flex-wrap items-center justify-between gap-3 border-t pt-5">
-              <span className="text-app-dim text-[13px]">{t('trial')}</span>
-              <Button
-                {...create.triggerProps}
-                size="touch"
-                type="submit"
-                variant="primary"
-              >
-                {create.pending ? (
-                  <>
-                    <Loader2 aria-hidden className="motion-safe:animate-spin" />
-                    {t('creating')}
-                  </>
-                ) : (
-                  <>
-                    {t('create')}
-                    <ArrowRight aria-hidden />
-                  </>
-                )}
-              </Button>
-            </div>
-          </form>
-        </div>
+          <div className="rz-card__foot flex-wrap items-center">
+            <span className="rz-caption">{t('trial')}</span>
+            <Button
+              {...create.triggerProps}
+              size="lg"
+              type="submit"
+              variant="primary"
+            >
+              {create.pending ? (
+                <>
+                  <Loader2 aria-hidden className="motion-safe:animate-spin" />
+                  {t('creating')}
+                </>
+              ) : (
+                t('create')
+              )}
+            </Button>
+          </div>
+        </form>
       </main>
-
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 -z-10 [background:radial-gradient(80%_60%_at_50%_0%,rgba(247,116,37,0.12),transparent_60%)]"
-      />
     </div>
   )
 }

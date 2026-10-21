@@ -1,12 +1,13 @@
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import { Button } from '@/components/app'
+import { Button, Notice, StatusPill } from '@/components/app'
 import { cn } from '@/lib/utils'
 import { commonMessages, useT } from '@/i18n'
 import type { CashRegister, CashTransaction } from '@/api/cash'
 import { useCashText } from './cash-labels'
+import { CashCrumbs } from './cash-list'
 import { cashMessages } from './cash-messages'
-import { RedesignShell, RedesignTitle } from '../redesign-shell'
+import { RedesignShell } from '../redesign-shell'
 
 const SEGMENTS = [
   { key: 'all', label: 'segAll' },
@@ -34,13 +35,13 @@ function Card({
   note?: ReactNode
 }) {
   return (
-    <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5">
-      <h2 className="text-app-ink text-[15px] font-bold">{title}</h2>
-      <div className="mt-3.5">{children}</div>
+    <section className="rz-card min-w-0">
+      <div className="rz-card__head">
+        <h2 className="rz-h-card">{title}</h2>
+      </div>
+      {children}
       {note === undefined ? null : (
-        <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-          {note}
-        </p>
+        <p className="rz-card__foot rz-caption m-0 block text-pretty">{note}</p>
       )}
     </section>
   )
@@ -55,21 +56,16 @@ function MoneyLines({
 }) {
   const { money } = useCashText()
   if (lines.length === 0)
-    return <p className="text-app-dim text-[13.5px]">{empty}</p>
+    return <p className="rz-card__body rz-dim m-0">{empty}</p>
   return (
-    <dl className="grid gap-1.5">
+    <dl className="rz-facts">
       {lines.map((line) => (
-        <div
-          className="flex items-baseline justify-between gap-4"
-          key={line.currency}
-        >
-          <dt className="text-app-muted font-mono text-[12px] tracking-[0.1em]">
-            {line.currency}
-          </dt>
+        <div key={line.currency}>
+          <dt className="rz-mono">{line.currency}</dt>
           <dd
             className={cn(
-              'font-mono text-[15px] tabular-nums',
-              line.amount === 0 ? 'text-app-dim' : 'text-app-ink font-medium',
+              'rz-num',
+              line.amount === 0 ? 'text-app-dim' : 'text-app-strong',
             )}
           >
             {money(line.amount, line.currency)}
@@ -144,11 +140,7 @@ export function CashCard({
             </Button>
           ) : null}
           {canManage && register.isActive ? (
-            <Button
-              className="px-5 text-sm font-bold"
-              onClick={onNewOperation}
-              variant="primary"
-            >
+            <Button onClick={onNewOperation} variant="primary">
               {t('newOperation')}
             </Button>
           ) : null}
@@ -164,60 +156,26 @@ export function CashCard({
           ) : null}
         </>
       }
-      crumb={
-        <>
-          <Link className="hover:text-app-muted" to={cashHref}>
-            {t('crumb')}
-          </Link>
-          <span aria-hidden> · </span>
-          <span className="text-app-muted">{register.name}</span>
-        </>
-      }
+      crumb={<CashCrumbs cashHref={cashHref} current={register.name} />}
     >
-      <RedesignTitle
-        aside={
-          <span
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-bold',
-              register.isActive
-                ? 'border-state-ok/28 text-state-ok bg-state-ok/10'
-                : 'border-app-line text-app-dim',
-            )}
-          >
-            <span
-              aria-hidden
-              className={cn(
-                'size-1.5 rounded-full',
-                register.isActive ? 'bg-state-ok' : 'bg-app-dim',
-              )}
-            />
-            {register.isActive ? t('active') : t('inactive')}
-          </span>
-        }
-        lead={`${registerType(register.type)}${typeHint === null ? '' : ` · ${typeHint}`}`}
-        title={register.name}
-      />
+      <div className="rz-page-head items-center">
+        <h1 className="rz-h-page">{register.name}</h1>
+        <StatusPill tone={register.isActive ? 'ok' : 'neutral'}>
+          {register.isActive ? t('active') : t('inactive')}
+        </StatusPill>
+        <span className="rz-muted basis-full">
+          {`${registerType(register.type)}${typeHint === null ? '' : ` · ${typeHint}`}`}
+        </span>
+      </div>
 
-      {error === null ? null : (
-        <p
-          className="border-state-danger/35 bg-state-danger/10 text-state-danger rounded-[16px] border px-4 py-3 text-[13.5px]"
-          role="alert"
-        >
-          {error}
-        </p>
-      )}
+      {error === null ? null : <Notice tone="danger">{error}</Notice>}
 
-      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <section
-          aria-label={t('operations')}
-          className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
-        >
-          <div className="border-app-line flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-5 py-4">
-            <div>
-              <h2 className="text-app-ink text-[15px] font-bold">
-                {t('operations')}
-              </h2>
-              <p className="text-app-dim mt-1 text-[12px]">
+      <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <section aria-label={t('operations')} className="rz-card min-w-0">
+          <div className="rz-card__head py-2">
+            <div className="min-w-0">
+              <h2 className="rz-h-card">{t('operations')}</h2>
+              <p className="rz-caption m-0">
                 {totalOperations === null
                   ? t('ledgerLoading')
                   : t('operationsTotal', { count: totalOperations })}
@@ -228,72 +186,71 @@ export function CashCard({
             </div>
             <div
               aria-label={t('typeOnPage')}
-              className="flex min-w-0 flex-wrap gap-1"
+              className="rz-seg max-w-full flex-wrap"
               role="group"
               title={t('noTypeFilter')}
             >
               {SEGMENTS.map((one) => (
                 <button
                   aria-pressed={segment === one.key}
-                  className={cn(
-                    'inline-flex min-h-11 items-center gap-2 rounded-[10px] px-3 text-[13px] font-bold whitespace-nowrap',
-                    segment === one.key
-                      ? 'text-app-ink bg-white/[0.08]'
-                      : 'text-app-muted hover:text-app-ink',
-                  )}
                   key={one.key}
                   onClick={() => setSegment(one.key)}
                   type="button"
                 >
                   {t(one.label)}
-                  <span className="text-app-dim font-mono text-[12px]">
+                  <span className="rz-mono rz-dim">
                     {count(counts[one.key])}
                   </span>
                 </button>
               ))}
             </div>
           </div>
-          <div className="border-app-line border-b px-5 py-3.5">{filters}</div>
+          <div className="border-app-line border-b px-[var(--rz-card-p)] py-3">
+            {filters}
+          </div>
           {shown.length === 0 ? (
-            <p className="text-app-muted px-5 py-8 text-[14px]">
+            <p className="rz-card__body rz-muted m-0">
               {ledger.length === 0
                 ? t('noOperations')
                 : t('noOperationsFiltered')}
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-[14px]">
-                <caption className="sr-only">
-                  {t('ledgerCaption', { name: register.name })}
-                </caption>
+            <div className="rz-table-scroll">
+              <table className="rz-table">
+                <caption>{t('ledgerCaption', { name: register.name })}</caption>
                 <thead>
-                  <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
-                    <th className="px-5 py-2.5 text-left">{t('colDate')}</th>
-                    <th className="px-3 py-2.5 text-left">{t('colPurpose')}</th>
-                    <th className="px-5 py-2.5 text-right">{t('colAmount')}</th>
+                  <tr>
+                    <th scope="col">{t('colDate')}</th>
+                    <th scope="col">{t('colPurpose')}</th>
+                    <th className="rz-num" scope="col">
+                      {t('colAmount')}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {shown.map((entry) => (
-                    <tr className="border-app-line border-b" key={entry.id}>
-                      <td className="text-app-dim px-5 py-3.5 font-mono text-[13px] whitespace-nowrap">
-                        {moment(entry.createdAt)}
-                      </td>
-                      <td className="px-3 py-3.5">
-                        <span className="text-app-ink font-medium">
+                    <tr key={entry.id}>
+                      <th className="py-2" scope="row">
+                        <span className="rz-mono rz-dim font-normal whitespace-nowrap">
+                          {moment(entry.createdAt)}
+                        </span>
+                      </th>
+                      <td className="py-2" data-label={t('colPurpose')}>
+                        <span className="text-app-ink block font-medium">
                           {entry.note ?? movementText(entry.type)}
                         </span>
-                        <span className="text-app-dim mt-0.5 block text-[12.5px]">
+                        <span className="rz-caption block">
                           {movementText(entry.type)} · {entry.createdByName}
                         </span>
                       </td>
                       <td
                         className={cn(
-                          'px-5 py-3.5 text-right font-mono tabular-nums',
+                          'rz-num py-2 whitespace-nowrap',
                           entry.direction === 'out'
                             ? 'text-state-danger'
                             : 'text-state-ok',
                         )}
+                        data-label={t('colAmount')}
                       >
                         {signedMoney(entry)}
                       </td>
@@ -303,29 +260,25 @@ export function CashCard({
               </table>
             </div>
           )}
-          <div className="border-app-line grid gap-3 border-t px-5 py-3.5">
-            <p className="text-app-dim text-[13px]">
-              {t('ledgerShown', {
-                shown: shown.length,
-                loaded: ledger.length,
-                count: ledgerTotal,
-              })}
-            </p>
-            {pagination}
-          </div>
+          <p className="rz-caption border-app-line m-0 border-t px-[var(--rz-card-p)] py-2.5">
+            {t('ledgerShown', {
+              shown: shown.length,
+              loaded: ledger.length,
+              count: ledgerTotal,
+            })}
+          </p>
+          {pagination}
         </section>
 
-        <div className="grid min-w-0 content-start gap-5">
-          <Card note={t('balancesNote')} title={t('balances')}>
-            <MoneyLines
-              empty={t('noCurrencies')}
-              lines={currencies.map(([currency, amount]) => ({
-                currency,
-                amount,
-              }))}
-            />
-          </Card>
-        </div>
+        <Card note={t('balancesNote')} title={t('balances')}>
+          <MoneyLines
+            empty={t('noCurrencies')}
+            lines={currencies.map(([currency, amount]) => ({
+              currency,
+              amount,
+            }))}
+          />
+        </Card>
       </div>
       {children}
     </RedesignShell>

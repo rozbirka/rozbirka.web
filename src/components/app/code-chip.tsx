@@ -20,23 +20,16 @@ export function CodeChip({
   onCopy: () => void
 }) {
   return (
-    <span
-      className={cn(
-        'border-app-line inline-flex h-[30px] items-center gap-2 rounded-[8px] border bg-white/[0.03] pr-1 pl-2.5',
-        className,
-      )}
-    >
-      <span className="text-app-ink font-mono text-[13px] whitespace-nowrap">
-        {code}
-      </span>
+    <span className={cn('rz-code', className)}>
+      <span className="text-app-ink">{code}</span>
       <button
         aria-label={label}
-        className="text-app-muted hover:text-app-ink relative grid size-6 shrink-0 place-items-center rounded-[6px] transition-colors hover:bg-white/[0.08] after:absolute after:-inset-2.5 after:content-['']"
+        className="relative after:absolute after:-inset-3 after:content-['']"
         onClick={onCopy}
         title={label}
         type="button"
       >
-        <Copy aria-hidden className="size-3" />
+        <Copy aria-hidden />
       </button>
     </span>
   )

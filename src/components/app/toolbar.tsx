@@ -15,17 +15,10 @@ export function Toolbar({
   className?: string
 }) {
   return (
-    <div
-      className={cn(
-        'border-app-line rounded-panel bg-app-raised flex flex-wrap items-end gap-2.5 border p-2.5',
-        className,
-      )}
-    >
+    <div className={cn('rz-toolbar', className)}>
       {children}
       {trailing === undefined ? null : (
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          {trailing}
-        </div>
+        <div className="rz-toolbar__end flex-wrap items-center">{trailing}</div>
       )}
     </div>
   )
@@ -52,19 +45,19 @@ export function ActiveFilters({
     <div className="flex flex-wrap items-center gap-2">
       {filters.map((filter) => (
         <button
-          className="border-brand/30 bg-brand/[0.12] text-brand inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-xs"
+          className="rz-chip"
           key={filter.key}
           onClick={filter.onClear}
           type="button"
         >
           {filter.label}
-          <X aria-hidden className="size-3.5 opacity-70" />
+          <X aria-hidden className="text-app-dim size-3" />
           <span className="sr-only">{t('clearFilter')}</span>
         </button>
       ))}
       {onReset === undefined ? null : (
         <button
-          className="text-app-muted hover:text-app-ink min-h-11 text-[13.5px] underline underline-offset-4"
+          className="rz-btn rz-btn--ghost rz-btn--sm"
           onClick={onReset}
           type="button"
         >

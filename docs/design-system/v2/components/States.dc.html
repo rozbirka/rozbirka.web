@@ -23,18 +23,18 @@
 
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px">
       <section role="status" aria-label="Порожньо" style="display:grid;justify-items:center;align-content:center;gap:8px;min-height:280px;padding:32px 24px;text-align:center;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
-        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-brand-soft);color:var(--rz-brand-text)"><i class="icon-package" style="font-size:16px"></i></span>
+        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-brand-soft);color:var(--rz-brand-text)"><i class="icon-package" style="font-size:var(--rz-icon-md)"></i></span>
         <h2 style="margin:4px 0 0;font-size:var(--rz-fs-title);font-weight:600;color:var(--rz-text-strong)">Тут поки порожньо</h2>
         <p style="margin:0;max-width:48ch;color:var(--rz-text-muted)">Додайте першу деталь або розберіть авто — позиції з’являться тут.</p>
         <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:6px">
-          <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)"><i class="icon-upload" style="font-size:14px;color:var(--rz-text-muted)"></i>Імпорт запчастин</button>
-          <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:0;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;cursor:pointer" style-hover="background:var(--rz-brand-hover)"><i class="icon-plus" style="font-size:14px"></i>Додати деталь</button>
+          <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)"><i class="icon-upload" style="font-size:var(--rz-icon);color:var(--rz-text-muted)"></i>Імпорт запчастин</button>
+          <button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:0;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;cursor:pointer" style-hover="background:var(--rz-brand-hover)"><i class="icon-plus" style="font-size:var(--rz-icon)"></i>Додати деталь</button>
         </div>
         <span style="margin-top:6px;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">empty · перший запуск · tone brand</span>
       </section>
 
       <section role="status" aria-label="Нічого не знайдено" style="display:grid;justify-items:center;align-content:center;gap:8px;min-height:280px;padding:32px 24px;text-align:center;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
-        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-neutral-soft);color:var(--rz-text-muted)"><i class="icon-search-x" style="font-size:16px"></i></span>
+        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-neutral-soft);color:var(--rz-text-muted)"><i class="icon-search-x" style="font-size:var(--rz-icon-md)"></i></span>
         <h2 style="margin:4px 0 0;font-size:var(--rz-fs-title);font-weight:600;color:var(--rz-text-strong)">Нічого не знайдено</h2>
         <p style="margin:0;max-width:48ch;color:var(--rz-text-muted)">За цими фільтрами нічого немає. Спробуйте прибрати частину умов.</p>
         <div style="margin-top:6px"><button type="button" style="height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)">Скинути фільтри</button></div>
@@ -42,25 +42,25 @@
       </section>
 
       <section role="alert" aria-label="Помилка завантаження" style="display:grid;justify-items:center;align-content:center;gap:8px;min-height:280px;padding:32px 24px;text-align:center;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
-        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-danger-soft);color:var(--rz-danger)"><i class="icon-wifi-off" style="font-size:16px"></i></span>
+        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-danger-soft);color:var(--rz-danger)"><i class="icon-wifi-off" style="font-size:var(--rz-icon-md)"></i></span>
         <h2 style="margin:4px 0 0;font-size:var(--rz-fs-title);font-weight:600;color:var(--rz-text-strong)">Склад не відповідає</h2>
         <p style="margin:0;max-width:48ch;color:var(--rz-text-muted)">Немає звʼязку з сервером. Фільтри лишилися на місці — повторіть, коли мережа повернеться.</p>
-        <div style="margin-top:6px"><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)"><i class="icon-refresh-cw" style="font-size:14px;color:var(--rz-text-muted)"></i>Спробувати ще раз</button></div>
+        <div style="margin-top:6px"><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)"><i class="icon-refresh-cw" style="font-size:var(--rz-icon);color:var(--rz-text-muted)"></i>Спробувати ще раз</button></div>
         <span style="margin-top:2px;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">звернення 7f3a9c21-b4e0</span>
         <span style="margin-top:4px;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">error · мережа · tone danger</span>
       </section>
 
       <section role="alert" aria-label="Помилка сервера" style="display:grid;justify-items:center;align-content:center;gap:8px;min-height:280px;padding:32px 24px;text-align:center;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
-        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-danger-soft);color:var(--rz-danger)"><i class="icon-triangle-alert" style="font-size:16px"></i></span>
+        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-danger-soft);color:var(--rz-danger)"><i class="icon-triangle-alert" style="font-size:var(--rz-icon-md)"></i></span>
         <h2 style="margin:4px 0 0;font-size:var(--rz-fs-title);font-weight:600;color:var(--rz-text-strong)">Склад не завантажився</h2>
         <p style="margin:0;max-width:48ch;color:var(--rz-text-muted)">Не вдалося завантажити склад. Дані на місці — потрібно лише повторити запит.</p>
-        <div style="margin-top:6px"><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)"><i class="icon-refresh-cw" style="font-size:14px;color:var(--rz-text-muted)"></i>Спробувати ще раз</button></div>
+        <div style="margin-top:6px"><button type="button" style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)"><i class="icon-refresh-cw" style="font-size:var(--rz-icon);color:var(--rz-text-muted)"></i>Спробувати ще раз</button></div>
         <span style="margin-top:2px;font-family:var(--rz-font-mono);font-size:var(--rz-fs-caption);color:var(--rz-text-dim)">звернення 0c51e8aa-91f2</span>
         <span style="margin-top:4px;font-family:var(--rz-font-mono);font-size:var(--rz-fs-micro);color:var(--rz-text-dim)">error · сервер · tone danger</span>
       </section>
 
       <section role="status" aria-label="Недостатньо прав" style="display:grid;justify-items:center;align-content:center;gap:8px;min-height:280px;padding:32px 24px;text-align:center;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
-        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-neutral-soft);color:var(--rz-text-muted)"><i class="icon-lock" style="font-size:16px"></i></span>
+        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-neutral-soft);color:var(--rz-text-muted)"><i class="icon-lock" style="font-size:var(--rz-icon-md)"></i></span>
         <h2 style="margin:4px 0 0;font-size:var(--rz-fs-title);font-weight:600;color:var(--rz-text-strong)">Недостатньо прав</h2>
         <p style="margin:0;max-width:48ch;color:var(--rz-text-muted)">Доступ до цього розділу відкриває власник розбірки в «Команді».</p>
         <div style="margin-top:6px"><button type="button" style="height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer" style-hover="background:var(--rz-fill-hover)">До головної</button></div>
@@ -68,7 +68,7 @@
       </section>
 
       <section role="status" aria-label="Ліміт вичерпано" style="display:grid;justify-items:center;align-content:center;gap:8px;min-height:280px;padding:32px 24px;text-align:center;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
-        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-warn-soft);color:var(--rz-warn)"><i class="icon-gauge" style="font-size:16px"></i></span>
+        <span style="display:grid;place-items:center;width:32px;height:32px;border-radius:var(--rz-r-sm);background:var(--rz-warn-soft);color:var(--rz-warn)"><i class="icon-gauge" style="font-size:var(--rz-icon-md)"></i></span>
         <h2 style="margin:4px 0 0;font-size:var(--rz-fs-title);font-weight:600;color:var(--rz-text-strong)">Ліміт вичерпано</h2>
         <p style="margin:0;max-width:48ch;color:var(--rz-text-muted)">Ліміт тарифу вичерпано: 1 500 з 1 500. Підвищте тариф або звільніть місце.</p>
         <span role="progressbar" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100" style="display:flex;width:160px;height:4px;margin:4px 0;border-radius:var(--rz-r-full);background:var(--rz-border-strong);overflow:hidden"><span style="width:100%;background:var(--rz-warn)"></span></span>
@@ -77,7 +77,7 @@
       </section>
 
       <section role="status" aria-label="Розділ не входить у тариф" style="display:grid;justify-items:center;align-content:center;gap:8px;min-height:280px;padding:32px 24px;text-align:center;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
-        <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:var(--rz-r-full);background:var(--rz-neutral-soft);color:var(--rz-text-muted);font-size:var(--rz-fs-caption);font-weight:500"><i class="icon-lock" style="font-size:11px"></i>Недоступно у поточному тарифі</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:var(--rz-r-full);background:var(--rz-neutral-soft);color:var(--rz-text-muted);font-size:var(--rz-fs-caption);font-weight:500"><i class="icon-lock" style="font-size:var(--rz-icon-sm)"></i>Недоступно у поточному тарифі</span>
         <h2 style="margin:4px 0 0;font-size:var(--rz-fs-title);font-weight:600;color:var(--rz-text-strong)">Розділ «Звіти» не входить у ваш тариф</h2>
         <p style="margin:0;max-width:48ch;color:var(--rz-text-muted)">Розділ вимкнений тарифом — дані розбірки від цього не змінюються й нікуди не зникають. Щойно тариф дозволить, усе буде на місці.</p>
         <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:6px">
@@ -92,7 +92,7 @@
         <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:600;color:var(--rz-text-strong)">Сторінку не знайдено</h2>
         <p style="margin:0;max-width:48ch;color:var(--rz-text-muted)">Можливо, запис видалили або посилання неповне. Спробуйте знайти деталь за номером — або поверніться на головну.</p>
         <form role="search" style="display:flex;gap:6px;width:100%;max-width:320px;margin-top:6px">
-          <label style="flex:1;display:flex;align-items:center;gap:8px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:var(--rz-surface-2)"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">Пошук запчастин</span><i class="icon-search" style="font-size:14px;color:var(--rz-text-dim)"></i><input placeholder="Номер деталі, назва, VIN" style="flex:1;min-width:0;border:0;background:transparent;color:var(--rz-text);outline:none"></label>
+          <label style="flex:1;display:flex;align-items:center;gap:8px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:var(--rz-surface-2)"><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)">Пошук запчастин</span><i class="icon-search" style="font-size:var(--rz-icon);color:var(--rz-text-dim)"></i><input placeholder="Номер деталі, назва, VIN" style="flex:1;min-width:0;border:0;background:transparent;color:var(--rz-text);outline:none"></label>
           <button type="button" style="height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;cursor:pointer">Знайти</button>
         </form>
         <a href="#" style="font-size:var(--rz-fs-caption);font-weight:500;color:var(--rz-brand-text)">На головну</a>
@@ -103,15 +103,15 @@
       <h2 style="margin:0;font-size:var(--rz-fs-title);font-weight:700;color:var(--rz-text-strong)">Режим «лише перегляд» · стан підписки над усім модулем</h2>
       <div style="border:1px solid var(--rz-border);border-radius:var(--rz-r-md);overflow:hidden">
         <div role="status" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;min-height:40px;padding:8px 16px;background:var(--rz-warn-soft);border-bottom:1px solid var(--rz-border)">
-          <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:var(--rz-r-full);background:var(--rz-warn-soft);color:var(--rz-warn);font-size:var(--rz-fs-caption);font-weight:600;white-space:nowrap"><i class="icon-eye" style="font-size:11px"></i>Кабінет у режимі перегляду</span>
+          <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 8px;border-radius:var(--rz-r-full);background:var(--rz-warn-soft);color:var(--rz-warn);font-size:var(--rz-fs-caption);font-weight:600;white-space:nowrap"><i class="icon-eye" style="font-size:var(--rz-icon-sm)"></i>Кабінет у режимі перегляду</span>
           <span style="flex:1;min-width:260px;color:var(--rz-text)"><strong style="font-weight:600;color:var(--rz-text-strong)">Підписка неактивна — дані лише для читання.</strong> <span style="color:var(--rz-text-muted)">Склад, замовлення й історія грошей збереглися повністю, але створювати й змінювати записи не можна, доки підписка не відновиться.</span></span>
           <a href="#" style="font-weight:500;color:var(--rz-brand-text);white-space:nowrap">Перейти до підписки</a>
         </div>
         <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;background:var(--rz-bg)">
           <span style="font-weight:700;color:var(--rz-text-strong);font-size:var(--rz-fs-page)">Деталі</span>
           <div style="margin-left:auto;display:flex;gap:6px">
-            <button type="button" disabled title="Поточна підписка не дозволяє цю дію." style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;opacity:0.5;cursor:not-allowed"><i class="icon-upload" style="font-size:14px"></i>Імпорт запчастин</button>
-            <button type="button" disabled title="Поточна підписка не дозволяє цю дію." style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:0;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;opacity:0.5;cursor:not-allowed"><i class="icon-plus" style="font-size:14px"></i>Додати деталь</button>
+            <button type="button" disabled title="Поточна підписка не дозволяє цю дію." style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:transparent;color:var(--rz-text);font-weight:500;opacity:0.5;cursor:not-allowed"><i class="icon-upload" style="font-size:var(--rz-icon)"></i>Імпорт запчастин</button>
+            <button type="button" disabled title="Поточна підписка не дозволяє цю дію." style="display:inline-flex;align-items:center;gap:6px;height:var(--rz-control-h);padding:0 10px;border:0;border-radius:var(--rz-r-sm);background:var(--rz-brand);color:var(--rz-on-brand);font-weight:600;opacity:0.5;cursor:not-allowed"><i class="icon-plus" style="font-size:var(--rz-icon)"></i>Додати деталь</button>
           </div>
         </div>
       </div>

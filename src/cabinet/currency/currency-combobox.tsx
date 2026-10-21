@@ -8,7 +8,6 @@ import {
   useT,
   type SupportedCurrency,
 } from '@/i18n'
-import { cn } from '@/lib/utils'
 import { currencyMessages } from './messages'
 
 /**
@@ -131,14 +130,14 @@ export function CurrencyCombobox({
       {open ? (
         options.length === 0 ? (
           <p
-            className="border-app-line-2 bg-app-overlay text-app-muted rounded-[14px] border px-3.5 py-4 text-[13px] leading-5 text-pretty"
+            className="rz-popover text-app-muted m-0 w-full px-3 py-3 text-pretty"
             role="status"
           >
             {t('noMatch', { query: query.trim() })}
           </p>
         ) : (
           <ul
-            className="border-app-line-2 bg-app-overlay max-h-[264px] overflow-auto rounded-[14px] border shadow-2xl"
+            className="rz-menu m-0 max-h-[264px] list-none overflow-auto"
             id={listId}
             role="listbox"
           >
@@ -147,10 +146,8 @@ export function CurrencyCombobox({
               return (
                 <li
                   aria-selected={selected}
-                  className={cn(
-                    'border-app-line flex min-h-11 cursor-pointer items-center gap-3 border-b px-3.5 py-2.5 last:border-b-0 hover:bg-white/[0.055]',
-                    index === active && 'bg-white/[0.07]',
-                  )}
+                  className="rz-menu__item h-auto min-h-[30px] py-1"
+                  data-highlighted={index === active ? '' : undefined}
                   id={optionId(option.code)}
                   key={option.code}
                   onClick={() => choose(option.code)}
@@ -158,14 +155,17 @@ export function CurrencyCombobox({
                   onMouseDown={(event) => event.preventDefault()}
                   role="option"
                 >
-                  <span className="text-app-ink w-11 shrink-0 font-mono text-[13px] font-bold">
+                  <span className="rz-mono text-app-strong w-11 shrink-0 font-medium">
                     {option.code}
                   </span>
-                  <span className="text-app-muted min-w-0 flex-1 text-[14px] text-pretty">
+                  <span className="text-app-muted min-w-0 flex-1 text-pretty">
                     {option.names[locale]}
                   </span>
                   {selected ? (
-                    <Check aria-hidden className="text-brand size-4 shrink-0" />
+                    <Check
+                      aria-hidden
+                      className="text-brand-text size-4 shrink-0"
+                    />
                   ) : null}
                 </li>
               )

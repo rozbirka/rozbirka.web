@@ -3,15 +3,7 @@ import { useT } from '@/i18n/hooks'
 import { appMessages } from './app-messages'
 
 export function Skeleton({ className }: { className?: string }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        'block h-3 rounded bg-white/[0.06] motion-safe:animate-pulse',
-        className,
-      )}
-    />
-  )
+  return <span aria-hidden className={cn('rz-skel', className)} />
 }
 
 const widths = ['w-3/5', 'w-2/5', 'w-1/3', 'w-1/2']
@@ -31,13 +23,16 @@ export function SkeletonRows({
 }) {
   const t = useT(appMessages)
   return (
-    <div className="border-app-line rounded-panel bg-app-raised grid gap-px overflow-hidden border">
+    <div className="rz-table-wrap grid">
       <p className="sr-only" role="status">
         {label ?? t('loadingData')}
       </p>
       {Array.from({ length: rows }, (_, row) => (
         <div
-          className="flex items-center gap-4 px-4 py-3.5"
+          className={cn(
+            'h-row flex items-center gap-4 px-3',
+            row > 0 && 'border-app-line border-t',
+          )}
           key={`skeleton-row-${String(row)}`}
         >
           {Array.from({ length: columns }, (_, column) => (

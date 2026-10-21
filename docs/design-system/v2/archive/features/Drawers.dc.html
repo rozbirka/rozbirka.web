@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../kit.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}a{color:var(--rz-brand-text);text-decoration:none}a:hover{text-decoration:underline}</style>
+</helmet>
+<div class="rz" data-theme="{{ theme }}" data-density="{{ density }}" style="min-height:100vh;display:flex;flex-wrap:wrap;align-items:stretch">
+  <aside aria-label="Шторки" style="flex:0 0 264px;min-width:0;display:grid;align-content:start;gap:18px;padding:20px 12px;border-right:1px solid var(--rz-border);background:var(--rz-bg-sidebar)">
+    <div style="display:grid;gap:4px;padding:0 8px">
+      <span class="rz-eyebrow">v2 · Шторки</span>
+      <h1 class="rz-h-title" style="margin:0">{{ total }} шторок</h1>
+      <span class="rz-caption">as-is: form-dialog.tsx · Sheet</span>
+    </div>
+    <sc-for list="{{ nav }}" as="g" hint-placeholder-count="4">
+      <nav style="display:grid;gap:2px">
+        <span class="rz-th-label" style="padding:0 8px 4px">{{ g.title }}</span>
+        <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="4">
+          <button type="button" aria-current="{{ it.current }}" onClick="{{ it.onClick }}" style="{{ it.style }}" style-hover="background:var(--rz-fill-hover)"><span class="rz-mono rz-dim" style="font-size:var(--rz-fs-micro);width:28px;flex:none">{{ it.id }}</span><span style="flex:1;min-width:0;text-align:left">{{ it.name }}</span><span class="rz-mono rz-dim" style="font-size:var(--rz-fs-micro)">{{ it.count }}</span></button>
+        </sc-for>
+      </nav>
+    </sc-for>
+  </aside>
+
+  <main style="flex:1 1 560px;min-width:0;display:grid;align-content:start;gap:16px;padding:24px">
+    <header style="display:grid;gap:6px">
+      <span class="rz-eyebrow">{{ d.id }} · {{ d.source }}</span>
+      <h2 class="rz-h-page" style="margin:0">{{ d.name }}</h2>
+      <sc-if value="{{ d.unverified }}" hint-placeholder-val="{{ false }}"><p class="rz-caption" style="margin:0"><span class="rz-mono" style="color:var(--rz-warn)">[unverified]</span> {{ d.unverified }}</p></sc-if>
+    </header>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+      <div class="rz-seg" role="group" aria-label="Стан шторки" style="flex-wrap:wrap;max-width:100%">
+        <sc-for list="{{ stateTabs }}" as="s" hint-placeholder-count="5"><button type="button" aria-pressed="{{ s.pressed }}" onClick="{{ s.onClick }}" style="{{ s.style }}">{{ s.label }}</button></sc-for>
+      </div>
+      <div class="rz-seg" role="group" aria-label="Пристрій">
+        <sc-for list="{{ deviceTabs }}" as="s" hint-placeholder-count="2"><button type="button" aria-pressed="{{ s.pressed }}" onClick="{{ s.onClick }}" style="{{ s.style }}"><i class="{{ s.icon }}"></i>{{ s.label }}</button></sc-for>
+      </div>
+      <a href="{{ boardHref }}" class="rz-btn rz-btn--ghost rz-btn--sm" style="margin-left:auto"><i class="icon-layout-grid"></i>Усі стани</a>
+    </div>
+
+    <div style="{{ stageStyle }}">
+      <div aria-hidden="true" style="position:absolute;inset:0;padding:24px;display:grid;align-content:start;gap:12px">
+        <span class="rz-skel" style="width:30%;height:18px"></span>
+        <span class="rz-skel" style="width:60%;height:12px"></span>
+        <span class="rz-skel" style="height:120px"></span>
+        <span class="rz-skel" style="height:240px"></span>
+      </div>
+      <div aria-hidden="true" style="position:absolute;inset:0;background:var(--rz-scrim)"></div>
+      <section role="dialog" aria-modal="true" aria-labelledby="dw-title" aria-busy="{{ busy }}" style="{{ sheetStyle }}">
+        <header style="display:flex;align-items:flex-start;gap:12px;padding:18px 20px 16px;border-bottom:1px solid var(--rz-border)">
+          <div style="flex:1;min-width:0;display:grid;gap:6px">
+            <span class="rz-eyebrow">{{ v.eyebrow }}</span>
+            <h3 id="dw-title" class="rz-h-page" style="margin:0;text-wrap:balance">{{ v.title }}</h3>
+            <sc-if value="{{ v.description }}" hint-placeholder-val="{{ false }}"><p class="rz-muted" style="margin:0;text-wrap:pretty">{{ v.description }}</p></sc-if>
+          </div>
+          <button type="button" class="rz-btn rz-btn--icon" aria-label="Закрити" disabled="{{ busy }}"><i class="icon-x"></i></button>
+        </header>
+
+        <div style="min-height:0;overflow-y:auto;display:grid;align-content:start;gap:20px;padding:20px 20px 28px">
+          <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+            <div style="{{ g.style }}">
+              <sc-for list="{{ g.blocks }}" as="b" hint-placeholder-count="2">
+                <div style="display:grid;gap:6px;min-width:0">
+                  <sc-if value="{{ b.is_notice }}" hint-placeholder-val="{{ false }}">
+                    <div class="{{ b.cls }}" role="status" style="align-items:flex-start">
+                      <i class="{{ b.icon }}" style="margin-top:1px"></i>
+                      <div class="rz-notice__body" style="display:grid;gap:4px">
+                        <sc-if value="{{ b.title }}" hint-placeholder-val="{{ false }}"><strong class="rz-strong">{{ b.title }}</strong></sc-if>
+                        <sc-if value="{{ b.text }}" hint-placeholder-val="{{ false }}"><span style="text-wrap:pretty">{{ b.text }}</span></sc-if>
+                        <sc-if value="{{ b.hasItems }}" hint-placeholder-val="{{ false }}"><ul style="margin:0;padding-left:16px;display:grid;gap:2px"><sc-for list="{{ b.items }}" as="li" hint-placeholder-count="2"><li>{{ li }}</li></sc-for></ul></sc-if>
+                        <sc-if value="{{ b.action }}" hint-placeholder-val="{{ false }}"><button type="button" class="rz-btn rz-btn--sm" style="justify-self:start;margin-top:4px">{{ b.action }}</button></sc-if>
+                        <sc-if value="{{ b.link }}" hint-placeholder-val="{{ false }}"><a href="{{ b.link }}" style="justify-self:start">{{ b.linkLabel }} →</a></sc-if>
+                      </div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_field }}" hint-placeholder-val="{{ false }}">
+                    <label class="rz-field">
+                      <span class="{{ b.labelCls }}">{{ b.label }}<sc-if value="{{ b.req }}" hint-placeholder-val="{{ false }}"><span class="rz-req">*</span></sc-if></span>
+                      <sc-if value="{{ b.textarea }}" hint-placeholder-val="{{ false }}"><textarea class="rz-textarea" rows="3" readOnly="{{ true }}" value="{{ b.value }}" placeholder="{{ b.ph }}" style="height:auto;padding:8px 10px;resize:vertical"></textarea></sc-if>
+                      <sc-if value="{{ b.notTextarea }}" hint-placeholder-val="{{ true }}">
+                        <span class="rz-input-group" style="{{ b.groupStyle }}">
+                          <sc-if value="{{ b.icon }}" hint-placeholder-val="{{ false }}"><i class="icon-search" style="padding-left:10px;font-size:var(--rz-icon);color:var(--rz-text-dim)"></i></sc-if>
+                          <input readOnly="{{ true }}" value="{{ b.value }}" placeholder="{{ b.ph }}" aria-invalid="{{ b.invalid }}" style="{{ b.inputStyle }}">
+                          <sc-if value="{{ b.clear }}" hint-placeholder-val="{{ false }}"><i class="icon-x" aria-label="Очистити пошук" style="padding:0 12px;font-size:var(--rz-icon);color:var(--rz-text-muted)"></i></sc-if>
+                          <sc-if value="{{ b.select }}" hint-placeholder-val="{{ false }}"><i class="icon-chevron-down" style="padding:0 10px;font-size:var(--rz-icon);color:var(--rz-text-dim)"></i></sc-if>
+                          <sc-if value="{{ b.suffix }}" hint-placeholder-val="{{ false }}"><span class="rz-input-group__addon">{{ b.suffix }}</span></sc-if>
+                        </span>
+                      </sc-if>
+                      <sc-if value="{{ b.hint }}" hint-placeholder-val="{{ false }}"><span class="rz-hint" style="text-wrap:pretty">{{ b.hint }}</span></sc-if>
+                      <sc-if value="{{ b.error }}" hint-placeholder-val="{{ false }}"><span class="rz-error"><i class="icon-circle-alert" style="margin-top:2px"></i><span style="text-wrap:pretty">{{ b.error }}</span></span></sc-if>
+                    </label>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_seg }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:grid;gap:6px">
+                      <span class="{{ b.labelCls }}">{{ b.label }}</span>
+                      <div class="rz-seg" role="group" aria-label="{{ b.label }}" style="{{ b.segStyle }}"><sc-for list="{{ b.opts }}" as="o" hint-placeholder-count="2"><button type="button" aria-pressed="{{ o.pressed }}" style="{{ o.style }}">{{ o.label }}</button></sc-for></div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_pair }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:grid;gap:6px"><span class="rz-label">{{ b.label }}</span>
+                      <div role="group" aria-label="{{ b.label }}" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><sc-for list="{{ b.opts }}" as="o" hint-placeholder-count="2"><button type="button" aria-pressed="{{ o.pressed }}" style="{{ o.style }}">{{ o.label }}</button></sc-for></div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_radios }}" hint-placeholder-val="{{ false }}">
+                    <fieldset style="margin:0;padding:0;border:0;display:grid;gap:6px"><legend class="rz-strong" style="padding:0;margin-bottom:6px;font-weight:700">{{ b.legend }}</legend>
+                      <sc-for list="{{ b.opts }}" as="o" hint-placeholder-count="2">
+                        <label style="{{ o.style }}"><span aria-hidden="true" style="{{ o.dot }}"><span style="{{ o.dotInner }}"></span></span><span class="rz-strong" style="flex:1;min-width:0;font-weight:600">{{ o.label }}</span><span class="rz-mono rz-muted" style="font-size:var(--rz-fs-caption)">{{ o.meta }}</span></label>
+                      </sc-for>
+                    </fieldset>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_cards }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:grid;gap:6px"><span class="rz-label">{{ b.label }}</span>
+                      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px"><sc-for list="{{ b.opts }}" as="o" hint-placeholder-count="2"><label class="rz-choice-card" style="{{ o.style }}"><span aria-hidden="true" style="{{ o.dot }}"><span style="{{ o.dotInner }}"></span></span><span style="display:grid;gap:2px"><span class="rz-strong" style="font-weight:600">{{ o.label }}</span><span class="rz-caption">{{ o.hint }}</span></span></label></sc-for></div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_chips }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:grid;gap:6px"><span class="rz-label">{{ b.label }}</span>
+                      <div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ b.opts }}" as="o" hint-placeholder-count="3"><button type="button" aria-pressed="{{ o.pressed }}" style="{{ o.style }}"><i class="{{ o.icon }}" style="font-size:var(--rz-icon-sm)"></i>{{ o.label }}</button></sc-for></div>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_list }}" hint-placeholder-val="{{ false }}">
+                    <sc-if value="{{ b.label }}" hint-placeholder-val="{{ false }}"><span class="rz-strong" style="font-weight:700">{{ b.label }}</span></sc-if>
+                    <div style="border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface-2);overflow:hidden">
+                      <sc-if value="{{ b.skel }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:grid;gap:10px;padding:14px"><span class="rz-sr">{{ b.skelLabel }}</span><sc-for list="{{ b.skelRows }}" as="sr" hint-placeholder-count="3"><span class="rz-skel" style="height:36px"></span></sc-for></div></sc-if>
+                      <sc-if value="{{ b.empty }}" hint-placeholder-val="{{ false }}"><p role="status" class="rz-muted" style="margin:0;padding:18px 16px;text-align:center;text-wrap:pretty">{{ b.empty }}</p></sc-if>
+                      <sc-if value="{{ b.prompt }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:grid;gap:4px;padding:28px 16px;text-align:center"><strong class="rz-strong">{{ b.prompt }}</strong><span class="rz-muted">{{ b.promptText }}</span></div></sc-if>
+                      <sc-for list="{{ b.rows }}" as="r" hint-placeholder-count="0">
+                        <div role="button" aria-pressed="{{ r.pressed }}" aria-disabled="{{ r.disabled }}" style="{{ r.style }}">
+                          <sc-if value="{{ r.avatar }}" hint-placeholder-val="{{ false }}"><span aria-hidden="true" style="display:grid;place-items:center;width:32px;height:32px;flex:none;border-radius:var(--rz-r-full);background:var(--rz-brand-soft);color:var(--rz-brand-text);font-size:var(--rz-fs-caption);font-weight:700">{{ r.avatar }}</span></sc-if>
+                          <span style="flex:1;min-width:0;display:grid;gap:3px"><span style="{{ r.titleStyle }}">{{ r.title }}</span><span class="rz-mono rz-muted" style="font-size:var(--rz-fs-micro);line-height:1.5">{{ r.meta }}</span></span>
+                          <sc-if value="{{ r.hasRight }}" hint-placeholder-val="{{ false }}"><span style="flex:none;display:grid;gap:3px;justify-items:end"><span class="rz-mono" style="{{ r.rightStyle }}">{{ r.right }}</span><sc-if value="{{ r.sub }}" hint-placeholder-val="{{ false }}"><span style="{{ r.subStyle }}">{{ r.sub }}</span></sc-if></span></sc-if>
+                          <sc-if value="{{ r.tag }}" hint-placeholder-val="{{ false }}"><span style="{{ r.tagStyle }}">{{ r.tag }}</span></sc-if>
+                          <sc-if value="{{ r.action }}" hint-placeholder-val="{{ false }}"><span class="rz-btn rz-btn--icon rz-btn--ghost rz-btn--sm" aria-label="Прибрати"><i class="{{ r.action }}"></i></span></sc-if>
+                        </div>
+                      </sc-for>
+                      <sc-if value="{{ b.add }}" hint-placeholder-val="{{ false }}"><div role="button" aria-pressed="{{ b.addPressed }}" style="{{ b.addStyle }}"><span aria-hidden="true" style="display:grid;place-items:center;width:32px;height:32px;flex:none;border-radius:var(--rz-r-full);border:1px dashed var(--rz-brand)"><i class="icon-plus" style="font-size:var(--rz-icon)"></i></span>{{ b.add }}</div></sc-if>
+                    </div>
+                    <sc-if value="{{ b.caption }}" hint-placeholder-val="{{ false }}"><span class="rz-caption" style="color:var(--rz-text-muted);text-wrap:pretty">{{ b.caption }}</span></sc-if>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_dl }}" hint-placeholder-val="{{ false }}">
+                    <sc-if value="{{ b.label }}" hint-placeholder-val="{{ false }}"><span class="rz-strong" style="font-weight:700">{{ b.label }}</span></sc-if>
+                    <dl style="margin:0;display:grid;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface-2);padding:4px 14px">
+                      <sc-for list="{{ b.rows }}" as="r" hint-placeholder-count="2"><div style="{{ r.style }}"><dt class="rz-muted">{{ r.k }}</dt><dd class="rz-mono" style="{{ r.vStyle }}">{{ r.v }}</dd></div></sc-for>
+                      <sc-if value="{{ b.total }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 16px;padding:10px 0;border-top:1px solid var(--rz-border-strong)"><dt class="rz-strong" style="font-weight:700">{{ b.total.k }}</dt><dd class="rz-mono" style="{{ b.totalStyle }}">{{ b.total.v }}</dd></div></sc-if>
+                      <sc-if value="{{ b.foot }}" hint-placeholder-val="{{ false }}"><div style="display:grid;gap:2px;padding:0 0 10px"><span style="{{ b.footStyle }}">{{ b.foot.title }}</span><span class="rz-caption" style="color:var(--rz-text-muted);text-wrap:pretty">{{ b.foot.text }}</span></div></sc-if>
+                    </dl>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_events }}" hint-placeholder-val="{{ false }}">
+                    <ol aria-label="{{ b.label }}" style="margin:0;padding:0;list-style:none;display:grid;gap:8px"><sc-for list="{{ b.rows }}" as="r" hint-placeholder-count="3"><li style="display:flex;justify-content:space-between;gap:12px"><span>{{ r.k }}</span><span class="rz-mono rz-dim" style="font-size:var(--rz-fs-caption);white-space:nowrap">{{ r.v }}</span></li></sc-for></ol>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_checks }}" hint-placeholder-val="{{ false }}">
+                    <ul style="margin:0;padding:0;list-style:none;display:grid;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface-2);overflow:hidden">
+                      <sc-for list="{{ b.rows }}" as="r" hint-placeholder-count="3"><li style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;min-height:44px;padding:10px 14px;border-bottom:1px solid var(--rz-border)"><span aria-hidden="true" style="{{ r.iconStyle }}"><i class="{{ r.icon }}" style="font-size:var(--rz-icon-xs)"></i></span><span class="rz-strong" style="flex:1;min-width:0;font-weight:600">{{ r.label }}</span><span class="rz-mono" style="{{ r.stateStyle }}">{{ r.state }}</span></li></sc-for>
+                    </ul>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_text }}" hint-placeholder-val="{{ false }}"><p style="{{ b.style }}">{{ b.text }}</p></sc-if>
+                  <sc-if value="{{ b.is_h }}" hint-placeholder-val="{{ false }}"><h4 class="rz-strong" style="margin:0;font-size:var(--rz-fs-input);font-weight:700">{{ b.text }}</h4></sc-if>
+                  <sc-if value="{{ b.is_eyebrow }}" hint-placeholder-val="{{ false }}"><span class="rz-eyebrow">{{ b.text }}</span></sc-if>
+                  <sc-if value="{{ b.is_title }}" hint-placeholder-val="{{ false }}"><h4 class="rz-h-title" style="margin:0">{{ b.text }}</h4></sc-if>
+
+                  <sc-if value="{{ b.is_skel }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:grid;gap:10px"><span class="rz-sr">{{ b.label }}</span><sc-for list="{{ b.skelRows }}" as="sr" hint-placeholder-count="3"><span class="rz-skel" style="height:40px"></span></sc-for><span class="rz-caption">{{ b.label }}</span></div></sc-if>
+
+                  <sc-if value="{{ b.is_amount }}" hint-placeholder-val="{{ false }}">
+                    <div style="{{ b.boxStyle }}"><span style="{{ b.labelStyle }}">{{ b.label }}</span><span class="rz-mono" style="{{ b.valueStyle }}">{{ b.value }}</span><sc-if value="{{ b.note }}" hint-placeholder-val="{{ false }}"><span class="rz-caption">{{ b.note }}</span></sc-if></div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_plain }}" hint-placeholder-val="{{ false }}"><div style="display:grid;gap:4px"><span class="rz-label">{{ b.label }}</span><span style="{{ b.valueStyle }}">{{ b.value }}</span></div></sc-if>
+
+                  <sc-if value="{{ b.is_arrow }}" hint-placeholder-val="{{ false }}"><div aria-hidden="true" style="display:flex;align-items:center;gap:12px"><span style="flex:1;height:1px;background:var(--rz-border)"></span><i class="icon-arrow-down" style="font-size:var(--rz-icon);color:var(--rz-text-dim)"></i><span style="flex:1;height:1px;background:var(--rz-border)"></span></div></sc-if>
+
+                  <sc-if value="{{ b.is_pdf }}" hint-placeholder-val="{{ false }}"><div role="img" aria-label="Етикетка Нової пошти" style="height:min(60vh,440px);display:grid;place-items:center;align-content:center;gap:8px;border:1px dashed var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-surface-2);color:var(--rz-text-dim)"><i class="icon-file-text" style="font-size:32px"></i><span class="rz-caption">{{ b.text }}</span></div></sc-if>
+
+                  <sc-if value="{{ b.is_switch }}" hint-placeholder-val="{{ false }}">
+                    <div style="{{ b.rowStyle }}"><span style="flex:1;min-width:0;display:grid;gap:2px"><span class="rz-strong" style="font-weight:600">{{ b.label }}</span><span class="rz-hint" style="text-wrap:pretty">{{ b.hint }}</span></span><span role="switch" aria-checked="{{ b.checked }}" aria-disabled="{{ b.disabledAria }}" style="{{ b.trackStyle }}"><span style="{{ b.knobStyle }}"></span></span></div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_check }}" hint-placeholder-val="{{ false }}"><label style="display:flex;align-items:center;gap:10px;min-height:32px"><span aria-hidden="true" style="{{ b.boxStyle }}"><i class="{{ b.icon }}" style="font-size:var(--rz-icon-xs)"></i></span><span>{{ b.label }}</span></label></sc-if>
+
+                  <sc-if value="{{ b.is_btn }}" hint-placeholder-val="{{ false }}"><button type="button" class="rz-btn rz-btn--lg" style="justify-self:start"><sc-if value="{{ b.icon }}" hint-placeholder-val="{{ false }}"><i class="{{ b.icon }}"></i></sc-if>{{ b.label }}</button></sc-if>
+
+                  <sc-if value="{{ b.is_presets }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:-10px"><sc-for list="{{ b.options }}" as="o" hint-placeholder-count="2"><button type="button" style="height:28px;padding:0 12px;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-full);background:transparent;color:var(--rz-text-muted);font-size:var(--rz-fs-caption);font-weight:600;cursor:pointer" style-hover="color:var(--rz-text-strong)">{{ o }}</button></sc-for></div></sc-if>
+
+                  <sc-if value="{{ b.is_perm }}" hint-placeholder-val="{{ false }}">
+                    <fieldset style="margin:0;padding:12px 14px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface-2);display:grid;gap:8px">
+                      <legend class="rz-sr">{{ b.count }}</legend>
+                      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px"><span class="rz-strong" style="font-weight:700">{{ b.legend }}</span><span class="rz-mono rz-dim" style="font-size:var(--rz-fs-micro)">{{ b.countShort }}</span></div>
+                      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:2px 16px"><sc-for list="{{ b.opts }}" as="o" hint-placeholder-count="3"><label style="display:flex;align-items:center;gap:10px;min-height:32px"><span aria-hidden="true" style="{{ o.boxStyle }}"><i class="{{ o.icon }}" style="font-size:var(--rz-icon-xs)"></i></span><span>{{ o.label }}</span></label></sc-for></div>
+                    </fieldset>
+                  </sc-if>
+
+                  <sc-if value="{{ b.is_row }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;align-items:end">
+                      <sc-for list="{{ b.items }}" as="it" hint-placeholder-count="2">
+                        <div style="display:grid;gap:6px;min-width:0">
+                          <span class="{{ it.labelCls }}">{{ it.label }}</span>
+                          <sc-if value="{{ it.isField }}" hint-placeholder-val="{{ true }}"><span class="rz-input-group" style="{{ it.groupStyle }}"><input readOnly="{{ true }}" value="{{ it.value }}" placeholder="{{ it.ph }}" style="{{ it.inputStyle }}"><sc-if value="{{ it.select }}" hint-placeholder-val="{{ false }}"><i class="icon-chevron-down" style="padding:0 10px;font-size:var(--rz-icon);color:var(--rz-text-dim)"></i></sc-if><sc-if value="{{ it.suffix }}" hint-placeholder-val="{{ false }}"><span class="rz-input-group__addon">{{ it.suffix }}</span></sc-if></span></sc-if>
+                          <sc-if value="{{ it.isStepper }}" hint-placeholder-val="{{ false }}"><span role="group" aria-label="{{ it.label }}" style="display:inline-flex;align-items:center;height:var(--rz-control-h-lg);border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-sm);background:var(--rz-surface-2);justify-self:start"><button type="button" aria-label="Менше" style="width:36px;height:100%;border:0;background:transparent;color:var(--rz-text-muted);cursor:pointer"><i class="icon-minus"></i></button><span class="rz-mono rz-strong" style="min-width:32px;text-align:center">{{ it.value }}</span><button type="button" aria-label="Більше" style="width:36px;height:100%;border:0;background:transparent;color:var(--rz-text-muted);cursor:pointer"><i class="icon-plus"></i></button></span></sc-if>
+                          <sc-if value="{{ it.isStat }}" hint-placeholder-val="{{ false }}"><span class="rz-mono rz-strong" style="display:flex;align-items:center;justify-content:flex-end;height:var(--rz-control-h-lg);font-size:var(--rz-fs-title);white-space:nowrap">{{ it.value }}</span></sc-if>
+                          <sc-if value="{{ it.isSeg }}" hint-placeholder-val="{{ false }}"><div class="rz-seg" role="group" aria-label="{{ it.label }}" style="display:grid;grid-auto-flow:column;grid-auto-columns:1fr;height:var(--rz-control-h-lg)"><sc-for list="{{ it.opts }}" as="o" hint-placeholder-count="2"><button type="button" aria-pressed="{{ o.pressed }}" style="{{ o.style }}">{{ o.label }}</button></sc-for></div></sc-if>
+                          <sc-if value="{{ it.hint }}" hint-placeholder-val="{{ false }}"><span class="rz-hint">{{ it.hint }}</span></sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+
+                  <sc-if value="{{ b.unverified }}" hint-placeholder-val="{{ false }}"><span class="rz-mono" style="font-size:var(--rz-fs-micro);color:var(--rz-warn)">[unverified] текст не знайдено в коді</span></sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+
+        <footer class="rz-sheet__foot" style="flex-wrap:wrap;align-items:center;gap:8px 10px;padding:14px 20px 16px">
+          <span style="{{ f.noteStyle }}">{{ f.note }}</span>
+          <sc-if value="{{ f.secondary }}" hint-placeholder-val="{{ false }}"><button type="button" class="rz-btn rz-btn--lg rz-btn--ghost" disabled="{{ f.secondaryDisabled }}" title="{{ f.secondaryReason }}">{{ f.secondary }}</button></sc-if>
+          <sc-if value="{{ f.cancel }}" hint-placeholder-val="{{ false }}"><button type="button" class="rz-btn rz-btn--lg" disabled="{{ busy }}">{{ f.cancel }}</button></sc-if>
+          <sc-if value="{{ f.primary }}" hint-placeholder-val="{{ false }}"><button type="button" class="{{ f.primaryCls }}" disabled="{{ f.primaryDisabled }}" aria-busy="{{ busy }}" title="{{ f.disabledReason }}"><sc-if value="{{ busy }}" hint-placeholder-val="{{ false }}"><i class="icon-loader-circle rz-spin"></i></sc-if>{{ f.primaryLabel }}</button></sc-if>
+        </footer>
+      </section>
+    </div>
+
+    <section style="display:grid;gap:8px;max-width:76ch">
+      <h3 class="rz-h-title" style="margin:0">Поведінка</h3>
+      <ul style="margin:0;padding-left:18px;display:grid;gap:4px;color:var(--rz-text-muted)">
+        <sc-for list="{{ notes }}" as="n" hint-placeholder-count="3"><li style="text-wrap:pretty">{{ n }}</li></sc-for>
+      </ul>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;drawer&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;order-new&quot;,&quot;order-item&quot;,&quot;order-customer&quot;,&quot;order-payment&quot;,&quot;np-readiness&quot;,&quot;np-booking&quot;,&quot;np-payment&quot;,&quot;np-attach&quot;,&quot;np-waybill&quot;,&quot;np-label&quot;,&quot;np-step&quot;,&quot;cash-movement&quot;,&quot;cash-transfer&quot;,&quot;cash-new&quot;,&quot;cash-edit&quot;,&quot;car-expense&quot;,&quot;customer-form&quot;,&quot;team-invite&quot;,&quot;team-permissions&quot;,&quot;np-point&quot;,&quot;part-form&quot;], &quot;default&quot;: &quot;order-item&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;device&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;desktop&quot;,&quot;mobile&quot;], &quot;default&quot;: &quot;desktop&quot;, &quot;tsType&quot;: &quot;'desktop' | 'mobile'&quot;}, &quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dark&quot;,&quot;light&quot;], &quot;default&quot;: &quot;dark&quot;, &quot;tsType&quot;: &quot;'dark' | 'light'&quot;}, &quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;,&quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+const TONES = { ok: 'var(--rz-ok)', warn: 'var(--rz-warn)', danger: 'var(--rz-danger)', info: 'var(--rz-info)', muted: 'var(--rz-text-muted)', dim: 'var(--rz-text-dim)', brand: 'var(--rz-brand-text)' };
+const SOFT = { ok: 'var(--rz-ok-soft)', warn: 'var(--rz-warn-soft)', danger: 'var(--rz-danger-soft)', info: 'var(--rz-info-soft)' };
+const ICONS = { ok: 'icon-circle-check', warn: 'icon-triangle-alert', danger: 'icon-circle-alert', info: 'icon-info' };
+const SIZES = { md: 560, lg: 640 };
+
+function segOpts(options, on, opt) {
+  return (options || []).map((label, i) => {
+    const sel = Array.isArray(on) ? on.includes(i) : i === on;
+    const brand = opt && opt.brand;
+    return {
+      label, pressed: sel ? 'true' : 'false',
+      style: 'display:inline-flex;align-items:center;justify-content:center;gap:6px;height:100%;min-height:30px;padding:0 12px;border:1px solid ' + (sel && brand ? 'var(--rz-brand)' : 'transparent') + ';border-radius:var(--rz-r-xs);background:' + (sel ? 'var(--rz-fill-selected)' : 'transparent') + ';color:' + (sel ? 'var(--rz-text-strong)' : 'var(--rz-text-muted)') + ';font-weight:' + (sel ? 600 : 500) + ';cursor:pointer;white-space:nowrap' + (opt && opt.mono ? ';font-family:var(--rz-font-mono)' : ''),
+    };
+  });
+}
+function fakeBox(on, round) {
+  return 'display:grid;place-items:center;width:14px;height:14px;flex:none;border-radius:' + (round ? 'var(--rz-r-full)' : 'var(--rz-r-xs)') + ';border:1px solid ' + (on ? 'var(--rz-brand)' : 'var(--rz-border-strong)') + ';background:' + (on && !round ? 'var(--rz-brand)' : 'transparent') + ';color:var(--rz-on-brand)';
+}
+function fieldBits(b) {
+  const err = !!b.error;
+  return {
+    labelCls: b.hideLabel ? 'rz-sr' : 'rz-label',
+    groupStyle: (err ? 'border-color:var(--rz-danger);' : '') + (b.big ? 'height:52px;' : '') + (b.disabled ? 'opacity:0.55;' : ''),
+    inputStyle: 'color:var(--rz-text-strong);' + (b.mono || b.big ? 'font-family:var(--rz-font-mono);font-variant-numeric:tabular-nums;' : '') + (b.big ? 'font-size:var(--rz-fs-page);padding-left:14px;' : 'font-size:var(--rz-fs-input);'),
+    invalid: err ? 'true' : 'false',
+    value: b.value ?? '', ph: b.ph ?? '',
+  };
+}
+
+function norm(b) {
+  const o = { ...b, ['is_' + b.t]: true };
+  switch (b.t) {
+    case 'notice': o.cls = 'rz-notice rz-notice--' + (b.tone || 'info'); o.icon = ICONS[b.tone || 'info']; o.hasItems = !!(b.items && b.items.length); break;
+    case 'field': Object.assign(o, fieldBits(b), { notTextarea: !b.textarea }); break;
+    case 'seg': o.labelCls = b.hideLabel ? 'rz-sr' : 'rz-label'; o.opts = segOpts(b.options, b.on, b);
+      o.segStyle = (b.full ? 'display:grid;grid-auto-flow:column;grid-auto-columns:1fr;height:44px;' : 'flex-wrap:wrap;max-width:100%;' + (b.brand ? 'border:0;background:transparent;padding:0;gap:6px;' : '')) + (b.warn ? 'border-color:var(--rz-warn);' : '');
+      if (b.brand && !b.full) o.opts = o.opts.map((x) => ({ ...x, style: x.style.replace('border:1px solid transparent', 'border:1px solid var(--rz-border-strong)') + ';height:36px;background:' + (x.pressed === 'true' ? 'var(--rz-fill-selected)' : 'var(--rz-surface-2)') }));
+      break;
+    case 'pair': o.opts = b.options.map((p, i) => { const on = i === b.on; const c = TONES[p.tone]; return { label: p.label, pressed: on ? 'true' : 'false', style: 'min-height:48px;padding:0 16px;border:1px solid ' + (on ? c : 'var(--rz-border-strong)') + ';border-radius:var(--rz-r-md);background:' + (on ? SOFT[p.tone] : 'transparent') + ';color:' + (on ? c : 'var(--rz-text-muted)') + ';font-weight:700;cursor:pointer' }; }); break;
+    case 'radios': o.opts = b.options.map((r) => ({ label: r.label, meta: r.meta || '', dot: fakeBox(r.on, true), dotInner: r.on ? 'width:6px;height:6px;border-radius:var(--rz-r-full);background:var(--rz-brand)' : 'display:none', style: 'display:flex;align-items:center;gap:12px;min-height:44px;padding:10px 14px;border:1px solid ' + (r.on ? 'var(--rz-border-strong)' : 'var(--rz-border)') + ';border-radius:var(--rz-r-md);background:' + (r.on ? 'var(--rz-fill-selected)' : 'var(--rz-surface-2)') + ';cursor:pointer' })); break;
+    case 'cards': o.opts = b.options.map((r) => ({ label: r.label, hint: r.hint || '', dot: fakeBox(r.on, true) + ';margin-top:2px', dotInner: r.on ? 'width:6px;height:6px;border-radius:var(--rz-r-full);background:var(--rz-brand)' : 'display:none', style: r.on ? 'border-color:var(--rz-brand);background:var(--rz-row-selected)' : '' })); break;
+    case 'chips': o.opts = b.options.map((label, i) => { const on = (b.on || []).includes(i); return { label, pressed: on ? 'true' : 'false', icon: on ? 'icon-check' : 'icon-plus', style: 'display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid ' + (on ? 'var(--rz-brand)' : 'var(--rz-border-strong)') + ';border-radius:var(--rz-r-full);background:' + (on ? 'var(--rz-brand-soft)' : 'transparent') + ';color:' + (on ? 'var(--rz-text-strong)' : 'var(--rz-text-muted)') + ';font-family:var(--rz-font-mono);font-weight:600;cursor:pointer' }; }); break;
+    case 'list':
+      o.skelRows = b.skel ? Array.from({ length: b.skel }, (_, i) => i) : [];
+      o.rows = (b.rows || []).map((r) => ({
+        ...r, pressed: r.on ? 'true' : 'false', disabled: r.off ? 'true' : 'false', hasRight: !!(r.right || r.sub),
+        style: 'display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--rz-border);cursor:' + (r.off ? 'default' : 'pointer') + ';background:' + (r.on ? 'var(--rz-row-selected)' : 'transparent') + (r.on ? ';box-shadow:inset 3px 0 0 var(--rz-brand)' : ''),
+        titleStyle: 'font-weight:700;color:' + (r.off ? 'var(--rz-text-dim)' : 'var(--rz-text-strong)') + ';text-wrap:pretty',
+        rightStyle: 'font-size:var(--rz-fs-body);color:' + (r.off ? 'var(--rz-text-dim)' : 'var(--rz-text)'),
+        subStyle: 'font-size:var(--rz-fs-micro);font-weight:700;white-space:nowrap;color:' + (TONES[r.subTone] || 'var(--rz-text-muted)'),
+        tagStyle: 'flex:none;font-size:var(--rz-fs-caption);font-weight:700;white-space:nowrap;color:' + (TONES[r.tagTone] || 'var(--rz-text-muted)'),
+      }));
+      o.addPressed = b.addOn ? 'true' : 'false';
+      o.addStyle = 'display:flex;align-items:center;gap:12px;padding:11px 14px;color:var(--rz-brand-text);font-weight:700;cursor:pointer;background:' + (b.addOn ? 'var(--rz-row-selected)' : 'transparent');
+      break;
+    case 'dl':
+      o.rows = (b.rows || []).map((r, i) => ({ ...r, style: 'display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 16px;padding:9px 0' + (i ? ';border-top:1px solid var(--rz-border)' : ''), vStyle: 'margin:0;text-align:right;font-size:var(--rz-fs-body);color:' + (TONES[r.tone] || 'var(--rz-text)') }));
+      o.totalStyle = 'margin:0;font-size:var(--rz-fs-title);font-weight:700;color:' + (b.total && TONES[b.total.tone] || 'var(--rz-text-strong)');
+      o.footStyle = 'font-size:var(--rz-fs-caption);font-weight:600;color:' + (b.foot && TONES[b.foot.tone] || 'var(--rz-text-muted)');
+      break;
+    case 'checks': o.rows = b.rows.map((r) => {
+      const ok = r.s === 'ok', fail = r.s === 'fail', soft = !ok && !fail;
+      return { ...r, icon: ok ? 'icon-check' : fail ? 'icon-x' : r.s === 'pending' ? 'icon-dot' : '',
+        iconStyle: 'display:grid;place-items:center;width:18px;height:18px;flex:none;border-radius:var(--rz-r-full);border:1px solid ' + (ok ? 'transparent' : fail ? 'var(--rz-danger)' : 'var(--rz-border-strong)') + ';background:' + (ok ? 'var(--rz-ok)' : 'transparent') + ';color:' + (ok ? 'var(--rz-on-brand)' : fail ? 'var(--rz-danger)' : 'var(--rz-text-dim)'),
+        stateStyle: 'margin-left:auto;font-size:var(--rz-fs-caption);color:' + (soft ? 'var(--rz-text-muted)' : ok ? 'var(--rz-ok)' : 'var(--rz-danger)') };
+    }); break;
+    case 'text': o.style = 'margin:0;text-wrap:pretty;font-size:' + (b.tone ? 'var(--rz-fs-caption)' : 'var(--rz-fs-body)') + ';color:' + (TONES[b.tone] || 'var(--rz-text)'); o.is_text = !!b.text; break;
+    case 'skel': o.skelRows = Array.from({ length: b.rows || 3 }, (_, i) => i); break;
+    case 'amount': {
+      const c = TONES[b.tone]; const inline = !!b.inline;
+      o.boxStyle = inline ? 'display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px 12px;padding:12px 14px;border:1px solid ' + c + ';border-radius:var(--rz-r-md);background:' + SOFT[b.tone] : 'display:grid;gap:4px;padding:14px 16px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface-2)';
+      o.labelStyle = 'font-size:var(--rz-fs-body);font-weight:' + (inline ? 500 : 600) + ';color:var(--rz-text-muted)';
+      o.valueStyle = 'font-variant-numeric:tabular-nums;font-weight:700;' + (inline ? 'font-size:var(--rz-fs-title);color:' + c : 'font-size:var(--rz-fs-page);color:var(--rz-text-strong)');
+      break; }
+    case 'plain': o.valueStyle = b.muted ? 'font-size:var(--rz-fs-caption);color:var(--rz-text-muted);text-wrap:pretty' : 'font-family:var(--rz-font-mono);font-weight:700;color:var(--rz-text-strong)'; break;
+    case 'switch':
+      o.checked = b.on ? 'true' : 'false'; o.disabledAria = b.disabled ? 'true' : 'false';
+      o.rowStyle = 'display:flex;align-items:flex-start;gap:16px;padding:10px 0;border-top:1px solid var(--rz-border)' + (b.disabled ? ';opacity:0.6' : '');
+      o.trackStyle = 'position:relative;width:28px;height:16px;flex:none;margin-top:2px;border-radius:var(--rz-r-full);background:' + (b.on ? 'var(--rz-brand)' : 'var(--rz-border-strong)');
+      o.knobStyle = 'position:absolute;top:2px;left:' + (b.on ? '14px' : '2px') + ';width:12px;height:12px;border-radius:var(--rz-r-full);background:var(--rz-on-solid, #fff)';
+      break;
+    case 'check': o.boxStyle = fakeBox(b.on); o.icon = b.on ? 'icon-check' : ''; break;
+    case 'perm': {
+      const n = b.items.filter((x) => x.on).length;
+      o.countShort = n + ' / ' + b.items.length;
+      o.opts = b.items.map((x) => ({ label: x.label, boxStyle: fakeBox(x.on), icon: x.on ? 'icon-check' : '' }));
+      break; }
+    case 'row': o.items = b.items.map((it) => {
+      const f = fieldBits(it);
+      return { ...it, ...f, isField: it.kind === 'field', isStepper: it.kind === 'stepper', isStat: it.kind === 'stat', isSeg: it.kind === 'seg', labelCls: it.kind === 'stat' ? 'rz-label' : f.labelCls, opts: it.kind === 'seg' ? segOpts(it.options, it.on, { mono: true }) : [], inputStyle: f.inputStyle + (it.kind === 'stat' ? '' : '') };
+    }); break;
+  }
+  return o;
+}
+
+function compose(d, st) {
+  let blocks = st.blocks ? st.blocks.slice() : d.blocks.slice();
+  if (st.replace) Object.entries(st.replace).forEach(([i, b]) => { blocks[+i] = b; });
+  blocks = blocks.filter((b) => b && !(b.t === 'text' && !b.text));
+  blocks = [...(st.top || []), ...blocks, ...(st.after || [])];
+  return {
+    eyebrow: st.eyebrow ?? d.eyebrow, title: st.title ?? d.title,
+    description: st.description !== undefined ? st.description : d.description || '',
+    blocks, footer: { ...d.footer, ...(st.footer || {}) }, busy: !!st.busy,
+  };
+}
+
+class Component extends DCLogic {
+  state = { data: null, drawer: null, st: null, device: null };
+  componentDidMount() {
+    let q = {}; try { q = Object.fromEntries(new URLSearchParams(location.search)); } catch (e) {}
+    this.setState({ drawer: q.drawer || null, st: q.state || null, device: q.device || null });
+    fetch('./drawers.json').then((r) => r.json()).then((data) => this.setState({ data })).catch(() => {});
+  }
+  go(patch) {
+    this.setState(patch, () => {
+      try { const u = new URL(location.href); u.searchParams.set('drawer', this.cur()); if (this.state.st) u.searchParams.set('state', this.state.st); else u.searchParams.delete('state'); history.replaceState(null, '', u); } catch (e) {}
+    });
+  }
+  cur() { const data = this.state.data; const id = this.state.drawer || this.props.drawer; return data && data.drawers[id] ? id : data ? data.groups[0].items[0] : id; }
+  renderVals() {
+    const data = this.state.data;
+    const theme = this.props.theme ?? 'dark', density = this.props.density ?? 'compact';
+    const device = this.state.device || this.props.device || 'desktop';
+    const mobile = device === 'mobile';
+    const empty = { theme, density, total: '', nav: [], d: {}, stateTabs: [], deviceTabs: [], boardHref: '#', stageStyle: 'position:relative;height:760px', sheetStyle: '', v: {}, groups: [], f: {}, busy: false, notes: [] };
+    if (!data) return empty;
+    const id = this.cur(); const d = data.drawers[id];
+    const st = d.states.find((s) => s.id === this.state.st) || d.states[0];
+    const v = compose(d, st);
+    const groups = v.blocks.map((b) => b.t === 'panel'
+      ? { style: 'display:grid;gap:14px;padding:16px 18px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface-2)', blocks: b.blocks.filter((x) => !(x.t === 'text' && !x.text)).map(norm) }
+      : { style: 'display:grid;gap:8px', blocks: [norm(b)] });
+    const f = v.footer; const busy = v.busy;
+    const width = SIZES[d.size] || 560;
+    return {
+      theme, density, busy,
+      total: String(Object.keys(data.drawers).length),
+      nav: data.groups.map((g) => ({ title: g.title, items: g.items.map((k) => { const x = data.drawers[k]; const on = k === id; return { id: x.id, name: x.name, count: String(x.states.length), current: on ? 'page' : 'false', onClick: () => this.go({ drawer: k, st: null }), style: 'display:flex;align-items:center;gap:6px;width:100%;min-height:32px;padding:4px 8px;border:0;border-radius:var(--rz-r-sm);cursor:pointer;font-weight:' + (on ? 600 : 500) + ';color:' + (on ? 'var(--rz-text-strong)' : 'var(--rz-text-muted)') + ';background:' + (on ? 'var(--rz-fill-selected)' : 'transparent') + (on ? ';box-shadow:inset 2px 0 0 var(--rz-brand)' : '') }; }) })),
+      d: { id: d.id, name: d.name, source: d.source, unverified: d.unverified || '' },
+      stateTabs: d.states.map((s) => { const on = s.id === st.id; return { label: s.label, pressed: on ? 'true' : 'false', onClick: () => this.go({ st: s.id }), style: 'display:inline-flex;align-items:center;height:26px;padding:0 9px;border:0;border-radius:var(--rz-r-xs);cursor:pointer;white-space:nowrap;font-weight:' + (on ? 600 : 500) + ';background:' + (on ? 'var(--rz-fill-selected)' : 'transparent') + ';color:' + (on ? 'var(--rz-text-strong)' : 'var(--rz-text-muted)') }; }),
+      deviceTabs: [['desktop', 'Desktop', 'icon-monitor'], ['mobile', 'Mobile', 'icon-smartphone']].map(([k, label, icon]) => { const on = k === device; return { label, icon, pressed: on ? 'true' : 'false', onClick: () => this.setState({ device: k }), style: 'display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;border:0;border-radius:var(--rz-r-xs);cursor:pointer;background:' + (on ? 'var(--rz-fill-selected)' : 'transparent') + ';color:' + (on ? 'var(--rz-text-strong)' : 'var(--rz-text-muted)') }; }),
+      boardHref: './Board.dc.html?f=' + encodeURIComponent('Drawers.dc.html?drawer=' + id),
+      stageStyle: 'position:relative;overflow:hidden;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-bg);' + (mobile ? 'width:390px;max-width:100%;height:800px;justify-self:center' : 'height:780px'),
+      sheetStyle: 'position:absolute;display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:var(--rz-overlay);box-shadow:var(--rz-shadow-dialog);' + (mobile ? 'left:0;right:0;bottom:0;max-height:92%;border-top:1px solid var(--rz-border-strong);border-radius:var(--rz-r-lg) var(--rz-r-lg) 0 0' : 'top:0;right:0;bottom:0;width:min(' + width + 'px,100%);border-left:1px solid var(--rz-border-strong)'),
+      v: { eyebrow: v.eyebrow, title: v.title, description: v.description },
+      groups,
+      f: {
+        note: f.note || '',
+        noteStyle: 'flex:1 1 160px;min-width:0;font-size:var(--rz-fs-body);color:' + (TONES[f.noteTone] || 'var(--rz-text-muted)') + (f.noteMono ? ';font-family:var(--rz-font-mono)' : ''),
+        secondary: f.secondary || '', secondaryDisabled: !!f.secondaryDisabled || busy, secondaryReason: f.secondaryReason || '',
+        cancel: f.cancel || '',
+        primary: f.primary || '',
+        primaryLabel: busy && f.busyLabel ? f.busyLabel : f.primary || '',
+        primaryCls: 'rz-btn rz-btn--lg ' + (f.danger ? 'rz-btn--danger' : 'rz-btn--primary'),
+        primaryDisabled: !!f.disabled || busy,
+        disabledReason: f.disabled ? f.disabledReason || '' : '',
+      },
+      notes: [...(d.notes || []), busy ? 'Стан pending: кнопки вимкнені, шторка не закривається ні кліком по фону, ні Esc.' : 'Під час збереження шторка не закривається (onOpenChange ігнорує закриття, поки busy).', mobile ? 'Mobile: шторка знизу, max-height 92%, радіус lg зверху.' : 'Desktop: праворуч на всю висоту, ' + width + ' px.'],
+    };
+  }
+}
+</script>
+</body>
+</html>

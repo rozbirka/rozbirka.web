@@ -131,7 +131,6 @@ export function SettlementPicker({
             aria-controls={showList ? listId : undefined}
             aria-expanded={showList}
             autoComplete="off"
-            className={matched ? 'border-state-ok/30' : undefined}
             onChange={(event) => {
               setQuery(event.target.value)
               setFound(null)
@@ -169,10 +168,10 @@ export function SettlementPicker({
           />
 
           {showList && (
-            <div className="border-app-line-2 bg-app-overlay overflow-hidden rounded-[14px] border shadow-2xl">
+            <div className="rz-popover w-full">
               {/* The list floats on the lighter overlay surface, where the page
               dim grey lands a hair under 4.5:1. */}
-              <p className="border-app-line text-app-muted flex items-center justify-between gap-2.5 border-b px-3.5 py-2.5 font-mono text-[10px] tracking-[0.12em] uppercase">
+              <p className="rz-eyebrow border-app-line text-app-muted m-0 flex items-center justify-between gap-2.5 border-b px-3 py-2">
                 <span>{t('directory')}</span>
                 <span>
                   {failure !== null
@@ -185,33 +184,35 @@ export function SettlementPicker({
                 </span>
               </p>
               {failure !== null ? (
-                <p className="text-state-danger px-3.5 py-4 text-[13px] leading-5 text-pretty">
+                <p className="text-state-danger m-0 px-3 py-3 text-pretty">
                   {t('directoryFailed')}
                 </p>
               ) : loading ? (
-                <p className="text-app-muted px-3.5 py-4 text-[13px] leading-5">
+                <p className="text-app-muted m-0 px-3 py-3">
                   {t('directoryLoading')}
                 </p>
               ) : options.length === 0 ? (
-                <p className="text-app-muted px-3.5 py-4 text-[13px] leading-5 text-pretty">
+                <p className="text-app-muted m-0 px-3 py-3 text-pretty">
                   {t('nothingFound')}
                 </p>
               ) : (
-                <ul className="max-h-[200px] overflow-auto" id={listId}>
+                <ul
+                  className="m-0 grid max-h-[200px] list-none gap-px overflow-auto p-1"
+                  id={listId}
+                >
                   {options.map((settlement, index) => (
                     <li key={settlement.ref}>
                       <button
-                        className={`border-app-line flex w-full items-center justify-between gap-3 border-b px-3.5 py-2.5 text-left hover:bg-white/[0.055] ${
-                          index === active ? 'bg-white/[0.055]' : ''
-                        }`}
+                        className="rz-menu__item w-full justify-between"
+                        data-highlighted={index === active ? '' : undefined}
                         onClick={() => choose(settlement)}
                         type="button"
                       >
-                        <span className="min-w-0 truncate text-[14px] font-bold text-white">
+                        <span className="min-w-0 truncate font-medium">
                           {settlement.name}
                         </span>
                         {prohibited(settlement, use) && (
-                          <span className="text-state-warn font-mono text-[11px] whitespace-nowrap">
+                          <span className="rz-mono text-state-warn text-micro whitespace-nowrap">
                             {t(PROHIBITED[use])}
                           </span>
                         )}

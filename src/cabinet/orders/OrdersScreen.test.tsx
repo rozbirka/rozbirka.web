@@ -361,8 +361,8 @@ it('opens canonical creation in a side drawer and preselects the linked customer
     name: 'Нове замовлення',
   })
   expect(screen.getByText('Замовлення', { selector: 'h1' })).toBeVisible()
-  expect(drawer).toHaveClass('sm:right-0')
-  expect(drawer).toHaveClass('sm:max-w-[600px]')
+  expect(drawer).toHaveClass('rz-sheet')
+  expect(drawer).toHaveClass('rz-sheet')
   expect(
     within(drawer).getByRole('button', { name: 'Створити замовлення' }),
   ).toHaveAttribute('form', 'order-create-form')
@@ -839,13 +839,17 @@ it('uses the reusable customer and part searches to populate a canonical order',
     await screen.findByRole('button', { name: 'Обрати клієнта Ірина' }),
   )
   expect(screen.getByLabelText('Пошук клієнта')).toHaveValue('Ірина')
-  expect(screen.getByLabelText('Пошук клієнта')).toHaveClass('border-brand/40')
+  // The chosen customer is the current selection: brand edge on the field.
+  expect(
+    screen.getByLabelText('Пошук клієнта').closest('.rz-search'),
+  ).toHaveClass('border-brand')
   expect(
     screen.queryByRole('button', { name: 'Обрати клієнта Ірина' }),
   ).toBeNull()
   expect(screen.getByRole('button', { name: 'Менше' })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Більше' })).toBeEnabled()
-  expect(screen.getByLabelText('Ціна за одиницю')).toHaveClass('text-left')
+  // Money is typed in the mono, right-aligned numeric input.
+  expect(screen.getByLabelText('Ціна за одиницю')).toHaveClass('rz-input--num')
   await user.type(screen.getByLabelText('Кількість'), '1')
   await user.type(screen.getByLabelText('Ціна за одиницю'), '250')
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
@@ -915,8 +919,13 @@ it('builds a multi-part order and shows its total in dollars', async () => {
 
   const summary = screen.getByLabelText('Підсумок замовлення')
   expect(within(summary).getByText('Разом за замовлення')).toBeVisible()
-  expect(within(summary).getByText('2 позиції')).toBeVisible()
-  expect(within(summary).getByText('175,00 USD')).toBeVisible()
+  // v2 summary: the item-count line and the total line both carry the sum.
+  expect(
+    within(summary).getByText('2 позиції').parentElement,
+  ).toHaveTextContent('175,00 USD')
+  expect(
+    within(summary).getByText('Разом за замовлення').parentElement,
+  ).toHaveTextContent('175,00 USD')
   await user.click(screen.getByRole('button', { name: 'Створити замовлення' }))
 
   expect(orderMocks.create).toHaveBeenCalledWith({
@@ -1694,16 +1703,18 @@ it('shows authoritative detail and lets orders.manage edit pending fields and ca
   const paymentSummary = screen
     .getByRole('heading', { name: 'Вартість замовлення' })
     .closest('section')
+  // v2 record: recording a payment is the payments card's own head action;
+  // the value card only reports.
   expect(
-    within(paymentsCard!).queryByRole('button', {
-      name: 'Додати платіж',
-    }),
-  ).not.toBeInTheDocument()
-  expect(
-    within(paymentSummary!).getByRole('button', {
+    within(paymentsCard!).getByRole('button', {
       name: 'Додати платіж',
     }),
   ).toBeVisible()
+  expect(
+    within(paymentSummary!).queryByRole('button', {
+      name: 'Додати платіж',
+    }),
+  ).not.toBeInTheDocument()
   const audit = screen.getByRole('list', { name: 'Історія замовлення' })
   expect(within(audit).getByText('Замовлення створено')).toBeVisible()
   expect(within(audit).getByText(/Олена/)).toBeVisible()
@@ -1783,7 +1794,7 @@ it('adds one payment at a time and keeps the ones the order already holds', asyn
   await screen.findByRole('heading', { name: 'Замовлення #1' })
   await user.click(screen.getByRole('button', { name: 'Додати платіж' }))
   const dialog = await screen.findByRole('dialog', { name: 'Додати платіж' })
-  expect(dialog).toHaveClass('sm:right-0')
+  expect(dialog).toHaveClass('rz-sheet')
 
   // The order's value stands on its own, in the accounting currency; the
   // amount starts empty — nothing is derived from a remaining sum.
@@ -2351,10 +2362,11 @@ it('keeps order prices in USD and renders mixed-currency payments independently'
   const positions = screen
     .getByRole('heading', { name: 'Позиції' })
     .closest('section')
-  // The line's own sum and the order total; the unit price rides along with
-  // the quantity as «1 × 150,00 USD».
-  expect(within(positions!).getAllByText('150,00 USD')).toHaveLength(2)
-  expect(within(positions!).getByText('1 × 150,00 USD')).toBeVisible()
+  // The unit price, the line's own sum and the order total: a table row with
+  // its own quantity and price columns.
+  expect(within(positions!).getAllByText('150,00 USD')).toHaveLength(3)
+  const line = within(positions!).getAllByRole('row')[1]!
+  expect(within(line).getByRole('cell', { name: '1' })).toBeVisible()
   expect(within(positions!).queryByText(/UAH/)).not.toBeInTheDocument()
 
   const paymentSummary = screen

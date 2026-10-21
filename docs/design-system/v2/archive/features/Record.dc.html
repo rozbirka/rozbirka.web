@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../kit.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}</style>
+</helmet>
+<div class="rz" data-theme="{{ theme }}" data-density="{{ density }}" style="min-height:100vh">
+  <sc-if value="{{ isAuth }}" hint-placeholder-val="{{ false }}">
+    <main style="min-height:100vh;display:grid;place-items:center;padding:24px">
+      <div style="width:100%;max-width:420px;display:grid;gap:20px">
+        <span style="display:flex;align-items:center;gap:8px"><span class="rz-avatar" style="width:28px;height:28px">R</span><span class="rz-strong" style="font-weight:700">Rozbirka</span></span>
+        <div style="display:grid;gap:6px"><span class="rz-eyebrow">{{ c.eyebrow }}</span><h1 class="rz-h-page">{{ c.title }}</h1><sc-if value="{{ c.subtitle }}" hint-placeholder-val="{{ false }}"><p class="rz-muted" style="margin:0">{{ c.subtitle }}</p></sc-if></div>
+        <sc-if value="{{ stateNotice }}" hint-placeholder-val="{{ false }}"><div class="{{ stateNotice.cls }}" role="alert"><i class="{{ stateNotice.icon }}"></i><span class="rz-notice__body">{{ stateNotice.text }}</span></div></sc-if>
+        <sc-for list="{{ fields }}" as="f" hint-placeholder-count="2"><label class="rz-field"><span class="rz-label">{{ f.label }}</span><input class="rz-input" placeholder="{{ f.placeholder }}" value="{{ f.value }}" inputmode="{{ f.mode }}" aria-invalid="{{ f.invalid }}" style="height:var(--rz-target-touch);font-size:var(--rz-fs-title)"><sc-if value="{{ f.hint }}" hint-placeholder-val="{{ false }}"><span class="rz-hint">{{ f.hint }}</span></sc-if></label></sc-for>
+        <button class="rz-btn rz-btn--primary rz-btn--touch rz-btn--block" type="submit" aria-busy="{{ busy }}">{{ submitLabel }}</button>
+        <sc-for list="{{ c.links }}" as="l" hint-placeholder-count="1"><a href="#" style="justify-self:center">{{ l }}</a></sc-for>
+      </div>
+    </main>
+  </sc-if>
+  <sc-if value="{{ isApp }}" hint-placeholder-val="{{ true }}">
+    <div class="rz-app">
+      <dc-import name="Sidebar" active="{{ c.module }}" hint-size="232px,100vh" style="flex:0 0 232px"></dc-import>
+      <div class="rz-main">
+        <header class="rz-topbar">
+          <nav class="rz-crumbs" aria-label="Навігаційний ланцюжок"><sc-for list="{{ c.crumbs }}" as="cr" hint-placeholder-count="2"><span style="display:flex;gap:6px;align-items:center"><a href="#">{{ cr }}</a><i class="icon-chevron-right" style="font-size:var(--rz-icon-sm)"></i></span></sc-for><span aria-current="page">{{ c.title }}</span></nav>
+          <div class="rz-topbar__actions"><sc-for list="{{ actions }}" as="a" hint-placeholder-count="2"><button class="{{ a.cls }}" type="button" disabled="{{ ro }}" title="{{ roReason }}"><i class="{{ a.icon }}"></i>{{ a.label }}</button></sc-for></div>
+        </header>
+        <sc-for list="{{ banners }}" as="b" hint-placeholder-count="0"><div class="{{ b.cls }}" role="status"><span class="{{ b.pill }}">{{ b.chip }}</span><span style="flex:1;min-width:240px"><strong class="rz-strong">{{ b.title }}</strong> <span class="rz-muted">{{ b.body }}</span></span><sc-if value="{{ b.link }}" hint-placeholder-val="{{ false }}"><a href="#">{{ b.link }}</a></sc-if></div></sc-for>
+        <main class="rz-page" style="max-width:1240px">
+          <sc-if value="{{ loading }}" hint-placeholder-val="{{ false }}"><p class="rz-sr" role="status">Завантажуємо дані…</p><span class="rz-skel" style="width:30%;height:20px"></span><div class="rz-kpis"><div class="rz-kpi" style="height:96px"><span class="rz-skel"></span></div><div class="rz-kpi"><span class="rz-skel"></span></div><div class="rz-kpi"><span class="rz-skel"></span></div></div><div class="rz-card" style="height:260px"></div></sc-if>
+          <sc-if value="{{ error }}" hint-placeholder-val="{{ false }}"><section class="rz-card"><div class="rz-state rz-state--danger" role="alert" style="min-height:400px"><span class="rz-state__icon"><i class="icon-triangle-alert"></i></span><h1 class="rz-state__title">Не вдалося завантажити дані</h1><p class="rz-state__body">Зв’язок із сервером перервався. Спробуйте ще раз.</p><button class="rz-btn" type="button" onClick="{{ retry }}"><i class="icon-refresh-cw"></i>Спробувати ще раз</button><span class="rz-state__meta">звернення 9a4f11c2-0be7</span></div></section></sc-if>
+          <sc-if value="{{ ready }}" hint-placeholder-val="{{ true }}">
+            <div style="display:grid;gap:8px"><sc-if value="{{ c.eyebrow }}" hint-placeholder-val="{{ false }}"><span class="rz-eyebrow">{{ c.eyebrow }}</span></sc-if><div class="rz-page-head"><h1 class="rz-h-page">{{ c.heading }}</h1><sc-for list="{{ c.chips }}" as="ch" hint-placeholder-count="2"><span class="{{ ch.cls }}">{{ ch.text }}</span></sc-for></div><sc-if value="{{ c.subtitle }}" hint-placeholder-val="{{ false }}"><p class="rz-muted" style="margin:0">{{ c.subtitle }}</p></sc-if></div>
+            <sc-if value="{{ hasKpis }}" hint-placeholder-val="{{ true }}"><div class="rz-kpis"><sc-for list="{{ c.kpis }}" as="k" hint-placeholder-count="4"><div class="{{ k.cls }}"><span class="rz-kpi__label">{{ k.label }}</span><span class="rz-kpi__value"><span class="rz-display">{{ k.value }}</span><span class="rz-kpi__unit">{{ k.unit }}</span></span><span class="rz-kpi__meta">{{ k.meta }}</span></div></sc-for></div></sc-if>
+            <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+              <div style="flex:1 1 480px;min-width:0;display:grid;gap:16px"><sc-for list="{{ main }}" as="s" hint-placeholder-count="2"><dc-import name="RecordSection" sec="{{ s }}" hint-size="100%,160px"></dc-import></sc-for></div>
+              <sc-if value="{{ hasAside }}" hint-placeholder-val="{{ true }}"><aside style="flex:1 1 280px;max-width:380px;min-width:0;display:grid;gap:16px"><sc-for list="{{ aside }}" as="s" hint-placeholder-count="2"><dc-import name="RecordSection" sec="{{ s }}" hint-size="100%,160px"></dc-import></sc-for></aside></sc-if>
+            </div>
+            <p class="rz-caption">{{ sourceNote }}</p>
+          </sc-if>
+        </main>
+      </div>
+    </div>
+  </sc-if>
+  <dc-import name="StateBar" title="{{ barTitle }}" file="{{ barFile }}" current="{{ view }}" states="{{ stateList }}" on-change="{{ setView }}" hint-size="400px,40px"></dc-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;screen&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dashboard&quot;, &quot;order&quot;, &quot;partform&quot;, &quot;car&quot;, &quot;carform&quot;, &quot;customer&quot;, &quot;customerform&quot;, &quot;intake&quot;, &quot;importflow&quot;, &quot;session&quot;, &quot;subscription&quot;, &quot;plans&quot;, &quot;payments&quot;, &quot;business&quot;, &quot;profile&quot;, &quot;reports&quot;, &quot;integrations&quot;, &quot;novaposhta&quot;, &quot;onboarding&quot;, &quot;account&quot;, &quot;login&quot;, &quot;invite&quot;, &quot;privacy&quot;], &quot;default&quot;: &quot;order&quot;, &quot;tsType&quot;: &quot;string&quot;}, &quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dark&quot;, &quot;light&quot;], &quot;default&quot;: &quot;dark&quot;, &quot;tsType&quot;: &quot;'dark' | 'light'&quot;}, &quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;, &quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+const BLANK = { module: 'dashboard', crumbs: [], chips: [], kpis: [], main: [], aside: [], actions: [], states: [['data', 'Дані'], ['loading', 'Завантаження'], ['error', 'Помилка']], stateBanners: {}, stateNotices: {}, fields: [], links: [] };
+class Component extends DCLogic {
+  state = { cfg: null, screen: null, view: null };
+  componentDidMount() {
+    let s = null, k = null;
+    try { const u = new URLSearchParams(location.search); s = u.get('screen'); k = u.get('state'); } catch (e) {}
+    s = s || this.props.screen || 'order';
+    this.setState({ screen: s, view: k });
+    fetch('./screens/' + s + '.json').then((r) => r.json()).then((cfg) => this.setState({ cfg })).catch(() => {});
+  }
+  componentDidUpdate(prev) {
+    if (this.props.screen && this.props.screen !== prev.screen) {
+      const s = this.props.screen;
+      this.setState({ screen: s, view: null });
+      fetch('./screens/' + s + '.json').then((r) => r.json()).then((cfg) => this.setState({ cfg })).catch(() => {});
+    }
+  }
+  componentWillUnmount() { clearTimeout(this._t); }
+  setView = (k) => { try { const u = new URL(location.href); u.searchParams.set('state', k); history.replaceState(null, '', u); } catch (e) {} this.setState({ view: k }); };
+  renderVals() {
+    const c = { ...BLANK, ...(this.state.cfg || {}) };
+    const v = this.state.view ?? 'data';
+    const ro = v === 'readonly';
+    const ov = (c.overrides && c.overrides[v]) || {};
+    const pick = (key) => (ov[key] !== undefined ? ov[key] : c[key]);
+    const auth = c.layout === 'auth';
+    const notice = c.stateNotices[v];
+    return {
+      theme: this.props.theme ?? 'dark', density: this.props.density ?? 'compact',
+      c: { ...c, heading: pick('heading') || c.title, chips: pick('chips'), kpis: pick('kpis'), eyebrow: pick('eyebrow'), title: pick('title'), subtitle: pick('subtitle'), links: pick('links') },
+      view: v, stateList: c.states, setView: this.setView,
+      barTitle: (c.id || '') + ' · ' + (c.title || ''), barFile: 'Record.dc.html?screen=' + (this.state.screen || ''),
+      isAuth: auth, isApp: !auth,
+      fields: (Array.isArray(ov.fields) ? ov.fields : c.fields).map((f) => ({ placeholder: '', value: '', mode: 'text', hint: null, ...f, invalid: ov.invalid === f.label ? 'true' : 'false' })),
+      stateNotice: notice ? { cls: 'rz-notice rz-notice--' + (notice.tone || 'danger'), icon: notice.icon || 'icon-triangle-alert', text: notice.text } : null,
+      busy: v === 'pending' ? 'true' : 'false', submitLabel: v === 'pending' ? (pick('pendingLabel') || 'Зберігаємо…') : pick('submit'),
+      ro, roReason: ro ? 'Поточна підписка не дозволяє цю дію.' : '',
+      actions: c.actions.map((a, i) => ({ ...a, cls: a.variant ? 'rz-btn rz-btn--' + a.variant : 'rz-btn' })),
+      banners: (c.stateBanners[v] ? [c.stateBanners[v]] : []).map((b) => ({ cls: 'rz-banner rz-banner--' + (b.tone || 'warn'), pill: 'rz-pill rz-pill--' + (b.tone || 'warn'), link: null, ...b })),
+      loading: v === 'loading', error: v === 'error', ready: !['loading', 'error'].includes(v),
+      hasKpis: (pick('kpis') || []).length > 0,
+      main: pick('main'), aside: pick('aside'), hasAside: (pick('aside') || []).length > 0,
+      retry: () => { this.setView('loading'); clearTimeout(this._t); this._t = setTimeout(() => this.setView('data'), 1000); },
+      sourceNote: c.source ? 'Демо-дані. Рядки — ' + c.source + (c.unverified ? ' · не звірено: ' + c.unverified : '') : '',
+    };
+  }
+}
+</script>
+</body>
+</html>

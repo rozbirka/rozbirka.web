@@ -7,14 +7,19 @@ import {
 } from 'react'
 import { Link } from 'react-router'
 import { Plus } from 'lucide-react'
-import { Button, Field, Notice, TextInput } from '@/components/app'
+import { Button, Field, Notice, StatusPill, TextInput } from '@/components/app'
+import { cn } from '@/lib/utils'
 import { Switch } from '../integrations/dispatch-point-form'
 import { businessApi } from '@/api/business'
 import { tenantsApi } from '@/api/tenants'
 import { isLostResponse, lostResponseMessages } from '../lost-response'
 import { inventoryApi, type Warehouse } from '@/api/inventory'
 import { useCabinet } from '../CabinetContext'
-import { RedesignShell, RedesignTitle } from '../redesign-shell'
+import {
+  RecordColumns,
+  RecordHead,
+  RecordShell,
+} from '../billing/billing-shell'
 import { useOptionalAuth } from '@/auth/AuthContext'
 import { useT } from '@/i18n/hooks'
 import { businessMessages } from './business-messages'
@@ -48,29 +53,40 @@ const RULES = [
   { label: 'ruleNegative', hint: 'ruleNegativeHint' },
 ] as const
 
+/** A numbered `.rz-card` section of the settings page. */
 function Step({
   number,
   title,
   action,
+  footer,
+  bodyClassName,
   children,
 }: {
   number: string
   title: string
   action?: ReactNode
+  footer?: ReactNode
+  bodyClassName?: string
   children: ReactNode
 }) {
   return (
-    <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-5">
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-        <div className="flex items-center gap-3">
-          <span className="border-app-line text-app-dim inline-flex size-7 shrink-0 items-center justify-center rounded-full border font-mono text-[11px]">
+    <section className="rz-card min-w-0">
+      <header className="rz-card__head py-2.5">
+        <div className="flex min-w-0 items-baseline gap-2">
+          {/* The design's numbered group: a mono number in brand text. */}
+          <span aria-hidden className="rz-mono text-caption text-brand-text">
             {number}
           </span>
-          <h2 className="text-app-ink text-[15px] font-bold">{title}</h2>
+          <h2 className="rz-h-card">{title}</h2>
         </div>
         {action}
+      </header>
+      <div className={cn('rz-card__body grid gap-3', bodyClassName)}>
+        {children}
       </div>
-      <div className="mt-4 grid gap-3.5">{children}</div>
+      {footer === undefined ? null : (
+        <div className="rz-card__foot">{footer}</div>
+      )}
     </section>
   )
 }
@@ -78,23 +94,14 @@ function Step({
 /** A control the design asks for and the API cannot back: shown, not faked. */
 function Dead({ children, title }: { children: ReactNode; title: string }) {
   return (
-    <button
-      className="border-app-line text-app-dim inline-flex min-h-11 cursor-not-allowed items-center rounded-[10px] border px-3.5 text-[13px] font-medium"
-      disabled
-      title={title}
-      type="button"
-    >
+    <button className="rz-btn" disabled title={title} type="button">
       {children}
     </button>
   )
 }
 
 function Note({ children }: { children: ReactNode }) {
-  return (
-    <p className="text-app-dim text-[12.5px] leading-5 text-pretty">
-      {children}
-    </p>
-  )
+  return <p className="rz-caption m-0 text-pretty">{children}</p>
 }
 
 export function BusinessSettingsScreen() {
@@ -159,7 +166,7 @@ export function BusinessSettingsScreen() {
   }, [generation, tenant?.id])
 
   if (!tenant) {
-    return <p className="text-app-muted text-sm">{t('noTenant')}</p>
+    return <p className="rz-muted m-0 p-5">{t('noTenant')}</p>
   }
 
   const normalizedName = name.trim()
@@ -250,14 +257,13 @@ export function BusinessSettingsScreen() {
   }
 
   return (
-    <RedesignShell
+    <RecordShell
       actions={
         <>
           <Button disabled={busy || !changed} onClick={reset}>
             {t('cancelChanges')}
           </Button>
           <Button
-            className="px-5 text-sm font-bold"
             disabled={!canSave || !changed}
             form={FORM_ID}
             type="submit"
@@ -269,7 +275,7 @@ export function BusinessSettingsScreen() {
       }
       crumb={t('crumb')}
     >
-      <RedesignTitle lead={t('lead')} title={t('title')} />
+      <RecordHead title={t('title')} />
 
       {saveState === 'success' && <Notice tone="ok">{t('saved')}</Notice>}
       {saveState === 'denied' && <Notice tone="danger">{t('denied')}</Notice>}
@@ -284,289 +290,293 @@ export function BusinessSettingsScreen() {
         <Notice tone="danger">{tl('checkFailed')}</Notice>
       )}
 
-      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="grid min-w-0 content-start gap-5">
-          <Step number="01" title={t('details')}>
-            <form
-              className="grid gap-3.5"
-              id={FORM_ID}
-              onSubmit={(event) => void save(event)}
-            >
-              <Field hint={t('nameHint')} label={t('nameLabel')} required>
-                <TextInput
-                  disabled={busy}
-                  onChange={(event) => {
-                    setName(event.target.value)
-                    if (!busy) setSaveState('idle')
-                  }}
-                  placeholder={t('namePlaceholder')}
-                  value={name}
-                />
-              </Field>
-              <Field label={t('cityLabel')}>
-                <TextInput
-                  disabled={busy}
-                  onChange={(event) => {
-                    setCity(event.target.value)
-                    if (!busy) setSaveState('idle')
-                  }}
-                  placeholder={t('cityPlaceholder')}
-                  value={city}
-                />
-              </Field>
-            </form>
-            <div className="grid gap-3.5 sm:grid-cols-2">
-              <div>
-                <p className="text-app-muted text-[13px] font-medium">
-                  {t('legalForm')}
+      <RecordColumns
+        aside={
+          <>
+            <section className="rz-card min-w-0">
+              <header className="rz-card__head py-2.5">
+                <h2 className="rz-h-card">{t('summary')}</h2>
+              </header>
+              <div className="rz-card__body grid gap-1">
+                <p
+                  className={
+                    normalizedName.length > 1
+                      ? 'rz-h-title m-0'
+                      : 'rz-h-title rz-dim m-0'
+                  }
+                >
+                  {normalizedName.length > 1 ? normalizedName : t('nameLabel')}
                 </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {LEGAL_FORMS.map((key) => (
-                    <Dead key={key} title={t('noLegalForm')}>
-                      {t(key)}
-                    </Dead>
-                  ))}
+                <p className="rz-muted m-0">
+                  {normalizedCity === '' ? t('cityMissing') : normalizedCity}
+                </p>
+              </div>
+              <dl className="rz-facts border-app-line border-t">
+                <div>
+                  <dt>{t('warehouseCount')}</dt>
+                  <dd className="rz-mono">
+                    {warehouses === null ? '…' : warehouses.length}
+                  </dd>
+                </div>
+                <AccountingCurrencySummary />
+                <div>
+                  <dt>{t('costSummary')}</dt>
+                  <dd className="rz-dim" title={t('noCosting')}>
+                    —
+                  </dd>
+                </div>
+              </dl>
+              <div className="rz-card__foot grid justify-stretch gap-2">
+                <Button
+                  disabled={!canSave || !changed}
+                  form={FORM_ID}
+                  size="wide"
+                  type="submit"
+                >
+                  {busy ? t('saving') : t('save')}
+                </Button>
+                <p className="rz-caption m-0 text-pretty">
+                  {normalizedName.length > 1
+                    ? t('summaryHint')
+                    : t('nameRequired')}
+                </p>
+              </div>
+            </section>
+
+            <section className="rz-card min-w-0">
+              <header className="rz-card__head py-2.5">
+                <h2 className="rz-h-card">{t('dataTitle')}</h2>
+              </header>
+              <div className="rz-card__body grid gap-3">
+                <p className="rz-muted m-0 text-pretty">{t('dataBody')}</p>
+                <div className="rz-btn-row">
+                  <Dead title={t('noExport')}>{t('exportAll')}</Dead>
+                  <Dead title={t('noTenantDelete')}>{t('deleteCabinet')}</Dead>
                 </div>
               </div>
-              <Field label={t('taxId')}>
-                <TextInput
-                  disabled
-                  placeholder={t('notStored')}
-                  title={t('noTaxId')}
-                  value=""
-                />
-              </Field>
-            </div>
-            <div className="grid gap-3.5 sm:grid-cols-2">
-              <Field label={t('phone')}>
-                <TextInput
-                  disabled
-                  placeholder={t('notStored')}
-                  title={t('noPhone')}
-                  value=""
-                />
-              </Field>
-              <Field label={t('address')}>
-                <TextInput
-                  disabled
-                  placeholder={t('onlyCity')}
-                  title={t('noAddress')}
-                  value=""
-                />
-              </Field>
-            </div>
-            <Note>
-              {t('noLegalForm')} {t('noAddress')}
-            </Note>
-          </Step>
+              <div className="rz-card__foot">
+                <Note>
+                  {t('noExport')} {t('noTenantDelete')}
+                </Note>
+              </div>
+            </section>
+          </>
+        }
+        main={
+          <>
+            <Step number="01" title={t('details')}>
+              <form
+                className="rz-form-grid"
+                id={FORM_ID}
+                onSubmit={(event) => void save(event)}
+              >
+                <Field hint={t('nameHint')} label={t('nameLabel')} required>
+                  <TextInput
+                    disabled={busy}
+                    onChange={(event) => {
+                      setName(event.target.value)
+                      if (!busy) setSaveState('idle')
+                    }}
+                    placeholder={t('namePlaceholder')}
+                    value={name}
+                  />
+                </Field>
+                <Field label={t('cityLabel')}>
+                  <TextInput
+                    disabled={busy}
+                    onChange={(event) => {
+                      setCity(event.target.value)
+                      if (!busy) setSaveState('idle')
+                    }}
+                    placeholder={t('cityPlaceholder')}
+                    value={city}
+                  />
+                </Field>
+              </form>
+              <div className="rz-form-grid">
+                <div className="rz-field">
+                  <p className="rz-label m-0">{t('legalForm')}</p>
+                  <div className="rz-seg flex-wrap self-start">
+                    {LEGAL_FORMS.map((key) => (
+                      <button
+                        disabled
+                        key={key}
+                        title={t('noLegalForm')}
+                        type="button"
+                      >
+                        {t(key)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <Field label={t('taxId')}>
+                  <TextInput
+                    disabled
+                    placeholder={t('notStored')}
+                    title={t('noTaxId')}
+                    value=""
+                  />
+                </Field>
+                <Field label={t('phone')}>
+                  <TextInput
+                    disabled
+                    placeholder={t('notStored')}
+                    title={t('noPhone')}
+                    value=""
+                  />
+                </Field>
+                <Field label={t('address')}>
+                  <TextInput
+                    disabled
+                    placeholder={t('onlyCity')}
+                    title={t('noAddress')}
+                    value=""
+                  />
+                </Field>
+              </div>
+              <Note>
+                {t('noLegalForm')} {t('noAddress')}
+              </Note>
+            </Step>
 
-          <RegionSettings
-            onSaved={(updated) => {
-              auth?.mergeTenantSettings?.([updated])
-            }}
-            role={cabinet.snapshot?.role}
-            tenant={tenant}
-          />
+            <RegionSettings
+              onSaved={(updated) => {
+                auth?.mergeTenantSettings?.([updated])
+              }}
+              role={cabinet.snapshot?.role}
+              tenant={tenant}
+            />
 
-          <AccountingCurrencySection />
+            <AccountingCurrencySection />
 
-          <Step
-            action={
-              <Button asChild>
-                <Link to={inventoryPath}>
-                  <Plus aria-hidden />
-                  {t('addWarehouse')}
-                </Link>
-              </Button>
-            }
-            number="04"
-            title={t('warehouses')}
-          >
-            {warehouses === null ? (
-              <Note>{t('warehousesLoading')}</Note>
-            ) : warehouses.length === 0 ? (
-              <Note>{t('warehousesEmpty')}</Note>
-            ) : (
-              <ul className="grid gap-2.5">
-                {warehouses.map((warehouse) => (
-                  <li
-                    className="border-app-line flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[16px] border px-4 py-3.5"
-                    key={warehouse.id}
-                  >
-                    <div className="min-w-0 flex-[1_1_200px]">
-                      <p className="flex flex-wrap items-center gap-2.5">
-                        <span className="text-app-ink text-[14px] font-bold">
-                          {warehouse.name}
-                        </span>
-                        {warehouse.isSystemDefault && (
-                          <span className="border-app-line text-app-dim rounded-full border px-2.5 py-0.5 text-[11px]">
-                            {t('warehouseMain')}
-                          </span>
-                        )}
-                        {!warehouse.isActive && (
-                          <span className="border-app-line text-app-dim rounded-full border px-2.5 py-0.5 text-[11px]">
-                            {t('warehouseArchived')}
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-app-dim mt-1 text-[12.5px]">
-                        <span className="font-mono">{warehouse.code}</span> ·{' '}
-                        {t('zones', { count: warehouse.zoneCount })}
-                      </p>
-                    </div>
-                    <span
-                      className="text-app-dim ml-auto text-[13px]"
-                      title={t('noWarehouseParts')}
+            <Step
+              action={
+                <Button asChild size="sm">
+                  <Link to={inventoryPath}>
+                    <Plus aria-hidden />
+                    {t('addWarehouse')}
+                  </Link>
+                </Button>
+              }
+              bodyClassName="p-0"
+              footer={
+                <Note>
+                  {t('warehousesNote')} {t('noWarehouseParts')}
+                </Note>
+              }
+              number="04"
+              title={t('warehouses')}
+            >
+              {warehouses === null ? (
+                <div className="rz-card__body">
+                  <Note>{t('warehousesLoading')}</Note>
+                </div>
+              ) : warehouses.length === 0 ? (
+                <div className="rz-card__body">
+                  <Note>{t('warehousesEmpty')}</Note>
+                </div>
+              ) : (
+                <ul className="m-0 grid list-none p-0">
+                  {warehouses.map((warehouse) => (
+                    <li
+                      className="border-app-line flex min-h-row flex-wrap items-center gap-x-4 gap-y-2 border-t px-[var(--rz-card-p)] py-2 first:border-t-0"
+                      key={warehouse.id}
                     >
-                      {t('partsNotCounted')}
+                      <div className="grid min-w-0 flex-[1_1_200px] gap-0.5">
+                        <p className="m-0 flex flex-wrap items-center gap-2">
+                          <span className="rz-strong font-medium">
+                            {warehouse.name}
+                          </span>
+                          {warehouse.isSystemDefault && (
+                            <StatusPill>{t('warehouseMain')}</StatusPill>
+                          )}
+                          {!warehouse.isActive && (
+                            <StatusPill>{t('warehouseArchived')}</StatusPill>
+                          )}
+                        </p>
+                        <p className="rz-caption m-0">
+                          <span className="rz-mono">{warehouse.code}</span> ·{' '}
+                          {t('zones', { count: warehouse.zoneCount })}
+                        </p>
+                      </div>
+                      <span
+                        className="rz-dim ml-auto"
+                        title={t('noWarehouseParts')}
+                      >
+                        {t('partsNotCounted')}
+                      </span>
+                      <Button asChild size="sm">
+                        <Link to={inventoryPath}>{t('change')}</Link>
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Step>
+
+            <Step number="05" title={t('accounting')}>
+              <div className="rz-field">
+                <p className="rz-label m-0">{t('partCost')}</p>
+                <div className="flex flex-wrap gap-2">
+                  {COSTING.map((option) => (
+                    <button
+                      className="rz-choice-card min-w-0 flex-[1_1_200px] cursor-not-allowed flex-col gap-0.5 bg-transparent text-left opacity-50"
+                      disabled
+                      key={option.label}
+                      title={t('noCosting')}
+                      type="button"
+                    >
+                      <span className="rz-strong font-medium">
+                        {t(option.label)}
+                      </span>
+                      <span className="rz-caption">{t(option.hint)}</span>
+                    </button>
+                  ))}
+                </div>
+                <Note>{t('noCosting')}</Note>
+              </div>
+              {/* The one rule in this step the service actually keeps. It sits
+                  above the rest so a real control is not mistaken for the dead
+                  ones below it. */}
+              <div className="rz-inset flex items-start gap-3">
+                <Switch
+                  checked={deposit}
+                  disabled={busy}
+                  label={t('deposit')}
+                  onChange={setDeposit}
+                />
+                <span className="grid min-w-0 gap-0.5">
+                  <span className="rz-strong font-medium">{t('deposit')}</span>
+                  <span className="rz-caption rz-muted text-pretty">
+                    {deposit ? t('depositOn') : t('depositOff')}
+                  </span>
+                </span>
+              </div>
+              <ul className="border-app-line rounded-control m-0 grid list-none border p-0">
+                {RULES.map((rule) => (
+                  <li
+                    className="border-app-line flex items-start gap-3 border-t px-3 py-2.5 first:border-t-0"
+                    key={rule.label}
+                    title={t('noRules')}
+                  >
+                    <span
+                      aria-hidden
+                      className="rz-switch mt-0.5 inline-block shrink-0 cursor-not-allowed opacity-40"
+                    />
+                    <span className="grid min-w-0 gap-0.5">
+                      <span className="rz-dim font-medium">
+                        {t(rule.label)}
+                      </span>
+                      <span className="rz-caption">{t(rule.hint)}</span>
                     </span>
-                    <Button asChild>
-                      <Link to={inventoryPath}>{t('change')}</Link>
-                    </Button>
                   </li>
                 ))}
               </ul>
-            )}
-            <Note>
-              {t('warehousesNote')} {t('noWarehouseParts')}
-            </Note>
-          </Step>
-
-          <Step number="05" title={t('accounting')}>
-            <div>
-              <p className="text-app-muted text-[13px] font-medium">
-                {t('partCost')}
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2.5">
-                {COSTING.map((option) => (
-                  <button
-                    className="border-app-line min-w-0 flex-[1_1_200px] cursor-not-allowed rounded-[14px] border px-4 py-3 text-left"
-                    disabled
-                    key={option.label}
-                    title={t('noCosting')}
-                    type="button"
-                  >
-                    <span className="text-app-dim block text-[14px] font-bold">
-                      {t(option.label)}
-                    </span>
-                    <span className="text-app-dim mt-1 block text-[12.5px]">
-                      {t(option.hint)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <Note>{t('noCosting')}</Note>
-            </div>
-            {/* The one rule in this step the service actually keeps. It sits
-                above the rest so a real control is not mistaken for the dead
-                ones below it. */}
-            <div className="border-app-line-2 flex items-start gap-3 rounded-[14px] border px-3.5 py-3">
-              <Switch
-                checked={deposit}
-                disabled={busy}
-                label={t('deposit')}
-                onChange={setDeposit}
-              />
-              <span className="min-w-0">
-                <span className="text-app-ink block text-[13.5px] font-medium">
-                  {t('deposit')}
-                </span>
-                <span className="text-app-muted mt-0.5 block text-[12.5px] leading-5 text-pretty">
-                  {deposit ? t('depositOn') : t('depositOff')}
-                </span>
-              </span>
-            </div>
-            <div className="grid gap-2">
-              {RULES.map((rule) => (
-                <div
-                  className="border-app-line flex items-start gap-3 rounded-[14px] border px-3.5 py-3"
-                  key={rule.label}
-                  title={t('noRules')}
-                >
-                  <span
-                    aria-hidden
-                    className="bg-app-line mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full px-0.5"
-                  >
-                    <span className="bg-app-dim size-4 rounded-full" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="text-app-dim block text-[13.5px] font-medium">
-                      {t(rule.label)}
-                    </span>
-                    <span className="text-app-dim mt-0.5 block text-[12.5px]">
-                      {t(rule.hint)}
-                    </span>
-                  </span>
-                </div>
-              ))}
-            </div>
-            <Note>{t('noRules')}</Note>
-          </Step>
-        </div>
-
-        <div className="grid min-w-0 content-start gap-5">
-          <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5">
-            <h2 className="text-app-ink text-[15px] font-bold">
-              {t('summary')}
-            </h2>
-            <p
-              className={
-                normalizedName.length > 1
-                  ? 'text-app-ink mt-3.5 text-[17px] font-bold'
-                  : 'text-app-dim mt-3.5 text-[17px] font-bold'
-              }
-            >
-              {normalizedName.length > 1 ? normalizedName : t('nameLabel')}
-            </p>
-            <p className="text-app-muted mt-1 text-[13px]">
-              {normalizedCity === '' ? t('cityMissing') : normalizedCity}
-            </p>
-            <dl className="mt-4 grid gap-2.5 text-[13.5px]">
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">{t('warehouseCount')}</dt>
-                <dd className="text-app-ink text-right font-medium">
-                  {warehouses === null ? '…' : warehouses.length}
-                </dd>
-              </div>
-              <AccountingCurrencySummary />
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">{t('costSummary')}</dt>
-                <dd className="text-app-dim text-right" title={t('noCosting')}>
-                  —
-                </dd>
-              </div>
-            </dl>
-            <Button
-              className="mt-5 w-full justify-center"
-              disabled={!canSave || !changed}
-              form={FORM_ID}
-              type="submit"
-              variant="primary"
-            >
-              {busy ? t('saving') : t('save')}
-            </Button>
-            <p className="text-app-dim mt-3 text-[12.5px] leading-5 text-pretty">
-              {normalizedName.length > 1 ? t('summaryHint') : t('nameRequired')}
-            </p>
-          </section>
-
-          <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5">
-            <h2 className="text-app-ink text-[15px] font-bold">
-              {t('dataTitle')}
-            </h2>
-            <p className="text-app-muted mt-2.5 text-[13px] leading-5 text-pretty">
-              {t('dataBody')}
-            </p>
-            <div className="mt-3.5 grid gap-2.5">
-              <Dead title={t('noExport')}>{t('exportAll')}</Dead>
-              <Dead title={t('noTenantDelete')}>{t('deleteCabinet')}</Dead>
-            </div>
-            <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-              {t('noExport')} {t('noTenantDelete')}
-            </p>
-          </section>
-        </div>
-      </div>
-    </RedesignShell>
+              <Note>{t('noRules')}</Note>
+            </Step>
+          </>
+        }
+      />
+    </RecordShell>
   )
 }

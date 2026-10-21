@@ -8,7 +8,7 @@ import type {
 import { pickConfirmedOrdersValue } from './order-value'
 import type { AccountingCurrencyStatus } from '../currency/accounting-currency'
 import { wholeMoney } from '../currency/money'
-import { CardRow, DashboardCard } from './dashboard-card'
+import { CardNote, CardRow, DashboardCard } from './dashboard-card'
 import { dashboardMoneyMessages } from './money-messages'
 
 /**
@@ -45,22 +45,16 @@ export function OrderValueCard({
   if (status.kind === 'chosen' && figure === null) return null
   return (
     <DashboardCard
-      aside={
-        figure === null ? null : (
-          <span className="text-app-muted text-[13px]">{periodLabel}</span>
-        )
-      }
+      aside={figure === null ? null : <CardNote>{periodLabel}</CardNote>}
       title={t('confirmedValue')}
     >
       <CardRow>
         {figure === null ? (
           <div className="grid gap-2">
-            <p className="text-app-muted text-[15px] font-semibold">
-              {t('notSet')}
-            </p>
+            <p className="rz-muted m-0 font-medium">{t('notSet')}</p>
             {settingsPath === null ? null : (
               <Link
-                className="text-brand inline-flex min-h-11 items-center text-[14px] font-semibold underline-offset-4 hover:underline"
+                className="inline-flex min-h-control items-center justify-self-start font-medium"
                 to={`${settingsPath}#accounting-currency`}
               >
                 {t('chooseCurrency')} →
@@ -69,10 +63,10 @@ export function OrderValueCard({
           </div>
         ) : (
           <div className="grid gap-1">
-            <p className="font-mono text-[26px] font-medium text-white tabular-nums">
+            <p className="rz-mono rz-strong m-0 text-page font-medium">
               {wholeMoney(figure.amount, figure.currency, locale)}
             </p>
-            <p className="text-app-muted font-mono text-[12px]">
+            <p className="rz-caption rz-mono m-0">
               {t('accountingValue', { code: figure.currency })}
             </p>
           </div>

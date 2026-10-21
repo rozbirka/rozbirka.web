@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../kit.css">
+<link rel="stylesheet" href="https://unpkg.com/lucide-static@0.460.0/font/lucide.css">
+<style>html,body{margin:0}a{color:var(--rz-brand-text);text-decoration:none}a:hover{color:var(--rz-brand-hover)}</style>
+</helmet>
+<div class="rz" data-theme="{{ theme }}" data-density="{{ density }}" style="min-height:100vh;padding:56px 64px 120px;background:var(--rz-bg-sidebar);display:grid;gap:72px;align-content:start;width:max-content">
+
+  <header style="display:grid;gap:16px;max-width:1280px">
+    <span class="rz-eyebrow">Rozbirka v2 · модуль 11 · Склад</span>
+    <h1 class="rz-h-page" style="font-size:var(--rz-fs-display)">Запчастини</h1>
+    <p class="rz-muted" style="margin:0;max-width:80ch;text-wrap:pretty">Усі екрани модуля по порядку: список → картка деталі → форма → шторки й діалоги → імпорт. Кожен кадр — 1280×800, один стан. Тексти з <span class="rz-mono">parts-list-messages.ts</span>, <span class="rz-mono">part-detail-messages.ts</span>, <span class="rz-mono">part-form-messages.ts</span>, <span class="rz-mono">access-messages.ts</span>; незнайдене в коді позначено <span class="rz-mono" style="color:var(--rz-warn)">[unverified]</span>.</p>
+    <nav aria-label="Зміст модуля" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;padding:16px;border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface)">
+      <sc-for list="{{ sections }}" as="s" hint-placeholder-count="5">
+        <div style="display:grid;gap:4px;align-content:start">
+          <a href="{{ s.href }}" style="font-weight:700;color:var(--rz-text-strong)"><span class="rz-mono" style="color:var(--rz-brand-text)">{{ s.num }}</span> {{ s.title }}</a>
+          <span class="rz-mono rz-dim" style="font-size:var(--rz-fs-micro)">{{ s.route }}</span>
+          <sc-for list="{{ s.frames }}" as="fr" hint-placeholder-count="4"><a href="{{ fr.href }}" style="color:var(--rz-text-muted);font-size:var(--rz-fs-caption)"><span class="rz-mono rz-dim">{{ fr.num }}</span> {{ fr.label }}</a></sc-for>
+        </div>
+      </sc-for>
+    </nav>
+  </header>
+
+  <sc-for list="{{ sections }}" as="s" hint-placeholder-count="2">
+    <section id="{{ s.anchor }}" style="display:grid;gap:28px">
+      <header style="display:flex;align-items:baseline;gap:16px;padding-bottom:12px;border-bottom:1px solid var(--rz-border-strong)">
+        <span class="rz-mono" style="font-size:var(--rz-fs-display);color:var(--rz-brand-text)">{{ s.num }}</span>
+        <h2 class="rz-h-page" style="font-size:var(--rz-fs-display)">{{ s.title }}</h2>
+        <span class="rz-mono rz-dim">{{ s.route }}</span>
+        <sc-if value="{{ s.unverified }}" hint-placeholder-val="{{ false }}"><span class="rz-mono" style="font-size:var(--rz-fs-caption);color:var(--rz-warn)">[unverified] {{ s.unverified }}</span></sc-if>
+        <span class="rz-caption" style="margin-left:auto">{{ s.source }}</span>
+      </header>
+      <div style="display:grid;grid-template-columns:repeat(3,1280px);gap:56px 48px">
+        <sc-for list="{{ s.frames }}" as="fr" hint-placeholder-count="3">
+          <figure id="{{ fr.anchor }}" style="margin:0;display:grid;gap:10px;align-content:start">
+            <figcaption style="display:flex;align-items:baseline;gap:10px;min-height:22px"><span class="rz-mono" style="font-size:var(--rz-fs-title);color:var(--rz-brand-text)">{{ fr.num }}</span><span class="rz-h-title">{{ fr.label }}</span><span class="rz-caption">{{ fr.note }}</span></figcaption>
+
+            <div style="position:relative;width:1280px;height:800px;display:flex;overflow:hidden;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-bg)">
+              <aside style="flex:0 0 216px;display:flex;flex-direction:column;gap:2px;padding:8px;border-right:1px solid var(--rz-border);background:var(--rz-bg-sidebar)">
+                <div style="display:flex;align-items:center;gap:8px;height:36px;padding:0 8px;font-weight:600;color:var(--rz-text-strong)"><span class="rz-avatar">Р</span><span style="flex:1">Демо-розбірка</span><i class="icon-chevrons-up-down rz-dim"></i></div>
+                <div class="rz-search" style="margin:4px 0 8px;color:var(--rz-text-dim)"><i class="icon-search"></i><span style="flex:1">Пошук</span><span class="rz-kbd">⌘K</span></div>
+                <sc-for list="{{ nav }}" as="g" hint-placeholder-count="4"><div class="rz-nav-group"><sc-if value="{{ g.title }}" hint-placeholder-val="{{ true }}"><p class="rz-nav-group__title">{{ g.title }}</p></sc-if><sc-for list="{{ g.items }}" as="it" hint-placeholder-count="3"><span class="rz-nav-item" aria-current="{{ it.current }}"><i class="{{ it.icon }}"></i>{{ it.label }}</span></sc-for></div></sc-for>
+              </aside>
+
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+                <div style="display:flex;align-items:center;gap:12px;height:48px;flex:none;padding:0 20px;border-bottom:1px solid var(--rz-border)">
+                  <nav class="rz-crumbs" aria-label="Навігаційний ланцюжок"><sc-for list="{{ fr.crumbs }}" as="c" hint-placeholder-count="2"><span style="{{ c.style }}">{{ c.label }}</span><sc-if value="{{ c.sep }}" hint-placeholder-val="{{ true }}"><i class="icon-chevron-right" style="font-size:var(--rz-icon-sm)"></i></sc-if></sc-for></nav>
+                  <div style="margin-left:auto;display:flex;gap:6px"><sc-for list="{{ fr.actions }}" as="a" hint-placeholder-count="1"><button type="button" class="{{ a.cls }}" disabled="{{ a.disabled }}" title="{{ a.title }}" aria-label="{{ a.aria }}"><i class="{{ a.icon }}"></i>{{ a.label }}</button></sc-for></div>
+                </div>
+                <sc-if value="{{ fr.banner }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;min-height:36px;padding:6px 20px;border-bottom:1px solid var(--rz-border);background:var(--rz-warn-soft)"><span class="rz-pill rz-pill--warn">{{ fr.banner.chip }}</span><span style="flex:1;min-width:240px"><strong class="rz-strong">{{ fr.banner.title }}</strong> <span class="rz-muted">{{ fr.banner.body }}</span></span><a href="#">{{ fr.banner.link }}</a></div></sc-if>
+
+                <div style="flex:1;min-height:0;display:flex">
+                  <div style="flex:1;min-width:0;overflow:hidden;padding:20px 24px;display:grid;align-content:start;gap:14px">
+
+                    <sc-if value="{{ fr.head }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:grid;gap:8px">
+                        <div style="display:flex;align-items:baseline;flex-wrap:wrap;gap:8px 16px"><h1 class="rz-h-page">{{ fr.head.title }}</h1><sc-for list="{{ fr.head.totals }}" as="t" hint-placeholder-count="0"><span style="display:flex;gap:5px;align-items:baseline"><span class="rz-mono rz-strong">{{ t.v }}</span><span class="rz-caption">{{ t.k }}</span></span></sc-for><sc-if value="{{ fr.head.sub }}" hint-placeholder-val="{{ false }}"><span class="rz-caption">{{ fr.head.sub }}</span></sc-if></div>
+                        <sc-if value="{{ fr.head.chips }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px"><sc-for list="{{ fr.head.chips }}" as="ch" hint-placeholder-count="2"><span class="{{ ch.cls }}">{{ ch.text }}<sc-if value="{{ ch.copy }}" hint-placeholder-val="{{ false }}"><button type="button" aria-label="Копіювати код"><i class="icon-copy"></i></button></sc-if></span></sc-for></div></sc-if>
+                      </div>
+                    </sc-if>
+
+                    <sc-for list="{{ fr.notices }}" as="n" hint-placeholder-count="0"><div class="{{ n.cls }}" role="status"><i class="{{ n.icon }}"></i><span class="rz-notice__body" style="text-wrap:pretty">{{ n.text }}</span><sc-if value="{{ n.action }}" hint-placeholder-val="{{ false }}"><span class="rz-btn rz-btn--sm">{{ n.action }}</span></sc-if></div></sc-for>
+
+                    <sc-if value="{{ fr.toolbar }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+                        <label class="rz-search" style="flex:0 1 320px"><i class="icon-search"></i><span class="rz-sr">Пошук деталей</span><input readOnly="{{ true }}" value="{{ fr.toolbar.query }}" placeholder="Пошук: назва, OEM, QR або VIN"></label>
+                        <div class="rz-seg" role="radiogroup" aria-label="Статус"><sc-for list="{{ fr.toolbar.tabs }}" as="t" hint-placeholder-count="4"><button type="button" role="radio" aria-checked="{{ t.pressed }}" style="{{ t.style }}"><sc-if value="{{ t.dot }}" hint-placeholder-val="{{ false }}"><span class="{{ t.dot }}"></span></sc-if>{{ t.label }}</button></sc-for></div>
+                        <sc-for list="{{ fr.toolbar.filters }}" as="fl" hint-placeholder-count="4"><button type="button" class="{{ fl.cls }}"><sc-if value="{{ fl.key }}" hint-placeholder-val="{{ false }}"><span class="rz-filter__key">{{ fl.key }}</span></sc-if>{{ fl.label }}<i class="icon-chevron-down" style="font-size:var(--rz-icon-sm)"></i></button></sc-for>
+                        <sc-if value="{{ fr.toolbar.reset }}" hint-placeholder-val="{{ false }}"><button type="button" class="rz-btn rz-btn--ghost">Скинути фільтри</button></sc-if>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ fr.bulk }}" hint-placeholder-val="{{ false }}">
+                      <div role="region" aria-label="Дії над обраними" style="display:flex;align-items:center;gap:12px;height:36px;padding:0 6px 0 12px;border:1px solid var(--rz-brand);border-radius:var(--rz-r-sm);background:var(--rz-row-selected)"><span><span class="rz-mono rz-strong" style="font-weight:600">{{ fr.bulk.count }}</span> {{ fr.bulk.label }}</span><span class="rz-btn rz-btn--ghost rz-btn--sm" style="text-decoration:underline;text-underline-offset:3px">{{ fr.bulk.page }}</span><span style="margin-left:auto;display:flex;gap:6px"><span class="rz-btn"><i class="icon-printer"></i>Друк стікера</span><span class="rz-btn rz-btn--icon" aria-label="Зняти вибір"><i class="icon-x"></i></span></span></div>
+                    </sc-if>
+
+                    <sc-for list="{{ fr.blocks }}" as="bk" hint-placeholder-count="1">
+                      <div style="{{ bk.wrap }}">
+                        <sc-for list="{{ bk.cols }}" as="col" hint-placeholder-count="1">
+                          <div style="{{ col.style }}">
+                            <sc-for list="{{ col.cards }}" as="cd" hint-placeholder-count="1">
+                              <section style="{{ cd.box }}">
+                                <sc-if value="{{ cd.title }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;padding:8px 16px;border-bottom:1px solid var(--rz-border)"><span style="display:grid;gap:2px"><h2 class="rz-h-card">{{ cd.title }} <span class="rz-dim" style="font-weight:400">{{ cd.count }}</span></h2><sc-if value="{{ cd.hint }}" hint-placeholder-val="{{ false }}"><span class="rz-caption" style="text-wrap:pretty">{{ cd.hint }}</span></sc-if></span><sc-if value="{{ cd.seg }}" hint-placeholder-val="{{ false }}"><div class="rz-seg"><sc-for list="{{ cd.seg }}" as="t" hint-placeholder-count="3"><button type="button" aria-pressed="{{ t.pressed }}" style="{{ t.style }}">{{ t.label }}</button></sc-for></div></sc-if><sc-if value="{{ cd.action }}" hint-placeholder-val="{{ false }}"><button type="button" class="rz-btn rz-btn--sm" disabled="{{ cd.actionOff }}">{{ cd.action }}</button></sc-if></div></sc-if>
+
+                                <sc-if value="{{ cd.table }}" hint-placeholder-val="{{ false }}">
+                                  <table style="width:100%;border-collapse:collapse"><caption class="rz-sr">{{ cd.caption }}</caption>
+                                    <thead><tr style="height:32px"><sc-for list="{{ cd.table.cols }}" as="h" hint-placeholder-count="5"><th scope="col" class="rz-th-label" style="{{ h.style }}"><sc-if value="{{ h.check }}" hint-placeholder-val="{{ false }}"><span aria-label="Обрати всі на сторінці" style="{{ h.box }}"><i class="{{ h.icon }}" style="font-size:var(--rz-icon-xs)"></i></span></sc-if>{{ h.label }}</th></sc-for></tr></thead>
+                                    <tbody><sc-for list="{{ cd.table.rows }}" as="r" hint-placeholder-count="4"><tr style="{{ r.style }}"><sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="5"><td style="{{ c.style }}">
+                                      <sc-if value="{{ c.isCheck }}" hint-placeholder-val="{{ false }}"><span role="checkbox" aria-checked="{{ c.on }}" aria-disabled="{{ c.off }}" title="{{ c.title }}" style="{{ c.box }}"><i class="{{ c.icon }}" style="font-size:var(--rz-icon-xs)"></i></span></sc-if>
+                                      <sc-if value="{{ c.isMain }}" hint-placeholder-val="{{ false }}"><span style="display:flex;align-items:baseline;gap:8px;white-space:nowrap"><span class="rz-strong" style="font-weight:500">{{ c.text }}</span><span class="rz-mono rz-dim" style="font-size:var(--rz-fs-caption)">{{ c.sub }}</span></span></sc-if>
+                                      <sc-if value="{{ c.isText }}" hint-placeholder-val="{{ false }}"><span style="display:grid"><span>{{ c.text }}</span><sc-if value="{{ c.sub }}" hint-placeholder-val="{{ false }}"><span class="rz-caption">{{ c.sub }}</span></sc-if></span></sc-if>
+                                      <sc-if value="{{ c.isPill }}" hint-placeholder-val="{{ false }}"><span class="{{ c.pill }}">{{ c.text }}</span></sc-if>
+                                      <sc-if value="{{ c.isDot }}" hint-placeholder-val="{{ false }}"><span class="{{ c.pill }}">{{ c.text }}</span></sc-if>
+                                      <sc-if value="{{ c.isNum }}" hint-placeholder-val="{{ false }}"><span class="rz-mono" style="display:inline-flex;align-items:center;gap:6px"><sc-if value="{{ c.lock }}" hint-placeholder-val="{{ false }}"><i class="icon-lock rz-dim" style="font-size:var(--rz-icon-sm)" title="Деталь у відкритій інвентаризації — кількість рахує сесія."></i></sc-if>{{ c.text }}</span></sc-if>
+                                      <sc-if value="{{ c.isLink }}" hint-placeholder-val="{{ false }}"><a href="#" class="rz-mono">{{ c.text }}</a></sc-if>
+                                    </td></sc-for></tr></sc-for></tbody>
+                                  </table>
+                                  <sc-if value="{{ cd.pager }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:16px;min-height:40px;padding:6px 12px;border-top:1px solid var(--rz-border);color:var(--rz-text-dim);font-size:var(--rz-fs-caption)"><span class="rz-mono">{{ cd.pager.range }}</span><span>25 на сторінці</span><span style="margin-left:auto">{{ cd.pager.page }}</span><span class="rz-btn rz-btn--icon rz-btn--sm" aria-label="Попередня сторінка" style="opacity:0.5"><i class="icon-chevron-left"></i></span><span class="rz-btn rz-btn--icon rz-btn--sm" aria-label="Наступна сторінка"><i class="icon-chevron-right"></i></span></div></sc-if>
+                                </sc-if>
+
+                                <sc-if value="{{ cd.state }}" hint-placeholder-val="{{ false }}"><div class="{{ cd.state.cls }}" role="{{ cd.state.role }}" style="min-height:{{ cd.state.h }}"><span class="rz-state__icon"><i class="{{ cd.state.icon }}"></i></span><p class="rz-state__title">{{ cd.state.title }}</p><p class="rz-muted" style="margin:0;max-width:56ch;text-wrap:pretty">{{ cd.state.body }}</p><sc-if value="{{ cd.state.btns }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:8px;margin-top:8px"><sc-for list="{{ cd.state.btns }}" as="b" hint-placeholder-count="1"><span class="{{ b.cls }}"><i class="{{ b.icon }}"></i>{{ b.label }}</span></sc-for></div></sc-if><sc-if value="{{ cd.state.meta }}" hint-placeholder-val="{{ false }}"><span class="rz-mono rz-dim" style="font-size:var(--rz-fs-micro)">{{ cd.state.meta }}</span></sc-if></div></sc-if>
+
+                                <sc-if value="{{ cd.facts }}" hint-placeholder-val="{{ false }}"><dl style="margin:0;padding:4px 16px"><sc-for list="{{ cd.facts }}" as="f" hint-placeholder-count="3"><div style="{{ f.style }}"><dt class="rz-muted">{{ f.k }}</dt><dd style="{{ f.vStyle }}">{{ f.v }}<sc-if value="{{ f.sub }}" hint-placeholder-val="{{ false }}"> <span class="rz-caption">{{ f.sub }}</span></sc-if></dd></div></sc-for></dl></sc-if>
+
+                                <sc-if value="{{ cd.kpis }}" hint-placeholder-val="{{ false }}"><div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--rz-border)"><sc-for list="{{ cd.kpis }}" as="k" hint-placeholder-count="3"><div style="display:grid;gap:4px;padding:12px;background:var(--rz-surface)"><span class="rz-kpi__label">{{ k.label }}</span><span class="rz-mono" style="{{ k.style }}">{{ k.value }}</span><span class="rz-kpi__meta">{{ k.meta }}</span></div></sc-for></div></sc-if>
+
+                                <sc-if value="{{ cd.photos }}" hint-placeholder-val="{{ false }}"><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:16px"><sc-for list="{{ cd.photos }}" as="ph" hint-placeholder-count="3"><div class="rz-photo"><sc-if value="{{ ph.cover }}" hint-placeholder-val="{{ false }}"><span class="rz-photo__badge">Обкладинка</span></sc-if><sc-if value="{{ ph.add }}" hint-placeholder-val="{{ false }}"><span style="display:grid;gap:4px;justify-items:center"><i class="icon-image-plus" style="font-size:var(--rz-icon-md)"></i>{{ ph.label }}</span></sc-if><sc-if value="{{ ph.img }}" hint-placeholder-val="{{ true }}"><i class="icon-image" style="font-size:var(--rz-icon-md)"></i></sc-if><sc-if value="{{ ph.status }}" hint-placeholder-val="{{ false }}"><span style="{{ ph.statusStyle }}">{{ ph.status }}</span></sc-if></div></sc-for></div></sc-if>
+
+                                <sc-if value="{{ cd.timeline }}" hint-placeholder-val="{{ false }}"><ol class="rz-timeline"><sc-for list="{{ cd.timeline }}" as="h" hint-placeholder-count="3"><li><span class="rz-timeline__icon"><i class="{{ h.icon }}"></i></span><span><span class="rz-strong">{{ h.event }}</span> <span class="rz-dim">{{ h.detail }}</span></span><span class="rz-timeline__date">{{ h.date }}</span></li></sc-for></ol></sc-if>
+
+                                <sc-if value="{{ cd.form }}" hint-placeholder-val="{{ false }}">
+                                  <div style="display:grid;gap:12px;padding:14px 16px 16px">
+                                    <sc-if value="{{ cd.form.choices }}" hint-placeholder-val="{{ false }}"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px"><sc-for list="{{ cd.form.choices }}" as="o" hint-placeholder-count="2"><div role="radio" aria-checked="{{ o.on }}" style="{{ o.style }}"><span aria-hidden="true" style="{{ o.dot }}"><span style="{{ o.dotIn }}"></span></span><span style="display:grid;gap:2px"><span class="rz-strong" style="font-weight:600">{{ o.label }}</span><span class="rz-caption" style="text-wrap:pretty">{{ o.hint }}</span></span></div></sc-for></div></sc-if>
+                                    <sc-if value="{{ cd.form.fields }}" hint-placeholder-val="{{ false }}"><div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px"><sc-for list="{{ cd.form.fields }}" as="fd" hint-placeholder-count="2">
+                                      <label class="rz-field" style="{{ fd.cell }}"><span class="rz-label">{{ fd.label }}<sc-if value="{{ fd.req }}" hint-placeholder-val="{{ false }}"><span class="rz-req">*</span></sc-if></span><span class="rz-input-group" style="{{ fd.group }}"><input readOnly="{{ true }}" value="{{ fd.value }}" placeholder="{{ fd.ph }}" aria-invalid="{{ fd.invalid }}" style="{{ fd.input }}"><sc-if value="{{ fd.lock }}" hint-placeholder-val="{{ false }}"><i class="icon-lock" style="padding:0 10px;color:var(--rz-text-dim)"></i></sc-if><sc-if value="{{ fd.select }}" hint-placeholder-val="{{ false }}"><i class="icon-chevron-down" style="padding:0 10px;color:var(--rz-text-dim)"></i></sc-if><sc-if value="{{ fd.suffix }}" hint-placeholder-val="{{ false }}"><span class="rz-input-group__addon">{{ fd.suffix }}</span></sc-if></span><sc-if value="{{ fd.hint }}" hint-placeholder-val="{{ false }}"><span class="rz-hint" style="text-wrap:pretty">{{ fd.hint }}</span></sc-if><sc-if value="{{ fd.error }}" hint-placeholder-val="{{ false }}"><span class="rz-error"><i class="icon-circle-alert" style="margin-top:2px"></i>{{ fd.error }}</span></sc-if></label>
+                                    </sc-for></div></sc-if>
+                                    <sc-for list="{{ cd.form.notes }}" as="nt" hint-placeholder-count="0"><div class="{{ nt.cls }}" role="status"><i class="{{ nt.icon }}"></i><span class="rz-notice__body" style="text-wrap:pretty">{{ nt.text }}</span></div></sc-for>
+                                    <sc-if value="{{ cd.form.caption }}" hint-placeholder-val="{{ false }}"><span class="rz-caption" style="text-wrap:pretty">{{ cd.form.caption }}</span></sc-if>
+                                    <sc-if value="{{ cd.form.buttons }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px"><sc-for list="{{ cd.form.buttons }}" as="b" hint-placeholder-count="1"><span class="{{ b.cls }}" aria-disabled="{{ b.off }}" style="{{ b.style }}"><i class="{{ b.icon }}"></i>{{ b.label }}</span></sc-for><sc-if value="{{ cd.form.btnNote }}" hint-placeholder-val="{{ false }}"><span class="rz-caption" style="flex:1;min-width:200px;text-wrap:pretty">{{ cd.form.btnNote }}</span></sc-if></div></sc-if>
+                                  </div>
+                                </sc-if>
+
+                                <sc-if value="{{ cd.text }}" hint-placeholder-val="{{ false }}"><p style="{{ cd.textStyle }}">{{ cd.text }}</p></sc-if>
+                                <sc-if value="{{ cd.skel }}" hint-placeholder-val="{{ false }}"><div role="status" style="display:grid;gap:10px;padding:16px"><sc-for list="{{ cd.skel }}" as="sk" hint-placeholder-count="3"><span class="rz-skel" style="{{ sk }}"></span></sc-for></div></sc-if>
+                                <sc-if value="{{ cd.foot }}" hint-placeholder-val="{{ false }}"><div style="display:flex;justify-content:space-between;gap:12px;padding:10px 16px;border-top:1px solid var(--rz-border)"><span class="rz-muted">{{ cd.foot.k }}</span><span class="rz-mono rz-strong">{{ cd.foot.v }}</span></div></sc-if>
+                              </section>
+                            </sc-for>
+                          </div>
+                        </sc-for>
+                      </div>
+                    </sc-for>
+                  </div>
+
+                  <sc-if value="{{ fr.peek }}" hint-placeholder-val="{{ false }}">
+                    <aside aria-label="Деталь" style="flex:0 0 400px;display:grid;align-content:start;border-left:1px solid var(--rz-border);background:var(--rz-surface);overflow:hidden">
+                      <div style="display:grid;gap:10px;padding:14px 16px;border-bottom:1px solid var(--rz-border)">
+                        <div style="display:flex;align-items:center;gap:4px"><span class="rz-eyebrow">Деталь</span><span style="margin-left:auto;display:flex;gap:2px"><span class="rz-btn rz-btn--ghost rz-btn--icon" aria-label="Попередній запис"><i class="icon-chevron-up"></i></span><span class="rz-btn rz-btn--ghost rz-btn--icon" aria-label="Наступний запис"><i class="icon-chevron-down"></i></span><span class="rz-btn rz-btn--ghost rz-btn--icon" aria-label="Відкрити на всю сторінку"><i class="icon-maximize-2"></i></span><span class="rz-btn rz-btn--ghost rz-btn--icon" aria-label="Закрити"><i class="icon-x"></i></span></span></div>
+                        <h2 class="rz-h-title">Колісний диск R17</h2>
+                        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px"><span class="rz-code">OEM 5G0601025<button type="button" aria-label="Копіювати код"><i class="icon-copy"></i></button></span><span class="rz-pill rz-pill--ok">Доступна</span><span class="rz-dim">Хороший стан</span></div>
+                        <div style="display:flex;gap:8px"><span class="rz-btn"><i class="icon-printer"></i>Друк стікера</span><span class="rz-btn" aria-disabled="true" title="Додавання деталі в замовлення з її картки ще не підключене — відкрийте замовлення й додайте позицію там." style="opacity:0.5"><i class="icon-clipboard-plus"></i>Додати в замовлення</span></div>
+                      </div>
+                      <div style="display:grid;gap:8px;padding:14px 16px;border-bottom:1px solid var(--rz-border)"><span class="rz-label">Наявність</span><div class="rz-kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="rz-kpi" style="padding:10px 12px"><span class="rz-kpi__label">Доступно</span><span class="rz-mono rz-strong" style="font-size:var(--rz-fs-page)">3</span><span class="rz-kpi__meta">можна продати</span></div><div class="rz-kpi" style="padding:10px 12px"><span class="rz-kpi__label">У резерві</span><span class="rz-mono rz-strong" style="font-size:var(--rz-fs-page)">1</span><span class="rz-kpi__meta">1 замовлення</span></div><div class="rz-kpi" style="padding:10px 12px"><span class="rz-kpi__label">Продано</span><span class="rz-mono rz-strong" style="font-size:var(--rz-fs-page)">0</span><span class="rz-kpi__meta">ще не продавалась</span></div></div></div>
+                      <dl style="margin:0;padding:4px 16px;border-bottom:1px solid var(--rz-border)"><div style="display:grid;grid-template-columns:120px 1fr;gap:12px;padding:8px 0"><dt class="rz-muted">Ціна продажу</dt><dd style="margin:0"><span class="rz-mono rz-strong">1 800 ₴</span> <span class="rz-caption">за 1 шт</span></dd></div><div style="display:grid;grid-template-columns:120px 1fr;gap:12px;padding:8px 0;border-top:1px solid var(--rz-border)"><dt class="rz-muted">Місце на складі</dt><dd style="margin:0">Склад 2 · Зона C · Стелаж 2</dd></div><div style="display:grid;grid-template-columns:120px 1fr;gap:12px;padding:8px 0;border-top:1px solid var(--rz-border)"><dt class="rz-muted">Авто-джерело</dt><dd style="margin:0"><a href="#">VW Passat B8 · 2016</a></dd></div><div style="display:grid;grid-template-columns:120px 1fr;gap:12px;padding:8px 0;border-top:1px solid var(--rz-border)"><dt class="rz-muted">Сумісність</dt><dd style="margin:0">VW 5×112, ET 47</dd></div></dl>
+                      <div style="display:grid;gap:4px;padding:14px 16px"><span class="rz-label">Історія</span><ol class="rz-timeline" style="margin:0 -12px"><li><span class="rz-timeline__icon"><i class="icon-bookmark"></i></span><span><span class="rz-strong">Зарезервовано</span> <span class="rz-dim">№ 358</span></span><span class="rz-timeline__date">17.10</span></li><li><span class="rz-timeline__icon"><i class="icon-map-pin"></i></span><span><span class="rz-strong">Розміщено</span> <span class="rz-dim">зона C</span></span><span class="rz-timeline__date">11.10</span></li><li><span class="rz-timeline__icon"><i class="icon-plus"></i></span><span><span class="rz-strong">Створено</span></span><span class="rz-timeline__date">08.10</span></li></ol></div>
+                    </aside>
+                  </sc-if>
+                </div>
+              </div>
+
+              <sc-if value="{{ fr.o.scrim }}" hint-placeholder-val="{{ false }}"><div aria-hidden="true" style="position:absolute;inset:0;background:var(--rz-scrim)"></div></sc-if>
+
+              <sc-if value="{{ fr.o.sheet }}" hint-placeholder-val="{{ false }}">
+                <section role="dialog" aria-modal="true" aria-label="{{ fr.o.sheet.title }}" aria-busy="{{ fr.o.sheet.busy }}" style="{{ fr.o.sheet.box }}">
+                  <header style="display:flex;align-items:flex-start;gap:12px;padding:12px 12px 12px 16px;border-bottom:1px solid var(--rz-border);background:var(--rz-sheet-band)"><span style="flex:1;display:grid;gap:2px"><h2 class="rz-h-title">{{ fr.o.sheet.title }}</h2><span class="rz-muted" style="font-size:var(--rz-fs-caption);text-wrap:pretty">{{ fr.o.sheet.desc }}</span></span><button type="button" class="rz-btn rz-btn--icon rz-btn--ghost" aria-label="Закрити" disabled="{{ fr.o.sheet.busy }}"><i class="icon-x"></i></button></header>
+                  <div style="display:grid;align-content:start;gap:16px;padding:16px;overflow:hidden">
+                    <sc-for list="{{ fr.o.sheet.groups }}" as="sg" hint-placeholder-count="2">
+                      <div style="display:grid;gap:10px">
+                        <sc-if value="{{ sg.title }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:baseline;gap:8px"><span class="rz-mono" style="color:var(--rz-brand-text);font-size:var(--rz-fs-caption)">{{ sg.n }}</span><h3 class="rz-h-card">{{ sg.title }}</h3></div></sc-if>
+                        <sc-if value="{{ sg.choices }}" hint-placeholder-val="{{ false }}"><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px"><sc-for list="{{ sg.choices }}" as="o" hint-placeholder-count="2"><div role="radio" aria-checked="{{ o.on }}" style="{{ o.style }}"><span aria-hidden="true" style="{{ o.dot }}"><span style="{{ o.dotIn }}"></span></span><span style="display:grid;gap:2px"><span class="rz-strong" style="font-weight:600">{{ o.label }}</span><span class="rz-caption" style="text-wrap:pretty">{{ o.hint }}</span></span></div></sc-for></div></sc-if>
+                        <sc-if value="{{ sg.fields }}" hint-placeholder-val="{{ false }}"><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px"><sc-for list="{{ sg.fields }}" as="fd" hint-placeholder-count="2"><label class="rz-field" style="{{ fd.cell }}"><span class="rz-label">{{ fd.label }}<sc-if value="{{ fd.req }}" hint-placeholder-val="{{ false }}"><span class="rz-req">*</span></sc-if></span><span class="rz-input-group" style="background:var(--rz-sheet-field);{{ fd.group }}"><input readOnly="{{ true }}" value="{{ fd.value }}" placeholder="{{ fd.ph }}" aria-invalid="{{ fd.invalid }}" style="{{ fd.input }}"><sc-if value="{{ fd.select }}" hint-placeholder-val="{{ false }}"><i class="icon-chevron-down" style="padding:0 10px;color:var(--rz-text-dim)"></i></sc-if><sc-if value="{{ fd.suffix }}" hint-placeholder-val="{{ false }}"><span class="rz-input-group__addon">{{ fd.suffix }}</span></sc-if></span><sc-if value="{{ fd.hint }}" hint-placeholder-val="{{ false }}"><span class="rz-hint" style="text-wrap:pretty">{{ fd.hint }}</span></sc-if><sc-if value="{{ fd.error }}" hint-placeholder-val="{{ false }}"><span class="rz-error"><i class="icon-circle-alert" style="margin-top:2px"></i>{{ fd.error }}</span></sc-if></label></sc-for></div></sc-if>
+                        <sc-for list="{{ sg.notes }}" as="nt" hint-placeholder-count="0"><div class="{{ nt.cls }}" role="status"><i class="{{ nt.icon }}"></i><span class="rz-notice__body" style="text-wrap:pretty">{{ nt.text }}</span></div></sc-for>
+                        <sc-if value="{{ sg.caption }}" hint-placeholder-val="{{ false }}"><span class="rz-caption" style="text-wrap:pretty">{{ sg.caption }}</span></sc-if>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <footer style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rz-border);background:var(--rz-sheet-band)"><span class="rz-caption" style="flex:1;min-width:0">{{ fr.o.sheet.note }}</span><button type="button" class="rz-btn" disabled="{{ fr.o.sheet.busy }}">Скасувати</button><button type="button" class="rz-btn rz-btn--primary" disabled="{{ fr.o.sheet.busy }}" aria-busy="{{ fr.o.sheet.busy }}"><sc-if value="{{ fr.o.sheet.busy }}" hint-placeholder-val="{{ false }}"><i class="icon-loader-circle rz-spin"></i></sc-if>{{ fr.o.sheet.submit }}</button></footer>
+                </section>
+              </sc-if>
+
+              <sc-if value="{{ fr.o.dialog }}" hint-placeholder-val="{{ false }}">
+                <div style="position:absolute;inset:0;display:grid;place-items:center;padding:24px">
+                  <section role="alertdialog" aria-label="{{ fr.o.dialog.title }}" style="width:440px;display:grid;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-sheet-body);box-shadow:var(--rz-shadow-dialog);overflow:hidden">
+                    <header style="display:flex;align-items:center;gap:12px;padding:10px 12px 10px 16px;border-bottom:1px solid var(--rz-border);background:var(--rz-sheet-band)"><h2 class="rz-h-title" style="flex:1">{{ fr.o.dialog.title }}</h2><button type="button" class="rz-btn rz-btn--icon rz-btn--ghost" aria-label="Закрити" disabled="{{ fr.o.dialog.busy }}"><i class="icon-x"></i></button></header>
+                    <div style="display:grid;gap:12px;padding:16px">
+                      <sc-if value="{{ fr.o.dialog.sub }}" hint-placeholder-val="{{ false }}"><span class="rz-muted" style="margin-top:-6px">{{ fr.o.dialog.sub }}</span></sc-if>
+                      <sc-if value="{{ fr.o.dialog.text }}" hint-placeholder-val="{{ false }}"><p style="margin:0;text-wrap:pretty">{{ fr.o.dialog.text }}</p></sc-if>
+                      <sc-if value="{{ fr.o.dialog.fields }}" hint-placeholder-val="{{ false }}"><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px"><sc-for list="{{ fr.o.dialog.fields }}" as="fd" hint-placeholder-count="2"><label class="rz-field" style="{{ fd.cell }}"><span class="rz-label">{{ fd.label }}</span><span class="rz-input-group" style="background:var(--rz-sheet-field);{{ fd.group }}"><input readOnly="{{ true }}" value="{{ fd.value }}" style="{{ fd.input }}"><sc-if value="{{ fd.select }}" hint-placeholder-val="{{ false }}"><i class="icon-chevron-down" style="padding:0 10px;color:var(--rz-text-dim)"></i></sc-if></span></label></sc-for></div></sc-if>
+                      <sc-if value="{{ fr.o.dialog.error }}" hint-placeholder-val="{{ false }}"><div class="rz-notice rz-notice--danger" role="alert"><i class="icon-circle-alert"></i><span class="rz-notice__body">{{ fr.o.dialog.error }}</span></div></sc-if>
+                    </div>
+                    <footer style="display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid var(--rz-border);background:var(--rz-sheet-band)"><button type="button" class="rz-btn" disabled="{{ fr.o.dialog.busy }}">Скасувати</button><button type="button" class="{{ fr.o.dialog.cls }}" aria-busy="{{ fr.o.dialog.busy }}"><sc-if value="{{ fr.o.dialog.busy }}" hint-placeholder-val="{{ false }}"><i class="icon-loader-circle rz-spin"></i></sc-if>{{ fr.o.dialog.confirm }}</button></footer>
+                  </section>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ fr.o.menu }}" hint-placeholder-val="{{ false }}"><div class="rz-menu" role="menu" aria-label="Інші дії з деталлю" style="position:absolute;top:44px;right:20px;width:250px"><sc-for list="{{ fr.o.menu }}" as="mi" hint-placeholder-count="3"><sc-if value="{{ mi.sep }}" hint-placeholder-val="{{ false }}"><div style="height:1px;margin:3px 4px;background:var(--rz-border)"></div></sc-if><div role="menuitem" class="rz-menu__item" aria-disabled="{{ mi.off }}" title="{{ mi.title }}" style="{{ mi.style }}"><i class="{{ mi.icon }}" style="{{ mi.iconStyle }}"></i><span style="flex:1">{{ mi.label }}</span></div></sc-for></div></sc-if>
+
+              <sc-if value="{{ fr.o.popover }}" hint-placeholder-val="{{ false }}">
+                <div role="dialog" aria-label="Марка" style="position:absolute;left:870px;top:154px;width:260px;display:grid;border:1px solid var(--rz-border-strong);border-radius:var(--rz-r-md);background:var(--rz-overlay);box-shadow:var(--rz-shadow-popover);overflow:hidden">
+                  <label style="display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border-bottom:1px solid var(--rz-border)"><i class="icon-search" style="color:var(--rz-text-dim)"></i><input readOnly="{{ true }}" placeholder="Марка: будь-яка" aria-label="Марка" style="flex:1;min-width:0;border:0;background:transparent;outline:none;color:var(--rz-text)"></label>
+                  <div role="listbox" style="display:grid;gap:1px;padding:4px"><sc-for list="{{ fr.o.popover }}" as="pk" hint-placeholder-count="4"><div role="option" aria-selected="{{ pk.sel }}" style="display:flex;align-items:center;gap:10px;height:28px;padding:0 8px;border-radius:var(--rz-r-sm)"><span aria-hidden="true" style="{{ pk.box }}"><i class="{{ pk.icon }}" style="font-size:var(--rz-icon-xs)"></i></span><span style="flex:1">{{ pk.label }}</span><span class="rz-mono rz-dim" style="font-size:var(--rz-fs-caption)">{{ pk.count }}</span></div></sc-for></div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border-top:1px solid var(--rz-border)"><span class="rz-caption">└ Модель: будь-яка</span><span class="rz-btn rz-btn--ghost rz-btn--sm">Скинути</span></div>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ fr.o.toast }}" hint-placeholder-val="{{ false }}"><div class="rz-toast" role="status" style="position:absolute;right:24px;bottom:24px"><i class="{{ fr.o.toast.icon }}" style="{{ fr.o.toast.iconStyle }}"></i><span class="rz-toast__msg">{{ fr.o.toast.text }}</span><span class="rz-btn rz-btn--icon rz-btn--ghost rz-btn--sm" aria-label="Закрити"><i class="icon-x"></i></span></div></sc-if>
+            </div>
+          </figure>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;dark&quot;,&quot;light&quot;], &quot;default&quot;: &quot;dark&quot;, &quot;tsType&quot;: &quot;'dark' | 'light'&quot;}, &quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;compact&quot;,&quot;comfortable&quot;], &quot;default&quot;: &quot;compact&quot;, &quot;tsType&quot;: &quot;'compact' | 'comfortable'&quot;}}">
+const NAV = [
+  { title: '', items: [['Головна', 'icon-layout-dashboard']] },
+  { title: 'Склад', items: [['Автомобілі', 'icon-car'], ['Запчастини', 'icon-package', true], ['Інвентаризація', 'icon-clipboard-check'], ['Приймання', 'icon-scan-line'], ['Стікери', 'icon-sticker']] },
+  { title: 'Продажі', items: [['Замовлення', 'icon-clipboard-list'], ['Клієнти', 'icon-users']] },
+  { title: 'Гроші', items: [['Фінанси', 'icon-wallet-cards'], ['Звіти', 'icon-chart-column']] },
+  { title: 'Налаштування', items: [['Команда', 'icon-user-round-cog'], ['Підписка', 'icon-credit-card'], ['Інтеграції', 'icon-plug']] },
+];
+const PARTS = [
+  ['p1', 'Фара передня ліва', '3G1941005', 'VW Passat B8 · 2016', 'available', 1, 1, 0],
+  ['p2', 'Двері задні праві', '5E5833052', 'Skoda Octavia A7 · 2018', 'reserved', 1, 0, 1],
+  ['p3', 'Генератор', '03L903023F', 'VW Passat B8 · 2016', 'available', 2, 2, 0],
+  ['p4', 'Дзеркало бічне праве', '87910-33D10', 'Toyota Camry XV70 · 2019', 'sold', 1, 0, 0],
+  ['p5', 'Кермова рейка', '8200675422', 'Renault Megane III · 2014', 'available', 1, 1, 0, true],
+  ['p6', 'Бампер передній', '5E0807221', 'Skoda Octavia A7 · 2018', 'available', 1, 1, 0],
+  ['p7', 'Компресор кондиціонера', '5Q0816803', 'VW Passat B8 · 2016', 'reserved', 1, 0, 1],
+  ['p8', 'Блок ABS', '44050-33K10', 'Toyota Camry XV70 · 2019', 'available', 1, 1, 0],
+  ['p9', 'Стартер', '02M911024A', 'Skoda Octavia A7 · 2018', 'sold', 1, 0, 0],
+  ['p10', 'Радіатор охолодження', '214104EA0A', 'Nissan Qashqai J11 · 2017', 'available', 2, 1, 1],
+  ['p11', 'Колісний диск R17', '5G0601025', 'VW Passat B8 · 2016', 'available', 4, 3, 1],
+  ['p12', 'Панель приладів', '83800-33A30', 'Toyota Camry XV70 · 2019', 'available', 1, 1, 0],
+  ['p13', 'Ліхтар задній лівий', '3G5945207', 'VW Passat B8 · 2016', 'available', 1, 1, 0],
+  ['p14', 'Подушка безпеки водія', '5E0880201', 'Skoda Octavia A7 · 2018', 'reserved', 1, 0, 1],
+];
+const ST = { available: ['Доступна', 'rz-pill rz-pill--ok'], reserved: ['У резерві', 'rz-pill rz-pill--warn'], sold: ['Продана', 'rz-pill rz-pill--danger'] };
+const LOCK = 'Деталь у відкритій інвентаризації — кількість рахує сесія.';
+const RO = 'Поточна підписка не дозволяє цю дію.';
+const READONLY = { chip: 'Кабінет у режимі перегляду', title: 'Підписка неактивна — дані лише для читання.', body: 'Склад, замовлення й історія грошей збереглися повністю, але створювати й змінювати записи не можна, доки підписка не відновиться.', link: 'Перейти до підписки' };
+
+const P = 'padding:0 12px;';
+const crumbs = (arr) => arr.map((label, i) => ({ label, sep: i < arr.length - 1, style: i === arr.length - 1 ? 'color:var(--rz-text-strong);font-weight:600' : 'color:var(--rz-text-muted)' }));
+const btn = (label, icon, kind, x) => ({ label, icon, cls: 'rz-btn' + (kind ? ' rz-btn--' + kind : ''), disabled: false, title: '', aria: '', ...(x || {}) });
+const seg = (labels, on, x) => labels.map((l, i) => { const lab = Array.isArray(l) ? l[0] : l; const sel = i === on; return { label: lab, dot: Array.isArray(l) ? l[1] : '', pressed: sel ? 'true' : 'false', style: 'display:inline-flex;align-items:center;gap:6px;height:' + ((x && x.h) || 24) + 'px;padding:0 9px;border:0;border-radius:var(--rz-r-xs);cursor:pointer;white-space:nowrap;font-size:' + ((x && x.small) ? 'var(--rz-fs-caption)' : 'inherit') + ';font-weight:' + (sel ? 600 : 500) + ';background:' + (sel ? 'var(--rz-fill-selected)' : 'transparent') + ';color:' + (sel ? 'var(--rz-text-strong)' : 'var(--rz-text-muted)') }; });
+const box = (on, off) => 'display:inline-grid;place-items:center;width:14px;height:14px;vertical-align:middle;border-radius:var(--rz-r-xs);border:1px solid ' + (on ? 'var(--rz-brand)' : 'var(--rz-border-strong)') + ';background:' + (on ? 'var(--rz-brand)' : 'transparent') + ';color:var(--rz-on-brand)' + (off ? ';opacity:0.45' : '');
+const card = (o) => ({ box: 'border:1px solid var(--rz-border);border-radius:var(--rz-r-md);background:var(--rz-surface);overflow:hidden', ...o });
+const one = (cards) => ({ wrap: 'display:grid;gap:14px', cols: [{ style: 'display:grid;gap:14px;align-content:start', cards }] });
+const two = (left, right, w) => ({ wrap: 'display:grid;grid-template-columns:minmax(0,1fr) ' + (w || 340) + 'px;gap:16px;align-items:start', cols: [{ style: 'display:grid;gap:14px;min-width:0', cards: left }, { style: 'display:grid;gap:14px', cards: right }] });
+const stateCard = (cls, role, icon, title, body, btns, meta, h) => card({ state: { cls: 'rz-state' + (cls ? ' rz-state--' + cls : ''), role, icon, title, body, btns: btns || null, meta: meta || '', h: (h || 420) + 'px' } });
+const notice = (tone, icon, text, action) => ({ cls: 'rz-notice rz-notice--' + tone, icon, text, action: action || '' });
+const toast = (text) => ({ toast: { text, icon: 'icon-circle-check', iconStyle: 'font-size:var(--rz-icon-md);color:var(--rz-ok)' } });
+const fact = (k, v, x) => ({ k, v, sub: (x && x.sub) || '', style: 'display:grid;grid-template-columns:120px minmax(0,1fr);gap:12px;padding:8px 0;border-top:1px solid var(--rz-border)', vStyle: 'margin:0;color:var(--rz-text);' + (x && x.mono ? 'font-family:var(--rz-font-mono);' : '') });
+const firstFact = (arr) => arr.map((f, i) => (i === 0 ? { ...f, style: f.style.replace(';border-top:1px solid var(--rz-border)', '') } : f));
+const field = (label, value, x) => {
+  x = x || {};
+  return { label, value: value || '', ph: x.ph || '', req: !!x.req, hint: x.hint || '', error: x.error || '', suffix: x.suffix || '', select: !!x.select, lock: !!x.lock, invalid: x.error ? 'true' : 'false',
+    cell: 'min-width:0;grid-column:span ' + (x.span || 1), group: (x.error ? 'border-color:var(--rz-danger);' : '') + (x.lock ? 'opacity:0.6;' : ''),
+    input: 'flex:1;width:100%;min-width:0;color:var(--rz-text-strong);font-size:var(--rz-fs-input);' + (x.mono ? 'font-family:var(--rz-font-mono);' : '') + (x.right ? 'text-align:right;' : '') };
+};
+const choice = (label, hint, on, off) => ({ label, hint, on: on ? 'true' : 'false', style: 'display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid ' + (on ? 'var(--rz-brand)' : 'var(--rz-border-strong)') + ';border-radius:var(--rz-r-md);background:' + (on ? 'var(--rz-row-selected)' : 'transparent') + (off ? ';opacity:0.55' : ''), dot: 'display:grid;place-items:center;width:14px;height:14px;flex:none;margin-top:2px;border-radius:var(--rz-r-full);border:1px solid ' + (on ? 'var(--rz-brand)' : 'var(--rz-border-strong)'), dotIn: on ? 'width:6px;height:6px;border-radius:var(--rz-r-full);background:var(--rz-brand)' : 'display:none' });
+
+function partsTable(rows, o) {
+  o = o || {};
+  const cols = [{ label: '', check: true, box: box(o.allOn), icon: o.allOn ? 'icon-check' : '', style: P + 'width:36px' }, { label: 'Деталь', style: P + 'text-align:left' }, { label: 'Авто-джерело', style: P + 'text-align:left' }, { label: 'Стан', style: P + 'text-align:left' }, { label: 'Всього', style: P + 'text-align:right' }, { label: 'Доступно', style: P + 'text-align:right' }, { label: 'Резерв', style: P + 'text-align:right' }];
+  if (o.skel) {
+    const sk = (w) => ({ isText: true, text: '', style: P });
+    return { cols, rows: Array.from({ length: 12 }, (_, i) => ({ style: 'height:40px;border-top:1px solid var(--rz-border)', cells: [0, 1, 2, 3, 4, 5, 6].map((j) => ({ isText: true, text: '', style: P + (j === 0 ? '' : '') })) })) };
+  }
+  return { cols, rows: rows.map(([id, name, oem, car, st, total, av, res, locked]) => {
+    const sel = (o.sel || []).includes(id); const act = o.active === id;
+    const off = !!locked || !!o.ro;
+    return { style: 'height:40px;border-top:1px solid var(--rz-border)' + (sel ? ';background:var(--rz-row-selected)' : '') + (act ? ';background:var(--rz-fill-selected);box-shadow:inset 2px 0 0 var(--rz-brand)' : ''),
+      cells: [
+        { isCheck: true, on: sel ? 'true' : 'false', off: off ? 'true' : 'false', title: locked ? LOCK : o.ro ? RO : '', box: box(sel, off), icon: sel ? 'icon-check' : '', style: P + 'width:36px' },
+        { isMain: true, text: name, sub: oem, style: P },
+        { isText: true, text: car, style: P + 'white-space:nowrap;color:var(--rz-text-muted)' },
+        { isPill: true, text: ST[st][0], pill: ST[st][1], style: P },
+        { isNum: true, text: String(total), style: P + 'text-align:right;color:var(--rz-text-muted)' },
+        { isNum: true, text: String(av), lock: !!locked, style: P + 'text-align:right;color:var(--rz-text-strong)' },
+        { isNum: true, text: String(res), style: P + 'text-align:right;color:var(--rz-text-muted)' },
+      ] };
+  }) };
+}
+const TOTALS = [{ v: '1 284', k: 'усього' }, { v: '1 012', k: 'доступно' }, { v: '86', k: 'у резерві' }, { v: '186', k: 'продано' }];
+const FILTERS = (make) => [
+  make ? { cls: 'rz-filter rz-filter--set', key: 'Марка:', label: 'Volkswagen' } : { cls: 'rz-filter', key: '', label: 'Марка: будь-яка' },
+  { cls: 'rz-filter', key: '', label: 'Склад: усі' }, { cls: 'rz-filter', key: '', label: 'Стан деталі' }, { cls: 'rz-filter', key: '', label: 'Походження' }];
+const TABS = [['Усі', ''], ['В наявності', 'rz-dot rz-dot--ok'], ['У резерві', 'rz-dot rz-dot--warn'], ['Продано', 'rz-dot rz-dot--danger']];
+
+function list(o) {
+  o = o || {};
+  const ro = !!o.ro;
+  const rows = o.rows || PARTS;
+  const add = ro ? { disabled: true, title: RO, icon: 'icon-lock' } : o.quota ? { disabled: true, title: 'Ліміт деталей вичерпано.', icon: 'icon-lock' } : {};
+  const actions = o.denied ? [] : [...(o.noImport ? [] : [btn('Імпорт запчастин', 'icon-upload', '', { disabled: ro, title: ro ? RO : '' })]), btn('Додати деталь', add.icon || 'icon-plus', 'primary', add)];
+  let blocks;
+  if (o.denied) blocks = [one([stateCard('', 'status', 'icon-lock', 'Недостатньо прав', 'Доступ до цього розділу відкриває власник розбірки в «Команді».', [{ cls: 'rz-btn', icon: 'icon-house', label: 'До головної' }], '', 520)])];
+  else if (o.state) blocks = [one([o.state])];
+  else blocks = [one([card({ caption: 'Деталі на складі', table: partsTable(rows, o), pager: { range: o.skel ? '—' : o.range || '1–14 з 1 284', page: o.page || 'Сторінка 1 з 52' } })])];
+  return {
+    crumbs: crumbs(['Склад', 'Деталі']), actions, banner: ro ? READONLY : null,
+    head: o.denied ? null : { title: 'Деталі', totals: o.noTotals ? [] : TOTALS, sub: '', chips: null },
+    notices: [...(o.quota ? [notice('warn', 'icon-gauge', 'Ліміт тарифу вичерпано: 1 500 з 1 500. Підвищте тариф або звільніть місце.', 'Порівняти тарифи')] : []), ...(o.origin ? [notice('info', 'icon-info', 'Фільтр «Вільні запчастини» скинуто: кожна деталь має автомобіль або партію.')] : [])],
+    toolbar: o.denied || o.sel || o.empty ? null : { query: o.query || '', tabs: seg(TABS, o.tab || 0), filters: FILTERS(!!o.make), reset: !!o.reset },
+    bulk: o.sel ? { count: String(o.sel.length), label: 'деталі обрано', page: 'Обрати всі на сторінці (12)' } : null,
+    blocks, peek: !!o.peek, o: o.ovl || {},
+  };
+}
+
+const SALES = [['№ 358', 'без клієнта', 'тримається, доки стоїть у замовленні', 'Резерв', 'rz-dot rz-dot--warn', '1', '1 800 ₴'], ['№ 341', 'Олена Коваль', 'позиція закрита продажем', 'Продано', 'rz-dot rz-dot--danger', '1', '1 800 ₴']];
+const HISTORY = [{ event: 'Зарезервовано', detail: '№ 358', date: '17.10 14:02', icon: 'icon-bookmark' }, { event: 'Змінено', detail: 'ціна 1 600 → 1 800', date: '15.10 09:41', icon: 'icon-tag' }, { event: 'Продано', detail: '№ 341', date: '10.10 11:05', icon: 'icon-check' }, { event: 'Розміщено', detail: 'зона C', date: '03.10 17:20', icon: 'icon-map-pin' }];
+function detail(o) {
+  o = o || {};
+  const ro = !!o.ro;
+  const stock = o.stock || [2, 1, 1];
+  const [av, res, sold] = stock;
+  const status = av > 0 ? ST.available : res > 0 ? ST.reserved : ST.sold;
+  if (o.loading || o.error) {
+    return { crumbs: crumbs(['Склад', 'Деталі', 'Деталь']), actions: [], banner: null, head: null, notices: [], toolbar: null, bulk: null, peek: false, o: {},
+      blocks: o.loading ? [one([card({ skel: ['width:40%;height:22px', 'width:25%', 'height:180px', 'height:240px'] })])] : [one([stateCard('danger', 'alert', 'icon-triangle-alert', 'Не вдалося завантажити деталь', 'Деталь не вдалося завантажити. Спробуйте ще раз.', [{ cls: 'rz-btn', icon: 'icon-arrow-left', label: 'До складу' }, { cls: 'rz-btn', icon: 'icon-refresh-cw', label: 'Спробувати ще раз' }], 'звернення 3b19e0f4-77ac', 560)])] };
+  }
+  const salesRows = (o.noSales ? [] : SALES).map((s) => ({ style: 'height:44px;border-top:1px solid var(--rz-border)', cells: [{ isLink: true, text: s[0], style: P }, { isText: true, text: s[1], sub: s[2], style: P + 'padding-top:4px;padding-bottom:4px' }, { isDot: true, text: s[3], pill: s[4], style: P }, { isNum: true, text: s[5], style: P + 'text-align:right;color:var(--rz-text-strong)' }, { isNum: true, text: s[6], style: P + 'text-align:right;color:var(--rz-text-strong)' }] }));
+  const left = [
+    card({ title: 'Фото', count: o.noPhotos ? '' : '3 знімки', photos: o.noPhotos ? null : [{ cover: true, img: true }, { img: true }, { img: true }], text: o.noPhotos ? 'Фото цієї деталі ще немає — їх додають під час редагування.' : '', textStyle: 'margin:0;padding:16px;color:var(--rz-text-dim)' }),
+    card({ title: 'Продажі', seg: seg(['Усі', 'У резерві', 'Продано'], 0, { h: 22, small: true }), caption: 'Замовлення, у яких стоїть ця деталь', table: salesRows.length ? { cols: [{ label: 'Замовлення', style: P + 'text-align:left' }, { label: 'Клієнт і доставка', style: P + 'text-align:left' }, { label: 'Статус', style: P + 'text-align:left' }, { label: 'К-сть', style: P + 'text-align:right' }, { label: 'Сума', style: P + 'text-align:right' }], rows: salesRows } : null, foot: salesRows.length ? { k: 'Разом продано', v: '1 800 ₴' } : null, text: salesRows.length ? '' : 'Деталь ще не продавалась.', textStyle: 'margin:0;padding:16px;color:var(--rz-text-dim)' }),
+    card({ title: 'Сумісність', count: '2 авто', facts: firstFact([fact('VW Passat B8', 'з 2015', { sub: '· авто-джерело, не редагується' }), fact('VW Golf VII', 'будь-яка модель · будь-який рік')]) }),
+    card({ title: 'Історія', seg: seg(['Усе', 'Продажі', 'Ціна', 'Склад'], 0, { h: 22, small: true }), timeline: HISTORY }),
+  ];
+  const kpiStyle = (c) => 'font-size:var(--rz-fs-page);color:' + c;
+  const placement = o.notPlaced ? card({ title: 'Місце на складі', action: 'Перемістити', actionOff: ro, text: '● Не розміщена', textStyle: 'margin:0;padding:14px 16px;color:var(--rz-text-muted)' })
+    : o.noModule ? card({ title: 'Місце на складі', text: '● Розміщення доступне зі складським модулем', textStyle: 'margin:0;padding:14px 16px;color:var(--rz-text-muted)' })
+    : card({ title: 'Місце на складі', action: 'Перемістити', actionOff: ro, facts: firstFact([fact('Склад', 'Склад 2'), fact('Зона', 'C'), fact('Місце', 'Стелаж 2')]) });
+  const stockNote = sold === 4 ? 'Усі одиниці продано' : res === 4 ? 'Усі фізично на складі, але зарезервовані.' : '';
+  const right = [
+    o.noPrice
+      ? card({ title: 'Ціна продажу', form: { notes: [notice('warn', 'icon-tag', 'Ціни ще немає. Без ціни деталь не можна додати в замовлення.')], buttons: [{ cls: 'rz-btn rz-btn--primary', icon: 'icon-tag', label: 'Вказати ціну', off: ro ? 'true' : 'false', style: '' }] } })
+      : card({ title: 'Ціна продажу', action: 'Змінити', actionOff: ro, text: av > 0 ? '1 800 ₴ за 1 шт · вільний залишок на ' + (av * 1800).toLocaleString('uk-UA') + ' ₴' : res > 0 ? '1 800 ₴ за 1 шт · вільних одиниць немає, ' + res + ' шт у резерві' : '1 800 ₴ за 1 шт · усі одиниці продано', textStyle: 'margin:0;padding:14px 16px;color:var(--rz-text-strong);font-family:var(--rz-font-mono)' }),
+    card({ title: 'Наявність', kpis: [{ label: 'Доступно', value: String(av), meta: av > 0 ? 'можна продати' : 'немає вільних', style: kpiStyle('var(--rz-text-strong)') }, { label: 'У резерві', value: String(res), meta: res > 0 ? res + ' замовлення' : 'немає', style: kpiStyle(res > 0 ? 'var(--rz-warn)' : 'var(--rz-text-strong)') }, { label: 'Продано', value: String(sold), meta: sold > 0 ? 'позиція закрита продажем' : 'ще не продавалась', style: kpiStyle('var(--rz-text-strong)') }], text: stockNote, textStyle: 'margin:0;padding:10px 16px;border-top:1px solid var(--rz-border);color:var(--rz-text-muted)' }),
+    placement,
+    card({ title: 'Нотатки', text: 'Нотаток немає. Їх можна додати в редагуванні деталі.', textStyle: 'margin:0;padding:14px 16px 4px;color:var(--rz-text-dim)', facts: [fact('Створено', 'Олег К.', { sub: '· 02.10.2026' }), fact('Авто-джерело', 'VW Passat B8 · 2016')] }),
+  ];
+  return {
+    crumbs: crumbs(['Склад', 'Деталі', 'Колісний диск R17']), banner: ro ? READONLY : null,
+    actions: [btn('Друк стікера', 'icon-printer', '', { disabled: ro, title: ro ? RO : '' }), btn('Редагувати', 'icon-pencil', '', { disabled: ro, title: ro ? RO : '' }), btn('', 'icon-ellipsis', 'icon', { aria: 'Інші дії з деталлю' })],
+    head: { title: 'Колісний диск R17', totals: [], sub: '', chips: [{ cls: 'rz-code', text: 'OEM 5G0601025', copy: true }, { cls: 'rz-code', text: 'QR RZ-000611', copy: true }, { cls: status[1], text: status[0] }, { cls: 'rz-dim', text: 'Хороший стан' + (res > 0 && av > 0 ? ' · ' + res + ' у резерві' : '') }] },
+    notices: o.locked ? [notice('info', 'icon-lock', LOCK, 'Інвентаризація')] : [],
+    toolbar: null, bulk: null, peek: false, blocks: [two(left, right, 360)], o: o.ovl || {},
+  };
+}
+
+const MENU = [
+  { label: 'Перемістити', icon: 'icon-arrow-right-left' },
+  { label: 'Копіювати код', icon: 'icon-copy' },
+  { label: 'Додати в замовлення', icon: 'icon-clipboard-plus', off: 'true', title: 'Додавання деталі в замовлення з її картки ще не підключене — відкрийте замовлення й додайте позицію там.' },
+  { label: 'Видалити деталь', icon: 'icon-trash-2', danger: true, sep: true },
+].map((m, i) => ({ off: 'false', title: '', ...m, style: (i === 0 ? 'background:var(--rz-fill-active);' : '') + (m.danger ? 'color:var(--rz-danger)' : '') + (m.off ? 'opacity:0.55' : ''), iconStyle: m.danger ? 'color:var(--rz-danger)' : '' }));
+const MAKES = [['Volkswagen', 412, true], ['Skoda', 268], ['Toyota', 190], ['Renault', 144], ['Nissan', 98], ['Audi', 87]].map(([label, n, on]) => ({ label, count: String(n), sel: on ? 'true' : 'false', box: box(on), icon: on ? 'icon-check' : '' }));
+const dialog = (title, text, confirm, cls, x) => ({ scrim: true, dialog: { title, text, confirm, cls: 'rz-btn ' + cls, busy: false, error: '', sub: '', fields: null, ...(x || {}) } });
+
+function form(mode) {
+  const edit = mode === 'edit', inv = mode === 'invalid', batch = mode === 'batch';
+  const STEP = (n, t) => n + ' · ' + t;
+  if (mode === 'loadfail') return { crumbs: crumbs(['Склад', 'Запчастини', 'Редагування']), actions: [], banner: null, head: null, toolbar: null, bulk: null, peek: false, o: {}, notices: [], blocks: [one([stateCard('danger', 'alert', 'icon-triangle-alert', 'Не вдалося завантажити деталь для редагування', 'Оновіть сторінку або поверніться до списку.', [{ cls: 'rz-btn', icon: 'icon-arrow-left', label: 'До деталі' }], '', 560)])] };
+  const source = edit
+    ? card({ title: STEP('01', 'Джерело'), hint: 'Джерело задане під час створення запчастини.', facts: firstFact([fact('Тип джерела', 'З авто · A-0142', { sub: '· Не змінюється' }), fact('Автомобіль-джерело', 'VW Passat B8 · 2016')]), form: { buttons: [{ cls: 'rz-btn rz-btn--sm', icon: 'icon-car', label: 'Відкрити авто', off: 'false', style: '' }] } })
+    : card({ title: STEP('01', 'Джерело'), hint: 'Звідки походить деталь. Після створення джерело не змінюється.', form: {
+        choices: [choice('З авто', 'Розібране авто зі складу', !batch), choice('З партії', 'Закупівля в постачальника', batch)],
+        fields: mode === 'noperm' ? null : [batch ? field('Партія-джерело', 'Партія з аукціону #12', { select: true, span: 4, hint: 'Деталь буде прив’язана до цієї партії.' }) : field('Автомобіль-джерело', mode === 'archived' ? 'Ford Focus III · 2013 · A-0098' : 'VW Passat B8 · 2016 · A-0142', { select: true, span: 4, hint: mode === 'archived' ? '' : 'Деталь буде прив’язана до цього авто.', error: mode === 'archived' ? 'Автомобіль в архіві — нові деталі до нього не додаються. Оберіть інше авто.' : '' })],
+        notes: mode === 'noperm' ? [notice('warn', 'icon-lock', 'Вибір автомобіля недоступний без права перегляду автомобілів. Попросіть власника кабінету відкрити доступ до автомобілів або оберіть інший тип джерела.')] : [],
+        buttons: mode === 'noperm' ? null : [{ cls: 'rz-btn rz-btn--sm', icon: 'icon-plus', label: batch ? 'Створити партію' : 'Створити автомобіль', off: 'false', style: '' }],
+        btnNote: mode === 'noperm' ? '' : 'Після створення повернетеся сюди з новим джерелом. Введені дані збережуться, фото потрібно буде додати ще раз.' } });
+  const describe = card({ title: STEP('02', 'Опис деталі'), hint: edit ? 'Як запчастина виглядає у списку складу та в пошуку.' : 'Як деталь виглядає у списку складу та в пошуку.', form: { fields: [
+    field('Назва', inv ? '' : 'Колісний диск R17', { req: true, span: 2, ph: 'Напр. Фара передня ліва', error: inv ? 'Введіть назву деталі — за нею її знаходять на складі.' : '' }),
+    field('Тип деталі', 'Колеса', { span: 2, hint: 'Наприклад: кузов, оптика, двигун' }),
+    field('OEM-код', '5G0601025', { mono: true, span: 2, lock: edit, hint: edit ? 'Редагування OEM поки не приймає сервер' : 'Каталожний номер виробника' }),
+    field('Нотатки', 'Одна подряпина на ободі', { span: 2, hint: 'Дефекти, комплектність, місце зберігання' }),
+  ] } });
+  const condition = card({ title: STEP('03', 'Стан деталі'), hint: 'Оберіть один із трьох сталих станів деталі.', form: { choices: [choice('Хороший стан', 'Справна, без суттєвих дефектів. Можна ставити без підготовки.', true), choice('Задовільний стан', 'Справна, є сліди використання або дрібні косметичні дефекти.'), choice('Пошкоджена', 'Несправна або некомплектна. Для розбору чи відновлення.')], caption: 'Стан бачать покупці у картці деталі й у пошуку. Його можна змінити пізніше.' } });
+  const qty = card({ title: STEP('04', 'Кількість і ціна'), hint: 'Скільки одиниць на складі та за скільки їх продавати.', form: { fields: [
+    field(edit ? 'Кількість на складі' : 'Кількість', inv ? '0' : '4', { req: true, mono: true, right: true, lock: edit, error: inv ? 'Вкажіть ціле число від 1, наприклад 3.' : '' }),
+    field('Одиниця', 'шт', { lock: true, hint: 'Фіксована одиниця обліку' }),
+    field('Бажана ціна', inv ? '18,00,0' : '1 800', { mono: true, right: true, suffix: '₴', span: 2, hint: inv ? '' : 'Можна залишити порожнім', error: inv ? 'Вкажіть число від 0, наприклад 1250.50, або залиште поле порожнім.' : '' }),
+  ] } });
+  const compat = card({ title: STEP('05', 'Сумісність'), hint: edit ? 'Сумісність задана під час створення і доступна лише для читання.' : batch ? 'До яких авто підходить деталь. Можна вказати кілька. Необовʼязково.' : 'Перший рядок підставлено з авто-джерела. Додайте інші, якщо деталь підходить і до них.', form: { fields: [
+    field('Марка', 'Volkswagen', { lock: true }), field('Модель', 'Passat B8', { lock: true }), field('Рік', '2015', { lock: true, mono: true }), field('', '', { ph: '' }),
+    ...(edit ? [] : [field('Марка', 'Volkswagen', { select: true }), field('Модель', 'Golf VII', { select: true }), field('Рік', '', { ph: 'будь-який', mono: true }), field('', '', {})]),
+  ].filter((f) => f.label), caption: edit ? '' : 'З вибраного авто-джерела. Змінюється разом із джерелом. Сумісність задається лише під час створення. Після збереження її не можна змінити.', buttons: edit ? null : [{ cls: 'rz-btn rz-btn--sm', icon: 'icon-plus', label: 'Додати ще авто', off: 'false', style: '' }] } });
+  const photos = card({ title: STEP('06', 'Фото'), hint: edit ? 'Нові фото завантажуються одразу після вибору. Зберегти можна, коли всі файли завантажені.' : 'Виберіть фото та перевірте перелік. Файли завантажаться разом зі створенням деталі.',
+    photos: mode === 'media' ? [{ img: true, status: 'Завантажено', statusStyle: 'position:absolute;left:6px;bottom:6px;font-size:var(--rz-fs-micro);color:var(--rz-ok)' }, { img: true, status: 'Помилка завантаження', statusStyle: 'position:absolute;left:6px;bottom:6px;font-size:var(--rz-fs-micro);color:var(--rz-danger)' }, { img: true, status: 'Завантаження…', statusStyle: 'position:absolute;left:6px;bottom:6px;font-size:var(--rz-fs-micro);color:var(--rz-text-muted)' }, { add: true, label: 'Фото деталі' }]
+      : edit ? [{ cover: true, img: true }, { img: true }, { img: true }, { add: true, label: 'Фото деталі' }] : [{ add: true, label: 'Фото деталі' }],
+    form: mode === 'media' ? { notes: [notice('danger', 'icon-circle-alert', 'Частина фото не завантажилася. Повторіть завантаження або приберіть ці файли, щоб зберегти деталь.')] } : { caption: edit ? 'Покупці бачать фото у картці деталі.' : 'Формати зображень, кілька файлів за раз. Фото ще не вибрано. Додайте знімки — покупці бачать їх у картці деталі.' } });
+  const sumFacts = edit ? firstFact([fact('Доступно', '3', { mono: true }), fact('У резерві', '1', { mono: true }), fact('QR-код', 'RZ-000611', { mono: true })]) : firstFact([fact('Джерело', batch ? 'Партія з аукціону #12' : 'VW Passat B8 · 2016'), fact('Кількість', inv ? '—' : '4 шт', { mono: true }), fact('Бажана ціна', inv ? '—' : '1 800 ₴', { mono: true })]);
+  const aside = [
+    card({ title: 'Зведення', facts: sumFacts, form: edit ? { buttons: [{ cls: 'rz-btn rz-btn--sm', icon: 'icon-printer', label: 'Надрукувати стікер', off: 'false', style: '' }] } : { caption: 'Обовʼязкові поля позначені *. Решту можна заповнити пізніше. Фото можна додати пізніше.' } }),
+    ...(edit ? [card({ title: 'Видалення', form: { caption: 'Деталь у резерві під замовлення — сервер відхилить видалення.', buttons: [{ cls: 'rz-btn rz-btn--danger', icon: 'icon-trash-2', label: 'Видалити запчастину', off: 'true', style: 'opacity:0.5' }] } })] : []),
+  ];
+  const n = inv ? [notice('danger', 'icon-triangle-alert', 'Деталь не створено: виправте позначені нижче поля.')] : mode === 'createfail' ? [notice('danger', 'icon-circle-alert', 'Не вдалося створити деталь. Перевірте зв’язок і надішліть форму ще раз.')] : [];
+  return {
+    crumbs: crumbs(edit ? ['Склад', 'Запчастини', 'Колісний диск R17', 'Редагування'] : ['Склад', 'Запчастини', 'Нова деталь']),
+    actions: [btn(edit ? 'До деталі' : 'Скасувати', edit ? 'icon-arrow-left' : 'icon-x', 'ghost'), btn(edit ? 'Зберегти зміни' : 'Створити деталь', 'icon-check', 'primary', mode === 'media' ? { disabled: true, title: 'Дочекайтеся, доки завантажаться всі фото.' } : {})],
+    banner: null, head: { title: edit ? 'Редагувати деталь' : 'Нова деталь', totals: [], sub: edit ? 'Створено Олег К. · 02.10.2026' : 'Решту можна заповнити пізніше.', chips: null },
+    notices: n, toolbar: null, bulk: null, peek: false, blocks: [two([source, describe, condition, qty, compat, photos], aside, 300)], o: mode === 'saved' ? toast('Зміни збережено.') : {},
+  };
+}
+
+function sheet(mode) {
+  const inv = mode === 'invalid', busy = mode === 'busy';
+  const f = (l, v, x) => { const r = field(l, v, x); r.cell = 'min-width:0;grid-column:span ' + ((x && x.span) || 1); return r; };
+  return { scrim: true, sheet: {
+    box: 'position:absolute;top:0;right:0;bottom:0;width:640px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;border-left:1px solid var(--rz-border-strong);background:var(--rz-sheet-body);box-shadow:var(--rz-shadow-dialog)',
+    title: 'Нова деталь', desc: 'Склад · Деталі', busy,
+    groups: [
+      { n: '01', title: 'Джерело', choices: [choice('З авто', 'Розібране авто зі складу', true), choice('З партії', 'Закупівля в постачальника')], fields: [f('Автомобіль-джерело', 'VW Passat B8 · 2016 · A-0142', { select: true, span: 2, hint: 'Деталь буде прив’язана до цього авто.' })] },
+      { n: '02', title: 'Опис деталі', fields: [f('Назва', inv ? '' : 'Ліхтар задній лівий', { req: true, span: 2, error: inv ? 'Введіть назву деталі — за нею її знаходять на складі.' : '' }), f('Тип деталі', 'Оптика', { hint: 'Наприклад: кузов, оптика, двигун' }), f('OEM-код', '3G5945207', { mono: true, hint: 'Каталожний номер виробника' })] },
+      { n: '03', title: 'Стан деталі', choices: [choice('Хороший стан', 'Без суттєвих дефектів', true), choice('Задовільний стан', 'Сліди використання'), choice('Пошкоджена', 'Для розбору чи відновлення')] },
+      { n: '04', title: 'Кількість і ціна', fields: [f('Кількість', inv ? '0' : '1', { req: true, mono: true, right: true, error: inv ? 'Вкажіть ціле число від 1, наприклад 3.' : '' }), f('Бажана ціна', '2 400', { mono: true, right: true, suffix: '₴', hint: 'Можна залишити порожнім' })] },
+    ].map((g) => ({ caption: '', notes: [], choices: null, fields: null, ...g })),
+    note: 'Сумісність і фото — на повній формі',
+    submit: busy ? 'Створюємо…' : 'Створити деталь',
+  } };
+}
+function priceSheet() {
+  const fl = field('Ціна продажу', '1 800', { mono: true, right: true, suffix: '₴', span: 2, hint: 'за 1 шт' });
+  return { scrim: true, sheet: { box: 'position:absolute;top:0;right:0;bottom:0;width:440px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;border-left:1px solid var(--rz-border-strong);background:var(--rz-sheet-body);box-shadow:var(--rz-shadow-dialog)', title: 'Ціна продажу', desc: 'Колісний диск R17', busy: false,
+    groups: [{ fields: [fl], notes: [notice('info', 'icon-info', 'Ціна фіксується під час продажу — у резерві її ще немає.')], caption: '', choices: null, title: '' }], note: '', submit: 'Зберегти' } };
+}
+
+function imports(o) {
+  o = o || {};
+  const rows = [['sklad_oct.xlsx', 'Ірина М. · 15.10', 'Завершено', 'rz-pill rz-pill--ok', '412', '398'], ['auction-12.csv', 'Олег К. · 14.10', 'Перевірка', 'rz-pill rz-pill--warn', '18', '—'], ['old-base.xlsx', 'Олег К. · 01.10', 'Помилка', 'rz-pill rz-pill--danger', '1 204', '0']];
+  const t = { cols: [{ label: 'Файл', style: P + 'text-align:left' }, { label: 'Статус', style: P + 'text-align:left' }, { label: 'Рядків', style: P + 'text-align:right' }, { label: 'Створено', style: P + 'text-align:right' }], rows: rows.map((r) => ({ style: 'height:44px;border-top:1px solid var(--rz-border)', cells: [{ isText: true, text: r[0], sub: r[1], style: P + 'font-family:var(--rz-font-mono);color:var(--rz-text-strong)' }, { isPill: true, text: r[2], pill: r[3], style: P }, { isNum: true, text: r[4], style: P + 'text-align:right;color:var(--rz-text-muted)' }, { isNum: true, text: r[5], style: P + 'text-align:right;color:var(--rz-text-strong)' }] })) };
+  return { crumbs: crumbs(['Склад', 'Імпорт запчастин']), actions: [btn('Імпорт запчастин', 'icon-upload', 'primary')], banner: null, head: { title: 'Імпорт запчастин', totals: [], sub: '', chips: null }, notices: [], toolbar: null, bulk: null, peek: false, o: {},
+    blocks: [one([o.empty ? stateCard('brand', 'status', 'icon-upload', 'Імпортів ще немає', 'Завантажте таблицю — ми зіставимо колонки й покажемо, що буде створено.', [{ cls: 'rz-btn rz-btn--primary', icon: 'icon-upload', label: 'Імпорт запчастин' }]) : card({ caption: 'Історія імпортів', table: t })])] };
+}
+function flow(step) {
+  const steps = ['Файл', 'Колонки', 'Перевірка', 'Результат'];
+  const idx = { map: 1, review: 2, conflict: 2, result: 3 }[step];
+  const tbl = (cols, rows) => ({ cols: cols.map(([l, a]) => ({ label: l, style: P + 'text-align:' + (a || 'left') })), rows: rows.map((r) => ({ style: 'height:40px;border-top:1px solid var(--rz-border)', cells: r.map((c, i) => (i === 0 ? { isText: true, text: c, style: P + 'font-family:var(--rz-font-mono);color:var(--rz-text-strong)' } : { isText: true, text: c, style: P + (cols[i][1] === 'right' ? 'text-align:right;font-family:var(--rz-font-mono)' : 'color:var(--rz-text)') })) })) });
+  let left, chips = [{ cls: step === 'result' ? 'rz-pill rz-pill--ok' : 'rz-pill rz-pill--warn', text: step === 'result' ? 'Завершено' : 'Перевірка' }];
+  if (step === 'map') left = [card({ title: 'Колонки файлу', table: tbl([['Колонка у файлі'], ['Поле в розбірці'], ['Приклад']], [['Назва', 'Назва', 'Фара передня ліва'], ['Артикул', 'OEM', '3G1941005'], ['К-сть', 'Кількість', '1'], ['Ціна', 'Ціна продажу', '4800'], ['Авто', 'Не імпортувати', 'Passat B8']]) })];
+  else if (step === 'result') left = [card({ kpis: [{ label: 'Створено', value: '398', meta: 'з 412', style: 'font-size:var(--rz-fs-page);color:var(--rz-ok)' }, { label: 'Пропущено', value: '14', meta: '', style: 'font-size:var(--rz-fs-page);color:var(--rz-text-dim)' }, { label: 'Помилок', value: '0', meta: '', style: 'font-size:var(--rz-fs-page);color:var(--rz-text-strong)' }] }), card({ title: 'Створені позиції', table: tbl([['Деталь'], ['К-сть', 'right']], [['Фара передня ліва', '1'], ['Генератор', '2'], ['Колісний диск R17', '4']]) })];
+  else left = [card({ kpis: [{ label: 'Буде створено', value: '398', meta: '', style: 'font-size:var(--rz-fs-page);color:var(--rz-text-strong)' }, { label: 'Потребує рішення', value: '14', meta: '', style: 'font-size:var(--rz-fs-page);color:var(--rz-warn)' }, { label: 'Пропущено', value: '0', meta: '', style: 'font-size:var(--rz-fs-page);color:var(--rz-text-dim)' }] }), card({ title: 'Рядки з питаннями', table: tbl([['Рядок'], ['Деталь'], ['Що не так']], [['17', 'Генератор', 'Схожа деталь уже є'], ['42', '—', 'Немає назви'], ['58', 'Стартер', 'Ціна не число']]) })];
+  return { crumbs: crumbs(['Склад', 'Імпорт запчастин', 'sklad_oct.xlsx']), actions: step === 'result' ? [btn('До складу', 'icon-package', '')] : [btn('Скасувати', 'icon-x', 'ghost'), btn('Далі', 'icon-arrow-right', 'primary')], banner: null,
+    head: { title: 'sklad_oct.xlsx', totals: [], sub: steps.map((s, i) => (i < idx ? '✓ ' : i === idx ? '● ' : '○ ') + s).join('   '), chips },
+    notices: step === 'conflict' ? [notice('warn', 'icon-git-merge', 'Рядок 17: схожа деталь уже є на складі — «Генератор», OEM 03L903023F.', 'Створити окремо')] : [], toolbar: null, bulk: null, peek: false, o: {},
+    blocks: [two(left, [card({ title: 'Файл', facts: firstFact([fact('Рядків', '412', { mono: true }), fact('Аркуш', 'Склад'), fact('Завантажив', 'Ірина М.')]) })], 300)] };
+}
+
+function build() {
+  const S = [];
+  const skelState = list({ skel: true, rows: [] });
+  skelState.blocks = [one([card({ skel: Array.from({ length: 12 }, (_, i) => 'height:28px;width:' + [92, 84, 96, 78, 90, 88, 94, 80, 86, 92, 82, 90][i] + '%') })])];
+  S.push({ num: '1', title: 'Список', route: '/app/:tenant/parts', source: 'PartsScreen.tsx · parts-list-messages.ts · access-messages.ts', frames: [
+    { label: 'Дані', note: '', ...list() },
+    { label: 'Peek', note: 'клік по рядку — панель поруч', ...list({ active: 'p11', peek: true }) },
+    { label: 'Вибір', note: 'BulkBar замість тулбара', ...list({ sel: ['p1', 'p3', 'p6'] }) },
+    { label: 'Фільтр «Марка»', note: 'popover з лічильниками', ...list({ make: true, reset: true, rows: PARTS.filter((p) => p[3].startsWith('VW')), range: '1–5 з 5', page: 'Сторінка 1 з 1', ovl: { popover: MAKES } }) },
+    { label: 'Завантаження', note: '', ...skelState },
+    { label: 'Порожньо', note: 'складу ще немає', ...list({ noTotals: true, empty: true, state: stateCard('brand', 'status', 'icon-package', 'Тут поки порожньо', 'Додайте першу деталь або розберіть авто — позиції з’являться тут.', [{ cls: 'rz-btn', icon: 'icon-upload', label: 'Імпорт запчастин' }, { cls: 'rz-btn rz-btn--primary', icon: 'icon-plus', label: 'Додати деталь' }], '', 480) }) },
+    { label: 'Нічого не знайдено', note: 'фільтри зберігаються', ...list({ query: 'zzz', make: true, reset: true, state: stateCard('', 'status', 'icon-search-x', 'Нічого не знайдено', 'За цими фільтрами нічого немає. Спробуйте прибрати частину умов.', [{ cls: 'rz-btn', icon: 'icon-x', label: 'Скинути фільтри' }], '', 380) }) },
+    { label: 'Немає мережі', note: '', ...list({ noTotals: true, state: stateCard('danger', 'alert', 'icon-wifi-off', 'Склад не відповідає', 'Немає звʼязку з сервером. Фільтри лишилися на місці — повторіть, коли мережа повернеться.', [{ cls: 'rz-btn', icon: 'icon-refresh-cw', label: 'Спробувати ще раз' }], 'звернення 7f3a9c21-b4e0', 380) }) },
+    { label: 'Помилка сервера', note: '', ...list({ noTotals: true, state: stateCard('danger', 'alert', 'icon-triangle-alert', 'Склад не завантажився', 'Не вдалося завантажити склад. Дані на місці — потрібно лише повторити запит.', [{ cls: 'rz-btn', icon: 'icon-refresh-cw', label: 'Спробувати ще раз' }], 'звернення 0c51e8aa-91f2', 380) }) },
+    { label: 'Немає прав', note: 'модуль замінено екраном', ...list({ denied: true }) },
+    { label: 'Ліміт тарифу', note: '«Додати» вимкнено з причиною', ...list({ quota: true }) },
+    { label: 'Лише перегляд', note: 'підписка неактивна', ...list({ ro: true }) },
+    { label: 'Скинутий фільтр', note: 'з URL прийшов знятий фільтр', ...list({ origin: true }) },
+    { label: 'Без імпорту', note: 'флаг parts.bulk-import вимкнено', ...list({ noImport: true }) },
+    { label: 'Деталь додано', note: 'тост після шторки', ...list({ ovl: toast('Деталь створено.') }) },
+  ] });
+  S.push({ num: '2', title: 'Картка деталі', route: '/app/:tenant/parts/:partId', source: 'PartsScreen.tsx · part-detail-messages.ts', frames: [
+    { label: 'Дані', note: '', ...detail() },
+    { label: 'Без ціни', note: '', ...detail({ noPrice: true }) },
+    { label: 'Без фото', note: '', ...detail({ noPhotos: true }) },
+    { label: 'Усе продано', note: '', ...detail({ stock: [0, 0, 4] }) },
+    { label: 'Усе в резерві', note: '', ...detail({ stock: [0, 4, 0], noSales: true }) },
+    { label: 'В інвентаризації', note: '', ...detail({ locked: true }) },
+    { label: 'Не розміщена', note: '', ...detail({ notPlaced: true }) },
+    { label: 'Без складського модуля', note: 'без «Перемістити»', ...detail({ noModule: true }) },
+    { label: 'Меню «Інші дії»', note: 'недоступна дія з причиною', ...detail({ ovl: { menu: MENU } }) },
+    { label: 'Лише перегляд', note: '', ...detail({ ro: true }) },
+    { label: 'Завантаження', note: '', ...detail({ loading: true }) },
+    { label: 'Помилка', note: '', ...detail({ error: true }) },
+  ] });
+  S.push({ num: '3', title: 'Форма деталі', route: '/app/:tenant/parts/new · /parts/:partId/edit', source: 'PartsScreen.tsx (кроки 01–06) · part-form-messages.ts', frames: [
+    { label: 'Нова · з авто', note: '', ...form('new') },
+    { label: 'Нова · з партії', note: '', ...form('batch') },
+    { label: 'Помилки полів', note: 'після спроби створити', ...form('invalid') },
+    { label: 'Немає права на авто', note: '', ...form('noperm') },
+    { label: 'Архівне авто', note: '', ...form('archived') },
+    { label: 'Фото не завантажились', note: 'збереження заблоковане', ...form('media') },
+    { label: 'Не вдалося створити', note: '', ...form('createfail') },
+    { label: 'Редагування', note: 'джерело й сумісність не змінюються', ...form('edit') },
+    { label: 'Зміни збережено', note: 'тост', ...{ ...form('edit'), o: toast('Зміни збережено.') } },
+    { label: 'Помилка завантаження', note: 'редагування', ...form('loadfail') },
+  ] });
+  S.push({ num: '4', title: 'Шторки й діалоги', route: 'список · картка деталі', source: 'PartsScreen.tsx:3767 Sheet · ConfirmDialog · FormDialog · part-form-messages.ts', frames: [
+    { label: 'Шторка «Нова деталь»', note: 'зі списку, без виходу', ...list({ ovl: sheet('new') }) },
+    { label: 'Шторка · помилки полів', note: '', ...list({ ovl: sheet('invalid') }) },
+    { label: 'Шторка · створюємо', note: 'не закривається', ...list({ ovl: sheet('busy') }) },
+    { label: 'Шторка «Ціна продажу»', note: '', ...detail({ ovl: priceSheet() }) },
+    { label: 'Діалог «Перемістити»', note: 'FormDialog md', ...detail({ ovl: dialog('Перемістити', '', 'Зберегти', 'rz-btn--primary', { sub: 'Колісний диск R17', fields: [field('Склад', 'Склад 2', { select: true }), field('Зона', 'C', { select: true }), field('Місце на складі', 'Стелаж 2', { span: 2 })] }) }) },
+    { label: 'Видалити деталь?', note: '', ...detail({ ovl: dialog('Видалити деталь?', 'Історія продажів, резерви та фото цієї деталі зникнуть назавжди. Сервер відхилить видалення, якщо деталь уже в замовленні.', 'Видалити деталь', 'rz-btn--danger') }) },
+    { label: 'Видаляємо…', note: 'pending', ...detail({ ovl: dialog('Видалити деталь?', 'Історія продажів, резерви та фото цієї деталі зникнуть назавжди. Сервер відхилить видалення, якщо деталь уже в замовленні.', 'Видаляємо…', 'rz-btn--danger', { busy: true }) }) },
+    { label: 'Конфлікт видалення', note: 'деталь у замовленні', ...detail({ ovl: dialog('Видалити деталь?', 'Історія продажів, резерви та фото цієї деталі зникнуть назавжди. Сервер відхилить видалення, якщо деталь уже в замовленні.', 'Видалити деталь', 'rz-btn--danger', { error: 'Не вдалося видалити деталь через конфлікт.' }) }) },
+  ] });
+  S.push({ num: '5', title: 'Імпорт запчастин', route: '/app/:tenant/parts/imports · /imports/:importId', source: 'imports/import-*-messages.ts', unverified: 'тексти імпорту ще не звірено з кодом', frames: [
+    { label: 'Історія імпортів', note: '', ...imports() },
+    { label: 'Порожньо', note: '', ...imports({ empty: true }) },
+    { label: 'Колонки', note: 'крок 2', ...flow('map') },
+    { label: 'Перевірка', note: 'крок 3', ...flow('review') },
+    { label: 'Конфлікт', note: 'схожа деталь', ...flow('conflict') },
+    { label: 'Результат', note: 'крок 4', ...flow('result') },
+  ] });
+  return S.map((s) => ({ unverified: '', ...s, anchor: 's' + s.num, href: '#s' + s.num, frames: s.frames.map((f, i) => ({ ...f, num: s.num + '.' + (i + 1), anchor: 'f' + s.num + '-' + (i + 1), href: '#f' + s.num + '-' + (i + 1) })) }));
+}
+
+class Component extends DCLogic {
+  renderVals() {
+    if (!this._s) this._s = build();
+    return {
+      theme: this.props.theme ?? 'dark', density: this.props.density ?? 'compact',
+      nav: NAV.map((g) => ({ title: g.title, items: g.items.map(([label, icon, on]) => ({ label, icon, current: on ? 'page' : 'false' })) })),
+      sections: this._s,
+    };
+  }
+}
+</script>
+</body>
+</html>

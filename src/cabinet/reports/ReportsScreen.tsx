@@ -14,8 +14,6 @@ import {
   EmptyState,
   Field,
   Notice,
-  PageBody,
-  PageHeader,
   SectionPanel,
   SkeletonRows,
   StatusPill,
@@ -32,6 +30,7 @@ import { tenantRequestScope } from '../tenant-request-scope'
 import { useLatestMutationGuard } from '../use-latest-mutation-guard'
 import { commonMessages, translate, useLocale, useT, type Locale } from '@/i18n'
 import { reportsMessages } from './messages'
+import { RecordHead, RecordShell } from '../billing/billing-shell'
 
 type ReportsKey = keyof (typeof reportsMessages)['uk']
 
@@ -487,12 +486,11 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
   const transferError = savePdf.error ?? printPdf.error
 
   return (
-    <PageBody aria-labelledby="reports-title" className="gap-5">
-      <PageHeader
-        eyebrow={t('eyebrow')}
-        title={<span id="reports-title">{t('title')}</span>}
-      />
-      <p className="text-app-muted max-w-[60ch] text-sm">{t('lead')}</p>
+    <RecordShell
+      crumb={`${t('eyebrow')} · ${t('title')}`}
+      labelledBy="reports-title"
+    >
+      <RecordHead lead={t('lead')} title={t('title')} titleId="reports-title" />
 
       {canManage ? (
         <form
@@ -518,7 +516,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
             }
             title={t('newReport')}
           >
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rz-form-grid">
               <Field
                 error={problems.from}
                 hint={t('fromHint')}
@@ -581,7 +579,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                 if (period === undefined) {
                   return (
                     <>
-                      <span aria-hidden className="text-app-dim">
+                      <span aria-hidden className="rz-dim">
                         —
                       </span>
                       <span className="sr-only">{t('periodUnknown')}</span>
@@ -618,16 +616,13 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                         className="grid w-full justify-items-end gap-1 md:justify-items-start"
                         role="status"
                       >
-                        <span className="text-app-muted text-[12.5px]">
+                        <span className="rz-caption rz-muted">
                           {progressText(report, status, locale)}
                         </span>
                         {percent === null ? null : (
-                          <span
-                            aria-hidden
-                            className="block h-1 w-24 overflow-hidden rounded-full bg-white/10"
-                          >
+                          <span aria-hidden className="rz-meter w-24">
                             <span
-                              className="bg-brand block h-full transition-all duration-500"
+                              className="bg-state-info transition-[width] duration-[var(--rz-dur-slow)]"
                               style={{ width: `${String(percent)}%` }}
                             />
                           </span>
@@ -635,7 +630,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                       </span>
                     ) : null}
                     {status === 'failed' ? (
-                      <span className="text-app-muted text-[12.5px]">
+                      <span className="rz-caption rz-muted">
                         {report.errorMessage
                           ? t('failedReason', { reason: report.errorMessage })
                           : t('failedUnknown')}{' '}
@@ -643,7 +638,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                       </span>
                     ) : null}
                     {status === 'expired' ? (
-                      <span className="text-app-muted text-[12.5px]">
+                      <span className="rz-caption rz-muted">
                         {t('expiredPrefix')}{' '}
                         <DateValue value={report.expiresAt} withTime={false} />,{' '}
                         {t('fileDeleted')}{' '}
@@ -651,7 +646,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                       </span>
                     ) : null}
                     {status === 'completed' ? (
-                      <span className="text-app-dim text-[12.5px]">
+                      <span className="rz-caption">
                         PDF
                         {report.fileSizeBytes === null
                           ? ''
@@ -674,7 +669,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                 if (status === 'completed') {
                   const active = currentDownloading === report.id
                   return (
-                    <span className="flex w-full flex-wrap justify-end gap-2">
+                    <span className="flex w-full flex-wrap justify-end gap-2 font-(family-name:--rz-font)">
                       <Button
                         aria-busy={savePdf.pending && active}
                         disabled={transferBusy}
@@ -682,7 +677,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                           transferRef.current = report
                           savePdf.run()
                         }}
-                        variant="primary"
+                        size="sm"
                       >
                         <Download aria-hidden />
                         {t('downloadPdf')}
@@ -690,6 +685,7 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                       <Button
                         aria-busy={printPdf.pending && active}
                         disabled={transferBusy}
+                        size="sm"
                         onClick={() => {
                           transferRef.current = report
                           printPdf.run()
@@ -706,10 +702,11 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
                   (status === 'failed' || status === 'expired')
                 ) {
                   return (
-                    <span className="flex w-full justify-end">
+                    <span className="flex w-full justify-end font-(family-name:--rz-font)">
                       <Button
                         disabled={isCreating || !rangeIsValid}
                         onClick={() => void createReport()}
+                        size="sm"
                       >
                         <RefreshCw aria-hidden />
                         {status === 'failed'
@@ -734,6 +731,6 @@ export const ReportsScreen: ComponentType<CabinetModuleScreenProps> = ({
           rows={visibleReports}
         />
       )}
-    </PageBody>
+    </RecordShell>
   )
 }

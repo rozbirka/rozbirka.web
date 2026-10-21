@@ -1,0 +1,148 @@
+{
+ "id": "C26",
+ "module": "intakes",
+ "crumbs": [
+  "Склад",
+  "Приймання"
+ ],
+ "title": "Партія з аукціону #12",
+ "route": "/app/:tenant/intakes/:intakeId[/parts/batch]",
+ "source": "intakes/messages.ts, intake-form-messages.ts",
+ "unverified": "колонки партії",
+ "chips": [
+  {
+   "cls": "rz-pill",
+   "text": "Чернетка"
+  }
+ ],
+ "subtitle": "Створив Олег К., 14.10",
+ "actions": [
+  {
+   "label": "Додати партією",
+   "icon": "icon-rows-3"
+  },
+  {
+   "label": "Додати деталь",
+   "icon": "icon-plus",
+   "variant": "primary"
+  }
+ ],
+ "states": [
+  [
+   "data",
+   "Дані"
+  ],
+  [
+   "loading",
+   "Завантаження"
+  ],
+  [
+   "error",
+   "Помилка"
+  ],
+  [
+   "readonly",
+   "Лише перегляд"
+  ],
+  [
+   "batch",
+   "Додати партією"
+  ]
+ ],
+ "stateBanners": {
+  "readonly": {
+   "tone": "warn",
+   "chip": "Кабінет у режимі перегляду",
+   "title": "Підписка неактивна — дані лише для читання.",
+   "body": "Склад, замовлення й історія грошей збереглися повністю, але створювати й змінювати записи не можна, доки підписка не відновиться.",
+   "link": "Перейти до підписки"
+  }
+ },
+ "main": [
+  {
+   "type": "table",
+   "title": "Деталі",
+   "count": "18",
+   "columns": [
+    {
+     "label": "Деталь"
+    },
+    {
+     "label": "К-сть",
+     "align": "end"
+    },
+    {
+     "label": "Ціна",
+     "align": "end"
+    }
+   ],
+   "rows": [
+    [
+     "Фара передня ліва",
+     "1",
+     "4 800"
+    ],
+    [
+     "Дзеркало бічне праве",
+     "2",
+     "1 900"
+    ]
+   ]
+  }
+ ],
+ "aside": [
+  {
+   "type": "facts",
+   "title": "Приймання",
+   "rows": [
+    [
+     "Джерело",
+     "Аукціон"
+    ],
+    [
+     "Постачальник",
+     "—"
+    ]
+   ]
+  }
+ ],
+ "overrides": {
+  "batch": {
+   "main": [
+    {
+     "type": "form",
+     "title": "Додати партією",
+     "action": "Додати рядок",
+     "fields": [
+      {
+       "label": "Назва",
+       "cls": "rz-input"
+      },
+      {
+       "label": "Кількість",
+       "value": "1",
+       "cls": "rz-input rz-input--num"
+      },
+      {
+       "label": "Ціна",
+       "cls": "rz-input rz-input--num"
+      },
+      {
+       "label": "Назва",
+       "cls": "rz-input"
+      },
+      {
+       "label": "Кількість",
+       "value": "1",
+       "cls": "rz-input rz-input--num"
+      },
+      {
+       "label": "Ціна",
+       "cls": "rz-input rz-input--num"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

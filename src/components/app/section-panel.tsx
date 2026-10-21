@@ -43,27 +43,33 @@ export function SectionPanel({
       className={cn(
         variant === 'plain'
           ? 'border-app-line border-b last:border-b-0'
-          : 'border-app-line rounded-panel bg-app-raised border',
+          : 'rz-card',
         className,
       )}
     >
       <header
         className={cn(
-          'flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1',
-          variant === 'plain' ? 'pt-5' : 'px-4 pt-4',
+          variant === 'plain'
+            ? 'flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 pt-4'
+            : 'rz-card__head py-2.5',
         )}
       >
-        <Heading className="text-base font-semibold text-white" id={titleId}>
+        <Heading className="rz-h-card" id={titleId}>
           {title}
         </Heading>
         {aside === undefined ? null : (
-          <div className="text-app-muted text-[13.5px]">{aside}</div>
+          <div className="text-app-muted">{aside}</div>
         )}
         {description === undefined ? null : (
-          <p className="text-app-dim w-full text-[13.5px]">{description}</p>
+          <p className="rz-caption w-full">{description}</p>
         )}
       </header>
-      <div className={cn('grid gap-3', variant === 'plain' ? 'py-4' : 'p-4')}>
+      <div
+        className={cn(
+          'grid gap-3',
+          variant === 'plain' ? 'py-4' : 'rz-card__body',
+        )}
+      >
         {children}
       </div>
       {footer === undefined ? null : <PanelFooter>{footer}</PanelFooter>}
@@ -91,13 +97,13 @@ export function PanelFooter({
   return (
     <div
       className={cn(
-        'border-app-line flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3',
-        standalone && 'rounded-panel bg-app-raised border',
+        'rz-card__foot flex-wrap items-center',
+        standalone && 'rounded-panel border',
         className,
       )}
     >
-      <div className="text-app-dim min-w-0 text-[13.5px]">{leading}</div>
-      <div className="flex flex-wrap items-center gap-2">{children}</div>
+      <div className="rz-caption min-w-0">{leading}</div>
+      <div className="rz-btn-row items-center">{children}</div>
     </div>
   )
 }

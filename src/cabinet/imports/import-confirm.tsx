@@ -1,5 +1,6 @@
-import { Button } from '@/components/app'
+import { Button, SectionPanel } from '@/components/app'
 import { cn } from '@/lib/utils'
+import { Kpi } from '../redesign-kpi'
 import { useLocale } from '@/i18n'
 import type {
   ImportMapping,
@@ -23,27 +24,12 @@ function Entity({
 }) {
   const count = useCount()
   return (
-    <div className="bg-app-raised px-5 pt-4.5 pb-5">
-      <p
-        className={cn(
-          'text-[26px] leading-none font-extrabold tracking-[-0.03em]',
-          value === 0 ? 'text-app-dim' : 'text-app-ink',
-        )}
-      >
-        {count(value)}
-      </p>
-      <p
-        className={cn(
-          'mt-2 text-[14px] font-bold',
-          value === 0 ? 'text-app-dim' : 'text-app-muted',
-        )}
-      >
-        {label}
-      </p>
-      <p className="text-app-dim mt-1 text-[13px] leading-5 text-pretty">
-        {meta}
-      </p>
-    </div>
+    <Kpi
+      label={label}
+      meta={meta}
+      {...(value === 0 ? { tone: 'dim' as const } : {})}
+      value={count(value)}
+    />
   )
 }
 
@@ -144,29 +130,20 @@ export function ImportConfirmStep({
   ]
 
   return (
-    <div className="flex min-w-0 flex-col gap-3.5">
-      <section
-        aria-label={t('willBeCreated')}
-        className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
-      >
-        <div className="px-6 pt-6 pb-5 sm:px-8">
-          <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-            {t('willBeCreated')}
-          </p>
-          <p className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="text-[44px] leading-none font-extrabold tracking-[-0.03em] text-white">
-              {count(validation.plannedParts)}
-            </span>
-            <span className="text-app-muted text-[17px] font-bold">
+    <div className="flex min-w-0 flex-col gap-3">
+      <section aria-label={t('willBeCreated')} className="rz-card">
+        <div className="rz-card__body grid gap-2">
+          <p className="rz-eyebrow m-0">{t('willBeCreated')}</p>
+          <p className="m-0 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <span className="rz-display">{count(validation.plannedParts)}</span>
+            <span className="text-app-strong font-semibold">
               {t('parts', { count: validation.plannedParts })}
             </span>
-            <span className="text-app-dim text-[14px]">
-              {t('units', { count: units })}
-            </span>
+            <span className="text-app-dim">{t('units', { count: units })}</span>
           </p>
         </div>
 
-        <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,170px),1fr))] gap-px border-y">
+        <div className="rz-kpis border-app-line rounded-none border-x-0">
           <Entity
             label={t('intakes')}
             meta={
@@ -209,17 +186,14 @@ export function ImportConfirmStep({
           />
         </div>
 
-        <dl className="divide-app-line divide-y">
+        <dl className="rz-facts">
           {facts.map((fact) => (
-            <div
-              className="flex flex-wrap items-baseline justify-between gap-4 px-6 py-3.5 sm:px-8"
-              key={fact.label}
-            >
-              <dt className="text-app-muted text-[14px]">{fact.label}</dt>
+            <div key={fact.label}>
+              <dt>{fact.label}</dt>
               <dd
                 className={cn(
-                  'text-[14.5px] font-medium',
-                  fact.value === null ? 'text-app-dim' : 'text-app-ink',
+                  'font-medium',
+                  fact.value === null ? 'text-app-dim' : 'text-app-strong',
                 )}
               >
                 {fact.value ?? t('notSet')}
@@ -229,70 +203,52 @@ export function ImportConfirmStep({
         </dl>
       </section>
 
-      <div className="flex flex-wrap items-start gap-3.5">
-        <section
-          aria-label={t('excludedTitle')}
-          className="border-app-line bg-app-raised min-w-0 flex-[1_1_320px] rounded-[18px] border px-5.5 py-5"
+      <div className="flex flex-wrap items-start gap-3">
+        <SectionPanel
+          className="min-w-0 flex-[1_1_320px]"
+          title={t('excludedTitle')}
         >
-          <h2 className="text-app-ink text-[15px] font-bold">
-            {t('excludedTitle')}
-          </h2>
           {excluded.size === 0 ? (
-            <p className="text-app-muted mt-3 text-[14px]">
-              {t('nothingExcluded')}
-            </p>
+            <p className="text-app-muted m-0">{t('nothingExcluded')}</p>
           ) : (
-            <dl className="mt-3.5 grid gap-2.5">
+            <dl className="rz-facts px-0 py-0">
               {[...excluded].map(([reason, howMany]) => (
-                <div
-                  className="flex flex-wrap items-baseline justify-between gap-3"
-                  key={reason}
-                >
-                  <dt className="text-app-muted min-w-0 flex-1 text-[13.5px]">
-                    {reason}
-                  </dt>
-                  <dd className="text-app-ink font-mono text-[13px] tabular-nums">
+                <div key={reason}>
+                  <dt>{reason}</dt>
+                  <dd className="text-right font-mono tabular-nums">
                     {t('rows', { count: howMany })}
                   </dd>
                 </div>
               ))}
             </dl>
           )}
-          <p className="text-app-dim mt-4 text-[13px] leading-5 text-pretty">
-            {t('excludedNote')}
-          </p>
-        </section>
+          <p className="rz-caption m-0 text-pretty">{t('excludedNote')}</p>
+        </SectionPanel>
 
-        <section
-          aria-label={t('goodToKnow')}
-          className="border-app-line bg-app-raised min-w-0 flex-[1_1_320px] rounded-[18px] border px-5.5 py-5"
+        <SectionPanel
+          className="min-w-0 flex-[1_1_320px]"
+          title={t('goodToKnow')}
         >
-          <h2 className="text-app-ink text-[15px] font-bold">
-            {t('goodToKnow')}
-          </h2>
-          <ul className="mt-3.5 grid gap-2.5">
+          <ul className="m-0 grid list-disc gap-2 pl-4">
             {NOTES.map((note) => (
-              <li
-                className="text-app-muted text-[13.5px] leading-6 text-pretty"
-                key={note}
-              >
+              <li className="text-app-muted text-pretty" key={note}>
                 {t(note)}
               </li>
             ))}
           </ul>
-        </section>
+        </SectionPanel>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
         <Button disabled={busy} onClick={onBack}>
           {t('backToReview')}
         </Button>
-        <div className="flex flex-wrap items-center gap-4">
-          <p className="text-app-dim text-[13px]">{t('runsInBackground')}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="rz-caption m-0">{t('runsInBackground')}</p>
           <Button
-            className="h-11.5 px-6 text-[15px] font-bold"
             disabled={busy}
             onClick={onCommit}
+            size="lg"
             variant="primary"
           >
             {t('startImport')}

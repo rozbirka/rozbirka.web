@@ -37,10 +37,10 @@ export function ImportReferencePicker({
     }
   }
   return (
-    <div className="import-stack">
-      <div className="flex gap-2">
+    <div className="grid min-w-0 gap-2">
+      <div className="flex min-w-0 gap-2">
         <input
-          className="min-w-0 w-full rounded-control border border-app-line bg-app-input px-3 py-2 text-app-ink"
+          className="rz-input w-full min-w-0 max-md:text-title"
           aria-label={t('searchRecord')}
           placeholder={t('searchByName')}
           value={search}
@@ -62,7 +62,7 @@ export function ImportReferencePicker({
         ))}
       </SelectInput>
       {error ? (
-        <p role="alert" className="text-state-danger">
+        <p role="alert" className="rz-error m-0">
           {t('referenceFailed')}
         </p>
       ) : null}

@@ -1,0 +1,73 @@
+{
+ "id": "C17",
+ "module": "profile",
+ "crumbs": [
+  "Налаштування"
+ ],
+ "title": "Профіль",
+ "route": "/app/:tenant/settings/profile",
+ "source": "profile, i18n/locales.ts, account-messages.ts",
+ "unverified": "назви полів профілю",
+ "actions": [
+  {
+   "label": "Зберегти",
+   "icon": "icon-check",
+   "variant": "primary"
+  }
+ ],
+ "states": [
+  [
+   "data",
+   "Дані"
+  ],
+  [
+   "loading",
+   "Завантаження"
+  ],
+  [
+   "error",
+   "Помилка"
+  ]
+ ],
+ "main": [
+  {
+   "type": "form",
+   "title": "Особистий акаунт",
+   "fields": [
+    {
+     "label": "Імʼя",
+     "value": "Олег Коваленко",
+     "cls": "rz-input"
+    },
+    {
+     "label": "Телефон",
+     "value": "+380 67 000 00 10",
+     "cls": "rz-input rz-input--num"
+    }
+   ]
+  },
+  {
+   "type": "facts",
+   "title": "Мова інтерфейсу",
+   "action": "Змінити",
+   "rows": [
+    [
+     "Мова",
+     "Українська"
+    ],
+    [
+     "Доступні",
+     "Українська · English (UK) · Polski"
+    ]
+   ]
+  }
+ ],
+ "aside": [
+  {
+   "type": "text",
+   "title": "Видалення акаунта",
+   "action": "Видалити акаунт",
+   "text": "Керування особистим акаунтом доступне поза тарифними обмеженнями розбірки."
+  }
+ ]
+}

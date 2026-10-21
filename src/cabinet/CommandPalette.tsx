@@ -14,7 +14,6 @@ import {
   type MessageKey,
   type MessageParams,
 } from '@/i18n'
-import { cn } from '@/lib/utils'
 import type { LucideIcon } from 'lucide-react'
 import type { Tenant } from '@/api/types'
 import type { TenantAccessSnapshot } from './access-types'
@@ -188,109 +187,113 @@ export function CommandPalette({
       open={open}
     >
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
-        <Dialog.Content
-          aria-describedby={undefined}
-          className="border-app-line bg-app-raised fixed top-[12vh] left-1/2 z-50 grid max-h-[70vh] w-[min(640px,calc(100vw-2rem))] -translate-x-1/2 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[18px] border shadow-2xl"
-          onKeyDown={(event) => {
-            if (event.key === 'ArrowDown') {
-              event.preventDefault()
-              setActive((value) => Math.min(value + 1, flat.length - 1))
-            }
-            if (event.key === 'ArrowUp') {
-              event.preventDefault()
-              setActive((value) => Math.max(value - 1, 0))
-            }
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              run(current)
-            }
-          }}
-        >
-          <Dialog.Title className="sr-only">{t('palette.title')}</Dialog.Title>
-          <div className="border-app-line flex items-center gap-3 border-b px-4">
-            <Search aria-hidden className="text-app-dim size-4 shrink-0" />
-            <input
-              aria-activedescendant={
-                current === undefined ? undefined : `${listId}-${current.id}`
+        <Dialog.Overlay className="rz-scrim content-start max-sm:p-3 sm:pt-10">
+          <Dialog.Content
+            aria-describedby={undefined}
+            className="rz-dialog max-h-[min(400px,90dvh)] max-w-[600px] grid-rows-[auto_minmax(0,1fr)]"
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowDown') {
+                event.preventDefault()
+                setActive((value) => Math.min(value + 1, flat.length - 1))
               }
-              aria-controls={listId}
-              aria-label={t('palette.title')}
-              autoComplete="off"
-              className="text-app-ink placeholder:text-app-dim min-w-0 flex-1 bg-transparent py-4 text-[15px] outline-none"
-              onChange={(event) => {
-                const next = event.target.value
-                setQuery(next)
-                setFound([])
-                setSearching(next.trim().length >= 2)
-                setActive(0)
-              }}
-              aria-expanded={flat.length > 0}
-              placeholder={t('palette.placeholder')}
-              role="combobox"
-              value={query}
-            />
-            <kbd className="text-app-dim border-app-line-2 hidden rounded-[6px] border px-1.5 py-0.5 font-mono text-[11px] sm:block">
-              Esc
-            </kbd>
-          </div>
+              if (event.key === 'ArrowUp') {
+                event.preventDefault()
+                setActive((value) => Math.max(value - 1, 0))
+              }
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                run(current)
+              }
+            }}
+          >
+            <Dialog.Title className="sr-only">
+              {t('palette.title')}
+            </Dialog.Title>
+            <div className="rz-search border-app-line h-12 rounded-none border-x-0 border-t-0 bg-transparent px-3.5">
+              <Search aria-hidden />
+              <input
+                aria-activedescendant={
+                  current === undefined ? undefined : `${listId}-${current.id}`
+                }
+                aria-controls={listId}
+                aria-label={t('palette.title')}
+                autoComplete="off"
+                className="text-input text-app-strong placeholder:text-app-dim"
+                onChange={(event) => {
+                  const next = event.target.value
+                  setQuery(next)
+                  setFound([])
+                  setSearching(next.trim().length >= 2)
+                  setActive(0)
+                }}
+                aria-expanded={flat.length > 0}
+                placeholder={t('palette.placeholder')}
+                role="combobox"
+                value={query}
+              />
+              <kbd className="rz-kbd max-sm:hidden">Esc</kbd>
+            </div>
 
-          <div className="overflow-y-auto p-2" id={listId} role="listbox">
-            {flat.length === 0 ? (
-              <p className="text-app-muted px-3 py-8 text-center text-sm">
-                {trimmed.length < 2
-                  ? t('palette.typeMore')
-                  : searching
-                    ? t('palette.searching')
-                    : t('palette.nothing')}
-              </p>
-            ) : (
-              groups.map((group) => (
-                <div className="mb-1" key={group.key}>
-                  <p className="text-app-dim px-3 pt-2 pb-1 font-mono text-[10.5px] tracking-[0.14em] uppercase">
-                    {group.label}
-                  </p>
-                  {group.commands.map((command) => {
-                    const Icon = command.icon
-                    return (
-                      <button
-                        aria-selected={current?.id === command.id}
-                        className={cn(
-                          'flex min-h-11 w-full items-center gap-3 rounded-[10px] px-3 text-left text-sm',
-                          current?.id === command.id
-                            ? 'bg-app-input text-white'
-                            : 'text-app-muted hover:bg-white/[0.03]',
-                        )}
-                        id={`${listId}-${command.id}`}
-                        key={command.id}
-                        onClick={() => run(command)}
-                        onMouseEnter={() =>
-                          setActive(
-                            flat.findIndex((entry) => entry.id === command.id),
-                          )
-                        }
-                        role="option"
-                        type="button"
-                      >
-                        {Icon === undefined ? null : (
-                          <Icon aria-hidden className="size-4 shrink-0" />
-                        )}
-                        <span className="min-w-0 flex-1 truncate">
-                          {command.label}
-                        </span>
-                        {command.detail === null ? null : (
-                          <span className="text-app-dim shrink-0 text-[12.5px]">
-                            {command.detail}
+            <div className="overflow-y-auto p-1.5" id={listId} role="listbox">
+              {flat.length === 0 ? (
+                <p className="rz-muted m-0 px-3 py-8 text-center">
+                  {trimmed.length < 2
+                    ? t('palette.typeMore')
+                    : searching
+                      ? t('palette.searching')
+                      : t('palette.nothing')}
+                </p>
+              ) : (
+                groups.map((group) => (
+                  <div className="mb-1 grid gap-px" key={group.key}>
+                    <p className="text-app-dim m-0 px-2 pt-2 pb-1 text-micro font-semibold">
+                      {group.label}
+                    </p>
+                    {group.commands.map((command) => {
+                      const Icon = command.icon
+                      return (
+                        <button
+                          aria-selected={current?.id === command.id}
+                          className="rz-menu__item w-full"
+                          data-highlighted={
+                            current?.id === command.id ? '' : undefined
+                          }
+                          id={`${listId}-${command.id}`}
+                          key={command.id}
+                          onClick={() => run(command)}
+                          onMouseEnter={() =>
+                            setActive(
+                              flat.findIndex(
+                                (entry) => entry.id === command.id,
+                              ),
+                            )
+                          }
+                          role="option"
+                          type="button"
+                        >
+                          {Icon === undefined ? null : (
+                            <Icon
+                              aria-hidden
+                              className="text-app-dim shrink-0"
+                            />
+                          )}
+                          <span className="min-w-0 flex-1 truncate">
+                            {command.label}
                           </span>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-              ))
-            )}
-          </div>
-        </Dialog.Content>
+                          {command.detail === null ? null : (
+                            <span className="rz-mono text-app-dim shrink-0 text-caption">
+                              {command.detail}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ))
+              )}
+            </div>
+          </Dialog.Content>
+        </Dialog.Overlay>
       </Dialog.Portal>
     </Dialog.Root>
   )

@@ -150,6 +150,12 @@ const openInvitationMenu = async (
   return within(await screen.findByRole('menu'))
 }
 
+/** The verb at the end of the confirmation's footer: «Вимкнути», «Відкликати»… */
+const confirmButton = () => {
+  const buttons = within(screen.getByRole('dialog')).getAllByRole('button')
+  return buttons[buttons.length - 1]!
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   let reject!: (reason?: unknown) => void
@@ -384,10 +390,8 @@ it('confirms and completes member, role, permission, and invitation mutations', 
       name: 'Відкликати',
     }),
   )
-  expect(screen.getByRole('alertdialog')).toHaveTextContent(
-    'Відкликати запрошення',
-  )
-  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+  expect(screen.getByRole('dialog')).toHaveTextContent('Відкликати запрошення')
+  await user.click(confirmButton())
   expect(teamApi.revokeInvitation).toHaveBeenCalledWith('invite-1', {
     signal: tenantRequestScope.signal,
   })
@@ -525,7 +529,7 @@ it('reloads only the current cabinet identity after a retry changes generation',
       name: 'Вимкнути',
     }),
   )
-  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+  await user.click(confirmButton())
   await waitFor(() => expect(currentCabinet.retry).toHaveBeenCalledOnce())
 
   const readsBeforeAccessSettles = [
@@ -645,9 +649,9 @@ it('denies a confirmation when team.manage is revoked after the dialog opens', a
       name: 'Вимкнути',
     }),
   )
-  expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+  expect(screen.getByRole('dialog')).toBeInTheDocument()
   currentCabinet.snapshot?.permissions.delete('team.manage')
-  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+  await user.click(confirmButton())
 
   expect(teamApi.deactivateMember).not.toHaveBeenCalled()
   expect(currentCabinet.retry).not.toHaveBeenCalled()
@@ -689,7 +693,7 @@ it('refreshes access after member and invitation confirmation mutations', async 
       name: 'Вимкнути',
     }),
   )
-  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+  await user.click(confirmButton())
   await waitFor(() => expect(teamApi.deactivateMember).toHaveBeenCalledOnce())
 
   await user.click(
@@ -697,7 +701,7 @@ it('refreshes access after member and invitation confirmation mutations', async 
       name: 'Видалити',
     }),
   )
-  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+  await user.click(confirmButton())
   await waitFor(() => expect(teamApi.deleteMember).toHaveBeenCalledOnce())
 
   await user.click(
@@ -705,11 +709,14 @@ it('refreshes access after member and invitation confirmation mutations', async 
       name: 'Відкликати',
     }),
   )
-  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+  await user.click(confirmButton())
   await waitFor(() => expect(teamApi.revokeInvitation).toHaveBeenCalledOnce())
 
   expect(currentCabinet.retry).toHaveBeenCalledTimes(3)
-  expect(screen.getByRole('status')).toHaveTextContent('Запрошення відкликано.')
+  // Each mutation confirms itself in its own toast; the last one is newest.
+  expect(screen.getAllByRole('status').at(-1)).toHaveTextContent(
+    'Запрошення відкликано.',
+  )
 })
 
 it('refreshes access after activating a member', async () => {
@@ -726,7 +733,7 @@ it('refreshes access after activating a member', async () => {
       name: 'Активувати',
     }),
   )
-  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+  await user.click(confirmButton())
 
   await waitFor(() => expect(teamApi.activateMember).toHaveBeenCalledOnce())
   expect(currentCabinet.retry).toHaveBeenCalledOnce()
@@ -742,11 +749,11 @@ it('supports Escape dismissal and restores focus to the confirmation trigger', a
       name: 'Відкликати',
     }),
   )
-  expect(screen.getByRole('alertdialog')).toBeInTheDocument()
+  expect(screen.getByRole('dialog')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Скасувати' })).toHaveFocus()
   await user.keyboard('{Escape}')
 
-  expect(screen.queryByRole('alertdialog')).toBeNull()
+  expect(screen.queryByRole('dialog')).toBeNull()
 })
 
 it('creates an invitation and refreshes the visible invitation lifecycle', async () => {
@@ -765,9 +772,10 @@ it('creates an invitation and refreshes the visible invitation lifecycle', async
   ).toBeInTheDocument()
   expect(teamApi.createInvitation).not.toHaveBeenCalled()
 
-  await user.selectOptions(
-    screen.getByLabelText('Роль для запрошення'),
-    'role-mechanic',
+  await user.click(
+    within(
+      screen.getByRole('group', { name: /Роль для запрошення/ }),
+    ).getByRole('radio', { name: 'Механік' }),
   )
   await user.click(screen.getByRole('button', { name: 'Створити запрошення' }))
 
@@ -813,10 +821,14 @@ it('keeps the owner role read-only and excludes Owner from role assignment and i
   ).toBeNull()
 
   await user.click(screen.getByRole('button', { name: 'Запросити' }))
-  const inviteRole = screen.getByLabelText('Роль для запрошення')
-  expect(inviteRole).toHaveValue('role-mechanic')
+  const inviteRole = screen.getByRole('group', {
+    name: /Роль для запрошення/,
+  })
   expect(
-    within(inviteRole).queryByRole('option', { name: 'Власник' }),
+    within(inviteRole).getByRole('radio', { name: 'Механік' }),
+  ).toBeChecked()
+  expect(
+    within(inviteRole).queryByRole('radio', { name: 'Власник' }),
   ).toBeNull()
   expect(teamApi.changeRole).not.toHaveBeenCalled()
   expect(teamApi.createInvitation).not.toHaveBeenCalled()
@@ -836,7 +848,7 @@ it('refreshes visible member data after a successful member mutation', async () 
       name: 'Вимкнути',
     }),
   )
-  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+  await user.click(confirmButton())
 
   expect(await screen.findByText('Вимкнений')).toBeInTheDocument()
   expect(currentCabinet.retry).toHaveBeenCalledOnce()
@@ -855,7 +867,7 @@ it('keeps mutation success without calling it a failure when authoritative acces
       name: 'Вимкнути',
     }),
   )
-  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+  await user.click(confirmButton())
   await waitFor(() => expect(currentCabinet.retry).toHaveBeenCalledOnce())
   accessRetry.reject(new Error('offline'))
 
@@ -908,7 +920,7 @@ it('keeps old data hidden across a retry generation switch until the current ide
       name: 'Вимкнути',
     }),
   )
-  await user.click(screen.getByRole('button', { name: 'Підтвердити' }))
+  await user.click(confirmButton())
   await waitFor(() => expect(currentCabinet.retry).toHaveBeenCalledOnce())
   expect(screen.queryByText('+380501112233')).toBeNull()
 
@@ -981,7 +993,6 @@ it('renders the team in English (UK)', async () => {
 
   expect(await screen.findByRole('heading', { name: 'Team' })).toBeVisible()
   expect(await screen.findByText('Олена')).toBeInTheDocument()
-  expect(screen.getByText('2 active')).toBeInTheDocument()
   expect(screen.getByText('Showing 2 of 2 members')).toBeInTheDocument()
   expect(screen.getByText('you')).toBeInTheDocument()
   // System role translated, custom role name as the business gave it.
@@ -991,9 +1002,9 @@ it('renders the team in English (UK)', async () => {
   expect(
     screen.getAllByRole('option', { name: 'Механік' }).length,
   ).toBeGreaterThan(0)
-  expect(screen.getAllByText(/in the team since/)[0]).toHaveTextContent(
-    '01/08/2026',
-  )
+  expect(
+    screen.getAllByText(/in the team since/)[0]?.closest('td'),
+  ).toHaveTextContent('01/08/2026')
   expect(screen.getByText('1 active')).toBeInTheDocument()
   expect(screen.getByText(/Механік · valid until/)).toHaveTextContent(
     '01/09/2026',

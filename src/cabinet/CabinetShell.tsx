@@ -5,11 +5,13 @@ import { useCabinet, type CabinetContextValue } from './CabinetContext'
 import { CabinetNavigation } from './CabinetNavigation'
 import { CommandPalette } from './CommandPalette'
 import { ConnectionNotice } from './ConnectionNotice'
+import { useDesignSystemRoot } from '@/components/app/use-design-system-root'
 
 export function CabinetShell() {
   const auth = useAuth()
   const cabinet = useCabinet()
   const navigate = useNavigate()
+  useDesignSystemRoot()
 
   if (!isReady(cabinet)) return null
 
@@ -19,15 +21,16 @@ export function CabinetShell() {
   }
 
   return (
-    <div className="cabinet-shell bg-background flex min-h-dvh w-full max-w-full text-white">
+    <div className="cabinet-shell bg-background flex min-h-dvh w-full max-w-full text-app-strong">
       <CabinetNavigation
+        userName={auth.user?.displayName ?? null}
         tenant={cabinet.targetTenant}
         tenants={auth.tenants}
         snapshot={cabinet.snapshot}
         onSwitchTenant={(tenantId) => cabinet.switchTenant(tenantId)}
         onLogout={handleLogout}
       />
-      <main className="cabinet-shell__content min-w-0 flex-1 px-4 py-6 sm:px-6 md:px-8 md:py-8 lg:px-10 lg:py-10">
+      <main className="rz-main cabinet-shell__content">
         <ToastProvider>
           <ConnectionNotice />
           <CommandPalette

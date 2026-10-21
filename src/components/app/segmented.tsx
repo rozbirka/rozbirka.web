@@ -43,7 +43,8 @@ export function Segmented<Value extends string>({
       <div
         aria-label={label}
         className={cn(
-          'bg-app-input border-app-line-2 rounded-control flex flex-wrap gap-1 border p-1',
+          'rz-seg flex-wrap',
+          selectionTone === 'brand' && 'rz-seg--brand',
           className,
         )}
         onKeyDown={(event) => {
@@ -74,14 +75,10 @@ export function Segmented<Value extends string>({
             <button
               aria-pressed={pressed}
               className={cn(
-                'rounded-control min-h-11 flex-1 px-3 text-[13.5px] transition-colors',
-                option.disabled && 'cursor-not-allowed opacity-40',
-                pressed
-                  ? 'bg-white/[0.09] font-medium text-white'
-                  : 'text-app-muted hover:bg-white/[0.04]',
+                'flex-1 justify-center',
                 pressed &&
                   selectionTone === 'brand' &&
-                  'ring-brand ring-1 ring-inset',
+                  'shadow-[inset_0_0_0_1px_var(--rz-brand)]',
               )}
               key={option.value}
               disabled={option.disabled}
@@ -100,26 +97,22 @@ export function Segmented<Value extends string>({
   }
 
   return (
-    <fieldset
-      className={cn(
-        'bg-app-input border-app-line-2 rounded-control flex flex-wrap gap-1 border p-1',
-        className,
-      )}
-    >
+    <fieldset className={cn('rz-seg m-0 flex-wrap', className)}>
       <legend className="sr-only">{label}</legend>
       {options.map((option) => {
         const checked = option.value === value
         return (
           <label
             className={cn(
-              'rounded-control flex min-h-11 flex-1 cursor-pointer items-center justify-center px-3 text-[13.5px] transition-colors',
+              'rounded-rz-xs flex h-[calc(var(--rz-control-h)-6px)] flex-1 cursor-pointer items-center justify-center px-[9px] font-medium whitespace-nowrap transition-colors',
+              'has-[:focus-visible]:shadow-[var(--rz-focus)]',
               option.disabled && 'cursor-not-allowed opacity-40',
               checked
-                ? 'bg-white/[0.09] font-medium text-white'
-                : 'text-app-muted hover:bg-white/[0.04]',
+                ? 'bg-app-selected text-app-strong'
+                : 'text-app-muted hover:text-app-strong',
               checked &&
                 selectionTone === 'brand' &&
-                'ring-brand ring-1 ring-inset',
+                'shadow-[inset_0_0_0_1px_var(--rz-brand)]',
             )}
             key={option.value}
           >

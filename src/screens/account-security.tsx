@@ -2,8 +2,9 @@ import { Link } from 'react-router'
 import { ArrowLeft, LogOut } from 'lucide-react'
 import { useAuth } from '@/auth/AuthContext'
 import { AccountDeletion } from '@/components/account/account-deletion'
-import { BrandLogo } from '@/components/site/brand-logo'
-import { Button } from '@/components/app'
+import { Button, Card, FactRows } from '@/components/app'
+import { useDesignSystemRoot } from '@/components/app/use-design-system-root'
+import { AuthBrand } from './auth-brand'
 import { useT } from '@/i18n'
 import { accountMessages } from '@/components/account/account-messages'
 
@@ -14,91 +15,67 @@ import { accountMessages } from '@/components/account/account-messages'
  * no yard, no subscription and no sidebar to return to.
  */
 export function AccountSecurityScreen() {
+  useDesignSystemRoot()
   const auth = useAuth()
   const user = auth.user
   const t = useT(accountMessages)
   return (
-    <div className="bg-app-canvas relative flex min-h-dvh flex-col text-white">
+    <div className="rz flex min-h-dvh flex-col">
       <title>{t('documentTitle')}</title>
       <meta name="robots" content="noindex, nofollow" />
-      <header className="flex items-center justify-between gap-3 px-4 py-4 sm:px-6 sm:py-6 lg:px-10">
-        <BrandLogo />
-        <Link
-          className="text-app-muted group -mr-2 inline-flex min-h-11 items-center gap-2 rounded-md px-2 text-[13px] transition-colors hover:text-white"
-          to="/account"
-        >
-          <ArrowLeft className="size-4 transition-transform group-hover:-translate-x-0.5" />
+      <header className="flex items-center justify-end px-4 pt-4">
+        <Link className="rz-btn rz-btn--ghost" to="/account">
+          <ArrowLeft aria-hidden />
           <span>{t('back')}</span>
         </Link>
       </header>
 
-      <main className="flex flex-1 justify-center px-4 pb-16 sm:px-6 sm:pb-24">
-        <div className="grid w-full max-w-[420px] content-start gap-6">
-          <div className="flex flex-col gap-2">
-            <span className="text-brand text-[11px] font-medium tracking-[0.28em] uppercase">
-              {t('eyebrow')}
-            </span>
-            <h1 className="text-[30px] leading-[1.05] font-light tracking-[-0.02em] text-balance sm:text-[38px]">
-              {t('title')}
-            </h1>
-            <p className="text-app-muted text-[13.5px] leading-[1.5]">
-              {t('lead')}
-            </p>
+      <main className="grid flex-1 justify-items-center p-6 pt-2">
+        <div className="grid w-full max-w-[420px] content-start gap-5">
+          <AuthBrand />
+          <div className="grid gap-1.5">
+            <span className="rz-eyebrow">{t('eyebrow')}</span>
+            <h1 className="rz-h-page text-balance">{t('title')}</h1>
+            <p className="text-app-muted m-0">{t('lead')}</p>
           </div>
 
-          <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5">
-            <h2 className="text-app-ink text-[15px] font-bold">
-              {t('signedInAs')}
-            </h2>
-            <dl className="mt-3 grid gap-2.5 text-[13.5px]">
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">{t('name')}</dt>
-                <dd className="text-app-ink min-w-0 truncate text-right font-medium">
-                  {user?.displayName ?? '—'}
-                </dd>
-              </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <dt className="text-app-muted">{t('phone')}</dt>
-                <dd className="text-app-ink text-right font-medium tabular-nums">
-                  {user?.phone ?? '—'}
-                </dd>
-              </div>
-            </dl>
-          </section>
+          <Card title={t('signedInAs')}>
+            <FactRows
+              rows={[
+                { label: t('name'), value: user?.displayName ?? '—' },
+                {
+                  label: t('phone'),
+                  value: (
+                    <span className="font-mono tabular-nums">
+                      {user?.phone ?? '—'}
+                    </span>
+                  ),
+                },
+              ]}
+            />
+          </Card>
 
-          <section className="border-app-line bg-app-raised min-w-0 rounded-[20px] border px-5 py-4.5">
-            <h2 className="text-app-ink text-[15px] font-bold">
-              {t('session')}
-            </h2>
-            <Button
-              className="mt-3.5 w-full justify-center"
-              onClick={() => void auth.signOut()}
-            >
-              <LogOut aria-hidden />
-              {t('logout')}
-            </Button>
-            <p className="text-app-dim mt-3 text-[12.5px] leading-5 text-pretty">
-              {t('logoutHint')}
-            </p>
-          </section>
+          <Card title={t('session')}>
+            <div className="grid gap-2.5">
+              <Button
+                className="rz-btn--block"
+                onClick={() => void auth.signOut()}
+                size="lg"
+              >
+                <LogOut aria-hidden />
+                {t('logout')}
+              </Button>
+              <p className="rz-caption m-0 text-pretty">{t('logoutHint')}</p>
+            </div>
+          </Card>
 
           <AccountDeletion key={user?.id} />
 
-          <p className="text-app-dim text-center text-[12px] leading-[1.5]">
-            <Link
-              className="text-app-muted underline underline-offset-4 hover:text-white"
-              to="/privacy"
-            >
-              {t('privacy')}
-            </Link>
+          <p className="rz-caption m-0 text-center">
+            <Link to="/privacy">{t('privacy')}</Link>
           </p>
         </div>
       </main>
-
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 -z-10 [background:radial-gradient(80%_60%_at_50%_0%,rgba(247,116,37,0.12),transparent_60%)]"
-      />
     </div>
   )
 }

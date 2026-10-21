@@ -1,0 +1,223 @@
+{
+ "id": "C27",
+ "module": "parts",
+ "crumbs": [
+  "Склад",
+  "Імпорт запчастин"
+ ],
+ "title": "sklad_oct.xlsx",
+ "route": "/app/:tenant/parts/imports/:importId",
+ "source": "imports/import-*-messages.ts",
+ "unverified": "назви кроків, колонок мапінгу",
+ "chips": [
+  {
+   "cls": "rz-pill rz-pill--warn",
+   "text": "Перевірка"
+  }
+ ],
+ "actions": [
+  {
+   "label": "Скасувати",
+   "icon": "icon-x"
+  },
+  {
+   "label": "Далі",
+   "icon": "icon-arrow-right",
+   "variant": "primary"
+  }
+ ],
+ "states": [
+  [
+   "data",
+   "Колонки"
+  ],
+  [
+   "review",
+   "Перевірка"
+  ],
+  [
+   "conflict",
+   "Конфлікт"
+  ],
+  [
+   "result",
+   "Результат"
+  ],
+  [
+   "loading",
+   "Завантаження"
+  ],
+  [
+   "error",
+   "Помилка"
+  ]
+ ],
+ "main": [
+  {
+   "type": "table",
+   "title": "Колонки файлу",
+   "columns": [
+    {
+     "label": "Колонка у файлі",
+     "mono": true
+    },
+    {
+     "label": "Поле в розбірці"
+    },
+    {
+     "label": "Приклад"
+    }
+   ],
+   "rows": [
+    [
+     "Назва",
+     "Назва",
+     "Фара передня ліва"
+    ],
+    [
+     "Артикул",
+     "OEM",
+     "3G1941005"
+    ],
+    [
+     "К-сть",
+     "Кількість",
+     "1"
+    ],
+    [
+     "Ціна",
+     "Ціна продажу",
+     "4800"
+    ]
+   ]
+  }
+ ],
+ "aside": [
+  {
+   "type": "facts",
+   "title": "Файл",
+   "rows": [
+    [
+     "Рядків",
+     "412",
+     true
+    ],
+    [
+     "Аркуш",
+     "Склад",
+     true
+    ]
+   ]
+  }
+ ],
+ "overrides": {
+  "review": {
+   "kpis": [
+    {
+     "cls": "rz-kpi",
+     "label": "Буде створено",
+     "value": "398",
+     "unit": "",
+     "meta": ""
+    },
+    {
+     "cls": "rz-kpi rz-kpi--warn",
+     "label": "Потребує рішення",
+     "value": "14",
+     "unit": "",
+     "meta": ""
+    }
+   ],
+   "main": [
+    {
+     "type": "table",
+     "title": "Рядки з питаннями",
+     "columns": [
+      {
+       "label": "Рядок",
+       "mono": true
+      },
+      {
+       "label": "Деталь"
+      },
+      {
+       "label": "Що не так"
+      }
+     ],
+     "rows": [
+      [
+       "17",
+       "Генератор",
+       "Схожа деталь уже є"
+      ],
+      [
+       "42",
+       "—",
+       "Немає назви"
+      ]
+     ]
+    }
+   ]
+  },
+  "conflict": {
+   "main": [
+    {
+     "type": "notice",
+     "tone": "warn",
+     "icon": "icon-git-merge",
+     "text": "Схожа деталь уже є на складі.",
+     "action": "Створити окремо"
+    }
+   ]
+  },
+  "result": {
+   "chips": [
+    {
+     "cls": "rz-pill rz-pill--ok",
+     "text": "Завершено"
+    }
+   ],
+   "kpis": [
+    {
+     "cls": "rz-kpi",
+     "label": "Створено",
+     "value": "398",
+     "unit": "з 412",
+     "meta": ""
+    },
+    {
+     "cls": "rz-kpi rz-kpi--dim",
+     "label": "Пропущено",
+     "value": "14",
+     "unit": "",
+     "meta": ""
+    }
+   ],
+   "main": [
+    {
+     "type": "table",
+     "title": "Створені позиції",
+     "columns": [
+      {
+       "label": "Деталь"
+      },
+      {
+       "label": "К-сть",
+       "align": "end"
+      }
+     ],
+     "rows": [
+      [
+       "Фара передня ліва",
+       "1"
+      ],
+      [
+       "Генератор",
+       "2"
+      ]
+     ]
+    }
+   ]
+  }
+ }
+}

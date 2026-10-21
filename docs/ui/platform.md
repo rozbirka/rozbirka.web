@@ -6,9 +6,9 @@
 
 Кабінет має `.cabinet-shell__content` із `env(safe-area-inset-bottom)` у padding. У `index.html` немає `viewport-fit=cover`, тому на iOS цей inset, найімовірніше, дорівнює 0 — фактичний відступ перевіряти на пристрої, а не виводити з CSS; [CabinetNavigation](../../src/cabinet/CabinetNavigation.tsx) та [RedesignShell](../../src/cabinet/redesign-shell.tsx) задають власне компонування. Маркетинговий [SiteHeader](../../src/components/site/header.tsx) перемикає навігацію через responsive classes. Один breakpoint не є універсальним правилом для всіх компонентів.
 
-App Button має мінімальні touch targets і окремий touch size. Під час зміни щільності таблиці або toolbar перевіряти реальний tap target, довгі українські назви й overflow; не зменшувати controls лише для красивого скриншота.
+Висоти контролів — з токенів v2: 28/32px на desktop, 44px на `pointer: coarse`, 56px (`glove`) для складу й сканера. Під час зміни щільності таблиці або toolbar перевіряти реальний tap target, довгі українські назви й overflow; не зменшувати controls лише для красивого скриншота.
 
-Хрестик Sheet має видиму рамку 34px та розширену псевдоелементом область натискання 44px. Її перевіряємо browser hit-testing і кліком поза видимою рамкою: `boundingBox()` не включає псевдоелемент.
+Хрестик Sheet — `.rz-btn--icon` (28/32px) із розширеною псевдоелементом областю натискання. Її перевіряємо browser hit-testing і кліком поза видимою рамкою: `boundingBox()` не включає псевдоелемент.
 
 ## Keyboard і focus
 

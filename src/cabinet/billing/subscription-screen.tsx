@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
-import { Check } from 'lucide-react'
+import { BadgeDollarSign, Check, ReceiptText } from 'lucide-react'
 import {
   Amount,
   Button,
   ConfirmDialog,
+  DataTable,
   DateValue,
   Notice,
   StatusPill,
@@ -26,7 +27,12 @@ import { cn } from '@/lib/utils'
 import { cabinetPath } from '../cabinet-paths'
 import { ModuleAccessDeniedError } from '../policy'
 import { Kpi, KpiStrip } from '../redesign-kpi'
-import { BillingCard, BillingDead, BillingShell } from './billing-shell'
+import {
+  BillingCard,
+  BillingDead,
+  BillingShell,
+  RecordColumns,
+} from './billing-shell'
 import { translate, useLocale, useT, type Locale } from '@/i18n'
 import {
   daysText,
@@ -37,6 +43,8 @@ import {
   paymentTypeLabel,
 } from './billing-vocabulary'
 import { billingMessages } from './messages'
+import { paymentsMessages } from './payments-messages'
+import { plansMessages } from './plans-messages'
 import { subscriptionMessages } from './subscription-messages'
 import {
   billingManagementUnavailable,
@@ -178,7 +186,15 @@ export function SubscriptionScreen() {
     resetCancel()
   }, [generation, resetCancel, resetCheckout])
 
-  if (!subscription || !cabinet.targetTenant) return <EmptyBillingPanel />
+  if (!subscription || !cabinet.targetTenant)
+    return (
+      <BillingShell
+        crumb={translate(subscriptionMessages, locale, 'crumb')}
+        title={translate(subscriptionMessages, locale, 'title')}
+      >
+        <EmptyBillingPanel />
+      </BillingShell>
+    )
 
   const goToPlans = () =>
     void navigate(cabinetPath(cabinet.targetTenant!.slug, 'plans'))
@@ -245,6 +261,8 @@ function SubscriptionPanel({
   const { locale } = useLocale()
   const t = useT(subscriptionMessages)
   const tb = useT(billingMessages)
+  const tp = useT(paymentsMessages)
+  const tplans = useT(plansMessages)
   const accessEnded = subscription.state === 'blocked'
   const providerSubscription = subscription as ProviderAwareSubscriptionDto
   const management = resolveProviderManagement(providerSubscription)
@@ -279,18 +297,85 @@ function SubscriptionPanel({
   )
   const features = subscription.features
 
+  const changeCard = (
+    <BillingDead title={t('noCardManagement')}>{t('changeCard')}</BillingDead>
+  )
+  const summary = (
+    <>
+      <div className="grid min-w-0 flex-[1_1_320px] gap-1">
+        <p className="rz-h-title m-0">
+          {daysLeft === null
+            ? t('noNextChargeDate')
+            : daysLeft >= 0
+              ? t('daysToCharge', { days: daysText(daysLeft, locale) })
+              : t('overdueBy', { days: daysText(-daysLeft, locale) })}
+        </p>
+        <p className="rz-muted m-0 text-pretty">
+          {nextChargeAt === null ? (
+            t('noNextChargeYet')
+          ) : (
+            <>
+              {t('nextCharge')}{' '}
+              <DateValue value={nextChargeAt} withTime={false} />
+              {typeof subscription.amount === 'number' && (
+                <>
+                  {' — '}
+                  <Amount
+                    currency={subscription.currency}
+                    value={subscription.amount}
+                  />
+                </>
+              )}
+              .{' '}
+            </>
+          )}
+          {subscription.cardLast4 ? (
+            <>
+              {t('card', {
+                brand: (subscription.cardBrand ?? 'Card').toUpperCase(),
+              })}{' '}
+              <span className="rz-mono">{subscription.cardLast4}</span>.{' '}
+              <span title={t('noCardExpiry')}>{t('expiryHidden')}</span>
+            </>
+          ) : (
+            t('noCardLinked')
+          )}
+        </p>
+      </div>
+      <div className="rz-btn-row">
+        {changeCard}
+        {canCheckout && (
+          <BillingMutationGate decision={manageDecision}>
+            <Button aria-busy={busy} disabled={busy} onClick={onSubscribe}>
+              {t('payNow')}
+            </Button>
+          </BillingMutationGate>
+        )}
+      </div>
+    </>
+  )
+  const alarming = state.tone === 'danger' || state.tone === 'warn'
+
   return (
     <BillingShell
       actions={
         <>
           <Button asChild>
-            <Link to={paymentsPath}>{t('payments')}</Link>
+            <Link to={plansPath}>
+              <BadgeDollarSign aria-hidden />
+              {tplans('title')}
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link to={paymentsPath}>
+              <ReceiptText aria-hidden />
+              {t('payments')}
+            </Link>
           </Button>
           {canCheckout && (
             <BillingMutationGate decision={manageDecision}>
               <Button
                 aria-busy={busy}
-                className="px-5 text-sm font-bold"
                 disabled={busy}
                 onClick={onSubscribe}
                 variant="primary"
@@ -305,8 +390,20 @@ function SubscriptionPanel({
           )}
         </>
       }
+      banner={
+        alarming ? (
+          <div
+            className={cn(
+              'rz-banner gap-y-2 py-2.5',
+              state.tone === 'danger' ? 'rz-banner--danger' : 'rz-banner--warn',
+            )}
+          >
+            {summary}
+          </div>
+        ) : undefined
+      }
+      chips={<StatusPill tone={state.tone}>{stateLabel}</StatusPill>}
       crumb={t('crumb')}
-      lead={t('lead')}
       title={t('title')}
     >
       {mutationError === null ? null : (
@@ -315,12 +412,7 @@ function SubscriptionPanel({
       {management.kind === 'provider' && (
         <Notice tone="info">
           {t('managedByProvider', { provider: management.label })}{' '}
-          <a
-            className="text-brand underline underline-offset-4"
-            href={management.url}
-            rel="noopener noreferrer"
-            target="_blank"
-          >
+          <a href={management.url} rel="noopener noreferrer" target="_blank">
             {t('manageIn', { provider: management.label })}
           </a>
         </Notice>
@@ -330,96 +422,48 @@ function SubscriptionPanel({
         !canCheckout &&
         !contractManaged && <BillingUnavailableNotice />}
 
-      <div
-        className={cn(
-          'flex flex-wrap items-center gap-x-8 gap-y-4 rounded-[20px] border px-5.5 py-4.5',
-          state.tone === 'danger'
-            ? 'border-state-danger/35 bg-state-danger/10'
-            : state.tone === 'warn'
-              ? 'border-state-warn/35 bg-state-warn/10'
-              : 'border-app-line bg-app-raised',
-        )}
-      >
-        <div className="min-w-0 flex-[1_1_320px]">
-          <p className="flex flex-wrap items-center gap-2.5">
-            <StatusPill tone={state.tone}>{stateLabel}</StatusPill>
-            <span className="text-app-ink text-[15px] font-bold">
-              {daysLeft === null
-                ? t('noNextChargeDate')
-                : daysLeft >= 0
-                  ? t('daysToCharge', { days: daysText(daysLeft, locale) })
-                  : t('overdueBy', { days: daysText(-daysLeft, locale) })}
-            </span>
-          </p>
-          <p className="text-app-muted mt-2 text-[13.5px] leading-5 text-pretty">
-            {nextChargeAt === null ? (
-              t('noNextChargeYet')
+      <KpiStrip>
+        <Kpi label={t('currentPlan')} meta={null} value={planLabel} />
+        <Kpi
+          label={
+            subscription.state === 'trial' ? t('kpiTrialDays') : t('nextCharge')
+          }
+          meta={
+            daysLeft === null
+              ? t('kpiNoChargeDate')
+              : daysLeft >= 0
+                ? t('daysToCharge', { days: daysText(daysLeft, locale) })
+                : t('overdueBy', { days: daysText(-daysLeft, locale) })
+          }
+          tone={daysLeft !== null && daysLeft < 0 ? 'warn' : 'plain'}
+          value={
+            subscription.state === 'trial' ? (
+              daysLeft == null ? (
+                '—'
+              ) : (
+                String(daysLeft)
+              )
+            ) : nextChargeAt === null ? (
+              '—'
             ) : (
-              <>
-                {t('nextCharge')}{' '}
-                <DateValue value={nextChargeAt} withTime={false} />
-                {typeof subscription.amount === 'number' && (
-                  <>
-                    {' — '}
-                    <Amount
-                      currency={subscription.currency}
-                      value={subscription.amount}
-                    />
-                  </>
-                )}
-                .{' '}
-              </>
-            )}
-            {subscription.cardLast4 ? (
+              <DateValue value={nextChargeAt} withTime={false} />
+            )
+          }
+        />
+        <Kpi
+          label={t('kpiPeriodPrice')}
+          meta={
+            subscription.cardLast4 ? (
               <>
                 {t('card', {
                   brand: (subscription.cardBrand ?? 'Card').toUpperCase(),
                 })}{' '}
-                {subscription.cardLast4}.{' '}
-                <span title={t('noCardExpiry')}>{t('expiryHidden')}</span>
+                <span className="rz-mono">{subscription.cardLast4}</span>
               </>
             ) : (
               t('noCardLinked')
-            )}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2.5">
-          <BillingDead title={t('noCardManagement')}>
-            {t('changeCard')}
-          </BillingDead>
-          {canCheckout && (
-            <BillingMutationGate decision={manageDecision}>
-              <Button
-                aria-busy={busy}
-                disabled={busy}
-                onClick={onSubscribe}
-                variant="primary"
-              >
-                {t('payNow')}
-              </Button>
-            </BillingMutationGate>
-          )}
-        </div>
-      </div>
-
-      <KpiStrip>
-        <Kpi
-          label={
-            subscription.state === 'trial'
-              ? t('kpiTrialDays')
-              : t('kpiDaysToCharge')
+            )
           }
-          meta={
-            nextChargeAt === null
-              ? t('kpiNoChargeDate')
-              : t('kpiUntilNextCharge')
-          }
-          tone={daysLeft !== null && daysLeft < 0 ? 'warn' : 'plain'}
-          value={daysLeft == null ? '—' : String(daysLeft)}
-        />
-        <Kpi
-          label={t('kpiPeriodPrice')}
-          meta={planLabel}
           value={
             typeof subscription.amount === 'number' ? (
               <Amount
@@ -431,209 +475,199 @@ function SubscriptionPanel({
             )
           }
         />
-        <Kpi
-          label={t('kpiLimitsReached')}
-          meta={
-            overLimits.length === 0
-              ? t('kpiLimitsOk')
-              : overLimits.map((item) => item.label).join(', ')
-          }
-          tone={overLimits.length === 0 ? 'plain' : 'warn'}
-          value={String(overLimits.length)}
-        />
       </KpiStrip>
 
-      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <BillingCard>
-          <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
-            <div className="min-w-0">
-              <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                {t('currentPlan')}
-              </p>
-              <h2 className="text-app-ink mt-2 text-[24px] leading-tight font-extrabold tracking-[-0.02em]">
-                {planLabel}
-              </h2>
-            </div>
-            <p className="text-right">
-              <span className="text-app-ink text-[24px] leading-tight font-extrabold tracking-[-0.02em]">
-                {typeof subscription.amount === 'number' ? (
-                  <Amount
-                    currency={subscription.currency}
-                    value={subscription.amount}
-                  />
-                ) : (
-                  '—'
-                )}
-              </span>
-              <span className="text-app-dim mt-1 block text-[12.5px]">
-                {t('perPeriod')}
-              </span>
-            </p>
-          </div>
-          <ul className="mt-4 grid gap-2">
-            {features.length === 0 ? (
-              <li className="text-app-dim text-[13.5px]">{t('noFeatures')}</li>
-            ) : (
-              features.map((code) => (
-                <li
-                  className="text-app-muted flex items-start gap-2.5 text-[13.5px]"
-                  key={code}
-                >
-                  <Check
-                    aria-hidden
-                    className="text-state-ok mt-0.5 size-4 shrink-0"
-                  />
-                  {featureLabel(code, locale)}
-                </li>
-              ))
-            )}
-          </ul>
-          <div className="mt-5 flex flex-wrap gap-2.5">
-            <Button asChild>
-              <Link to={plansPath}>{t('allPlans')}</Link>
-            </Button>
-            {isMono && subscription.canCancel && (
-              <BillingMutationGate decision={manageDecision}>
-                <Button
-                  disabled={busy}
-                  onClick={onCancelRequest}
-                  variant="danger"
-                >
-                  {t('cancelSubscription')}
-                </Button>
-              </BillingMutationGate>
-            )}
-          </div>
-          <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-            {t('noCycleDiscount')}
-          </p>
-        </BillingCard>
-
-        <BillingCard title={t('planLimits')}>
-          {overLimits.length > 0 && (
-            <Notice
-              action={
-                <Button onClick={onSeePlans} variant="primary">
-                  {t('upgrade')}
-                </Button>
-              }
-              tone="warn"
-            >
-              {t('limitReached', {
-                limits: overLimits
-                  .map(
-                    (item) =>
-                      `${item.label} ${String(item.data.used)}/${item.data.max == null ? '∞' : String(item.data.max)}`,
-                  )
-                  .join(', '),
-              })}
-            </Notice>
-          )}
-          <ul className="grid gap-3" role="list">
-            {limits.map((item) => {
-              const max = item.data.max
-              const over = max != null && item.data.used > max
-              const ratio =
-                max == null
-                  ? 1
-                  : max === 0
-                    ? 0
-                    : Math.min(item.data.used / max, 1)
-              return (
-                <li key={item.label}>
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-app-muted text-[13.5px]">
-                      {item.label}
-                    </span>
-                    <span
-                      className={cn(
-                        'font-mono text-[13px] tabular-nums',
-                        over ? 'text-state-warn' : 'text-app-ink',
-                      )}
-                    >
-                      {item.data.used} / {max ?? '∞'}
-                    </span>
-                  </div>
-                  <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
-                    <div
-                      className={cn(
-                        'h-full transition-all duration-500',
-                        max == null
-                          ? 'bg-brand/40'
-                          : ratio >= 1
-                            ? 'bg-state-danger'
-                            : ratio >= 0.8
-                              ? 'bg-state-warn'
-                              : 'bg-brand',
-                      )}
-                      style={{ width: `${String(ratio * 100)}%` }}
-                    />
-                  </div>
-                  <p className="text-app-dim mt-1 text-[12px]">
-                    {max == null
-                      ? t('unlimited')
-                      : t('remaining', {
-                          count: Math.max(max - item.data.used, 0),
-                        })}
-                  </p>
-                </li>
-              )
-            })}
-          </ul>
-        </BillingCard>
-      </div>
-
-      <BillingCard
+      <RecordColumns
         aside={
-          <Link
-            className="text-brand text-[13px] font-bold underline-offset-4 hover:underline"
-            to={paymentsPath}
-          >
-            {t('allPayments')}
-          </Link>
-        }
-        title={t('history')}
-      >
-        {history === null ? (
-          <p className="text-app-dim text-[13.5px]">{tb('loadingPayments')}</p>
-        ) : history.length === 0 ? (
-          <p className="text-app-muted text-[13.5px]">{tb('noPayments')}</p>
-        ) : (
-          <ul className="grid gap-2.5">
-            {history.map((payment) => {
-              const status = paymentStatusMeta(payment.status, locale)
-              return (
-                <li
-                  className="border-app-line flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[16px] border px-4 py-3.5"
-                  key={payment.id}
-                >
-                  <span className="text-app-dim font-mono text-[13px] whitespace-nowrap">
-                    <DateValue value={payment.createdAt} withTime={false} />
-                  </span>
-                  <span className="min-w-0 flex-[1_1_180px]">
-                    <span className="text-app-ink block font-medium">
-                      {paymentTypeLabel(payment.type, locale)}
-                    </span>
-                    <span className="text-app-dim block text-[12.5px]">
-                      {payment.providerInvoiceId ?? tb('noInvoiceNumber')}
-                    </span>
-                  </span>
-                  <span className="text-app-ink ml-auto font-mono tabular-nums">
+          <section className="rz-card min-w-0">
+            <header className="rz-card__head gap-y-1 py-2.5">
+              <div className="grid min-w-0 gap-0.5">
+                <p className="rz-eyebrow m-0">{t('currentPlan')}</p>
+                <h2 className="rz-h-title">{planLabel}</h2>
+              </div>
+              <p className="m-0 grid justify-items-end gap-0.5">
+                <span className="rz-mono rz-strong text-title font-semibold">
+                  {typeof subscription.amount === 'number' ? (
                     <Amount
-                      currency={payment.currency}
-                      value={payment.amount}
+                      currency={subscription.currency}
+                      value={subscription.amount}
                     />
-                  </span>
-                  <StatusPill tone={status.tone}>{status.label}</StatusPill>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-        <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-          {t('noRetentionPolicy')}
-        </p>
-      </BillingCard>
+                  ) : (
+                    '—'
+                  )}
+                </span>
+                <span className="rz-caption">{t('perPeriod')}</span>
+              </p>
+            </header>
+            <div className="rz-card__body grid gap-3">
+              <ul className="m-0 grid list-none gap-2 p-0">
+                {features.length === 0 ? (
+                  <li className="rz-dim">{t('noFeatures')}</li>
+                ) : (
+                  features.map((code) => (
+                    <li className="flex items-start gap-2.5" key={code}>
+                      <Check
+                        aria-hidden
+                        className="text-state-ok mt-0.5 size-3.5 shrink-0"
+                      />
+                      {featureLabel(code, locale)}
+                    </li>
+                  ))
+                )}
+              </ul>
+              <p className="rz-caption m-0 text-pretty">
+                {t('noCycleDiscount')}
+              </p>
+            </div>
+            <div className="rz-card__foot flex-wrap">
+              <Button asChild>
+                <Link to={plansPath}>{t('allPlans')}</Link>
+              </Button>
+              {alarming ? null : changeCard}
+              {isMono && subscription.canCancel && (
+                <BillingMutationGate decision={manageDecision}>
+                  <Button
+                    disabled={busy}
+                    onClick={onCancelRequest}
+                    variant="danger"
+                  >
+                    {t('cancelSubscription')}
+                  </Button>
+                </BillingMutationGate>
+              )}
+            </div>
+          </section>
+        }
+        main={
+          <>
+            <BillingCard title={t('planLimits')}>
+              {overLimits.length > 0 && (
+                <Notice
+                  action={
+                    <Button onClick={onSeePlans} size="sm">
+                      {t('upgrade')}
+                    </Button>
+                  }
+                  tone="warn"
+                >
+                  {t('limitReached', {
+                    limits: overLimits
+                      .map(
+                        (item) =>
+                          `${item.label} ${String(item.data.used)}/${item.data.max == null ? '∞' : String(item.data.max)}`,
+                      )
+                      .join(', '),
+                  })}
+                </Notice>
+              )}
+              <dl className="rz-facts px-0 py-0">
+                {limits.map((item) => {
+                  const max = item.data.max
+                  const over = max != null && item.data.used > max
+                  return (
+                    <div key={item.label}>
+                      <dt>{item.label}</dt>
+                      <dd>
+                        <span className="flex items-baseline justify-between gap-3">
+                          <span
+                            className={cn(
+                              'rz-mono',
+                              over ? 'text-state-warn' : 'rz-strong',
+                            )}
+                          >
+                            {item.data.used} / {max ?? '∞'}
+                          </span>
+                          <span className="rz-caption">
+                            {max == null
+                              ? t('unlimited')
+                              : t('remaining', {
+                                  count: Math.max(max - item.data.used, 0),
+                                })}
+                          </span>
+                        </span>
+                      </dd>
+                    </div>
+                  )
+                })}
+              </dl>
+            </BillingCard>
+
+            <BillingCard
+              aside={<Link to={paymentsPath}>{t('allPayments')}</Link>}
+              bodyClassName={
+                history !== null && history.length > 0 ? 'p-0' : ''
+              }
+              footer={t('noRetentionPolicy')}
+              title={t('history')}
+            >
+              {history === null ? (
+                <p className="rz-dim m-0">{tb('loadingPayments')}</p>
+              ) : history.length === 0 ? (
+                <p className="rz-muted m-0">{tb('noPayments')}</p>
+              ) : (
+                <DataTable
+                  caption={t('history')}
+                  columns={[
+                    {
+                      key: 'date',
+                      label: tp('columnDate'),
+                      variant: 'primary',
+                      cell: (payment) => (
+                        <span className="font-mono">
+                          <DateValue
+                            value={payment.createdAt}
+                            withTime={false}
+                          />
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'description',
+                      label: tp('columnDescription'),
+                      cell: (payment) => (
+                        <span className="grid min-w-0">
+                          <span className="rz-strong">
+                            {paymentTypeLabel(payment.type, locale)}
+                          </span>
+                          <span className="rz-caption">
+                            {payment.providerInvoiceId ?? tb('noInvoiceNumber')}
+                          </span>
+                        </span>
+                      ),
+                    },
+                    {
+                      key: 'amount',
+                      label: tp('columnAmount'),
+                      align: 'end',
+                      cell: (payment) => (
+                        <Amount
+                          currency={payment.currency}
+                          value={payment.amount}
+                        />
+                      ),
+                    },
+                    {
+                      key: 'status',
+                      label: tp('columnStatus'),
+                      cell: (payment) => {
+                        const status = paymentStatusMeta(payment.status, locale)
+                        return (
+                          <StatusPill tone={status.tone}>
+                            {status.label}
+                          </StatusPill>
+                        )
+                      },
+                    },
+                  ]}
+                  embedded
+                  rowKey={(payment) => payment.id}
+                  rows={history}
+                />
+              )}
+            </BillingCard>
+          </>
+        }
+      />
 
       <ConfirmDialog
         cancelLabel={t('keepSubscription')}

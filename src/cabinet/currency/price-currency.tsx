@@ -26,12 +26,12 @@ export function MoneyInput({
       <TextInput
         inputMode="decimal"
         {...props}
-        className={cn(currency === 'none' ? '' : 'pr-14', className)}
+        className={cn('rz-mono', currency === 'none' ? '' : 'pr-14', className)}
       />
       {currency === 'none' ? null : (
         <span
           aria-hidden
-          className="text-app-muted pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 font-mono text-[13px] font-semibold"
+          className="rz-mono text-app-dim pointer-events-none absolute top-1/2 right-3 -translate-y-1/2"
         >
           {currency ?? '—'}
         </span>
@@ -89,11 +89,11 @@ function BlockedPriceNote({
   const location = useLocation()
   return (
     <Notice block className={className ?? ''} tone="warn">
-      <p className="font-semibold">{t('needCurrency')}</p>
+      <p className="m-0 font-semibold">{t('needCurrency')}</p>
       {reason === 'choose' && settingsPath !== null ? (
         <>
           <Link
-            className="text-brand mt-1.5 inline-flex min-h-11 items-center font-semibold underline-offset-4 hover:underline"
+            className="text-brand-text mt-1 inline-flex items-center font-medium underline-offset-4 hover:underline"
             onClick={onLeave}
             to={currencySettingsHref(
               settingsPath,
@@ -103,11 +103,11 @@ function BlockedPriceNote({
             {t('chooseLink')} →
           </Link>
           {draftKept ? (
-            <p className="text-app-muted text-[13px]">{t('draftKept')}</p>
+            <p className="text-app-muted m-0">{t('draftKept')}</p>
           ) : null}
         </>
       ) : (
-        <p className="text-app-muted mt-1 text-[13px]">{t('askOwner')}</p>
+        <p className="text-app-muted m-0 mt-1">{t('askOwner')}</p>
       )}
     </Notice>
   )
@@ -149,8 +149,8 @@ export function PriceSaveNotes({
         role="alert"
         tone="warn"
       >
-        <p className="font-semibold">{t('conflictTitle')}</p>
-        <p className="text-app-muted mt-1 text-[13px] text-pretty">
+        <p className="m-0 font-semibold">{t('conflictTitle')}</p>
+        <p className="text-app-muted m-0 mt-1 text-pretty">
           {t('conflictBody', { from: check.from, to: check.to })}
         </p>
       </Notice>
@@ -161,10 +161,7 @@ export function PriceSaveNotes({
     body = <Notice tone="danger">{t('precheckFailed')}</Notice>
   } else if (willLock !== null) {
     body = (
-      <p
-        className="text-state-warn text-[13px] leading-5 text-pretty"
-        role="status"
-      >
+      <p className="text-state-warn m-0 text-pretty" role="status">
         {t('willLock', { code: willLock })}
       </p>
     )

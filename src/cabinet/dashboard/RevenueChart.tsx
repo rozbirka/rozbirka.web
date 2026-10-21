@@ -35,73 +35,105 @@ export function RevenueChart({
   const money = (amount: number, code: string | null) =>
     wholeMoney(amount, code, locale)
 
+  // Bars follow the design system's chart: every bucket in the brand's soft
+  // fill under a 2px brand edge, its amount above it and its label under it;
+  // an empty bucket stays a hairline in the hover fill. A month is too dense
+  // to label each bar, so it keeps only the first and last label. Tokens only.
+  const labelled = days <= LABELLED_BARS
   return (
-    <section
-      aria-label={t('receipts')}
-      className="border-app-line bg-app-raised rounded-[20px] border px-6 py-5"
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 className="text-[17px] font-bold tracking-[-0.01em] text-white">
-          {t('period', { period: periodLabel })}
-        </h2>
+    <section aria-label={t('receipts')} className="rz-card">
+      <header className="rz-card__head">
+        <h2 className="rz-h-card">{t('period', { period: periodLabel })}</h2>
         {average === null || currency === null ? null : (
-          <span className="text-app-muted text-[13px]">
+          <span className="rz-muted text-caption">
             {t('perDay', { amount: money(average, currency) })}
           </span>
         )}
-      </div>
-      {received.length === 0 ? null : (
-        <ul
-          aria-label={t('byCurrency')}
-          className="mt-2 flex flex-wrap gap-x-4 gap-y-1"
-        >
-          {received.map(([code, amount]) => (
-            <li
-              className="font-mono text-[17px] font-medium text-white tabular-nums"
-              key={code}
-            >
-              {money(amount, code)}
-            </li>
-          ))}
-        </ul>
-      )}
-      {days === 0 ? (
-        <p className="text-app-dim mt-5 text-[13px]">{t('noReceipts')}</p>
-      ) : (
-        <>
-          <div
-            className={cn(
-              'mt-5 flex h-[132px] items-end',
-              days > 14 ? 'gap-[3px]' : 'gap-1.5',
-            )}
+      </header>
+      <div className="rz-card__body grid gap-4">
+        {received.length === 0 ? null : (
+          <ul
+            aria-label={t('byCurrency')}
+            className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0"
           >
-            {series.map((value, index) => (
-              <div
-                className={cn(
-                  'min-w-0 flex-1 rounded-t-[4px] rounded-b-[1px]',
-                  index === series.length - 1
-                    ? 'bg-brand'
-                    : value === 0
-                      ? 'bg-white/[0.06]'
-                      : 'bg-white/[0.22]',
-                )}
-                key={data.labels[index] ?? index}
-                style={{
-                  height: `${String(max === 0 ? 2 : Math.max((value / max) * 100, 2))}%`,
-                }}
-                title={`${data.labels[index] ?? ''} · ${money(value, currency)}`}
-              />
+            {received.map(([code, amount]) => (
+              <li
+                className="rz-mono rz-strong text-title font-medium"
+                key={code}
+              >
+                {money(amount, code)}
+              </li>
             ))}
+          </ul>
+        )}
+        {days === 0 ? (
+          <p className="rz-dim m-0">{t('noReceipts')}</p>
+        ) : (
+          <div className="grid gap-1.5">
+            <div
+              className={cn(
+                'flex h-[160px] items-end',
+                days > 14 ? 'gap-0.5' : 'gap-2.5',
+              )}
+            >
+              {series.map((value, index) => (
+                <div
+                  className="flex h-full min-w-0 flex-1 flex-col items-stretch justify-end gap-1"
+                  key={data.labels[index] ?? index}
+                  title={`${data.labels[index] ?? ''} · ${money(value, currency)}`}
+                >
+                  {labelled && value > 0 ? (
+                    <span className="rz-mono rz-dim truncate text-center text-micro">
+                      {wholeMoney(value, null, locale)}
+                    </span>
+                  ) : null}
+                  <div
+                    className={cn(
+                      'rounded-t-rz-xs',
+                      value === 0
+                        ? 'bg-app-hover'
+                        : 'bg-brand-soft border-brand border-t-2',
+                    )}
+                    style={{
+                      height: `${String(max === 0 ? 2 : Math.max((value / max) * BAR_MAX, 2))}%`,
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+            {labelled ? (
+              <p
+                className={cn(
+                  'rz-muted m-0 flex text-caption',
+                  days > 14 ? 'gap-0.5' : 'gap-2.5',
+                )}
+              >
+                {series.map((_, index) => (
+                  <span
+                    className="min-w-0 flex-1 truncate text-center"
+                    key={data.labels[index] ?? index}
+                  >
+                    {data.labels[index] ?? ''}
+                  </span>
+                ))}
+              </p>
+            ) : (
+              <p className="rz-mono rz-dim m-0 flex justify-between gap-2 text-micro">
+                <span>{first}</span>
+                <span>{last}</span>
+              </p>
+            )}
           </div>
-          <p className="text-app-dim mt-2.5 flex justify-between gap-2 font-mono text-[11px]">
-            <span>{first}</span>
-            <span>{last}</span>
-          </p>
-        </>
-      )}
+        )}
+      </div>
     </section>
   )
 }
+
+/** Up to a fortnight of buckets each carry their amount and label. */
+const LABELLED_BARS = 14
+/** The tallest bar's share of the plot, leaving room for its amount above. */
+const BAR_MAX = 85
 
 /**
  * The currency the bars are in: the one the server names (pending contract),

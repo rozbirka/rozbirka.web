@@ -22,8 +22,8 @@ export function FileField({ className, ...props }: ComponentProps<'input'>) {
       type="file"
       {...props}
       className={cn(
-        'bg-app-input border-app-line-2 rounded-control text-app-muted min-h-11 w-full cursor-pointer border px-3 py-2 text-sm',
-        'file:mr-3 file:min-h-11 file:cursor-pointer file:rounded-lg file:border-0 file:bg-white/[0.08] file:px-3 file:text-[13.5px] file:text-white hover:file:bg-white/[0.12]',
+        'rz-input text-app-muted flex cursor-pointer items-center py-0',
+        'file:rounded-rz-xs file:bg-app-active file:text-app-strong hover:file:bg-app-selected file:mr-2.5 file:h-6 file:cursor-pointer file:border-0 file:px-2 file:text-caption file:font-medium',
         className,
       )}
     />
@@ -46,16 +46,16 @@ export function PhotoFileField({
   return (
     <label
       className={cn(
-        'border-app-line-2 bg-app-input hover:border-brand flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-[14px] border border-dashed px-5 text-center transition-colors',
+        'border-app-line-2 bg-app-input hover:border-app-dim rounded-control flex min-h-24 cursor-pointer flex-col items-center justify-center border border-dashed px-5 text-center transition-colors',
         disabled && 'cursor-not-allowed opacity-55',
         className,
       )}
     >
-      <ImagePlus aria-hidden className="text-app-muted size-6" />
-      <span className="mt-2 text-sm font-bold text-white">
+      <ImagePlus aria-hidden className="text-app-muted size-5" />
+      <span className="text-app-strong mt-2 font-semibold">
         {t('choosePhotos')}
       </span>
-      <span className="text-app-dim mt-1 text-xs">{t('choosePhotosHint')}</span>
+      <span className="rz-caption mt-0.5">{t('choosePhotosHint')}</span>
       <input
         {...field}
         accept="image/*"
@@ -100,37 +100,33 @@ export function UploadList({
   const { locale } = useLocale()
   const t = useT(appMessages)
   if (items.length === 0) {
-    return (
-      <p className="text-app-dim text-[13.5px]">{emptyLabel ?? t('noFiles')}</p>
-    )
+    return <p className="rz-caption">{emptyLabel ?? t('noFiles')}</p>
   }
 
   return (
     <ul aria-label={label} className="grid gap-2">
       {items.map((item) => (
         <li
-          className="border-app-line rounded-panel bg-app-raised flex flex-wrap items-center gap-3 border p-2"
+          className="rz-inset flex flex-wrap items-center gap-3 p-2"
           key={item.id}
         >
           {item.previewUrl || item.url ? (
             <Thumbnail
               alt=""
-              className="size-11 shrink-0"
+              className="rounded-rz-xs size-8 shrink-0"
               photo={{ url: item.previewUrl ?? item.url! }}
             />
           ) : (
-            <span className="bg-app-input text-app-dim grid size-11 shrink-0 place-items-center rounded-lg">
-              <Upload aria-hidden className="size-4" />
+            <span className="bg-app-active text-app-dim rounded-rz-xs grid size-8 shrink-0 place-items-center">
+              <Upload aria-hidden className="size-3.5" />
             </span>
           )}
 
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[14px] text-white">
-              {item.name}
-            </span>
+            <span className="text-app-strong block truncate">{item.name}</span>
             <span
               className={cn(
-                'block font-mono text-[12px]',
+                'text-caption block font-mono',
                 item.status === 'failed' ? 'text-state-danger' : 'text-app-dim',
               )}
             >
@@ -177,11 +173,8 @@ export function UploadSummary({ failed }: { failed: number }) {
   if (failed === 0) return null
 
   return (
-    <p
-      className="text-state-danger flex items-center gap-2 text-[13.5px]"
-      role="status"
-    >
-      <FileWarning aria-hidden className="size-4" />
+    <p className="rz-error items-center" role="status">
+      <FileWarning aria-hidden className="size-3.5" />
       {failed === 1 ? t('oneFileFailed') : t('filesFailed', { count: failed })}
     </p>
   )

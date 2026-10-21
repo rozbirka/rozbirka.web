@@ -1,0 +1,111 @@
+{
+ "id": "C16",
+ "module": "business",
+ "crumbs": [
+  "Налаштування"
+ ],
+ "title": "Бізнес",
+ "route": "/app/:tenant/settings/business",
+ "source": "business/business-messages.ts, currency/messages.ts",
+ "unverified": "назви полів",
+ "actions": [
+  {
+   "label": "Зберегти",
+   "icon": "icon-check",
+   "variant": "primary"
+  }
+ ],
+ "states": [
+  [
+   "data",
+   "Дані"
+  ],
+  [
+   "loading",
+   "Завантаження"
+  ],
+  [
+   "error",
+   "Помилка"
+  ],
+  [
+   "readonly",
+   "Лише перегляд"
+  ]
+ ],
+ "stateBanners": {
+  "readonly": {
+   "tone": "warn",
+   "chip": "Кабінет у режимі перегляду",
+   "title": "Підписка неактивна — дані лише для читання.",
+   "body": "Склад, замовлення й історія грошей збереглися повністю, але створювати й змінювати записи не можна, доки підписка не відновиться.",
+   "link": "Перейти до підписки"
+  }
+ },
+ "main": [
+  {
+   "type": "form",
+   "title": "Бізнес",
+   "fields": [
+    {
+     "label": "Назва",
+     "value": "Демо-розбірка",
+     "cls": "rz-input"
+    },
+    {
+     "label": "Адреса",
+     "value": "м. Київ",
+     "cls": "rz-input"
+    },
+    {
+     "label": "Телефон",
+     "value": "+380 67 000 00 10",
+     "cls": "rz-input rz-input--num"
+    }
+   ]
+  },
+  {
+   "type": "table",
+   "title": "Склади",
+   "action": "Додати склад",
+   "columns": [
+    {
+     "label": "Склад"
+    },
+    {
+     "label": "Зон",
+     "align": "end"
+    }
+   ],
+   "rows": [
+    [
+     "Склад 1",
+     "4"
+    ],
+    [
+     "Склад 2",
+     "3"
+    ]
+   ]
+  }
+ ],
+ "aside": [
+  {
+   "type": "facts",
+   "title": "Валюта обліку",
+   "action": "Змінити",
+   "rows": [
+    [
+     "Валюта",
+     "UAH",
+     true
+    ],
+    [
+     "Часовий пояс",
+     "Europe/Kyiv",
+     true
+    ]
+   ]
+  }
+ ]
+}

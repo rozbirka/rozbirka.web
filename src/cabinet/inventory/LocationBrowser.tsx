@@ -142,7 +142,7 @@ export function LocationBrowser({
         {printWorkspace ? null : (
           <div className="location-browser__search">
             <SearchInput
-              className="min-h-11 text-sm"
+              className="min-h-control-lg text-body"
               aria-label={t(section ? 'searchShelves' : 'searchSections')}
               placeholder={t('nameOrCode')}
               value={query}
@@ -158,7 +158,7 @@ export function LocationBrowser({
         <div className="location-browser__actions">
           {canManage ? (
             <Button
-              className="px-3 text-[13px] sm:px-4 sm:text-sm"
+              className="px-3 text-body sm:px-4 sm:text-body"
               variant="primary"
               onClick={() =>
                 section ? onAddShelf(section) : onAddSection(zone)
@@ -231,7 +231,7 @@ export function LocationBrowser({
                           {onEditShelf ? (
                             <Pencil
                               aria-hidden
-                              className="location-browser__arrow text-brand"
+                              className="location-browser__arrow"
                             />
                           ) : (
                             <ChevronRight

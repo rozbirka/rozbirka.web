@@ -9,6 +9,7 @@ import {
 } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import {
+  AlertTriangle,
   Archive,
   ArrowRight,
   Check,
@@ -21,6 +22,10 @@ import {
   Plus,
   Printer,
   RefreshCw,
+  ScanLine,
+  SearchX,
+  ClipboardCheck,
+  Play,
 } from 'lucide-react'
 import {
   ActionMenu,
@@ -35,6 +40,7 @@ import {
   SearchInput,
   Sheet,
   SkeletonRows,
+  StateScreen,
   StatusPill,
   TextArea,
   TextInput,
@@ -83,6 +89,8 @@ import { locationBrowserMessages } from './location-browser-messages'
 import { warehouseMessages } from './warehouse-messages'
 import { inventoryCodeFromName } from './inventory-code'
 import { ZoneEditorSheet, type ZoneDraft } from './ZoneEditorSheet'
+import { Crumbs } from '../redesign-shell'
+import { scannerMessages } from '../scanners/messages'
 
 type LoadState<T> =
   | { kind: 'loading' }
@@ -116,28 +124,84 @@ function Resource<T>({
   retry,
   children,
   errorContent,
+  framed = true,
 }: {
   state: LoadState<T>
   errorContent?: ReactNode
+  /** Off inside a drawer: the host draws the frame. */
+  framed?: boolean
   retry: () => void
   children: (data: T) => ReactNode
 }) {
   const t = useT(inventoryMessages)
-  if (state.kind === 'loading') return <SkeletonRows label={t('loading')} />
+  const base = useInventoryBase()
+  /* Loading and failure keep the screen's frame, as the module page draws
+     them: the topbar with the trail back to the inventory stays in place. */
+  const frame = (content: ReactNode) => (
+    <div className="grid content-start">
+      <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
+        <InventoryCrumbs base={base} items={[]} />
+      </div>
+      <div className="rz-page">{content}</div>
+    </div>
+  )
+  if (state.kind === 'loading')
+    return framed ? (
+      frame(<SkeletonRows label={t('loading')} />)
+    ) : (
+      <SkeletonRows label={t('loading')} />
+    )
   if (state.kind === 'error') {
-    return (
+    const failed = (
       <>
-        <Notice tone="danger">
-          {t('loadFailed')}{' '}
-          <button className="underline" onClick={retry} type="button">
-            {t('retry')}
-          </button>
-        </Notice>
+        <StateScreen
+          actions={
+            <Button onClick={retry}>
+              <RefreshCw aria-hidden />
+              {t('retry')}
+            </Button>
+          }
+          icon={<AlertTriangle aria-hidden />}
+          role="alert"
+          title={t('loadFailed')}
+          tone="danger"
+        />
         {errorContent}
       </>
     )
+    return framed ? frame(failed) : failed
   }
   return children(state.data)
+}
+
+/**
+ * The trail of an inventory screen: Склад › Інвентаризація › …, every part
+ * before the current one a way back.
+ */
+function InventoryCrumbs({
+  base,
+  items,
+}: {
+  base: string
+  /** What follows "Інвентаризація": links, then the current page last. */
+  items: readonly ReactNode[]
+}) {
+  const t = useT(inventoryMessages)
+  return (
+    <Crumbs
+      items={[
+        <span key="warehouse">{t('crumbWarehouse')}</span>,
+        items.length === 0 ? (
+          t('crumbInventory')
+        ) : (
+          <Link key="inventory" to={base}>
+            {t('crumbInventory')}
+          </Link>
+        ),
+        ...items,
+      ]}
+    />
+  )
 }
 
 export function InventoryScreen({
@@ -211,8 +275,11 @@ interface OverviewData {
 function Overview() {
   const t = useT(overviewMessages)
   const ti = useT(inventoryMessages)
+  const ts = useT(scannerMessages)
+  const { targetTenant } = useCabinet()
   const { date, day, sessionStatus, locale } = useInventoryFormat()
   const base = useInventoryBase()
+  const navigate = useNavigate()
   const canManage = usePermission('inventory.manage')
   const canZones = usePermission('inventory.zones.manage')
   const canSeeParts = usePermission('parts.view')
@@ -281,416 +348,441 @@ function Overview() {
     }
   }
 
+  const lastCompleted = (sessions: readonly InventorySession[]) =>
+    sessions
+      .filter((item) => item.status === 'completed')
+      .sort((left, right) =>
+        (right.completedAt ?? right.createdAt).localeCompare(
+          left.completedAt ?? left.createdAt,
+        ),
+      )[0] ?? null
+  const ready = resource.state.kind === 'ready' ? resource.state.data : null
+  const latest = ready === null ? null : lastCompleted(ready.sessions)
+  const scannerPath =
+    targetTenant === null || targetTenant === undefined
+      ? null
+      : `/app/${targetTenant.slug}/scan`
+
   return (
-    <Resource retry={resource.reload} state={resource.state}>
-      {({ warehouses, sessions, zones, byWarehouse, since }: OverviewData) => {
-        const zonesOf = (item: InventorySession) =>
-          [...new Set(item.zones.map((zone) => zone.zoneCode))].join(', ')
-        const houseOf = (item: InventorySession) =>
-          item.zones[0]?.warehouseName ?? '—'
-        const doneZones = (item: InventorySession) =>
-          item.zones.filter((zone) => zone.status === 'completed').length
-        const closedAt = (item: InventorySession) =>
-          item.completedAt ?? item.cancelledAt ?? item.createdAt
-        const counts: Record<OverviewSegment, number> = {
-          active: 0,
-          done: 0,
-          draft: 0,
-        }
-        for (const item of sessions) counts[segmentOf(item.status)] += 1
-        const needle = query.trim().toLowerCase()
-        const rows = sessions
-          .filter((item) => segmentOf(item.status) === segment)
-          .filter(
-            (item) =>
-              needle === '' ||
-              `${item.number} ${houseOf(item)} ${zonesOf(item)}`
-                .toLowerCase()
-                .includes(needle),
-          )
-          .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    <div className="grid content-start">
+      <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
+        <InventoryCrumbs base={base} items={[]} />
+        {canManage || (canSeeParts && scannerPath !== null) ? (
+          <div className="rz-topbar__actions flex-wrap items-center">
+            {canSeeParts && scannerPath !== null ? (
+              <Button asChild>
+                <Link to={scannerPath}>
+                  <ScanLine aria-hidden />
+                  {ts('title')}
+                </Link>
+              </Button>
+            ) : null}
+            {canManage ? (
+              <Button asChild variant="primary">
+                <Link to={`${base}/sessions/new`}>
+                  <Plus aria-hidden />
+                  {ti('newSession')}
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
-        const completedSessions = sessions
-          .filter((item) => item.status === 'completed')
-          .sort((left, right) => closedAt(right).localeCompare(closedAt(left)))
-        const last = completedSessions[0] ?? null
-        const accuracy =
-          last === null || last.preview.includedPartCount === 0
-            ? null
-            : Math.round(
-                ((last.preview.includedPartCount -
-                  last.preview.conflictingPartCount) /
-                  last.preview.includedPartCount) *
-                  1000,
-              ) / 10
-        const checkedZones = sessions
-          .filter((item) => new Date(closedAt(item)).getTime() >= since)
-          .reduce((sum, item) => sum + doneZones(item), 0)
-        const countable = zones.filter((zone) => !zone.isSystemUnassigned)
-        const running = sessions.filter(
-          (item) => segmentOf(item.status) === 'active',
-        )
-        const openDiffs = running.reduce(
-          (sum, item) => sum + item.preview.conflictingPartCount,
-          0,
-        )
-        /* The last time each warehouse was counted, and whether one is
-           running there right now. */
-        const checkOf = (warehouseId: string) => {
-          if (
-            running.some((item) =>
-              item.zones.some((zone) => zone.warehouseId === warehouseId),
+      <div className="rz-page">
+        <div className="min-w-0">
+          <div className="rz-page-head">
+            <h1 className="rz-h-page">{ti('crumbInventory')}</h1>
+          </div>
+          {ready === null ? null : (
+            <p className="rz-muted m-0 mt-1">
+              {latest === null
+                ? t('noCompletedYet')
+                : t('lastCompleted', {
+                    date: day(latest.completedAt),
+                    count: latest.preview.conflictingPartCount,
+                  })}
+            </p>
+          )}
+        </div>
+        <Resource framed={false} retry={resource.reload} state={resource.state}>
+          {({
+            warehouses,
+            sessions,
+            zones,
+            byWarehouse,
+            since,
+          }: OverviewData) => {
+            const zonesOf = (item: InventorySession) =>
+              [...new Set(item.zones.map((zone) => zone.zoneCode))].join(', ')
+            const houseOf = (item: InventorySession) =>
+              item.zones[0]?.warehouseName ?? '—'
+            const doneZones = (item: InventorySession) =>
+              item.zones.filter((zone) => zone.status === 'completed').length
+            const closedAt = (item: InventorySession) =>
+              item.completedAt ?? item.cancelledAt ?? item.createdAt
+            const counts: Record<OverviewSegment, number> = {
+              active: 0,
+              done: 0,
+              draft: 0,
+            }
+            for (const item of sessions) counts[segmentOf(item.status)] += 1
+            const needle = query.trim().toLowerCase()
+            const rows = sessions
+              .filter((item) => segmentOf(item.status) === segment)
+              .filter(
+                (item) =>
+                  needle === '' ||
+                  `${item.number} ${houseOf(item)} ${zonesOf(item)}`
+                    .toLowerCase()
+                    .includes(needle),
+              )
+              .sort((left, right) =>
+                right.createdAt.localeCompare(left.createdAt),
+              )
+
+            const completedSessions = sessions
+              .filter((item) => item.status === 'completed')
+              .sort((left, right) =>
+                closedAt(right).localeCompare(closedAt(left)),
+              )
+            const last = completedSessions[0] ?? null
+            const accuracy =
+              last === null || last.preview.includedPartCount === 0
+                ? null
+                : Math.round(
+                    ((last.preview.includedPartCount -
+                      last.preview.conflictingPartCount) /
+                      last.preview.includedPartCount) *
+                      1000,
+                  ) / 10
+            const checkedZones = sessions
+              .filter((item) => new Date(closedAt(item)).getTime() >= since)
+              .reduce((sum, item) => sum + doneZones(item), 0)
+            const countable = zones.filter((zone) => !zone.isSystemUnassigned)
+            const running = sessions.filter(
+              (item) => segmentOf(item.status) === 'active',
             )
-          )
-            return t('checkRunning')
-          const done = completedSessions.find((item) =>
-            item.zones.some((zone) => zone.warehouseId === warehouseId),
-          )
-          return done === undefined
-            ? t('neverChecked')
-            : t('checkedOn', { date: day(done.completedAt) })
-        }
-        const stock = byWarehouse
-        const stockTotal =
-          stock === null
-            ? 0
-            : [...stock.values()].reduce((sum, value) => sum + value, 0)
+            const openDiffs = running.reduce(
+              (sum, item) => sum + item.preview.conflictingPartCount,
+              0,
+            )
+            /* The last time each warehouse was counted, and whether one is
+           running there right now. */
+            const checkOf = (warehouseId: string) => {
+              if (
+                running.some((item) =>
+                  item.zones.some((zone) => zone.warehouseId === warehouseId),
+                )
+              )
+                return t('checkRunning')
+              const done = completedSessions.find((item) =>
+                item.zones.some((zone) => zone.warehouseId === warehouseId),
+              )
+              return done === undefined
+                ? t('neverChecked')
+                : t('checkedOn', { date: day(done.completedAt) })
+            }
+            const stock = byWarehouse
+            const stockTotal =
+              stock === null
+                ? 0
+                : [...stock.values()].reduce((sum, value) => sum + value, 0)
 
-        return (
-          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-              <p className="text-app-dim flex items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase">
-                <span>{ti('crumbWarehouse')}</span>
-                <span aria-hidden className="text-white/20">
-                  /
-                </span>
-                <span className="text-app-muted">{ti('crumbInventory')}</span>
-              </p>
-              <div className="flex flex-1 flex-wrap items-center justify-end gap-2.5">
-                <div className="min-w-[12rem] flex-[0_1_20rem]">
+            return (
+              <>
+                {operationError ? (
+                  <Notice tone="danger">{operationError}</Notice>
+                ) : null}
+
+                <div className="rz-kpis">
+                  <WarehouseStat
+                    label={t('statActive')}
+                    meta={
+                      running.length === 0
+                        ? t('nobodyCounting')
+                        : [
+                            ...new Set(running.map((item) => houseOf(item))),
+                          ].join(', ')
+                    }
+                    tone={running.length > 0 ? 'warn' : 'plain'}
+                    unit=""
+                    value={String(running.length)}
+                  />
+                  <WarehouseStat
+                    label={t('statZones')}
+                    meta={t('lastDays', { count: RECENT_DAYS })}
+                    unit={
+                      countable.length === 0
+                        ? t('zonesUnit')
+                        : t('ofTotal', { count: countable.length })
+                    }
+                    value={String(checkedZones)}
+                  />
+                  <WarehouseStat
+                    label={ti('discrepancies')}
+                    meta={t('inRunning')}
+                    tone={openDiffs > 0 ? 'danger' : 'plain'}
+                    unit={ti('positionsUnit')}
+                    value={String(openDiffs)}
+                  />
+                  <WarehouseStat
+                    label={t('statAccuracy')}
+                    meta={
+                      last === null
+                        ? t('noCompletedShort')
+                        : t('lastSession', { number: last.number })
+                    }
+                    tone={accuracy === null ? 'plain' : 'ok'}
+                    unit="%"
+                    value={
+                      accuracy === null
+                        ? '—'
+                        : (formatNumber(accuracy, locale, {
+                            maximumFractionDigits: 1,
+                          }) ?? '—')
+                    }
+                  />
+                </div>
+
+                <div className="rz-toolbar" role="search">
                   <SearchInput
                     aria-label={t('searchLabel')}
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder={t('searchPlaceholder')}
                     value={query}
                   />
-                </div>
-                {canManage ? (
-                  <Button
-                    asChild
-                    className="px-5 text-sm font-bold"
-                    variant="primary"
+                  <div
+                    aria-label={t('segmentsLabel')}
+                    className="rz-seg flex-wrap"
+                    role="radiogroup"
                   >
-                    <Link to={`${base}/sessions/new`}>{ti('newSession')}</Link>
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
-              <div className="min-w-0">
-                <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                  {ti('crumbInventory')}
-                </h1>
-                <p className="text-app-muted mt-3 text-[15px]">
-                  {last === null
-                    ? t('noCompletedYet')
-                    : t('lastCompleted', {
-                        date: day(last.completedAt),
-                        count: last.preview.conflictingPartCount,
-                      })}
-                </p>
-              </div>
-
-              {operationError ? (
-                <Notice tone="danger">{operationError}</Notice>
-              ) : null}
-
-              <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-px overflow-hidden rounded-[20px] border">
-                <WarehouseStat
-                  label={t('statActive')}
-                  meta={
-                    running.length === 0
-                      ? t('nobodyCounting')
-                      : [...new Set(running.map((item) => houseOf(item)))].join(
-                          ', ',
-                        )
-                  }
-                  tone={running.length > 0 ? 'warn' : 'plain'}
-                  unit=""
-                  value={String(running.length)}
-                />
-                <WarehouseStat
-                  label={t('statZones')}
-                  meta={t('lastDays', { count: RECENT_DAYS })}
-                  unit={
-                    countable.length === 0
-                      ? t('zonesUnit')
-                      : t('ofTotal', { count: countable.length })
-                  }
-                  value={String(checkedZones)}
-                />
-                <WarehouseStat
-                  label={ti('discrepancies')}
-                  meta={t('inRunning')}
-                  tone={openDiffs > 0 ? 'danger' : 'plain'}
-                  unit={ti('positionsUnit')}
-                  value={String(openDiffs)}
-                />
-                <WarehouseStat
-                  label={t('statAccuracy')}
-                  meta={
-                    last === null
-                      ? t('noCompletedShort')
-                      : t('lastSession', { number: last.number })
-                  }
-                  tone={accuracy === null ? 'plain' : 'ok'}
-                  unit="%"
-                  value={
-                    accuracy === null
-                      ? '—'
-                      : (formatNumber(accuracy, locale, {
-                          maximumFractionDigits: 1,
-                        }) ?? '—')
-                  }
-                />
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div
-                  aria-label={t('segmentsLabel')}
-                  className="border-app-line bg-app-raised flex flex-wrap gap-1 rounded-xl border p-1"
-                  role="radiogroup"
-                >
-                  {OVERVIEW_SEGMENTS.map((option) => {
-                    const active = option.value === segment
-                    return (
+                    {OVERVIEW_SEGMENTS.map((option) => (
                       <button
-                        aria-checked={active}
-                        className={cn(
-                          'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-bold',
-                          active
-                            ? 'text-app-ink bg-white/[0.08]'
-                            : 'text-app-muted hover:text-app-ink',
-                        )}
+                        aria-checked={option.value === segment}
                         key={option.value}
                         onClick={() => setSegment(option.value)}
                         role="radio"
                         type="button"
                       >
                         {t(option.label)}{' '}
-                        <span className="text-app-dim font-mono text-[11px] font-medium">
+                        <span className="rz-mono text-app-dim text-micro">
                           {counts[option.value]}
                         </span>
                       </button>
-                    )
-                  })}
-                </div>
-                <p className="text-app-muted text-[13px]">
-                  {t('rowsSummary', { count: rows.length })}
-                </p>
-              </div>
-
-              <section
-                aria-label={t('sessionsLabel')}
-                className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
-              >
-                <div
-                  aria-hidden
-                  className="border-app-line text-app-muted hidden gap-4 border-b px-6 py-3 font-mono text-[10px] tracking-[0.14em] uppercase md:grid md:grid-cols-[1.6fr_1fr_9.5rem_7rem_6rem]"
-                >
-                  <span>{t('colSession')}</span>
-                  <span>{t('colWarehouseZones')}</span>
-                  <span>{t('colProgress')}</span>
-                  <span>{ti('discrepancies')}</span>
-                  <span className="text-right">{t('colStatus')}</span>
-                </div>
-                {rows.length === 0 ? (
-                  <p className="text-app-muted px-6 py-8 text-center text-sm">
-                    {sessions.length === 0 ? t('noSessions') : t('noFiltered')}
+                    ))}
+                  </div>
+                  <p className="rz-toolbar__end rz-dim m-0">
+                    {t('rowsSummary', { count: rows.length })}
                   </p>
-                ) : (
-                  <ul className="grid">
-                    {rows.map((item) => {
-                      const [label, tone] = sessionStatus(item.status)
-                      const total = item.zones.length
-                      const done = doneZones(item)
-                      const percent =
-                        total === 0 ? 0 : Math.round((done / total) * 100)
-                      return (
-                        <li
-                          className="border-app-line border-b last:border-0"
-                          key={item.id}
-                        >
-                          <Link
-                            className="grid items-center gap-x-4 gap-y-2 px-6 py-4 hover:bg-white/[0.03] md:grid-cols-[1.6fr_1fr_9.5rem_7rem_6rem]"
-                            to={`${base}/sessions/${item.id}`}
-                          >
-                            <span className="min-w-0">
-                              <span className="block text-[15px] font-bold tracking-[-0.01em] text-white">
+                </div>
+
+                <section aria-label={t('sessionsLabel')}>
+                  {sessions.length === 0 ? (
+                    <EmptyState
+                      actions={
+                        canManage ? (
+                          <Button asChild variant="primary">
+                            <Link to={`${base}/sessions/new`}>
+                              <Plus aria-hidden />
+                              {ti('newSession')}
+                            </Link>
+                          </Button>
+                        ) : undefined
+                      }
+                      icon={<ClipboardCheck aria-hidden />}
+                      title={t('noSessions')}
+                    />
+                  ) : rows.length === 0 ? (
+                    <EmptyState
+                      icon={<SearchX aria-hidden />}
+                      title={t('noFiltered')}
+                      tone="neutral"
+                    />
+                  ) : (
+                    <DataTable
+                      caption={t('sessionsLabel')}
+                      rows={rows}
+                      rowKey={(item) => item.id}
+                      onRowClick={(item) =>
+                        void navigate(`${base}/sessions/${item.id}`)
+                      }
+                      columns={[
+                        {
+                          key: 'session',
+                          label: t('colSession'),
+                          variant: 'primary',
+                          cell: (item) => (
+                            <span className="grid min-w-0 py-1.5">
+                              <Link
+                                className="text-app-strong"
+                                onClick={(event) => event.stopPropagation()}
+                                to={`${base}/sessions/${item.id}`}
+                              >
                                 {item.number}
-                              </span>
-                              <span className="text-app-muted mt-0.5 block text-[13px]">
+                              </Link>
+                              <span className="rz-caption font-normal">
                                 {ti('created', { date: date(item.createdAt) })}
                               </span>
                             </span>
-                            <span className="text-app-muted min-w-0 text-[14px]">
-                              {houseOf(item)}
-                              {zonesOf(item) === ''
-                                ? ''
-                                : ` · ${zonesOf(item)}`}
-                            </span>
-                            <span>
-                              <span
-                                aria-hidden
-                                className="bg-app-line-2 block h-1.5 overflow-hidden rounded-full"
-                              >
+                          ),
+                        },
+                        {
+                          key: 'status',
+                          label: t('colStatus'),
+                          cell: (item) => {
+                            const [label, tone] = sessionStatus(item.status)
+                            return <StatusPill tone={tone}>{label}</StatusPill>
+                          },
+                        },
+                        {
+                          key: 'scope',
+                          label: t('colWarehouseZones'),
+                          cell: (item) =>
+                            `${houseOf(item)}${zonesOf(item) === '' ? '' : ` · ${zonesOf(item)}`}`,
+                        },
+                        {
+                          key: 'progress',
+                          label: t('colProgress'),
+                          cell: (item) => {
+                            const total = item.zones.length
+                            const done = doneZones(item)
+                            const percent =
+                              total === 0 ? 0 : Math.round((done / total) * 100)
+                            return (
+                              <span className="grid min-w-28 gap-1">
                                 <span
+                                  aria-hidden
                                   className={cn(
-                                    'block h-full rounded-full',
-                                    percent === 100
-                                      ? 'bg-state-ok'
-                                      : percent > 0
-                                        ? 'bg-state-warn'
-                                        : 'bg-transparent',
+                                    'rz-meter',
+                                    percent < 100 && 'rz-meter--warn',
                                   )}
-                                  style={{ width: `${String(percent)}%` }}
-                                />
+                                >
+                                  <span
+                                    style={{ width: `${String(percent)}%` }}
+                                  />
+                                </span>
+                                <span className="rz-mono rz-caption">
+                                  {ti('zonesProgress', { done, count: total })}
+                                </span>
                               </span>
-                              <span className="text-app-muted mt-1.5 block font-mono text-[12px]">
-                                {ti('zonesProgress', { done, count: total })}
-                              </span>
-                            </span>
+                            )
+                          },
+                        },
+                        {
+                          key: 'diffs',
+                          label: ti('discrepancies'),
+                          align: 'end',
+                          cell: (item) => (
                             <span
                               className={cn(
-                                'font-mono text-[14px] tabular-nums',
-                                item.status === 'draft'
-                                  ? 'text-app-dim'
-                                  : item.preview.conflictingPartCount === 0
-                                    ? 'text-state-ok'
-                                    : 'text-state-danger',
+                                'rz-num',
+                                item.status === 'draft' && 'text-app-dim',
                               )}
                             >
-                              <span className="text-app-muted mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
-                                {ti('discrepancies')}
-                              </span>
                               {item.status === 'draft'
                                 ? '—'
                                 : item.preview.conflictingPartCount}
                             </span>
-                            <span className="md:flex md:justify-end">
-                              <StatusPill tone={tone}>{label}</StatusPill>
-                            </span>
-                          </Link>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                )}
-              </section>
+                          ),
+                        },
+                      ]}
+                    />
+                  )}
+                </section>
 
-              <section aria-label={t('warehouses')} className="grid gap-4.5">
-                <div className="flex flex-wrap items-baseline gap-3.5">
-                  <h2 className="text-app-muted font-mono text-[11px] tracking-[0.16em] uppercase">
-                    {t('warehouses')}
-                  </h2>
-                  <span aria-hidden className="bg-app-line h-px flex-1" />
-                  {canZones ? (
-                    <Button
-                      className="text-[13px] font-semibold"
-                      onClick={() => {
-                        setDraft({ name: '', code: '' })
-                        setAdding(true)
-                      }}
-                      variant="ghost"
-                    >
-                      <Plus aria-hidden />
-                      {t('addWarehouse')}
-                    </Button>
-                  ) : null}
-                </div>
-                {warehouses.length === 0 ? (
-                  <EmptyState
-                    description={t('noWarehousesHint')}
-                    title={t('noWarehousesTitle')}
-                  />
-                ) : (
-                  <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-4">
-                    {warehouses.map((item) => {
-                      const parts = stock?.get(item.id) ?? null
-                      const share =
-                        parts === null || stockTotal === 0
-                          ? 0
-                          : Math.round((parts / stockTotal) * 100)
-                      return (
-                        <li key={item.id}>
-                          <Link
-                            className="border-app-line bg-app-raised block h-full rounded-[18px] border px-5.5 pt-5 pb-5.5 hover:border-white/20"
-                            to={`${base}/warehouses/${item.id}`}
-                          >
-                            <span className="flex items-baseline justify-between gap-3">
-                              <span className="text-[17px] font-bold tracking-[-0.01em] text-white">
-                                {item.name}
-                              </span>
-                              <span className="text-app-muted font-mono text-[13px]">
-                                {ti('zones', { count: item.zoneCount })}
-                              </span>
-                            </span>
-                            <span className="text-app-muted mt-1 block text-[13px]">
-                              {[
-                                t('warehouseCode', { code: item.code }),
-                                item.isSystemDefault ? t('defaultTag') : null,
-                                item.isActive ? null : t('archivedTag'),
-                              ]
-                                .filter(Boolean)
-                                .join(' · ')}
-                            </span>
-                            <span
-                              aria-hidden
-                              className="bg-app-line-2 mt-4 block h-1.5 overflow-hidden rounded-full"
+                <section aria-label={t('warehouses')} className="grid gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h2 className="rz-h-title">{t('warehouses')}</h2>
+                    {canZones ? (
+                      <Button
+                        onClick={() => {
+                          setDraft({ name: '', code: '' })
+                          setAdding(true)
+                        }}
+                      >
+                        <Plus aria-hidden />
+                        {t('addWarehouse')}
+                      </Button>
+                    ) : null}
+                  </div>
+                  {warehouses.length === 0 ? (
+                    <EmptyState
+                      description={t('noWarehousesHint')}
+                      title={t('noWarehousesTitle')}
+                    />
+                  ) : (
+                    <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-3 p-0">
+                      {warehouses.map((item) => {
+                        const parts = stock?.get(item.id) ?? null
+                        const share =
+                          parts === null || stockTotal === 0
+                            ? 0
+                            : Math.round((parts / stockTotal) * 100)
+                        return (
+                          <li key={item.id}>
+                            <Link
+                              className="rz-card rz-card__body block h-full text-app-ink transition-colors hover:border-app-line-2"
+                              to={`${base}/warehouses/${item.id}`}
                             >
-                              <span
-                                className="bg-state-ok block h-full rounded-full"
-                                style={{ width: `${String(share)}%` }}
-                              />
-                            </span>
-                            <span className="text-app-muted mt-2.5 flex items-baseline justify-between gap-3 text-[13px]">
-                              <span>
-                                {parts === null
-                                  ? ti('stockUnavailable')
-                                  : t('shareOfYard', { share })}
+                              <span className="flex items-baseline justify-between gap-3">
+                                <span className="rz-strong font-semibold">
+                                  {item.name}
+                                </span>
+                                <span className="rz-mono rz-caption">
+                                  {ti('zones', { count: item.zoneCount })}
+                                </span>
                               </span>
-                              <span className="font-mono">
-                                {parts === null
-                                  ? '—'
-                                  : t('positionsShort', { count: parts })}
+                              <span className="rz-muted mt-0.5 block text-caption">
+                                {[
+                                  t('warehouseCode', { code: item.code }),
+                                  item.isSystemDefault ? t('defaultTag') : null,
+                                  item.isActive ? null : t('archivedTag'),
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
                               </span>
-                            </span>
-                            <span className="border-app-line text-app-dim mt-3.5 block border-t pt-3.5 text-[13px]">
-                              {checkOf(item.id)}
-                            </span>
-                          </Link>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                )}
-              </section>
-            </div>
+                              <span aria-hidden className="rz-meter mt-3">
+                                <span style={{ width: `${String(share)}%` }} />
+                              </span>
+                              <span className="rz-muted mt-2 flex items-baseline justify-between gap-3 text-caption">
+                                <span>
+                                  {parts === null
+                                    ? ti('stockUnavailable')
+                                    : t('shareOfYard', { share })}
+                                </span>
+                                <span className="rz-mono">
+                                  {parts === null
+                                    ? '—'
+                                    : t('positionsShort', { count: parts })}
+                                </span>
+                              </span>
+                              <span className="border-app-line rz-dim mt-3 block border-t pt-3 text-caption">
+                                {checkOf(item.id)}
+                              </span>
+                            </Link>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+                </section>
+              </>
+            )
+          }}
+        </Resource>
+      </div>
 
-            <WarehouseEditorSheet
-              open={adding}
-              draft={draft}
-              onChange={setDraft}
-              onClose={() => setAdding(false)}
-              onSubmit={() => void createWarehouse()}
-              pending={creating}
-              error={operationError}
-            />
-          </div>
-        )
-      }}
-    </Resource>
+      <WarehouseEditorSheet
+        open={adding}
+        draft={draft}
+        onChange={setDraft}
+        onClose={() => setAdding(false)}
+        onSubmit={() => void createWarehouse()}
+        pending={creating}
+        error={operationError}
+      />
+    </div>
   )
 }
 
@@ -742,7 +834,7 @@ function WarehouseEditorSheet({
       <form
         id={formId}
         aria-busy={pending}
-        className="grid content-start gap-5"
+        className="grid content-start gap-3"
         onSubmit={(event) => {
           event.preventDefault()
           if (!pending && draft.name.trim() && draft.code.trim()) onSubmit()
@@ -1019,34 +1111,26 @@ function WarehouseView({ id }: { id: string }) {
             : active.zones.filter((zone) => zone.status === 'completed').length
 
         return (
-          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-              <div className="flex min-w-0 items-center gap-5">
-                <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-                  to={base}
-                >
+          <div className="grid content-start">
+            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
+              <div className="flex min-w-0 items-center gap-3">
+                <Link className="rz-btn rz-btn--ghost" to={base}>
                   <ChevronLeft aria-hidden className="size-3.5" />
                   {ti('backToInventory')}
                 </Link>
-                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                <p className="rz-crumbs m-0 hidden sm:flex">
                   <span>{ti('crumbWarehouse')}</span>
-                  <span aria-hidden className="text-white/20">
-                    /
-                  </span>
+                  <ChevronRight aria-hidden className="size-3" />
                   <span>{ti('crumbWarehouses')}</span>
-                  <span aria-hidden className="text-white/20">
-                    /
-                  </span>
+                  <ChevronRight aria-hidden className="size-3" />
                   <span className="text-app-muted truncate">
                     {warehouse.name}
                   </span>
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2.5">
+              <div className="rz-topbar__actions flex-wrap items-center">
                 {canManage ? (
                   <Button
-                    className="px-[18px] text-sm font-semibold"
                     onClick={() => {
                       setDraft({ name: warehouse.name, code: warehouse.code })
                       setEditingWarehouse(true)
@@ -1057,11 +1141,7 @@ function WarehouseView({ id }: { id: string }) {
                   </Button>
                 ) : null}
                 {canSession ? (
-                  <Button
-                    asChild
-                    className="px-5 text-sm font-bold"
-                    variant="primary"
-                  >
+                  <Button asChild variant="primary">
                     <Link to={`${base}/sessions/new`}>{ti('newSession')}</Link>
                   </Button>
                 ) : null}
@@ -1102,25 +1182,17 @@ function WarehouseView({ id }: { id: string }) {
               </div>
             </div>
 
-            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="rz-page">
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-4">
-                  <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                    {warehouse.name}
-                  </h1>
+                <div className="rz-page-head items-center">
+                  <h1 className="rz-h-page">{warehouse.name}</h1>
                   {warehouse.isActive ? (
-                    <span className="border-state-ok/30 bg-state-ok-soft text-state-ok inline-flex h-[30px] items-center gap-2 rounded-full border pr-3.5 pl-3 text-[13px] font-bold">
-                      <span
-                        aria-hidden
-                        className="bg-state-ok size-1.5 rounded-full"
-                      />
-                      {t('active')}
-                    </span>
+                    <StatusPill tone="ok">{t('active')}</StatusPill>
                   ) : (
                     <StatusPill tone="neutral">{t('archived')}</StatusPill>
                   )}
                 </div>
-                <p className="text-app-muted mt-3 text-[15px]">
+                <p className="rz-muted m-0 mt-1">
                   {[
                     t('code', { code: warehouse.code }),
                     ti('zones', { count: real.length }),
@@ -1139,7 +1211,7 @@ function WarehouseView({ id }: { id: string }) {
                 <Notice tone="danger">{operationError}</Notice>
               ) : null}
 
-              <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,210px),1fr))] gap-px overflow-hidden rounded-[20px] border">
+              <div className="rz-kpis">
                 <WarehouseStat
                   label={t('statPositions')}
                   meta={`${ti('zones', { count: real.length })} · ${t('unassigned', { count: warehouse.unassignedPartCount })}`}
@@ -1180,7 +1252,7 @@ function WarehouseView({ id }: { id: string }) {
                 />
               </div>
 
-              <div className="grid min-w-0 gap-5">
+              <div className="grid min-w-0 gap-3">
                 <Card
                   aside={
                     <div className="flex flex-wrap items-center gap-2">
@@ -1192,7 +1264,7 @@ function WarehouseView({ id }: { id: string }) {
                       ) : null}
                     </div>
                   }
-                  bodyClassName={labelsOpen ? 'p-4 sm:p-6' : 'p-0 pt-4'}
+                  bodyClassName={labelsOpen ? '' : 'p-0'}
                   className="min-w-0"
                   title={t('zonesTitle')}
                 >
@@ -1207,172 +1279,167 @@ function WarehouseView({ id }: { id: string }) {
                       returnFocusRef={labelTriggerRef}
                     />
                   ) : (
-                    <>
-                      <div
-                        aria-hidden
-                        className={cn(
-                          'border-app-line text-app-muted hidden gap-3 border-y px-6 py-3 font-mono text-[10px] tracking-[0.14em] uppercase md:grid',
-                          canManage
-                            ? 'grid-cols-[minmax(0,1fr)_4.5rem_10rem_6.5rem_5.5rem]'
-                            : 'grid-cols-[minmax(0,1fr)_4.5rem_10rem_6.5rem]',
-                        )}
-                      >
-                        <span>{t('colZone')}</span>
-                        <span className="text-right">{t('colPositions')}</span>
-                        <span>{t('colFill')}</span>
-                        <span className="text-right">{t('colChecked')}</span>
-                        {canManage ? (
-                          <span className="text-right">{t('colActions')}</span>
-                        ) : null}
-                      </div>
-                      <ul className="grid">
-                        {zones.length === 0 ? (
-                          <li className="text-app-muted px-6 py-6 text-sm">
-                            {t('noZones')}
-                          </li>
-                        ) : null}
-                        {zones.map((zone) => {
-                          const count = partsIn(zone.id)
-                          /** How much of the warehouse's stock lies in this zone. */
-                          const share =
-                            stock.total === null || stock.total === 0
-                              ? 0
-                              : Math.round((count / stock.total) * 100)
-                          const check = checkOf(zone.id)
-                          return (
-                            <li
-                              className={cn(
-                                'border-app-line grid items-center gap-x-4 gap-y-2 border-b px-6 py-4 last:border-0 md:gap-3',
-                                canManage
-                                  ? 'md:grid-cols-[minmax(0,1fr)_4.5rem_10rem_6.5rem_5.5rem]'
-                                  : 'md:grid-cols-[minmax(0,1fr)_4.5rem_10rem_6.5rem]',
-                              )}
-                              key={zone.id}
-                            >
-                              <div className="min-w-0">
-                                {zone.isSystemUnassigned &&
-                                partsBase === null ? (
-                                  <span className="text-[15px] font-bold text-white">
-                                    {zone.name}
-                                  </span>
-                                ) : (
-                                  <Link
-                                    className="flex min-h-11 items-center justify-between gap-3 text-[15px] font-bold text-white hover:underline"
-                                    to={
-                                      zone.isSystemUnassigned
-                                        ? `${partsBase}?zone=${encodeURIComponent(zone.id)}`
-                                        : `${base}/zones/${encodeURIComponent(zone.id)}`
-                                    }
-                                  >
-                                    {zone.name}
-                                    {!zone.isSystemUnassigned ? (
-                                      <ChevronRight
-                                        aria-hidden
-                                        className="text-app-muted size-4 shrink-0"
-                                      />
-                                    ) : null}
-                                  </Link>
-                                )}
-                                <p className="text-app-muted mt-0.5 text-[13px]">
-                                  {[
-                                    zone.code,
+                    <DataTable
+                      embedded
+                      caption={t('zonesTitle')}
+                      rows={zones}
+                      rowKey={(zone) => zone.id}
+                      empty={
+                        <p className="rz-muted m-0 px-4 py-6">{t('noZones')}</p>
+                      }
+                      columns={[
+                        {
+                          key: 'zone',
+                          label: t('colZone'),
+                          variant: 'primary',
+                          cell: (zone) => (
+                            <div className="min-w-0 py-1.5">
+                              {zone.isSystemUnassigned && partsBase === null ? (
+                                <span className="rz-strong font-semibold">
+                                  {zone.name}
+                                </span>
+                              ) : (
+                                <Link
+                                  className="text-app-strong inline-flex items-center gap-1.5 font-semibold"
+                                  to={
                                     zone.isSystemUnassigned
-                                      ? t('systemTag')
-                                      : null,
-                                    zone.isActive ? null : t('archivedZoneTag'),
-                                  ]
-                                    .filter(Boolean)
-                                    .join(' · ')}
-                                </p>
-                              </div>
-                              <p className="text-app-muted font-mono text-[14px] tabular-nums md:text-right">
-                                {stock.total === null ? '—' : count}
-                              </p>
-                              <div>
-                                <span
-                                  aria-hidden
-                                  className="bg-app-line-2 block h-1.5 overflow-hidden rounded-full"
+                                      ? `${partsBase}?zone=${encodeURIComponent(zone.id)}`
+                                      : `${base}/zones/${encodeURIComponent(zone.id)}`
+                                  }
                                 >
+                                  {zone.name}
+                                  {!zone.isSystemUnassigned ? (
+                                    <ChevronRight
+                                      aria-hidden
+                                      className="text-app-dim size-3.5 shrink-0"
+                                    />
+                                  ) : null}
+                                </Link>
+                              )}
+                              <p className="rz-caption m-0 font-normal">
+                                {[
+                                  zone.code,
+                                  zone.isSystemUnassigned
+                                    ? t('systemTag')
+                                    : null,
+                                  zone.isActive ? null : t('archivedZoneTag'),
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </p>
+                            </div>
+                          ),
+                        },
+                        {
+                          key: 'positions',
+                          label: t('colPositions'),
+                          align: 'end',
+                          cell: (zone) =>
+                            stock.total === null ? '—' : partsIn(zone.id),
+                        },
+                        {
+                          key: 'fill',
+                          label: t('colFill'),
+                          cell: (zone) => {
+                            /** How much of the warehouse's stock lies in this zone. */
+                            const share =
+                              stock.total === null || stock.total === 0
+                                ? 0
+                                : Math.round(
+                                    (partsIn(zone.id) / stock.total) * 100,
+                                  )
+                            return (
+                              <span className="grid min-w-28 gap-1">
+                                <span aria-hidden className="rz-meter">
                                   <span
-                                    className="bg-state-ok block h-full rounded-full"
                                     style={{ width: `${String(share)}%` }}
                                   />
                                 </span>
-                                <p className="text-app-muted mt-2 font-mono text-[12px]">
+                                <span className="rz-mono rz-caption">
                                   {stock.total === null
                                     ? ti('stockUnavailable')
                                     : t('shareOfWarehouse', { share })}
-                                </p>
-                              </div>
-                              <p
-                                className={cn(
-                                  'text-[13px] md:text-right',
-                                  check.tone,
-                                )}
-                              >
+                                </span>
+                              </span>
+                            )
+                          },
+                        },
+                        {
+                          key: 'checked',
+                          label: t('colChecked'),
+                          align: 'end',
+                          cell: (zone) => {
+                            const check = checkOf(zone.id)
+                            return (
+                              <span className={cn('font-sans', check.tone)}>
                                 {check.label}
-                              </p>
-                              {canManage ? (
-                                <div className="flex gap-1.5 md:justify-end">
-                                  <Button
-                                    aria-label={t('editZone', {
-                                      name: zone.name,
-                                    })}
-                                    className="min-w-11 px-0"
-                                    disabled={zone.isSystemUnassigned}
-                                    onClick={() => {
-                                      setOperationError(null)
-                                      setEditingZone(zone)
-                                    }}
-                                    title={
-                                      zone.isSystemUnassigned
-                                        ? t('systemNoEdit')
-                                        : undefined
-                                    }
-                                    variant="ghost"
-                                  >
-                                    <Pencil aria-hidden />
-                                  </Button>
-                                  <Button
-                                    aria-label={t('archiveZoneLabel', {
-                                      name: zone.name,
-                                    })}
-                                    className="min-w-11 px-0"
-                                    disabled={zone.isSystemUnassigned}
-                                    onClick={() => setArchivingZone(zone)}
-                                    title={
-                                      zone.isSystemUnassigned
-                                        ? t('systemNoArchive')
-                                        : undefined
-                                    }
-                                    variant="ghost"
-                                  >
-                                    <Archive aria-hidden />
-                                  </Button>
-                                </div>
-                              ) : null}
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    </>
+                              </span>
+                            )
+                          },
+                        },
+                        ...(canManage
+                          ? [
+                              {
+                                key: 'actions',
+                                label: t('colActions'),
+                                align: 'end' as const,
+                                cell: (zone: WarehouseZone) => (
+                                  <span className="inline-flex gap-1">
+                                    <Button
+                                      aria-label={t('editZone', {
+                                        name: zone.name,
+                                      })}
+                                      disabled={zone.isSystemUnassigned}
+                                      onClick={() => {
+                                        setOperationError(null)
+                                        setEditingZone(zone)
+                                      }}
+                                      size="icon"
+                                      title={
+                                        zone.isSystemUnassigned
+                                          ? t('systemNoEdit')
+                                          : undefined
+                                      }
+                                      variant="quiet"
+                                    >
+                                      <Pencil aria-hidden />
+                                    </Button>
+                                    <Button
+                                      aria-label={t('archiveZoneLabel', {
+                                        name: zone.name,
+                                      })}
+                                      disabled={zone.isSystemUnassigned}
+                                      onClick={() => setArchivingZone(zone)}
+                                      size="icon"
+                                      title={
+                                        zone.isSystemUnassigned
+                                          ? t('systemNoArchive')
+                                          : undefined
+                                      }
+                                      variant="quiet"
+                                    >
+                                      <Archive aria-hidden />
+                                    </Button>
+                                  </span>
+                                ),
+                              },
+                            ]
+                          : []),
+                      ]}
+                    />
                   )}
                 </Card>
 
-                <div className="grid min-w-0 gap-5 lg:grid-cols-2 lg:items-start">
+                <div className="grid min-w-0 gap-3 lg:grid-cols-2 lg:items-start">
                   <section
                     aria-label={t('activeSession')}
-                    className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
+                    className="rz-card rz-card__body"
                   >
-                    <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                      {t('activeSession')}
-                    </h2>
+                    <h2 className="rz-h-card">{t('activeSession')}</h2>
                     {active === null ? (
                       <>
-                        <p className="mt-3 text-[19px] font-bold tracking-[-0.015em] text-white">
-                          {t('noCheck')}
-                        </p>
-                        <p className="text-app-muted mt-1 text-[13px]">
+                        <p className="rz-h-title mt-3">{t('noCheck')}</p>
+                        <p className="text-app-muted mt-1 text-body">
                           {t('lastCount', {
                             date:
                               history[0] === undefined
@@ -1383,7 +1450,7 @@ function WarehouseView({ id }: { id: string }) {
                         {canSession ? (
                           <Button
                             asChild
-                            className="mt-5 min-h-11 w-full text-sm font-bold"
+                            className="rz-btn--lg mt-4 w-full"
                             variant="primary"
                           >
                             <Link to={`${base}/sessions/new`}>
@@ -1394,10 +1461,10 @@ function WarehouseView({ id }: { id: string }) {
                       </>
                     ) : (
                       <>
-                        <p className="mt-3 text-[19px] font-bold tracking-[-0.015em] text-white">
+                        <p className="rz-h-title mt-3">
                           {active.number} · {zonesOf(active)}
                         </p>
-                        <p className="text-app-muted mt-1 text-[13px]">
+                        <p className="text-app-muted mt-1 text-body">
                           {active.startedAt == null
                             ? ti('created', { date: date(active.createdAt) })
                             : ti('started', { date: date(active.startedAt) })}
@@ -1407,10 +1474,10 @@ function WarehouseView({ id }: { id: string }) {
                         </p>
                         <span
                           aria-hidden
-                          className="bg-app-line-2 mt-4 block h-1.5 overflow-hidden rounded-full"
+                          className="rz-meter rz-meter--warn mt-4"
                         >
                           <span
-                            className="bg-state-warn block h-full rounded-full"
+                            className="block"
                             style={{
                               width: `${String(
                                 active.zones.length === 0
@@ -1423,7 +1490,7 @@ function WarehouseView({ id }: { id: string }) {
                             }}
                           />
                         </span>
-                        <p className="text-app-muted mt-2.5 flex justify-between gap-3 font-mono text-[12px]">
+                        <p className="text-app-muted mt-2.5 flex justify-between gap-3 font-mono text-caption">
                           <span>
                             {ti('zonesProgress', {
                               done: countedZones,
@@ -1438,7 +1505,7 @@ function WarehouseView({ id }: { id: string }) {
                         </p>
                         <Button
                           asChild
-                          className="mt-5 min-h-11 w-full text-sm font-bold"
+                          className="rz-btn--lg mt-4 w-full"
                           variant="primary"
                         >
                           <Link to={`${base}/sessions/${active.id}`}>
@@ -1451,10 +1518,7 @@ function WarehouseView({ id }: { id: string }) {
 
                   <Card
                     aside={
-                      <Link
-                        className="text-brand text-[13px] font-semibold hover:underline"
-                        to={base}
-                      >
+                      <Link className="font-medium" to={base}>
                         {t('all')}
                       </Link>
                     }
@@ -1462,7 +1526,7 @@ function WarehouseView({ id }: { id: string }) {
                     title={t('historyTitle')}
                   >
                     {history.length === 0 ? (
-                      <p className="text-app-muted px-6 pt-4 pb-6 text-sm">
+                      <p className="rz-muted m-0 px-4 pt-3 pb-4">
                         {t('noHistory')}
                       </p>
                     ) : (
@@ -1471,17 +1535,17 @@ function WarehouseView({ id }: { id: string }) {
                           const conflicts = item.preview.conflictingPartCount
                           return (
                             <li
-                              className="border-app-line flex items-center gap-4 border-t px-6 py-3.5"
+                              className="border-app-line flex items-center gap-4 border-t px-4 py-3.5"
                               key={item.id}
                             >
                               <div className="min-w-0 flex-1">
                                 <Link
-                                  className="text-[14px] font-semibold text-white hover:underline"
+                                  className="text-body font-semibold text-app-strong hover:underline"
                                   to={`${base}/sessions/${item.id}`}
                                 >
                                   {item.number} · {zonesOf(item)}
                                 </Link>
-                                <p className="text-app-muted mt-0.5 text-[12px]">
+                                <p className="text-app-muted mt-0.5 text-caption">
                                   {[
                                     day(closedAt(item)),
                                     nameOf(item.completedBy ?? item.createdBy),
@@ -1495,7 +1559,7 @@ function WarehouseView({ id }: { id: string }) {
                               </div>
                               <p
                                 className={cn(
-                                  'font-mono text-[13px] whitespace-nowrap tabular-nums',
+                                  'font-mono text-body whitespace-nowrap tabular-nums',
                                   conflicts === 0
                                     ? 'text-state-ok'
                                     : 'text-state-danger',
@@ -1671,11 +1735,11 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
               ? `?${new URLSearchParams({ locationSearch: zoneSearch }).toString()}`
               : ''
         return (
-          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-              <div className="flex min-w-0 items-center gap-5">
+          <div className="grid content-start">
+            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
+              <div className="flex min-w-0 items-center gap-3">
                 <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex min-h-11 shrink-0 items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
+                  className="rz-btn rz-btn--ghost shrink-0"
                   to={
                     section
                       ? `${base}/zones/${zone.id}${returnQuery}`
@@ -1685,32 +1749,24 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
                   <ChevronLeft aria-hidden className="size-3.5" />
                   {t(section ? 'backToZone' : 'backToWarehouse')}
                 </Link>
-                <p className="text-app-muted hidden min-w-0 items-center gap-2 text-sm sm:flex">
+                <p className="rz-crumbs m-0 hidden sm:flex">
                   <span>{ti('crumbWarehouse')}</span>
-                  <span aria-hidden className="text-white/20">
-                    /
-                  </span>
-                  <span className="text-app-muted truncate">
-                    {zone.warehouseName}
-                  </span>
-                  <span aria-hidden className="text-white/20">
-                    /
-                  </span>
+                  <ChevronRight aria-hidden className="size-3" />
+                  <span className="truncate">{zone.warehouseName}</span>
+                  <ChevronRight aria-hidden className="size-3" />
                   {section ? (
                     <>
-                      <span className="text-app-muted truncate">
-                        {zone.name}
-                      </span>
-                      <span aria-hidden className="text-white/20">
-                        /
-                      </span>
+                      <span className="truncate">{zone.name}</span>
+                      <ChevronRight aria-hidden className="size-3" />
                     </>
                   ) : null}
-                  <span>{t(section ? 'sectionType' : 'zoneType')}</span>
+                  <span aria-current="page">
+                    {t(section ? 'sectionType' : 'zoneType')}
+                  </span>
                 </p>
               </div>
               {canViewParts && targetTenant ? (
-                <Button asChild className="px-4 text-sm font-semibold">
+                <Button asChild>
                   <Link
                     to={locationPartsHref(
                       cabinetPath(targetTenant.slug, 'parts'),
@@ -1732,17 +1788,17 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
                     )}
                   >
                     {t(section ? 'allSectionParts' : 'allZoneParts')}
-                    <ArrowRight aria-hidden className="size-4" />
+                    <ArrowRight aria-hidden />
                   </Link>
                 </Button>
               ) : null}
             </div>
-            <div className="mx-auto grid w-full max-w-[1440px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="rz-page">
               <header className="min-w-0">
-                <h1 className="break-words text-[38px] leading-[1.05] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+                <h1 className="rz-h-page break-words">
                   {section?.name ?? zone.name}
                 </h1>
-                <div className="mt-3 flex flex-wrap items-center gap-3">
+                <div className="mt-2 flex flex-wrap items-center gap-3">
                   <StatusPill
                     tone={
                       zone.isActive && section?.isActive !== false
@@ -1756,7 +1812,7 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
                         : 'zoneArchived',
                     )}
                   </StatusPill>
-                  <p className="text-app-muted min-w-0 break-all font-mono text-[13px]">
+                  <p className="rz-mono rz-muted m-0 min-w-0 break-all">
                     {t('code', { code: section?.code ?? zone.code })}
                   </p>
                 </div>
@@ -1781,7 +1837,7 @@ function LocationView({ id, kind }: { id: string; kind: 'zone' | 'section' }) {
                     )}
                   </Notice>
                   {labelsOpen && !zone.isSystemUnassigned ? (
-                    <div className="border-app-line bg-app-raised rounded-[20px] border p-4 sm:p-6">
+                    <div className="rz-card rz-card__body">
                       <LocationLabelsPage
                         target={{
                           kind: section ? 'shelf' : 'section',
@@ -1976,24 +2032,20 @@ function ZoneLocations({
   return (
     <section
       aria-label={t(section ? 'shelfType' : 'sectionType')}
-      className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
+      className="rz-card min-w-0"
     >
       {error ? (
-        <div className="p-4 sm:p-6">
+        <div className="rz-card__body">
           <Notice tone="danger">{error}</Notice>
         </div>
       ) : null}
       {resource.state.kind === 'loading' ? (
-        <div className="p-4 sm:p-6">
+        <div className="rz-card__body">
           <SkeletonRows rows={3} />
         </div>
       ) : null}
       {resource.state.kind === 'error' ? (
-        <Button
-          className="m-4 sm:m-6"
-          onClick={resource.reload}
-          variant="ghost"
-        >
+        <Button className="m-4" onClick={resource.reload} variant="ghost">
           {tc('retry')}
         </Button>
       ) : null}
@@ -2173,7 +2225,7 @@ function ZoneLocations({
         }
       >
         <form
-          className="grid content-start gap-5"
+          className="grid content-start gap-3"
           id={formId}
           onSubmit={(event) => {
             event.preventDefault()
@@ -2241,6 +2293,7 @@ function NameAndCode({
       </Field>
       <Field hint={t('codeHint')} label={t('codeLabel')} required>
         <TextInput
+          className="font-mono"
           onChange={(event) => onChange({ ...draft, code: event.target.value })}
           value={draft.code}
         />
@@ -2249,7 +2302,7 @@ function NameAndCode({
   )
 }
 
-/** One figure of the warehouse strip: label, number, unit and what it counts. */
+/** One figure of the warehouse strip: `.rz-kpi` from the design system. */
 function WarehouseStat({
   label,
   value,
@@ -2264,30 +2317,21 @@ function WarehouseStat({
   tone?: 'plain' | 'ok' | 'warn' | 'danger'
 }) {
   return (
-    <div className="bg-app-raised px-6 pt-[22px] pb-6">
-      <p className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-        {label}
-      </p>
-      <p className="mt-3.5 flex items-baseline gap-2">
+    <div className={cn('rz-kpi', tone === 'warn' && 'rz-kpi--warn')}>
+      <p className="rz-kpi__label m-0">{label}</p>
+      <p className="rz-kpi__value m-0">
         <span
           className={cn(
-            'text-[30px] leading-none font-extrabold tracking-[-0.03em] tabular-nums',
-            tone === 'ok'
-              ? 'text-state-ok'
-              : tone === 'warn'
-                ? 'text-state-warn'
-                : tone === 'danger'
-                  ? 'text-state-danger'
-                  : 'text-white',
+            'rz-display',
+            tone === 'ok' && 'text-state-ok',
+            tone === 'danger' && 'text-state-danger',
           )}
         >
           {value}
         </span>
-        <span className="text-app-muted font-mono text-[13px] font-medium">
-          {unit}
-        </span>
+        <span className="rz-kpi__unit">{unit}</span>
       </p>
-      <p className="text-app-dim mt-3.5 text-[13px]">{meta}</p>
+      <p className="rz-kpi__meta m-0">{meta}</p>
     </div>
   )
 }
@@ -2426,34 +2470,27 @@ function NewSessionView() {
         const ready = selected.length > 0 && canManage
 
         return (
-          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-              <div className="flex min-w-0 items-center gap-5">
-                <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-                  to={base}
-                >
+          <div className="grid content-start">
+            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
+              <div className="flex min-w-0 items-center gap-3">
+                <Link className="rz-btn rz-btn--ghost" to={base}>
                   <ChevronLeft aria-hidden className="size-3.5" />
                   {ti('backToInventory')}
                 </Link>
-                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                <p className="rz-crumbs m-0 hidden sm:flex">
                   <span>{ti('crumbWarehouse')}</span>
-                  <span aria-hidden className="text-white/20">
-                    /
-                  </span>
-                  <span className="text-app-muted">{ti('crumbInventory')}</span>
+                  <ChevronRight aria-hidden className="size-3" />
+                  <span aria-current="page">{ti('crumbInventory')}</span>
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2.5">
+              <div className="rz-topbar__actions flex-wrap items-center">
                 <Button
-                  className="px-[18px] text-sm font-semibold"
                   disabled={!ready || busy !== null}
                   onClick={() => void create(selected, false)}
                 >
                   {busy === 'draft' ? t('saving') : t('saveDraft')}
                 </Button>
                 <Button
-                  className="px-5 text-sm font-bold"
                   disabled={!ready || busy !== null}
                   onClick={() => void create(selected, true)}
                   variant="primary"
@@ -2463,12 +2500,10 @@ function NewSessionView() {
               </div>
             </div>
 
-            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="rz-page">
               <div className="min-w-0">
-                <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                  {t('title')}
-                </h1>
-                <p className="text-app-muted mt-3 text-[15px]">{t('intro')}</p>
+                <h1 className="rz-h-page">{t('title')}</h1>
+                <p className="rz-muted m-0 mt-1">{t('intro')}</p>
               </div>
 
               {!canManage ? (
@@ -2478,8 +2513,8 @@ function NewSessionView() {
                 <Notice tone="danger">{operationError}</Notice>
               ) : null}
 
-              <div className="flex flex-wrap items-start gap-6">
-                <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-5">
+              <div className="flex flex-wrap items-start gap-4">
+                <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-3">
                   <Step hint={t('typeHint')} number="01" title={t('typeTitle')}>
                     <div
                       aria-label={t('typeTitle')}
@@ -2492,13 +2527,11 @@ function NewSessionView() {
                           <button
                             aria-checked={active}
                             className={cn(
-                              'focus-visible:outline-brand min-h-[70px] flex-[1_1_10rem] rounded-xl border px-4 py-3.5 text-left',
-                              active
-                                ? 'border-app-line-2 bg-white/[0.07]'
-                                : 'border-app-line bg-transparent',
+                              'rz-choice-card grid flex-[1_1_10rem] gap-0.5 bg-transparent text-left',
+                              active && 'border-brand bg-brand-soft',
                               option.available
-                                ? 'cursor-pointer hover:border-white/20'
-                                : 'cursor-not-allowed opacity-55',
+                                ? 'hover:bg-app-hover'
+                                : 'cursor-not-allowed opacity-50',
                             )}
                             disabled={!option.available}
                             key={option.value}
@@ -2513,13 +2546,13 @@ function NewSessionView() {
                           >
                             <span
                               className={cn(
-                                'block text-[15px] font-bold',
-                                active ? 'text-app-ink' : 'text-app-muted',
+                                'block font-semibold',
+                                active ? 'text-app-strong' : 'text-app-ink',
                               )}
                             >
                               {t(option.label)}
                             </span>
-                            <span className="text-app-muted mt-1.5 block text-[12px] leading-[1.4] font-medium">
+                            <span className="rz-muted block text-caption">
                               {t(option.hint)}
                             </span>
                           </button>
@@ -2538,7 +2571,7 @@ function NewSessionView() {
                     {houses.length > 1 ? (
                       <div
                         aria-label={t('warehouse')}
-                        className="flex flex-wrap gap-1.5"
+                        className="rz-seg mb-3 flex-wrap"
                         role="radiogroup"
                       >
                         {houses.map((item) => {
@@ -2546,12 +2579,6 @@ function NewSessionView() {
                           return (
                             <button
                               aria-checked={active}
-                              className={cn(
-                                'focus-visible:outline-brand min-h-11 cursor-pointer rounded-[10px] border px-4 text-[14px] font-semibold',
-                                active
-                                  ? 'border-app-line-2 text-app-ink bg-white/[0.07]'
-                                  : 'border-app-line text-app-muted hover:border-white/20',
-                              )}
                               key={item.id}
                               onClick={() => {
                                 setWarehouseId(item.id)
@@ -2566,11 +2593,9 @@ function NewSessionView() {
                         })}
                       </div>
                     ) : null}
-                    <ul className="mt-4 grid gap-2">
+                    <ul className="m-0 grid list-none gap-1.5 p-0">
                       {inHouse.length === 0 ? (
-                        <li className="text-app-muted text-sm">
-                          {t('noActiveZones')}
-                        </li>
+                        <li className="rz-muted">{t('noActiveZones')}</li>
                       ) : null}
                       {inHouse.map((zone) => {
                         const on = selected.includes(zone.id)
@@ -2579,18 +2604,16 @@ function NewSessionView() {
                           <li key={zone.id}>
                             <label
                               className={cn(
-                                'flex w-full flex-wrap items-center gap-x-3.5 gap-y-1 rounded-xl border px-4 py-3.5',
-                                on
-                                  ? 'border-app-line-2 bg-white/[0.04]'
-                                  : 'border-app-line bg-app-canvas',
+                                'border-app-line flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-control border px-3 py-2',
+                                on && 'bg-app-row-selected',
                                 type === 'full'
                                   ? 'cursor-not-allowed'
-                                  : 'cursor-pointer hover:border-white/20',
+                                  : 'cursor-pointer hover:bg-app-hover',
                               )}
                             >
                               <input
                                 checked={on}
-                                className="accent-brand size-5 shrink-0"
+                                className="rz-check"
                                 disabled={type === 'full' || !canManage}
                                 onChange={() =>
                                   setPicked((value) =>
@@ -2604,21 +2627,21 @@ function NewSessionView() {
                               <span className="min-w-0 flex-[1_1_8rem]">
                                 <span
                                   className={cn(
-                                    'block text-[15px] font-bold',
+                                    'block font-semibold',
                                     type === 'full'
                                       ? 'text-app-muted'
-                                      : 'text-app-ink',
+                                      : 'text-app-strong',
                                   )}
                                 >
                                   {zone.name}
                                 </span>
-                                <span className="text-app-muted mt-0.5 block text-[13px]">
+                                <span className="rz-muted block text-caption">
                                   {zone.code} · {zone.warehouseName}
                                 </span>
                               </span>
                               {/* Narrow screens give the count its own line
                                   rather than squeezing the zone's name. */}
-                              <span className="text-app-muted w-full pl-8.5 font-mono text-[13px] tabular-nums sm:w-auto sm:pl-0">
+                              <span className="rz-mono rz-muted w-full pl-6.5 sm:w-auto sm:pl-0">
                                 {count === null
                                   ? '—'
                                   : ti('positions', { count })}
@@ -2636,20 +2659,20 @@ function NewSessionView() {
                     title={t('peopleTitle')}
                   >
                     {people.length === 0 ? (
-                      <p className="text-app-muted text-sm">
+                      <p className="rz-muted m-0">
                         {canSeeTeam ? t('noPeople') : t('teamHidden')}
                       </p>
                     ) : (
-                      <ul className="flex flex-wrap gap-2">
+                      <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
                         {people.map((person) => (
                           <li key={person.userId}>
                             <span
-                              className="border-app-line text-app-muted flex min-h-11 items-center gap-2.5 rounded-full border py-0 pr-4 pl-2 text-[14px] font-semibold"
+                              className="rz-chip h-control-lg cursor-default gap-2 pr-2.5 pl-1 text-body"
                               title={t('personHint')}
                             >
                               <span
                                 aria-hidden
-                                className="flex size-7 items-center justify-center rounded-full bg-white/[0.06] text-[12px] font-bold"
+                                className="rz-avatar rz-avatar--round"
                               >
                                 {initials(person.name)}
                               </span>
@@ -2662,7 +2685,7 @@ function NewSessionView() {
                   </Step>
 
                   <Step number="04" title={t('rulesTitle')}>
-                    <ul className="grid gap-2.5">
+                    <ul className="m-0 grid list-none gap-1.5 p-0">
                       <Toggle
                         hint={t('lockHint')}
                         label={t('lockLabel')}
@@ -2682,7 +2705,7 @@ function NewSessionView() {
                         why={t('photoWhy')}
                       />
                     </ul>
-                    <div className="mt-4">
+                    <div className="mt-3">
                       <Field hint={t('commentHint')} label={t('commentLabel')}>
                         <TextArea
                           disabled
@@ -2697,69 +2720,68 @@ function NewSessionView() {
 
                 <section
                   aria-label={t('scopeTitle')}
-                  className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-[18px] border px-5.5 pt-[22px] pb-6"
+                  className="rz-card flex min-w-0 flex-[1_1_18rem] flex-col self-start"
                 >
-                  <h2 className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
-                    {t('scopeTitle')}
-                  </h2>
-                  <div className="border-app-line bg-app-canvas mt-4 rounded-[14px] border p-4">
-                    <p className="text-[17px] font-bold tracking-[-0.015em] text-white">
-                      {houseName} · {typeName}
-                    </p>
-                    <p className="text-app-muted mt-1 text-[14px]">
-                      {selected.length === 0
-                        ? t('noZonesPicked')
-                        : inHouse
-                            .filter((zone) => selected.includes(zone.id))
-                            .map((zone) => zone.name)
-                            .join(', ')}
+                  <div className="rz-card__head py-2.5">
+                    <h2 className="rz-h-card">{t('scopeTitle')}</h2>
+                  </div>
+                  <div className="rz-card__body flex flex-col">
+                    <div className="rz-inset">
+                      <p className="rz-strong m-0 font-semibold">
+                        {houseName} · {typeName}
+                      </p>
+                      <p className="rz-muted m-0 mt-1">
+                        {selected.length === 0
+                          ? t('noZonesPicked')
+                          : inHouse
+                              .filter((zone) => selected.includes(zone.id))
+                              .map((zone) => zone.name)
+                              .join(', ')}
+                      </p>
+                    </div>
+                    <dl className="rz-facts mt-2 px-0">
+                      <div>
+                        <dt>{t('zonesCount')}</dt>
+                        <dd className="rz-num">
+                          {selected.length === 0 ? '—' : selected.length}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{t('positionsCount')}</dt>
+                        <dd className="rz-num">
+                          {byZone === null || selected.length === 0
+                            ? '—'
+                            : partsTotal}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt title={t('peopleNotAssigned')}>
+                          {t('peopleCount')}
+                        </dt>
+                        <dd className="rz-num text-app-dim">—</dd>
+                      </div>
+                      <div>
+                        <dt
+                          className="text-app-strong font-semibold"
+                          title={t('durationNotEstimated')}
+                        >
+                          {t('estimate')}
+                        </dt>
+                        <dd className="rz-num text-app-dim">—</dd>
+                      </div>
+                    </dl>
+                    <Button
+                      className="rz-btn--lg mt-4 w-full"
+                      disabled={!ready || busy !== null}
+                      onClick={() => void create(selected, true)}
+                      variant="primary"
+                    >
+                      {busy === 'start' ? t('starting') : t('start')}
+                    </Button>
+                    <p className="rz-caption m-0 mt-3">
+                      {selected.length === 0 ? t('pickOne') : t('afterStart')}
                     </p>
                   </div>
-                  <dl className="mt-5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5">
-                    <dt className="text-app-muted text-[14px] font-semibold">
-                      {t('zonesCount')}
-                    </dt>
-                    <dd className="font-mono text-[15px] text-white tabular-nums">
-                      {selected.length === 0 ? '—' : selected.length}
-                    </dd>
-                    <dt className="text-app-muted text-[14px] font-semibold">
-                      {t('positionsCount')}
-                    </dt>
-                    <dd className="font-mono text-[15px] text-white tabular-nums">
-                      {byZone === null || selected.length === 0
-                        ? '—'
-                        : partsTotal}
-                    </dd>
-                    <dt
-                      className="text-app-muted text-[14px] font-semibold"
-                      title={t('peopleNotAssigned')}
-                    >
-                      {t('peopleCount')}
-                    </dt>
-                    <dd className="text-app-dim font-mono text-[15px]">—</dd>
-                    <dd
-                      aria-hidden
-                      className="bg-app-line col-span-2 my-1 h-px"
-                    />
-                    <dt
-                      className="text-[15px] font-bold text-white"
-                      title={t('durationNotEstimated')}
-                    >
-                      {t('estimate')}
-                    </dt>
-                    <dd className="text-app-dim font-mono text-[20px]">—</dd>
-                  </dl>
-                  <Button
-                    className="mt-5.5 min-h-11.5 w-full text-[15px] font-bold"
-                    disabled={!ready || busy !== null}
-                    onClick={() => void create(selected, true)}
-                    variant="primary"
-                  >
-                    {busy === 'start' ? t('starting') : t('start')}
-                  </Button>
-                  <p className="text-app-dim mt-3 text-[12px] leading-[1.5]">
-                    {selected.length === 0 ? t('pickOne') : t('afterStart')}
-                  </p>
                 </section>
               </div>
             </div>
@@ -2787,28 +2809,22 @@ function Step({
 }) {
   const titleId = useId()
   return (
-    <section
-      aria-labelledby={titleId}
-      className="border-app-line bg-app-raised rounded-[18px] border px-6 pt-[22px] pb-6"
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <div className="flex items-baseline gap-2.5">
-          <span aria-hidden className="text-app-dim font-mono text-[11px]">
+    <section aria-labelledby={titleId} className="rz-card">
+      <div className="rz-card__head py-2.5">
+        <div className="flex items-baseline gap-2">
+          <span aria-hidden className="rz-mono rz-dim text-micro">
             {number}
           </span>
-          <h2
-            className="text-[17px] font-bold tracking-[-0.01em] text-white"
-            id={titleId}
-          >
+          <h2 className="rz-h-card" id={titleId}>
             {title}
           </h2>
         </div>
         {aside}
+        {hint === undefined ? null : (
+          <p className="rz-caption m-0 w-full">{hint}</p>
+        )}
       </div>
-      {hint === undefined ? null : (
-        <p className="text-app-muted mt-1.5 text-[14px]">{hint}</p>
-      )}
-      <div className="mt-4.5">{children}</div>
+      <div className="rz-card__body">{children}</div>
     </section>
   )
 }
@@ -2830,30 +2846,22 @@ function Toggle({
 }) {
   const t = useT(newSessionMessages)
   return (
-    <li
-      className="border-app-line bg-app-canvas flex items-center gap-3.5 rounded-xl border px-4 py-3.5"
-      title={why}
-    >
+    <li className="rz-inset flex items-center gap-3 px-3 py-2.5" title={why}>
       <span className="min-w-0 flex-1">
-        <span className="block text-[15px] font-bold text-white">{label}</span>
-        <span className="text-app-muted mt-0.5 block text-[13px] leading-[1.45]">
+        <span className="rz-strong block font-semibold">{label}</span>
+        <span className="rz-muted block text-caption">
           {hint} {why}.
         </span>
       </span>
-      <span
+      <input
         aria-hidden
-        className={cn(
-          'flex h-6 w-10.5 shrink-0 items-center rounded-full p-[3px]',
-          on ? 'bg-brand' : 'bg-white/10',
-        )}
-      >
-        <span
-          className={cn(
-            'size-4.5 rounded-full',
-            on ? 'bg-app-canvas translate-x-4.5' : 'bg-app-muted',
-          )}
-        />
-      </span>
+        checked={on}
+        className="rz-switch shrink-0"
+        disabled
+        readOnly
+        tabIndex={-1}
+        type="checkbox"
+      />
       <span className="sr-only">{on ? t('toggleOn') : t('toggleOff')}</span>
     </li>
   )
@@ -2888,6 +2896,7 @@ const initials = (name: string) =>
 
 function SessionView({ id }: { id: string }) {
   const t = useT(sessionMessages)
+  const tj = useT(journalMessages)
   const ti = useT(inventoryMessages)
   const { date, sessionStatus, timeOfDay } = useInventoryFormat()
   const navigate = useNavigate()
@@ -3034,45 +3043,42 @@ function SessionView({ id }: { id: string }) {
           .filter((name): name is string => name !== null)
 
         return (
-          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-              <div className="flex min-w-0 items-center gap-5">
-                <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-                  to={base}
-                >
-                  <ChevronLeft aria-hidden className="size-3.5" />
-                  {ti('backToInventory')}
-                </Link>
-                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-                  <span>{ti('crumbInventory')}</span>
-                  <span aria-hidden className="text-white/20">
-                    /
-                  </span>
-                  <span className="text-app-muted">{session.number}</span>
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2.5">
+          <div className="grid content-start">
+            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
+              <InventoryCrumbs base={base} items={[session.number]} />
+              <div className="rz-topbar__actions flex-wrap items-center">
                 {session.status === 'draft' ? null : (
-                  <Button
-                    asChild
-                    className="px-[18px] text-sm font-semibold"
-                    variant="quiet"
-                  >
+                  <Button asChild variant="quiet">
                     <Link to={`${base}/sessions/${id}/results`}>
                       {t('results')}
                     </Link>
                   </Button>
                 )}
                 {/* Counting happens in the mobile app; the cabinet watches it. */}
-                <Button
-                  className="px-5 text-sm font-bold"
-                  disabled
-                  title={t('scanUnavailable')}
-                  variant="primary"
-                >
+                <Button disabled title={t('scanUnavailable')}>
+                  <ScanLine aria-hidden />
                   {t('scan')}
                 </Button>
+                {canManage && session.status === 'draft' ? (
+                  <Button
+                    disabled={acting}
+                    onClick={() => setAsking('start')}
+                    variant="primary"
+                  >
+                    <Play aria-hidden />
+                    {t('start')}
+                  </Button>
+                ) : null}
+                {canManage && session.status === 'review' ? (
+                  <Button
+                    disabled={acting}
+                    onClick={() => setAsking('complete')}
+                    variant="primary"
+                  >
+                    <Check aria-hidden />
+                    {t('complete')}
+                  </Button>
+                ) : null}
                 <ActionMenu
                   actions={[
                     {
@@ -3118,15 +3124,13 @@ function SessionView({ id }: { id: string }) {
               </div>
             </div>
 
-            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="rz-page">
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-4">
-                  <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                    {session.number}
-                  </h1>
+                <div className="rz-page-head items-center">
+                  <h1 className="rz-h-page">{session.number}</h1>
                   <StatusPill tone={tone}>{label}</StatusPill>
                 </div>
-                <p className="text-app-muted mt-3 text-[15px]">
+                <p className="rz-muted m-0 mt-1">
                   {[
                     session.zones[0]?.warehouseName ?? null,
                     session.zones.length === 0
@@ -3146,124 +3150,96 @@ function SessionView({ id }: { id: string }) {
                 <Notice tone="danger">{operationError}</Notice>
               ) : null}
 
-              <div className="flex flex-wrap-reverse items-end gap-6">
-                <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-5">
+              {/* The aside leads on a narrow screen: progress before the lists. */}
+              <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_340px]">
+                <div className="order-2 flex min-w-0 flex-col gap-3 lg:order-none">
                   <Card
                     aside={
                       <div
                         aria-label={t('filterLabel')}
-                        className="border-app-line bg-app-canvas flex flex-wrap gap-1 rounded-[10px] border p-[3px]"
+                        className="rz-seg flex-wrap"
                         role="radiogroup"
                       >
-                        {SESSION_FILTERS.map((option) => {
-                          const active = option.value === filter
-                          return (
-                            <button
-                              aria-checked={active}
-                              className={cn(
-                                'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-[8px] px-3 text-[12px] font-bold',
-                                active
-                                  ? 'text-app-ink bg-white/[0.08]'
-                                  : 'text-app-muted hover:text-app-ink',
-                              )}
-                              key={option.value}
-                              onClick={() => setFilter(option.value)}
-                              role="radio"
-                              type="button"
-                            >
-                              {t(option.label)}{' '}
-                              <span className="text-app-dim font-mono text-[11px] font-medium">
-                                {counts[option.value]}
-                              </span>
-                            </button>
-                          )
-                        })}
+                        {SESSION_FILTERS.map((option) => (
+                          <button
+                            aria-checked={option.value === filter}
+                            key={option.value}
+                            onClick={() => setFilter(option.value)}
+                            role="radio"
+                            type="button"
+                          >
+                            {t(option.label)}{' '}
+                            <span className="rz-mono text-app-dim text-micro">
+                              {counts[option.value]}
+                            </span>
+                          </button>
+                        ))}
                       </div>
                     }
-                    bodyClassName="p-0 pt-4"
+                    bodyClassName="p-0"
                     className="min-w-0"
                     title={t('positionsTitle')}
                   >
-                    <div
-                      aria-hidden
-                      className="border-app-line text-app-muted hidden gap-3 border-y px-6 py-3 font-mono text-[10px] tracking-[0.14em] uppercase md:grid md:grid-cols-[7rem_minmax(0,1fr)_5.5rem_5.5rem_6rem]"
-                    >
-                      <span>{t('colCode')}</span>
-                      <span>{t('colPosition')}</span>
-                      <span className="text-right">{t('colExpected')}</span>
-                      <span className="text-right">{t('colActual')}</span>
-                      <span className="text-right">{t('colDelta')}</span>
-                    </div>
-                    {rows.length === 0 ? (
-                      <p className="text-app-muted px-6 py-6 text-sm">
-                        {results === null
-                          ? t('notStarted')
-                          : parts.length === 0
-                            ? t('noPositions')
-                            : t('noFiltered')}
-                      </p>
-                    ) : (
-                      <ul className="grid">
-                        {rows.map((part) => (
-                          <li
-                            className="border-app-line grid items-center gap-x-3 gap-y-1 border-b px-6 py-3.5 last:border-0 md:grid-cols-[7rem_minmax(0,1fr)_5.5rem_5.5rem_6rem]"
-                            key={part.partId}
-                          >
-                            <span className="text-app-muted font-mono text-[14px]">
-                              {part.partQrCode}
-                            </span>
-                            <span className="min-w-0">
-                              <span className="block text-[15px] font-semibold tracking-[-0.01em] text-white">
-                                {part.partName}
-                              </span>
+                    <DataTable
+                      embedded
+                      caption={t('positionsTitle')}
+                      rows={rows}
+                      rowKey={(part) => part.partId}
+                      empty={
+                        <p className="rz-muted m-0 px-4 py-6">
+                          {results === null
+                            ? t('notStarted')
+                            : parts.length === 0
+                              ? t('noPositions')
+                              : t('noFiltered')}
+                        </p>
+                      }
+                      columns={[
+                        {
+                          key: 'position',
+                          label: t('colPosition'),
+                          variant: 'primary',
+                          cell: (part) => (
+                            <span className="grid min-w-0 py-1.5">
+                              <span className="truncate">{part.partName}</span>
                               {part.hasCoverageWarning ? (
-                                <span className="text-state-warn mt-0.5 block text-[12px]">
+                                <span className="text-state-warn text-caption font-normal">
                                   {t('coverageWarning')}
                                 </span>
                               ) : null}
                             </span>
-                            <span className="text-app-muted font-mono text-[14px] tabular-nums md:text-right">
-                              {/* Stacked rows lose the header row, so each
-                                  number carries its own name below md. */}
-                              <span className="mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
-                                {t('colExpected')}
-                              </span>
-                              {part.expectedQuantity}
-                            </span>
-                            <span
-                              className={cn(
-                                'font-mono text-[14px] tabular-nums md:text-right',
-                                part.delta === 0
-                                  ? 'text-app-muted'
-                                  : part.delta > 0
-                                    ? 'text-state-warn'
-                                    : 'text-state-danger',
-                              )}
-                            >
-                              <span className="text-app-muted mr-2 text-[10px] tracking-[0.14em] uppercase md:hidden">
-                                {t('colActual')}
-                              </span>
-                              {part.actualQuantity}
-                            </span>
-                            <span className="md:flex md:justify-end">
-                              <StatusPill
-                                tone={
-                                  part.delta === 0
-                                    ? 'ok'
-                                    : part.delta > 0
-                                      ? 'warn'
-                                      : 'danger'
-                                }
-                              >
-                                {part.delta > 0
-                                  ? `+${String(part.delta)}`
-                                  : String(part.delta)}
-                              </StatusPill>
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                          ),
+                        },
+                        {
+                          key: 'code',
+                          label: t('colCode'),
+                          cell: (part) => (
+                            <span className="rz-mono">{part.partQrCode}</span>
+                          ),
+                        },
+                        {
+                          key: 'expected',
+                          label: t('colExpected'),
+                          align: 'end',
+                          cell: (part) => part.expectedQuantity,
+                        },
+                        {
+                          key: 'actual',
+                          label: t('colActual'),
+                          align: 'end',
+                          cell: (part) => part.actualQuantity,
+                        },
+                        {
+                          key: 'delta',
+                          label: t('colDelta'),
+                          align: 'end',
+                          cell: (part) =>
+                            part.delta > 0
+                              ? `+${String(part.delta)}`
+                              : String(part.delta),
+                        },
+                      ]}
+                    />
                   </Card>
 
                   <Card
@@ -3271,37 +3247,56 @@ function SessionView({ id }: { id: string }) {
                     className="min-w-0"
                     title={t('recentScans')}
                   >
-                    {scans.length === 0 ? (
-                      <p className="text-app-muted px-6 pt-4 pb-6 text-sm">
-                        {t('noScans')}
-                      </p>
-                    ) : (
-                      <ul className="grid">
-                        {scans.slice(0, 8).map((scan) => (
-                          <li
-                            className="border-app-line flex flex-wrap items-center gap-x-3.5 gap-y-1 border-t px-6 py-3"
-                            key={scan.id}
-                          >
-                            <span className="text-app-dim w-13 shrink-0 font-mono text-[13px]">
+                    <DataTable
+                      embedded
+                      caption={t('recentScans')}
+                      rows={scans.slice(0, 8)}
+                      rowKey={(scan) => scan.id}
+                      empty={
+                        <p className="rz-muted m-0 px-4 pt-3 pb-4">
+                          {t('noScans')}
+                        </p>
+                      }
+                      columns={[
+                        {
+                          key: 'time',
+                          label: tj('colTime'),
+                          variant: 'primary',
+                          cell: (scan) => (
+                            <span className="rz-mono">
                               {timeOfDay(scan.scannedAt)}
                             </span>
+                          ),
+                        },
+                        {
+                          key: 'part',
+                          label: t('colPosition'),
+                          cell: (scan) => scan.partName,
+                        },
+                        {
+                          key: 'zone',
+                          label: t('zones'),
+                          cell: (scan) => (
                             <Link
-                              className="text-app-ink w-24 shrink-0 font-mono text-[14px] hover:underline"
+                              className="rz-mono text-app-ink"
                               to={`${base}/sessions/${id}/journal/${scan.zoneId}`}
                             >
                               {zoneName(scan.zoneId)}
                             </Link>
-                            <span className="text-app-muted order-last min-w-0 basis-full truncate text-[14px] sm:order-none sm:flex-1 sm:basis-auto">
-                              {scan.partName}
-                            </span>
-                            {nameOf(scan.scannedBy) === null ? null : (
-                              <span className="text-app-muted text-[13px] whitespace-nowrap">
-                                {nameOf(scan.scannedBy)}
-                              </span>
-                            )}
+                          ),
+                        },
+                        {
+                          key: 'who',
+                          label: tj('colWho'),
+                          cell: (scan) => nameOf(scan.scannedBy) ?? '—',
+                        },
+                        {
+                          key: 'count',
+                          label: tj('colScan'),
+                          align: 'end',
+                          cell: (scan) => (
                             <span
                               className={cn(
-                                'min-w-12 text-right font-mono text-[13px] tabular-nums',
                                 scan.voidedAt != null
                                   ? 'text-state-danger line-through'
                                   : scan.unexpected
@@ -3311,26 +3306,22 @@ function SessionView({ id }: { id: string }) {
                             >
                               {scan.zonePartCount}
                             </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                          ),
+                        },
+                      ]}
+                    />
                   </Card>
                 </div>
 
-                <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-5">
+                <div className="order-1 flex min-w-0 flex-col gap-3 lg:order-none">
                   <section
                     aria-label={t('progress')}
-                    className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
+                    className="rz-card rz-card__body"
                   >
-                    <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                      {t('progress')}
-                    </h2>
-                    <p className="mt-3 flex items-baseline gap-2.5">
-                      <span className="text-[34px] leading-none font-extrabold tracking-[-0.03em] tabular-nums text-white">
-                        {percent}%
-                      </span>
-                      <span className="text-app-muted font-mono text-[14px]">
+                    <h2 className="rz-h-card">{t('progress')}</h2>
+                    <p className="m-0 mt-3 flex items-baseline gap-2.5">
+                      <span className="rz-display">{percent}%</span>
+                      <span className="rz-mono rz-muted">
                         {ti('zonesProgress', {
                           done,
                           count: session.zones.length,
@@ -3339,71 +3330,47 @@ function SessionView({ id }: { id: string }) {
                     </p>
                     <span
                       aria-hidden
-                      className="bg-app-line-2 mt-4 block h-2 overflow-hidden rounded-full"
+                      className={cn(
+                        'rz-meter mt-3',
+                        percent < 100 && 'rz-meter--warn',
+                      )}
                     >
-                      <span
-                        className={cn(
-                          'block h-full rounded-full',
-                          percent === 100 ? 'bg-state-ok' : 'bg-state-warn',
-                        )}
-                        style={{ width: `${String(percent)}%` }}
-                      />
+                      <span style={{ width: `${String(percent)}%` }} />
                     </span>
-                    <dl className="border-app-line mt-4.5 grid grid-cols-[1fr_auto] items-baseline gap-y-2.5 border-t pt-4">
-                      <dt className="text-app-muted text-[14px] font-semibold">
-                        {t('matched')}
-                      </dt>
-                      <dd className="text-state-ok font-mono text-[15px] tabular-nums">
-                        {results === null ? '—' : matched}
-                      </dd>
-                      <dt className="text-app-muted text-[14px] font-semibold">
-                        {t('differing')}
-                      </dt>
-                      <dd className="text-state-danger font-mono text-[15px] tabular-nums">
-                        {results === null ? '—' : differing}
-                      </dd>
-                      <dt className="text-app-muted text-[14px] font-semibold">
-                        {t('zonesLeft')}
-                      </dt>
-                      <dd className="font-mono text-[15px] text-white tabular-nums">
-                        {session.zones.length - done}
-                      </dd>
+                    <dl className="rz-facts mt-3 px-0">
+                      <div>
+                        <dt>{t('matched')}</dt>
+                        <dd className="rz-num text-state-ok">
+                          {results === null ? '—' : matched}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{t('differing')}</dt>
+                        <dd className="rz-num text-state-danger">
+                          {results === null ? '—' : differing}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{t('zonesLeft')}</dt>
+                        <dd className="rz-num text-app-strong">
+                          {session.zones.length - done}
+                        </dd>
+                      </div>
                     </dl>
                     {canManage ? (
-                      <div className="mt-4.5 grid gap-2.5">
-                        {session.status === 'draft' ? (
-                          <Button
-                            className="min-h-11 w-full text-sm font-bold"
-                            disabled={acting}
-                            onClick={() => setAsking('start')}
-                            variant="primary"
-                          >
-                            {t('start')}
-                          </Button>
-                        ) : null}
+                      <div className="mt-3 grid gap-2">
                         {session.status === 'inProgress' ? (
                           <Button
-                            className="min-h-11 w-full text-sm font-bold"
+                            className="rz-btn--lg w-full"
                             disabled
                             title={t('countingInApp')}
-                            variant="primary"
                           >
                             {t('continueScanning')}
                           </Button>
                         ) : null}
                         {session.status === 'review' ? (
                           <Button
-                            className="min-h-11 w-full text-sm font-bold"
-                            disabled={acting}
-                            onClick={() => setAsking('complete')}
-                            variant="primary"
-                          >
-                            {t('complete')}
-                          </Button>
-                        ) : null}
-                        {session.status === 'review' ? (
-                          <Button
-                            className="min-h-11 w-full text-sm font-semibold"
+                            className="rz-btn--lg w-full"
                             disabled={acting}
                             onClick={() => setAsking('reopen')}
                           >
@@ -3412,7 +3379,7 @@ function SessionView({ id }: { id: string }) {
                         ) : null}
                       </div>
                     ) : null}
-                    <p className="text-app-dim mt-3 text-[12px] leading-[1.5]">
+                    <p className="rz-caption m-0 mt-3">
                       {session.status === 'review'
                         ? t('hintReview')
                         : session.status === 'inProgress'
@@ -3423,22 +3390,22 @@ function SessionView({ id }: { id: string }) {
                     </p>
                   </section>
 
-                  <Card bodyClassName="p-0 pt-2" title={t('zones')}>
-                    <ul className="grid">
+                  <Card bodyClassName="p-0" title={t('zones')}>
+                    <ul className="m-0 grid list-none p-0">
                       {session.zones.map((zone) => (
                         <li
-                          className="border-app-line grid gap-2 border-t px-6 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                          className="border-app-line grid gap-2 border-t px-4 py-2.5 first:border-t-0"
                           key={zone.zoneId}
                         >
                           <div className="min-w-0">
-                            <strong className="text-[15px] font-bold text-white">
+                            <strong className="rz-strong font-semibold">
                               {zone.zoneName}
                             </strong>
-                            <p className="text-app-muted mt-0.5 text-[13px]">
+                            <p className="rz-muted m-0 text-caption">
                               {zone.warehouseName} · {zone.zoneCode}
                             </p>
                             {zone.leaseOwnerUserId ? (
-                              <p className="text-state-warn mt-1.5 text-[12px]">
+                              <p className="text-state-warn m-0 mt-1 text-caption">
                                 {nameOf(zone.leaseOwnerUserId) === null
                                   ? t('leased', {
                                       date: date(zone.leaseExpiresAt),
@@ -3453,7 +3420,7 @@ function SessionView({ id }: { id: string }) {
                             ) : null}
                           </div>
                           <div className="flex items-center gap-2">
-                            <Button asChild size="md" variant="quiet">
+                            <Button asChild size="sm" variant="quiet">
                               <Link
                                 to={`${base}/sessions/${id}/journal/${zone.zoneId}`}
                               >
@@ -3484,12 +3451,10 @@ function SessionView({ id }: { id: string }) {
                   {workers.length === 0 ? null : (
                     <section
                       aria-label={t('workers')}
-                      className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
+                      className="rz-card rz-card__body"
                     >
-                      <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                        {t('workers')}
-                      </h2>
-                      <ul className="mt-4 grid gap-3.5">
+                      <h2 className="rz-h-card">{t('workers')}</h2>
+                      <ul className="m-0 mt-3 grid list-none gap-2.5 p-0">
                         {workers.map(([userId, stat]) => {
                           const who = nameOf(userId)
                           return (
@@ -3499,19 +3464,19 @@ function SessionView({ id }: { id: string }) {
                             >
                               <span
                                 aria-hidden
-                                className="bg-brand-soft text-brand flex size-[34px] shrink-0 items-center justify-center rounded-full text-[13px] font-bold"
+                                className="rz-avatar rz-avatar--round"
                               >
                                 {initials(who ?? '?')}
                               </span>
                               <span className="min-w-0 flex-1">
-                                <span className="block text-[15px] font-semibold text-white">
+                                <span className="rz-strong block font-semibold">
                                   {who ?? t('nameHidden')}
                                 </span>
-                                <span className="text-app-muted mt-0.5 block text-[12px]">
+                                <span className="rz-muted block text-caption">
                                   {t('since', { time: timeOfDay(stat.since) })}
                                 </span>
                               </span>
-                              <span className="text-app-muted font-mono text-[14px] tabular-nums">
+                              <span className="text-app-muted font-mono text-body tabular-nums">
                                 {stat.count}
                               </span>
                             </li>
@@ -3519,7 +3484,7 @@ function SessionView({ id }: { id: string }) {
                         })}
                       </ul>
                       {people.length === 0 ? (
-                        <p className="text-app-muted mt-3.5 text-[12px] leading-[1.5]">
+                        <p className="rz-caption m-0 mt-3">
                           {t('namesHidden')}
                         </p>
                       ) : null}
@@ -3528,12 +3493,10 @@ function SessionView({ id }: { id: string }) {
 
                   <section
                     aria-label={t('rules')}
-                    className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-[22px] pb-6"
+                    className="rz-card rz-card__body"
                   >
-                    <h2 className="text-app-muted font-mono text-[10px] tracking-[0.14em] uppercase">
-                      {t('rules')}
-                    </h2>
-                    <ul className="mt-3.5 grid gap-2.5">
+                    <h2 className="rz-h-card">{t('rules')}</h2>
+                    <ul className="m-0 mt-3 grid list-none gap-2 p-0">
                       {/* The slice stays locked until the session closes —
                           review still has decisions waiting on it. */}
                       <Rule
@@ -3637,7 +3600,7 @@ function Rule({
   return (
     <li
       className={cn(
-        'flex items-center gap-2.5 text-[13px] font-semibold',
+        'flex items-center gap-2.5 font-medium',
         on === true ? 'text-app-ink' : 'text-app-dim',
       )}
       title={why}
@@ -3645,8 +3608,10 @@ function Rule({
       <span
         aria-hidden
         className={cn(
-          'flex size-4.5 shrink-0 items-center justify-center rounded-full text-[11px] font-extrabold',
-          on === true ? 'bg-state-ok-soft text-state-ok' : 'bg-white/[0.06]',
+          'rz-mono flex size-4.5 shrink-0 items-center justify-center rounded-full text-micro',
+          on === true
+            ? 'bg-state-ok-soft text-state-ok'
+            : 'bg-app-neutral-soft',
         )}
       >
         {on === true ? '✓' : on === false ? '' : '?'}
@@ -3805,30 +3770,19 @@ function ResultsView({ id }: { id: string }) {
         ].join(', ')
 
         return (
-          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-              <div className="flex min-w-0 items-center gap-5">
-                <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-                  to={`${base}/sessions/${id}`}
-                >
-                  <ChevronLeft aria-hidden className="size-3.5" />
-                  {t('backToSession')}
-                </Link>
-                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-                  <span>{ti('crumbInventory')}</span>
-                  <span aria-hidden className="text-white/20">
-                    /
-                  </span>
-                  <span>{session.number}</span>
-                  <span aria-hidden className="text-white/20">
-                    /
-                  </span>
-                  <span className="text-app-muted">{t('crumbResults')}</span>
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2.5">
-                <Button asChild className="px-[18px] text-sm font-semibold">
+          <div className="grid content-start">
+            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
+              <InventoryCrumbs
+                base={base}
+                items={[
+                  <Link key="session" to={`${base}/sessions/${id}`}>
+                    {session.number}
+                  </Link>,
+                  t('crumbResults'),
+                ]}
+              />
+              <div className="rz-topbar__actions flex-wrap items-center">
+                <Button asChild>
                   <Link to={`${base}/sessions/${id}/audit`}>{t('audit')}</Link>
                 </Button>
                 <Button disabled title={t('exportUnavailable')}>
@@ -3837,15 +3791,13 @@ function ResultsView({ id }: { id: string }) {
               </div>
             </div>
 
-            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="rz-page">
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-4">
-                  <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                    {t('title')}
-                  </h1>
+                <div className="rz-page-head items-center">
+                  <h1 className="rz-h-page">{t('title')}</h1>
                   <StatusPill tone={statusTone}>{statusLabel}</StatusPill>
                 </div>
-                <p className="text-app-muted mt-3 text-[15px]">
+                <p className="rz-muted m-0 mt-1">
                   {[
                     session.zones[0]?.warehouseName,
                     zones === '' ? null : t('zonesList', { zones }),
@@ -3864,7 +3816,7 @@ function ResultsView({ id }: { id: string }) {
                 <Notice tone="danger">{operationError}</Notice>
               ) : null}
 
-              <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-px overflow-hidden rounded-[20px] border">
+              <div className="rz-kpis">
                 <JournalStat
                   label={t('statPositions')}
                   meta={ti('zones', { count: session.zones.length })}
@@ -3904,10 +3856,10 @@ function ResultsView({ id }: { id: string }) {
                 />
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="rz-toolbar">
                 <div
                   aria-label={t('filterLabel')}
-                  className="border-app-line bg-app-raised flex flex-wrap gap-1 rounded-xl border p-1"
+                  className="rz-seg flex-wrap"
                   role="radiogroup"
                 >
                   {RESULT_FILTERS.map((option) => {
@@ -3915,27 +3867,21 @@ function ResultsView({ id }: { id: string }) {
                     return (
                       <button
                         aria-checked={active}
-                        className={cn(
-                          'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-bold',
-                          active
-                            ? 'text-app-ink bg-white/[0.08]'
-                            : 'text-app-muted hover:text-app-ink',
-                        )}
                         key={option.value}
                         onClick={() => setFilter(option.value)}
                         role="radio"
                         type="button"
                       >
                         {t(option.label)}{' '}
-                        <span className="text-app-dim font-mono text-[11px] font-medium">
+                        <span className="rz-mono text-app-dim text-micro">
                           {counts[option.value]}
                         </span>
                       </button>
                     )
                   })}
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <p className="text-app-dim text-[13px]">
+                <div className="rz-toolbar__end flex-wrap items-center gap-3">
+                  <p className="rz-dim m-0">
                     {differing.length === 0
                       ? t('noDiffs')
                       : t('decisionsMade', {
@@ -3947,7 +3893,6 @@ function ResultsView({ id }: { id: string }) {
                   </p>
                   {decidable.length > 0 ? (
                     <Button
-                      className="min-h-9 px-3.5 text-[13px] font-semibold"
                       onClick={() => {
                         setReason('')
                         setAsking(decidable)
@@ -3959,10 +3904,7 @@ function ResultsView({ id }: { id: string }) {
                 </div>
               </div>
 
-              <section
-                aria-label={t('tableLabel')}
-                className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
-              >
+              <section aria-label={t('tableLabel')} className="rz-card">
                 <DataTable
                   caption={t('caption')}
                   columns={[
@@ -3970,9 +3912,7 @@ function ResultsView({ id }: { id: string }) {
                       key: 'code',
                       label: t('colCode'),
                       cell: (part) => (
-                        <span className="text-app-muted font-mono text-[13px]">
-                          {part.partQrCode}
-                        </span>
+                        <span className="rz-mono">{part.partQrCode}</span>
                       ),
                     },
                     {
@@ -3980,12 +3920,10 @@ function ResultsView({ id }: { id: string }) {
                       label: t('colPosition'),
                       variant: 'primary',
                       cell: (part) => (
-                        <span className="grid gap-0.5">
-                          <span className="font-semibold text-white">
-                            {part.partName}
-                          </span>
+                        <span className="grid min-w-0 py-1.5">
+                          <span className="truncate">{part.partName}</span>
                           {part.hasCoverageWarning ? (
-                            <span className="text-state-warn text-[12px]">
+                            <span className="text-state-warn text-caption font-normal">
                               {t('notAllZones')}
                             </span>
                           ) : null}
@@ -3996,47 +3934,22 @@ function ResultsView({ id }: { id: string }) {
                       key: 'expected',
                       label: t('colExpected'),
                       align: 'end',
-                      cell: (part) => (
-                        <span className="text-app-muted font-mono tabular-nums">
-                          {part.expectedQuantity}
-                        </span>
-                      ),
+                      cell: (part) => part.expectedQuantity,
                     },
                     {
                       key: 'actual',
                       label: t('colActual'),
                       align: 'end',
-                      cell: (part) => (
-                        <span
-                          className={cn(
-                            'font-mono tabular-nums',
-                            part.delta === 0
-                              ? 'text-app-muted'
-                              : part.delta > 0
-                                ? 'text-state-warn'
-                                : 'text-state-danger',
-                          )}
-                        >
-                          {part.actualQuantity}
-                        </span>
-                      ),
+                      cell: (part) => part.actualQuantity,
                     },
                     {
                       key: 'delta',
                       label: t('colDelta'),
                       align: 'end',
                       cell: (part) =>
-                        part.delta === 0 ? (
-                          <span className="text-app-dim font-mono tabular-nums">
-                            0
-                          </span>
-                        ) : (
-                          <StatusPill tone={part.delta > 0 ? 'warn' : 'danger'}>
-                            {part.delta > 0
-                              ? `+${String(part.delta)}`
-                              : String(part.delta)}
-                          </StatusPill>
-                        ),
+                        part.delta > 0
+                          ? `+${String(part.delta)}`
+                          : String(part.delta),
                     },
                     {
                       key: 'decision',
@@ -4077,63 +3990,61 @@ function ResultsView({ id }: { id: string }) {
                 />
               </section>
 
-              <div className="flex flex-wrap items-start gap-5">
+              <div className="flex flex-wrap items-start gap-3">
                 <Card
-                  className="min-w-[320px] flex-[1_1_420px]"
+                  className="min-w-0 flex-[1_1_420px]"
                   title={t('impactTitle')}
                 >
-                  <dl className="grid grid-cols-[1fr_auto] items-baseline gap-y-3">
-                    <dt className="text-app-muted text-sm font-semibold">
-                      {t('writeOff')}
-                    </dt>
-                    <dd className="text-state-danger font-mono text-[15px] tabular-nums">
-                      {shortage === 0
-                        ? '—'
-                        : t('quantity', { count: String(shortage) })}
-                    </dd>
-                    <dt className="text-app-muted text-sm font-semibold">
-                      {t('addSurplus')}
-                    </dt>
-                    <dd className="text-state-ok font-mono text-[15px] tabular-nums">
-                      {surplus === 0
-                        ? '—'
-                        : t('quantity', { count: `+${String(surplus)}` })}
-                    </dd>
-                    <div className="bg-app-line col-span-2 my-0.5 h-px" />
-                    <dt className="text-[15px] font-bold text-white">
-                      {t('quantityChange')}
-                    </dt>
-                    <dd
-                      className={cn(
-                        'font-mono text-[19px] tabular-nums',
-                        shortage + surplus === 0
-                          ? 'text-app-muted'
-                          : shortage + surplus > 0
-                            ? 'text-state-ok'
-                            : 'text-state-danger',
-                      )}
-                    >
-                      {t('quantity', {
-                        count:
-                          shortage + surplus > 0
-                            ? `+${String(shortage + surplus)}`
-                            : String(shortage + surplus),
-                      })}
-                    </dd>
+                  <dl className="rz-facts px-0 py-0">
+                    <div>
+                      <dt>{t('writeOff')}</dt>
+                      <dd className="rz-num text-state-danger">
+                        {shortage === 0
+                          ? '—'
+                          : t('quantity', { count: String(shortage) })}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>{t('addSurplus')}</dt>
+                      <dd className="rz-num text-state-ok">
+                        {surplus === 0
+                          ? '—'
+                          : t('quantity', { count: `+${String(surplus)}` })}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-app-strong font-semibold">
+                        {t('quantityChange')}
+                      </dt>
+                      <dd
+                        className={cn(
+                          'rz-num font-semibold',
+                          shortage + surplus === 0
+                            ? 'text-app-muted'
+                            : shortage + surplus > 0
+                              ? 'text-state-ok'
+                              : 'text-state-danger',
+                        )}
+                      >
+                        {t('quantity', {
+                          count:
+                            shortage + surplus > 0
+                              ? `+${String(shortage + surplus)}`
+                              : String(shortage + surplus),
+                        })}
+                      </dd>
+                    </div>
                   </dl>
-                  <p
-                    className="text-app-dim mt-4 text-[13px] leading-[1.5]"
-                    title={t('noCostTitle')}
-                  >
+                  <p className="rz-dim m-0 mt-3" title={t('noCostTitle')}>
                     {t('noCost')}
                   </p>
                 </Card>
 
                 <Card
-                  className="min-w-[280px] flex-[1_1_300px]"
+                  className="min-w-0 flex-[1_1_300px]"
                   title={t('afterTitle')}
                 >
-                  <ul className="text-app-ink grid gap-3 text-sm leading-[1.5]">
+                  <ul className="text-app-ink m-0 grid list-none gap-2 p-0">
                     {[t('afterStock'), t('afterAudit'), t('afterUndo')].map(
                       (line) => (
                         <li className="flex gap-2.5" key={line}>
@@ -4147,7 +4058,7 @@ function ResultsView({ id }: { id: string }) {
                   </ul>
                   {decidable.length > 0 ? (
                     <Button
-                      className="mt-5 min-h-11 w-full text-sm font-bold"
+                      className="rz-btn--lg mt-4 w-full"
                       onClick={() => {
                         setReason('')
                         setAsking(decidable)
@@ -4157,7 +4068,7 @@ function ResultsView({ id }: { id: string }) {
                       {t('applyDecisions', { count: decidable.length })}
                     </Button>
                   ) : (
-                    <p className="text-app-dim mt-5 text-[13px] leading-[1.5]">
+                    <p className="rz-dim m-0 mt-4">
                       {differing.length === 0
                         ? t('nothingToApply')
                         : session.status === 'review'
@@ -4235,12 +4146,12 @@ function ResultDecision({
   onAsk: () => void
 }) {
   const t = useT(resultsMessages)
-  if (part.delta === 0) return <span className="text-app-dim font-mono">—</span>
+  if (part.delta === 0) return <span className="text-app-dim">—</span>
   if (adjusted) return <StatusPill tone="ok">{t('applied')}</StatusPill>
   if (part.hasCoverageWarning)
     return (
       <span
-        className="text-app-dim text-[12px]"
+        className="text-app-dim text-caption"
         title={t('partialCoverageWhy')}
       >
         {t('partialCoverage')}
@@ -4248,18 +4159,14 @@ function ResultDecision({
     )
   if (!canAdjust)
     return (
-      <span className="text-app-dim text-[12px]">{t('noAdjustRight')}</span>
+      <span className="text-app-dim text-caption">{t('noAdjustRight')}</span>
     )
   if (status !== 'review')
     return (
-      <span className="text-app-dim text-[12px]">{t('awaitingReview')}</span>
+      <span className="text-app-dim text-caption">{t('awaitingReview')}</span>
     )
   return (
-    <Button
-      className="min-h-9 px-3 text-xs font-bold"
-      disabled={busy}
-      onClick={onAsk}
-    >
+    <Button disabled={busy} onClick={onAsk} size="sm">
       {t('accept')}
     </Button>
   )
@@ -4280,7 +4187,7 @@ const auditKind = (event: InventoryAuditEvent): AuditKind => {
 type AuditKind = 'decision' | 'scan' | 'session'
 
 const AUDIT_KINDS: Record<AuditKind, { label: AuditKey; dot: string }> = {
-  decision: { label: 'kindDecision', dot: 'bg-brand' },
+  decision: { label: 'kindDecision', dot: 'bg-state-warn' },
   scan: { label: 'kindScan', dot: 'bg-state-info' },
   session: { label: 'kindSession', dot: 'bg-state-ok' },
 }
@@ -4305,7 +4212,6 @@ interface AuditData {
 
 function AuditView({ id }: { id: string }) {
   const t = useT(auditMessages)
-  const ti = useT(inventoryMessages)
   const { date, locale } = useInventoryFormat()
   const base = useInventoryBase()
   const canSeeTeam = usePermission('team.view')
@@ -4363,32 +4269,20 @@ function AuditView({ id }: { id: string }) {
         const warehouse = session.zones[0]?.warehouseName ?? null
 
         return (
-          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-              <div className="flex min-w-0 items-center gap-5">
-                <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-                  to={`${base}/sessions/${id}`}
-                >
-                  <ChevronLeft aria-hidden className="size-3.5" />
-                  {t('backToSession')}
-                </Link>
-                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-                  <span>{ti('crumbInventory')}</span>
-                  <span aria-hidden className="text-white/20">
-                    /
-                  </span>
-                  <span>{session.number}</span>
-                  <span aria-hidden className="text-white/20">
-                    /
-                  </span>
-                  <span className="text-app-muted">{t('crumbAudit')}</span>
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2.5">
+          <div className="grid content-start">
+            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
+              <InventoryCrumbs
+                base={base}
+                items={[
+                  <Link key="session" to={`${base}/sessions/${id}`}>
+                    {session.number}
+                  </Link>,
+                  t('crumbAudit'),
+                ]}
+              />
+              <div className="rz-topbar__actions flex-wrap items-center">
                 <Button
                   aria-pressed={raw}
-                  className="px-4 text-sm font-semibold"
                   onClick={() => setRaw((value) => !value)}
                 >
                   {raw ? t('hideRaw') : t('showRaw')}
@@ -4399,12 +4293,10 @@ function AuditView({ id }: { id: string }) {
               </div>
             </div>
 
-            <div className="mx-auto grid w-full max-w-[1240px] gap-6 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="rz-page">
               <div className="min-w-0">
-                <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                  {t('title')}
-                </h1>
-                <p className="text-app-muted mt-3 text-[15px]">
+                <h1 className="rz-h-page">{t('title')}</h1>
+                <p className="rz-muted m-0 mt-1">
                   {[
                     warehouse,
                     zones === '' ? null : t('zonesList', { zones }),
@@ -4417,113 +4309,93 @@ function AuditView({ id }: { id: string }) {
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="rz-toolbar">
+                <SearchInput
+                  aria-label={t('searchLabel')}
+                  onChange={(event) => {
+                    setQuery(event.target.value)
+                    setShown(AUDIT_PAGE)
+                  }}
+                  placeholder={t('searchPlaceholder')}
+                  value={query}
+                />
                 <div
                   aria-label={t('filterLabel')}
-                  className="border-app-line bg-app-raised flex flex-wrap gap-1 rounded-xl border p-1"
+                  className="rz-seg flex-wrap"
                   role="radiogroup"
                 >
-                  {AUDIT_FILTERS.map((option) => {
-                    const active = option.value === filter
-                    return (
-                      <button
-                        aria-checked={active}
-                        className={cn(
-                          'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-bold',
-                          active
-                            ? 'text-app-ink bg-white/[0.08]'
-                            : 'text-app-muted hover:text-app-ink',
-                        )}
-                        key={option.value}
-                        onClick={() => {
-                          setFilter(option.value)
-                          setShown(AUDIT_PAGE)
-                        }}
-                        role="radio"
-                        type="button"
-                      >
-                        {t(option.label)}{' '}
-                        <span className="text-app-dim font-mono text-[11px] font-medium">
-                          {counts[option.value]}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-                <div className="min-w-[200px] flex-[1_1_220px]">
-                  <SearchInput
-                    aria-label={t('searchLabel')}
-                    onChange={(event) => {
-                      setQuery(event.target.value)
-                      setShown(AUDIT_PAGE)
-                    }}
-                    placeholder={t('searchPlaceholder')}
-                    value={query}
-                  />
+                  {AUDIT_FILTERS.map((option) => (
+                    <button
+                      aria-checked={option.value === filter}
+                      key={option.value}
+                      onClick={() => {
+                        setFilter(option.value)
+                        setShown(AUDIT_PAGE)
+                      }}
+                      role="radio"
+                      type="button"
+                    >
+                      {t(option.label)}{' '}
+                      <span className="rz-mono text-app-dim text-micro">
+                        {counts[option.value]}
+                      </span>
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <section
-                aria-label={t('logLabel')}
-                className="border-app-line bg-app-raised rounded-[20px] border px-6 pt-6 pb-2"
-              >
+              <section aria-label={t('logLabel')} className="rz-card">
                 {visible.length === 0 ? (
-                  <p className="text-app-muted py-6 text-center text-sm">
+                  <p className="rz-muted m-0 px-4 py-6 text-center">
                     {events.length === 0 ? t('noEvents') : t('noFiltered')}
                   </p>
                 ) : (
-                  <ol className="grid">
-                    {visible.map((event, index) => {
+                  <ol className="rz-timeline">
+                    {visible.map((event) => {
                       const kind = auditKind(event)
                       const change = auditChange(event.detailsJson, locale)
                       return (
-                        <li className="flex gap-4" key={event.id}>
-                          <span
-                            aria-hidden
-                            className="flex flex-col items-center"
-                          >
+                        <li key={event.id}>
+                          <span aria-hidden className="rz-timeline__icon">
                             <span
                               className={cn(
-                                'mt-1.5 size-2.5 rounded-full',
+                                'size-2 rounded-full',
                                 AUDIT_KINDS[kind].dot,
                               )}
                             />
-                            {index < visible.length - 1 ? (
-                              <span className="bg-app-line w-px flex-1" />
-                            ) : null}
                           </span>
-                          <span className="min-w-0 flex-1 pb-5.5">
-                            <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                              <span className="text-[15px] font-bold text-white">
+                          <span className="grid min-w-0 gap-1">
+                            <span className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
+                              <span className="rz-strong">
                                 {auditTitle(event.action, locale)}
                               </span>
-                              <span className="border-app-line-2 text-app-muted inline-flex h-[22px] items-center rounded-full border bg-white/[0.05] px-2.5 text-[11px] font-bold">
+                              <span className="rz-muted">
+                                {nameOf(event.actorUserId) ?? t('actorUnknown')}
+                              </span>
+                              <StatusPill className="self-center">
                                 {t(AUDIT_KINDS[kind].label)}
-                              </span>
-                              <span className="text-app-dim font-mono text-[12px]">
-                                {date(event.createdAt)}
-                              </span>
-                            </span>
-                            <span className="text-app-muted mt-1 block text-[13px]">
-                              {nameOf(event.actorUserId) ?? t('actorUnknown')}
+                              </StatusPill>
                             </span>
                             {change === null ? null : (
-                              <span className="border-app-line bg-app-input mt-2.5 inline-flex items-center gap-3 rounded-[10px] border px-3.5 py-2 font-mono text-[13px]">
-                                <span className="text-app-muted line-through">
-                                  {change.from}
-                                </span>
+                              <span className="rz-change">
+                                <s>{change.from}</s>
                                 <ArrowRight
                                   aria-hidden
                                   className="text-app-dim size-3.5"
                                 />
-                                <span className="text-white">{change.to}</span>
+                                <span className="text-app-strong">
+                                  {change.to}
+                                </span>
                               </span>
                             )}
                             {raw && event.detailsJson ? (
-                              <span className="border-app-line bg-app-input text-app-muted mt-2.5 block rounded-[9px] border px-3 py-2.5 font-mono text-[11px] leading-[1.55] break-all">
+                              <span className="rz-inset rz-mono text-app-muted block px-3 py-2 text-micro break-all">
                                 {event.detailsJson}
                               </span>
                             ) : null}
+                          </span>
+                          <span className="rz-timeline__date">
+                            {date(event.createdAt)}
                           </span>
                         </li>
                       )
@@ -4533,8 +4405,8 @@ function AuditView({ id }: { id: string }) {
               </section>
 
               {rows.length > 0 ? (
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <p className="text-app-dim text-[13px]">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="rz-dim m-0">
                     {t('shown', {
                       visible: visible.length,
                       count: rows.length,
@@ -4542,7 +4414,6 @@ function AuditView({ id }: { id: string }) {
                   </p>
                   {visible.length < rows.length ? (
                     <Button
-                      className="min-h-10 px-4 text-[13px] font-bold"
                       onClick={() => setShown((value) => value + AUDIT_PAGE)}
                     >
                       {t('showMore', {
@@ -4683,30 +4554,19 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
         const backTo = `${base}/sessions/${id}`
 
         return (
-          <div className="type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10">
-            <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-              <div className="flex min-w-0 items-center gap-5">
-                <Link
-                  className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-                  to={backTo}
-                >
-                  <ChevronLeft aria-hidden className="size-3.5" />
-                  {t('backToSession')}
-                </Link>
-                <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
-                  <span>{t('crumbSession', { number: session.number })}</span>
-                  {zone ? (
-                    <>
-                      <span aria-hidden className="text-white/20">
-                        /
-                      </span>
-                      <span className="text-app-muted">{zone.zoneCode}</span>
-                    </>
-                  ) : null}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2.5">
-                <Button asChild className="px-[18px] text-sm font-semibold">
+          <div className="grid content-start">
+            <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
+              <InventoryCrumbs
+                base={base}
+                items={[
+                  <Link key="session" to={backTo}>
+                    {t('crumbSession', { number: session.number })}
+                  </Link>,
+                  zone ? zone.zoneCode : t('title'),
+                ]}
+              />
+              <div className="rz-topbar__actions flex-wrap items-center">
+                <Button asChild>
                   <Link to={`${base}/sessions/${id}/results`}>
                     {t('results')}
                   </Link>
@@ -4714,12 +4574,12 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
               </div>
             </div>
 
-            <div className="mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12">
+            <div className="rz-page">
               <div className="min-w-0">
-                <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
+                <h1 className="rz-h-page">
                   {zone ? t('titleZone', { zone: zone.zoneCode }) : t('title')}
                 </h1>
-                <p className="text-app-muted mt-3 text-[15px]">
+                <p className="rz-muted m-0 mt-1">
                   {[
                     zone?.warehouseName,
                     zone?.zoneName,
@@ -4734,7 +4594,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
 
               <Notice tone="info">{t('readOnly')}</Notice>
 
-              <div className="bg-app-line border-app-line grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-px overflow-hidden rounded-[20px] border">
+              <div className="rz-kpis">
                 <JournalStat
                   label={t('statScans')}
                   meta={ti('positions', {
@@ -4775,10 +4635,19 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                 />
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
+              <div className="rz-toolbar">
+                <SearchInput
+                  aria-label={t('searchLabel')}
+                  onChange={(event) => {
+                    setQuery(event.target.value)
+                    setShown(JOURNAL_PAGE)
+                  }}
+                  placeholder={t('searchPlaceholder')}
+                  value={query}
+                />
                 <div
                   aria-label={t('filterLabel')}
-                  className="border-app-line bg-app-raised flex gap-1 rounded-xl border p-1"
+                  className="rz-seg flex-wrap"
                   role="radiogroup"
                 >
                   {JOURNAL_FILTERS.map((option) => {
@@ -4788,12 +4657,6 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                     return (
                       <button
                         aria-checked={active}
-                        className={cn(
-                          'focus-visible:outline-brand flex min-h-9 cursor-pointer items-center gap-2 rounded-[9px] px-3.5 text-[13px] font-bold disabled:cursor-not-allowed disabled:opacity-50',
-                          active
-                            ? 'text-app-ink bg-white/[0.08]'
-                            : 'text-app-muted hover:text-app-ink',
-                        )}
                         disabled={locked}
                         key={option.value}
                         onClick={() => {
@@ -4805,7 +4668,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                         type="button"
                       >
                         {t(option.label)}{' '}
-                        <span className="text-app-dim font-mono text-[11px] font-medium">
+                        <span className="rz-mono text-app-dim text-micro">
                           {counts[option.value]}
                         </span>
                       </button>
@@ -4815,7 +4678,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                 {people.length > 0 && scanners.length > 1 ? (
                   <div
                     aria-label={t('whoLabel')}
-                    className="flex flex-wrap gap-1.5"
+                    className="rz-seg flex-wrap"
                     role="radiogroup"
                   >
                     {[
@@ -4827,12 +4690,6 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                     ].map((person) => (
                       <button
                         aria-checked={who === person.id}
-                        className={cn(
-                          'focus-visible:outline-brand min-h-9 cursor-pointer rounded-full border px-3.5 text-[13px] font-semibold',
-                          who === person.id
-                            ? 'border-app-line-2 bg-app-input text-white'
-                            : 'border-app-line text-app-muted hover:text-app-ink',
-                        )}
                         key={person.id}
                         onClick={() => {
                           setWho(person.id)
@@ -4846,23 +4703,9 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                     ))}
                   </div>
                 ) : null}
-                <div className="min-w-[180px] flex-[1_1_200px]">
-                  <SearchInput
-                    aria-label={t('searchLabel')}
-                    onChange={(event) => {
-                      setQuery(event.target.value)
-                      setShown(JOURNAL_PAGE)
-                    }}
-                    placeholder={t('searchPlaceholder')}
-                    value={query}
-                  />
-                </div>
               </div>
 
-              <section
-                aria-label={t('title')}
-                className="border-app-line bg-app-raised overflow-hidden rounded-[20px] border"
-              >
+              <section aria-label={t('title')} className="rz-card">
                 <DataTable
                   caption={t('caption')}
                   columns={[
@@ -4870,7 +4713,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                       key: 'time',
                       label: t('colTime'),
                       cell: (scan) => (
-                        <span className="text-app-dim font-mono text-[13px]">
+                        <span className="rz-mono text-app-dim">
                           {timeOfDay(scan.scannedAt)}
                         </span>
                       ),
@@ -4880,22 +4723,20 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                       label: t('colPosition'),
                       variant: 'primary',
                       cell: (scan) => (
-                        <span className="grid gap-0.5">
-                          <span className="font-semibold text-white">
-                            {scan.partName}
-                          </span>
-                          <span className="text-app-dim font-mono text-[12px]">
+                        <span className="grid min-w-0 py-1.5">
+                          <span className="truncate">{scan.partName}</span>
+                          <span className="rz-mono rz-caption font-normal">
                             {scan.partQrCode}
                           </span>
                           {/* Facts about this scan rather than about the
                               total, so they stay beside the part. */}
                           {scan.voidReason == null ? null : (
-                            <span className="text-app-muted text-[12px]">
+                            <span className="text-app-muted text-caption font-normal">
                               {scan.voidReason}
                             </span>
                           )}
                           {scan.unexpected && scan.voidedAt == null ? (
-                            <span className="text-state-warn text-[12px]">
+                            <span className="text-state-warn text-caption font-normal">
                               {t('unexpected')}
                             </span>
                           ) : null}
@@ -4916,22 +4757,16 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                       key: 'expected',
                       label: t('colExpected'),
                       align: 'end',
-                      cell: (scan) => (
-                        <span className="text-app-muted font-mono tabular-nums">
-                          {resultOf(scan.partId)?.expectedQuantity ?? '—'}
-                        </span>
-                      ),
+                      cell: (scan) =>
+                        resultOf(scan.partId)?.expectedQuantity ?? '—',
                     },
                     {
                       key: 'actual',
                       label: t('colScan'),
                       align: 'end',
-                      cell: (scan) => (
-                        <span className="font-mono text-white tabular-nums">
-                          {resultOf(scan.partId)?.actualQuantity ??
-                            scan.zonePartCount}
-                        </span>
-                      ),
+                      cell: (scan) =>
+                        resultOf(scan.partId)?.actualQuantity ??
+                        scan.zonePartCount,
                     },
                     {
                       key: 'delta',
@@ -4944,24 +4779,10 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                           )
                         const part = resultOf(scan.partId)
                         if (part === null)
-                          return (
-                            <span className="text-app-dim font-mono">—</span>
-                          )
-                        return (
-                          <StatusPill
-                            tone={
-                              part.delta === 0
-                                ? 'ok'
-                                : part.delta > 0
-                                  ? 'warn'
-                                  : 'danger'
-                            }
-                          >
-                            {part.delta > 0
-                              ? `+${String(part.delta)}`
-                              : String(part.delta)}
-                          </StatusPill>
-                        )
+                          return <span className="text-app-dim">—</span>
+                        return part.delta > 0
+                          ? `+${String(part.delta)}`
+                          : String(part.delta)
                       },
                     },
                   ]}
@@ -4982,46 +4803,41 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
                   rows={visible}
                 />
                 {rows.length > 0 ? (
-                  <div className="border-app-line flex flex-wrap items-center justify-between gap-4 border-t px-6 py-4">
-                    <p className="text-app-dim text-[13px]">
+                  <div className="rz-pager">
+                    <p className="rz-mono m-0">
                       {t('shown', {
                         visible: visible.length,
                         count: rows.length,
                       })}
                     </p>
                     {visible.length < rows.length ? (
-                      <Button
-                        className="min-h-9 px-3.5 text-[13px] font-bold"
-                        onClick={() =>
-                          setShown((value) => value + JOURNAL_PAGE)
-                        }
-                      >
-                        {t('showMore')}
-                      </Button>
+                      <div className="rz-pager__nav">
+                        <Button
+                          onClick={() =>
+                            setShown((value) => value + JOURNAL_PAGE)
+                          }
+                        >
+                          {t('showMore')}
+                        </Button>
+                      </div>
                     ) : null}
                   </div>
                 ) : null}
               </section>
 
               {pending.length > 0 ? (
-                <section
-                  aria-label={t('pendingZones')}
-                  className="grid gap-4.5"
-                >
-                  <div className="flex items-baseline gap-3.5">
-                    <h2 className="text-app-muted font-mono text-[11px] tracking-[0.16em] uppercase">
-                      {t('pendingZones')}
-                    </h2>
-                    <span aria-hidden className="bg-app-line h-px flex-1" />
-                    <span className="text-app-dim text-[13px]">
+                <section aria-label={t('pendingZones')} className="grid gap-3">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <h2 className="rz-h-card">{t('pendingZones')}</h2>
+                    <span className="rz-dim">
                       {ti('zones', { count: pending.length })}
                     </span>
                   </div>
-                  <ul className="grid grid-cols-[repeat(auto-fill,minmax(96px,1fr))] gap-2">
+                  <ul className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(96px,1fr))] gap-2 p-0">
                     {pending.map((item) => (
                       <li key={item.zoneId}>
                         <Link
-                          className="border-app-line-2 text-app-muted hover:text-app-ink block rounded-[11px] border border-dashed bg-white/[0.02] px-3 py-2.5 text-center font-mono text-[13px] hover:bg-white/[0.05]"
+                          className="rz-btn rz-mono w-full border-dashed"
                           to={`${base}/sessions/${id}/journal/${item.zoneId}`}
                         >
                           {item.zoneCode}
@@ -5039,7 +4855,7 @@ function JournalView({ id, zoneId }: { id: string; zoneId: string }) {
   )
 }
 
-/** One cell of the journal's figure strip. */
+/** One cell of the journal's figure strip: `.rz-kpi`. */
 function JournalStat({
   label,
   value,
@@ -5054,28 +4870,19 @@ function JournalStat({
   tone?: 'danger' | undefined
 }) {
   return (
-    <div className="bg-app-raised px-6 pt-[22px] pb-6">
-      <p className="text-app-muted font-mono text-[11px] tracking-[0.14em] uppercase">
-        {label}
-      </p>
-      <p className="mt-3.5 flex items-baseline gap-2">
+    <div className="rz-kpi">
+      <p className="rz-kpi__label m-0">{label}</p>
+      <p className="rz-kpi__value m-0">
         <span
-          className={cn(
-            'text-[30px] leading-none font-extrabold tracking-[-0.03em] tabular-nums',
-            tone === 'danger' ? 'text-state-danger' : 'text-white',
-          )}
+          className={cn('rz-display', tone === 'danger' && 'text-state-danger')}
         >
           {value}
         </span>
         {unit === undefined ? null : (
-          <span className="text-app-muted font-mono text-[13px] font-medium">
-            {unit}
-          </span>
+          <span className="rz-kpi__unit">{unit}</span>
         )}
       </p>
-      {meta === undefined ? null : (
-        <p className="text-app-dim mt-3.5 text-[13px]">{meta}</p>
-      )}
+      {meta === undefined ? null : <p className="rz-kpi__meta m-0">{meta}</p>}
     </div>
   )
 }
@@ -5329,7 +5136,7 @@ function PartPlacementView({
     : '/'
 
   const content = (
-    <Resource retry={resource.reload} state={resource.state}>
+    <Resource framed={!drawer} retry={resource.reload} state={resource.state}>
       {({
         warehouses,
         zones,
@@ -5430,42 +5237,32 @@ function PartPlacementView({
         return (
           <div
             className={
-              drawer
-                ? 'type-redesign grid min-w-0 content-start'
-                : 'type-redesign -mx-4 -mt-6 grid content-start sm:-mx-6 md:-mx-8 md:-mt-8 lg:-mx-10 lg:-mt-10'
+              drawer ? 'grid min-w-0 content-start' : 'grid content-start'
             }
           >
             {!drawer ? (
-              <div className="border-app-line bg-app-canvas/80 sticky top-0 z-20 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-4 py-3 backdrop-blur-[14px] sm:px-6 md:px-8 lg:px-12">
-                <div className="flex min-w-0 items-center gap-5">
-                  <Link
-                    className="border-app-line-2 text-app-muted hover:text-app-ink flex items-center gap-2 rounded-full border py-2 pr-3.5 pl-2.5 text-sm font-semibold hover:bg-white/[0.05]"
-                    to={back}
-                  >
+              <div className="rz-topbar h-auto min-h-topbar flex-wrap justify-between gap-y-1.5 py-1.5">
+                <div className="flex min-w-0 items-center gap-3">
+                  <Link className="rz-btn rz-btn--ghost" to={back}>
                     <ChevronLeft aria-hidden className="size-3.5" />
                     {t('backToPart')}
                   </Link>
-                  <p className="text-app-dim hidden items-center gap-2.5 font-mono text-[12px] tracking-[0.14em] uppercase sm:flex">
+                  <p className="rz-crumbs m-0 hidden sm:flex">
                     <span>{ti('crumbWarehouse')}</span>
-                    <span aria-hidden className="text-white/20">
-                      /
-                    </span>
+                    <ChevronRight aria-hidden className="size-3" />
                     <span>{t('crumbParts')}</span>
                     {part === null ? null : (
                       <>
-                        <span aria-hidden className="text-white/20">
-                          /
-                        </span>
-                        <span className="text-app-muted">{part.qrCode}</span>
+                        <ChevronRight aria-hidden className="size-3" />
+                        <span aria-current="page">{part.qrCode}</span>
                       </>
                     )}
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2.5">
+                <div className="rz-topbar__actions flex-wrap items-center">
                   {canManage ? (
                     <Button
                       aria-busy={saving}
-                      className="px-5 text-sm font-bold"
                       disabled={saving || selected.length === 0}
                       onClick={() => void save()}
                       variant="primary"
@@ -5477,20 +5274,14 @@ function PartPlacementView({
               </div>
             ) : null}
 
-            <div
-              className={
-                drawer
-                  ? 'grid min-w-0 gap-5'
-                  : 'mx-auto grid w-full max-w-[1240px] gap-7 px-4 pt-8 pb-16 sm:px-6 md:px-8 md:pt-10 lg:px-12'
-              }
-            >
+            <div className={drawer ? 'grid min-w-0 gap-3' : 'rz-page'}>
               <div className="min-w-0">
                 {!drawer ? (
-                  <h1 className="text-[38px] leading-[1.02] font-extrabold tracking-[-0.03em] text-white sm:text-[46px]">
-                    {t('title')}
-                  </h1>
+                  <div className="rz-page-head">
+                    <h1 className="rz-h-page">{t('title')}</h1>
+                  </div>
                 ) : null}
-                <p className="text-app-muted mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[15px]">
+                <p className="rz-muted m-0 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
                   {part === null ? (
                     <span>{t('partHidden')}</span>
                   ) : (
@@ -5498,13 +5289,13 @@ function PartPlacementView({
                       <span className="text-app-ink font-semibold">
                         {part.name}
                       </span>
-                      <span aria-hidden className="text-white/20">
+                      <span aria-hidden className="text-app-dim">
                         ·
                       </span>
                       <span className="max-w-full break-all font-mono">
                         {part.qrCode}
                       </span>
-                      <span aria-hidden className="text-white/20">
+                      <span aria-hidden className="text-app-dim">
                         ·
                       </span>
                       <span>
@@ -5523,12 +5314,12 @@ function PartPlacementView({
               ) : null}
               {saved ? <Notice tone="ok">{t('saved')}</Notice> : null}
 
-              <div className="flex flex-wrap items-start gap-6">
+              <div className="flex flex-wrap items-start gap-4">
                 <div
                   className={
                     drawer
-                      ? 'grid min-w-0 w-full gap-5'
-                      : 'flex min-w-0 flex-[2_1_34rem] flex-col gap-5'
+                      ? 'grid min-w-0 w-full gap-3'
+                      : 'flex min-w-0 flex-[2_1_34rem] flex-col gap-3'
                   }
                 >
                   <Step
@@ -5542,8 +5333,8 @@ function PartPlacementView({
                       role="radiogroup"
                     >
                       {houses.length === 0 ? (
-                        <div className="border-app-line-2 text-app-muted grid w-full gap-3 rounded-xl border border-dashed bg-white/[0.02] p-4.5 text-sm">
-                          <p>{t('noActiveWarehouses')}</p>
+                        <div className="rz-inset rz-muted grid w-full gap-3 border-dashed">
+                          <p className="m-0">{t('noActiveWarehouses')}</p>
                           {canManage ? (
                             <Button onClick={() => openCreate('warehouse')}>
                               <Plus aria-hidden />
@@ -5561,10 +5352,8 @@ function PartPlacementView({
                           <button
                             aria-checked={active}
                             className={cn(
-                              'focus-visible:outline-brand min-h-[66px] flex-[1_1_10rem] cursor-pointer rounded-xl border px-3.5 py-3 text-left hover:border-white/20',
-                              active
-                                ? 'border-app-line-2 bg-white/[0.07]'
-                                : 'border-app-line bg-transparent',
+                              'rz-choice-card grid flex-[1_1_10rem] gap-0.5 bg-transparent text-left hover:bg-app-hover',
+                              active && 'border-brand bg-brand-soft',
                             )}
                             key={item.id}
                             onClick={() => {
@@ -5576,13 +5365,13 @@ function PartPlacementView({
                           >
                             <span
                               className={cn(
-                                'block text-[15px] font-bold',
-                                active ? 'text-app-ink' : 'text-app-muted',
+                                'block font-semibold',
+                                active ? 'text-app-strong' : 'text-app-ink',
                               )}
                             >
                               {item.name}
                             </span>
-                            <span className="text-app-muted mt-1 block text-[12px] font-medium">
+                            <span className="rz-muted block text-caption">
                               {ti('zones', { count })}
                             </span>
                           </button>
@@ -5593,25 +5382,25 @@ function PartPlacementView({
 
                   <Step
                     aside={
-                      <p className="text-app-muted flex flex-wrap items-center gap-3.5 text-[12px]">
+                      <p className="rz-muted m-0 flex flex-wrap items-center gap-3 text-caption">
                         <span className="flex items-center gap-1.5">
                           <span
                             aria-hidden
-                            className="size-2 rounded-[3px] bg-white/15"
+                            className="bg-app-line-2 size-2 rounded-rz-xs"
                           />
                           {t('legendEmpty')}
                         </span>
                         <span className="flex items-center gap-1.5">
                           <span
                             aria-hidden
-                            className="bg-state-warn/50 size-2 rounded-[3px]"
+                            className="bg-state-warn/50 size-2 rounded-rz-xs"
                           />
                           {t('legendFilled')}
                         </span>
                         <span className="flex items-center gap-1.5">
                           <span
                             aria-hidden
-                            className="bg-state-danger/50 size-2 rounded-[3px]"
+                            className="bg-state-danger/50 size-2 rounded-rz-xs"
                           />
                           {t('legendBusiest')}
                         </span>
@@ -5624,11 +5413,7 @@ function PartPlacementView({
                     {warehouseOnly ? (
                       <label
                         className={cn(
-                          'mb-3 flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
-                          selected.length === 1 &&
-                            selected[0] === warehouseOnly.id
-                            ? 'border-brand bg-brand/[0.08]'
-                            : 'border-app-line hover:border-app-line-2',
+                          'mb-3 rz-choice-card items-center justify-between',
                         )}
                       >
                         <input
@@ -5651,16 +5436,16 @@ function PartPlacementView({
                         <span
                           aria-hidden="true"
                           className={cn(
-                            'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                            'flex size-4 shrink-0 items-center justify-center rounded-rz-xs border peer-focus-visible:shadow-[var(--rz-focus)]',
                             selected.length === 1 &&
                               selected[0] === warehouseOnly.id
-                              ? 'border-brand bg-brand text-app-canvas'
+                              ? 'border-brand bg-brand text-[var(--rz-on-brand)]'
                               : 'border-app-line-2',
                           )}
                         >
                           {selected.length === 1 &&
                           selected[0] === warehouseOnly.id ? (
-                            <Check size={15} strokeWidth={3} />
+                            <Check size={11} strokeWidth={3} />
                           ) : null}
                         </span>
                       </label>
@@ -5683,7 +5468,7 @@ function PartPlacementView({
                       </div>
                     )}
                     {house !== null && shown.length === 0 ? (
-                      <p className="border-app-line-2 text-app-muted mt-3.5 rounded-xl border border-dashed bg-white/[0.02] p-4.5 text-sm">
+                      <p className="rz-inset rz-muted m-0 mt-3 border-dashed">
                         {inHouse.length === 0
                           ? t('noActiveZones')
                           : t('noZonesFound')}
@@ -5692,8 +5477,8 @@ function PartPlacementView({
                       <ul
                         className={
                           drawer
-                            ? 'mt-3.5 grid gap-2'
-                            : 'mt-3.5 grid grid-cols-[repeat(auto-fill,minmax(min(100%,8rem),1fr))] gap-2'
+                            ? 'm-0 mt-3 grid list-none gap-2 p-0'
+                            : 'm-0 mt-3 grid list-none grid-cols-[repeat(auto-fill,minmax(min(100%,8rem),1fr))] gap-2 p-0'
                         }
                       >
                         {shown.map((zone) => {
@@ -5705,27 +5490,20 @@ function PartPlacementView({
                               : Math.round((count / busiest) * 100)
                           return (
                             <li key={zone.id}>
-                              <label
-                                className={cn(
-                                  'block cursor-pointer rounded-xl border px-3 pt-2.5 pb-3 hover:border-white/20',
-                                  on
-                                    ? 'border-brand bg-brand/[0.08]'
-                                    : 'border-app-line bg-app-canvas',
-                                )}
-                              >
+                              <label className="rz-choice-card block px-3 py-2.5">
                                 <span className="flex items-start justify-between gap-2">
                                   <span className="min-w-0">
                                     <span
                                       className={cn(
                                         drawer
-                                          ? 'block break-words text-[14px] font-bold'
-                                          : 'block truncate text-[14px] font-bold',
-                                        on ? 'text-app-ink' : 'text-app-muted',
+                                          ? 'block font-semibold break-words'
+                                          : 'block truncate font-semibold',
+                                        on ? 'text-app-strong' : 'text-app-ink',
                                       )}
                                     >
                                       {zone.name}
                                     </span>
-                                    <span className="text-app-muted block font-mono text-[12px]">
+                                    <span className="rz-mono rz-caption block">
                                       {zone.code}
                                     </span>
                                   </span>
@@ -5740,34 +5518,29 @@ function PartPlacementView({
                                   <span
                                     aria-hidden="true"
                                     className={cn(
-                                      'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                      'flex size-4 shrink-0 items-center justify-center rounded-rz-xs border peer-focus-visible:shadow-[var(--rz-focus)]',
                                       on
-                                        ? 'border-brand bg-brand text-app-canvas'
+                                        ? 'border-brand bg-brand text-[var(--rz-on-brand)]'
                                         : 'border-app-line-2',
                                     )}
                                   >
                                     {on ? (
-                                      <Check size={15} strokeWidth={3} />
+                                      <Check size={11} strokeWidth={3} />
                                     ) : null}
                                   </span>
                                 </span>
                                 <span
                                   aria-hidden
-                                  className="mt-2.5 block h-1 overflow-hidden rounded-full bg-white/[0.08]"
+                                  className={cn(
+                                    'rz-meter mt-2',
+                                    load >= 100
+                                      ? 'rz-meter--danger'
+                                      : 'rz-meter--warn',
+                                  )}
                                 >
-                                  <span
-                                    className={cn(
-                                      'block h-full rounded-full',
-                                      load >= 100
-                                        ? 'bg-state-danger/60'
-                                        : load > 0
-                                          ? 'bg-state-warn/60'
-                                          : 'bg-transparent',
-                                    )}
-                                    style={{ width: `${String(load)}%` }}
-                                  />
+                                  <span style={{ width: `${String(load)}%` }} />
                                 </span>
-                                <span className="text-app-muted mt-1.5 block text-[11px] font-semibold">
+                                <span className="rz-muted mt-1 block text-micro">
                                   {count === null
                                     ? ti('stockUnavailable')
                                     : ti('positions', { count })}
@@ -5810,10 +5583,7 @@ function PartPlacementView({
                         <div className="grid gap-2 sm:grid-cols-2">
                           <label
                             className={cn(
-                              'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
-                              !selectedSectionId
-                                ? 'border-brand bg-brand/[0.08]'
-                                : 'border-app-line hover:border-app-line-2',
+                              'rz-choice-card items-center justify-between',
                             )}
                           >
                             <input
@@ -5831,24 +5601,21 @@ function PartPlacementView({
                             <span
                               aria-hidden="true"
                               className={cn(
-                                'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                'flex size-4 shrink-0 items-center justify-center rounded-rz-xs border peer-focus-visible:shadow-[var(--rz-focus)]',
                                 !selectedSectionId
-                                  ? 'border-brand bg-brand text-app-canvas'
+                                  ? 'border-brand bg-brand text-[var(--rz-on-brand)]'
                                   : 'border-app-line-2',
                               )}
                             >
                               {!selectedSectionId ? (
-                                <Check size={15} strokeWidth={3} />
+                                <Check size={11} strokeWidth={3} />
                               ) : null}
                             </span>
                           </label>
                           {availableSections.map((section) => (
                             <label
                               className={cn(
-                                'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
-                                selectedSectionId === section.id
-                                  ? 'border-brand bg-brand/[0.08]'
-                                  : 'border-app-line hover:border-app-line-2',
+                                'rz-choice-card items-center justify-between',
                               )}
                               key={section.id}
                             >
@@ -5869,14 +5636,14 @@ function PartPlacementView({
                               <span
                                 aria-hidden="true"
                                 className={cn(
-                                  'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                  'flex size-4 shrink-0 items-center justify-center rounded-rz-xs border peer-focus-visible:shadow-[var(--rz-focus)]',
                                   selectedSectionId === section.id
-                                    ? 'border-brand bg-brand text-app-canvas'
+                                    ? 'border-brand bg-brand text-[var(--rz-on-brand)]'
                                     : 'border-app-line-2',
                                 )}
                               >
                                 {selectedSectionId === section.id ? (
-                                  <Check size={15} strokeWidth={3} />
+                                  <Check size={11} strokeWidth={3} />
                                 ) : null}
                               </span>
                             </label>
@@ -5906,10 +5673,7 @@ function PartPlacementView({
                         <div className="grid gap-2 sm:grid-cols-2">
                           <label
                             className={cn(
-                              'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
-                              !selectedShelfId
-                                ? 'border-brand bg-brand/[0.08]'
-                                : 'border-app-line hover:border-app-line-2',
+                              'rz-choice-card items-center justify-between',
                             )}
                           >
                             <input
@@ -5924,24 +5688,21 @@ function PartPlacementView({
                             <span
                               aria-hidden="true"
                               className={cn(
-                                'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                'flex size-4 shrink-0 items-center justify-center rounded-rz-xs border peer-focus-visible:shadow-[var(--rz-focus)]',
                                 !selectedShelfId
-                                  ? 'border-brand bg-brand text-app-canvas'
+                                  ? 'border-brand bg-brand text-[var(--rz-on-brand)]'
                                   : 'border-app-line-2',
                               )}
                             >
                               {!selectedShelfId ? (
-                                <Check size={15} strokeWidth={3} />
+                                <Check size={11} strokeWidth={3} />
                               ) : null}
                             </span>
                           </label>
                           {availableShelves.map((shelf) => (
                             <label
                               className={cn(
-                                'flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 text-sm transition-colors',
-                                selectedShelfId === shelf.id
-                                  ? 'border-brand bg-brand/[0.08]'
-                                  : 'border-app-line hover:border-app-line-2',
+                                'rz-choice-card items-center justify-between',
                               )}
                               key={shelf.id}
                             >
@@ -5960,14 +5721,14 @@ function PartPlacementView({
                               <span
                                 aria-hidden="true"
                                 className={cn(
-                                  'flex size-5 shrink-0 items-center justify-center rounded-[5px] border peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brand',
+                                  'flex size-4 shrink-0 items-center justify-center rounded-rz-xs border peer-focus-visible:shadow-[var(--rz-focus)]',
                                   selectedShelfId === shelf.id
-                                    ? 'border-brand bg-brand text-app-canvas'
+                                    ? 'border-brand bg-brand text-[var(--rz-on-brand)]'
                                     : 'border-app-line-2',
                                 )}
                               >
                                 {selectedShelfId === shelf.id ? (
-                                  <Check size={15} strokeWidth={3} />
+                                  <Check size={11} strokeWidth={3} />
                                 ) : null}
                               </span>
                             </label>
@@ -5984,28 +5745,29 @@ function PartPlacementView({
                     }
                     title={t('quantity')}
                   >
-                    <div className="flex flex-wrap items-center gap-4.5">
-                      <span
-                        className="border-app-line bg-app-canvas text-app-muted flex items-center gap-1 rounded-xl border p-[3px]"
-                        title={t('notSplitTitle')}
-                      >
-                        <span
+                    <div className="flex flex-wrap items-center gap-4">
+                      <span className="rz-stepper" title={t('notSplitTitle')}>
+                        <button
                           aria-hidden
-                          className="flex size-9.5 items-center justify-center rounded-[9px] text-[18px] font-bold opacity-40"
+                          disabled
+                          tabIndex={-1}
+                          type="button"
                         >
                           −
-                        </span>
-                        <span className="w-13 text-center font-mono text-[17px] text-white">
+                        </button>
+                        <span className="rz-mono rz-strong border-app-line grid h-full min-w-12 place-items-center border-x px-2">
                           {part?.quantityTotal ?? '—'}
                         </span>
-                        <span
+                        <button
                           aria-hidden
-                          className="flex size-9.5 items-center justify-center rounded-[9px] text-[18px] font-bold opacity-40"
+                          disabled
+                          tabIndex={-1}
+                          type="button"
                         >
                           +
-                        </span>
+                        </button>
                       </span>
-                      <p className="text-app-muted min-w-[12rem] flex-1 text-[14px]">
+                      <p className="rz-muted m-0 min-w-[12rem] flex-1">
                         {t('notSplit')}
                       </p>
                     </div>
@@ -6014,7 +5776,7 @@ function PartPlacementView({
                   {!drawer ? (
                     <Card
                       aside={
-                        <span className="text-app-muted font-mono text-[11px] tracking-[0.1em] uppercase">
+                        <span className="rz-eyebrow">
                           {t('records', { count: moves.length })}
                         </span>
                       }
@@ -6023,25 +5785,25 @@ function PartPlacementView({
                       title={t('historyTitle')}
                     >
                       {moves.length === 0 ? (
-                        <p className="text-app-muted px-6 pt-4 pb-6 text-sm">
+                        <p className="rz-muted m-0 px-4 pt-3 pb-4">
                           {history === null
                             ? t('historyHidden')
                             : t('neverMoved')}
                         </p>
                       ) : (
-                        <ul className="grid">
+                        <ul className="m-0 grid list-none p-0">
                           {moves.slice(0, 8).map((event) => (
                             <li
-                              className="border-app-line flex flex-wrap items-center gap-x-3.5 gap-y-1 border-t px-6 py-3"
+                              className="border-app-line flex flex-wrap items-center gap-x-3.5 gap-y-1 border-t px-4 py-2.5"
                               key={event.id}
                             >
-                              <span className="text-app-ink w-28 shrink-0 text-[14px] font-semibold">
+                              <span className="rz-strong w-28 shrink-0 font-semibold">
                                 {historyLabel(event.eventType, locale)}
                               </span>
-                              <span className="text-app-muted min-w-0 flex-1 text-[13px]">
+                              <span className="rz-muted min-w-0 flex-1">
                                 {historyDetails(event.data, locale).join(' · ')}
                               </span>
-                              <span className="text-app-dim font-mono text-[13px] whitespace-nowrap">
+                              <span className="rz-timeline__date">
                                 {date(event.createdAt)}
                               </span>
                             </li>
@@ -6055,14 +5817,12 @@ function PartPlacementView({
                 {!drawer ? (
                   <section
                     aria-label={t('newPlacement')}
-                    className="border-app-line bg-app-raised flex min-w-0 flex-[1_1_18rem] flex-col rounded-[18px] border px-5.5 pt-[22px] pb-6"
+                    className="rz-card rz-card__body flex min-w-0 flex-[1_1_18rem] flex-col self-start"
                   >
-                    <h2 className="text-app-dim font-mono text-[10px] tracking-[0.14em] uppercase">
-                      {t('newPlacement')}
-                    </h2>
-                    <div className="border-app-line bg-app-canvas mt-4 rounded-[14px] border p-4">
+                    <h2 className="rz-h-card">{t('newPlacement')}</h2>
+                    <div className="rz-inset mt-3">
                       {chosen.length > 0 ? (
-                        <ul className="grid gap-3 text-[14px]">
+                        <ul className="m-0 grid list-none gap-2 p-0">
                           {chosen.map((zone) => (
                             <li className="min-w-0" key={zone.id}>
                               <span className="text-app-ink font-semibold">
@@ -6083,7 +5843,7 @@ function PartPlacementView({
                           ))}
                         </ul>
                       ) : (
-                        <p className="text-app-muted text-[14px]">
+                        <p className="rz-muted m-0">
                           {t('noLocationSelected')}
                         </p>
                       )}
@@ -6091,7 +5851,7 @@ function PartPlacementView({
                     {canManage ? (
                       <Button
                         aria-busy={saving}
-                        className="mt-5.5 min-h-11.5 w-full text-[15px] font-bold"
+                        className="rz-btn--lg mt-4 w-full"
                         disabled={saving || selected.length === 0}
                         onClick={() => void save()}
                         variant="primary"
@@ -6099,7 +5859,7 @@ function PartPlacementView({
                         {saving ? t('saving') : t('savePlacement')}
                       </Button>
                     ) : null}
-                    <p className="text-app-dim mt-3 text-[12px] leading-[1.5]">
+                    <p className="rz-caption m-0 mt-3">
                       {selected.length === 0
                         ? t('pickOne')
                         : changed

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CreditCard } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import {
   Amount,
   Button,
+  DataTable,
   DateValue,
   ErrorState,
   Notice,
@@ -11,6 +11,7 @@ import {
   StatusPill,
   useOperation,
   useToast,
+  type DataColumn,
 } from '@/components/app'
 import {
   billingApi,
@@ -22,7 +23,6 @@ import { normalizeApiProblem } from '@/api/errors'
 import type { PagedResult, PaymentDto, SubscriptionDto } from '@/api/types'
 import { ModuleAccessDeniedError } from '../policy'
 import { tenantRequestScope } from '../tenant-request-scope'
-import { Kpi, KpiStrip } from '../redesign-kpi'
 import { BillingCard, BillingDead, BillingShell } from './billing-shell'
 import { commonMessages, translate, useLocale, useT, type Locale } from '@/i18n'
 import { paymentStatusMeta, paymentTypeLabel } from './billing-vocabulary'
@@ -224,10 +224,6 @@ export function PaymentsScreen() {
 
   const items =
     currentPaymentsState.kind === 'ready' ? currentPaymentsState.page.items : []
-  const total =
-    currentPaymentsState.kind === 'ready'
-      ? currentPaymentsState.page.total
-      : items.length
   const guardCheckout = (
     event: { preventDefault: () => void },
     payment: PaymentDto,
@@ -271,14 +267,86 @@ export function PaymentsScreen() {
       return item.status === 'failed' || item.status === 'reversed'
     return item.status === segment
   })
-  const paid = items
-    .filter((item) => item.status === 'success')
-    .reduce((sum, item) => sum + item.amount, 0)
-  const paidCurrency = items.find((item) => item.status === 'success')?.currency
-  const mixedCurrency =
-    new Set(
-      items.filter((item) => item.status === 'success').map((i) => i.currency),
-    ).size > 1
+  const columns: DataColumn<PaymentDto>[] = [
+    {
+      key: 'date',
+      label: t('columnDate'),
+      variant: 'primary',
+      cell: (item) => (
+        <span className="font-mono">
+          <DateValue value={item.createdAt} withTime={false} />
+        </span>
+      ),
+    },
+    {
+      key: 'description',
+      label: t('columnDescription'),
+      cell: (item) => (
+        <span className="grid min-w-0">
+          <span className="rz-strong">
+            {paymentTypeLabel(item.type, locale)}
+          </span>
+          <span className="rz-caption">
+            {item.providerInvoiceId ?? tb('noInvoiceNumber')}
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      label: t('columnStatus'),
+      cell: (item) => {
+        const status = paymentStatusMeta(item.status, locale)
+        return <StatusPill tone={status.tone}>{status.label}</StatusPill>
+      },
+    },
+    {
+      key: 'amount',
+      label: t('columnAmount'),
+      align: 'end',
+      cell: (item) => <Amount currency={item.currency} value={item.amount} />,
+    },
+    ...(actionable
+      ? [
+          {
+            key: 'actions',
+            label: tc('actions'),
+            align: 'end' as const,
+            headerHidden: true,
+            cell: (item: PaymentDto) =>
+              canManageMonoPayments && item.status === 'pending' ? (
+                <span className="flex min-w-0 flex-wrap justify-end gap-2">
+                  {item.checkoutUrl && isCheckoutCurrent(item) && (
+                    <BillingMutationGate decision={controlDecision}>
+                      <Button asChild size="sm">
+                        <a
+                          href={item.checkoutUrl}
+                          onClick={(event) => guardCheckout(event, item)}
+                          rel="noopener noreferrer"
+                          target="_blank"
+                        >
+                          {t('continuePayment')}
+                        </a>
+                      </Button>
+                    </BillingMutationGate>
+                  )}
+                  <BillingMutationGate decision={controlDecision}>
+                    <Button
+                      {...cancelPayment.triggerProps}
+                      aria-busy={cancellingId === item.id}
+                      onClick={() => startCancel(item.id)}
+                      size="sm"
+                      variant="danger"
+                    >
+                      {tc('cancel')}
+                    </Button>
+                  </BillingMutationGate>
+                </span>
+              ) : null,
+          },
+        ]
+      : []),
+  ]
 
   return (
     <PaymentsFrame>
@@ -286,196 +354,65 @@ export function PaymentsScreen() {
         <Notice tone="danger">{mutationError}</Notice>
       )}
 
-      <KpiStrip>
-        <Kpi
-          label={t('kpiTotal')}
-          meta={
-            total === items.length
-              ? t('kpiTotalAll')
-              : t('kpiTotalNewest', { count: items.length })
-          }
-          value={String(total)}
-        />
-        <Kpi
-          label={t('kpiPaid')}
-          meta={mixedCurrency ? t('kpiPaidMixed') : t('kpiPaidMeta')}
-          value={
-            mixedCurrency || paidCurrency === undefined ? (
-              '—'
-            ) : (
-              <Amount currency={paidCurrency} value={paid} />
-            )
-          }
-        />
-        <Kpi
-          label={t('kpiPending')}
-          meta={
-            counts.pending === 0 ? t('kpiPendingNone') : t('kpiPendingSome')
-          }
-          tone={counts.pending === 0 ? 'plain' : 'warn'}
-          value={String(counts.pending)}
-        />
-      </KpiStrip>
-
-      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-2">
-        <PaymentMethod subscription={cabinet.snapshot?.subscription ?? null} />
-        <BillingCard title={t('invoiceDetails')}>
-          <p className="text-app-muted text-[13.5px] leading-5 text-pretty">
-            {t('noInvoiceDetails')}
+      {/* The ledger runs the full width, as the module page draws it; the
+          card and receipt details sit under it. */}
+      <section aria-label={t('history')} className="grid min-w-0 gap-3">
+        <div className="rz-toolbar">
+          <div
+            aria-label={t('paymentStatus')}
+            className="rz-seg flex-wrap"
+            role="group"
+            title={t('noStatusFilter')}
+          >
+            {PAYMENT_SEGMENTS.map((one) => (
+              <button
+                aria-pressed={segment === one.key}
+                key={one.key}
+                onClick={() => setSegment(one.key)}
+                type="button"
+              >
+                {t(one.message)}
+                <span className="rz-count">{counts[one.key]}</span>
+              </button>
+            ))}
+          </div>
+          <p className="rz-toolbar__end rz-dim m-0">
+            {t('shownOnPage', { shown: shown.length, total: items.length })}
           </p>
-          <div className="mt-3.5">
+        </div>
+
+        <div className="rz-table-wrap">
+          <div className="rz-card__head py-2.5">
+            <h2 className="rz-h-card">{t('history')}</h2>
+          </div>
+          {shown.length === 0 ? (
+            <p className="rz-muted m-0 px-[var(--rz-card-p)] py-8">
+              {items.length === 0 ? tb('noPayments') : t('noneForFilter')}
+            </p>
+          ) : (
+            <DataTable
+              caption={t('history')}
+              columns={columns}
+              embedded
+              rowKey={(item) => item.id}
+              rows={shown}
+            />
+          )}
+          <p className="rz-caption border-app-line m-0 border-t px-[var(--rz-card-p)] py-2.5 text-pretty">
+            {t('noReceiptFile')} {t('noStatusFilter')}
+          </p>
+        </div>
+      </section>
+      <div className="grid min-w-0 items-start gap-4 md:grid-cols-2">
+        <PaymentMethod subscription={cabinet.snapshot?.subscription ?? null} />
+        <BillingCard footer={t('noInvoiceDetails')} title={t('invoiceDetails')}>
+          <div className="rz-btn-row">
             <BillingDead title={t('noInvoiceDetails')}>
               {t('changeInvoiceDetails')}
             </BillingDead>
           </div>
         </BillingCard>
       </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-        <div
-          aria-label={t('paymentStatus')}
-          className="border-app-line bg-app-raised flex min-w-0 flex-wrap gap-1 rounded-[14px] border p-1"
-          role="group"
-          title={t('noStatusFilter')}
-        >
-          {PAYMENT_SEGMENTS.map((one) => (
-            <button
-              aria-pressed={segment === one.key}
-              className={cn(
-                'inline-flex min-h-11 items-center gap-2 rounded-[10px] px-3.5 text-[13.5px] font-bold whitespace-nowrap',
-                segment === one.key
-                  ? 'text-app-ink bg-white/[0.08]'
-                  : 'text-app-muted hover:text-app-ink',
-              )}
-              key={one.key}
-              onClick={() => setSegment(one.key)}
-              type="button"
-            >
-              {t(one.message)}
-              <span className="text-app-dim font-mono text-[12px]">
-                {counts[one.key]}
-              </span>
-            </button>
-          ))}
-        </div>
-        <p className="text-app-dim text-[13px]">
-          {t('shownOnPage', { shown: shown.length, total: items.length })}
-        </p>
-      </div>
-
-      <section
-        aria-label={t('history')}
-        className="border-app-line bg-app-raised min-w-0 overflow-hidden rounded-[20px] border"
-      >
-        {shown.length === 0 ? (
-          <p className="text-app-muted px-5.5 py-8 text-[14px]">
-            {items.length === 0 ? tb('noPayments') : t('noneForFilter')}
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[14px]">
-              <caption className="sr-only">{t('history')}</caption>
-              <thead>
-                <tr className="text-app-muted border-app-line border-b font-mono text-[10px] tracking-[0.14em] uppercase">
-                  <th className="px-5.5 py-2.5 text-left">{t('columnDate')}</th>
-                  <th className="px-3 py-2.5 text-left">
-                    {t('columnDescription')}
-                  </th>
-                  <th className="px-3 py-2.5 text-right">
-                    {t('columnAmount')}
-                  </th>
-                  <th className="px-3 py-2.5 text-left">{t('columnStatus')}</th>
-                  <th
-                    className="px-3 py-2.5 text-left"
-                    title={t('noReceiptFile')}
-                  >
-                    {t('columnReceipt')}
-                  </th>
-                  {actionable && (
-                    <th className="relative px-5.5 py-2.5 text-right">
-                      <span className="sr-only">{tc('actions')}</span>
-                    </th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((item) => {
-                  const status = paymentStatusMeta(item.status, locale)
-                  return (
-                    <tr className="border-app-line border-b" key={item.id}>
-                      <td className="text-app-dim px-5.5 py-3.5 font-mono text-[13px] whitespace-nowrap">
-                        <DateValue value={item.createdAt} withTime={false} />
-                      </td>
-                      <td className="px-3 py-3.5">
-                        <span className="text-app-ink block font-medium">
-                          {paymentTypeLabel(item.type, locale)}
-                        </span>
-                        <span className="text-app-dim mt-0.5 block text-[12.5px]">
-                          {item.providerInvoiceId ?? tb('noInvoiceNumber')}
-                        </span>
-                      </td>
-                      <td className="text-app-ink px-3 py-3.5 text-right font-mono tabular-nums">
-                        <Amount currency={item.currency} value={item.amount} />
-                      </td>
-                      <td className="px-3 py-3.5">
-                        <StatusPill tone={status.tone}>
-                          {status.label}
-                        </StatusPill>
-                      </td>
-                      <td className="px-3 py-3.5">
-                        <span
-                          className="text-app-dim text-[13px]"
-                          title={t('noReceiptFile')}
-                        >
-                          —
-                        </span>
-                      </td>
-                      {actionable && (
-                        <td className="px-5.5 py-3.5">
-                          {canManageMonoPayments &&
-                          item.status === 'pending' ? (
-                            <span className="flex min-w-0 flex-wrap justify-end gap-2">
-                              {item.checkoutUrl && isCheckoutCurrent(item) && (
-                                <BillingMutationGate decision={controlDecision}>
-                                  <Button asChild variant="ghost">
-                                    <a
-                                      href={item.checkoutUrl}
-                                      onClick={(event) =>
-                                        guardCheckout(event, item)
-                                      }
-                                      rel="noopener noreferrer"
-                                      target="_blank"
-                                    >
-                                      {t('continuePayment')}
-                                    </a>
-                                  </Button>
-                                </BillingMutationGate>
-                              )}
-                              <BillingMutationGate decision={controlDecision}>
-                                <Button
-                                  {...cancelPayment.triggerProps}
-                                  aria-busy={cancellingId === item.id}
-                                  onClick={() => startCancel(item.id)}
-                                  variant="danger"
-                                >
-                                  {tc('cancel')}
-                                </Button>
-                              </BillingMutationGate>
-                            </span>
-                          ) : null}
-                        </td>
-                      )}
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <p className="text-app-dim border-app-line border-t px-5.5 py-3.5 text-[13px] leading-5 text-pretty">
-          {t('noReceiptFile')} {t('noStatusFilter')}
-        </p>
-      </section>
     </PaymentsFrame>
   )
 }
@@ -489,12 +426,7 @@ function PaymentsFrame({
 }) {
   const t = useT(paymentsMessages)
   return (
-    <BillingShell
-      actions={actions}
-      crumb={t('crumb')}
-      lead={t('lead')}
-      title={t('title')}
-    >
+    <BillingShell actions={actions} crumb={t('crumb')} title={t('title')}>
       {children}
     </BillingShell>
   )
@@ -574,35 +506,28 @@ function PaymentMethod({
   const t = useT(paymentsMessages)
 
   return (
-    <BillingCard title={t('paymentMethod')}>
+    <BillingCard footer={t('noCardList')} title={t('paymentMethod')}>
       {management.kind === 'provider' ? (
-        <p className="text-app-muted text-sm">
+        <p className="rz-muted m-0">
           {t('methodByProvider', { provider: management.label })}
         </p>
       ) : management.kind === 'unavailable' ? (
-        <p className="text-app-muted text-sm">{t('methodUnavailable')}</p>
+        <p className="rz-muted m-0">{t('methodUnavailable')}</p>
       ) : hasCard ? (
-        <div className="flex items-center gap-3">
-          <span className="bg-brand/[0.12] text-brand grid size-11 shrink-0 place-items-center rounded-xl">
-            <CreditCard aria-hidden className="size-5" />
-          </span>
+        <div className="rz-inset flex items-center gap-3">
+          <CreditCard aria-hidden className="text-app-muted size-4 shrink-0" />
           <span className="grid min-w-0 gap-0.5">
-            <span className="text-sm font-medium tabular-nums text-white">
+            <span className="rz-mono rz-strong">
               {(subscription?.cardBrand ?? 'Card').toUpperCase()} ••••{' '}
               {subscription?.cardLast4}
             </span>
-            <span className="text-app-dim text-[13.5px]">
-              {t('cardAuthorised')}
-            </span>
+            <span className="rz-caption">{t('cardAuthorised')}</span>
           </span>
         </div>
       ) : (
-        <p className="text-app-muted text-sm">{t('noCard')}</p>
+        <p className="rz-muted m-0">{t('noCard')}</p>
       )}
-      <p className="text-app-dim mt-3.5 text-[12.5px] leading-5 text-pretty">
-        {t('noCardList')}
-      </p>
-      <div className="mt-3.5 flex flex-wrap gap-2.5">
+      <div className="rz-btn-row">
         <BillingDead title={t('noCardList')}>
           {t('addPaymentMethod')}
         </BillingDead>
